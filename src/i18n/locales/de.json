@@ -3560,5 +3560,13 @@
   "productHunt.dialogLabel": "MailVault ist auf Product Hunt",
   "productHunt.openLabel": "Unterstütze MailVault auf Product Hunt",
   "productHunt.endsNote": "Dieses Banner wird nach dem {{when}} nicht mehr angezeigt.",
-  "productHunt.timeLeft": "Noch {{left}}"
+  "productHunt.timeLeft": "Noch {{left}}",
+  "privacy.title": "Datenschutzmodus",
+  "privacy.on": "Datenschutzmodus ein",
+  "privacy.off": "Datenschutzmodus aus",
+  "privacy.hint": "Maskiert Namen, E-Mail-Adressen, Telefonnummern und Adressen. Zum Hineinschauen Option (Alt) gedrückt halten.",
+  "privacy.upsellTitle": "Der Datenschutzmodus ist eine Premium-Funktion",
+  "privacy.upsellBody": "Nimm deinen Bildschirm auf oder lies Mails in der Öffentlichkeit, ohne zu zeigen, wem du schreibst.",
+  "privacy.notificationTitle": "Neue Nachricht",
+  "privacy.sourceBlocked": "Schalte den Datenschutzmodus aus, um den Quelltext der Nachricht anzuzeigen."
 }

@@ -7,7 +7,7 @@ vi.mock('../../services/api', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
 }));
 
-const { useKeyboardShortcuts } = await import('../useKeyboardShortcuts');
+const { useKeyboardShortcuts, eventToKeyString } = await import('../useKeyboardShortcuts');
 const { useSettingsStore, DEFAULT_SHORTCUTS } = await import('../../stores/settingsStore');
 const { useFocusStore } = await import('../../stores/focusStore');
 
@@ -187,5 +187,16 @@ describe('workspace shortcut boundaries', () => {
     expect(handlers.delete).not.toHaveBeenCalled();expect(handlers.nextEmail).not.toHaveBeenCalled();expect(handlers.goToInbox).not.toHaveBeenCalled();
     expect(handlers.compose).toHaveBeenCalledOnce();expect(handlers.escape).toHaveBeenCalledOnce();
     rerender({allowedActions:null});press(document.body,'j');expect(handlers.nextEmail).toHaveBeenCalledOnce();
+  });
+});
+
+describe('privacy shortcut', () => {
+  it('matches Cmd+Shift+P as the hook encodes it', () => {
+    const e = new KeyboardEvent('keydown', { key: 'P', metaKey: true, shiftKey: true });
+    expect(DEFAULT_SHORTCUTS.togglePrivacyMode).toBe(eventToKeyString(e));
+  });
+  it('collides with no other default binding', () => {
+    const same = Object.entries(DEFAULT_SHORTCUTS).filter(([, k]) => k === DEFAULT_SHORTCUTS.togglePrivacyMode);
+    expect(same).toHaveLength(1);
   });
 });

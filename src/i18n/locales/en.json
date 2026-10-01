@@ -3560,5 +3560,13 @@
   "productHunt.dialogLabel": "MailVault is live on Product Hunt",
   "productHunt.openLabel": "Support MailVault on Product Hunt",
   "productHunt.endsNote": "This banner will not be shown after {{when}}.",
-  "productHunt.timeLeft": "{{left}} left"
+  "productHunt.timeLeft": "{{left}} left",
+  "privacy.title": "Privacy mode",
+  "privacy.on": "Privacy mode on",
+  "privacy.off": "Privacy mode off",
+  "privacy.hint": "Masks names, email addresses, phone numbers and addresses. Hold Option (Alt) to peek.",
+  "privacy.upsellTitle": "Privacy mode is a Premium feature",
+  "privacy.upsellBody": "Record your screen or read mail in public without showing who you write to.",
+  "privacy.notificationTitle": "New message",
+  "privacy.sourceBlocked": "Turn off privacy mode to view the message source."
 }

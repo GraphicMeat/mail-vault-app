@@ -26,7 +26,7 @@ function isTypingTarget(el) {
  * Normalise a KeyboardEvent into the string format used by the shortcuts config.
  * Modifier keys are prefixed in a fixed order: Meta+Ctrl+Alt+Shift+<key>
  */
-function eventToKeyString(e) {
+export function eventToKeyString(e) {
   const parts = [];
   if (e.metaKey) parts.push(t('hook.useKeyboardShortcuts.meta'));
   if (e.ctrlKey) parts.push(t('hook.useKeyboardShortcuts.ctrl'));

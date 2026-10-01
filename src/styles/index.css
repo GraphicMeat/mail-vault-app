@@ -1764,3 +1764,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fi
   .email-sender-main { flex-wrap: wrap; row-gap: 4px; }
   .email-sender-main > div:first-child { flex-basis: 100%; }
 }
+
+/* Privacy mode. The text under the blur is already filler. */
+.mv-private { filter: blur(4px); user-select: none; }

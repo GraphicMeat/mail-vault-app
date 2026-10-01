@@ -3560,5 +3560,13 @@
   "productHunt.dialogLabel": "MailVault è su Product Hunt",
   "productHunt.openLabel": "Sostieni MailVault su Product Hunt",
   "productHunt.endsNote": "Questo banner non verrà più mostrato dopo il {{when}}.",
-  "productHunt.timeLeft": "Restano {{left}}"
+  "productHunt.timeLeft": "Restano {{left}}",
+  "privacy.title": "Modalità privacy",
+  "privacy.on": "Modalità privacy attiva",
+  "privacy.off": "Modalità privacy disattivata",
+  "privacy.hint": "Nasconde nomi, indirizzi email, numeri di telefono e indirizzi. Tieni premuto Opzione (Alt) per dare un'occhiata.",
+  "privacy.upsellTitle": "La modalità privacy è una funzione Premium",
+  "privacy.upsellBody": "Registra lo schermo o leggi la posta in pubblico senza mostrare a chi scrivi.",
+  "privacy.notificationTitle": "Nuovo messaggio",
+  "privacy.sourceBlocked": "Disattiva la modalità privacy per vedere il sorgente del messaggio."
 }

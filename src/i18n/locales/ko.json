@@ -3560,5 +3560,13 @@
   "productHunt.dialogLabel": "MailVault가 Product Hunt에 올라왔습니다",
   "productHunt.openLabel": "Product Hunt에서 MailVault 응원하기",
   "productHunt.endsNote": "이 배너는 {{when}} 이후에는 표시되지 않습니다.",
-  "productHunt.timeLeft": "{{left}} 남음"
+  "productHunt.timeLeft": "{{left}} 남음",
+  "privacy.title": "개인정보 보호 모드",
+  "privacy.on": "개인정보 보호 모드 켜짐",
+  "privacy.off": "개인정보 보호 모드 꺼짐",
+  "privacy.hint": "이름, 이메일 주소, 전화번호, 주소를 가립니다. Option(Alt) 키를 누르고 있으면 잠시 보입니다.",
+  "privacy.upsellTitle": "개인정보 보호 모드는 프리미엄 기능입니다",
+  "privacy.upsellBody": "화면을 녹화하거나 공공장소에서 메일을 읽어도 누구에게 쓰는지 드러나지 않습니다.",
+  "privacy.notificationTitle": "새 메시지",
+  "privacy.sourceBlocked": "메시지 소스를 보려면 개인정보 보호 모드를 끄세요."
 }

@@ -26,6 +26,7 @@ const ACTION_LABELS = () => ({
   focusSearch: tr('search.search'),
   showShortcuts: tr('settings.shortcuts.showShortcuts'),
   openSettings: tr('settings.shortcuts.openSettings'),
+  togglePrivacyMode: tr('privacy.title'),
 });
 
 const CATEGORIES = () => ([
@@ -43,7 +44,7 @@ const CATEGORIES = () => ([
   },
   {
     title: 'UI',
-    actions: ['focusSearch', 'showShortcuts', 'openSettings'],
+    actions: ['focusSearch', 'showShortcuts', 'openSettings', 'togglePrivacyMode'],
   },
 ]);
 

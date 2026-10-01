@@ -28,6 +28,7 @@ import { ScheduledFolderModal } from './scheduled/ScheduledFolderModal';
 import { FolderContextMenu } from './FolderContextMenu';
 import { FolderNameDialog } from './FolderNameDialog';
 import { FocusTimerButton } from './FocusTimerButton';
+import { PrivacyModeButton } from './privacy/PrivacyModeButton';
 import { buildMailboxTree, mailboxAncestors, withLocalFolders } from '../services/workflows/mailboxTree';
 import { openFolder } from '../services/workflows/loadSubtree';
 import { useKeychainGateStore } from '../stores/keychainGateStore';
@@ -1082,6 +1083,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <Settings size={15} className="text-mail-text-muted" />
           </Button>
           <FocusTimerButton collapsed onUpgrade={() => onOpenSettings('billing')} />
+          <PrivacyModeButton onUpgrade={() => onOpenSettings('billing')} />
           <Button variant="ghost" icon size="sm"
             onClick={onReportBug}
             title={t('sidebar.reportABug')}
@@ -1326,6 +1328,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       <div className="sidebar-footer">
         <div className="sidebar-footer-tools">
           <div className="flex-1 min-w-0"><FocusTimerButton onUpgrade={() => onOpenSettings('billing')} /></div>
+          <PrivacyModeButton onUpgrade={() => onOpenSettings('billing')} />
           <Button variant="ghost" icon size="sm" onClick={onReportBug} title={t('sidebar.reportABug')} aria-label={t('sidebar.reportABug')}><Bug size={14} /></Button>
           <Button variant="ghost" icon size="sm" onClick={onReferFriend} title={t('sidebar.referAFriend')} aria-label={t('sidebar.referAFriend')}><Gift size={14} /></Button>
         </div>

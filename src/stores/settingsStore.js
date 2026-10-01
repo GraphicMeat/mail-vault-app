@@ -89,6 +89,8 @@ export const DEFAULT_SHORTCUTS = {
   showShortcuts: '?',
   openSettings: 'Meta+,',
   undo: 'Meta+z',
+  // Shift is implicit for a letter key: the hook's encoder only names it for named keys, so this is the capital.
+  togglePrivacyMode: 'Meta+P',
 };
 
 // Persisted preferences override defaults; sidebar layouts reject invalid values.

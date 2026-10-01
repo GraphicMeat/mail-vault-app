@@ -3560,5 +3560,13 @@
   "productHunt.dialogLabel": "MailVaultがProduct Huntに登場",
   "productHunt.openLabel": "Product HuntでMailVaultを応援する",
   "productHunt.endsNote": "このバナーは{{when}}以降は表示されません。",
-  "productHunt.timeLeft": "残り{{left}}"
+  "productHunt.timeLeft": "残り{{left}}",
+  "privacy.title": "プライバシーモード",
+  "privacy.on": "プライバシーモード オン",
+  "privacy.off": "プライバシーモード オフ",
+  "privacy.hint": "名前、メールアドレス、電話番号、住所を隠します。Option（Alt）キーを押している間だけ表示されます。",
+  "privacy.upsellTitle": "プライバシーモードはプレミアム機能です",
+  "privacy.upsellBody": "画面を録画したり、人前でメールを読んだりしても、誰に宛てて書いているかを見せずに済みます。",
+  "privacy.notificationTitle": "新着メッセージ",
+  "privacy.sourceBlocked": "メッセージのソースを表示するには、プライバシーモードをオフにしてください。"
 }

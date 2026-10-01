@@ -120,13 +120,14 @@ export function ShortcutsSettings({ active = true }) {
     focusSearch: t('search.search'),
     showShortcuts: t('settings.shortcuts.showShortcuts'),
     openSettings: t('settings.shortcuts.openSettings'),
+    togglePrivacyMode: t('privacy.title'),
   };
 
   const SHORTCUT_CATEGORIES = [
     { title: t('settings.shortcuts.navigation'), actions: ['nextEmail', 'prevEmail', 'goToInbox', 'goToSent', 'goToDrafts'] },
     { title: t('settings.shortcuts.actions'), actions: ['reply', 'replyAll', 'forward', 'archive', 'toggleStar', 'delete', 'moveToFolder', 'snooze', 'compose', 'undo'] },
     { title: t('settings.shortcuts.selection'), actions: ['toggleSelect', 'escape'] },
-    { title: 'UI', actions: ['focusSearch', 'showShortcuts', 'openSettings'] },
+    { title: 'UI', actions: ['focusSearch', 'showShortcuts', 'openSettings', 'togglePrivacyMode'] },
   ];
 
   // Format keybinding for display

@@ -3560,5 +3560,13 @@
   "productHunt.dialogLabel": "MailVault 已登陆 Product Hunt",
   "productHunt.openLabel": "在 Product Hunt 上支持 MailVault",
   "productHunt.endsNote": "此横幅将在{{when}}之后不再显示。",
-  "productHunt.timeLeft": "还剩 {{left}}"
+  "productHunt.timeLeft": "还剩 {{left}}",
+  "privacy.title": "隐私模式",
+  "privacy.on": "隐私模式已开启",
+  "privacy.off": "隐私模式已关闭",
+  "privacy.hint": "隐藏姓名、电子邮件地址、电话号码和地址。按住 Option（Alt）键可临时查看。",
+  "privacy.upsellTitle": "隐私模式是高级版功能",
+  "privacy.upsellBody": "录制屏幕或在公共场所阅读邮件时，不会暴露你在给谁写信。",
+  "privacy.notificationTitle": "新消息",
+  "privacy.sourceBlocked": "请先关闭隐私模式，再查看邮件源码。"
 }

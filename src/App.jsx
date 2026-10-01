@@ -59,6 +59,8 @@ import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import { FocusLock } from './components/FocusLock';
 import { PrivacyDictionaryHost } from './components/privacy/PrivacyDictionaryHost';
+import { usePrivacyStore, isPrivacyMasking } from './stores/privacyStore';
+import { usePrivacyPeekListeners } from './hooks/usePrivacy';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import BackupUpsellModal from './components/BackupUpsellModal.jsx';
 import { ExportDialog } from './components/export/ExportDialog.jsx';
@@ -681,6 +683,12 @@ function App() {
     if (target) selectEmail(keyOf(target));
   };
 
+  const privacyOn = usePrivacyStore(isPrivacyMasking);
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-privacy', privacyOn);
+  }, [privacyOn]);
+  usePrivacyPeekListeners();
+
   // Keyboard shortcuts — wire all shortcut actions to app state/store methods
   useKeyboardShortcuts({
     compose: () => setComposeState({}),
@@ -792,6 +800,10 @@ function App() {
     },
     showShortcuts: () => setShowShortcutsModal(prev => !prev),
     openSettings,
+    togglePrivacyMode: () => {
+      const p = usePrivacyStore.getState();
+      if (p.setEnabled(!p.enabled) === 'premium') openSettings({ tab: 'billing' });
+    },
     moveToFolder: () => {
       const { selectedEmailIds, selectedEmailId } = useMailStore.getState();
       // Only open if there's something to move
