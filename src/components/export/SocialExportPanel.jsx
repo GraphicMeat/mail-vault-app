@@ -60,18 +60,6 @@ function Field({ label, children }) {
   );
 }
 
-// A swatch's accessible name. Literal keys, so the catalog check sees each.
-const swatchNames = (t) => ({
-  sunset: t('export.social.swatch.sunset'), ocean: t('export.social.swatch.ocean'),
-  aurora: t('export.social.swatch.aurora'), candy: t('export.social.swatch.candy'),
-  lime: t('export.social.swatch.lime'), peach: t('export.social.swatch.peach'),
-  violet: t('export.social.swatch.violet'), ember: t('export.social.swatch.ember'),
-  mint: t('export.social.swatch.mint'), midnight: t('export.social.swatch.midnight'),
-  white: t('export.social.swatch.white'), black: t('export.social.swatch.black'),
-  graphite: t('export.social.swatch.graphite'), cream: t('export.social.swatch.cream'),
-  sky: t('export.social.swatch.sky'), blush: t('export.social.swatch.blush'),
-});
-
 const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' && a.type !== 'solid' ? true : a.id === b.id);
 
 /**
@@ -195,7 +183,17 @@ export function SocialExportPanel({ message, onDone }) {
   const customStops = prefs.background.type === 'custom' && prefs.background.stops?.length >= 2
     ? prefs.background.stops : DEFAULT_CUSTOM_STOPS;
   const sizeOptions = useMemo(() => [{ value: 'auto', label: t('export.social.sizeAuto') }, ...SIZES], [t]);
-  const names = useMemo(() => swatchNames(t), [t]);
+  // A swatch's accessible name. Literal keys, so the catalog check sees each.
+  const names = useMemo(() => ({
+    sunset: t('export.social.swatch.sunset'), ocean: t('export.social.swatch.ocean'),
+    aurora: t('export.social.swatch.aurora'), candy: t('export.social.swatch.candy'),
+    lime: t('export.social.swatch.lime'), peach: t('export.social.swatch.peach'),
+    violet: t('export.social.swatch.violet'), ember: t('export.social.swatch.ember'),
+    mint: t('export.social.swatch.mint'), midnight: t('export.social.swatch.midnight'),
+    white: t('export.social.swatch.white'), black: t('export.social.swatch.black'),
+    graphite: t('export.social.swatch.graphite'), cream: t('export.social.swatch.cream'),
+    sky: t('export.social.swatch.sky'), blush: t('export.social.swatch.blush'),
+  }), [t]);
 
   return (
     <>
