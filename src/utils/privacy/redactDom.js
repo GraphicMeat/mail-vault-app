@@ -9,10 +9,11 @@ import { findPii, maskText, maskString } from './piiDetector';
  * survives exactly as written. Same walking rules as iframeSearchHighlight.
  *
  * ponytail: Detection is per text node (a name split across elements, e.g. John <b>Smith</b>,
- * is caught only token-by-token via the dictionary). <textarea> default text is skipped.
+ * is caught only token-by-token via the dictionary). <noscript> and <textarea> text is masked
+ * too: noscript renders in a scriptless frame, and a textarea shows its default text.
  */
 export const PII_CLASS = 'mv-pii';
-const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA']);
+const SKIP_TAGS = new Set(['SCRIPT', 'STYLE']);
 const TEXT_ATTRS = ['title', 'alt', 'aria-label', 'placeholder', 'value', 'label', 'aria-description'];
 
 function safeDecode(s) {

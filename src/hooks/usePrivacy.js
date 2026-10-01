@@ -3,7 +3,6 @@ import { usePrivacyStore, isPrivacyMasking } from '../stores/privacyStore';
 import { usePrivacyDictStore, getPrivacyDictionary } from '../utils/privacy/privacyDictionary';
 import { findPii, maskText, maskString } from '../utils/privacy/piiDetector';
 import { createPeekController } from '../utils/privacy/peekController';
-import { isChildWindow } from '../utils/privacy/isChildWindow';
 
 const STRUCTURAL = new Set(['name', 'email', 'filename']);
 
@@ -27,10 +26,11 @@ const isHydrated = () => usePrivacyStore.persist.hasHydrated();
 
 export function usePrivacyActive() {
   const masking = usePrivacyStore(isPrivacyMasking);
-  // A detached window hydrates the persisted choice asynchronously, so its
-  // first paint would show real names. It masks until that has loaded.
+  // Every window hydrates the persisted choice asynchronously (the main one
+  // too: safeStorage reads the settings file over IPC), so a first paint would
+  // show real names. Masking for those few ms at launch is the cheaper mistake.
   const hydrated = useSyncExternalStore(subscribeHydration, isHydrated);
-  return masking || (!hydrated && isChildWindow());
+  return masking || !hydrated;
 }
 
 /**

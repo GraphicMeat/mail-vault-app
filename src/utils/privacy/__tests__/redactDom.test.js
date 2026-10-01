@@ -83,4 +83,11 @@ describe('redactTree', () => {
     expect(attrs).toContainEqual(['value', 'John Smith']);
     expect(attrs).toContainEqual(['aria-description', 'John Smith is here']);
   });
+  it('masks noscript and textarea text: a scriptless frame renders noscript', () => {
+    const root = mount('<noscript>John Smith</noscript><textarea>John Smith</textarea><style>.John{}</style>');
+    redactTree(root, dict);
+    expect(root.querySelector('noscript').textContent).not.toMatch(/John|Smith/);
+    expect(root.querySelector('textarea').textContent).not.toMatch(/John|Smith/);
+    expect(root.querySelector('style').textContent).toBe('.John{}'); // style text is still skipped
+  });
 });

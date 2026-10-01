@@ -18,6 +18,9 @@ export function PrivacyDictionaryHost() {
   const displayNames = useSettingsStore(s => s.displayNames);
   const [indexTick, setIndexTick] = useState(0);
   const lastKey = useRef('');
+  // Every name seen this session. The set only grows: a folder switch that
+  // drops a header must not unmask the message still on screen.
+  const seen = useRef(new Set());
 
   useEffect(() => subscribeContactsIndex(() => setIndexTick(n => n + 1)), []);
   useEffect(() => { if (needed && accounts?.length) hydrateContactsIndex(accounts); }, [needed, accounts]);
@@ -25,12 +28,13 @@ export function PrivacyDictionaryHost() {
   useEffect(() => {
     if (!needed) return;
     const index = buildContactsIndex(getHydratedAccountSources(), accounts || []);
-    const names = collectPrivacyNames({
+    for (const n of collectPrivacyNames({
       contacts: index.all,
       emails: [...(emails || []), ...(sentEmails || []), ...(selectedEmail ? [selectedEmail] : [])],
       accounts: accounts || [],
       displayNames,
-    });
+    })) seen.current.add(n);
+    const names = [...seen.current];
     const ready = isContactsIndexHydrated();
     // Every list change reruns this, but the names rarely change: only a new name set pays for a rebuild and wakes the readers.
     // ponytail: collecting is O(headers x 5) per change (cheap, unmeasured); revisit if profiling shows list loads stalling.

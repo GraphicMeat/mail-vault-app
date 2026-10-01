@@ -73,7 +73,7 @@ describe('<Private>', () => {
   });
 });
 
-describe('usePrivacyActive in a detached window', () => {
+describe('usePrivacyActive before the persisted choice loads', () => {
   let hydrated;
   let listeners;
   beforeEach(() => {
@@ -98,9 +98,12 @@ describe('usePrivacyActive in a detached window', () => {
     act(() => listeners.forEach(l => l()));
     expect(result.current).toBe(false);
   });
-  it('masks nothing early in the main window', () => {
+  it('masks early in the main window too, then follows the persisted choice', () => {
     window.history.replaceState(null, '', '/');
     const { result } = renderHook(() => usePrivacyActive());
+    expect(result.current).toBe(true);
+    hydrated = true;
+    act(() => listeners.forEach(l => l()));
     expect(result.current).toBe(false);
   });
 });

@@ -39,4 +39,13 @@ describe('PrivacyDictionaryHost', () => {
     expect(getPrivacyDictionary().tokens.has('bobby')).toBe(true);
     expect(usePrivacyDictStore.getState().version).toBe(v + 1);
   });
+
+  it('never forgets a name this session: a folder switch must not unmask the open message', async () => {
+    usePrivacyStore.setState({ enabled: true });
+    render(<PrivacyDictionaryHost />);
+    await act(async () => { useMailStore.setState({ emails: [mail('Carla Mendez')] }); });
+    await act(async () => { useMailStore.setState({ emails: [mail('Dmitri Orlov')] }); });
+    expect(getPrivacyDictionary().tokens.has('dmitri')).toBe(true);
+    expect(getPrivacyDictionary().tokens.has('carla')).toBe(true);
+  });
 });

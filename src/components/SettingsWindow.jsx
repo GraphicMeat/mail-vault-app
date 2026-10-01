@@ -15,6 +15,7 @@ import { useFieldStore } from '../stores/fieldStore';
 import { useNetActivityStore } from '../stores/netActivityStore';
 import { pinQuickActionScope } from '../hooks/useQuickActionConfiguration';
 import { startPrivacySync } from '../utils/privacy/privacySync';
+import { PrivacyDictionaryHost } from './privacy/PrivacyDictionaryHost';
 
 const token = new URLSearchParams(window.location.search).get('settings');
 
@@ -140,5 +141,7 @@ export function SettingsWindow() {
       onImportAccounts={() => handoff('import-accounts')}
       onReportBug={() => handoff('report-bug')} />
     <UnsubscribeHost />
+    {/* Cleanup's message preview masks names from this window's own dictionary. */}
+    <PrivacyDictionaryHost />
   </>;
 }

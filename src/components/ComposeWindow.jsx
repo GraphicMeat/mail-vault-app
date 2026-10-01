@@ -8,6 +8,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { isComposeMessage } from '../services/composeWindow';
 import { setLocale } from '../i18n/index.js';
 import { startPrivacySync } from '../utils/privacy/privacySync';
+import { PrivacyDictionaryHost } from './privacy/PrivacyDictionaryHost';
 
 const composeId = new URLSearchParams(window.location.search).get('compose');
 const token = new URLSearchParams(window.location.search).get('token');
@@ -217,6 +218,8 @@ export function ComposeWindow() {
   if (bootError) return <div className="h-screen bg-mail-bg text-mail-danger p-4" role="alert">{bootError}</div>;
   if (!initialization || !activated) return <div className="h-screen bg-mail-bg" aria-busy="true" />;
   return <>
+    {/* The quoted original and the thread are masked here too: this window builds its own dictionary. */}
+    <PrivacyDictionaryHost />
     {bridgeError && <div className="fixed top-2 left-2 right-2 z-[100] rounded bg-mail-danger px-3 py-2 text-sm text-white" role="alert">{bridgeError}</div>}
     <ComposeModal
       detached
