@@ -42,6 +42,16 @@ describe('buildExport with redact', () => {
     expect(doc).toContain('█');
   });
 
+  it('html export: the header card and thread head use █ runs like the body; the file name does not', async () => {
+    const r = await buildExport({ messages: [msg], format: 'html', mirror: false, gate: SAMPLE, account: 'owen@own.example', mailbox: 'INBOX', redact: { style: 'bar', dict } });
+    const doc = decode(r.files[0].base64);
+    expect(doc).toContain('██████ █████████'); // the sender, Joanna Kowalczyk
+    expect(doc).toContain('████@███.███████'); // the account
+    expect(doc).not.toContain('xxxxxx xxxxxxxxx');
+    expect(r.files[0].name).not.toContain('█');
+    expect(r.files[0].name).toContain('xxxxxx xxxxxxxxx');
+  });
+
   it('image export: the document handed to the rasterizer carries no fixture person', async () => {
     const r = await buildExport({ messages: [msg], format: 'image', mirror: false, gate: SAMPLE, account: 'owen@own.example', mailbox: 'INBOX', redact: { style: 'bar', dict } });
     expect(r.ok).toBe(true);

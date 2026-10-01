@@ -121,7 +121,7 @@ export const normalizeListPreviewLines = value => [0, 1, 2, 3].includes(value) ?
 // background falls back to the default preset.
 export const DEFAULT_SOCIAL_EXPORT = Object.freeze({
   content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
-  padding: 64, radius: 16, shadow: true, chrome: true, theme: 'light',
+  padding: 64, radius: 16, shadow: true, chrome: true,
 });
 const SOCIAL_BACKGROUNDS = ['gradient', 'solid', 'custom', 'transparent'];
 export const normalizeSocialExport = (value) => {

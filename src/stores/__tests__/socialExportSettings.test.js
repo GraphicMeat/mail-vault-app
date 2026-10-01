@@ -25,4 +25,9 @@ describe('social export style', () => {
     const merged = _mergePersistedSettings({ socialExport: { padding: 120, background: { type: 'image' } } }, current).socialExport;
     expect(merged).toEqual({ ...DEFAULT_SOCIAL_EXPORT, padding: 120 });
   });
+
+  it('drops the old card theme choice: the card is light, an app shot follows the app', () => {
+    const merged = _mergePersistedSettings({ socialExport: { theme: 'dark' } }, useSettingsStore.getState()).socialExport;
+    expect(merged).not.toHaveProperty('theme');
+  });
 });

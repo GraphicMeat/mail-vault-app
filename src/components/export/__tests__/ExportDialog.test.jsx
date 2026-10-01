@@ -23,7 +23,7 @@ vi.mock('../../../stores/settingsStore', () => ({
 
 import { ExportDialog } from '../ExportDialog';
 import { usePrivacyStore } from '../../../stores/privacyStore';
-import { usePrivacyDictStore, setPrivacyDictionary, getPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
+import { setPrivacyDictionary, getPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
 import { buildNameDictionary } from '../../../utils/privacy/piiDetector';
 
 // The format radios are queried anchored (/^image$/) because the layout row
@@ -37,13 +37,20 @@ const messages = [
 ];
 const props = { open: true, account: 'r@x.test', mailbox: 'INBOX', onClose: () => {}, onUpgrade: () => {}, onShowSamples: () => {} };
 
+// Stands in for PrivacyDictionaryHost: a raised dictWanted gets a fresh build.
+let hostDict = buildNameDictionary({ names: [] });
+let unHost = null;
 beforeEach(() => {
+  usePrivacyStore.setState({ enabled: false, dictWanted: false });
+  unHost = usePrivacyStore.subscribe((s, prev) => {
+    if (s.dictWanted && !prev.dictWanted) setPrivacyDictionary(hostDict, { ready: true });
+  });
   hasPremiumAccess.mockReturnValue(true);
   buildExport.mockReset();
   buildExport.mockResolvedValue({ ok: true, files: [{ name: 'out.png', base64: 'A' }], failures: [], stats: {} });
   saveOneFile.mockClear(); saveFilesToDirectory.mockClear();
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); unHost?.(); });
 
 describe('ExportDialog', () => {
   it('offers both formats', () => {
@@ -185,7 +192,7 @@ describe('ExportDialog', () => {
   });
 
   it('redacts on request: blur for an image, the current dictionary, and the flag dropped after', async () => {
-    setPrivacyDictionary(buildNameDictionary({ names: ['Ana Brandt'] }), { ready: true });
+    hostDict = buildNameDictionary({ names: ['Ana Brandt'] });
     const wanted = [];
     const un = usePrivacyStore.subscribe(s => wanted.push(s.dictWanted));
     render(<ExportDialog {...props} messages={messages} />);
@@ -203,7 +210,6 @@ describe('ExportDialog', () => {
   });
 
   it('always uses bars for a redacted HTML export, and offers no style', async () => {
-    usePrivacyDictStore.setState({ ready: true });
     render(<ExportDialog {...props} messages={messages} />);
     fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
     fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
@@ -211,6 +217,27 @@ describe('ExportDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
     await waitFor(() => expect(buildExport).toHaveBeenCalled());
     expect(buildExport.mock.calls[0][0].redact.style).toBe('bar');
+  });
+
+  it('turns attachments off when redaction goes on, and keeps a re-enabled choice', () => {
+    render(<ExportDialog {...props} messages={messages} />);
+    const attachments = screen.getByRole('checkbox', { name: /include attachments/i });
+    expect(attachments.checked).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+    expect(attachments.checked).toBe(false);
+    expect(screen.getByText(/attachment contents are not redacted/i)).toBeTruthy();
+    fireEvent.click(attachments);
+    expect(attachments.checked).toBe(true);
+  });
+
+  it('opens with redaction on (attachments off) while privacy mode is on', async () => {
+    usePrivacyStore.setState({ enabled: true });
+    render(<ExportDialog {...props} messages={messages} />);
+    expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
+    expect(screen.getByRole('checkbox', { name: /include attachments/i }).checked).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(buildExport).toHaveBeenCalled());
+    expect(buildExport.mock.calls[0][0]).toMatchObject({ attachments: false, redact: { style: 'blur' } });
   });
 
   it('exports unredacted by default', async () => {

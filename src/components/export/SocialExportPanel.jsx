@@ -4,14 +4,19 @@ import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
 import { useSettingsStore, DEFAULT_SOCIAL_EXPORT } from '../../stores/settingsStore';
-import { buildSocialContent, buildSocialExport, effectiveTheme } from '../../services/export/social/buildSocialExport';
+import { buildSocialContent, buildSocialExport, chromeTheme } from '../../services/export/social/buildSocialExport';
 import { composeSocialImage } from '../../services/export/social/composeSocialImage';
 import { SIZE_PRESETS } from '../../services/export/social/socialLayout';
 import { GRADIENT_PRESETS, SOLID_PRESETS, DEFAULT_CUSTOM_STOPS, cssGradient } from '../../services/export/social/socialBackgrounds';
 import { saveOneFile } from '../../services/export/exportSaver';
+import { usePrivacyStore } from '../../stores/privacyStore';
+import { useThemeStore } from '../../stores/themeStore';
 
 const PREVIEW_W = 360;
 const PREVIEW_H = 420;
+// The preview composes at its own size (2x for a sharp canvas), not the
+// full-size image: a 2160x3840 story per slider step is wasted work.
+const PREVIEW_MAX = { w: PREVIEW_W * 2, h: PREVIEW_H * 2 };
 const SIZES = [
   { value: 'square', label: '1:1' },
   { value: 'portrait', label: '4:5' },
@@ -55,16 +60,29 @@ function Field({ label, children }) {
   );
 }
 
+// A swatch's accessible name. Literal keys, so the catalog check sees each.
+const swatchNames = (t) => ({
+  sunset: t('export.social.swatch.sunset'), ocean: t('export.social.swatch.ocean'),
+  aurora: t('export.social.swatch.aurora'), candy: t('export.social.swatch.candy'),
+  lime: t('export.social.swatch.lime'), peach: t('export.social.swatch.peach'),
+  violet: t('export.social.swatch.violet'), ember: t('export.social.swatch.ember'),
+  mint: t('export.social.swatch.mint'), midnight: t('export.social.swatch.midnight'),
+  white: t('export.social.swatch.white'), black: t('export.social.swatch.black'),
+  graphite: t('export.social.swatch.graphite'), cream: t('export.social.swatch.cream'),
+  sky: t('export.social.swatch.sky'), blush: t('export.social.swatch.blush'),
+});
+
 const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' && a.type !== 'solid' ? true : a.id === b.id);
 
 /**
  * The "Social" format of the export dialog: one message as a styled PNG,
  * either a card on a background or the app window with the message open.
  *
- * The content is rendered once per (content, redact, theme) and cached; every
- * style change re-composes from the cache. The style is remembered in
- * settings; redaction is on every time the panel opens, and an own image is
- * never stored.
+ * The content is rendered once per (content, redact) and cached; every style
+ * change re-composes from the cache. The style is remembered in settings;
+ * redaction is on every time the panel opens (and cannot be turned off while
+ * privacy mode is on), and an own image is never stored. The card is light;
+ * the app window's frame follows the app theme.
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
@@ -75,6 +93,10 @@ export function SocialExportPanel({ message, onDone }) {
   // Seeded once: the panel owns its style while open and writes through.
   const [prefs, setPrefs] = useState(() => ({ ...DEFAULT_SOCIAL_EXPORT, ...saved }));
   const [redact, setRedact] = useState(true);
+  // Privacy mode on: a social image never shows anyone, whatever the checkbox said.
+  const privacyOn = usePrivacyStore(s => s.enabled);
+  const redacting = redact || privacyOn;
+  const appTheme = useThemeStore(s => s.theme);
   const [ownImage, setOwnImage] = useState(null); // { type: 'image', image }, in memory only
   const [imageActive, setImageActive] = useState(false);
   const [content, setContent] = useState(null);
@@ -85,7 +107,7 @@ export function SocialExportPanel({ message, onDone }) {
   const request = useRef(0);
   const cache = useRef(new Map());
 
-  const theme = effectiveTheme(prefs.content, prefs.theme);
+  const theme = chromeTheme(prefs.content, appTheme);
   const background = imageActive && ownImage ? ownImage : prefs.background;
 
   const update = (patch) => {
@@ -112,27 +134,30 @@ export function SocialExportPanel({ message, onDone }) {
   useEffect(() => { cache.current = new Map(); }, [message]);
 
   useEffect(() => {
-    const key = `${prefs.content}|${redact}|${theme}`;
+    const key = `${prefs.content}|${redacting}`;
     const id = ++request.current;
     const hit = cache.current.get(key);
     if (hit) { setContent(hit); setLoading(false); return; }
+    // The old content goes now: an unredacted canvas must not stay painted
+    // while the redacted one builds (privacy mode turned on mid-preview).
+    setContent(null);
     setLoading(true);
     setNotice(null);
-    buildSocialContent(message, { content: prefs.content, redact, theme })
+    buildSocialContent(message, { content: prefs.content, redact: redacting })
       .then((canvas) => {
         cache.current.set(key, canvas);
         if (request.current === id) setContent(canvas);
       })
       .catch(() => { if (request.current === id) { setContent(null); setNotice(t('export.dialog.messageCouldExported')); } })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [message, prefs.content, redact, theme]);
+  }, [message, prefs.content, redacting]);
 
   useEffect(() => {
     if (!content) return;
     const out = composeSocialImage({
       content, size: SIZE_PRESETS[prefs.size] ?? null, background,
       padding: prefs.padding, radius: prefs.radius, shadow: prefs.shadow, chrome: prefs.chrome,
-      theme, fit: prefs.content === 'app' ? 'contain' : 'crop',
+      theme, fit: prefs.content === 'app' ? 'contain' : 'crop', maxSize: PREVIEW_MAX,
     });
     const canvas = previewRef.current;
     if (!canvas || !out.width || !out.height) return;
@@ -153,7 +178,7 @@ export function SocialExportPanel({ message, onDone }) {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await buildSocialExport({ message, options: { ...prefs, background, redact } });
+      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting } });
       if (!result.ok) {
         setNotice(result.reason === 'premium' ? t('export.dialog.exportPremiumFeature') : t('export.dialog.messageCouldExported'));
         return;
@@ -170,8 +195,7 @@ export function SocialExportPanel({ message, onDone }) {
   const customStops = prefs.background.type === 'custom' && prefs.background.stops?.length >= 2
     ? prefs.background.stops : DEFAULT_CUSTOM_STOPS;
   const sizeOptions = useMemo(() => [{ value: 'auto', label: t('export.social.sizeAuto') }, ...SIZES], [t]);
-  let swatchNo = 0;
-  const swatchLabel = () => t('export.social.swatch', { n: ++swatchNo });
+  const names = useMemo(() => swatchNames(t), [t]);
 
   return (
     <>
@@ -196,12 +220,12 @@ export function SocialExportPanel({ message, onDone }) {
           <Field label={t('export.social.background')}>
             <div className="flex flex-wrap gap-1.5">
               {GRADIENT_PRESETS.map(g => (
-                <Swatch key={g.id} label={swatchLabel()} style={{ background: cssGradient(g.stops, g.angle) }}
+                <Swatch key={g.id} label={names[g.id]} style={{ background: cssGradient(g.stops, g.angle) }}
                   selected={!imageActive && sameBackground(prefs.background, { type: 'gradient', id: g.id })}
                   onClick={() => pickBackground({ type: 'gradient', id: g.id })} />
               ))}
               {SOLID_PRESETS.map(s => (
-                <Swatch key={s.id} label={swatchLabel()} style={{ background: s.color }}
+                <Swatch key={s.id} label={names[s.id]} style={{ background: s.color }}
                   selected={!imageActive && sameBackground(prefs.background, { type: 'solid', id: s.id })}
                   onClick={() => pickBackground({ type: 'solid', id: s.id })} />
               ))}
@@ -253,18 +277,12 @@ export function SocialExportPanel({ message, onDone }) {
             <ToggleSwitch active={prefs.chrome} label={t('export.social.chrome')} onClick={() => update({ chrome: !prefs.chrome })} />
           </div>
 
-          <Field label={t('export.social.theme')}>
-            <Chips label={t('export.social.theme')} value={theme} onChange={v => update({ theme: v })}
-              options={[
-                { value: 'light', label: t('export.social.light') },
-                { value: 'dark', label: t('export.social.dark'), disabled: prefs.content === 'card' },
-              ]} />
-            {prefs.content === 'card' && <p className="text-xs text-mail-text-muted">{t('export.social.darkAppOnly')}</p>}
-          </Field>
-
-          <label className="flex items-start gap-2 cursor-pointer">
-            <input type="checkbox" checked={redact} onChange={e => setRedact(e.target.checked)} className="mt-0.5" />
-            <span className="text-sm text-mail-text">{t('export.dialog.redactLabel')}</span>
+          <label className={`flex items-start gap-2 ${privacyOn ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+            <input type="checkbox" checked={redacting} disabled={privacyOn} onChange={e => setRedact(e.target.checked)} className="mt-0.5" />
+            <span>
+              <span className="block text-sm text-mail-text">{t('export.dialog.redactLabel')}</span>
+              {privacyOn && <span className="block text-xs text-mail-text-muted">{t('export.social.redactForced')}</span>}
+            </span>
           </label>
         </div>
       </div>

@@ -27,7 +27,10 @@ const keep = (node) => !(node?.nodeType === 1 && node.closest?.('[data-capture-e
 
 function cloneHook(redact, dict) {
   return (clone) => {
-    // A frame's srcdoc is the raw, unmasked body; the visible content is composited below.
+    // A frame's srcdoc is the raw, unmasked body; the visible content is
+    // composited below. Only a frame the cloner cannot read keeps its <iframe>
+    // (and srcdoc) in the clone: a same-origin one is cloned as its <html>,
+    // which the redaction below walks like any other subtree.
     for (const frame of clone.querySelectorAll?.('iframe[srcdoc]') || []) frame.removeAttribute('srcdoc');
     if (clone.nodeName === 'IFRAME') clone.removeAttribute('srcdoc');
     if (redact) redactTree(clone, dict ?? undefined);

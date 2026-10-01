@@ -26,7 +26,9 @@ export function PrivacyDictionaryHost() {
   useEffect(() => { if (needed && accounts?.length) hydrateContactsIndex(accounts); }, [needed, accounts]);
 
   useEffect(() => {
-    if (!needed) return;
+    // Idle, the dictionary goes stale; the next wake must publish a build (a
+    // waiting export counts on it) even when the names are the same.
+    if (!needed) { lastKey.current = ''; return; }
     const index = buildContactsIndex(getHydratedAccountSources(), accounts || []);
     for (const n of collectPrivacyNames({
       contacts: index.all,

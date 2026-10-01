@@ -16,7 +16,7 @@ export const PII_CLASS = 'mv-pii';
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE']);
 const TEXT_ATTRS = ['title', 'alt', 'aria-label', 'placeholder', 'value', 'label', 'aria-description'];
 
-function safeDecode(s) {
+export function safeDecode(s) {
   return s.replace(/(?:%[0-9a-f]{2})+/gi, m => { try { return decodeURIComponent(m); } catch { return m; } });
 }
 

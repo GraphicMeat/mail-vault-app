@@ -263,14 +263,15 @@ export function maskText(s) {
   return String(s ?? '').replace(/[\p{L}\p{N}]\p{M}*/gu, 'x').replace(/\p{M}+/gu, '');
 }
 
-export function maskString(text, dict = EMPTY_DICTIONARY) {
+// `mask`: how a match is filled (an HTML export uses █ runs).
+export function maskString(text, dict = EMPTY_DICTIONARY, mask = maskText) {
   const s = String(text ?? '');
   const spans = findPii(s, dict);
   if (!spans.length) return s;
   let out = '';
   let last = 0;
   for (const { start, end } of spans) {
-    out += s.slice(last, start) + maskText(s.slice(start, end));
+    out += s.slice(last, start) + mask(s.slice(start, end));
     last = end;
   }
   return out + s.slice(last);

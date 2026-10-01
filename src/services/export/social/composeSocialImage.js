@@ -38,17 +38,24 @@ function paintBackground(ctx, w, h, bg) {
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
 }
 
-export function composeSocialImage({ content, size, background, padding, radius, shadow, chrome, theme = 'light', fit }) {
+/**
+ * `maxSize: { w, h }` paints a scaled-down copy that fits inside it (the live
+ * preview); omitted, the image is full size (Save).
+ */
+export function composeSocialImage({ content, size, background, padding, radius, shadow, chrome, theme = 'light', fit, maxSize }) {
   const L = layoutSocial({ contentW: content.width, contentH: content.height, size, padding, chrome, fit });
+  const scale = maxSize ? Math.min(1, maxSize.w / L.canvasW, maxSize.h / L.canvasH) : 1;
   const canvas = document.createElement('canvas');
-  canvas.width = L.canvasW; canvas.height = L.canvasH;
+  canvas.width = Math.max(1, Math.round(L.canvasW * scale)); canvas.height = Math.max(1, Math.round(L.canvasH * scale));
   const ctx = canvas.getContext('2d');
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
   paintBackground(ctx, L.canvasW, L.canvasH, background);
   const r = radius * 2;
   const { x, y, w, h } = L.card;
   if (shadow) {
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 80; ctx.shadowOffsetY = 28;
+    // Shadows ignore the transform: scaled by hand.
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 80 * scale; ctx.shadowOffsetY = 28 * scale;
     ctx.fillStyle = CARD_BG[theme]; roundRect(ctx, x, y, w, h, r); ctx.fill();
     ctx.restore();
   }

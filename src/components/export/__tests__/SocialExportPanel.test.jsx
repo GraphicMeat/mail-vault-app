@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 
 const stubCanvas = () => ({ width: 200, height: 300 });
 const buildSocialContent = vi.fn(async () => stubCanvas());
@@ -13,7 +13,7 @@ const setSocialExport = vi.fn();
 vi.mock('../../../services/export/social/buildSocialExport', () => ({
   buildSocialContent: (...a) => buildSocialContent(...a),
   buildSocialExport: (...a) => buildSocialExport(...a),
-  effectiveTheme: (content, theme) => (content === 'app' && theme === 'dark' ? 'dark' : 'light'),
+  chromeTheme: (content, appTheme) => (content === 'app' && appTheme === 'dark' ? 'dark' : 'light'),
 }));
 vi.mock('../../../services/export/social/composeSocialImage', () => ({
   composeSocialImage: (...a) => composeSocialImage(...a),
@@ -24,7 +24,7 @@ vi.mock('../../../services/export/exportSaver', () => ({
 
 const DEFAULT_SOCIAL_EXPORT = {
   content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
-  padding: 64, radius: 16, shadow: true, chrome: true, theme: 'light',
+  padding: 64, radius: 16, shadow: true, chrome: true,
 };
 // Saved by an earlier session: a style, and a stray redact:false that must not win.
 let settingsState;
@@ -32,7 +32,7 @@ vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   DEFAULT_SOCIAL_EXPORT: {
     content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
-    padding: 64, radius: 16, shadow: true, chrome: true, theme: 'light',
+    padding: 64, radius: 16, shadow: true, chrome: true,
   },
   useSettingsStore: (sel) => sel(settingsState),
 }));
@@ -40,6 +40,8 @@ vi.mock('../../../stores/settingsStore', () => ({
 import { SocialExportPanel } from '../SocialExportPanel';
 import { SIZE_PRESETS } from '../../../services/export/social/socialLayout';
 import { FIXTURE_MESSAGE } from '../../../test/privacyFixtures';
+import { usePrivacyStore } from '../../../stores/privacyStore';
+import { useThemeStore } from '../../../stores/themeStore';
 
 let getContext;
 beforeEach(() => {
@@ -51,7 +53,11 @@ beforeEach(() => {
   getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ clearRect() {}, drawImage() {} });
   vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 50, height: 50, close: vi.fn() })));
 });
-afterEach(() => { cleanup(); getContext.mockRestore(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup(); getContext.mockRestore(); vi.unstubAllGlobals();
+  usePrivacyStore.setState({ enabled: false });
+  useThemeStore.setState({ theme: 'dark' });
+});
 
 const renderPanel = (props = {}) => render(<SocialExportPanel message={FIXTURE_MESSAGE} onDone={() => {}} {...props} />);
 const lastCompose = () => composeSocialImage.mock.calls.at(-1)[0];
@@ -61,9 +67,10 @@ describe('SocialExportPanel', () => {
     renderPanel();
     expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
     await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
-    expect(buildSocialContent.mock.calls[0][1]).toMatchObject({ content: 'card', redact: true, theme: 'light' });
+    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true });
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
-    expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, fit: 'crop' });
+    // The preview composes at preview size; only Save renders full size.
+    expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, fit: 'crop', maxSize: { w: 720, h: 840 } });
   });
 
   it('re-composes at 9:16 from the cached content, and remembers the size', async () => {
@@ -103,12 +110,50 @@ describe('SocialExportPanel', () => {
     }
   });
 
-  it('offers Dark only for the app window', async () => {
+  it('has no theme choice: the card is light, the app window frame follows the app theme', async () => {
+    useThemeStore.setState({ theme: 'dark' });
     renderPanel();
-    expect(screen.getByRole('button', { name: /^dark$/i }).disabled).toBe(true);
-    expect(screen.getByText(/dark is available for app window/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^dark$/i })).toBeNull();
+    await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
+    expect(lastCompose().theme).toBe('light');
     fireEvent.click(screen.getByRole('button', { name: /app window/i }));
-    expect(screen.getByRole('button', { name: /^dark$/i }).disabled).toBe(false);
-    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toMatchObject({ content: 'app' }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true }));
+    await waitFor(() => expect(lastCompose().theme).toBe('dark'));
+    act(() => useThemeStore.setState({ theme: 'light' }));
+    await waitFor(() => expect(lastCompose().theme).toBe('light'));
+    // The theme is not part of the content: no second capture.
+    expect(buildSocialContent).toHaveBeenCalledTimes(2);
+  });
+
+  it('names each background swatch', () => {
+    renderPanel();
+    for (const name of ['Sunset', 'Midnight', 'White', 'Blush']) expect(screen.getByRole('button', { name })).toBeTruthy();
+  });
+
+  it('forces redaction on while privacy mode is on, and says why', async () => {
+    usePrivacyStore.setState({ enabled: true });
+    renderPanel();
+    const box = screen.getByRole('checkbox', { name: /redact sensitive info/i });
+    expect(box.checked).toBe(true);
+    expect(box.disabled).toBe(true);
+    expect(screen.getByText(/always on while privacy mode is on/i)).toBeTruthy();
+    const save = screen.getByRole('button', { name: /save png/i });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
+    await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+    expect(buildSocialExport.mock.calls[0][0].options.redact).toBe(true);
+  });
+
+  it('takes an unredacted preview down at once when privacy mode turns on', async () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: false }));
+    await waitFor(() => expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy());
+    // Not cached yet: the redacted capture is still building when privacy turns on.
+    buildSocialContent.mockImplementationOnce(() => new Promise(() => {}));
+    act(() => usePrivacyStore.setState({ enabled: true }));
+    expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true });
+    expect(screen.queryByRole('img', { name: /preview/i })).toBeNull();
   });
 });

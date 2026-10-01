@@ -55,10 +55,19 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
   // — someone who exports HTML once usually means it again. The notice is the
   // other half: without this, the error from a failed export is still sitting
   // there when the next one opens, describing something that never happened.
+  // Redacting starts without attachments: their contents are not redacted.
+  // Only on the switch to redacting, so a re-enabled checkbox stays on.
+  const turnRedact = (on) => {
+    setRedact(on);
+    if (on && !redact) setAttachments(false);
+  };
+
   useEffect(() => {
     if (!open) return;
     setNotice(null);
     setBusy(false);
+    // Someone recording with privacy mode on means a shareable export too.
+    if (usePrivacyStore.getState().enabled) turnRedact(true);
   }, [open]);
 
   const isThread = messages.length > 1;
@@ -75,15 +84,9 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
       let redactOpts = null;
       if (redact) {
         // Not captureMask: that would mask the live UI too. The host builds the
-        // dictionary while this flag is up; a cold one gets 1.5 s.
-        const { setDictWanted } = usePrivacyStore.getState();
-        setDictWanted(true);
-        try {
-          // HTML always gets bars: a blur needs a stylesheet the file cannot promise.
-          redactOpts = { style: activeFormat === 'html' ? 'bar' : redactStyle, dict: await ensurePrivacyDictionary() };
-        } finally {
-          setDictWanted(false);
-        }
+        // dictionary while the export waits for it.
+        // HTML always gets bars: a blur needs a stylesheet the file cannot promise.
+        redactOpts = { style: activeFormat === 'html' ? 'bar' : redactStyle, dict: await ensurePrivacyDictionary() };
       }
       const result = await buildExport({ messages, format: activeFormat, layout, mirror, attachments, account, mailbox, redact: redactOpts });
       if (!result.ok) {
@@ -190,7 +193,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
             </label>
 
             <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" checked={redact} onChange={e => setRedact(e.target.checked)} className="mt-0.5" />
+              <input type="checkbox" checked={redact} onChange={e => turnRedact(e.target.checked)} className="mt-0.5" />
               <span>
                 <span className="block text-sm text-mail-text">{t('export.dialog.redactLabel')}</span>
                 <span className="block text-xs text-mail-text-muted">

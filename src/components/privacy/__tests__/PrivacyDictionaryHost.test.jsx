@@ -47,6 +47,17 @@ describe('PrivacyDictionaryHost', () => {
     expect(getPrivacyDictionary().tokens.has('elif')).toBe(true);
   });
 
+  it('publishes a fresh build on every wake, even with the same names (an export waits for it)', async () => {
+    useMailStore.setState({ emails: [mail('Fern Gale')] });
+    render(<PrivacyDictionaryHost />);
+    await act(async () => { usePrivacyStore.setState({ dictWanted: true }); });
+    const v = usePrivacyDictStore.getState().version;
+    await act(async () => { usePrivacyStore.setState({ dictWanted: false }); });
+    await act(async () => { usePrivacyStore.setState({ dictWanted: true }); });
+    expect(usePrivacyDictStore.getState().version).toBe(v + 1);
+    expect(getPrivacyDictionary().tokens.has('fern')).toBe(true);
+  });
+
   it('never forgets a name this session: a folder switch must not unmask the open message', async () => {
     usePrivacyStore.setState({ enabled: true });
     render(<PrivacyDictionaryHost />);

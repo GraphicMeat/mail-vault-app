@@ -29,16 +29,19 @@ const { buildSocialExport } = await import('../buildSocialExport');
 const { SIZE_PRESETS } = await import('../socialLayout');
 const { FIXTURE_MESSAGE, NEEDLES } = await import('../../../../test/privacyFixtures');
 const { usePrivacyStore } = await import('../../../../stores/privacyStore');
+const { useThemeStore } = await import('../../../../stores/themeStore');
 
 const message = { ...FIXTURE_MESSAGE, html: '<p>Hi Rokas Ambrazevičius, mail joanna.k@example.org or call +370 612 34567</p>' };
 const options = {
   content: 'card', size: 'portrait', background: { type: 'gradient', id: 'sunset' },
-  padding: 64, radius: 16, shadow: true, chrome: true, theme: 'light', redact: true,
+  padding: 64, radius: 16, shadow: true, chrome: true, redact: true,
 };
 const noLeak = (s) => NEEDLES.forEach(n => expect(s, n).not.toContain(n));
 
 beforeEach(() => {
   renderMessageToCanvas.mockClear(); captureAppWindow.mockClear(); composeSocialImage.mockClear();
+  usePrivacyStore.setState({ enabled: false });
+  useThemeStore.setState({ theme: 'dark' });
 });
 
 describe('buildSocialExport', () => {
@@ -50,14 +53,15 @@ describe('buildSocialExport', () => {
     expect(args.redactStyle).toBe('blur');
     expect(typeof args.onCloneNode).toBe('function');
     expect(composeSocialImage.mock.calls[0][0]).toMatchObject({ fit: 'crop', size: SIZE_PRESETS.portrait, theme: 'light' });
+    expect(composeSocialImage.mock.calls[0][0].maxSize).toBeUndefined(); // Save is full size
     noLeak(r.file.name);
     expect(r.file.name.endsWith(' - social.png')).toBe(true);
     expect(r.file.base64).toBe('AAAA');
     expect(usePrivacyStore.getState().dictWanted).toBe(false);
   });
 
-  it('app: captures the window with redaction and fits it whole', async () => {
-    const r = await buildSocialExport({ message, options: { ...options, content: 'app', size: 'landscape', theme: 'dark' } });
+  it('app: captures the window with redaction, fits it whole, frame in the app theme', async () => {
+    const r = await buildSocialExport({ message, options: { ...options, content: 'app', size: 'landscape' } });
     expect(r.ok).toBe(true);
     expect(renderMessageToCanvas).not.toHaveBeenCalled();
     expect(captureAppWindow.mock.calls[0][0].redact).toBe(true);
@@ -66,9 +70,21 @@ describe('buildSocialExport', () => {
     noLeak(r.file.name);
   });
 
-  it('a card is never dark', async () => {
-    await buildSocialExport({ message, options: { ...options, theme: 'dark' } });
+  it('a card is never dark, an app shot in a light app is light', async () => {
+    await buildSocialExport({ message, options });
     expect(composeSocialImage.mock.calls[0][0].theme).toBe('light');
+    useThemeStore.setState({ theme: 'light' });
+    await buildSocialExport({ message, options: { ...options, content: 'app' } });
+    expect(composeSocialImage.mock.calls[1][0].theme).toBe('light');
+  });
+
+  it('redacts while privacy mode is on, even when asked not to', async () => {
+    usePrivacyStore.setState({ enabled: true });
+    const r = await buildSocialExport({ message, options: { ...options, redact: false } });
+    const args = renderMessageToCanvas.mock.calls[0][0];
+    noLeak(JSON.stringify(args.message) + args.bodyHtml + r.file.name);
+    await buildSocialExport({ message, options: { ...options, content: 'app', redact: false } });
+    expect(captureAppWindow.mock.calls[0][0].redact).toBe(true);
   });
 
   it('without redact, passes the original message through', async () => {

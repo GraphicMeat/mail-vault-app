@@ -13,7 +13,7 @@ import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 import { trace } from './exportTrace';
 import { plainTextBodyHtml } from '../../utils/mailto';
 import { send } from '../transport';
-import { redactMessageForExport, redactBodyForExport, redactLabel } from './exportRedact';
+import { redactMessageForExport, redactBodyForExport, redactLabel, barText } from './exportRedact';
 import { buildNameDictionary, unionDictionaries, maskText } from '../../utils/privacy/piiDetector';
 import { collectPrivacyNames } from '../../utils/privacy/privacyDictionary';
 
@@ -203,8 +203,10 @@ export async function buildExport({
   // The exported messages' own parties join the dictionary: a cold host (privacy
   // mode off) may not know them yet, and a search result is not in the list.
   const dict = redact && unionDictionaries(redact.dict, buildNameDictionary({ names: collectPrivacyNames({ emails: ordered }) }));
-  const docAccount = redact ? account && maskText(account) : account;
-  const docMailbox = redact ? mailbox && redactLabel(mailbox, dict) : mailbox;
+  // An HTML file shows its masks as █ runs, header and thread head included.
+  const bar = format === 'html';
+  const docAccount = redact ? account && (bar ? barText : maskText)(account) : account;
+  const docMailbox = redact ? mailbox && redactLabel(mailbox, dict, { bar }) : mailbox;
   trace('start', { format, layout, mirror, messages: ordered.length });
 
   for (const message of ordered) {
@@ -231,6 +233,8 @@ export async function buildExport({
         // are renamed by position in the loaded list: getRealAttachments filters,
         // so the message's own attachment indices do not line up with it.
         const last = prepared[prepared.length - 1];
+        // The file is named from the x copy: █ makes a poor filename.
+        if (bar) last.docMessage = redactMessageForExport(last.message, dict, { bar });
         last.message = redactMessageForExport(last.message, dict);
         last.body = redactBodyForExport(last.body, dict, { format });
         last.attachments = last.attachments.map((a, i) => {
@@ -255,10 +259,10 @@ export async function buildExport({
   if (format === 'html') {
     const heights = [];
     for (const item of prepared) {
-      heights.push(await measureMessageHeight({ message: item.message, bodyHtml: item.body }));
+      heights.push(await measureMessageHeight({ message: item.docMessage || item.message, bodyHtml: item.body }));
     }
     const html = buildThreadDocument({
-      messages: prepared.map(p => p.message),
+      messages: prepared.map(p => p.docMessage || p.message),
       bodies: prepared.map(p => p.body),
       attachments: prepared.map(p => p.attachments),
       heights, account: docAccount, mailbox: docMailbox, stats,
