@@ -60,6 +60,95 @@ describe('peekController', () => {
     vi.advanceTimersByTime(250);
     expect(onChange).toHaveBeenLastCalledWith(true);
   });
+  it('after typing, Alt hold works again', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown({ key: 'a' });
+    c.keyup({ key: 'a' });
+    c.keydown(alt);
+    vi.advanceTimersByTime(250);
+    expect(onChange).toHaveBeenLastCalledWith(true);
+  });
+  it('after clicking, Alt hold works again', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.pointerdown();
+    c.keydown(alt);
+    vi.advanceTimersByTime(250);
+    expect(onChange).toHaveBeenLastCalledWith(true);
+  });
+  it('Cmd-Alt does not peek', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown({ key: 'Alt', metaKey: true });
+    vi.advanceTimersByTime(1000);
+    expect(onChange).not.toHaveBeenCalledWith(true);
+  });
+  it('Alt keyup before 250ms cancels peek', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown(alt);
+    vi.advanceTimersByTime(200);
+    c.keyup(alt);
+    vi.advanceTimersByTime(100);
+    expect(onChange).not.toHaveBeenCalledWith(true);
+  });
+  it('blur before 250ms cancels peek', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown(alt);
+    vi.advanceTimersByTime(200);
+    c.blur();
+    vi.advanceTimersByTime(100);
+    expect(onChange).not.toHaveBeenCalledWith(true);
+  });
+  it('repeat Alt keydown while already peeking keeps peek on', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown(alt);
+    vi.advanceTimersByTime(250);
+    expect(onChange).toHaveBeenLastCalledWith(true);
+    c.keydown({ key: 'Alt', repeat: true });
+    expect(onChange).toHaveBeenLastCalledWith(true); // Still on
+  });
+  it('AltGraph never peeks', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown({ key: 'AltGraph' });
+    vi.advanceTimersByTime(1000);
+    expect(onChange).not.toHaveBeenCalledWith(true);
+  });
+  it('dispose with pending timer never fires', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown(alt);
+    vi.advanceTimersByTime(200);
+    c.dispose();
+    vi.advanceTimersByTime(100);
+    expect(onChange).not.toHaveBeenCalledWith(true);
+  });
+  it('dispose during live peek turns off', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown(alt);
+    vi.advanceTimersByTime(250);
+    expect(onChange).toHaveBeenLastCalledWith(true);
+    c.dispose();
+    expect(onChange).toHaveBeenLastCalledWith(false);
+  });
+  it('after dispose, keydown/keyup/pointerdown are no-ops', () => {
+    const onChange = vi.fn();
+    const c = createPeekController({ onChange });
+    c.keydown(alt);
+    vi.advanceTimersByTime(250);
+    c.dispose();
+    onChange.mockClear();
+    c.keydown(alt);
+    c.keyup(alt);
+    c.pointerdown();
+    vi.advanceTimersByTime(500);
+    expect(onChange).not.toHaveBeenCalled();
+  });
   it('keyup of non-Alt key while Alt is held does not start a peek', () => {
     const onChange = vi.fn();
     const c = createPeekController({ onChange });
