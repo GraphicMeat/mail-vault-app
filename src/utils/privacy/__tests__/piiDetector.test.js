@@ -63,12 +63,81 @@ describe('masking', () => {
 });
 
 describe('performance', () => {
+  // Letter-only, distinct: base-26 suffixes, so 5,000 names really are 10,000 tokens.
+  const letters = (i) => { let r = ''; let n = i; do { r = String.fromCharCode(97 + (n % 26)) + r; n = Math.floor(n / 26); } while (n); return r.padStart(4, 'a'); };
+  const nameOf = (i) => `P${letters(i)} S${letters(i)}`;
   it('scans 200 KB against 5,000 names in under 150 ms', () => {
-    const names = Array.from({ length: 5000 }, (_, i) => `Person${i} Surname${i}`);
+    const names = Array.from({ length: 5000 }, (_, i) => nameOf(i));
     const big = buildNameDictionary({ names });
-    const text = 'Lorem ipsum Person42 Surname42 dolor sit amet, call +1 555 123 4567. '.repeat(3000);
+    expect(big.tokens.size).toBe(10000);
+    const text = `Lorem ipsum ${nameOf(42)} dolor sit amet, call +1 555 123 4567. `.repeat(3000);
     const t0 = performance.now();
-    findPii(text, big);
+    const spans = findPii(text, big);
     expect(performance.now() - t0).toBeLessThan(150);
+    expect(spans.filter(x => x.kind === 'name')).toHaveLength(3000);
+  });
+  it('scans long unspaced runs and digit soup in under 150 ms', () => {
+    const text = `${'a'.repeat(100000)} ${'A'.repeat(50000)} ${'0123456789 '.repeat(9000)}`;
+    const t0 = performance.now();
+    findPii(text, dict);
+    expect(performance.now() - t0).toBeLessThan(150);
+  });
+});
+
+describe('fix round 1: leak classes', () => {
+  const d = (...names) => buildNameDictionary({ names });
+
+  it('buildNameDictionary skips emails, stoplisted and short tokens', () => {
+    const b = d('a@b.com', 'Will Ng', 'Jo Li', 'Anna Smith-Jones', "Pat O’Brien");
+    expect([...b.tokens].sort()).toEqual(['anna', 'brien', 'jones', "o'brien", 'pat', 'smith', 'smith-jones']);
+    expect(b.fullNames.has('will ng')).toBe(true);
+    expect(b.fullNames.has('a')).toBe(false);
+    expect(b.size).toBe(b.tokens.size + b.fullNames.size + b.unspaced.size);
+  });
+
+  it('masks possessives, hyphenated and apostrophe names', () => {
+    expect(kinds("John Smith's invoice")).toEqual([["John Smith's", 'name']]);
+    expect(kinds('Ms Smith', d('Anna Smith-Jones'))).toEqual([['Smith', 'name']]);
+    expect(kinds('Mr Smith-Jones', d('Smith'))).toEqual([['Smith-Jones', 'name']]);
+    expect(kinds('Hi O’Brien', d("Pat O'Brien"))).toEqual([['O’Brien', 'name']]);
+  });
+
+  it('masks names in caseless and unspaced scripts', () => {
+    expect(kinds('请联系王小明。', d('王小明'))).toEqual([['王小明', 'name']]);
+    expect(kinds('Hi محمد علي', d('محمد علي'))).toEqual([['محمد علي', 'name']]);
+  });
+
+  it('keeps the uncovered part of a partly overlapped span', () => {
+    expect(kinds('Baker Street 5, 10115\nJohn Smith')).toEqual([['Baker Street 5, 10115', 'address'], ['John Smith', 'name']]);
+    expect(kinds('Anna Smith@x.com', d('Anna Smith'))).toEqual([['Anna', 'name'], ['Smith@x.com', 'email']]);
+    expect(kinds('123 456 7890 Main Street', EMPTY_DICTIONARY)).toEqual([['123 456', 'phone'], ['7890 Main Street', 'address']]);
+  });
+
+  it('finds a phone inside a rejected run', () => {
+    expect(kinds('01.10.2026 861234567', EMPTY_DICTIONARY)).toEqual([['861234567', 'phone']]);
+    expect(kinds('861234567 01.10.2026', EMPTY_DICTIONARY)).toEqual([['861234567', 'phone']]);
+  });
+
+  it('emails with underscores', () => {
+    expect(kinds('xx_john@x.com', EMPTY_DICTIONARY)).toEqual([['xx_john@x.com', 'email']]);
+  });
+
+  it('addresses in ALL CAPS, leading street words and more suffixes', () => {
+    expect(kinds('221B BAKER STREET', EMPTY_DICTIONARY)).toEqual([['221B BAKER STREET', 'address']]);
+    expect(kinds('HAUPTSTRASSE 5', EMPTY_DICTIONARY)).toEqual([['HAUPTSTRASSE 5', 'address']]);
+    expect(kinds('at 10 Rue Lafayette', EMPTY_DICTIONARY)).toEqual([['10 Rue Lafayette', 'address']]);
+    expect(kinds('Calle Mayor 5', EMPTY_DICTIONARY)).toEqual([['Calle Mayor 5', 'address']]);
+    expect(kinds('Via Roma 10', EMPTY_DICTIONARY)).toEqual([['Via Roma 10', 'address']]);
+    expect(kinds('7 Elm Crescent', EMPTY_DICTIONARY)).toEqual([['7 Elm Crescent', 'address']]);
+  });
+
+  it('maskText drops combining marks', () => {
+    expect(maskText('Ambrazevičius'.normalize('NFD'))).toBe('x'.repeat(13));
+  });
+
+  it('folds letters NFD leaves alone', () => {
+    expect(kinds('Łukasz wrote', d('Lukasz Nowak'))).toEqual([['Łukasz', 'name']]);
+    expect(kinds('Herr STRAUSS', d('Strauß'))).toEqual([['STRAUSS', 'name']]);
+    expect(foldName('Ørsted Đurić Œuvre')).toBe('orsted duric oeuvre');
   });
 });
