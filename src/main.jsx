@@ -6,7 +6,7 @@ import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
 import { wireConnectivityEvents, installNetMock } from './stores/connectivityStore';
 import { watchTextAppearance } from './utils/appFont';
-import { watchMenuBar } from './utils/menuBar';
+import { watchMenuBar, watchQuitShortcut } from './utils/menuBar';
 import './styles/index.css';
 
 const isComposeWindow = new URLSearchParams(window.location.search).has('compose');
@@ -27,6 +27,7 @@ if (!isComposeWindow && !isOriginalWindow && !isSettingsWindow) wireConnectivity
 watchTextAppearance(useSettingsStore);
 // Linux's menu bar, hidden or shown in every window (utils/menuBar.js).
 watchMenuBar(useSettingsStore);
+watchQuitShortcut();
 
 // Apply the persisted language once the store has hydrated — and NOT before.
 //

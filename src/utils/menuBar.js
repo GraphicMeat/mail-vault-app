@@ -36,3 +36,19 @@ export function watchMenuBar(store) {
   store.persist?.onFinishHydration?.(state => apply(state));
   return store.subscribe(state => { if (hydrated()) apply(state); });
 }
+
+// Ctrl+Q, in every window. File > Quit carries it as a GTK accelerator, but a
+// bar the shell never attached (off at launch) has none, so the key reaches
+// the page. With the bar attached GTK takes the key first and this never runs.
+export function watchQuitShortcut(target = window) {
+  if (!window.__TAURI__ || !IS_LINUX) return () => {};
+  const onKey = (e) => {
+    if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey || e.key.toLowerCase() !== 'q') return;
+    e.preventDefault();
+    void import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke('quit_app'))
+      .catch(error => console.warn('[menuBar] quit failed:', error));
+  };
+  target.addEventListener('keydown', onKey, true);
+  return () => target.removeEventListener('keydown', onKey, true);
+}

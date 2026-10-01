@@ -1,5 +1,5 @@
 import { resolve, join } from 'path';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { spawn, execFileSync } from 'child_process';
 import {
@@ -326,6 +326,14 @@ function seedOnboardingComplete(home) {
   }));
 }
 
+/** Add `showMenuBar: false` to the seeded settings (seedOnboardingComplete). */
+function seedMenuBarOff(home) {
+  const path = join(appDataDir(home), 'frontend-settings.json');
+  const settings = JSON.parse(readFileSync(path, 'utf8'));
+  settings['mailvault-settings'].state.showMenuBar = false;
+  writeFileSync(path, JSON.stringify(settings));
+}
+
 /**
  * WDIO's automatic `DELETE /session` between spec files is the only thing
  * that ends the previous spec's `mailvault` process (there is no per-spec
@@ -621,6 +629,11 @@ export const config = {
       // exist before the app launches: the sweep runs once during setup.
       if ((specs || []).some((s) => s.includes('connected-vault-eml-migration'))) {
         seedLegacyVault(testDataDir, accounts[0].id);
+      }
+      // A user who turned the Linux menu bar off and restarted: the shell
+      // reads the choice in setup(), before any page exists.
+      if ((specs || []).some((s) => s.includes('ui-linux-menu-bar-off-at-launch'))) {
+        seedMenuBarOff(testDataDir);
       }
       if ((specs || []).some((s) => s.includes('connected-custody-migration'))) {
         seedLegacyCustody(testDataDir, accounts[0].id);

@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const invoke = vi.fn(() => Promise.resolve());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
-let watchMenuBar;
+let watchMenuBar, watchQuitShortcut;
 beforeEach(async () => {
   vi.resetModules();
   Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15', configurable: true });
   window.__TAURI__ = {};
-  ({ watchMenuBar } = await import('../menuBar'));
+  ({ watchMenuBar, watchQuitShortcut } = await import('../menuBar'));
 });
 afterEach(() => { delete window.__TAURI__; invoke.mockClear(); });
 
@@ -41,5 +41,18 @@ describe('menu bar', () => {
     watchMenuBar(fakeStore({ showMenuBar: false }));
     await flush();
     expect(invoke).toHaveBeenCalledWith('set_menu_bar_visible', { visible: false });
+  });
+
+  it('quits on Ctrl+Q, and only on Ctrl+Q', async () => {
+    const stop = watchQuitShortcut();
+    const press = (init) => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', ...init }));
+    press({ ctrlKey: true, shiftKey: true });
+    press({});
+    await flush();
+    expect(invoke).not.toHaveBeenCalled();
+    press({ ctrlKey: true });
+    await flush();
+    expect(invoke).toHaveBeenCalledWith('quit_app');
+    stop();
   });
 });
