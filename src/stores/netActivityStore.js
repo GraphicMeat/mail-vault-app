@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { daemonCall } from '../services/daemonClient';
 import { scanTrackers } from '../utils/trackerDetect';
 import { bodyStamp } from '../utils/linkSafety';
+import { stripGoogleFontImports } from '../utils/mailFonts';
 
 // Settings > Privacy > Network Activity. The daemon keeps the events (in
 // app.db on this Mac, for the period the user chose); this only mirrors what
@@ -214,10 +215,16 @@ const counted = new Map();
  * http image). Keyless previews are told apart by their body. A message whose
  * preview body is later replaced by the full one under the same key adds only
  * what the full body has beyond what was already counted.
+ *
+ * Google Fonts stylesheets leave here too, blocking or not: the webview would
+ * fetch them itself, unseen (the "Open in window" pop-outs carry no app CSP).
+ * The families they named come through the daemon (fontService
+ * attachMailFonts). The scan reads the body as given, so it shares its cache
+ * entry with the other scans of the same message.
  */
 export function frameBody(bodyHtml, key, blocking) {
   const scan = scanTrackers(bodyHtml, key);
-  const body = blocking ? scan.cleanedBodyHtml : bodyHtml;
+  const body = stripGoogleFontImports(blocking ? scan.cleanedBodyHtml : bodyHtml);
   const id = key || (bodyHtml ? bodyStamp(bodyHtml) : '');
   if (id) {
     const trackers = scan.trackers || [];

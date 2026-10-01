@@ -339,3 +339,18 @@ describe('remote images', () => {
     expect(counts()).toEqual({ blocked: 0, loaded: 2 });
   });
 });
+
+// Every frame and "Open in window" pop-out takes its body from frameBody. A
+// Google Fonts stylesheet left in it would be fetched by the webview itself,
+// past Network Activity; the pop-outs have no app CSP to stop it.
+describe('Google Fonts stylesheets in a framed body', () => {
+  const link = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;700&display=swap">';
+  const imported = '<style>@import url("https://fonts.googleapis.com/css?family=Lato");p{font-family:Lora}</style>';
+
+  it.each([false, true])('are stripped with blocking %s', (blocking) => {
+    const { body } = frameBody(`${link}${imported}<p>hi</p>`, `acct-INBOX-fonts-${blocking}`, blocking);
+    expect(body).not.toContain('fonts.googleapis.com');
+    expect(body).toContain('p{font-family:Lora}');
+    expect(body).toContain('<p>hi</p>');
+  });
+});

@@ -10,6 +10,7 @@ import { resolveMessageBody } from './bodyResolver';
 import { useMailStore } from '../../stores/mailStore';
 import { resolveEmailLocation, accountEmailOf } from '../../stores/slices/unifiedHelpers';
 import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
+import { stripGoogleFontImports } from '../../utils/mailFonts';
 import { trace } from './exportTrace';
 import { plainTextBodyHtml } from '../../utils/mailto';
 import { send } from '../transport';
@@ -82,7 +83,8 @@ async function prepareBody(message, mirror, fetchAsset, totals) {
   // The same fallback the reader makes: a message with no HTML part still has
   // its text, and reading `html` alone exported it as an empty card.
   const source = message.html || plainTextBodyHtml(message.text || message.textBody);
-  const raw = getEmailBodyContent(replaceCidUrls(source, message.attachments));
+  // No Google Fonts stylesheet: the exported page would fetch it on opening.
+  const raw = stripGoogleFontImports(getEmailBodyContent(replaceCidUrls(source, message.attachments)));
   const safe = sanitizeForExport(raw);
   if (!mirror) return safe;
   const { html, stats } = await mirrorRemoteAssets(safe, { fetchAsset, caps: DEFAULT_CAPS });
