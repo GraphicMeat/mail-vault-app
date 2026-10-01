@@ -38,6 +38,57 @@ pub fn parse_chat_response(body: &Value) -> Result<String, String> {
         .ok_or_else(|| format!("unexpected chat completion response shape: {body}"))
 }
 
+// ── Where Gmail mail may be processed ───────────────────────────────────────
+//
+// Google's rule for the Gmail API: Google user data never reaches a third-party
+// AI service. Mail from a Google account is therefore only ever handed to an
+// on-device model: Apple's, the downloaded GGUF, or an OpenAI-compatible server
+// that is on THIS computer (Ollama on loopback). Everything else is cloud.
+
+/// Stable error code the daemon answers when Gmail mail would reach a cloud
+/// provider. The app maps it to the `ai.googleMailOnDeviceOnly` catalog key.
+pub const GOOGLE_MAIL_ON_DEVICE_ONLY: &str = "E_GOOGLE_MAIL_ON_DEVICE_ONLY";
+
+/// Whether an OpenAI-compatible endpoint URL points at this computer: the host
+/// is `localhost`, an address in `127.0.0.0/8`, or `::1`. Parsed, not
+/// pattern-matched, so `http://localhost.evil.com` and
+/// `http://localhost@evil.com` are both cloud. Anything that does not parse as
+/// an http(s) URL with a host is cloud too: when in doubt, it is not local.
+pub fn endpoint_is_on_device(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url.trim()) else { return false };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
+    match parsed.host() {
+        Some(url::Host::Domain(d)) => d.trim_end_matches('.').eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback() || ip.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback()),
+        None => false,
+    }
+}
+
+/// Whether a provider may be handed mail from a Google account. `kind` is the
+/// provider's `type` tag (`appleFm`, `localGguf`, `endpoint`); `endpoint_url`
+/// only matters for `endpoint`. An unknown kind is not allowed.
+pub fn provider_allowed_for_google_mail(kind: &str, endpoint_url: Option<&str>) -> bool {
+    match kind {
+        "appleFm" | "localGguf" => true,
+        "endpoint" => endpoint_url.is_some_and(endpoint_is_on_device),
+        _ => false,
+    }
+}
+
+/// Whether an account record (an `accounts.json` entry or the keychain blob's
+/// copy of it) is a Google account: Google OAuth, or an IMAP account on one of
+/// Gmail's hosts (an app-password Gmail account is Google data too). Field
+/// reads are trimmed and case-insensitive.
+pub fn is_google_account(account: &Value) -> bool {
+    let text = |key: &str| account.get(key).and_then(Value::as_str).unwrap_or_default().trim().to_ascii_lowercase();
+    let host = text("imapHost");
+    let host = host.trim_end_matches('.');
+    (text("authType") == "oauth2" && text("oauth2Provider") == "google") || host == "imap.gmail.com" || host == "imap.googlemail.com"
+}
+
 // ── Apple FM helper protocol (one JSON object per line, each way) ──────────
 
 #[derive(Debug, Clone, Serialize)]
@@ -233,5 +284,69 @@ mod tests {
         let available = apple_fm_status(true, Some(&FmResponse { ok: true, available: Some(true), ..Default::default() }));
         assert!(available.available);
         assert_eq!(available.reason, "");
+    }
+
+    #[test]
+    fn only_a_loopback_host_is_on_device() {
+        for url in [
+            "http://localhost:11434/v1",
+            "http://LOCALHOST:11434",
+            "https://localhost/v1",
+            "http://127.0.0.1:11434/v1",
+            "http://127.1.2.3:8080",
+            "http://[::1]:11434/v1",
+            "http://[::ffff:127.0.0.1]:11434",
+            " http://localhost:11434 ",
+        ] {
+            assert!(endpoint_is_on_device(url), "{url} is this computer");
+        }
+        for url in [
+            "http://192.168.1.5:11434",
+            "http://10.0.0.2:11434/v1",
+            "http://0.0.0.0:11434",
+            "https://api.openai.com/v1",
+            "http://localhost.evil.com",
+            "http://127.0.0.1.evil.com",
+            "http://localhost@evil.com",
+            "http://evil.com/localhost",
+            "http://my-mac.local:11434",
+            "http://[::2]:11434",
+            "localhost:11434/v1",
+            "ftp://localhost/x",
+            "file:///localhost",
+            "",
+            "   ",
+            "not a url",
+            "http://",
+        ] {
+            assert!(!endpoint_is_on_device(url), "{url:?} is not provably this computer");
+        }
+    }
+
+    #[test]
+    fn google_mail_reaches_only_apple_the_downloaded_model_or_a_loopback_endpoint() {
+        assert!(provider_allowed_for_google_mail("appleFm", None));
+        assert!(provider_allowed_for_google_mail("localGguf", None));
+        assert!(provider_allowed_for_google_mail("endpoint", Some("http://localhost:11434/v1")));
+        assert!(!provider_allowed_for_google_mail("endpoint", Some("https://api.openai.com/v1")));
+        assert!(!provider_allowed_for_google_mail("endpoint", Some("http://192.168.1.5:11434")));
+        assert!(!provider_allowed_for_google_mail("endpoint", None), "an endpoint with no URL is not provably local");
+        assert!(!provider_allowed_for_google_mail("somethingNew", Some("http://localhost")), "an unknown kind is refused");
+    }
+
+    #[test]
+    fn a_google_account_is_google_oauth_or_a_gmail_imap_host() {
+        use serde_json::json;
+        assert!(is_google_account(&json!({"authType": "oauth2", "oauth2Provider": "google"})));
+        assert!(is_google_account(&json!({"authType": " OAuth2 ", "oauth2Provider": "Google"})));
+        assert!(is_google_account(&json!({"authType": "password", "imapHost": "imap.gmail.com"})), "an app-password Gmail account");
+        assert!(is_google_account(&json!({"imapHost": "IMAP.GOOGLEMAIL.COM"})));
+        assert!(is_google_account(&json!({"imapHost": " imap.gmail.com. "})));
+        assert!(!is_google_account(&json!({"authType": "oauth2", "oauth2Provider": "microsoft", "imapHost": "outlook.office365.com"})));
+        assert!(!is_google_account(&json!({"authType": "password", "imapHost": "imap.fastmail.com"})));
+        assert!(!is_google_account(&json!({"authType": "password", "oauth2Provider": "google"})), "a provider tag without OAuth is not a Google sign-in");
+        assert!(!is_google_account(&json!({"imapHost": "imap.gmail.com.evil.com"})));
+        assert!(!is_google_account(&json!({})));
+        assert!(!is_google_account(&json!(null)));
     }
 }

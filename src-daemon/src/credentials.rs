@@ -295,6 +295,16 @@ pub async fn resolve_account_credentials_quiet(account_id: &str) -> Result<ImapC
     account_from_blob(&blob, account_id)
 }
 
+/// One account's raw record (the JSON the app stored, auth type and host
+/// included, secrets too: never log it) read without ever raising a keychain
+/// prompt. `ai_gate` uses it to decide whether an account is a Google one when
+/// `accounts.json` does not list it.
+pub async fn resolve_account_record_quiet(account_id: &str) -> Result<serde_json::Value, String> {
+    let blob = guarded(CREDENTIALS_KEY, blob_read(false), AI_KEY_TIMEOUT).await?;
+    let raw = blob.get(account_id).ok_or_else(|| format!("no credentials found for account {account_id}"))?;
+    serde_json::from_str(raw).map_err(|e| format!("failed to parse credentials for account {account_id}: {e}"))
+}
+
 /// macOS's password prompt shows once per blocked episode: only a read that
 /// finds the gate clear (the one that discovers the problem) may raise it,
 /// plus `keychain.retry`, which the user asked for. Every other read while

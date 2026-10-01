@@ -21,7 +21,7 @@ use crate::server::DaemonState;
 use mailvault_core::app_db::{self, auto_tags, tags::Target};
 use mailvault_core::custody::cache;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// A generous catch-up bound, not a cost control (the real cost control is
 /// `enabled_at` + the prefilter + `auto_tag_decisions`): the only time this
@@ -158,12 +158,24 @@ async fn process_rule_account(state: &Arc<DaemonState>, rule: &auto_tags::Rule, 
     }
 
     let provider = provider_from_rule(rule);
+    // A Google account's mail never goes to a cloud endpoint. Skip the whole
+    // batch with one line, not one per message; nothing is recorded as decided,
+    // so switching the rule to an on-device provider picks the mail up again.
+    if let Err(refused) = crate::ai_gate::check(&state.app_dir, &provider, Some(&[account_id.to_string()])).await {
+        info!(
+            "[auto-tag] rule {} skipped {} message(s) of one account: {}",
+            rule.id,
+            undecided.len(),
+            refused.split_once(':').map_or(refused.as_str(), |(code, _)| code),
+        );
+        return;
+    }
     for c in candidates {
         let target = c.msg_ref.target();
         if !undecided.contains(&(target.account_id.clone(), target.msg_key.clone())) {
             continue;
         }
-        let verdict = evaluate(&provider, &state.inference, rule, &c.candidate).await;
+        let verdict = evaluate(&state.app_dir, account_id, &provider, &state.inference, rule, &c.candidate).await;
         // A decision is recorded only when the model actually answered. An
         // Err here is "we could not ask" -- no model downloaded yet, an
         // endpoint that timed out, a remote provider this rule may not use --
@@ -289,6 +301,36 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(still_undecided.len(), 1, "a refusal is not a verdict and must leave the message undecided");
+    }
+
+    #[tokio::test]
+    async fn a_sweep_never_sends_a_google_accounts_mail_to_a_cloud_endpoint() {
+        let s = st();
+        crate::ai_gate::test_support::seed_accounts(&s.app_dir);
+        seed_header(&s, "g-oauth", "INBOX", 1, "Your receipt", "billing@shop.example");
+        seed_header(&s, "plain", "INBOX", 1, "Your receipt", "billing@shop.example");
+        let tag = tag_named(&s, "Receipts").await;
+        let (url, hits) = crate::ai_gate::test_support::require_lan_mock("MATCH: yes\nCONFIDENCE: 0.9");
+        let provider = json!({"type": "endpoint", "url": url, "model": "m"});
+        let rule = create_rule(&s, &tag, true, provider).await;
+        backdate(&s, &rule.id).await;
+
+        sweep(&s).await;
+
+        // Exactly one message went out: the non-Google account's.
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1, "only the non-Google account's mail may reach the cloud endpoint");
+        assert_eq!(tag_count(&s).await, 1);
+
+        // The Google account's message was not judged either way, so moving
+        // the rule to an on-device provider would still pick it up.
+        let app_dir = s.app_dir.clone();
+        let rule_id = rule.id.clone();
+        let target = Target { account_id: "g-oauth".into(), msg_key: "u:INBOX:1".into() };
+        let undecided = blocking(move || app_db::with(&app_dir, |conn| auto_tags::undecided(conn, &rule_id, &[target])))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(undecided.len(), 1);
     }
 
     #[tokio::test]

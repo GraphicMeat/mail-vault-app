@@ -5,6 +5,7 @@
 
 mod abd_local;
 mod abd_worker;
+mod ai_gate;
 mod attachment_extract;
 mod auth;
 mod auto_tag_worker;

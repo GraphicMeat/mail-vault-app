@@ -418,6 +418,18 @@ pub enum Provider {
     AppleFm,
 }
 
+impl Provider {
+    /// Whether mail from a Google account may be handed to this provider: only
+    /// the on-device ones (see `mailvault_core::ai::provider_allowed_for_google_mail`).
+    pub fn on_device(&self) -> bool {
+        match self {
+            Provider::LocalGguf => mailvault_core::ai::provider_allowed_for_google_mail("localGguf", None),
+            Provider::AppleFm => mailvault_core::ai::provider_allowed_for_google_mail("appleFm", None),
+            Provider::Endpoint { url, .. } => mailvault_core::ai::provider_allowed_for_google_mail("endpoint", Some(url)),
+        }
+    }
+}
+
 /// 60s: generous enough for a cold Apple Intelligence load (the probe's cold
 /// run was ~1.25s) plus a slow prompt, short enough that a hung helper can't
 /// wedge an `ai.generate` RPC forever.

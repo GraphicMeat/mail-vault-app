@@ -93,8 +93,13 @@ fn undo_backfill(conn: &app_db::Connection, batch_id: &str) -> Result<Value, Str
 /// never `llm::generate` directly. Checks the privacy opt-in BEFORE building
 /// any request — an `Endpoint` provider on a rule without `allow_remote`
 /// never reaches `llm::generate` at all, so it can never construct a
-/// `reqwest::Client` or send anything anywhere.
+/// `reqwest::Client` or send anything anywhere. The same goes for a Google
+/// account's mail with a cloud endpoint (`ai_gate`): `account_id` is whose mail
+/// `candidate` is, and a cloud provider is refused before any prompt is built
+/// unless that account resolves to a non-Google one.
 pub(crate) async fn evaluate(
+    app_dir: &std::path::Path,
+    account_id: &str,
     provider: &Provider,
     inference: &inference::InferenceEngine,
     rule: &auto_tags::Rule,
@@ -103,6 +108,7 @@ pub(crate) async fn evaluate(
     if matches!(provider, Provider::Endpoint { .. }) && !rule.allow_remote {
         return Err("this rule does not allow a remote provider (allow_remote is false)".to_string());
     }
+    crate::ai_gate::check(app_dir, provider, Some(&[account_id.to_string()])).await?;
     let prompt = auto_tags::verdict_prompt(&rule.instruction, candidate);
     let text = llm::generate(provider, inference, &prompt, Some(auto_tags::VERDICT_SYSTEM_PROMPT), 32).await?;
     auto_tags::parse_verdict(&text)
@@ -217,6 +223,8 @@ async fn run_preview(state: &Arc<DaemonState>, params: &Value) -> Result<Value, 
     let provider = provider_of(params)?;
     let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(200) as usize;
     let rule = rule_for_eval(state, params).await?;
+    // Said once, up front, rather than as one refusal per candidate.
+    crate::ai_gate::check(&state.app_dir, &provider, Some(std::slice::from_ref(&account_id))).await?;
 
     let state_clone = Arc::clone(state);
     let account = account_id.clone();
@@ -228,7 +236,7 @@ async fn run_preview(state: &Arc<DaemonState>, params: &Value) -> Result<Value, 
         if !auto_tags::passes(&rule.constraints, &c.candidate, now) {
             continue;
         }
-        let verdict = evaluate(&provider, &state.inference, &rule, &c.candidate).await;
+        let verdict = evaluate(&state.app_dir, &account_id, &provider, &state.inference, &rule, &c.candidate).await;
         let matched = should_assign(&verdict, rule.min_confidence);
         let (confidence, refused) = match &verdict {
             Ok(auto_tags::Verdict::Match(c)) => (Some(*c), None),
@@ -268,6 +276,7 @@ async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value,
         .await
         .and_then(|r| r)?
         .ok_or_else(|| format!("no such auto-tag rule: {rule_id}"))?;
+    crate::ai_gate::check(&state.app_dir, &provider, Some(std::slice::from_ref(&account_id))).await?;
 
     let state_clone = Arc::clone(state);
     let account = account_id.clone();
@@ -283,7 +292,7 @@ async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value,
     for c in candidates {
         processed += 1;
         if auto_tags::passes(&rule.constraints, &c.candidate, now) {
-            let verdict = evaluate(&provider, &state.inference, &rule, &c.candidate).await;
+            let verdict = evaluate(&state.app_dir, &account_id, &provider, &state.inference, &rule, &c.candidate).await;
             if should_assign(&verdict, rule.min_confidence) {
                 matched += 1;
                 targets.push(c.msg_ref.target());
@@ -448,7 +457,7 @@ mod tests {
             ..core_rule(&tag)
         };
         let provider = Provider::Endpoint { url: "http://127.0.0.1:1".into(), model: "m".into() };
-        let err = evaluate(&provider, &s.inference, &rule, &auto_tags::Candidate::default()).await.unwrap_err();
+        let err = evaluate(&s.app_dir, "a", &provider, &s.inference, &rule, &auto_tags::Candidate::default()).await.unwrap_err();
         assert!(err.contains("allow_remote"), "{err}");
         // Proof this never even tried to reach the network: a real attempt
         // against a closed port fails with reqwest's own wording, not ours.
@@ -468,6 +477,56 @@ mod tests {
         assert_eq!(rows[0]["matched"], false);
         assert!(rows[0]["refused"].as_str().unwrap().contains("allow_remote"));
         assert_eq!(tag_count(&s).await, 0, "preview must never write");
+    }
+
+    // ── Privacy: a Google account's mail never reaches a cloud endpoint ──
+
+    #[tokio::test]
+    async fn evaluate_refuses_a_cloud_endpoint_for_a_google_account_but_not_a_loopback_one() {
+        let s = st();
+        crate::ai_gate::test_support::seed_accounts(&s.app_dir);
+        let tag = tag_named(&s, "Receipts").await;
+        let rule = auto_tags::Rule { id: "r1".into(), allow_remote: true, ..core_rule(&tag) };
+        let candidate = auto_tags::Candidate::default();
+
+        let cloud = Provider::Endpoint { url: "https://api.openai.com/v1".into(), model: "m".into() };
+        let err = evaluate(&s.app_dir, "g-oauth", &cloud, &s.inference, &rule, &candidate).await.unwrap_err();
+        assert!(err.starts_with("E_GOOGLE_MAIL_ON_DEVICE_ONLY"), "{err}");
+        // Refused before any request was built: a real attempt would say so in reqwest's own words.
+        assert!(!err.to_lowercase().contains("endpoint request failed"), "{err}");
+
+        let port = mock_endpoint_once("MATCH: yes\nCONFIDENCE: 0.9");
+        let local = Provider::Endpoint { url: format!("http://127.0.0.1:{port}"), model: "m".into() };
+        let verdict = evaluate(&s.app_dir, "g-oauth", &local, &s.inference, &rule, &candidate).await;
+        assert!(matches!(verdict, Ok(auto_tags::Verdict::Match(_))), "{verdict:?}");
+    }
+
+    #[tokio::test]
+    async fn preview_and_backfill_of_a_google_account_with_a_cloud_endpoint_send_nothing_and_say_why() {
+        let s = st();
+        crate::ai_gate::test_support::seed_accounts(&s.app_dir);
+        seed_header(&s, "g-oauth", "INBOX", 1, "Your receipt", "billing@shop.example", true);
+        let tag = tag_named(&s, "Receipts").await;
+        let mut rule = rule_json(&tag, true);
+        rule["minConfidence"] = json!(0.5);
+        let created = call(&s, "auto_tags.create", json!({"rule": rule.clone()})).await;
+        let rule_id = created["id"].as_str().unwrap().to_string();
+
+        let (url, hits) = crate::ai_gate::test_support::require_lan_mock("MATCH: yes\nCONFIDENCE: 0.9");
+        let provider = json!({"type": "endpoint", "url": url, "model": "m"});
+
+        let err = call_err(&s, "auto_tags.preview", json!({"accountId": "g-oauth", "provider": provider, "rule": rule})).await;
+        assert!(err.starts_with("E_GOOGLE_MAIL_ON_DEVICE_ONLY"), "{err}");
+        let err = call_err(&s, "auto_tags.backfill", json!({"accountId": "g-oauth", "ruleId": rule_id, "provider": provider})).await;
+        assert!(err.starts_with("E_GOOGLE_MAIL_ON_DEVICE_ONLY"), "{err}");
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 0, "the cloud endpoint was never contacted");
+        assert_eq!(tag_count(&s).await, 0);
+
+        // The same rule on a non-Google account still uses the cloud endpoint.
+        seed_header(&s, "plain", "INBOX", 1, "Your receipt", "billing@shop.example", true);
+        let out = call(&s, "auto_tags.backfill", json!({"accountId": "plain", "ruleId": rule_id, "provider": provider})).await;
+        assert_eq!(out["assigned"], 1);
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     // ── Preview never writes ─────────────────────────────────────────
