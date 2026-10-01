@@ -17,11 +17,11 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
 <text x="1150" y="79" text-anchor="end" font-size="20" fill="#575b69">A Graphic Meat creation</text>
 <text x="126" y="85" font-size="31" font-weight="700" fill="#20212c">MailVault</text>
 <g font-size="72" font-weight="700" letter-spacing="-2" fill="#20212c">
-<text x="64" y="208">Make room</text>
-<text x="64" y="290">for new mail.</text>
-<text x="64" y="372" fill="#4f46df">Keep the old.</text>
+<text x="64" y="208">Fast search.</text>
+<text x="64" y="290">Private mail.</text>
+<text x="64" y="372" fill="#4f46df">Yours to keep.</text>
 </g>
-<text x="66" y="436" font-size="25" fill="#575b69">Your email. Saved on your computer.</text>
+<text x="66" y="436" font-size="25" fill="#575b69">Saved on your computer. No ads, no account.</text>
 <text x="66" y="542" font-size="24" font-weight="700" fill="#20212c">Free for macOS, Windows &amp; Linux</text>
 <text x="66" y="581" font-size="21" fill="#575b69">mailvaultapp.com</text>
 </g>
