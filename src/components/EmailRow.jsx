@@ -27,6 +27,8 @@ import {
   Star,
 } from 'lucide-react';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 // A search hit whose term lives only in an attachment shows nothing in the
 // message itself. `matchedIn` comes back from the offline index; the row's own
@@ -112,7 +114,7 @@ export function RowSnippet({ email }) {
   if (!lines || !text) return null;
   return (
     <div data-testid="row-snippet" dir="auto" className="row-snippet" style={{ WebkitLineClamp: lines, maxHeight: lines * SNIPPET_LINE_PX }}>
-      {text}
+      <Private kind="text">{text}</Private>
     </div>
   );
 }
@@ -190,6 +192,7 @@ function openRow(email, onSelect) {
 // `configOverride` pass through to them (Settings' sample rows).
 export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
   const t = useT();
+  const pa = usePrivateAttr();
   // Preview lines make this a row of several lines: its gutter stacks.
   const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
   const dense = useSettingsStore(s => s.listDensity) === 'compact';
@@ -264,11 +267,11 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
             data-testid="account-dot"
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
-            title={email._accountEmail}
+            title={pa(email._accountEmail, 'email')}
           />
         )}
         <span data-testid="row-sender" className="truncate min-w-0" dir="auto">
-          {outgoing && `${t('email.original.to')} `}{displayText(getRowPartyName(email, { outgoing }))}
+          {outgoing && `${t('email.original.to')} `}<Private kind="name">{displayText(getRowPartyName(email, { outgoing }))}</Private>
         </span>
         <BimiLogo email={email} size={14} />
         <StarToggle email={email} actions={actions} size={14} />
@@ -295,7 +298,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       */}
       <div className="flex-1 min-w-[120px] flex items-center gap-2">
         <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-          {displayText(email.subject, '(No subject)')}
+          <Private kind="text">{displayText(email.subject, '(No subject)')}</Private>
         </span>
         <TagChips email={email} />
         <AttachmentGlyph email={email} size={14} />
@@ -316,6 +319,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
 
 export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const dense = useSettingsStore(s => s.listDensity) === 'compact';
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
@@ -382,11 +386,11 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
               data-testid="account-dot"
               className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
-              title={email._accountEmail}
+              title={pa(email._accountEmail, 'email')}
             />
           )}
           <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {outgoing && `${t('email.original.to')} `}{displayText(getRowPartyName(email, { outgoing }))}
+            {outgoing && `${t('email.original.to')} `}<Private kind="name">{displayText(getRowPartyName(email, { outgoing }))}</Private>
           </span>
           <BimiLogo email={email} size={13} />
           <StarToggle email={email} actions={actions} size={13} />
@@ -403,7 +407,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
         <div className="flex items-center gap-1.5">
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
           <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {displayText(email.subject, '(No subject)')}
+            <Private kind="text">{displayText(email.subject, '(No subject)')}</Private>
           </span>
           <TagChips email={email} />
           <AttachmentGlyph email={email} size={12} />

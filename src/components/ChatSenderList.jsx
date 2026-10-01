@@ -15,6 +15,7 @@ import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { useSettingsStore } from '../stores/settingsStore';
 import { viewOwnAddresses } from '../stores/slices/unifiedHelpers';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 const INITIAL_VISIBLE = 50;
 const LOAD_MORE_COUNT = 50;
@@ -179,7 +180,7 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-semibold text-mail-text truncate">
-            {correspondent.name}
+            <Private kind="name">{correspondent.name}</Private>
           </span>
           <span className="text-xs text-mail-text-muted flex-shrink-0">
             {correspondent.lastMessage && formatRelativeTime(correspondent.lastMessage.date)}
@@ -190,7 +191,7 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick }) {
           <span className="text-sm text-mail-text-muted truncate flex items-center gap-1">
             {(() => { const sa = getSenderAlertLevel(correspondent.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
             <LinkAlertIcon level={getLinkAlertLevel(correspondent.emails)} size={12} alerts={getAlertsForEmails(correspondent.emails, useMailStore.getState())} />
-            {correspondent.lastMessage?.subject || 'No messages'}
+            <Private kind="text">{correspondent.lastMessage?.subject || 'No messages'}</Private>
           </span>
 
           {correspondent.unreadCount > 0 && (
@@ -203,7 +204,7 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick }) {
 
         {correspondent.lastMessage?.preview && (
           <p className="text-xs text-mail-text-muted truncate mt-1">
-            {correspondent.lastMessage.preview}
+            <Private kind="text">{correspondent.lastMessage.preview}</Private>
           </p>
         )}
       </div>

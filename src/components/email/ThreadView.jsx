@@ -13,7 +13,8 @@ import { PgpDecryptedBadge, PgpLockedNotice } from './PgpStatus';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
 import { refuseWindowUnderPrivacy } from '../../utils/privacy/windowBlocked';
-import { usePrivacySourceBlocked } from '../../hooks/usePrivacy';
+import { usePrivacySourceBlocked, usePrivateAttr } from '../../hooks/usePrivacy';
+import { Private } from '../privacy/Private';
 import { SourceBlocked } from '../privacy/SourceBlocked';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
@@ -67,6 +68,7 @@ import { ReadDelayProgress } from '../ReadDelayProgress';
 
 function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null, loadError, signatureDisplay, shouldShowSignature, effectiveTheme, selectionRef, readOnly = false }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const iframeRef = useRef(null);
   const plainBodyRef = useRef(null);
   selectionRef.current = () => {
@@ -230,7 +232,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
         <p data-testid="thread-body-loading" role="status" className="mb-2 text-xs text-mail-text-muted">
           {t('viewer.showingPreviewWhileDownloading')}
         </p>
-        <p className="whitespace-pre-wrap">{snippet}</p>
+        <p className="whitespace-pre-wrap"><Private kind="text">{snippet}</Private></p>
       </div>
     );
   }
@@ -274,7 +276,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
             className="w-full border-0"
             style={{ minHeight: '100px', display: 'block', maxWidth: '100%' }}
             sandbox="allow-same-origin allow-popups allow-scripts"
-            title={`Email from ${getSenderName(email)}`}
+            title={`Email from ${pa(getSenderName(email), 'name')}`}
           />
         </div>
       ) : (
@@ -465,8 +467,8 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
             className="w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-mail-surface-hover">
             <ConnectedStateIcon email={email} size={14} />
             <span className="flex-1 min-w-0">
-              <span className="flex justify-between gap-2"><span className="truncate text-sm font-semibold">{getSenderName(email)}</span><span className="text-xs text-mail-text-muted shrink-0">{formatEmailDate(email.date)}</span></span>
-              <span className="block truncate text-xs text-mail-text-muted">{loadedEmail?.text?.substring(0, 200) || email.subject}</span>
+              <span className="flex justify-between gap-2"><span className="truncate text-sm font-semibold"><Private kind="name">{getSenderName(email)}</Private></span><span className="text-xs text-mail-text-muted shrink-0">{formatEmailDate(email.date)}</span></span>
+              <span className="block truncate text-xs text-mail-text-muted"><Private kind="text">{loadedEmail?.text?.substring(0, 200) || email.subject}</Private></span>
             </span>
           </button>
         ) : <EmailSenderInfo
@@ -485,7 +487,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
         />}
         {!expanded && !compact && (
           <p className="text-xs text-mail-text-muted truncate mt-0.5 pl-12 pb-1">
-            {loadedEmail?.text?.substring(0, 200) || email.subject || ''}
+            <Private kind="text">{loadedEmail?.text?.substring(0, 200) || email.subject || ''}</Private>
           </p>
         )}
       </div>
@@ -884,7 +886,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
       <div data-tauri-drag-region={readOnly ? undefined : true} className="flex items-center justify-between px-3 py-2.5 border-b border-mail-border">
         <div className="flex flex-col justify-center flex-1 min-w-0 min-h-[34px]">
           <h1 className="text-sm font-semibold text-mail-text truncate">
-            {thread.subject}
+            <Private kind="text">{thread.subject}</Private>
           </h1>
           <span className="text-xs text-mail-text-muted">
             {t('email.thread.messagesInThread', { count: thread.messageCount })}
@@ -985,7 +987,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
                     onClick={() => { setSelectedMessage(emailKey(email)); setExpandedMessages(previous => ({ ...previous, [emailKey(email)]: true })); }}
                     className={`w-full h-14 text-left px-3 flex items-center gap-2 border-b border-mail-border ${emailKey(selectedEmail) === emailKey(email) ? 'bg-mail-accent-tint' : 'hover:bg-mail-surface-hover'}`}>
                     <ConnectedStateIcon email={email} size={14} />
-                    <span className="flex-1 min-w-0"><span className="block truncate text-sm font-semibold">{getSenderName(email)}</span><span className="block truncate text-xs text-mail-text-muted">{email.subject}</span></span>
+                    <span className="flex-1 min-w-0"><span className="block truncate text-sm font-semibold"><Private kind="name">{getSenderName(email)}</Private></span><span className="block truncate text-xs text-mail-text-muted"><Private kind="text">{email.subject}</Private></span></span>
                     <span className="text-xs text-mail-text-muted shrink-0">{formatEmailDate(email.date)}</span>
                   </button>
                 ) : <ThreadEmailItem

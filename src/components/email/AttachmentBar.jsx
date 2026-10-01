@@ -23,6 +23,8 @@ import {
   Check,
 } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { send } from '../../services/transport';
 import { useAttachmentExports, messageExportKey, runAttachmentExport, startExportJob, leafOf, showSavedFolder, pickFolder } from '../../services/attachmentExport';
 
@@ -228,6 +230,7 @@ function AttachmentContextMenu({ x, y, downloadedPath, canPreview, onPreview, on
  */
 function AttachmentPreviewDialog({ attachment, kind, loadContent, downloadedPath, onDownload, onSaveAs, onOpen, onClose }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const [src, setSrc] = useState(null);
   const [error, setError] = useState(null);
 
@@ -279,7 +282,7 @@ function AttachmentPreviewDialog({ attachment, kind, loadContent, downloadedPath
     <Dialog
       open
       onClose={onClose}
-      title={displayText(attachment.filename, t('email.attachments.unnamed'))}
+      title={displayText(pa(attachment.filename, 'filename'), t('email.attachments.unnamed'))}
       size="xl"
       portal
       footer={footer}
@@ -293,14 +296,14 @@ function AttachmentPreviewDialog({ attachment, kind, loadContent, downloadedPath
         ) : kind === 'pdf' ? (
           <iframe
             src={src}
-            title={attachment.filename || 'PDF'}
+            title={pa(attachment.filename, 'filename') || 'PDF'}
             className="w-full h-[70vh] border-0"
             data-testid="attachment-preview-pdf"
           />
         ) : (
           <img
             src={src}
-            alt={attachment.filename || ''}
+            alt={pa(attachment.filename, 'filename') || ''}
             className="max-w-full max-h-[70vh] object-contain"
             data-testid="attachment-preview-image"
           />
@@ -612,7 +615,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
         </div>
         <div className="flex-1 min-w-0">
           <div className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-mail-text truncate`}>
-            {displayText(attachment.filename, t('email.attachments.unnamed'))}
+            {displayText(attachment.filename) ? <Private kind="filename">{displayText(attachment.filename)}</Private> : t('email.attachments.unnamed')}
           </div>
           <div className={`text-xs text-mail-text-muted`}>
             {error ? (
@@ -824,10 +827,11 @@ export function ExportProgress({ progress, label, className = '' }) {
  */
 export function SavedToFolder({ dir, pinned = false }) {
   const t = useT();
+  const pa = usePrivateAttr();
   return (
     <span className="flex items-center gap-1.5 text-sm text-mail-text-muted" role="status">
       <Check size={14} className="text-mail-success shrink-0" />
-      <span className="max-w-[16rem] truncate">{t('email.attachments.savedTo', { folder: leafOf(dir) })}</span>
+      <span className="max-w-[16rem] truncate">{t('email.attachments.savedTo', { folder: pa(leafOf(dir), 'text') })}</span>
       <button
         type="button"
         onClick={() => showSavedFolder(dir)}

@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { AlertTriangle, CornerUpLeft } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 /**
  * Warning icon shown next to a subject when the email's Reply-To address
@@ -69,7 +70,7 @@ export function ReplyToAlertIcon({ mismatch, size = 14 }) {
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
           <div className="text-xs text-mail-text-muted mb-1">{t('alert.replyTo.repliesWouldGo')}</div>
-          <div className="text-sm font-mono text-mail-text break-all">{mismatch.replyToAddress || mismatch.replyToDomain}</div>
+          <div className="text-sm font-mono text-mail-text break-all"><Private kind="email">{mismatch.replyToAddress || mismatch.replyToDomain}</Private></div>
           <div className="text-xs text-mail-warning mt-0.5">{mismatch.replyToDomain}</div>
         </div>
       </Dialog>

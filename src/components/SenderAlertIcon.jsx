@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { t, useT  } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 export function SenderAlertIcon({ level, email, size = 14 }) {
   const t = useT();
@@ -51,12 +52,12 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
           <div className="text-xs text-mail-text-muted mb-1">{t('alert.sender.displayNameShows')}</div>
-          <div className="text-sm font-mono text-mail-text break-all">{fromName}</div>
+          <div className="text-sm font-mono text-mail-text break-all"><Private kind="name">{fromName}</Private></div>
         </div>
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
           <div className="text-xs text-mail-text-muted mb-1">{t('alert.sender.actualSenderAddress')}</div>
-          <div className="text-sm font-mono text-mail-text break-all">{fromAddress}</div>
+          <div className="text-sm font-mono text-mail-text break-all"><Private kind="email">{fromAddress}</Private></div>
           {fromAddress.includes('@') && (
             <div className={`text-xs ${isRed ? 'text-mail-danger' : 'text-mail-warning'} mt-0.5`}>
               {fromAddress.split('@')[1]}

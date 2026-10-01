@@ -173,10 +173,10 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
 
         <div className="flex-1 min-w-0">
           <h2 className="text-sm font-semibold text-mail-text truncate leading-tight">
-            {topic.subject}
+            <Private kind="text">{topic.subject}</Private>
           </h2>
           <p className="text-[11px] text-mail-text-muted truncate leading-tight">
-            {correspondent.name} &middot; {t('common.messageCount', { count: topic.emails.length })}
+            <Private kind="name">{correspondent.name}</Private> &middot; {t('common.messageCount', { count: topic.emails.length })}
           </p>
         </div>
       </div>
@@ -844,7 +844,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               <span data-testid="chat-body-loading" role="status" className={`text-xs ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`}>
                 {t('viewer.showingPreviewWhileDownloading')}
               </span>
-              <p className="text-sm whitespace-pre-wrap">{bodyEntry.snippet}</p>
+              <p className="text-sm whitespace-pre-wrap"><Private kind="text">{bodyEntry.snippet}</Private></p>
             </div>
           ) : isBodyLoading ? (
             <div className="px-4 py-3 flex items-center gap-2">
@@ -978,3 +978,4 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
 
 export { OriginalEmailModal } from './email/OriginalEmailModal';
 import { t as tr, useT  } from '../i18n/index.js';
+import { Private } from './privacy/Private';

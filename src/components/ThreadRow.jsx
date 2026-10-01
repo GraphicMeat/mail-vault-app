@@ -24,6 +24,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { t as tr, useT  } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 // The unfold control (expandable thread mode). It sits in the row gutter's
 // disclosure slot, which only an unfolding list reserves.
@@ -45,7 +46,8 @@ function ThreadDisclosure({ expanded, threadId, onToggleExpand }) {
   );
 }
 
-// Every distinct party in the thread, two named and the rest counted.
+// Every distinct party in the thread, two named and the rest counted. Each
+// name masks on its own, so privacy mode keeps the separators and the count.
 function participantsLabel(emails, outgoing) {
   const seen = new Set();
   const names = [];
@@ -56,7 +58,10 @@ function participantsLabel(emails, outgoing) {
       names.push(getRowPartyName(email, { outgoing }));
     }
   }
-  return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
+  const shown = names.slice(0, 2).map((name, i) => (
+    <React.Fragment key={i}>{i ? ', ' : ''}<Private kind="name">{name}</Private></React.Fragment>
+  ));
+  return names.length <= 2 ? shown : <>{shown} +{names.length - 2}</>;
 }
 
 // Thread row for default layout — shows collapsed thread with participant names and count
@@ -161,7 +166,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       */}
       <div className="flex-1 min-w-[140px] flex items-center gap-2">
         <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-          {displayText(thread.subject, '(No subject)')}
+          <Private kind="text">{displayText(thread.subject, '(No subject)')}</Private>
         </span>
         <TagChips email={members} />
         {thread.messageCount > 1 && (
@@ -281,7 +286,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
         <div className="flex items-center gap-1.5">
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
           <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {displayText(thread.subject, '(No subject)')}
+            <Private kind="text">{displayText(thread.subject, '(No subject)')}</Private>
           </span>
           <TagChips email={members} />
           {latestEmail.hasAttachments && (

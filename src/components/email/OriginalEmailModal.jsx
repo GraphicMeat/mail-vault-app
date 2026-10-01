@@ -5,12 +5,15 @@ import { Button } from '../ui/Button';
 import { AttachmentItem } from './AttachmentBar';
 import { formatDateTime } from '../../utils/dateFormat';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { usePrivacySourceBlocked } from '../../hooks/usePrivacy';
 import { SourceBlocked } from '../privacy/SourceBlocked';
 
 // Modal for viewing full original email
 export function OriginalEmailModal({ email, onClose }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const blocked = usePrivacySourceBlocked();
   return (
     <Dialog
@@ -36,18 +39,18 @@ export function OriginalEmailModal({ email, onClose }) {
             <div className="flex gap-2">
               <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.from')}</span>
               <span className="text-mail-text min-w-0 break-words">
-                {email?.from?.name} &lt;{email?.from?.address}&gt;
+                {pa(email?.from?.name, 'name')} &lt;{pa(email?.from?.address, 'email')}&gt;
               </span>
             </div>
             <div className="flex gap-2">
               <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.to')}</span>
               <span className="text-mail-text min-w-0 break-words">
-                {email?.to?.map(t => `${t.name || ''} <${t.address}>`).join(', ')}
+                {email?.to?.map(t => `${pa(t.name, 'name') || ''} <${pa(t.address, 'email')}>`).join(', ')}
               </span>
             </div>
             <div className="flex gap-2">
               <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.subject')}</span>
-              <span className="text-mail-text font-medium">{email?.subject}</span>
+              <span className="text-mail-text font-medium"><Private kind="text">{email?.subject}</Private></span>
             </div>
             <div className="flex gap-2">
               <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.date')}</span>

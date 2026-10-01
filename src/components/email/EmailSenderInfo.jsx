@@ -12,6 +12,8 @@ import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { SenderInfoPopover } from './SenderInfoPopover';
 import { getSenderName } from '../../utils/emailParser';
 import { t, useT  } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { BimiLogo } from './BimiLogo';
 import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
 
@@ -44,6 +46,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   readOnly = false,
 }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const [headerExpanded, setHeaderExpanded] = useState(false);
   // Sender Details popover (parity with chat view) — anchored to the clicked element
   const [detailsAnchor, setDetailsAnchor] = useState(null);
@@ -118,7 +121,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
               onClick={hasDistinctName ? openDetails : composeToSender}
               title={hasDistinctName ? t('email.sender.senderDetails') : onReply ? t('emailActionBar.reply') : undefined}
             >
-              {senderName}
+              <Private kind="name">{senderName}</Private>
             </span>
 
             {/* DKIM / verification badge */}
@@ -134,7 +137,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                 onClick={composeToSender}
                 title={onReply ? t('emailActionBar.reply') : undefined}
               >
-                &lt;{email.from.address}&gt;
+                &lt;<Private kind="email">{email.from.address}</Private>&gt;
               </span>
             )}
 
@@ -196,9 +199,9 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
         {(expanded || variant === 'thread') && (
           <div className="text-xs text-mail-text-muted mt-1">
             <div>
-              {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => x.name || x.address).join(', ') || t('settings.cleanup.unknown') })}
+              {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => pa(x.name || x.address, 'name')).join(', ') || t('settings.cleanup.unknown') })}
               {email.cc?.length > 0 && (
-                <span className="ml-2">{t('email.header.cc', { cc: email.cc.map(c => c.name || c.address).join(', ') })}</span>
+                <span className="ml-2">{t('email.header.cc', { cc: email.cc.map(c => pa(c.name || c.address, 'name')).join(', ') })}</span>
               )}
               {expanded && (
                 <button
@@ -222,7 +225,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                   <div>{t('email.header.date', { date: email.date ? formatDateTime(email.date) : t('settings.cleanup.unknown') })}</div>
                   {email.messageId && <div className="break-all">{t('email.header.messageId', { messageId: email.messageId })}</div>}
                   {email.replyTo?.length > 0 && (
-                    <div>{t('email.header.replyTo', { replyTo: email.replyTo.map(r => r.address || r).join(', ') })}</div>
+                    <div>{t('email.header.replyTo', { replyTo: email.replyTo.map(r => pa(r.address || r, 'email')).join(', ') })}</div>
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleRaw?.(); }}

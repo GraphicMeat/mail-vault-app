@@ -18,6 +18,8 @@ import { withoutSnippet } from '../utils/withoutSnippet';
 import { composeIdentities, composeSenderName, composeSignature, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { t, useT, tErr, getLocale } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
@@ -71,6 +73,7 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
 
 function AttachmentPreview({ attachment, onRemove }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const formatSize = (bytes) => {
     if (bytes < 1024) return t('settings.backup.account.b', { bytes });
     if (bytes < 1024 * 1024) return t('settings.backup.account.kb', { bytes: (bytes / 1024).toFixed(1) });
@@ -80,11 +83,11 @@ function AttachmentPreview({ attachment, onRemove }) {
   return (
     <div
       data-testid="compose-attachment"
-      data-filename={attachment.filename}
+      data-filename={pa(attachment.filename, 'filename')}
       className="flex items-center gap-2 px-3 py-2 bg-mail-surface-hover rounded-lg"
     >
       <FileText size={16} className="text-mail-accent-text" />
-      <span className="text-sm text-mail-text truncate flex-1">{attachment.filename}</span>
+      <span className="text-sm text-mail-text truncate flex-1"><Private kind="filename">{attachment.filename}</Private></span>
       <span className="text-xs text-mail-text-muted">{formatSize(attachment.size)}</span>
       <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
         onClick={onRemove}
@@ -118,6 +121,7 @@ const NO_ALIASES = {};
 
 export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend }) {
   const t = useT();
+  const pa = usePrivateAttr();
   // A reader's snippet stand-in (`_bodyLoading`) is never quoted or forwarded
   // as the message: without it the quote waits for the real body like a
   // radial reply does (the late-fill effect below).
@@ -1410,14 +1414,14 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                       const named = acc.name && acc.name !== acc.email;
                       if (ids.length === 1) {
                         const name = ids[0].name || (named ? acc.name : '');
-                        const label = name ? `${name} <${ids[0].address}>` : ids[0].address;
+                        const label = name ? `${pa(name, 'name')} <${pa(ids[0].address, 'email')}>` : pa(ids[0].address, 'email');
                         return <option key={acc.id} value={ids[0].key}>{label}</option>;
                       }
                       // The native optgroup indents the addresses under the account.
                       return (
-                        <optgroup key={acc.id} label={named ? acc.name : acc.email}>
+                        <optgroup key={acc.id} label={pa(named ? acc.name : acc.email, 'name')}>
                           {ids.map(i => (
-                            <option key={i.key} value={i.key}>{i.name ? `${i.name} <${i.address}>` : i.address}</option>
+                            <option key={i.key} value={i.key}>{i.name ? `${pa(i.name, 'name')} <${pa(i.address, 'email')}>` : pa(i.address, 'email')}</option>
                           ))}
                         </optgroup>
                       );

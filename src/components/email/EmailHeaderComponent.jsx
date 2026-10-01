@@ -17,6 +17,8 @@ import { checkSenderVerification, parseAuthResults } from '../../utils/senderChe
 import { getSenderName } from '../../utils/emailParser';
 import { useViewportShift } from '../../hooks/useViewportShift';
 import { t, useT  } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
@@ -79,12 +81,12 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
       <div className="space-y-1 mb-2 text-xs">
         <div className="flex items-start gap-2">
           <span className="text-mail-text-muted w-16 flex-shrink-0">{t('common.from')}</span>
-          <span className="text-mail-text break-all">{email?.from?.address || 'unknown'}</span>
+          <span className="text-mail-text break-all"><Private kind="email">{email?.from?.address || 'unknown'}</Private></span>
         </div>
         {email?.from?.name && email.from.name !== email.from.address && (
           <div className="flex items-start gap-2">
             <span className="text-mail-text-muted w-16 flex-shrink-0">{t('email.header.name')}</span>
-            <span className="text-mail-text break-all">{email.from.name}</span>
+            <span className="text-mail-text break-all"><Private kind="name">{email.from.name}</Private></span>
           </div>
         )}
       </div>
@@ -95,7 +97,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
           {senderIssues.map((issue, i) => (
             <div key={i} className="flex items-start gap-2 text-xs">
               <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 mt-1 ${issue.level === 'danger' ? 'bg-mail-danger' : 'bg-mail-warning'}`} />
-              <span className={issue.level === 'danger' ? 'text-mail-danger' : 'text-mail-warning'}>{issue.text}</span>
+              <span className={issue.level === 'danger' ? 'text-mail-danger' : 'text-mail-warning'}><Private kind="text">{issue.text}</Private></span>
             </div>
           ))}
         </div>
@@ -124,7 +126,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
             <div className="flex items-center gap-2 text-xs border-t border-mail-border pt-1.5 mt-1.5">
               <span className={`inline-block w-2 h-2 rounded-full ${replyToMatches ? 'bg-mail-success' : 'bg-mail-warning'}`} />
               <span className="text-mail-text-muted">{t('email.header.reply')}</span>
-              <span className="text-mail-text">{replyToMatches ? t('email.header.matchesSender') : replyToAddr}</span>
+              <span className="text-mail-text">{replyToMatches ? t('email.header.matchesSender') : <Private kind="email">{replyToAddr}</Private>}</span>
             </div>
           )}
         </div>
@@ -142,6 +144,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
 // ── Sender Verification Badge ────────────────────────────────────────────────
 
 export function SenderVerificationBadge({ email, size = 14 }) {
+  const pa = usePrivateAttr();
   const [popoverAnchor, setPopoverAnchor] = useState(null);
   const { status, tooltip } = useMemo(
     () => checkSenderVerification(email),
@@ -162,7 +165,7 @@ export function SenderVerificationBadge({ email, size = 14 }) {
           setPopoverAnchor(popoverAnchor ? null : e.currentTarget.getBoundingClientRect());
         }}
         className={`${colorClass} hover:opacity-80 transition-opacity`}
-        title={tooltip}
+        title={pa(tooltip, 'text')}
       >
         <Icon size={size} />
       </button>
@@ -177,6 +180,7 @@ export function SenderVerificationBadge({ email, size = 14 }) {
 
 export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingRaw, showInsights, onToggleInsights }) {
   const t = useT();
+  const pa = usePrivateAttr();
   return (
     <div
       className="p-4 border-b border-mail-border cursor-pointer"
@@ -193,12 +197,12 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span dir="auto" className="font-semibold text-mail-text">
-              {displayText(getSenderName(email))}
+              <Private kind="name">{displayText(getSenderName(email))}</Private>
             </span>
             <SenderVerificationBadge email={email} />
             {email.from?.name && (
               <span className="text-sm text-mail-text-muted">
-                &lt;{email.from.address}&gt;
+                &lt;<Private kind="email">{email.from.address}</Private>&gt;
               </span>
             )}
             <button
@@ -212,10 +216,10 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
           </div>
 
           <div className="text-sm text-mail-text-muted">
-            {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => x.name || x.address).join(', ') || t('settings.cleanup.unknown') })}
+            {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => pa(x.name || x.address, 'name')).join(', ') || t('settings.cleanup.unknown') })}
             {email.cc?.length > 0 && (
               <span className="ml-2">
-                {t('email.header.cc', { cc: email.cc.map(c => c.name || c.address).join(', ') })}
+                {t('email.header.cc', { cc: email.cc.map(c => pa(c.name || c.address, 'name')).join(', ') })}
               </span>
             )}
           </div>
@@ -231,7 +235,7 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
                 <div>{t('email.header.date', { date: formatDateTime(email.date) })}</div>
                 {email.messageId && <div>{t('email.header.messageId', { messageId: email.messageId })}</div>}
                 {email.replyTo?.length > 0 && (
-                  <div>{t('email.header.replyTo', { replyTo: email.replyTo.map(r => r.address).join(', ') })}</div>
+                  <div>{t('email.header.replyTo', { replyTo: email.replyTo.map(r => pa(r.address, 'email')).join(', ') })}</div>
                 )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onToggleRaw(); }}

@@ -14,6 +14,8 @@ import {
   subscribeContactsIndex,
 } from '../utils/contactsIndex';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 // All inboxes puts every account's rows in these lists, so each row is credited
 // to its own account; an unstamped row belongs to the active one.
@@ -85,6 +87,7 @@ function getTrailingToken(value) {
 // override within the current compose session.
 export function ContactsPickerButton({ value, onChange, fieldName, boostAccountId = null }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const index = useContactsIndex();
   const accounts = useAccountStore(s => s.accounts) || [];
   const accountColors = useSettingsStore(s => s.accountColors);
@@ -166,7 +169,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
                                transition-colors ${active
                                  ? 'bg-mail-surface-hover ring-1 ring-mail-accent'
                                  : 'hover:bg-mail-surface-hover'}`}
-                    title={a.email}
+                    title={pa(a.email, 'email')}
                   >
                     <span
                       className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
@@ -219,8 +222,8 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    {c.name && <p className="text-xs font-medium text-mail-text truncate">{c.name}</p>}
-                    <p className="text-[11px] text-mail-text-muted truncate">{c.address}</p>
+                    {c.name && <p className="text-xs font-medium text-mail-text truncate"><Private kind="name">{c.name}</Private></p>}
+                    <p className="text-[11px] text-mail-text-muted truncate"><Private kind="email">{c.address}</Private></p>
                   </div>
                   <span className="text-[10px] text-mail-text-muted flex-shrink-0">
                     {tab === 'popular' ? `×${c.count}` : ''}
@@ -304,8 +307,8 @@ export function ContactsAutocomplete({ value, onChange, inputRef, boostAccountId
                      ${i === highlight ? 'bg-mail-surface-hover' : 'hover:bg-mail-surface-hover'}`}
         >
           <div className="flex-1 min-w-0">
-            {c.name && <p className="text-xs font-medium text-mail-text truncate">{c.name}</p>}
-            <p className="text-[11px] text-mail-text-muted truncate">{c.address}</p>
+            {c.name && <p className="text-xs font-medium text-mail-text truncate"><Private kind="name">{c.name}</Private></p>}
+            <p className="text-[11px] text-mail-text-muted truncate"><Private kind="email">{c.address}</Private></p>
           </div>
         </button>
       ))}

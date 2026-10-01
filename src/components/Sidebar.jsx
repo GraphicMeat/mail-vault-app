@@ -36,6 +36,8 @@ import { usePortableStore } from '../stores/portableStore';
 import { PortableBadge } from './PortableIndicators';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { connectionFailureStatus } from '../utils/connectionError';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 import {
   Inbox,
   Network,
@@ -215,10 +217,11 @@ function refreshCurrentView() {
 }
 
 function CollapsedBackupIcon({ onOpenBackup }) {
+  const pa = usePrivateAttr();
   const ab = useBackupStore(s => s.activeBackup);
   if (!ab?.active) return null;
   return (
-    <button onClick={onOpenBackup} className="p-2 hover:bg-mail-accent/10 rounded-lg transition-colors" title={`Backing up ${ab.accountEmail}...`}>
+    <button onClick={onOpenBackup} className="p-2 hover:bg-mail-accent/10 rounded-lg transition-colors" title={`Backing up ${pa(ab.accountEmail, 'email')}...`}>
       <HardDrive size={16} className="text-mail-accent-text animate-pulse" />
     </button>
   );
@@ -226,6 +229,7 @@ function CollapsedBackupIcon({ onOpenBackup }) {
 
 function BackupIndicator({ onOpenBackup }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const activeBackup = useBackupStore(s => s.activeBackup);
   if (!activeBackup || !activeBackup.active) return null;
 
@@ -248,7 +252,7 @@ function BackupIndicator({ onOpenBackup }) {
       )}
       <div className="flex-1 min-w-0">
         <div className="truncate">
-          {isDone ? t('sidebar.backupComplete') : t('sidebar.backingUp', { activeBackup: activeBackup.accountEmail })}
+          {isDone ? t('sidebar.backupComplete') : t('sidebar.backingUp', { activeBackup: pa(activeBackup.accountEmail, 'email') })}
           {!isDone && activeBackup.queueLength > 0 && <span className="text-mail-text-muted"> +{activeBackup.queueLength}</span>}
         </div>
         {!isDone && activeBackup.totalFolders > 0 && (
@@ -267,15 +271,16 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
   unreadCount, onActivate, onActivateInbox, onOpenBackup, insightsOpen = false
 }) {
   const t = useT();
+  const pa = usePrivateAttr();
   return (
     <div className="relative">
       <button type="button"
         className={`relative p-1.5 rounded-lg transition-colors ${isActive && !unifiedInbox && !insightsOpen ? 'bg-mail-accent-tint' : 'hover:bg-mail-surface-hover'}`}
         onClick={onActivate}
         onDoubleClick={onActivateInbox}
-        aria-label={label === account.email ? label : `${label}, ${account.email}`}
+        aria-label={label === account.email ? pa(label, 'email') : `${pa(label, 'name')}, ${pa(account.email, 'email')}`}
         aria-current={isActive && !unifiedInbox && !insightsOpen ? 'true' : undefined}
-        title={label === account.email ? label : `${label} — ${account.email}`}>
+        title={label === account.email ? pa(label, 'email') : `${pa(label, 'name')} — ${pa(account.email, 'email')}`}>
         <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none" style={{ backgroundColor: color }}>
           {initial}
         </span>
@@ -300,19 +305,20 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   unreadCount, onActivate, onActivateInbox, onOpenBackup, insightsOpen = false,
 }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const selected = isActive && !unifiedInbox && !insightsOpen;
   const showAddress = label !== account.email;
   return (
     <div className={`sidebar-account-row ${selected ? 'sidebar-account-selected' : ''}`}>
       <button type="button" className="sidebar-account-open"
-        aria-label={showAddress ? `${label}, ${account.email}` : account.email}
+        aria-label={showAddress ? `${pa(label, 'name')}, ${pa(account.email, 'email')}` : pa(account.email, 'email')}
         aria-current={selected ? 'true' : undefined}
-        title={showAddress ? `${label} — ${account.email}` : account.email}
+        title={showAddress ? `${pa(label, 'name')} — ${pa(account.email, 'email')}` : pa(account.email, 'email')}
         onClick={onActivate} onDoubleClick={onActivateInbox}>
         <span className="sidebar-account-avatar" style={{ backgroundColor: color }} aria-hidden="true">{initial}</span>
         <span className="sidebar-account-label">
-          <span className="sidebar-account-name">{label}</span>
-          {showAddress && <span className="sidebar-account-address">{account.email}</span>}
+          <span className="sidebar-account-name"><Private kind="name">{label}</Private></span>
+          {showAddress && <span className="sidebar-account-address"><Private kind="email">{account.email}</Private></span>}
         </span>
         <span className="sidebar-account-indicators">
           {unreadCount > 0 && <span className="sidebar-unread-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}
@@ -531,6 +537,7 @@ function AccountChooser({ position, onClose, accounts, renderAccount, unifiedRow
 
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend, onOpenInsights, onOpenNotes, onOpenMail, insightsOpen = false, notesOpen = false }) {
   const t = useT();
+  const pa = usePrivateAttr();
   // Either full page hides the mail view, so neither leaves a folder or an
   // account looking selected.
   const mailHidden = insightsOpen || notesOpen;
@@ -899,7 +906,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       onClose={() => setShowErrorModal(false)}
       size="sm"
       title={t('sidebar.accountConnection')}
-      description={activeAccount?.email}
+      description={pa(activeAccount?.email, 'email')}
     >
       {connectionError && <p className="text-sm text-mail-text-muted whitespace-pre-wrap break-words">{connectionError}</p>}
       {connectionErrorType === 'passwordMissing' && (
@@ -1194,6 +1201,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   );
   const selectedAccountLabel = unifiedInbox ? t('sidebar.allInboxes')
     : activeAccount ? displayNames[activeAccount.id] || activeAccount.name || activeAccount.email : t('sidebar.addAccount');
+  // The label as shown: an account's own label masks, "All Inboxes" does not.
+  const shownAccountLabel = !unifiedInbox && activeAccount ? pa(selectedAccountLabel, 'name') : selectedAccountLabel;
+  const shownAccountEmail = pa(activeAccount?.email, 'email');
 
   return (
     <div className="mail-sidebar w-64 h-full bg-mail-surface border-r border-mail-border flex flex-col relative" data-sidebar-density={sidebarDensity}>
@@ -1249,8 +1259,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             </div>
             <div className="sidebar-account-row sidebar-switcher-row">
               <button type="button" ref={accountTriggerRef} className="sidebar-account-switcher"
-                aria-label={`${t('sidebar.switchAccount')}: ${selectedAccountLabel}${!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `, ${activeAccount.email}` : ''}`}
-                title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${selectedAccountLabel} — ${activeAccount.email}` : selectedAccountLabel}
+                aria-label={`${t('sidebar.switchAccount')}: ${shownAccountLabel}${!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `, ${shownAccountEmail}` : ''}`}
+                title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${shownAccountLabel} — ${shownAccountEmail}` : shownAccountLabel}
                 aria-haspopup="dialog" aria-expanded={!!chooserPosition}
                 onClick={chooserPosition ? closeChooser : openChooser}
                 onDoubleClick={() => { if (activeAccount && !unifiedInbox) activateInbox(activeAccount.id); }}>
@@ -1258,8 +1268,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   : activeAccount ? <span className="sidebar-account-avatar" style={{ backgroundColor: getAccountColor(accountColors, activeAccount) }} aria-hidden="true">
                     {getAccountInitial(activeAccount, displayNames[activeAccount.id])}
                   </span> : <Plus size={17} />}
-                <span className="sidebar-account-label"><span className="sidebar-account-name">{selectedAccountLabel}</span>
-                  {!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email && <span className="sidebar-account-address">{activeAccount.email}</span>}
+                <span className="sidebar-account-label"><span className="sidebar-account-name">{shownAccountLabel}</span>
+                  {!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email && <span className="sidebar-account-address">{shownAccountEmail}</span>}
                 </span>
                 {!unifiedInbox && activeAccount && unreadPerAccount[activeAccount.id] > 0 && <span className="sidebar-unread-count">{unreadPerAccount[activeAccount.id] > 99 ? '99+' : unreadPerAccount[activeAccount.id]}</span>}
                 {!unifiedInbox && activeAccount && connectionStatus !== 'connected' && (connectionStatus === 'error'

@@ -25,6 +25,8 @@ import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { getSelectionGeneration } from '../../services/workflows/selectEmail';
 import { EmailActionBar } from './EmailActionBar';
 import { TagChips } from '../TagChips';
@@ -54,6 +56,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const backupConfigured = useMailStore(s => s.backupConfigured);
   const iframeRef = useRef(null);
   const privacyOn = usePrivacyFrameGate();
+  const pa = usePrivateAttr();
   const selectedReplyHtml = () => {
     const frame = iframeRef.current;
     return replySelection(frame?.contentDocument?.body, frame?.contentWindow?.getSelection?.());
@@ -287,7 +290,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-bg shrink-0">
           <div className="flex-1 min-w-0 mr-4">
             <h2 className="font-semibold text-mail-text truncate text-lg">
-              {email.subject || '(No subject)'}
+              <Private kind="text">{email.subject || '(No subject)'}</Private>
             </h2>
           </div>
           <Button variant="ghost" icon onClick={close} aria-label={t('common.close')} className="flex-shrink-0">
@@ -300,13 +303,13 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
           <div className="flex gap-2">
             <span className="text-mail-text-muted w-14 flex-shrink-0">{t('email.fullView.from')}</span>
             <span className="text-mail-text min-w-0 break-words">
-              {email.from?.name ? `${email.from.name} <${email.from.address}>` : email.from?.address}
+              {email.from?.name ? `${pa(email.from.name, 'name')} <${pa(email.from.address, 'email')}>` : pa(email.from?.address, 'email')}
             </span>
           </div>
           <div className="flex gap-2">
             <span className="text-mail-text-muted w-14 flex-shrink-0">{t('email.fullView.to')}</span>
             <span className="text-mail-text min-w-0 break-words">
-              {email.to?.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')}
+              {email.to?.map(t => t.name ? `${pa(t.name, 'name')} <${pa(t.address, 'email')}>` : pa(t.address, 'email')).join(', ')}
             </span>
           </div>
           <div className="flex gap-2">

@@ -5,6 +5,8 @@ import { useComposeStore } from '../stores/composeStore';
 import { AnimatePresence } from 'framer-motion';
 import { Undo2, Mail } from 'lucide-react';
 import { t as tr, useT  } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 function formatCountdown(seconds) {
   if (seconds >= 60) {
@@ -17,6 +19,7 @@ function formatCountdown(seconds) {
 
 export function UndoSendToast({ onUndo }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const pendingSend = useComposeStore(s => s.pendingSend);
   const cancelPendingSend = useComposeStore(s => s.cancelPendingSend);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -59,10 +62,10 @@ export function UndoSendToast({ onUndo }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   {subject && (
-                    <p className="text-xs font-medium text-mail-text truncate">{subject}</p>
+                    <p className="text-xs font-medium text-mail-text truncate"><Private kind="text">{subject}</Private></p>
                   )}
                   <p className="text-xs text-mail-text-muted">
-                    {recipient ? tr('undoSend.to', { recipient }) : ''}{tr('undoSend.sendingIn')}{' '}
+                    {recipient ? tr('undoSend.to', { recipient: pa(recipient, 'name') }) : ''}{tr('undoSend.sendingIn')}{' '}
                     <span className="font-semibold tabular-nums text-mail-text">{formatCountdown(secondsLeft)}</span>
                   </p>
                 </div>

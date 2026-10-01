@@ -24,6 +24,7 @@ import { useSearchHighlight } from '../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
 import { refuseWindowUnderPrivacy } from '../utils/privacy/windowBlocked';
 import { usePrivacySourceBlocked } from '../hooks/usePrivacy';
+import { Private } from './privacy/Private';
 import { SourceBlocked } from './privacy/SourceBlocked';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
@@ -702,7 +703,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             blocked={trackerBlocking}
             size={18}
           />
-          <span className="min-w-0 break-words">{selectedEmail.subject}</span>
+          <span className="min-w-0 break-words"><Private kind="text">{selectedEmail.subject}</Private></span>
         </h1>
         <div className="flex items-center flex-shrink-0">
           {showOpenInWindow && <Button variant="ghost" icon size="sm" data-testid="open-in-window" onClick={openInWindow}

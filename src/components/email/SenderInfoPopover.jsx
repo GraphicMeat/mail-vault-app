@@ -7,6 +7,8 @@ import { useMailStore } from '../../stores/mailStore';
 import { isRowArchived } from '../../utils/quickActionFacts';
 import { getSenderName } from '../../utils/emailParser';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 /**
  * Portal-based sender info popover for chat view.
@@ -21,6 +23,7 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
   archivedEmailIds,
 }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const popoverRef = useRef(null);
   const previousFocusRef = useRef(null);
 
@@ -107,7 +110,7 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
           <div className="min-w-0">
             {hasDistinctName && (
               <div className="text-sm font-semibold text-mail-text truncate">
-                {senderName}
+                <Private kind="name">{senderName}</Private>
               </div>
             )}
             {address && onReply ? (
@@ -119,11 +122,11 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
                 className={`block max-w-full truncate text-left hover:underline ${
                   hasDistinctName ? 'text-xs text-mail-text-muted' : 'text-sm font-semibold text-mail-text'}`}
               >
-                {hasDistinctName ? address : senderName}
+                <Private kind="name">{hasDistinctName ? address : senderName}</Private>
               </button>
             ) : (
               <div className={hasDistinctName ? 'text-xs text-mail-text-muted truncate' : 'text-sm font-semibold text-mail-text truncate'}>
-                {hasDistinctName ? address : senderName}
+                <Private kind="name">{hasDistinctName ? address : senderName}</Private>
               </div>
             )}
           </div>
@@ -140,10 +143,10 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
         {/* To/CC */}
         <div className="text-xs text-mail-text-muted space-y-0.5">
           <div>
-            {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => x.name || x.address).join(', ') || t('settings.cleanup.unknown') })}
+            {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => pa(x.name || x.address, 'name')).join(', ') || t('settings.cleanup.unknown') })}
           </div>
           {email.cc?.length > 0 && (
-            <div>{t('email.header.cc', { cc: email.cc.map(c => c.name || c.address).join(', ') })}</div>
+            <div>{t('email.header.cc', { cc: email.cc.map(c => pa(c.name || c.address, 'name')).join(', ') })}</div>
           )}
         </div>
 

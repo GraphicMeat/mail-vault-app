@@ -3,6 +3,8 @@ import { useComposeStore } from '../stores/composeStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader, Check, AlertTriangle, RefreshCw, X } from 'lucide-react';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 // Renders one bubble per in-flight or errored send. Mirrors the minimized
 // compose bubble style so the compose → send → success/error flow all lives
@@ -10,6 +12,7 @@ import { useT } from '../i18n/index.js';
 // user retries or dismisses (which restores the compose window).
 export function OutboxTray({ onRestoreDraft }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const items = useComposeStore(s => s.outboxItems);
   const retryOutbox = useComposeStore(s => s.retryOutbox);
   const dismissOutbox = useComposeStore(s => s.dismissOutbox);
@@ -49,9 +52,9 @@ export function OutboxTray({ onRestoreDraft }) {
                 {isError && <AlertTriangle size={14} className="text-mail-danger" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-mail-text truncate">{subject}</p>
+                <p className="text-xs font-medium text-mail-text truncate"><Private kind="text">{subject}</Private></p>
                 {recipient && (
-                  <p className="text-[10px] text-mail-text-muted truncate">{t('outbox.toRecipient', { recipient })}</p>
+                  <p className="text-[10px] text-mail-text-muted truncate">{t('outbox.toRecipient', { recipient: pa(recipient, 'name') })}</p>
                 )}
                 <p className={`text-[11px] mt-0.5 ${isError ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
                   {isSending && 'Sending…'}

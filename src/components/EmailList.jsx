@@ -68,6 +68,8 @@ import { TagChips } from './TagChips';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 import { t, useT } from '../i18n/index.js';
 import { cleanPreviewText } from '../utils/previewText';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 // Labels describe what the list shows; users choose a mode directly.
 const THREAD_MODE_LABEL = {
@@ -218,6 +220,7 @@ function LiveRowShell({ renderActions, children }) {
 
 function EmailListComponent({ stacked = false }) {
   const t = useT();
+  const pa = usePrivateAttr();
   // Individual selectors — component only re-renders when these specific fields change
   const loading = useSyncStore(s => s.loading);
   const loadingMore = useSyncStore(s => s.loadingMore);
@@ -1525,13 +1528,13 @@ function EmailListComponent({ stacked = false }) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className={`text-sm truncate ${item.sender.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-                              {item.sender.senderName || item.sender.senderEmail}
+                              <Private kind="name">{item.sender.senderName || item.sender.senderEmail}</Private>
                             </span>
                             {item.sender.totalEmails && (
                               <span className="text-xs text-mail-text-muted">({item.sender.totalEmails})</span>
                             )}
                             {item.sender.senderName && item.sender.senderName !== item.sender.senderEmail && (
-                              <span className="text-xs text-mail-text-muted truncate hidden sm:inline">{item.sender.senderEmail}</span>
+                              <span className="text-xs text-mail-text-muted truncate hidden sm:inline"><Private kind="email">{item.sender.senderEmail}</Private></span>
                             )}
                           </div>
                         </div>
@@ -1578,12 +1581,12 @@ function EmailListComponent({ stacked = false }) {
                           <div className={`text-sm truncate flex items-center gap-1 ${item.topic.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
                             {(() => { const sa = getSenderAlertLevel(item.topic.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={13} /> : null; })()}
                             <LinkAlertIcon level={getLinkAlertLevel(item.topic.emails)} size={13} alerts={getAlertsForEmails(item.topic.emails, useMailStore.getState())} />
-                            {item.topic.originalSubject || '(No subject)'}
+                            <Private kind="text">{item.topic.originalSubject || '(No subject)'}</Private>
                           </div>
                           <div className="text-xs text-mail-text-muted truncate mt-0.5">
                             {item.topic.participants
                               .filter(p => p !== item.sender.senderEmail)
-                              .map(p => p.split('@')[0])
+                              .map(p => pa(p.split('@')[0], 'name'))
                               .join(', ')
                               || 'No other participants'
                             }
@@ -1669,7 +1672,7 @@ function EmailListComponent({ stacked = false }) {
                               {item.email.date ? formatEmailDate(new Date(item.email.date)) : ''}
                             </span>
                             <span className={`text-xs ${!item.email.flags?.includes('\\Seen') ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-                              {item.email._fromSentFolder ? t('list.you') : getSenderName(item.email)}
+                              {item.email._fromSentFolder ? t('list.you') : <Private kind="name">{getSenderName(item.email)}</Private>}
                             </span>
                             {item.email._fromSentFolder && (
                               <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent-text font-medium">{t('list.sent')}</span>
@@ -1677,7 +1680,7 @@ function EmailListComponent({ stacked = false }) {
                           </div>
                           {/* The same text a list row's preview line shows (RowSnippet). */}
                           {cleanPreviewText(item.email.previewText || item.email.snippet) && (
-                            <div className="text-xs text-mail-text-muted truncate mt-0.5">{cleanPreviewText(item.email.previewText || item.email.snippet)}</div>
+                            <div className="text-xs text-mail-text-muted truncate mt-0.5"><Private kind="text">{cleanPreviewText(item.email.previewText || item.email.snippet)}</Private></div>
                           )}
                           <TagChips email={item.email} />
                         </div>
@@ -1692,10 +1695,10 @@ function EmailListComponent({ stacked = false }) {
                     {item.type === 'email-body' && (
                       <div className="pl-16 pr-4 py-3 border-t border-mail-border bg-mail-surface h-full overflow-auto">
                         <div className="text-xs text-mail-text-muted mb-2">
-                          {t('list.fromToLine', { from: getSenderName(item.email), to: item.email.to?.[0]?.address || '' })}
+                          {t('list.fromToLine', { from: pa(getSenderName(item.email), 'name'), to: pa(item.email.to?.[0]?.address || '', 'email') })}
                         </div>
                         <div className="text-sm text-mail-text whitespace-pre-wrap">
-                          {item.email.text || item.email.textBody || item.email.snippet || item.email.subject || 'No content available'}
+                          <Private kind="text">{item.email.text || item.email.textBody || item.email.snippet || item.email.subject || 'No content available'}</Private>
                         </div>
                       </div>
                     )}

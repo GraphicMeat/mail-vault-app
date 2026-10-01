@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Clock, Search, User, X } from 'lucide-react';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 import { registerPopoverLayer } from '../hooks/useDialogA11y';
 import {
   addTags, commitText, formatTag, operatorMenu, parseTag, pickOperator, removeTag, replaceTag, slashQuery,
@@ -8,11 +10,19 @@ import {
 
 const keyPrefix = key => (key === '-' ? '-' : `${key}:`);
 
+/// Privacy mode masks a recipient's value whole; any other tag only where a
+/// name, address or number is found in it.
+const RECIPIENT_KEYS = new Set(['from', 'to']);
+function privateTag(pa, tag) {
+  const { key, value } = parseTag(tag);
+  return RECIPIENT_KEYS.has(key) ? `${keyPrefix(key)}${pa(value, 'name')}` : pa(tag, 'text');
+}
+
 /// A tag as the chip shows it: the operator muted, its value without quotes.
 function TagLabel({ tag }) {
   const { key, value } = parseTag(tag);
-  if (!key) return tag;
-  return <><span className="text-mail-text-muted">{keyPrefix(key)}</span>{value}</>;
+  if (!key) return <Private kind="text">{tag}</Private>;
+  return <><span className="text-mail-text-muted">{keyPrefix(key)}</span><Private kind={RECIPIENT_KEYS.has(key) ? 'name' : 'text'}>{value}</Private></>;
 }
 
 /// Keys that stay put while other tags come and go, so a focused chip keeps
@@ -54,6 +64,7 @@ export function SearchTagInput({
   onFocus, leading, trailing,
 }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const listId = useId();
   const rootRef = useRef(null);
   const rowRef = useRef(null);
@@ -266,8 +277,8 @@ export function SearchTagInput({
                   ref={node => { chipRefs.current[index] = node; }}
                   type="button"
                   data-testid="search-tag-text"
-                  aria-label={t('search.tags.edit', { tag })}
-                  title={tag}
+                  aria-label={t('search.tags.edit', { tag: privateTag(pa, tag) })}
+                  title={privateTag(pa, tag)}
                   onClick={() => {
                     const { key, value } = parseTag(tag);
                     startEditing({ index, key, text: key ? value : tag, isNew: false });
@@ -281,7 +292,7 @@ export function SearchTagInput({
                   type="button"
                   tabIndex={-1}
                   data-testid="search-tag-remove"
-                  aria-label={t('search.tags.remove', { tag })}
+                  aria-label={t('search.tags.remove', { tag: privateTag(pa, tag) })}
                   onClick={() => {
                     onTagsChange(removeTag(tags, index));
                     focusInput();
@@ -384,10 +395,10 @@ export function SearchTagInput({
                             text-mail-text hover:border-mail-accent cursor-pointer transition-colors
                             ${index === current ? 'border-mail-accent' : 'border-mail-border'}`}
                         >
-                          <span className="max-w-[150px] truncate">{option.query}</span>
+                          <span className="max-w-[150px] truncate"><Private kind="text">{option.query}</Private></span>
                           <button
                             type="button"
-                            aria-label={t('search.tags.remove', { tag: option.query })}
+                            aria-label={t('search.tags.remove', { tag: pa(option.query, 'text') })}
                             onClick={event => {
                               event.stopPropagation();
                               onRemoveRecent?.(option.query);
@@ -424,9 +435,9 @@ export function SearchTagInput({
                           {option.suggestion.kind === 'sender'
                             ? <User size={12} className="shrink-0 text-mail-text-muted" aria-hidden="true" />
                             : <Search size={12} className="shrink-0 text-mail-text-muted" aria-hidden="true" />}
-                          <span className="truncate">{option.suggestion.label}</span>
+                          <span className="truncate"><Private kind={option.suggestion.kind === 'sender' ? 'name' : 'text'}>{option.suggestion.label}</Private></span>
                           {option.suggestion.detail && (
-                            <span className="truncate text-xs text-mail-text-muted">{option.suggestion.detail}</span>
+                            <span className="truncate text-xs text-mail-text-muted"><Private kind={option.suggestion.kind === 'sender' ? 'email' : 'text'}>{option.suggestion.detail}</Private></span>
                           )}
                         </li>
                       ))}

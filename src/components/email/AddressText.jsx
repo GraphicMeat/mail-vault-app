@@ -3,6 +3,8 @@ import { openMailtoCompose } from '../../utils/mailto';
 import { linkifyText } from '../../utils/linkify';
 import { codeRuns } from '../../utils/codeText';
 import { CODE_LOOK } from '../../utils/codeLook';
+import { Private } from '../privacy/Private';
+import { usePrivacyActive } from '../../hooks/usePrivacy';
 
 /**
  * Plain-text body text with its email and web addresses made clickable.
@@ -22,27 +24,35 @@ import { CODE_LOOK } from '../../utils/codeLook';
  */
 // `readOnly` (the compose pane's copy): an email address shows as a link but
 // composes nothing; a web address still opens, which is reading.
+//
+// Privacy mode masks every run in place; a mailto link keeps its click but
+// loses the href that spells the address.
 export const AddressText = memo(function AddressText({ text, accountId, readOnly = false }) {
+  const masked = usePrivacyActive();
   const runs = useMemo(() => codeRuns(text).map(run => (
     run.code ? run : { ...run, segments: linkifyText(run.text) }
   )), [text]);
 
   // Nothing to link and no code — hand back the string itself so the common
   // case adds no elements to the tree at all.
-  if (!runs.some(run => run.code || run.segments.some(seg => seg.href))) return text ?? null;
+  if (!runs.some(run => run.code || run.segments.some(seg => seg.href))) {
+    return masked ? <Private kind="text">{text ?? ''}</Private> : text ?? null;
+  }
+  const show = (s, kind = 'text') => (masked ? <Private kind={kind}>{s}</Private> : s);
 
   return runs.map((run, r) => {
-    if (run.code === 'inline') return <code key={r} style={CODE_LOOK.inline}>{run.text}</code>;
-    if (run.code === 'block') return <pre key={r} style={{ ...CODE_LOOK.block, margin: '0.25em 0' }}>{run.text}</pre>;
-    return run.segments.map((seg, i) => linked(seg, `${r}.${i}`, accountId, readOnly));
+    if (run.code === 'inline') return <code key={r} style={CODE_LOOK.inline}>{show(run.text)}</code>;
+    if (run.code === 'block') return <pre key={r} style={{ ...CODE_LOOK.block, margin: '0.25em 0' }}>{show(run.text)}</pre>;
+    return run.segments.map((seg, i) => linked(seg, `${r}.${i}`, accountId, readOnly, masked, show));
   });
 });
 
-function linked(seg, i, accountId, readOnly) {
+function linked(seg, i, accountId, readOnly, masked, show) {
+  const mailto = seg.href?.startsWith('mailto:');
   return seg.href ? (
     <a
       key={i}
-      href={seg.href}
+      href={masked && mailto ? undefined : seg.href}
       // Inherits the body's colour on purpose: these sit on the message
       // surface, which is white or near-black depending on the email theme,
       // and no fixed link colour reads well on both. The underline is the
@@ -63,7 +73,7 @@ function linked(seg, i, accountId, readOnly) {
           .catch(() => window.open(seg.href, '_blank'));
       }}
     >
-      {seg.text}
+      {show(seg.text, mailto ? 'email' : 'text')}
     </a>
-  ) : seg.text;
+  ) : <React.Fragment key={i}>{show(seg.text)}</React.Fragment>;
 }

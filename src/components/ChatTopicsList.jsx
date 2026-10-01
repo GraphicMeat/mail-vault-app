@@ -12,6 +12,7 @@ import { formatDateOnly } from '../utils/dateFormat';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { t as tr, useT  } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic }) {
   const t = useT();
@@ -38,10 +39,10 @@ export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic })
 
         <div className="flex-1 min-w-0">
           <h2 className="text-sm font-semibold text-mail-text truncate leading-tight">
-            {correspondent.name}
+            <Private kind="name">{correspondent.name}</Private>
           </h2>
           <p className="text-[11px] text-mail-text-muted truncate leading-tight">
-            {correspondent.email}
+            <Private kind="email">{correspondent.email}</Private>
           </p>
         </div>
 
@@ -108,7 +109,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick }) {
           <h3 className={`text-sm truncate min-w-0 flex items-center gap-1 ${unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {(() => { const sa = getSenderAlertLevel(topic.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={14} /> : null; })()}
             <LinkAlertIcon level={getLinkAlertLevel(topic.emails)} size={14} alerts={getAlertsForEmails(topic.emails, useMailStore.getState())} />
-            <span className="truncate">{topic.subject}</span>
+            <span className="truncate"><Private kind="text">{topic.subject}</Private></span>
           </h3>
 
           {unreadCount > 0 && (

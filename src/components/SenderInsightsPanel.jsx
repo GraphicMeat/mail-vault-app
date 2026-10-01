@@ -2,12 +2,14 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useSenderInsights } from '../hooks/useSenderInsights';
 import { formatDateOnly } from '../utils/dateFormat';
+import { Private } from './privacy/Private';
 
-function StatRow({ label, value }) {
+// `masked`: the value names people (subjects, account addresses).
+function StatRow({ label, value, masked = false }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-0.5 min-w-0">
       <span className="text-xs text-mail-text-muted whitespace-nowrap shrink-0">{label}</span>
-      <span className="text-xs text-mail-text text-right truncate min-w-0">{value}</span>
+      <span className="text-xs text-mail-text text-right truncate min-w-0">{masked ? <Private kind="text">{value}</Private> : value}</span>
     </div>
   );
 }
@@ -50,12 +52,14 @@ export function SenderInsightsPanel({ senderEmail, email = null }) {
             <StatRow
               label="Common topics"
               value={topSubjects.join(', ')}
+              masked
             />
           )}
           {accountsUsed.length >= 2 && (
             <StatRow
               label="Via accounts"
               value={accountsUsed.join(', ')}
+              masked
             />
           )}
         </div>
