@@ -177,6 +177,16 @@ export function SearchBar({ autoFocus = false }) {
     setTimeout(() => performSearch(), 0);
   };
 
+  // A tag added, removed or edited runs the search it now says at once, with
+  // no second Enter. Text still being typed stays out of it until committed.
+  const handleTagsChange = (next) => {
+    setTags(next);
+    const query = serializeTags(next);
+    if (query === serializeTags(tags)) return;
+    setSearchQuery(query);
+    setTimeout(() => performSearch(), 0);
+  };
+
   const openHelp = () => {
     const rect = helpButtonRef.current?.getBoundingClientRect();
     setHelpAnchor({ top: (rect?.bottom ?? 0) + 8, right: Math.max(8, window.innerWidth - (rect?.right ?? 0)) });
@@ -191,7 +201,7 @@ export function SearchBar({ autoFocus = false }) {
 
   const insertExample = (example) => {
     setHelpAnchor(null);
-    setTags(current => addTags(current, [...commitText(draft), ...commitText(example)]));
+    handleTagsChange(addTags(tags, [...commitText(draft), ...commitText(example)]));
     setDraft('');
     inputRef.current?.focus();
   };
@@ -323,7 +333,7 @@ export function SearchBar({ autoFocus = false }) {
       <form onSubmit={handleSearch} className="flex items-start gap-2">
         <SearchTagInput
           tags={tags}
-          onTagsChange={setTags}
+          onTagsChange={handleTagsChange}
           draft={draft}
           onDraftChange={setDraft}
           onSubmit={handleSearch}

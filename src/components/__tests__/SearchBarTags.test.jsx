@@ -89,12 +89,11 @@ afterEach(() => {
 });
 
 describe('committing tags', () => {
-  it('turns typed text into a tag on Enter, and searches on Enter in an empty box', async () => {
+  it('turns typed text into a tag on Enter, and searches again on Enter in an empty box', async () => {
     render(<SearchBar />);
     commit('invoice', 'from:ann');
     expect(tagTexts()).toEqual(['invoice', 'from:ann']);
     expect(input().value).toBe('');
-    expect(harness.runs).toHaveLength(0);
 
     press('Enter');
     await flush();
@@ -129,6 +128,75 @@ describe('committing tags', () => {
     expect(tagTexts()).toEqual([]);
     expect(useSearchStore.getState().searchQuery).toBe('');
     expect(useSearchStore.getState().searchActive).toBe(false);
+  });
+});
+
+describe('searching as the tags change', () => {
+  const lastRun = () => harness.runs.at(-1)?.request;
+
+  it('runs the search as soon as a tag is committed, without a second Enter', async () => {
+    render(<SearchBar />);
+    commit('invoice');
+    await flush();
+    await flush();
+    expect(useSearchStore.getState().searchQuery).toBe('invoice');
+    expect(lastRun()).toMatchObject({ query: 'invoice' });
+
+    commit('from:ann');
+    await flush();
+    await flush();
+    expect(lastRun()).toMatchObject({ query: 'invoice', sender: 'ann' });
+  });
+
+  it('runs again when a tag is removed or edited, leaving the text being typed out of it', async () => {
+    render(<SearchBar />);
+    commit('a', 'b');
+    await flush();
+    await flush();
+    type('half');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove a' }));
+    await flush();
+    await flush();
+    expect(useSearchStore.getState().searchQuery).toBe('b');
+    expect(lastRun()).toMatchObject({ query: 'b' });
+    expect(input().value).toBe('half');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit b' }));
+    type('c', screen.getByTestId('search-tag-edit'));
+    press('Enter', screen.getByTestId('search-tag-edit'));
+    await flush();
+    await flush();
+    expect(lastRun()).toMatchObject({ query: 'c' });
+  });
+
+  it('ends the search when the last tag goes, keeping the filters', async () => {
+    render(<SearchBar />);
+    useSearchStore.getState().setSearchFilters({ hasAttachments: true });
+    commit('a');
+    await flush();
+    await flush();
+    const runs = harness.runs.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Remove a' }));
+    await flush();
+    await flush();
+    expect(useSearchStore.getState().searchQuery).toBe('');
+    expect(useSearchStore.getState().searchFilters.hasAttachments).toBe(true);
+    expect(harness.runs.length).toBe(runs + 1);
+    expect(lastRun()).toMatchObject({ query: '' });
+  });
+
+  it('does not run for a change that leaves the tags as they were', async () => {
+    render(<SearchBar />);
+    commit('a');
+    await flush();
+    await flush();
+    const runs = harness.runs.length;
+    commit('A');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit a' }));
+    press('Escape', screen.getByTestId('search-tag-edit'));
+    await flush();
+    await flush();
+    expect(harness.runs.length).toBe(runs);
   });
 });
 
