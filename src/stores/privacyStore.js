@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage, flushSafeStorage } from './safeStorage';
 import { hasPremiumAccess, useSettingsStore } from './settingsStore';
+import { isChildWindow } from '../utils/privacy/isChildWindow';
 
 /**
  * Privacy mode: people's names, addresses and numbers masked across the app,
@@ -21,6 +22,8 @@ export const usePrivacyStore = create(
       peek: false,
       captureMask: false,
       setEnabled: (on) => {
+        // A detached window follows the main window's event; it never diverges.
+        if (isChildWindow()) return 'ok';
         if (on && !hasPremiumAccess(useSettingsStore.getState().billingProfile)) return 'premium';
         set({ enabled: !!on, peek: false });
         // A detached window reads this file at mount; write it now, not in 500 ms.
@@ -34,7 +37,7 @@ export const usePrivacyStore = create(
       name: 'mailvault-privacy',
       storage: createJSONStorage(() => safeStorage),
       partialize: (s) => ({ enabled: s.enabled }),
-      merge: (persisted, current) => ({ ...current, enabled: !!persisted?.enabled }),
+      merge: (persisted, current) => ({ ...current, enabled: persisted ? !!persisted.enabled : current.enabled }),
     },
   ),
 );

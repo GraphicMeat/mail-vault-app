@@ -1,9 +1,10 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 vi.mock('../settingsStore', async (orig) => {
   const real = await orig();
   return { ...real, hasPremiumAccess: vi.fn(() => true) };
 });
-import { hasPremiumAccess } from '../settingsStore';
+import { hasPremiumAccess, useSettingsStore } from '../settingsStore';
 import { usePrivacyStore, isPrivacyMasking } from '../privacyStore';
 
 beforeEach(() => usePrivacyStore.setState({ enabled: false, peek: false, captureMask: false }));
@@ -22,10 +23,27 @@ describe('privacyStore', () => {
     hasPremiumAccess.mockReturnValue(true);
   });
   it('never turns itself off when Premium lapses', () => {
-    usePrivacyStore.setState({ enabled: true });
+    useSettingsStore.setState({ billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active' } });
+    usePrivacyStore.getState().setEnabled(true);
     hasPremiumAccess.mockReturnValue(false);
+    useSettingsStore.setState({ billingProfile: { hasSubscription: false, premiumAccess: false, status: 'canceled' } });
     expect(usePrivacyStore.getState().enabled).toBe(true);
     hasPremiumAccess.mockReturnValue(true);
+    useSettingsStore.setState({ billingProfile: null });
+  });
+  it('a detached window never changes enabled itself', () => {
+    window.history.replaceState({}, '', '/?compose=1');
+    try {
+      expect(usePrivacyStore.getState().setEnabled(true)).toBe('ok');
+      expect(usePrivacyStore.getState().enabled).toBe(false);
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+  it('keeps the current value when nothing was persisted', () => {
+    const { merge } = usePrivacyStore.persist.getOptions();
+    expect(merge(undefined, { enabled: true, peek: false }).enabled).toBe(true);
+    expect(merge({ enabled: false }, { enabled: true }).enabled).toBe(false);
   });
   it('masks when enabled or capture-masked, but not while peeking', () => {
     expect(isPrivacyMasking({ enabled: true, peek: false, captureMask: false })).toBe(true);

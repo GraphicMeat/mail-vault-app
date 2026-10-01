@@ -1,14 +1,14 @@
 import { usePrivacyStore } from '../../stores/privacyStore';
+import { isChildWindow } from './isChildWindow';
 
 const EVENT = 'privacy-mode-changed';
-// Same window detection safeStorage uses for its write gate.
-const isChildWindow = () => typeof window !== 'undefined'
-  && ['compose', 'original', 'settings'].some(k => new URLSearchParams(window.location?.search || '').has(k));
 
 /**
  * The main window owns the toggle. Detached windows read the persisted value at
  * mount (safeStorage) and follow every change through this event.
  */
+// ponytail: a toggle between a child's disk read and its listen registering is
+// missed until the next toggle or reopen; narrow (ms), revisit if ever reported.
 export function startPrivacySync() {
   let stop = () => {};
   let cancelled = false;
