@@ -264,6 +264,9 @@ describe('the results summary', () => {
     }));
     expect(view.getByTestId('search-summary').textContent)
       .toBe('Found 1 results in Inbox across all accounts from 48,000 emails');
+
+    act(() => useSearchStore.setState({ searchIndexCoverage: { indexed: 100, total: 48000, complete: false, matched: 1, shown: 1 } }));
+    expect(view.getByTestId('search-summary').textContent).not.toContain('from');
   });
 
   it('shows no duration while the search is still running', async () => {
