@@ -1,0 +1,28 @@
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../safeStorage', () => ({
+  safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+}));
+
+const { useSettingsStore, _mergePersistedSettings, DEFAULT_SOCIAL_EXPORT } = await import('../settingsStore');
+
+describe('social export style', () => {
+  it('starts on the defaults', () => {
+    expect(useSettingsStore.getState().socialExport).toEqual(DEFAULT_SOCIAL_EXPORT);
+  });
+
+  it('stores a patch, but never the redact choice or an own image', () => {
+    const { setSocialExport } = useSettingsStore.getState();
+    setSocialExport({ size: 'story', background: { type: 'solid', id: 'black' } });
+    setSocialExport({ redact: false, background: { type: 'image', image: {} } });
+    const s = useSettingsStore.getState().socialExport;
+    expect(s).toMatchObject({ size: 'story', background: { type: 'solid', id: 'black' } });
+    expect(s).not.toHaveProperty('redact');
+  });
+
+  it('a stored style survives a reload; missing keys and an image background fall back', () => {
+    const current = useSettingsStore.getState();
+    const merged = _mergePersistedSettings({ socialExport: { padding: 120, background: { type: 'image' } } }, current).socialExport;
+    expect(merged).toEqual({ ...DEFAULT_SOCIAL_EXPORT, padding: 120 });
+  });
+});

@@ -116,6 +116,20 @@ const normalizeSwipeAction = (value, fallback) => SWIPE_ACTIONS.includes(value) 
 // Lines of message preview under each list row: 0 (off, the list as it always
 // was), 1, 2 or 3. Anything else reads as off.
 export const normalizeListPreviewLines = value => [0, 1, 2, 3].includes(value) ? value : 0;
+// The social export's last-used style. Never the redact choice (on every time
+// the panel opens) and never an own image (in memory only): a stored image
+// background falls back to the default preset.
+export const DEFAULT_SOCIAL_EXPORT = Object.freeze({
+  content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
+  padding: 64, radius: 16, shadow: true, chrome: true, theme: 'light',
+});
+const SOCIAL_BACKGROUNDS = ['gradient', 'solid', 'custom', 'transparent'];
+export const normalizeSocialExport = (value) => {
+  const v = value && typeof value === 'object' ? value : {};
+  const out = Object.fromEntries(Object.keys(DEFAULT_SOCIAL_EXPORT).map(k => [k, v[k] ?? DEFAULT_SOCIAL_EXPORT[k]]));
+  if (!SOCIAL_BACKGROUNDS.includes(out.background?.type)) out.background = DEFAULT_SOCIAL_EXPORT.background;
+  return out;
+};
 export const normalizeSearchMailboxConcurrency = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.min(5, Math.max(1, Math.trunc(parsed))) : 3;
@@ -204,6 +218,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   swipeLeftAction: normalizeSwipeAction(persisted?.swipeLeftAction, current.swipeLeftAction),
   swipeRightAction: normalizeSwipeAction(persisted?.swipeRightAction, current.swipeRightAction),
   listPreviewLines: normalizeListPreviewLines(persisted?.listPreviewLines ?? current.listPreviewLines),
+  socialExport: normalizeSocialExport(persisted?.socialExport ?? current.socialExport),
 });
 
 /**
@@ -536,6 +551,7 @@ export const useSettingsStore = create(
       viewStyle: 'list', // 'list' | 'chat'
       emailListStyle: 'compact', // 'default' | 'compact'
       listPreviewLines: 0, // 0 (off) | 1 | 2 | 3 lines of body text under each row
+      socialExport: normalizeSocialExport(null),
       listDensity: 'comfortable', // 'comfortable' | 'compact': message rows, in one line or two alike
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
       emailListView: 'list', // 'list' | 'explorer'
@@ -1289,6 +1305,12 @@ export const useSettingsStore = create(
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
       setListPreviewLines: (lines) => set({ listPreviewLines: normalizeListPreviewLines(lines) }),
+      // Unknown keys (redact) are dropped; an own image keeps the previous background.
+      setSocialExport: (patch) => set(state => {
+        const next = { ...state.socialExport, ...patch };
+        if (patch?.background?.type === 'image') next.background = state.socialExport.background;
+        return { socialExport: normalizeSocialExport(next) };
+      }),
       setListDensity: (density) => set({ listDensity: normalizeListDensity(density) }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
       setInsightsPreferences: value => set({ insightsPreferences: normalizeInsightsPreferences(value) }),
@@ -1594,6 +1616,7 @@ export const useSettingsStore = create(
           viewStyle: 'list',
           emailListStyle: 'compact',
           listPreviewLines: 0,
+          socialExport: normalizeSocialExport(null),
           listDensity: 'comfortable',
           emailListGrouping: 'chronological',
           emailListView: 'list',

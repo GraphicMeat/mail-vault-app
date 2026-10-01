@@ -77,6 +77,7 @@ export const Popover = forwardRef(function Popover({
             role={role}
             className={`fixed ${layer} ${VARIANTS[variant]} ${className}`}
             style={style}
+            data-capture-exclude=""
             onClick={(e) => e.stopPropagation()}
             {...rest}
           >

@@ -53,6 +53,7 @@ export function FocusLock() {
         panelClassName="flex flex-col items-center justify-center gap-6 text-center"
         aria-label={t('focus.lockedTitle')}
         data-testid="focus-lock"
+        data-capture-exclude=""
         /* The a11y hook leaves Escape alone when there is no close handler, so
            the confirm step has to peel itself back. */
         onKeyDown={e => {

@@ -64,6 +64,12 @@ describe('ExportDialog', () => {
     expect(screen.queryByRole('radio', { name: /one tall image/i })).toBeNull();
   });
 
+  it('offers Social for one message only, and says so', () => {
+    render(<ExportDialog {...props} messages={messages} />);
+    expect(screen.getByRole('radio', { name: /^social$/i }).disabled).toBe(true);
+    expect(screen.getByText(/select one message for a social image/i)).toBeTruthy();
+  });
+
   it('has the mirror toggle on by default and says what it does', () => {
     render(<ExportDialog {...props} messages={messages} />);
     const toggle = screen.getByRole('checkbox', { name: /mirror remote content/i });

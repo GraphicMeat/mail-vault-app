@@ -55,6 +55,8 @@ export function ToastShell({
       role={role}
       aria-live={role === 'status' ? 'polite' : undefined}
       className={`fixed ${POSITIONS[position]} ${Z.toast} ${bare ? '' : 'bg-mail-surface border border-mail-border rounded-xl p-2'} ${className}`}
+      /* Kept out of a social export's app-window capture. */
+      data-capture-exclude=""
       {...rest}
     >
       {children}
