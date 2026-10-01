@@ -58,6 +58,7 @@ import { MboxUploadProgress } from './components/MboxUploadProgress';
 import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import { FocusLock } from './components/FocusLock';
+import { PrivacyDictionaryHost } from './components/privacy/PrivacyDictionaryHost';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import BackupUpsellModal from './components/BackupUpsellModal.jsx';
 import { ExportDialog } from './components/export/ExportDialog.jsx';
@@ -1748,6 +1749,7 @@ function App() {
       />
 
       <FocusLock />
+      <PrivacyDictionaryHost />
 
       {/* Pending bulk operation resume banner */}
       {pendingOperation && (

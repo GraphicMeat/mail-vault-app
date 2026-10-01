@@ -20,6 +20,7 @@ let _daemonUnavailable = false;
 const _hydrated = new Map();
 let _hydrationPromise = null;
 let _hydrationKey = '';
+let _hydratedKey = '';
 const _subscribers = new Set();
 
 function _notify() {
@@ -175,9 +176,16 @@ export async function hydrateContactsIndex(accounts) {
       const db = await import('../services/db');
       await Promise.all(accounts.map(a => _hydrateOneFromDisk(db, a)));
     }
+    // Before _notify so a synchronous subscriber already sees it as hydrated.
+    _hydratedKey = key;
     _notify();
   })();
   return _hydrationPromise;
+}
+
+// True once hydrateContactsIndex has resolved for the current account set.
+export function isContactsIndexHydrated() {
+  return !!_hydrationKey && _hydratedKey === _hydrationKey;
 }
 
 // Returns per-account hydrated sources: `[{ accountId, emails }, ...]` — one
