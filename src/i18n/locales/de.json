@@ -3293,6 +3293,8 @@
   "workspace.twoLineRows": "Zwei Zeilen",
   "workspace.twoLineRowsHint": "Absender über dem Betreff. In jedem Bereich gut lesbar.",
   "workspace.unread": "Ungelesen",
+  "workspace.menuBar": "Menüleiste",
+  "workspace.menuBarHint": "Zeigt das Menü Datei und Protokolle unter der Titelleiste.",
   "autoTag.remote.sampleHeading": "E-Mail:",
   "autoTag.remote.sampleQuestion": "Passt diese E-Mail zur Regel?",
   "autoTag.editorIntro": "Beschreibe, welche E-Mails erkannt werden sollen, wähle ein Tag und prüfe das Ergebnis. Erst Speichern und Aktivieren wendet die Regel an.",

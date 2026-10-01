@@ -149,6 +149,7 @@ export const settingSearchGroups = [
     ['workspace.messageRows', 'message rows density compact single two lines'],
     ['workspace.listDensity', 'message list rows density compact comfortable spacing dense tight'],
     ['listPreview.title', 'preview snippet excerpt body text lines message list rows'],
+    ['workspace.menuBar', 'menu bar menubar file logs hide linux title bar'],
   ] },
   { id: 'appearance', section: 'reading', sectionKey: 'settings.appearance.section.reading', settings: [
     ['settings.appearance.threadMode', 'conversation conversations thread threads grouping ungroup'],

@@ -6,6 +6,7 @@ import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
 import { wireConnectivityEvents, installNetMock } from './stores/connectivityStore';
 import { watchTextAppearance } from './utils/appFont';
+import { watchMenuBar } from './utils/menuBar';
 import './styles/index.css';
 
 const isComposeWindow = new URLSearchParams(window.location.search).has('compose');
@@ -24,6 +25,8 @@ if (!isComposeWindow && !isOriginalWindow && !isSettingsWindow) wireConnectivity
 // Font and text size, in every window: each hydrates the same settings file,
 // and the owner relays later changes (settings window, detached compose).
 watchTextAppearance(useSettingsStore);
+// Linux's menu bar, hidden or shown in every window (utils/menuBar.js).
+watchMenuBar(useSettingsStore);
 
 // Apply the persisted language once the store has hydrated — and NOT before.
 //

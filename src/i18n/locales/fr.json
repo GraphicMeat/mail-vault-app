@@ -3293,6 +3293,8 @@
   "workspace.twoLineRows": "Deux lignes",
   "workspace.twoLineRowsHint": "L’expéditeur au-dessus de l’objet, lisible dans tous les volets.",
   "workspace.unread": "Non lus",
+  "workspace.menuBar": "Barre de menus",
+  "workspace.menuBarHint": "Affiche le menu Fichier et Journaux sous la barre de titre.",
   "autoTag.remote.sampleHeading": "E-mail :",
   "autoTag.remote.sampleQuestion": "Cet e-mail correspond-il à la règle ?",
   "autoTag.editorIntro": "Décrivez les messages à reconnaître, choisissez un tag, puis vérifiez le résultat. Rien ne change avant l’enregistrement et l’activation.",

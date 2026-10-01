@@ -79,6 +79,10 @@ fn set_tray_accounts(app: tauri::AppHandle, accounts: Vec<TrayAccount>) -> Resul
     *shown += 1;
     Ok(())
 }
+/// Linux: the File/Logs menu bar, kept even while it is not attached (Settings >
+/// Appearance > Layout > Menu bar off) so it can be attached later and relabeled.
+#[cfg(target_os = "linux")]
+struct LinuxMenuBar(tauri::menu::Menu<tauri::Wry>);
 
 #[tauri::command]
 fn apply_menu_labels(
@@ -120,6 +124,41 @@ fn apply_menu_labels(
             relabel(items, &labels);
         }
     }
+    // A detached menu bar: `app.menu()` above does not see it.
+    #[cfg(target_os = "linux")]
+    if app.menu().is_none() {
+        if let Some(bar) = app.try_state::<LinuxMenuBar>() {
+            if let Ok(items) = bar.0.items() {
+                relabel(items, &labels);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Linux: show or hide the File/Logs menu bar of the calling window
+/// (Settings > Appearance > Layout > Menu bar). Every window runs this for
+/// itself once the settings hydrate. A no-op elsewhere: macOS keeps its
+/// global menu and Windows has no menu bar.
+#[tauri::command]
+fn set_menu_bar_visible(window: tauri::Window, visible: bool) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let app = window.app_handle();
+        if visible {
+            // Started with the bar off, the menu was never attached.
+            if app.menu().is_none() {
+                if let Some(bar) = app.try_state::<LinuxMenuBar>() {
+                    app.set_menu(bar.0.clone()).map_err(|e| e.to_string())?;
+                }
+            }
+            window.show_menu().map_err(|e| e.to_string())?;
+        } else if app.menu().is_some() {
+            window.hide_menu().map_err(|e| e.to_string())?;
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (window, visible);
     Ok(())
 }
 
@@ -1688,6 +1727,19 @@ fn close_to_tray() -> bool {
 
 /// The frontend's persisted `updateTrack`, read straight off disk — this runs in
 /// `setup()`, long before a window could be asked. Any problem reads as "unset".
+/// Linux: the menu bar choice saved by the frontend, read in `setup()` so a
+/// hidden bar is never built and never flashes in before the settings hydrate.
+#[cfg(target_os = "linux")]
+fn persisted_show_menu_bar() -> bool {
+    let read = || -> Option<bool> {
+        let path = mailvault_core::paths::app_data_dir().ok()?.join("frontend-settings.json");
+        let raw = fs::read_to_string(path).ok()?;
+        let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        settings["mailvault-settings"]["state"]["showMenuBar"].as_bool()
+    };
+    read().unwrap_or(true)
+}
+
 fn persisted_update_track() -> Option<String> {
     let path = mailvault_core::paths::app_data_dir()
         .ok()?
@@ -3497,6 +3549,7 @@ fn main() {
     let app = builder
         .invoke_handler(tauri::generate_handler![
             apply_menu_labels,
+            set_menu_bar_visible,
             dropped_files::read_dropped_files,
             take_pending_mailto,
             notification_open::take_notification_open,
@@ -3826,7 +3879,12 @@ fn main() {
                     &file_submenu as &dyn tauri::menu::IsMenuItem<_>,
                     &logs_submenu as &dyn tauri::menu::IsMenuItem<_>,
                 ])?;
-                app.set_menu(menu)?;
+                // Attached only when shown (Settings > Appearance > Layout >
+                // Menu bar): with the bar off no GTK menu bar is ever built.
+                if persisted_show_menu_bar() {
+                    app.set_menu(menu.clone())?;
+                }
+                app.manage(LinuxMenuBar(menu));
             }
 
             // Handle app menu events
@@ -3921,6 +3979,14 @@ fn main() {
             // `apply_menu_labels` localizes it.
             #[cfg(windows)]
             tray_menu.insert(&check_updates, 4)?;
+            // Linux: the menu bar can be hidden, so the tray offers the update
+            // check too. A separate item with the same id, since the File menu
+            // already holds `check_updates`.
+            #[cfg(target_os = "linux")]
+            {
+                let tray_check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
+                tray_menu.insert(&tray_check_updates, 4)?;
+            }
 
             // TrayIcon exposes no `menu()` accessor, so keep a handle to the tray
             // menu in state — `apply_menu_labels` relabels it alongside the menu bar.

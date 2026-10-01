@@ -3293,6 +3293,8 @@
   "workspace.twoLineRows": "Two lines",
   "workspace.twoLineRowsHint": "Sender above the subject. Easy to scan in any pane.",
   "workspace.unread": "Unread",
+  "workspace.menuBar": "Menu bar",
+  "workspace.menuBarHint": "Show the File and Logs menu under the title bar.",
   "autoTag.remote.sampleHeading": "Email:",
   "autoTag.remote.sampleQuestion": "Does this email match the rule?",
   "autoTag.editorIntro": "Tell MailVault what to recognize, choose a tag, then check the result below. Nothing changes until you save and enable the rule.",

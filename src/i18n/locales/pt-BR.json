@@ -3293,6 +3293,8 @@
   "workspace.twoLineRows": "Duas linhas",
   "workspace.twoLineRowsHint": "Remetente acima do assunto. Fácil de ler em qualquer painel.",
   "workspace.unread": "Não lidos",
+  "workspace.menuBar": "Barra de menus",
+  "workspace.menuBarHint": "Mostra o menu Arquivo e Logs abaixo da barra de título.",
   "autoTag.remote.sampleHeading": "E-mail:",
   "autoTag.remote.sampleQuestion": "Este e-mail corresponde à regra?",
   "autoTag.editorIntro": "Descreva o que reconhecer, escolha uma etiqueta e confira o resultado. Nada muda até salvar e ativar a regra.",
