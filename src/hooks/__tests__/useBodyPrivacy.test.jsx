@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React, { useRef } from 'react';
 import { render, act, cleanup } from '@testing-library/react';
-import { useBodyPrivacy } from '../useBodyPrivacy';
+import { useBodyPrivacy, usePrivacyFrameGate } from '../useBodyPrivacy';
 import { usePrivacyStore } from '../../stores/privacyStore';
 import { setPrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 import { buildNameDictionary, EMPTY_DICTIONARY } from '../../utils/privacy/piiDetector';
@@ -10,10 +10,10 @@ import { buildEmailIframeHtml } from '../../utils/emailIframeTemplate';
 import { PRIVACY_GATE_ID } from '../../utils/iframePrivacyRedact';
 
 // jsdom does not load srcdoc, so the test frame's document is written by hand.
-function Frame({ html }) {
+function Frame({ html, show = true }) {
   const ref = useRef(null);
   useBodyPrivacy(ref, html, { readyTimeoutMs: 3000 });
-  return <iframe ref={ref} title="t" />;
+  return show ? <iframe ref={ref} title="t" /> : null;
 }
 function writeFrame(iframe, html) {
   const d = iframe.contentDocument; d.open(); d.write(html); d.close();
@@ -84,5 +84,33 @@ describe('useBodyPrivacy', () => {
     act(() => key('keyup'));
     expect(usePrivacyStore.getState().peek).toBe(false);
     expect(doc.body.textContent).not.toContain('John');
+  });
+  it('a remounted frame with the same srcDoc is masked and revealed too', () => {
+    // Same html, new <iframe> element: nothing in the deps changed but the frame.
+    setPrivacyDictionary(buildNameDictionary({ names: ['John Smith'] }), { ready: true });
+    const html = buildEmailIframeHtml({ bodyHtml: '<p>John Smith</p>', privacy: true });
+    const { container, rerender } = render(<Frame html={html} />);
+    act(() => writeFrame(container.querySelector('iframe'), html));
+    rerender(<Frame html={html} show={false} />);
+    rerender(<Frame html={html} />);
+    const iframe = container.querySelector('iframe');
+    act(() => writeFrame(iframe, html));
+    expect(iframe.contentDocument.getElementById(PRIVACY_GATE_ID)).toBeNull();
+    expect(iframe.contentDocument.body.textContent).not.toContain('John');
+  });
+});
+
+describe('usePrivacyFrameGate', () => {
+  function Probe({ out }) { out.gate = usePrivacyFrameGate(); return null; }
+  it('gates while privacy is on, peeking or not, and not for a capture alone', () => {
+    const out = {};
+    render(<Probe out={out} />);
+    expect(out.gate).toBe(true);
+    act(() => usePrivacyStore.setState({ peek: true }));
+    expect(out.gate).toBe(true); // a peek must not reload the frame
+    act(() => usePrivacyStore.setState({ enabled: false, peek: false, captureMask: true }));
+    expect(out.gate).toBe(false); // a capture masks in place; a reload would blank it
+    act(() => usePrivacyStore.setState({ captureMask: false }));
+    expect(out.gate).toBe(false);
   });
 });

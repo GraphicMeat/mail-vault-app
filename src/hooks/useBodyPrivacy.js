@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { usePrivacyActive, attachPeekToDocument } from './usePrivacy';
 import { usePrivacyStore } from '../stores/privacyStore';
 import { usePrivacyDictStore, getPrivacyDictionary, isPrivacyDictionaryReady } from '../utils/privacy/privacyDictionary';
@@ -16,13 +16,34 @@ const frameDoc = (iframe) => {
  * Whether a frame's srcDoc must start gated (buildEmailIframeHtml `privacy`):
  * privacy on, peeking or not, so a peek never reloads the frame; or a detached
  * window that has not read the persisted choice yet (usePrivacyActive).
- * ponytail: a social capture's captureMask also gates, which reloads the frame
- * when it toggles; revisit if a capture flashes.
+ * A capture's captureMask does not gate: reloading would hand the capture a
+ * blank frame, and the pass below masks the one on screen in place before paint.
  */
 export function usePrivacyFrameGate() {
   const enabled = usePrivacyStore(s => s.enabled);
+  const captureMask = usePrivacyStore(s => s.captureMask);
   const active = usePrivacyActive();
-  return enabled || active;
+  return enabled || (active && !captureMask);
+}
+
+/**
+ * A layout effect re-run when `deps` change OR the frame element does. The
+ * element is read as committed, not at render: a remounted <iframe> showing
+ * the same srcDoc (a branch that toggles, thread to single on one message)
+ * would otherwise load its gated document with nobody listening, and stay
+ * blank. Kept a layout effect, not state plus a re-render, so on mount it is
+ * still attached before useSearchHighlight's passive effect.
+ */
+function useFrameEffect(iframeRef, effect, deps) {
+  const current = useRef(null); // { frame, deps, cleanup }
+  useLayoutEffect(() => {
+    const frame = iframeRef?.current || null;
+    const was = current.current;
+    if (was && was.frame === frame && was.deps.every((d, i) => Object.is(d, deps[i]))) return;
+    was?.cleanup?.();
+    current.current = { frame, deps, cleanup: frame ? effect(frame) : undefined };
+  });
+  useLayoutEffect(() => () => { current.current?.cleanup?.(); current.current = null; }, []);
 }
 
 /**
@@ -45,11 +66,9 @@ export function useBodyPrivacy(iframeRef, contentKey, { readyTimeoutMs = 3000 } 
   const enabled = usePrivacyStore(s => s.enabled);
   const version = usePrivacyDictStore(s => s.version);
 
-  // A layout effect: when masking turns on or a peek ends, the frame on screen
+  // Layout timing: when masking turns on or a peek ends, the frame on screen
   // is masked before the next paint, in step with the React-rendered fields.
-  useLayoutEffect(() => {
-    const iframe = iframeRef?.current;
-    if (!iframe) return undefined;
+  useFrameEffect(iframeRef, (iframe) => {
     let observer = null;
     let timer = null;
 
@@ -88,14 +107,13 @@ export function useBodyPrivacy(iframeRef, contentKey, { readyTimeoutMs = 3000 } 
       observer?.disconnect();
       clearTimeout(timer);
     };
-  }, [iframeRef, contentKey, active, version, readyTimeoutMs]);
+  }, [contentKey, active, version, readyTimeoutMs]);
 
   // Option-hold peek from inside the frame. Its own effect: a peek flips
   // `active` above, and re-running this with it would dispose the listener
   // holding the peek, so the keyup that ends it would never be seen.
-  useEffect(() => {
-    const iframe = iframeRef?.current;
-    if (!iframe || !enabled) return undefined;
+  useFrameEffect(iframeRef, (iframe) => {
+    if (!enabled) return undefined;
     let detach = () => {};
     const attach = () => {
       detach();
@@ -108,5 +126,5 @@ export function useBodyPrivacy(iframeRef, contentKey, { readyTimeoutMs = 3000 } 
       iframe.removeEventListener('load', attach);
       detach();
     };
-  }, [iframeRef, contentKey, enabled]);
+  }, [contentKey, enabled]);
 }

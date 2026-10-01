@@ -577,10 +577,8 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
 
   // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
   const iframeHtmlContent = iframeContent?.html || '';
-  // The original and the cleaned view are two frames on one ref: a key that
-  // differs per branch (both are stable per build) re-attaches to whichever
-  // is mounted.
-  useBodyPrivacy(iframeRef, isOriginalVisible ? iframeContent : iframeHtmlContent);
+  // One ref for both frames (original and cleaned): the hook follows whichever is mounted.
+  useBodyPrivacy(iframeRef, iframeHtmlContent);
   const chatScanAlert = iframeContent?.alertLevel || null;
   const chatTrackerSummary = iframeContent?.trackerSummary || null;
 
