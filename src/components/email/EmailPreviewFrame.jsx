@@ -3,6 +3,7 @@ import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIfra
 import { frameBody } from '../../stores/netActivityStore';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
+import { useMailFonts } from '../../hooks/useMailFonts';
 
 // Read-only email body for the side surfaces (Cleanup preview, Time Capsule).
 //
@@ -31,6 +32,14 @@ export function EmailPreviewFrame({ html, title, message = null }) {
   const doc = useMemo(() => buildEmailPreviewHtml(html, trackerBlocking, privacyOn), [html, trackerBlocking, privacyOn]);
   // No scripts in here, but same-origin: the parent's masking pass reaches it.
   useBodyPrivacy(frameRef, doc, { message });
+  const fitHeight = (frame) => {
+    try {
+      const h = frame?.contentDocument?.body?.scrollHeight;
+      if (h) setHeight(Math.min(h + 32, 2000));
+    } catch {}
+  };
+  // The mail's own Google Fonts change its height after load.
+  useMailFonts(frameRef, () => fitHeight(frameRef.current));
 
   return (
     <iframe
@@ -38,12 +47,7 @@ export function EmailPreviewFrame({ html, title, message = null }) {
       srcDoc={doc}
       // On the element, not an effect: React binds it at creation, so a
       // srcdoc that loads before a passive effect runs can't be missed.
-      onLoad={(e) => {
-        try {
-          const h = e.currentTarget.contentDocument?.body?.scrollHeight;
-          if (h) setHeight(Math.min(h + 32, 2000));
-        } catch {}
-      }}
+      onLoad={(e) => fitHeight(e.currentTarget)}
       sandbox="allow-same-origin"
       style={{ width: '100%', height, border: 'none' }}
       title={title}

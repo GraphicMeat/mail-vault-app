@@ -7,7 +7,10 @@
 // downloaded family into this window with `new FontFace(family, bytes)`: no
 // URL reaches the page, so the CSP needs no font host.
 //
-// Every window has its own copy (each webview has its own document.fonts).
+// Every window has its own copy (each webview has its own document.fonts), and
+// so has every mail frame: attachMailFonts registers the families a received
+// mail is written in into its frame's own document, downloading a catalogue
+// family it does not have yet unless tracker blocking is on.
 // Nothing here throws at a caller that did not ask to download: a family that
 // cannot load leaves the stack's fallback drawing.
 
@@ -15,6 +18,7 @@ import { create } from 'zustand';
 import { listen } from '@tauri-apps/api/event';
 import { daemonCall } from './daemonClient';
 import { findGoogleFont } from '../utils/googleFonts';
+import { fontSourcesOf, mailFontFamilies } from '../utils/mailFonts';
 
 export const FONT_EVENT = 'font-download';
 // A download whose outcome event was lost still settles: the list is re-read
@@ -179,6 +183,32 @@ function retryWanted() {
 
 const bytesOf = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
 
+// family -> Promise<{data: ArrayBuffer, descriptors}[] | null>: the decoded
+// files, shared by this window and every mail frame (a thread of ten frames
+// reads and decodes a family once). A failure is not kept.
+const decoded = new Map();
+
+function readFaces(family) {
+  let read = decoded.get(family);
+  if (!read) {
+    read = (async () => {
+      try {
+        const answer = await daemonCall('fonts.read', { family });
+        const faces = (answer?.faces || []).map(face => ({
+          data: bytesOf(face.data),
+          descriptors: { weight: String(face.weight), style: face.style || 'normal', unicodeRange: face.unicodeRange },
+        }));
+        return faces.length ? faces : null;
+      } catch {
+        return null;
+      }
+    })();
+    decoded.set(family, read);
+    read.then(faces => { if (!faces && decoded.get(family) === read) decoded.delete(family); });
+  }
+  return read;
+}
+
 /**
  * Registers a downloaded family's faces in this window, once. `false` (never
  * a throw) when it is not in the catalogue, not downloaded, or the webview
@@ -192,25 +222,27 @@ export function loadFontFaces(family) {
   void wire();
   let faces = loaded.get(family);
   if (!faces) {
-    faces = (async () => {
-      try {
-        const answer = await daemonCall('fonts.read', { family });
-        const made = (answer?.faces || []).map(face => new FontFace(family, bytesOf(face.data), {
-          weight: String(face.weight),
-          style: face.style || 'normal',
-          unicodeRange: face.unicodeRange,
-        }));
-        if (!made.length) return null;
-        made.forEach(face => document.fonts.add(face));
-        return made;
-      } catch {
-        return null;
-      }
-    })();
+    faces = readFaces(family).then(read => {
+      if (!read) return null;
+      const made = read.map(face => new FontFace(family, face.data, face.descriptors));
+      made.forEach(face => document.fonts.add(face));
+      return made;
+    }).catch(() => null);
     loaded.set(family, faces);
     faces.then(made => { if (!made) loaded.delete(family); });
   }
   return faces.then(made => !!made);
+}
+
+// The daemon's list, read once. A failed read (the daemon not up yet) is
+// asked again next time rather than kept as "nothing installed".
+function listOnce() {
+  if (!listed) {
+    const read = refreshFonts();
+    listed = read;
+    read.then(answer => { if (!answer && listed === read) listed = null; });
+  }
+  return listed;
 }
 
 // The first family a style names: the one the author chose.
@@ -221,8 +253,7 @@ export async function loadFontFacesForHtml(html) {
   if (typeof html !== 'string' || !html.includes('font-family')) return;
   const families = [...new Set([...html.matchAll(STYLE_FAMILY)].map(m => m[1].trim()))].filter(findGoogleFont);
   if (!families.length) return;
-  if (!listed) listed = refreshFonts();
-  await listed;
+  await listOnce();
   const { installed } = useFontStore.getState();
   await Promise.all(families.filter(family => installed.includes(family)).map(loadFontFaces));
 }
@@ -239,8 +270,72 @@ export async function removeFont(family) {
   if (answer?.errorCode) return false;
   const faces = await loaded.get(family);
   loaded.delete(family);
+  decoded.delete(family);
   faces?.forEach(face => document.fonts.delete(face));
   wanted.delete(family);
   useFontStore.setState(s => ({ installed: s.installed.filter(f => f !== family), errors: without(s.errors, family) }));
   return true;
+}
+
+// Families a mail asked for whose download failed this session: asked once,
+// so a font that cannot be fetched is not fetched again on every open. Offline
+// is not a failure of the font; it is asked again.
+const mailFailed = new Set();
+
+async function familyForMail(family, blocking) {
+  if (useFontStore.getState().installed.includes(family)) return true;
+  if (blocking() || mailFailed.has(family)) return false;
+  try {
+    await downloadFont(family);
+    return true;
+  } catch (e) {
+    if (e?.code !== 'E_FONT_OFFLINE') mailFailed.add(family);
+    return false;
+  }
+}
+
+async function drawMailFonts(iframe, doc, blocking, onFonts) {
+  try {
+    const view = doc.defaultView;
+    if (typeof view?.FontFace !== 'function' || !doc.fonts) return;
+    const families = mailFontFamilies(...fontSourcesOf(doc));
+    if (!families.length) return;
+    await listOnce();
+    const added = await Promise.all(families.map(async family => {
+      if (!(await familyForMail(family, blocking))) return [];
+      const read = await readFaces(family);
+      // The srcDoc may have been replaced (or the frame removed) meanwhile.
+      if (!read || iframe.contentDocument !== doc) return [];
+      const faces = read.map(face => new view.FontFace(family, face.data, face.descriptors));
+      faces.forEach(face => doc.fonts.add(face));
+      return faces;
+    }));
+    const faces = added.flat();
+    if (!faces.length || !onFonts) return;
+    await Promise.all(faces.map(face => Promise.resolve(face.loaded).catch(() => null)));
+    if (iframe.contentDocument === doc) onFonts();
+  } catch { /* the stack's fallback draws */ }
+}
+
+/**
+ * Draws a mail frame in the Google Fonts its mail chose: on every document the
+ * frame loads (and the one it shows now), the catalogue families its rendered
+ * styles name first are registered into that document's own fonts, downloaded
+ * by the daemon first unless `blocking()` is true. `onFonts` runs once a
+ * document's faces are in (text metrics changed). Returns a detach function.
+ * All after load: opening a message never waits for a font.
+ */
+export function attachMailFonts(iframe, { blocking = () => false, onFonts } = {}) {
+  if (!iframe) return () => {};
+  const seen = new WeakSet();
+  const run = () => {
+    let doc;
+    try { doc = iframe.contentDocument; } catch { return; }
+    if (!doc || seen.has(doc) || doc.readyState === 'loading') return;
+    seen.add(doc);
+    void drawMailFonts(iframe, doc, blocking, onFonts);
+  };
+  iframe.addEventListener('load', run);
+  run();
+  return () => iframe.removeEventListener('load', run);
 }

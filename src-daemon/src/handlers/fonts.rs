@@ -1,4 +1,5 @@
-//! `fonts.*`: Google Fonts on demand, for the app's UI font and signatures.
+//! `fonts.*`: Google Fonts on demand, for the app's UI font, signatures and
+//! the fonts received mail is written in.
 //!
 //! - `fonts.download {family}` answers at once (`ready`, `downloading`, or
 //!   `failed` with an `errorCode` if it could not start) and runs it on a

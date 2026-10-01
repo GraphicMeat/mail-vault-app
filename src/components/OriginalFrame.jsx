@@ -8,6 +8,7 @@ import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getEmailColors } from '../utils/mailChrome';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
 import { useT } from '../i18n/index.js';
+import { useMailFonts } from '../hooks/useMailFonts';
 
 // The theme the reading pane opens a message in: the email theme setting, or
 // the app's own when that is "system".
@@ -50,6 +51,7 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
   // window (the gate holds there until the persisted choice is read).
   const privacyOn = usePrivacyFrameGate();
   useEffect(() => (autoSize ? attachEmailIframeAutoSize(frameRef.current) : undefined), [autoSize]);
+  useMailFonts(frameRef);
   const srcDoc = useMemo(() => {
     const nonce = emailScriptNonce();
     return buildEmailIframeHtml({

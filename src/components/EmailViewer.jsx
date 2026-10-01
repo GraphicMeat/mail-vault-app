@@ -26,6 +26,7 @@ import { refuseWindowUnderPrivacy } from '../utils/privacy/windowBlocked';
 import { usePrivacySourceBlocked } from '../hooks/usePrivacy';
 import { Private } from './privacy/Private';
 import { SourceBlocked } from './privacy/SourceBlocked';
+import { useMailFonts } from '../hooks/useMailFonts';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
@@ -453,6 +454,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   useBodyPrivacy(iframeRef, iframeContent, { message: selectedEmail });
   // Terms from the open search, painted into the body the results list opened.
   useSearchHighlight(iframeRef, iframeContent);
+  // The Google Fonts the mail is written in, from the daemon.
+  useMailFonts(iframeRef);
 
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {

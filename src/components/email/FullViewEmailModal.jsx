@@ -24,6 +24,7 @@ import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
+import { useMailFonts } from '../../hooks/useMailFonts';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
@@ -236,6 +237,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   // it must run on `load` before the highlight.
   useBodyPrivacy(iframeRef, iframeContent, { message: email });
   useSearchHighlight(iframeRef, iframeContent);
+  useMailFonts(iframeRef);
 
   useEffect(() => {
     if (!iframeRef.current) return;

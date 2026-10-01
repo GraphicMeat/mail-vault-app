@@ -16,6 +16,7 @@ import {
 } from '../utils/emailParser';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
+import { useMailFonts } from '../hooks/useMailFonts';
 import { resolveEmailLocation, selectionKey, emailScopeKey, inLocalFolder } from '../stores/slices/unifiedHelpers';
 import { isRowArchived } from '../utils/quickActionFacts';
 import {
@@ -669,6 +670,13 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
 
     return () => window.removeEventListener('message', handleMessage);
   }, [mergedEmail.html]);
+
+  // The mail's own Google Fonts, from the daemon. They change the text's
+  // height after the load-time sizing above, so size once more.
+  useMailFonts(iframeRef, () => {
+    const body = iframeRef.current?.contentDocument?.body;
+    if (body) iframeRef.current.style.height = Math.min(Math.max(body.scrollHeight, body.offsetHeight, 50) + 16, 400) + 'px';
+  });
 
   return (
     <motion.div

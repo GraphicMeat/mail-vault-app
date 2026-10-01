@@ -221,3 +221,128 @@ describe('the list and removal', () => {
     expect(mod.useFontStore.getState().installed).toEqual([]);
   });
 });
+
+// Mail renders in srcdoc frames, each with its own document.fonts: a face in
+// this window's never draws there.
+describe('fonts a received mail is written in', () => {
+  class FrameFontFace {
+    constructor(family, source, descriptors) {
+      Object.assign(this, { family, source, descriptors, loaded: Promise.resolve(this) });
+      FrameFontFace.made.push(this);
+    }
+  }
+  const frames = [];
+  afterEach(() => { frames.splice(0).forEach(frame => frame.remove()); });
+
+  // A real frame (jsdom does not load srcdoc): the mail's HTML written into
+  // its document, FontFace and fonts stubbed in ITS realm.
+  const mailFrame = (html) => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    frames.push(iframe);
+    const doc = iframe.contentDocument;
+    doc.body.innerHTML = html;
+    iframe.contentWindow.FontFace = FrameFontFace;
+    Object.defineProperty(doc, 'fonts', { configurable: true, value: { add: vi.fn() } });
+    return { iframe, doc };
+  };
+  const loadedFrame = (html, options) => {
+    const frame = mailFrame(html);
+    const detach = mod.attachMailFonts(frame.iframe, options);
+    frame.iframe.dispatchEvent(new Event('load'));
+    return { ...frame, detach };
+  };
+  const daemon = ({ installed = [], download = 'ready' } = {}) => daemonCall.mockImplementation(async (method, params) => {
+    if (method === 'fonts.list') return { fonts: installed.map(family => ({ family })), downloading: [] };
+    if (method === 'fonts.download') return { family: params.family, state: download };
+    if (method === 'fonts.read') return faces(params.family);
+    return null;
+  });
+  const calls = method => daemonCall.mock.calls.filter(([m]) => m === method).map(([, p]) => p?.family);
+
+  beforeEach(() => { FrameFontFace.made = []; });
+
+  it('registers a downloaded family into the frame document, not this window', async () => {
+    daemon({ installed: ['Lora'] });
+    const { doc } = loadedFrame('<p style="font-family: Lora, Georgia, serif">a</p>');
+    await vi.waitFor(() => expect(doc.fonts.add).toHaveBeenCalledTimes(2));
+    expect(FrameFontFace.made.map(face => face.family)).toEqual(['Lora', 'Lora']);
+    expect(FrameFontFace.made[1].descriptors).toEqual({ weight: '400', style: 'normal', unicodeRange: 'U+0000-00FF' });
+    expect(new TextDecoder().decode(FrameFontFace.made[0].source)).toBe('wOF2 fake');
+    expect(document.fonts.add).not.toHaveBeenCalled();
+    expect(calls('fonts.download')).toEqual([]);
+  });
+
+  it('downloads a catalogue family the mail uses, then registers it', async () => {
+    daemon({ installed: [] });
+    const { doc } = loadedFrame("<style>p { font: italic 14px/1.4 'lora', serif }</style><p>a</p>");
+    await vi.waitFor(() => expect(doc.fonts.add).toHaveBeenCalledTimes(2));
+    expect(calls('fonts.download')).toEqual(['Lora']);
+    // An ordinary downloaded font: the pickers list it.
+    expect(mod.useFontStore.getState().installed).toContain('Lora');
+  });
+
+  it('downloads nothing because of a mail while blocking is on, and still draws one already here', async () => {
+    daemon({ installed: ['Lora'] });
+    const { doc } = loadedFrame('<p style="font-family: Pacifico">a</p><p style="font-family: Lora">b</p>', { blocking: () => true });
+    await vi.waitFor(() => expect(doc.fonts.add).toHaveBeenCalledTimes(2));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(calls('fonts.download')).toEqual([]);
+    expect(calls('fonts.read')).toEqual(['Lora']);
+    expect(FrameFontFace.made.every(face => face.family === 'Lora')).toBe(true);
+  });
+
+  it('does not register into a document the frame no longer shows', async () => {
+    let answer;
+    daemonCall.mockImplementation(async (method, params) => {
+      if (method === 'fonts.list') return new Promise(resolve => { answer = resolve; });
+      return faces(params.family);
+    });
+    const { iframe, doc } = loadedFrame('<p style="font-family: Lora">a</p>');
+    await vi.waitFor(() => expect(answer).toBeTypeOf('function'));
+    // The srcDoc was replaced while the daemon was answering.
+    const next = document.implementation.createHTMLDocument('');
+    Object.defineProperty(iframe, 'contentDocument', { configurable: true, get: () => next });
+    answer({ fonts: [{ family: 'Lora' }], downloading: [] });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(doc.fonts.add).not.toHaveBeenCalled();
+    expect(FrameFontFace.made).toEqual([]);
+  });
+
+  it('reads and decodes a family once for every frame that draws in it', async () => {
+    daemon({ installed: ['Lora'] });
+    const one = loadedFrame('<p style="font-family: Lora">a</p>');
+    const two = loadedFrame('<font face="Lora, serif">b</font>');
+    await vi.waitFor(() => expect(two.doc.fonts.add).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(one.doc.fonts.add).toHaveBeenCalledTimes(2));
+    expect(calls('fonts.read')).toEqual(['Lora']);
+    expect(calls('fonts.list')).toHaveLength(1);
+    // The same decoded bytes, not a second base64 pass.
+    expect(FrameFontFace.made[0].source).toBe(FrameFontFace.made[2].source);
+  });
+
+  it('asks the list again after a failed first answer, and never throws', async () => {
+    daemonCall.mockRejectedValueOnce(new Error('daemon not running'));
+    const first = loadedFrame('<p style="font-family: Lora">a</p>', { blocking: () => true });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(first.doc.fonts.add).not.toHaveBeenCalled();
+    daemon({ installed: ['Lora'] });
+    const second = loadedFrame('<p style="font-family: Lora">a</p>', { blocking: () => true });
+    await vi.waitFor(() => expect(second.doc.fonts.add).toHaveBeenCalledTimes(2));
+  });
+
+  it('tells the frame when its faces are in, and stops listening when detached', async () => {
+    daemon({ installed: ['Lora'] });
+    const onFonts = vi.fn();
+    const { iframe, detach } = loadedFrame('<p style="font-family: Lora">a</p>', { onFonts });
+    await vi.waitFor(() => expect(onFonts).toHaveBeenCalledTimes(1));
+    detach();
+    // The frame goes on to show another mail.
+    const { doc: next } = mailFrame('<p style="font-family: Lato">b</p>');
+    Object.defineProperty(iframe, 'contentDocument', { configurable: true, get: () => next });
+    iframe.dispatchEvent(new Event('load'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(calls('fonts.read')).toEqual(['Lora']);
+  });
+});

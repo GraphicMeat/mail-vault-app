@@ -16,6 +16,7 @@ import { refuseWindowUnderPrivacy } from '../../utils/privacy/windowBlocked';
 import { usePrivacySourceBlocked, usePrivateAttr } from '../../hooks/usePrivacy';
 import { Private } from '../privacy/Private';
 import { SourceBlocked } from '../privacy/SourceBlocked';
+import { useMailFonts } from '../../hooks/useMailFonts';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
@@ -151,6 +152,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   // The thread is a second reader of the same body — including for the search
   // highlight, or a hit opened in thread mode is marked nowhere.
   useSearchHighlight(iframeRef, iframeContent);
+  useMailFonts(iframeRef);
 
   // The thread is a second reader of the same body: what it finds has to reach
   // the row, or the glyph means "you opened this in the reading pane".
