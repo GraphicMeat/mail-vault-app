@@ -7,9 +7,9 @@ import { buildNameDictionary } from '../../utils/privacy/piiDetector';
 import { collectPrivacyNames, setPrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 import { hydrateContactsIndex, getHydratedAccountSources, buildContactsIndex, subscribeContactsIndex, isContactsIndexHydrated } from '../../utils/contactsIndex';
 
-/** Keeps the privacy dictionary current while privacy mode (or a capture) needs it. Renders nothing. */
+/** Keeps the privacy dictionary current while privacy mode, a capture or a redacted export needs it. Renders nothing. */
 export function PrivacyDictionaryHost() {
-  const needed = usePrivacyStore(s => s.enabled || s.captureMask);
+  const needed = usePrivacyStore(s => s.enabled || s.captureMask || s.dictWanted);
   const emails = useMailStore(s => s.emails);
   const sentEmails = useMailStore(s => s.sentEmails);
   const selectedEmail = useMailStore(s => s.selectedEmail);

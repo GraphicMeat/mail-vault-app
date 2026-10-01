@@ -50,8 +50,14 @@ describe('privacyStore', () => {
     expect(isPrivacyMasking({ enabled: false, peek: false, captureMask: true })).toBe(true);
     expect(isPrivacyMasking({ enabled: true, peek: true, captureMask: false })).toBe(false);
   });
+  it('dictWanted asks for the dictionary without masking anything', () => {
+    usePrivacyStore.getState().setDictWanted(true);
+    expect(usePrivacyStore.getState().dictWanted).toBe(true);
+    expect(isPrivacyMasking(usePrivacyStore.getState())).toBe(false);
+    usePrivacyStore.getState().setDictWanted(false);
+  });
   it('persists only enabled', () => {
     const { partialize } = usePrivacyStore.persist.getOptions();
-    expect(partialize({ enabled: true, peek: true, captureMask: true })).toEqual({ enabled: true });
+    expect(partialize({ enabled: true, peek: true, captureMask: true, dictWanted: true })).toEqual({ enabled: true });
   });
 });

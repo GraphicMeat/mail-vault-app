@@ -1,6 +1,7 @@
 import { sanitizeForExport } from './exportSanitize';
 import { t } from '../../i18n/index.js';
 import { formatDateTime } from '../../utils/dateFormat.js';
+import { REDACT_CSS } from './exportRedact';
 
 // One width, one scale, used by the rasterizer, the packer and the HTML
 // document alike. A baked iframe height is only honest while the column that
@@ -109,9 +110,10 @@ export const EXPORT_CSS = `
   .mv-mark { margin-top: 6px; color: #9aa1ab; }
 `;
 
-export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats }) {
+// `redactStyle` ('blur' | 'bar'): how a redacted body's `.mv-pii` spans paint.
+export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle }) {
   return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${EXPORT_CSS}</style></head>
+<html><head><meta charset="utf-8"><style>${EXPORT_CSS}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style></head>
 <body>
 ${headerCardHtml(message)}
 <main class="mv-body">${sanitizeForExport(bodyHtml)}</main>

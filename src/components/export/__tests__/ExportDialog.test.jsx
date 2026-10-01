@@ -22,6 +22,9 @@ vi.mock('../../../stores/settingsStore', () => ({
 }));
 
 import { ExportDialog } from '../ExportDialog';
+import { usePrivacyStore } from '../../../stores/privacyStore';
+import { usePrivacyDictStore, setPrivacyDictionary, getPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
+import { buildNameDictionary } from '../../../utils/privacy/piiDetector';
 
 // The format radios are queried anchored (/^image$/) because the layout row
 // also says "image" — "One tall image" and "Separate images" both match a bare
@@ -173,6 +176,42 @@ describe('ExportDialog', () => {
     render(<ExportDialog {...props} messages={messages} />);
     fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
     await screen.findByText(/1 message could not be exported/i);
+  });
+
+  it('redacts on request: blur for an image, the current dictionary, and the flag dropped after', async () => {
+    setPrivacyDictionary(buildNameDictionary({ names: ['Ana Brandt'] }), { ready: true });
+    const wanted = [];
+    const un = usePrivacyStore.subscribe(s => wanted.push(s.dictWanted));
+    render(<ExportDialog {...props} messages={messages} />);
+    expect(screen.queryByRole('radio', { name: /black bar/i })).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+    expect(screen.getByRole('radio', { name: /^blur$/i }).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(buildExport).toHaveBeenCalled());
+    un();
+    expect(buildExport.mock.calls[0][0].redact).toEqual({ style: 'blur', dict: getPrivacyDictionary() });
+    // Up while the dictionary was fetched, down once it was in hand.
+    expect(wanted).toContain(true);
+    expect(wanted.at(-1)).toBe(false);
+    expect(usePrivacyStore.getState().dictWanted).toBe(false);
+  });
+
+  it('always uses bars for a redacted HTML export, and offers no style', async () => {
+    usePrivacyDictStore.setState({ ready: true });
+    render(<ExportDialog {...props} messages={messages} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
+    expect(screen.queryByRole('radio', { name: /^blur$/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(buildExport).toHaveBeenCalled());
+    expect(buildExport.mock.calls[0][0].redact.style).toBe('bar');
+  });
+
+  it('exports unredacted by default', async () => {
+    render(<ExportDialog {...props} messages={messages} />);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(buildExport).toHaveBeenCalled());
+    expect(buildExport.mock.calls[0][0].redact).toBeNull();
   });
 
   it('surfaces an outright failure', async () => {

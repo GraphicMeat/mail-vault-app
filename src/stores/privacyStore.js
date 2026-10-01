@@ -12,8 +12,9 @@ import { isChildWindow } from '../utils/privacy/isChildWindow';
  * because that would unmask the screen in the middle of a recording. Same
  * rule as a running Focus session.
  *
- * `peek` (Option held) and `captureMask` (a social capture forcing masks on
- * for a moment) are never persisted.
+ * `peek` (Option held), `captureMask` (a social capture forcing masks on
+ * for a moment) and `dictWanted` (a redacted export needing the name
+ * dictionary without masking the UI) are never persisted.
  */
 export const usePrivacyStore = create(
   persist(
@@ -21,6 +22,7 @@ export const usePrivacyStore = create(
       enabled: false,
       peek: false,
       captureMask: false,
+      dictWanted: false,
       setEnabled: (on) => {
         // A detached window follows the main window's event; it never diverges.
         if (isChildWindow()) return 'ok';
@@ -32,6 +34,7 @@ export const usePrivacyStore = create(
       },
       setPeek: (on) => set({ peek: !!on }),
       setCaptureMask: (on) => set({ captureMask: !!on }),
+      setDictWanted: (on) => set({ dictWanted: !!on }),
     }),
     {
       name: 'mailvault-privacy',

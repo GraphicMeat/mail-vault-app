@@ -14,7 +14,7 @@ const mail = (name) => ({ uid: 1, from: { name, address: 'a@x.com' }, to: [], cc
 
 afterEach(cleanup);
 beforeEach(() => {
-  usePrivacyStore.setState({ enabled: false, peek: false, captureMask: false });
+  usePrivacyStore.setState({ enabled: false, peek: false, captureMask: false, dictWanted: false });
   useMailStore.setState({ emails: [], sentEmails: [], selectedEmail: null, accounts: [] });
 });
 
@@ -38,6 +38,13 @@ describe('PrivacyDictionaryHost', () => {
     await act(async () => { useMailStore.setState({ emails: [mail('Ann Lee'), mail('Bobby Ray')] }); });
     expect(getPrivacyDictionary().tokens.has('bobby')).toBe(true);
     expect(usePrivacyDictStore.getState().version).toBe(v + 1);
+  });
+
+  it('builds for a redacted export (dictWanted) with privacy mode off', async () => {
+    usePrivacyStore.setState({ dictWanted: true });
+    render(<PrivacyDictionaryHost />);
+    await act(async () => { useMailStore.setState({ emails: [mail('Elif Sahin')] }); });
+    expect(getPrivacyDictionary().tokens.has('elif')).toBe(true);
   });
 
   it('never forgets a name this session: a folder switch must not unmask the open message', async () => {

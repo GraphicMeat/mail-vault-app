@@ -108,8 +108,8 @@ function adopt(canvas) {
   return copy;
 }
 
-export async function renderMessageToCanvas({ message, bodyHtml, account, mailbox, stats, loadTimeoutMs }) {
-  const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats });
+export async function renderMessageToCanvas({ message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs }) {
+  const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle });
   const frame = await mountExportFrame(html, { loadTimeoutMs });
   try {
     // font:false and a short timeout are load-bearing, not tuning: the Task 0

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { collectPrivacyNames, setPrivacyDictionary, getPrivacyDictionary, usePrivacyDictStore, isPrivacyDictionaryReady } from '../privacyDictionary';
+import { describe, it, expect, vi } from 'vitest';
+import { collectPrivacyNames, setPrivacyDictionary, getPrivacyDictionary, usePrivacyDictStore, isPrivacyDictionaryReady, ensurePrivacyDictionary } from '../privacyDictionary';
 import { buildNameDictionary } from '../piiDetector';
 
 describe('privacyDictionary', () => {
@@ -21,5 +21,29 @@ describe('privacyDictionary', () => {
     expect(usePrivacyDictStore.getState().version).toBe(v + 1);
     expect(isPrivacyDictionaryReady()).toBe(true);
     expect(getPrivacyDictionary().tokens.has('zed')).toBe(true);
+  });
+
+  describe('ensurePrivacyDictionary', () => {
+    it('returns at once when the dictionary is ready', async () => {
+      setPrivacyDictionary(buildNameDictionary({ names: ['Yan Po'] }), { ready: true });
+      expect((await ensurePrivacyDictionary()).tokens.has('yan')).toBe(true);
+    });
+    it('waits for ready', async () => {
+      usePrivacyDictStore.setState({ ready: false });
+      const p = ensurePrivacyDictionary(60_000);
+      setPrivacyDictionary(buildNameDictionary({ names: ['Xavi Lund'] }), { ready: true });
+      expect((await p).tokens.has('xavi')).toBe(true);
+    });
+    it('gives up after the timeout with what it has', async () => {
+      vi.useFakeTimers();
+      try {
+        setPrivacyDictionary(buildNameDictionary({ names: ['Wim Ode'] }), { ready: false });
+        const p = ensurePrivacyDictionary(1500);
+        await vi.advanceTimersByTimeAsync(1500);
+        expect((await p).tokens.has('wim')).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

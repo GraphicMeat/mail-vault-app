@@ -10,6 +10,8 @@ import { sidecarName } from '../../services/export/exportNaming';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { t, useT  } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
+import { usePrivacyStore } from '../../stores/privacyStore';
+import { ensurePrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 
 // The label reads "Image" over a hint, but the accessible name is just the
 // choice: "One tall image" and "Separate images" both contain the word image,
@@ -41,6 +43,8 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
   const [layout, setLayout] = useState('single');
   const [mirror, setMirror] = useState(true);
   const [attachments, setAttachments] = useState(true);
+  const [redact, setRedact] = useState(false);
+  const [redactStyle, setRedactStyle] = useState('blur');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
@@ -62,7 +66,20 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
     setBusy(true);
     setNotice(null);
     try {
-      const result = await buildExport({ messages, format, layout, mirror, attachments, account, mailbox });
+      let redactOpts = null;
+      if (redact) {
+        // Not captureMask: that would mask the live UI too. The host builds the
+        // dictionary while this flag is up; a cold one gets 1.5 s.
+        const { setDictWanted } = usePrivacyStore.getState();
+        setDictWanted(true);
+        try {
+          // HTML always gets bars: a blur needs a stylesheet the file cannot promise.
+          redactOpts = { style: format === 'html' ? 'bar' : redactStyle, dict: await ensurePrivacyDictionary() };
+        } finally {
+          setDictWanted(false);
+        }
+      }
+      const result = await buildExport({ messages, format, layout, mirror, attachments, account, mailbox, redact: redactOpts });
       if (!result.ok) {
         setNotice(result.reason === 'premium'
           ? t('export.dialog.exportPremiumFeature')
@@ -159,6 +176,25 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
               </span>
             </span>
           </label>
+
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" checked={redact} onChange={e => setRedact(e.target.checked)} className="mt-0.5" />
+            <span>
+              <span className="block text-sm text-mail-text">{t('export.dialog.redactLabel')}</span>
+              <span className="block text-xs text-mail-text-muted">
+                {t('export.dialog.redactHint')}
+              </span>
+            </span>
+          </label>
+
+          {redact && format === 'image' && (
+            <div className="grid grid-cols-2 gap-2">
+              <Choice name="mv-export-redact-style" value="blur" checked={redactStyle === 'blur'} onChange={setRedactStyle}
+                label={t('export.dialog.redactStyleBlur')} />
+              <Choice name="mv-export-redact-style" value="bar" checked={redactStyle === 'bar'} onChange={setRedactStyle}
+                label={t('export.dialog.redactStyleBar')} />
+            </div>
+          )}
 
           {notice && <p className="text-xs text-mail-danger">{notice}</p>}
 

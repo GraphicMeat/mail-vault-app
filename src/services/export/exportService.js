@@ -13,6 +13,9 @@ import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 import { trace } from './exportTrace';
 import { plainTextBodyHtml } from '../../utils/mailto';
 import { send } from '../transport';
+import { redactMessageForExport, redactBodyForExport, redactLabel } from './exportRedact';
+import { buildNameDictionary, unionDictionaries, maskText } from '../../utils/privacy/piiDetector';
+import { collectPrivacyNames } from '../../utils/privacy/privacyDictionary';
 
 // Samples run the real pipeline over fixture data, so they must reach it
 // without a subscription. Everything else meets the gate below.
@@ -152,10 +155,14 @@ function buildSidecars(items, stemFor) {
 
 const stemOf = (fileName) => fileName.replace(/\.[^.]+$/, '');
 
+// `redact`: null, or `{ style: 'blur' | 'bar', dict }` for a private export.
+// Everything that reaches a file (names, headers, body, footer, attachment
+// names) is masked; `stats` is unchanged.
 export async function buildExport({
   messages, format, layout = 'single', mirror = true, account, mailbox,
   gate, fetchAsset = fetchAssetViaTauri,
   attachments = false, readAttachment = readAttachmentViaTauri,
+  redact = null,
 }) {
   if (gate !== SAMPLE) {
     const { billingProfile } = useSettingsStore.getState();
@@ -172,6 +179,11 @@ export async function buildExport({
   const failures = [];
   const attachmentFailures = [];
   const prepared = [];
+  // The exported messages' own parties join the dictionary: a cold host (privacy
+  // mode off) may not know them yet, and a search result is not in the list.
+  const dict = redact && unionDictionaries(redact.dict, buildNameDictionary({ names: collectPrivacyNames({ emails: ordered }) }));
+  const docAccount = redact ? account && maskText(account) : account;
+  const docMailbox = redact ? mailbox && redactLabel(mailbox, dict) : mailbox;
   trace('start', { format, layout, mirror, messages: ordered.length });
 
   for (const message of ordered) {
@@ -193,6 +205,18 @@ export async function buildExport({
         body: await prepareBody(full, mirror, fetcher, stats),
         attachments: attachments ? await loadAttachments(location, full, readAttachment, attachmentFailures) : [],
       });
+      if (redact) {
+        // After prepareBody, so mirrored assets are already data: URIs. Attachments
+        // are renamed by position in the loaded list: getRealAttachments filters,
+        // so the message's own attachment indices do not line up with it.
+        const last = prepared[prepared.length - 1];
+        last.message = redactMessageForExport(last.message, dict);
+        last.body = redactBodyForExport(last.body, dict, { format });
+        last.attachments = last.attachments.map((a, i) => {
+          const ext = /\.([a-z0-9]{1,8})$/i.exec(a.name || '')?.[1];
+          return { ...a, name: `attachment-${i + 1}${ext ? `.${ext.toLowerCase()}` : ''}` };
+        });
+      }
       trace('prepared', { uid: message.uid });
     } catch (err) {
       // One body that will not load is not a failed export of the other forty.
@@ -216,7 +240,7 @@ export async function buildExport({
       messages: prepared.map(p => p.message),
       bodies: prepared.map(p => p.body),
       attachments: prepared.map(p => p.attachments),
-      heights, account, mailbox, stats,
+      heights, account: docAccount, mailbox: docMailbox, stats,
     });
     // Embedded as download links in the document itself — nothing beside it.
     return {
@@ -231,7 +255,8 @@ export async function buildExport({
     try {
       trace('render', { uid: item.message.uid });
       canvases.push(await renderMessageToCanvas({
-        message: item.message, bodyHtml: item.body, account, mailbox, stats,
+        message: item.message, bodyHtml: item.body, account: docAccount, mailbox: docMailbox, stats,
+        redactStyle: redact?.style,
       }));
       rendered.push(item);
       trace('rendered', { uid: item.message.uid });

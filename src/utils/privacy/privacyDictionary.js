@@ -41,3 +41,14 @@ export function setPrivacyDictionary(dict, { ready }) {
 }
 export const getPrivacyDictionary = () => current;
 export const isPrivacyDictionaryReady = () => usePrivacyDictStore.getState().ready;
+
+/** Resolves once the dictionary is ready, or after timeoutMs with what it has. Set dictWanted first. */
+export async function ensurePrivacyDictionary(timeoutMs = 1500) {
+  if (usePrivacyDictStore.getState().ready) return getPrivacyDictionary();
+  await new Promise((resolve) => {
+    const timer = setTimeout(done, timeoutMs);
+    const un = usePrivacyDictStore.subscribe(s => { if (s.ready) done(); });
+    function done() { clearTimeout(timer); un(); resolve(); }
+  });
+  return getPrivacyDictionary();
+}
