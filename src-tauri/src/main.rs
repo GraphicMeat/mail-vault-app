@@ -162,6 +162,15 @@ fn set_menu_bar_visible(window: tauri::Window, visible: bool) -> Result<(), Stri
     Ok(())
 }
 
+/// Linux: Ctrl+Q from the page. A menu bar that was never attached (Settings >
+/// Appearance > Layout > Menu bar off at launch) has no GTK accelerators, so
+/// File > Quit's Ctrl+Q reaches the webview instead (utils/menuBar.js).
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    info!("Application quitting via Ctrl+Q");
+    app.exit(0);
+}
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -1725,8 +1734,6 @@ fn close_to_tray() -> bool {
     mailvault_core::autostart::close_to_tray_from_settings(&raw)
 }
 
-/// The frontend's persisted `updateTrack`, read straight off disk — this runs in
-/// `setup()`, long before a window could be asked. Any problem reads as "unset".
 /// Linux: the menu bar choice saved by the frontend, read in `setup()` so a
 /// hidden bar is never built and never flashes in before the settings hydrate.
 #[cfg(target_os = "linux")]
@@ -1740,6 +1747,8 @@ fn persisted_show_menu_bar() -> bool {
     read().unwrap_or(true)
 }
 
+/// The frontend's persisted `updateTrack`, read straight off disk — this runs in
+/// `setup()`, long before a window could be asked. Any problem reads as "unset".
 fn persisted_update_track() -> Option<String> {
     let path = mailvault_core::paths::app_data_dir()
         .ok()?
@@ -3550,6 +3559,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             apply_menu_labels,
             set_menu_bar_visible,
+            quit_app,
             dropped_files::read_dropped_files,
             take_pending_mailto,
             notification_open::take_notification_open,
