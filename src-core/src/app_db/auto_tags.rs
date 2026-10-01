@@ -440,29 +440,81 @@ pub fn verdict_prompt(instruction: &str, candidate: &Candidate) -> String {
 
 /// Parse a model's reply into a `Verdict`. `Err` is a refusal: the caller
 /// must never fall back to guessing a match from text it could not read.
+///
+/// Accepts the strict `MATCH:` / `CONFIDENCE:` lines the prompt asks for, and
+/// the shorter shapes real on-device models answer with instead (`YES`,
+/// `yes 0.9`, `NO\nCONFIDENCE: 0`). A "yes" that states no confidence is a
+/// full-confidence match; the user's minimum-confidence threshold only ever
+/// filters confidences the model actually stated.
+///
+/// ponytail: a bare number is read as a 0..=1 fraction, so `90%` or `9/10`
+/// refuse instead of being converted. Ceiling: parse percentages if a model
+/// turns out to answer that way.
 pub fn parse_verdict(text: &str) -> Result<Verdict, String> {
-    let mut is_match: Option<bool> = None;
-    let mut confidence: Option<f64> = None;
+    let refuse = || format!("unparseable auto-tag verdict, refusing rather than guessing a match: {text:?}");
+    let keyed = text.lines().any(|l| l.trim().split_once(':').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("match")));
+    let (is_match, confidence) = if keyed { parse_keyed(text) } else { parse_bare(text) }.ok_or_else(refuse)?;
+    match (is_match, confidence) {
+        (false, _) => Ok(Verdict::NoMatch),
+        (true, None) => Ok(Verdict::Match(1.0)),
+        (true, Some(c)) if (0.0..=1.0).contains(&c) => Ok(Verdict::Match(c)),
+        _ => Err(refuse()),
+    }
+}
+
+fn yes_no(word: &str) -> Option<bool> {
+    match word.to_ascii_lowercase().as_str() {
+        "yes" | "true" => Some(true),
+        "no" | "false" => Some(false),
+        _ => None,
+    }
+}
+
+/// The strict shape: `MATCH:` and optional `CONFIDENCE:` lines; any other
+/// line (a preamble, an explanation) is ignored. `None` = unreadable.
+fn parse_keyed(text: &str) -> Option<(bool, Option<f64>)> {
+    let mut is_match = None;
+    let mut confidence = None;
     for line in text.lines() {
         let Some((key, value)) = line.trim().split_once(':') else { continue };
         let value = value.trim();
         match key.trim().to_ascii_lowercase().as_str() {
-            "match" => {
-                is_match = match value.to_ascii_lowercase().as_str() {
-                    "yes" | "true" => Some(true),
-                    "no" | "false" => Some(false),
-                    _ => None,
-                };
-            }
-            "confidence" => confidence = value.parse::<f64>().ok(),
+            "match" => is_match = Some(yes_no(value)?),
+            "confidence" => confidence = Some(value.parse::<f64>().ok()?),
             _ => {}
         }
     }
-    match (is_match, confidence) {
-        (Some(false), _) => Ok(Verdict::NoMatch),
-        (Some(true), Some(c)) if (0.0..=1.0).contains(&c) => Ok(Verdict::Match(c)),
-        _ => Err(format!("unparseable auto-tag verdict, refusing rather than guessing a match: {text:?}")),
+    Some((is_match?, confidence))
+}
+
+/// The keyless shape: the first line opens with yes/no, optionally followed by
+/// a bare number; later lines may only be a bare number or a `CONFIDENCE:`
+/// line. Any other words make the reply ambiguous. `None` = unreadable.
+fn parse_bare(text: &str) -> Option<(bool, Option<f64>)> {
+    let punct = |c: char| c.is_whitespace() || matches!(c, ',' | ';' | ':' | '!' | '(' | ')' | '"' | '\'' | '`' | '*');
+    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
+    let first = lines.next()?.trim_start_matches(|c: char| !c.is_alphanumeric());
+    let word_len = first.find(|c: char| !c.is_alphabetic()).unwrap_or(first.len());
+    let is_match = yes_no(&first[..word_len])?;
+    let mut confidence = bare_number(&first[word_len..], punct)?;
+    for line in lines {
+        let value = match line.split_once(':') {
+            Some((key, value)) if key.trim().eq_ignore_ascii_case("confidence") => value,
+            _ => line,
+        };
+        confidence = Some(bare_number(value, punct)??);
     }
+    Some((is_match, confidence))
+}
+
+/// `Some(None)` for nothing but punctuation, `Some(Some(n))` for a number,
+/// `None` for anything else.
+fn bare_number(s: &str, punct: impl Fn(char) -> bool) -> Option<Option<f64>> {
+    let s = s.trim_matches(punct).trim_end_matches('.');
+    if s.is_empty() {
+        return Some(None);
+    }
+    s.parse::<f64>().ok().map(Some)
 }
 
 /// Whether `verdict` clears `min_confidence`. A `NoMatch` never clears any
@@ -818,8 +870,72 @@ mod tests {
     }
 
     #[test]
-    fn a_yes_with_no_confidence_at_all_is_a_refusal_not_a_guess() {
-        assert!(parse_verdict("MATCH: yes").is_err());
+    fn a_keyed_yes_with_no_confidence_is_a_full_confidence_match() {
+        assert_eq!(parse_verdict("MATCH: yes").unwrap(), Verdict::Match(1.0));
+    }
+
+    #[test]
+    fn a_keyed_yes_with_an_unreadable_confidence_is_a_refusal() {
+        assert!(parse_verdict("MATCH: yes\nCONFIDENCE: high").is_err());
+    }
+
+    #[test]
+    fn a_leading_yes_or_no_without_the_match_key_is_read() {
+        assert_eq!(parse_verdict("yes 0.9").unwrap(), Verdict::Match(0.9));
+        assert_eq!(parse_verdict("YES").unwrap(), Verdict::Match(1.0));
+        assert_eq!(parse_verdict("NO").unwrap(), Verdict::NoMatch);
+        assert_eq!(parse_verdict("no 0.8").unwrap(), Verdict::NoMatch);
+    }
+
+    #[test]
+    fn a_leading_yes_or_no_tolerates_case_and_punctuation() {
+        assert_eq!(parse_verdict("Yes.").unwrap(), Verdict::Match(1.0));
+        assert_eq!(parse_verdict("**YES**").unwrap(), Verdict::Match(1.0));
+        assert_eq!(parse_verdict("\"No!\"").unwrap(), Verdict::NoMatch);
+        assert_eq!(parse_verdict("yes, 0.75.").unwrap(), Verdict::Match(0.75));
+        assert_eq!(parse_verdict("Yes (0.6)").unwrap(), Verdict::Match(0.6));
+    }
+
+    #[test]
+    fn a_keyless_answer_may_state_confidence_on_its_own_line() {
+        assert_eq!(parse_verdict("NO\nCONFIDENCE: 0").unwrap(), Verdict::NoMatch);
+        assert_eq!(parse_verdict("YES\nCONFIDENCE: 0.85").unwrap(), Verdict::Match(0.85));
+        assert_eq!(parse_verdict("yes\n0.4").unwrap(), Verdict::Match(0.4));
+        assert_eq!(parse_verdict("\n  Yes \n\n confidence: 0.3 \n").unwrap(), Verdict::Match(0.3));
+    }
+
+    #[test]
+    fn a_keyless_yes_with_an_out_of_range_number_is_a_refusal() {
+        assert!(parse_verdict("yes 1.5").is_err());
+        assert!(parse_verdict("YES\nCONFIDENCE: 90").is_err());
+    }
+
+    #[test]
+    fn ambiguous_keyless_text_is_a_refusal() {
+        for text in [
+            "Yes and no",
+            "yes/no",
+            "Yes, this looks like a receipt",
+            "No, it is not a receipt",
+            "yes\nno",
+            "YES\nbecause it is an invoice",
+            "Yesterday's receipt",
+            "Not sure",
+            "maybe 0.9",
+            "0.9",
+            "yes 90%",
+            "yes\nCONFIDENCE: high",
+            "yes\nCONFIDENCE:",
+        ] {
+            let err = parse_verdict(text).unwrap_err();
+            assert!(err.contains("unparseable"), "{text:?}: {err}");
+        }
+    }
+
+    #[test]
+    fn an_unreadable_match_key_is_a_refusal_even_with_a_yes_elsewhere() {
+        assert!(parse_verdict("MATCH: maybe\nCONFIDENCE: 0.9").is_err());
+        assert!(parse_verdict("yes\nMATCH: perhaps").is_err());
     }
 
     #[test]
