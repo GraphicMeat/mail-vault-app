@@ -7,11 +7,11 @@ const require = createRequire(import.meta.url);
 const sharp = require(process.env.SHARP_MODULE || 'sharp');
 const root = resolve(import.meta.dirname, '..');
 const icon = await sharp(readFileSync(resolve(root, 'website/icon-128.webp'))).png().toBuffer();
-const app = await sharp(readFileSync(resolve(root, 'website/screenshots/thread-view-1440.webp'))).resize(730).png().toBuffer();
+const app = await sharp(readFileSync(resolve(root, 'website/screenshots/thread-view-light-1440.webp'))).resize(730).png().toBuffer();
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-<defs><clipPath id="app"><rect x="648" y="122" width="730" height="471" rx="12"/></clipPath></defs>
+<defs><radialGradient id="stage" cx="50%" cy="40%" r="75%"><stop offset="0" stop-color="#2a2d2b"/><stop offset="1" stop-color="#121313"/></radialGradient><clipPath id="app"><rect x="648" y="122" width="730" height="471" rx="12"/></clipPath></defs>
 <rect width="1200" height="630" fill="#fafaf8"/>
-<rect x="622" y="96" width="640" height="523" rx="24" fill="#eeecff"/>
+<rect x="622" y="96" width="640" height="523" rx="24" fill="url(#stage)"/>
 <image href="data:image/png;base64,${icon.toString('base64')}" x="64" y="52" width="48" height="48"/>
 <g font-family="Arial, Helvetica, sans-serif">
 <text x="1150" y="79" text-anchor="end" font-size="20" fill="#575b69">A Graphic Meat creation</text>
@@ -28,9 +28,9 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
 <image href="data:image/png;base64,${app.toString('base64')}" x="648" y="122" width="730" height="471" clip-path="url(#app)"/>
 <g transform="translate(0 108) scale(0.833333 0.6)"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="#4f46df" stroke-width="1.5" vector-effect="non-scaling-stroke"/></g>
 </svg>`;
-await sharp(Buffer.from(svg)).png().toFile(resolve(root,'website/assets/og-mailvault-en-v2.png'));
+await sharp(Buffer.from(svg)).png().toFile(resolve(root,'website/assets/og-mailvault-en-v3.png'));
 // Keep historical URLs current for existing links and crawlers that retain them.
 for (const legacyPath of ['website/og-image.png', 'og-image.png']) {
-  copyFileSync(resolve(root, 'website/assets/og-mailvault-en-v2.png'), resolve(root, legacyPath));
+  copyFileSync(resolve(root, 'website/assets/og-mailvault-en-v3.png'), resolve(root, legacyPath));
 }
-console.log('Generated website/assets/og-mailvault-en-v2.png (1200 × 630)');
+console.log('Generated website/assets/og-mailvault-en-v3.png (1200 × 630)');

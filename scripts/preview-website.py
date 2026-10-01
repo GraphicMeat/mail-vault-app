@@ -61,7 +61,7 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         host = self.headers.get('Host', '')
         if file.suffix == '.html' and file.is_file() and re.fullmatch(r'[a-zA-Z0-9.\-:]+', host):
             content = file.read_text(encoding='utf-8')
-            image = '/assets/og-mailvault-en-v2.png'
+            image = '/assets/og-mailvault-en-v3.png'
             if 'https://mailvaultapp.com' + image in content:
                 content = content.replace('https://mailvaultapp.com' + image, 'http://' + host + image)
                 return self.reply(200, content.encode('utf-8'), 'text/html; charset=utf-8')

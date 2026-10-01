@@ -87,7 +87,7 @@ Graphic Meat's stepped line motif appears in indigo beneath the English header
 and at the homepage pricing boundary. The studio credit near the footer uses the
 existing Graphic Meat logo and red line. The header links to the parent studio.
 
-English pages reference `/assets/og-mailvault-en-v2.png` (1200×630), while existing
+English pages reference `/assets/og-mailvault-en-v3.png` (1200×630), while existing
 localized pages retain their previous share asset. Regenerate the code-defined
 card with `node scripts/generate-social-card.mjs`; set SHARP_MODULE to a bundled
 sharp installation if sharp is not installed locally. The preview server rewrites
