@@ -273,7 +273,7 @@ export function SocialExportPanel({ message, onDone }) {
 
       <div className="flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onDone} disabled={busy}>{t('common.cancel')}</Button>
-        <Button variant="primary" size="sm" onClick={save} disabled={busy || !content}>
+        <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content}>
           {busy && <Loader size={14} className="animate-spin" />}{t('export.social.save')}
         </Button>
       </div>

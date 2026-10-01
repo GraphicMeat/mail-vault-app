@@ -55,6 +55,29 @@ describe('captureAppWindow', () => {
     expect(lastOpts.filter(kept.firstChild)).toBe(true); // a text node
   });
 
+  it('keeps the mask up until the last of two overlapping captures ends', async () => {
+    const { domToCanvas } = await import('modern-screenshot');
+    let releaseFirst;
+    domToCanvas.mockImplementationOnce(() => new Promise((resolve) => {
+      releaseFirst = () => resolve(Object.assign(document.createElement('canvas'), { width: 10, height: 10 }));
+    }));
+    let releaseSecond;
+    domToCanvas.mockImplementationOnce(() => new Promise((resolve) => {
+      releaseSecond = () => resolve(Object.assign(document.createElement('canvas'), { width: 10, height: 10 }));
+    }));
+    document.body.innerHTML = '<div id="root">a</div>';
+    const dict = buildNameDictionary({ names: [] });
+    const first = captureAppWindow({ redact: true, dict });
+    const second = captureAppWindow({ redact: true, dict });
+    await vi.waitFor(() => expect(releaseFirst && releaseSecond).toBeTruthy());
+    releaseFirst();
+    await first;
+    expect(usePrivacyStore.getState().captureMask).toBe(true);
+    releaseSecond();
+    await second;
+    expect(usePrivacyStore.getState().captureMask).toBe(false);
+  });
+
   it('restores the capture mask when the capture throws', async () => {
     const { domToCanvas } = await import('modern-screenshot');
     domToCanvas.mockRejectedValueOnce(new Error('boom'));

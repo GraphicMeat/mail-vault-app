@@ -100,10 +100,15 @@ async function compositeFrames(canvas, root, onCloneNode) {
   }
 }
 
+// Redacted captures in flight. A preview capture and a Save can overlap; the
+// first to finish must not lift the mask under the other.
+let masking = 0;
+
 export async function captureAppWindow({ redact, dict }) {
   const root = document.getElementById('root');
   if (!root) throw new Error('no app root');
   const privacy = usePrivacyStore.getState();
+  if (redact) masking += 1;
   try {
     if (redact) {
       privacy.setPeek(false);
@@ -119,6 +124,6 @@ export async function captureAppWindow({ redact, dict }) {
     await compositeFrames(canvas, root, onCloneNode);
     return canvas;
   } finally {
-    if (redact) usePrivacyStore.getState().setCaptureMask(false);
+    if (redact && --masking === 0) usePrivacyStore.getState().setCaptureMask(false);
   }
 }
