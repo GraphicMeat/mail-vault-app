@@ -7,13 +7,16 @@ import { findPii, maskText, maskString } from './piiDetector';
  *
  * Only text nodes and a few attributes are touched, so the mail's own markup
  * survives exactly as written. Same walking rules as iframeSearchHighlight.
+ *
+ * ponytail: Detection is per text node (a name split across elements, e.g. John <b>Smith</b>,
+ * is caught only token-by-token via the dictionary). <textarea> default text is skipped.
  */
 export const PII_CLASS = 'mv-pii';
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA']);
-const TEXT_ATTRS = ['title', 'alt', 'aria-label', 'placeholder'];
+const TEXT_ATTRS = ['title', 'alt', 'aria-label', 'placeholder', 'value', 'label', 'aria-description'];
 
 function safeDecode(s) {
-  try { return decodeURIComponent(s); } catch { return s; }
+  return s.replace(/(?:%[0-9a-f]{2})+/gi, m => { try { return decodeURIComponent(m); } catch { return m; } });
 }
 
 export function redactTree(root, dict, hooks = {}) {
@@ -22,7 +25,7 @@ export function redactTree(root, dict, hooks = {}) {
   const walker = doc.createTreeWalker(root, 4 /* SHOW_TEXT */, {
     acceptNode: (node) => {
       const parent = node.parentNode;
-      if (!node.data.trim() || SKIP_TAGS.has(parent?.nodeName)) return 2;
+      if (!node.data.trim() || SKIP_TAGS.has(parent?.nodeName?.toUpperCase())) return 2;
       if (parent?.closest?.(`.${PII_CLASS}`)) return 2;
       return 1;
     },
@@ -64,7 +67,7 @@ export function redactTree(root, dict, hooks = {}) {
       if (next !== value) { hooks.onAttr?.(el, name, value); el.setAttribute(name, next); }
     }
     const href = el.getAttribute('href');
-    if (href && (/^(mailto|tel):/i.test(href)
+    if (href && (/^\s*(mailto|tel):/i.test(href)
       || findPii(safeDecode(href), dict).some(s => s.kind === 'email' || s.kind === 'phone'))) {
       hooks.onAttr?.(el, 'href', href);
       el.removeAttribute('href');

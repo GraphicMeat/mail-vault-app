@@ -37,6 +37,50 @@ describe('redactTree', () => {
   it('does not re-wrap text already inside a mask span', () => {
     const root = mount('<p>John Smith</p>');
     redactTree(root, dict);
-    expect(redactTree(root, dict)).toBe(0);
+    const htmlAfter = root.innerHTML;
+    const attrs = [];
+    expect(redactTree(root, dict, { onAttr: (el, name) => attrs.push(name) })).toBe(0);
+    expect(root.innerHTML).toBe(htmlAfter);
+    expect(attrs).toHaveLength(0);
+  });
+
+  it('handles malformed percent-encoded URLs without throwing', () => {
+    const root = mount('<a href="https://t.co/?d=50%&u=john%40x.com">bad</a>');
+    expect(() => redactTree(root, dict)).not.toThrow();
+    expect(root.querySelector('a').hasAttribute('href')).toBe(false);
+  });
+
+  it('strips hrefs with leading whitespace in scheme', () => {
+    const root = mount('<a href=" tel:112">call</a>');
+    redactTree(root, dict);
+    expect(root.querySelector('a').hasAttribute('href')).toBe(false);
+  });
+
+  it('strips tel: hrefs even with no other content', () => {
+    const root = mount('<a href="tel:+37061234567">dial</a>');
+    redactTree(root, dict);
+    expect(root.querySelector('a').hasAttribute('href')).toBe(false);
+  });
+
+  it('skips style text in case-insensitive svg elements', () => {
+    const root = mount('<svg><style>John Smith</style></svg>');
+    const originals = [];
+    const n = redactTree(root, dict, { onText: (_s, o) => originals.push(o) });
+    expect(n).toBe(0);
+    expect(root.querySelector('style').textContent).toBe('John Smith');
+  });
+
+  it('masks input value, label, and aria-description attributes', () => {
+    const root = mount(`<input value="John Smith">
+      <label>Name: John Smith</label>
+      <div aria-description="John Smith is here">info</div>`);
+    const attrs = [];
+    redactTree(root, dict, { onAttr: (el, name, orig) => attrs.push([name, orig]) });
+    expect(root.querySelector('input').getAttribute('value')).toBe('xxxx xxxxx');
+    expect(root.querySelector('label').getAttribute('label')).toBeNull();
+    expect(root.querySelector('label').textContent).not.toMatch(/John|Smith/);
+    expect(root.querySelector('[aria-description]').getAttribute('aria-description')).toBe('xxxx xxxxx is here');
+    expect(attrs).toContainEqual(['value', 'John Smith']);
+    expect(attrs).toContainEqual(['aria-description', 'John Smith is here']);
   });
 });
