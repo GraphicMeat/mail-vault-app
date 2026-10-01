@@ -2371,6 +2371,72 @@ mod tests {
         assert!(ambiguous.get("serverAbsent").is_none());
     }
 
+    /// The unified inbox asks every account for its INBOX (or Sent, Drafts…)
+    /// by name. A folder the vault has never written a message to has no
+    /// `cur/`, so the indexer never lists it and it never gets a scan row: it
+    /// must read as an empty, covered folder, not hold "still being built"
+    /// over a finished index forever.
+    #[tokio::test]
+    async fn a_requested_folder_with_no_vault_directory_does_not_hold_the_building_banner() {
+        let (tmp, state) = state();
+        write_mail(tmp.path(), "acct", "INBOX", 1, "indexed hello", "body");
+        enable_index(
+            &state,
+            &[("INBOX", 1, "indexed hello", &indexed_row("indexed hello"))],
+            &[("INBOX", 1)],
+        );
+        let mut rx = state.events.subscribe();
+        let req = request_with_targets(
+            "never-stored",
+            2,
+            vec![target("acct", Some(vec!["INBOX", "Drafts"]))],
+        );
+        assert_eq!(
+            call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "never-stored").await;
+        assert!(
+            frames.iter().all(|frame| frame["fallbackReason"].is_null()),
+            "a finished index must not report a fallback: {frames:?}"
+        );
+        assert!(frames.iter().all(|frame| frame["localMode"] != "scan"), "{frames:?}");
+        let indexed = frames
+            .iter()
+            .filter(|frame| frame["replaceIndexAccountId"] == "acct")
+            .last()
+            .unwrap();
+        assert_eq!(indexed["coverage"]["complete"], true, "{indexed:?}");
+        assert_eq!(indexed["rows"][0]["subject"], "indexed hello");
+    }
+
+    /// The other side of the rule: a folder that IS in the vault but the
+    /// indexer has not listed yet is genuinely waiting, and so is one whose
+    /// directory only matches the requested name by case (a scope-resolution
+    /// mismatch on a case-insensitive disk, which the fallback still reads).
+    #[tokio::test]
+    async fn a_requested_folder_in_the_vault_but_not_listed_yet_is_still_building() {
+        for (requested, on_disk) in [("Archive", "Archive"), ("inbox", "INBOX")] {
+            let (tmp, state) = state();
+            write_mail(tmp.path(), "acct", on_disk, 7, "waiting mail", "body");
+            enable_index(&state, &[], &[]);
+            let mut rx = state.events.subscribe();
+            let id = format!("unlisted-{requested}");
+            let req = request_with_targets(&id, 1, vec![target("acct", Some(vec![requested]))]);
+            assert_eq!(
+                call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+                true
+            );
+            let frames = collect_until_terminal(&mut rx, &id).await;
+            let indexed = frames
+                .iter()
+                .find(|frame| frame["localMode"] == "index")
+                .unwrap();
+            assert_eq!(indexed["fallbackReason"], "building", "{requested}: {frames:?}");
+            assert_eq!(indexed["coverage"]["complete"], false, "{requested}");
+        }
+    }
+
     #[tokio::test]
     async fn index_off_building_and_unavailable_each_report_the_fallback_reason() {
         for reason in ["off", "building", "unavailable"] {

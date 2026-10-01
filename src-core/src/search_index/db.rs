@@ -330,6 +330,12 @@ pub struct ScopeCoverage {
     pub total: u64,
     pub complete: bool,
     pub uncovered_vault_dirs: Vec<String>,
+    /// The uncovered folders the index knows nothing of: no scan row and no
+    /// rows. Either the indexer has not listed them yet, or the vault holds
+    /// no such folder at all; only the disk can tell which
+    /// (`settle_unlisted_folders`). Internal: never sent to the app.
+    #[serde(skip)]
+    pub unlisted_vault_dirs: Vec<String>,
 }
 
 /// Coverage for the requested server mailbox paths, or every indexed/vault
@@ -380,10 +386,57 @@ pub fn scope_coverage(conn: &Connection, account_id: &str, mailboxes: Option<&[S
         coverage.total += u64::try_from(file_count.max(row_count)).unwrap_or(0);
         if !has_scan || row_count < file_count || pending_count > 0 {
             coverage.complete = false;
+            if !has_scan && row_count == 0 {
+                coverage.unlisted_vault_dirs.push(vault_dir.clone());
+            }
             coverage.uncovered_vault_dirs.push(vault_dir);
         }
     }
     Ok(coverage)
+}
+
+/// Settles the folders `scope_coverage` could not judge from the index alone
+/// (`unlisted_vault_dirs`) against the vault on disk, with no index lock held.
+///
+/// The vault writes a folder's `cur/` with its first message, and the indexer
+/// lists only folders that have one, so a requested folder the vault never
+/// stored mail in (an account's empty Drafts, a Sent the unified view names
+/// for an account that has none) never gets a scan row. It holds no mail to
+/// find and no pass will ever list it: it is covered, with nothing in it.
+///
+/// A folder stays uncovered whenever the disk does not prove it absent: the
+/// `Maildir` itself is missing (an unplugged or moving vault), the account
+/// directory cannot be listed, a `cur/` cannot be checked, or a directory
+/// matches the name only by case (a case-insensitive disk would read it
+/// under the requested name, so the fallback still finds its mail).
+pub fn settle_unlisted_folders(coverage: &mut ScopeCoverage, maildir: &Path, account_id: &str) {
+    if coverage.unlisted_vault_dirs.is_empty() || !maildir.is_dir() {
+        return;
+    }
+    let account_dir = crate::vault_files::account_dir(maildir, account_id);
+    let on_disk: Option<Vec<std::path::PathBuf>> = match std::fs::read_dir(&account_dir) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(Vec::new()),
+        Err(_) => None,
+        Ok(entries) => entries.map(|entry| entry.map(|e| e.path())).collect::<Result<_, _>>().ok(),
+    };
+    let Some(on_disk) = on_disk else { return };
+    let absent = |vault_dir: &str| -> bool {
+        let wanted = vault_dir.to_lowercase();
+        on_disk.iter().all(|path| {
+            let same_name = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.to_lowercase() == wanted);
+            // A directory of this name with no `cur/` holds nothing the
+            // index or the fallback scan reads; one whose `cur/` cannot be
+            // checked is unknown, so it is not absent.
+            !same_name || matches!(std::fs::metadata(path.join("cur")), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+        })
+    };
+    let settled: BTreeSet<String> = coverage.unlisted_vault_dirs.iter().filter(|dir| absent(dir)).cloned().collect();
+    if settled.is_empty() {
+        return;
+    }
+    coverage.uncovered_vault_dirs.retain(|dir| !settled.contains(dir));
+    coverage.unlisted_vault_dirs.retain(|dir| !settled.contains(dir));
+    coverage.complete = coverage.uncovered_vault_dirs.is_empty();
 }
 
 /// Index coverage. `total` is the larger of the rows and the files each

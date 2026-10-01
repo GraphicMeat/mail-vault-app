@@ -446,6 +446,13 @@ pub(crate) fn search_page_reply(
             }
         }
     };
+    // A requested folder the index never listed may be one the vault has no
+    // mail in at all; only the disk can tell, read here with the index lock
+    // released so a slow drive never stalls another reader.
+    let result = result.map(|mut reply| {
+        db::settle_unlisted_folders(&mut reply.coverage, &st.vault_root.join("Maildir"), &request.account_id);
+        reply
+    });
     #[cfg(test)]
     if matches!(&result, Ok(_)) {
         let hook = g(&st.search_batch_hook).clone();

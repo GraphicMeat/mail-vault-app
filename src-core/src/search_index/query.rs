@@ -1281,6 +1281,52 @@ mod tests {
     }
 
     #[test]
+    fn a_requested_folder_the_vault_never_stored_settles_as_covered() {
+        let (tmp, conn) = coverage_fixture();
+        let maildir = tmp.path().join("Maildir");
+        std::fs::create_dir_all(maildir.join("a/INBOX/cur")).unwrap();
+        std::fs::create_dir_all(maildir.join("a/Drafts")).unwrap(); // no cur: nothing stored
+        seed_scan(&conn, "a", "INBOX", 2);
+        seed_rows(&conn, "a", "INBOX", 2, 1);
+
+        let mut coverage = db::scope_coverage(&conn, "a", Some(&["INBOX".into(), "Drafts".into(), "Sent".into()])).unwrap();
+        assert_eq!(coverage.uncovered_vault_dirs, vec!["Drafts", "Sent"]);
+        db::settle_unlisted_folders(&mut coverage, &maildir, "a");
+        assert_eq!((coverage.indexed, coverage.total, coverage.complete), (2, 2, true));
+        assert!(coverage.uncovered_vault_dirs.is_empty());
+
+        // An account the vault holds nothing for: every folder of it is empty.
+        let mut none = db::scope_coverage(&conn, "b", Some(&["INBOX".into()])).unwrap();
+        db::settle_unlisted_folders(&mut none, &maildir, "b");
+        assert!(none.complete && none.uncovered_vault_dirs.is_empty());
+    }
+
+    #[test]
+    fn settling_keeps_every_folder_the_disk_does_not_prove_absent() {
+        let (tmp, conn) = coverage_fixture();
+        let maildir = tmp.path().join("Maildir");
+        // On disk, not listed yet: genuinely waiting for the indexer.
+        std::fs::create_dir_all(maildir.join("a/Archive/cur")).unwrap();
+        // Matches the requested `inbox` only by case.
+        std::fs::create_dir_all(maildir.join("a/INBOX/cur")).unwrap();
+        // Listed, but short of its files: never settled by the disk.
+        seed_scan(&conn, "a", "Short", 3);
+        seed_rows(&conn, "a", "Short", 1, 1);
+        let scope = ["Archive".to_string(), "inbox".to_string(), "Short".to_string()];
+
+        let mut coverage = db::scope_coverage(&conn, "a", Some(&scope)).unwrap();
+        db::settle_unlisted_folders(&mut coverage, &maildir, "a");
+        assert!(!coverage.complete);
+        assert_eq!(coverage.uncovered_vault_dirs, vec!["Archive", "Short", "inbox"]);
+
+        // No Maildir at all (an unplugged vault): nothing is proven absent.
+        let mut unplugged = db::scope_coverage(&conn, "a", Some(&["Drafts".into()])).unwrap();
+        db::settle_unlisted_folders(&mut unplugged, &tmp.path().join("gone/Maildir"), "a");
+        assert_eq!(unplugged.uncovered_vault_dirs, vec!["Drafts"]);
+        assert!(!unplugged.complete);
+    }
+
+    #[test]
     fn coverage_deduplicates_server_paths_that_share_a_vault_directory() {
         let (_tmp, conn) = coverage_fixture();
         seed_scan(&conn, "a", "Projects_2026", 2);
