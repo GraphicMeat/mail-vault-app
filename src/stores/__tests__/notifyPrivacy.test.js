@@ -7,6 +7,8 @@ import { setPrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 import { buildNameDictionary } from '../../utils/privacy/piiDetector';
 
 beforeEach(() => {
+  vi.restoreAllMocks();
+  vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
   sendNotification.mockClear();
   useFocusStore.setState({ endsAt: null, held: [] });
   setPrivacyDictionary(buildNameDictionary({ names: ['John Smith'] }), { ready: true });
@@ -31,6 +33,12 @@ describe('notify under privacy mode', () => {
     await notify('Backup done', 'Saved mail for John Smith');
     expect(sendNotification).not.toHaveBeenCalled();
     expect(useFocusStore.getState().held[0].body).toBe('Saved mail for xxxx xxxxx');
+  });
+  it('masks before the saved choice has loaded, even when it will turn out off', async () => {
+    usePrivacyStore.setState({ enabled: false });
+    usePrivacyStore.persist.hasHydrated.mockReturnValue(false);
+    await notify('Backup done', 'Saved mail for John Smith');
+    expect(sendNotification.mock.calls[0][1]).toBe('Saved mail for xxxx xxxxx');
   });
   it('privacy off leaves banners untouched', async () => {
     usePrivacyStore.setState({ enabled: false });

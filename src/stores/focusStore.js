@@ -189,8 +189,9 @@ export function clearNotificationDecisions() {
  */
 export function notify(title, body, sound, target, mailCtx) {
   // Privacy mode: a banner is on screen too. Mail banners say only that mail
-  // came; anything else is masked like the window behind it.
-  if (usePrivacyStore.getState().enabled) {
+  // came; anything else is masked like the window behind it. Until the saved
+  // choice has loaded it counts as on: a banner cannot be taken back.
+  if (usePrivacyStore.getState().enabled || !usePrivacyStore.persist.hasHydrated()) {
     if (mailCtx) { title = t('privacy.notificationTitle'); body = ''; }
     else { const d = getPrivacyDictionary(); title = maskString(title, d); body = maskString(body, d); }
   }
