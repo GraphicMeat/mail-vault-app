@@ -170,8 +170,8 @@ describe('privacy leak guard', () => {
       cleanup();
     }
     useSettingsStore.setState({ sidebarCollapsed: true });
-    const { container } = render(<Sidebar />);
-    expect(container.querySelector('[aria-label]')).not.toBeNull();
+    render(<Sidebar />);
+    expect(document.querySelector('[aria-label*="xxxx@xxx.xxxxxxx"]')).not.toBeNull();
     expectNoLeak(document.body);
   });
 
@@ -211,6 +211,7 @@ describe('privacy leak guard', () => {
       onSubmit={vi.fn()} suggestions={[{ key: 's1', kind: 'sender', label: JOANNA, tags: [`from:${JOANNA_ADDR}`] }]} />);
     act(() => { document.querySelector('input')?.focus(); });
     expect(screen.getAllByTestId('search-tag').length).toBe(2);
+    expect(screen.getByTestId('search-suggestion')).toBeTruthy();
     expectNoLeak(document.body);
   });
 
