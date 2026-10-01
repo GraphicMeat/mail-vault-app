@@ -4,6 +4,7 @@ import { Loader, Check, AlertTriangle, UploadCloud, X } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 // Corner bubble for a minimized change-server restore. Mirrors the OutboxTray
 // bubble style: shows live upload progress while the restore runs in the
@@ -44,7 +45,7 @@ export function RestoreTray() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-mail-text truncate flex items-center gap-1.5">
-              <UploadCloud size={12} className="flex-shrink-0" /> Restore — {activeRestore.email}
+              <UploadCloud size={12} className="flex-shrink-0" /> Restore — <Private kind="email">{activeRestore.email}</Private>
             </p>
             <p className="text-[11px] mt-0.5 text-mail-text-muted truncate">
               {running && (

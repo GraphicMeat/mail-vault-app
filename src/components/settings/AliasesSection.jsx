@@ -9,6 +9,8 @@ import { SignatureEditor } from './SignatureEditor';
 import { textToHtml, htmlToText } from '../RichTextEditor';
 import { signatureHasContent } from '../../utils/signatureImages';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 // Settings > Accounts > Aliases: every address one account sends from. The
 // login comes first and always stays; the aliases after it are the settings
@@ -65,6 +67,7 @@ export function _resetAliasesSection() {
 
 export function AliasesSection({ account, displayName = '' }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const accountId = account.id;
   const login = account.email || '';
   const stored = useSettingsStore(s => s.aliases?.[accountId]) || NO_ALIASES;
@@ -185,24 +188,24 @@ export function AliasesSection({ account, displayName = '' }) {
         <legend className="text-sm font-medium text-mail-text">{t('settings.accounts.aliases.defaultAddress')}</legend>
         <p className="text-sm text-mail-text-muted mb-3">{t('settings.accounts.aliases.defaultHint')}</p>
         <ul data-testid="aliases-list" className="alias-list">
-          <li data-testid="alias-row" data-address={login} data-login="true" className="alias-row">
+          <li data-testid="alias-row" data-address={pa(login, 'email')} data-login="true" className="alias-row">
             <input type="radio" name={radioName} checked={loginIsDefault} onChange={() => setDefault('')}
-              aria-label={t('settings.accounts.aliases.useByDefaultFor', { address: login })}
+              aria-label={t('settings.accounts.aliases.useByDefaultFor', { address: pa(login, 'email') })}
               data-testid="alias-default-radio" className="alias-radio" />
             <div className="alias-row-main">
               <div className="alias-row-address">
-                <span className="font-mono text-sm text-mail-text break-all">{login}</span>
+                <span className="font-mono text-sm text-mail-text break-all"><Private kind="email">{login}</Private></span>
                 <span className="alias-badge alias-badge-login">{t('settings.accounts.aliases.badgeLogin')}</span>
               </div>
               {accountName && (
-                <p className="text-xs text-mail-text-muted">{t('settings.accounts.aliases.loginName', { name: accountName })}</p>
+                <p className="text-xs text-mail-text-muted">{t('settings.accounts.aliases.loginName', { name: pa(accountName, 'name') })}</p>
               )}
             </div>
           </li>
           {aliases.map(alias => (
             <AliasRow key={`${accountId}:${key(alias.address)}`} accountId={accountId} alias={alias}
               radioName={radioName} isDefault={key(defaultFrom) === key(alias.address)}
-              placeholder={accountName} onDefault={() => setDefault(alias.address)}
+              placeholder={pa(accountName, 'name')} onDefault={() => setDefault(alias.address)}
               onVerify={() => setVerifying(alias)} onRemove={() => removeAlias(alias.address)} />
           ))}
         </ul>
@@ -228,7 +231,7 @@ export function AliasesSection({ account, displayName = '' }) {
             <label htmlFor={`${ids}-add-name`} className="block text-sm font-medium text-mail-text mb-2">{t('settings.accounts.aliases.addName')}</label>
             <input id={`${ids}-add-name`} type="text" autoComplete="off"
               value={newName} onChange={event => setNewName(event.target.value)}
-              placeholder={accountName}
+              placeholder={pa(accountName, 'name')}
               data-testid="alias-add-name-input"
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all" />
           </div>
@@ -250,11 +253,11 @@ export function AliasesSection({ account, displayName = '' }) {
           <div className="flex items-center gap-2 flex-wrap mt-2">
             {suggestions.map(suggestion => (
               <button key={key(suggestion.address)} type="button" onClick={() => addSuggestion(suggestion)}
-                data-testid="alias-suggestion-add" data-address={suggestion.address}
-                aria-label={t('settings.accounts.aliases.addSuggestion', { address: suggestion.address })}
+                data-testid="alias-suggestion-add" data-address={pa(suggestion.address, 'email')}
+                aria-label={t('settings.accounts.aliases.addSuggestion', { address: pa(suggestion.address, 'email') })}
                 className="alias-chip">
                 <Plus size={12} aria-hidden="true" />
-                <span className="font-mono">{suggestion.address}</span>
+                <span className="font-mono"><Private kind="email">{suggestion.address}</Private></span>
               </button>
             ))}
           </div>
@@ -277,15 +280,16 @@ export function AliasesSection({ account, displayName = '' }) {
 /** One alias: the default radio, its address and source, its name, Verify and Remove. */
 function AliasRow({ accountId, alias, radioName, isDefault, placeholder, onDefault, onVerify, onRemove }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const nameId = useId();
   return (
-    <li data-testid="alias-row" data-address={alias.address} className="alias-row">
+    <li data-testid="alias-row" data-address={pa(alias.address, 'email')} className="alias-row">
       <input type="radio" name={radioName} checked={isDefault} onChange={onDefault}
-        aria-label={t('settings.accounts.aliases.useByDefaultFor', { address: alias.address })}
+        aria-label={t('settings.accounts.aliases.useByDefaultFor', { address: pa(alias.address, 'email') })}
         data-testid="alias-default-radio" className="alias-radio" />
       <div className="alias-row-main">
         <div className="alias-row-address">
-          <span className="font-mono text-sm text-mail-text break-all">{alias.address}</span>
+          <span className="font-mono text-sm text-mail-text break-all"><Private kind="email">{alias.address}</Private></span>
           <span data-testid="alias-source-badge" className="alias-badge">{t(SOURCE_KEYS[alias.source] || SOURCE_KEYS.manual)}</span>
         </div>
         <div className="alias-name">

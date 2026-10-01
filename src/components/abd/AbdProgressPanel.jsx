@@ -10,6 +10,7 @@ import { formatBytes } from '../../utils/formatBytes';
 import { formatCount } from '../../utils/formatCount';
 import { statusText, KEPT_KEYS } from './abdText';
 import { tErr, useT } from '../../i18n/index.js';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 /**
  * The progress panel of an Archive & delete job (part-d design 6.4), in the
@@ -44,6 +45,7 @@ function CounterRow({ label, done, total, testId }) {
 
 function PanelBody({ job }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -106,7 +108,7 @@ function PanelBody({ job }) {
                   : <Archive size={14} className="text-mail-accent-text" />}
             </div>
             <span className="font-medium text-mail-text text-sm truncate" data-testid="abd-panel-title">
-              {t(backup ? 'abd.panel.titleBackup' : 'abd.panel.title', { account: accountEmail })}
+              {t(backup ? 'abd.panel.titleBackup' : 'abd.panel.title', { account: pa(accountEmail, 'email') })}
             </span>
           </div>
           {!finished && (

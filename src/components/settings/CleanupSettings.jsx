@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { formatEmailDate } from '../../utils/dateFormat';
 import { t as tr, t, useT   } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 import { formatCount } from '../../utils/formatCount';
 
 const DEFAULT_CATEGORIES = [
@@ -187,12 +188,12 @@ const CleanupRow = React.memo(function CleanupRow({
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-mail-text truncate">{senderName(item.from)}</p>
+          <p className="text-sm font-medium text-mail-text truncate"><Private kind="name">{senderName(item.from)}</Private></p>
           {item.date && (
             <span className="text-[11px] text-mail-text-muted shrink-0">{formatEmailDate(item.date)}</span>
           )}
         </div>
-        <p className="text-xs text-mail-text-muted truncate">{item.subject || '(No subject)'}</p>
+        <p className="text-xs text-mail-text-muted truncate"><Private kind="text">{item.subject || '(No subject)'}</Private></p>
       </div>
       <CategoryDropdown current={c.category} categories={allCategories} onChange={(cat) => onCorrectCategory(item, cat)} />
       <ActionDropdown current={c.action} onChange={(act) => onCorrectAction(item, act)} />
@@ -537,10 +538,10 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
       <div className="flex flex-col h-full overflow-hidden">
         {/* Email header */}
         <div className="px-6 py-4 border-b border-mail-border shrink-0">
-          <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || previewItem.subject || '(No subject)'}</h3>
+          <h3 className="text-lg font-semibold text-mail-text mb-2"><Private kind="text">{email.subject || previewItem.subject || '(No subject)'}</Private></h3>
           <div className="text-sm text-mail-text-muted space-y-0.5">
-            <p><span className="font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text">{from}</span></p>
-            {to && <p><span className="font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text">{to}</span></p>}
+            <p><span className="font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text"><Private kind="name">{from}</Private></span></p>
+            {to && <p><span className="font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text"><Private kind="name">{to}</Private></span></p>}
             <p><span className="font-medium w-12 inline-block">{t('settings.cleanup.date')}</span> <span className="text-mail-text">{email.date || previewItem.date || ''}</span></p>
           </div>
           <div className="flex items-center gap-2 mt-3">
@@ -559,7 +560,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
           ) : htmlContent ? (
             <EmailPreviewFrame html={htmlContent} title={t('settings.cleanup.emailPreview')} message={previewEmail} />
           ) : previewEmail?.textBody || previewEmail?.text ? (
-            <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{previewEmail.textBody || previewEmail.text}</pre>
+            <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4"><Private kind="text">{previewEmail.textBody || previewEmail.text}</Private></pre>
           ) : previewError ? (
             <p role="alert" className="text-sm text-mail-text-muted px-6 py-4">{previewError}</p>
           ) : null}
@@ -586,7 +587,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
                     compact
                   />
                 ) : (
-                  <span key={i} className="text-xs text-mail-text-muted">{att.filename || 'attachment'}</span>
+                  <span key={i} className="text-xs text-mail-text-muted"><Private kind="filename">{att.filename || 'attachment'}</Private></span>
                 );
               })}
             </div>
@@ -778,7 +779,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
           <Button variant="ghost" icon size="sm" onClick={() => closePreview()}>
             <ChevronLeft size={18} className="text-mail-text-muted" />
           </Button>
-          <span className="text-sm font-medium text-mail-text truncate">{previewItem.subject || 'Email'}</span>
+          <span className="text-sm font-medium text-mail-text truncate"><Private kind="text">{previewItem.subject || 'Email'}</Private></span>
         </div>
       )}
 

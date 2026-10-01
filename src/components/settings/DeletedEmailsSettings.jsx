@@ -8,6 +8,7 @@ import { formatDateTime } from '../../utils/dateFormat';
 import { Button } from '../ui/Button';
 import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 
 /** How long the bin keeps a deleted email; the daemon clamps to 1..30. */
 export const RETENTION_DAYS = [1, 3, 7, 14, 30];
@@ -80,10 +81,10 @@ export function DeletedEmailsSettings() {
         </tr></thead>
         <tbody>{rows.map(d => <tr key={d.id} data-deleted-id={d.id} className="border-b border-mail-border last:border-0">
           <td className={`${CELL} max-w-0 w-2/5`}>
-            <div className="font-medium text-mail-text truncate">{d.row?.subject || t('common.noSubject')}</div>
-            <div className="text-xs text-mail-text-muted truncate">{senderOf(d.row)}</div>
+            <div className="font-medium text-mail-text truncate">{d.row?.subject ? <Private kind="text">{d.row.subject}</Private> : t('common.noSubject')}</div>
+            <div className="text-xs text-mail-text-muted truncate"><Private kind="name">{senderOf(d.row)}</Private></div>
           </td>
-          <td className={`${CELL} text-xs text-mail-text-muted truncate max-w-0`}>{accountLabel(d.accountId)}</td>
+          <td className={`${CELL} text-xs text-mail-text-muted truncate max-w-0`}><Private kind="name">{accountLabel(d.accountId)}</Private></td>
           <td className={`${CELL} text-xs text-mail-text-muted whitespace-nowrap`}>{d.row?.date ? formatDateTime(d.row.date) : ''}</td>
           <td className={`${CELL} text-xs text-mail-text-muted whitespace-nowrap`}>{formatDateTime(d.deletedAt)}</td>
           <td className={`${CELL} text-right`}>

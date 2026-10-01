@@ -3,6 +3,7 @@ import { Trash2, Globe, User, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
 import { useFieldStore } from '../../stores/fieldStore';
 import { useT } from '../../i18n/index.js';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 const KINDS = ['select', 'multi_select', 'date', 'checkbox', 'text'];
 const GLOBAL = '*';
@@ -86,6 +87,7 @@ function OptionEditor({ field, onSave, usageOf }) {
 /// answer they take, and whether every account shares them.
 export function FieldsSettings() {
   const t = useT();
+  const pa = usePrivateAttr();
   const accountId = useMailStore(state => state.activeAccountId);
   const accounts = useMailStore(state => state.accounts) || [];
   const fields = useFieldStore(state => state.fields);
@@ -195,7 +197,7 @@ export function FieldsSettings() {
       <select data-testid="copy-from-account" value={copyFrom} aria-label={t('fields.copyFrom')}
         onChange={event => { setCopyFrom(event.target.value); setPicked([]); }}>
         <option value="">{t('fields.copyFrom')}</option>
-        {others.map(account => <option key={account.id} value={account.id}>{account.email}</option>)}
+        {others.map(account => <option key={account.id} value={account.id}>{pa(account.email, 'email')}</option>)}
       </select>
       {sourceFields.map(field => <label key={field.id}>
         <input type="checkbox" data-testid={`copy-field-${field.id}`} checked={picked.includes(field.id)}

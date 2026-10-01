@@ -37,6 +37,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 
 // The sub-sections of an account's settings, in tab order.
 const ACCOUNT_SECTIONS = ['profile', 'aliases', 'connection', 'advanced'];
@@ -409,7 +410,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-mail-text truncate flex items-center gap-1.5">
-                      {getDisplayName(account.id) || account.name || account.email?.split('@')[0] || 'Unknown'}
+                      <Private kind="name">{getDisplayName(account.id) || account.name || account.email?.split('@')[0] || 'Unknown'}</Private>
                       {account.authType === 'oauth2' && (
                         <Shield size={12} className="text-mail-accent-text flex-shrink-0" />
                       )}
@@ -418,7 +419,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                       )}
                     </div>
                     <div className="text-xs text-mail-text-muted truncate">
-                      {account.email}
+                      <Private kind="email">{account.email}</Private>
                     </div>
                   </div>
                   </button>

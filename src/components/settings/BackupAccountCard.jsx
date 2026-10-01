@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { t as tr, t, useT   } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) return '--';
@@ -69,6 +71,7 @@ const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail
 
 const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account, isPaidUser, globalEnabled, highlighted, onUpgrade }, ref) {
   const t = useT();
+  const pa = usePrivateAttr();
   const priceBlurb = usePremiumPriceBlurb();
   const backupSchedules = useSettingsStore(s => s.backupSchedules);
   const backupState = useSettingsStore(s => s.backupState);
@@ -480,15 +483,15 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             {avatarInitial}
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-sm font-medium text-mail-text">{account.email}</span>
+            <span className="text-sm font-medium text-mail-text"><Private kind="email">{account.email}</Private></span>
             {globalEnabled && (
               <span className="text-xs text-mail-accent-text ml-2">{t('settings.backup.account.usingGlobalSchedule')}</span>
             )}
           </div>
         </div>
         {isPaidUser && !globalEnabled ? (
-          <div aria-label={`Enable backup schedule for ${account.email}`}>
-            <ToggleSwitch label={`${t('settings.backup.schedule.automaticBackup')}: ${account.email}`} active={config.enabled} onClick={handleToggle} />
+          <div aria-label={`Enable backup schedule for ${pa(account.email, 'email')}`}>
+            <ToggleSwitch label={`${t('settings.backup.schedule.automaticBackup')}: ${pa(account.email, 'email')}`} active={config.enabled} onClick={handleToggle} />
           </div>
         ) : !isPaidUser && !IS_APPSTORE_BUILD && upsellBackupShown && onUpgrade ? (
           <button

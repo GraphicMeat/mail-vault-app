@@ -8,11 +8,16 @@ import { formatEmailDate } from '../utils/dateFormat';
 import { displayText } from '../utils/bidiText';
 import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
 import { filterUnread } from '../utils/emailParser';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 import '../styles/explorer.css';
 
 const EMPTY_PATH = Object.freeze([]);
 const EMPTY_CONTEXT = Object.freeze({});
 const isUnread = email => !email.flags?.includes('\\Seen');
+
+// What privacy mode masks in a group's [label, detail], by group kind. A date
+// group names no one.
+const GROUP_PRIVACY = { sender: ['name', 'email'], conversation: ['text', 'text'], field: ['text', null] };
 
 function GroupCheckbox({ emails, selectedEmailIds, getSelectionKey, onSetSelection, label }) {
   const ref = useRef(null);
@@ -31,6 +36,7 @@ export function ExplorerView({
   rowHeight = 56, searchActive = false, groupingOverride = null, fieldGroup = null, onGroupingChange = null,
 }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const storedGrouping = useSettingsStore(s => s.explorerGrouping);
   // A saved view brings its own grouping, and a change made inside it goes
   // back to the view (`onGroupingChange`), never to the settings store:
@@ -157,7 +163,9 @@ export function ExplorerView({
 
   const unreadCount = visibleEmails.filter(isUnread).length;
   const vaultCount = visibleEmails.filter(email => email.isArchived).length;
-  const groupLabel = group => group.id === tree.id ? rootLabel : group.label;
+  const groupLabel = group => group.id === tree.id ? rootLabel
+    : GROUP_PRIVACY[group.kind] ? pa(group.label, GROUP_PRIVACY[group.kind][0]) : group.label;
+  const groupDetail = group => (GROUP_PRIVACY[group.kind]?.[1] ? pa(group.detail, GROUP_PRIVACY[group.kind][1]) : group.detail);
 
   return <section ref={rootRef} data-testid="explorer-view" data-grouping={grouping} className="mail-explorer"
     aria-label={t('explorer.name')} onKeyDown={event => {
@@ -221,16 +229,16 @@ export function ExplorerView({
                 : !group ? { position: 'relative', height: rowHeight } : undefined };
             if (!group) return <div {...props} tabIndex={-1}>{renderEmail(entry.email)}</div>;
             const GroupIcon = group.thread ? MessagesSquare : Folder;
-            return <div {...props} data-testid="explorer-group-row" data-label={group.label} data-detail={group.detail}
+            return <div {...props} data-testid="explorer-group-row" data-label={groupLabel(group)} data-detail={groupDetail(group)}
               data-selected={selected || undefined} className="explorer-group-row">
               <GroupCheckbox emails={entry.emails} selectedEmailIds={selectedEmailIds} getSelectionKey={getSelectionKey}
-                onSetSelection={onSetSelection} label={t('explorer.selectGroup', { name: group.label })} />
+                onSetSelection={onSetSelection} label={t('explorer.selectGroup', { name: groupLabel(group) })} />
               <button type="button" data-testid="explorer-group-open" className="explorer-group-open"
-                aria-label={t('explorer.openGroup', { name: group.label })}
+                aria-label={t('explorer.openGroup', { name: groupLabel(group) })}
                 onClick={event => navigate([...path, group.id], event.detail === 0)}>
                 <GroupIcon size={20} className="shrink-0 text-mail-text-muted" aria-hidden="true" />
-                <span className="explorer-group-copy"><span className="explorer-group-name" dir="auto" title={group.label}>{displayText(group.label)}</span>
-                  <span className="explorer-group-meta">{group.detail && <span className="explorer-sender-address" dir="auto" title={group.detail}>{displayText(group.detail)} · </span>}
+                <span className="explorer-group-copy"><span className="explorer-group-name" dir="auto" title={groupLabel(group)}>{displayText(groupLabel(group))}</span>
+                  <span className="explorer-group-meta">{group.detail && <span className="explorer-sender-address" dir="auto" title={groupDetail(group)}>{displayText(groupDetail(group))} · </span>}
                     {t('common.emailCount', { count: entry.emails.length })} · {t('explorer.vaultCount', { count: entry.emails.filter(email => email.isArchived).length })}
                     {entry.emails.some(isUnread) && <> · {t('explorer.unreadCount', { count: entry.emails.filter(isUnread).length })}</>}
                   </span>

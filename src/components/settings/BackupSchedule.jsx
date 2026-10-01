@@ -12,11 +12,13 @@ import {
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
 export default function BackupSchedule({ initialAccountId, onUpgrade }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const cardRefs = useRef({});
   const [highlightedId, setHighlightedId] = useState(null);
 
@@ -159,7 +161,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               <div className="flex items-center gap-2">
                 <Loader size={14} className="text-mail-accent-text animate-spin flex-shrink-0" />
                 <span className="text-xs font-semibold text-mail-text truncate">
-                  {t('settings.backup.schedule.backingUpAccount', { email: activeBackup.accountEmail })}
+                  {t('settings.backup.schedule.backingUpAccount', { email: pa(activeBackup.accountEmail, 'email') })}
                 </span>
                 {activeBackup.queueLength > 0 && (
                   <span className="text-xs text-mail-text-muted">{t('settings.backup.schedule.plusQueued', { count: activeBackup.queueLength })}</span>

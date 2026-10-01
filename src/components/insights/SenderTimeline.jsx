@@ -3,6 +3,8 @@ import { useT } from '../../i18n';
 import { compareNames } from '../../utils/collation';
 import { chartLocale, compareStable } from '../../utils/insights/chartFormat';
 import '../../styles/insights-charts.css';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 const DAY = 86400000;
 const ROW = 48;
@@ -31,6 +33,7 @@ function boundedBuckets(buckets, limit) {
 
 export default function SenderTimeline({ lanes = [], query, onQueryChange, onSelectBucket }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const viewport = useRef(null);
   const [width, setWidth] = useState(900);
   const [scrollTop, setScrollTop] = useState(0);
@@ -90,9 +93,9 @@ export default function SenderTimeline({ lanes = [], query, onQueryChange, onSel
           if (ordered.some((mark, i) => i > 0 && (mark.time - ordered[i - 1].time) / duration * plotWidth < 26)) {
             marks = lane.buckets.flatMap(bucket => marksFor(bucket, true));
           }
-          return <div key={lane.address} role="row" aria-label={lane.address} aria-rowindex={first + index + 1} data-sender={lane.address}
+          return <div key={lane.address} role="row" aria-label={pa(lane.address, 'email')} aria-rowindex={first + index + 1} data-sender={pa(lane.address, 'email')}
             className="insights-timeline-row" style={{ top: (first + index) * ROW, height: ROW }}>
-            <span role="cell" className="insights-timeline-sender" title={lane.address}>{lane.name || lane.address}</span>
+            <span role="cell" className="insights-timeline-sender" title={pa(lane.address, 'email')}><Private kind="name">{lane.name || lane.address}</Private></span>
             <div role="cell" className="insights-timeline-plot">
               <svg aria-hidden="true" width="100%" height={ROW}>
                 {marks.map((mark, i) => <g key={mark.key || `${mark.startDate}-${i}`}>

@@ -34,6 +34,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { t as tr, t, useT   } from '../../i18n/index.js';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { SettingsPageLayout } from '../ui/SettingsForm';
 
 // Cooldown constants
@@ -122,6 +123,7 @@ function timeAgo(dateStr) {
 
 export function BillingSettings({ onNavigate }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const billingEmail = useSettingsStore(s => s.billingEmail);
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const billingLastChecked = useSettingsStore(s => s.billingLastChecked);
@@ -526,7 +528,7 @@ export function BillingSettings({ onNavigate }) {
               className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
             >
               {accountEmails.map(email => (
-                <option key={email} value={email}>{email}</option>
+                <option key={email} value={email}>{pa(email, 'email')}</option>
               ))}
             </select>
             <button onClick={handleSignIn} disabled={signInDisabled}

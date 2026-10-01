@@ -12,6 +12,8 @@ import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import NoteCard from './NoteCard';
 import AccountChipMenu from './AccountChipMenu';
 import { useT } from '../../i18n';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 const NONE = {};
 /// A reader action it cannot take reads as unusable, never as live (the
@@ -29,6 +31,7 @@ const dialogOpen = () => [...document.querySelectorAll('[role="dialog"], [role="
 /// A full page like Insights; the mail view behind it is hidden and inert.
 export default function NotesBoard({ onClose, onComposeReply }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const status = useNotesStore(s => s.status);
   const cards = useNotesStore(s => s.cards);
   const filter = useNotesStore(s => s.filter);
@@ -184,7 +187,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
     {barAccounts.length > 1 && <div role="group" aria-label={t('notes.accounts')} data-testid="notes-accounts"
       className="flex flex-wrap items-center gap-1.5 px-6 pt-3">
       {barAccounts.map(account => <Button key={account.id} variant={off[account.id] ? 'ghost' : 'accentTint'} size="xs" pill
-        data-testid={`notes-account-${account.id}`} aria-pressed={!off[account.id]} title={account.email}
+        data-testid={`notes-account-${account.id}`} aria-pressed={!off[account.id]} title={pa(account.email, 'email')}
         onClick={() => useSettingsStore.getState().toggleNotesAccount(account.id)}
         onContextMenu={event => {
           event.preventDefault();
@@ -194,7 +197,7 @@ export default function NotesBoard({ onClose, onComposeReply }) {
         <span data-testid="notes-account-dot" aria-hidden="true"
           className={`w-2 h-2 rounded-full shrink-0 ${off[account.id] ? 'opacity-40' : ''}`}
           style={{ backgroundColor: getAccountColor(accountColors, account) }} />
-        {displayNames[account.id] || account.name || account.email}
+        <Private kind="name">{displayNames[account.id] || account.name || account.email}</Private>
       </Button>)}
       <Button variant="ghost" size="xs" data-testid="notes-select-all" disabled={!barAccounts.some(({ id }) => off[id])}
         onClick={() => setOff(() => false)}>{t('notes.selectAll')}</Button>

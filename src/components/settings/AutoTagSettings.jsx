@@ -12,6 +12,7 @@ import { SettingsField, SettingsSection, SegmentedControl, SettingsPageLayout, S
 import { TomSelectField } from '../ui/TomSelectField';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 
 const EMPTY_CONSTRAINTS = {
   fromDomain: '', fromAddress: '', subjectContains: '', mailbox: '',
@@ -427,7 +428,7 @@ export function AutoTagSettings() {
                       )}
                       {!previewRows.error && previewRows.map((row, i) => (
                         <div key={`${row.mailbox}-${row.uid}-${i}`} className="text-xs py-1 border-b border-mail-border last:border-0 flex justify-between gap-2">
-                          <span className="truncate">{row.subject || t('common.noSubject')}</span>
+                          <span className="truncate">{row.subject ? <Private kind="text">{row.subject}</Private> : t('common.noSubject')}</span>
                           <span className="shrink-0 text-mail-text-muted">
                             {row.matched
                               ? t('autoTag.confidence', { value: Math.round((row.confidence || 0) * 100) })

@@ -3,9 +3,12 @@ import { useT } from '../../i18n';
 import { compareNames } from '../../utils/collation';
 import { chartLocale, filterSenders, senderAccessibleLabel, senderLastDate } from '../../utils/insights/chartFormat';
 import '../../styles/insights-charts.css';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 export default function SenderList({ senders = [], selectedAddress, onSelect, searchable = true }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('recent');
   const visible = useMemo(() => [...filterSenders(senders, search)].sort((a, b) => {
@@ -34,10 +37,10 @@ export default function SenderList({ senders = [], selectedAddress, onSelect, se
     {!visible.length && <p className="insights-chart-empty">{t('insights.chart.noSenders')}</p>}
     <ul className="insights-sender-rows" aria-label={t('insights.chart.senderList')}>
       {visible.map(sender => <li key={sender.address}>
-        <button type="button" aria-label={senderAccessibleLabel(sender, t)}
+        <button type="button" aria-label={senderAccessibleLabel({ ...sender, name: pa(sender.name, 'name'), address: pa(sender.address, 'email') }, t)}
           aria-pressed={selectedAddress === sender.address} onClick={() => onSelect?.(sender.address)}>
-          <span className="insights-sender-identity"><strong>{sender.name || sender.address}</strong>
-            {sender.name && <span>{sender.address}</span>}</span>
+          <span className="insights-sender-identity"><strong><Private kind="name">{sender.name || sender.address}</Private></strong>
+            {sender.name && <span><Private kind="email">{sender.address}</Private></span>}</span>
           <span className="insights-sender-stats"><strong>{new Intl.NumberFormat(chartLocale()).format(sender.count)}</strong>
             <span>{senderLastDate(sender, t)}</span></span>
         </button>

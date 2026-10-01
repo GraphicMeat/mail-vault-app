@@ -3,6 +3,8 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Clock, X, Send, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useT, tErr, getLocale } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { useScheduledStore } from '../../stores/scheduledStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useAutostartState } from '../../hooks/useAutostartState';
@@ -133,6 +135,7 @@ function RowActions({ row, onReschedule, onCancel, onSendNow }) {
  */
 export function ScheduledFolderModal({ onClose, onOpenSettings }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const rows = useScheduledStore(s => s.rows);
   const loadRows = useScheduledStore(s => s.loadRows);
   const reschedule = useScheduledStore(s => s.reschedule);
@@ -211,9 +214,9 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
             const envelope = parseEnvelope(row);
             const summary = (
               <>
-                <div className="text-sm text-mail-text truncate">{envelope.to || t('scheduled.row.noRecipient')}</div>
+                <div className="text-sm text-mail-text truncate">{envelope.to ? <Private kind="name">{envelope.to}</Private> : t('scheduled.row.noRecipient')}</div>
                 <div className="text-xs text-mail-text-muted">
-                  {accountEmail(row.accountId)} — {formatWallClock(row.localTime, getLocale())} ({row.tz})
+                  {pa(accountEmail(row.accountId), 'email')} — {formatWallClock(row.localTime, getLocale())} ({row.tz})
                 </div>
               </>
             );

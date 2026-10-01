@@ -10,6 +10,7 @@ import { dateScopeFor, olderCutoffDate, yearBounds } from '../../../utils/abdSco
 import { formatDateLong } from '../../../utils/dateFormat';
 import { formatCount } from '../../../utils/formatCount';
 import { tErr, useT } from '../../../i18n/index.js';
+import { Private } from '../../privacy/Private';
 
 /** How long a click on a checkbox waits for the next one before the dry run is asked again. */
 export const SUMMARY_DEBOUNCE_MS = 250;
@@ -166,7 +167,7 @@ export default function AbdSetup({ account, mode, onBack, onStarted }) {
         <h4 className="font-semibold text-mail-text">{t('settings.backup.abd.setup.title')}</h4>
         <Button variant="ghost" size="sm" data-testid="abd-back" onClick={onBack}>{t('common.back')}</Button>
       </div>
-      <p className="text-xs text-mail-text-muted">{account.email}</p>
+      <p className="text-xs text-mail-text-muted"><Private kind="email">{account.email}</Private></p>
 
       {failed && (
         <div role="alert" data-testid="abd-list-failed" className="space-y-2">

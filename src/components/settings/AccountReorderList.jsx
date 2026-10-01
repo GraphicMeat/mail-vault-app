@@ -2,9 +2,11 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GripVertical } from 'lucide-react';
 import { useT } from '../../i18n';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 export function AccountReorderList({ accounts, selectedAccountId, onReorder, children, labels }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const instructionsId = useId();
   const listRef = useRef(null);
   const pointerRef = useRef(null);
@@ -139,7 +141,7 @@ export function AccountReorderList({ accounts, selectedAccountId, onReorder, chi
         data-drop-before={drag?.overList && drag.beforeId === account.id || undefined}
         className={`account-settings-account ${account.id === selectedAccountId ? 'account-settings-account-selected' : ''} ${drag?.id === account.id ? 'is-dragging' : ''}`}>
         {accounts.length > 1 && <button type="button" className="account-settings-drag-handle"
-          aria-label={labels?.reorder?.(account.email) || t('settings.accounts.reorderAccount', { email: account.email })}
+          aria-label={labels?.reorder?.(account.email) || t('settings.accounts.reorderAccount', { email: pa(account.email, 'email') })}
           aria-describedby={instructionsId} title={labels?.instructions || t('settings.accounts.reorderInstructions')}
           onPointerDown={event => startDrag(event, account)} onPointerMove={moveDrag}
           onPointerUp={finishDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}

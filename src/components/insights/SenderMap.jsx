@@ -8,11 +8,14 @@ import { MailX } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useInsightsStore } from '../../stores/insightsStore';
 import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 const EMPTY = Object.freeze([]);
 
 export default function SenderMap({ senders = [], endAt, selectedAddress, onSelect }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const [search, setSearch] = useState('');
   const [tooltip, setTooltip] = useState(null);
   const tooltipRef = useRef(null);
@@ -83,7 +86,7 @@ export default function SenderMap({ senders = [], endAt, selectedAddress, onSele
           const sender = byAddress.get(node.address);
           const diameter = Math.max(24, node.radius * 2);
           return <button type="button" key={node.address} className="insights-map-node"
-            aria-label={senderAccessibleLabel(sender, t)} aria-describedby={tooltip?.sender.address === sender.address ? 'insights-sender-tooltip' : undefined}
+            aria-label={senderAccessibleLabel({ ...sender, name: pa(sender.name, 'name'), address: pa(sender.address, 'email') }, t)} aria-describedby={tooltip?.sender.address === sender.address ? 'insights-sender-tooltip' : undefined}
             aria-pressed={node.address === selectedAddress} onClick={() => onSelect?.(node.address)}
             onPointerEnter={event => showTooltip(sender, event)} onPointerMove={event => showTooltip(sender, event)}
             onPointerLeave={() => setTooltip(null)} onFocus={event => showTooltip(sender, event)} onBlur={() => setTooltip(null)}
@@ -97,14 +100,14 @@ export default function SenderMap({ senders = [], endAt, selectedAddress, onSele
     </div>
     {tooltip && <div ref={tooltipRef} id="insights-sender-tooltip" role="tooltip" className="insights-sender-tooltip"
       style={{ left: tooltip.left, top: tooltip.top }}>
-      <strong>{tooltip.sender.name || tooltip.sender.address}</strong>
-      <span>{tooltip.sender.address}</span>
+      <strong><Private kind="name">{tooltip.sender.name || tooltip.sender.address}</Private></strong>
+      <span><Private kind="email">{tooltip.sender.address}</Private></span>
       <span>{t('insights.chart.counts', { received: tooltip.sender.received, sent: tooltip.sender.sent })}</span>
       <span>{senderLastDate(tooltip.sender, t)}</span>
     </div>}
     {layout.omittedCount > 0 && <p className="insights-chart-caption">{t('insights.chart.omitted', { count: layout.omittedCount })}</p>}
     {selected && <div className="insights-sender-detail" aria-live="polite">
-      <strong>{selected.name || selected.address}</strong><span>{selected.address}</span>
+      <strong><Private kind="name">{selected.name || selected.address}</Private></strong><span><Private kind="email">{selected.address}</Private></span>
       <span>{t('insights.chart.counts', { received: selected.received, sent: selected.sent })}</span>
       <span>{senderLastDate(selected, t)}</span>
       {selected.automationEvidence?.length > 0 && <span>{t('insights.chart.automation', { evidence: selected.automationEvidence.join(', ') })}</span>}

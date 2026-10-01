@@ -63,6 +63,7 @@ import { SettingsTabs } from './ui/SettingsTabs';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
 import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 import { useUnsavedStore } from '../stores/unsavedStore';
 import { useUnsubscribeSendersStore } from '../stores/unsubscribeStore';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
@@ -792,7 +793,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
                       : 'border-mail-border text-mail-text-muted hover:border-mail-accent hover:text-mail-text'
                   }`}
                 >
-                  {acc.email}
+                  <Private kind="email">{acc.email}</Private>
                 </button>
               ))}
             </div>

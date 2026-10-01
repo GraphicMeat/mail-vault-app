@@ -5,6 +5,7 @@ import { formatBytes } from '../../utils/formatBytes';
 import { isGmailAccount, resolveDailyLimitBytes, providerDefaultBytes } from '../../utils/transferLimits';
 import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 
 const PERIODS = [
   { id: 'day', labelKey: 'settings.dataUsage.period.day' },
@@ -72,9 +73,9 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
             {avatarInitial}
           </div>
           <div className="min-w-0">
-            {account.name && <div className="text-sm font-medium text-mail-text truncate">{account.name}</div>}
+            {account.name && <div className="text-sm font-medium text-mail-text truncate"><Private kind="name">{account.name}</Private></div>}
             <div className={`truncate ${account.name ? 'text-xs text-mail-text-muted' : 'text-sm font-medium text-mail-text'}`}>
-              {account.email}
+              <Private kind="email">{account.email}</Private>
             </div>
           </div>
         </div>

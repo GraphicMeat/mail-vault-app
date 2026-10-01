@@ -9,6 +9,7 @@ import { saveOneFile, saveFilesToDirectory } from '../../services/export/exportS
 import { sidecarName } from '../../services/export/exportNaming';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { t, useT  } from '../../i18n/index.js';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 // The label reads "Image" over a hint, but the accessible name is just the
 // choice: "One tall image" and "Separate images" both contain the word image,
@@ -32,6 +33,7 @@ function Choice({ name, value, checked, onChange, icon: Icon, label, hint }) {
 
 export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgrade, onShowSamples }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
 
@@ -89,7 +91,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
       if (result.partial) {
         notices.push(t('export.dialog.exportedSomeFailed', {
           count: result.failures.length,
-          failed: result.failures.map(f => f.subject || f.uid).join(', '),
+          failed: result.failures.map(f => pa(f.subject, 'text') || f.uid).join(', '),
         }));
       }
       const lost = [...(result.attachmentFailures || []), ...unwritten];

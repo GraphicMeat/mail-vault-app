@@ -18,6 +18,7 @@ import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { t, useT  } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 import { SettingsPageLayout } from '../ui/SettingsForm';
 import { formatCount } from '../../utils/formatCount';
 
@@ -101,7 +102,7 @@ function AccountRow({ account, selected, disabled, disabledLabel, accountColors,
       >
         {avatarInitial}
       </div>
-      <span className="text-sm text-mail-text flex-1 min-w-0 break-words text-left">{account.email}</span>
+      <span className="text-sm text-mail-text flex-1 min-w-0 break-words text-left"><Private kind="email">{account.email}</Private></span>
       {disabledLabel && (
         <span className="text-xs text-mail-text-muted">{disabledLabel}</span>
       )}
@@ -676,7 +677,7 @@ function SummaryRow({ label, account, accountColors }) {
         >
           {avatarInitial}
         </div>
-        <span className="text-sm text-mail-text">{account.email}</span>
+        <span className="text-sm text-mail-text"><Private kind="email">{account.email}</Private></span>
       </div>
     </div>
   );
@@ -731,9 +732,9 @@ function LiveLogSection() {
             logEntries.map((entry, i) => (
               <div key={i} className="flex items-center gap-1 text-mail-text-muted whitespace-nowrap">
                 <span>{entry.timestamp}</span>
-                <span className="text-mail-text">{entry.sender}</span>
+                <span className="text-mail-text"><Private kind="name">{entry.sender}</Private></span>
                 <span>--</span>
-                <span className="text-mail-text truncate">{entry.subject}</span>
+                <span className="text-mail-text truncate"><Private kind="text">{entry.subject}</Private></span>
                 {entry.status === 'ok' && <Check size={12} className="text-mail-success flex-shrink-0" />}
                 {entry.status === 'skipped' && <ArrowRight size={12} className="text-mail-text-muted flex-shrink-0" />}
                 {entry.status === 'failed' && <X size={12} className="text-mail-danger flex-shrink-0" />}

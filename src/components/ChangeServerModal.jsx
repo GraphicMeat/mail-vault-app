@@ -12,6 +12,7 @@ import { detectProvider } from './AccountModal.jsx';
 import { deriveSuggestion, classifyVerifyError, nextStepAfterVerify } from './changeServer/helpers.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { t as tr, useT  } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 const inputClass = 'w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:outline-none focus:border-mail-accent';
 
@@ -210,7 +211,7 @@ export default function ChangeServerModal() {
     >
         <div className="flex items-center justify-between mb-3">
           <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
-            <Server size={18} /> Change server — {account.email}
+            <Server size={18} /> Change server — <Private kind="email">{account.email}</Private>
           </h2>
           {step === 2 && activeRestore && (
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('changeServer.minimizeRestoreContinuesBackground')}>

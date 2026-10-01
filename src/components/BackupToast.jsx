@@ -4,9 +4,11 @@ import { HardDrive, Loader2 } from 'lucide-react';
 import { useBackupStore } from '../stores/backupStore.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { useT, t  } from '../i18n/index.js';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 
 export function BackupToast({ showSettings, onOpenBackup }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const activeBackup = useBackupStore(s => s.activeBackup);
 
   if (!activeBackup || !activeBackup.active || showSettings) return null;
@@ -24,7 +26,7 @@ export function BackupToast({ showSettings, onOpenBackup }) {
             <div className="flex items-center gap-1">
               <Loader2 size={12} className="text-mail-accent-text animate-spin flex-shrink-0" />
               <span className="text-xs font-semibold text-mail-text truncate">
-                {t('settings.backup.schedule.backingUpAccount', { email: activeBackup.accountEmail })}
+                {t('settings.backup.schedule.backingUpAccount', { email: pa(activeBackup.accountEmail, 'email') })}
               </span>
             </div>
             <span className="text-[10px] text-mail-text-muted">

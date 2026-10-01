@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useViewStore } from '../stores/viewStore';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 
 /// What the definition on screen would find, right now.
 ///
@@ -55,8 +56,8 @@ export function ViewPreview({ def, limit = 25 }) {
 
     {result?.available && result.rows.length > 0 && <ul className="view-preview-rows" data-testid="view-preview-rows">
       {result.rows.map(email => <li key={rowKey(email)}>
-        <span className="view-preview-sender">{email.from?.name || email.from?.address || ''}</span>
-        <span className="view-preview-subject">{email.subject || t('views.preview.noSubject')}</span>
+        <span className="view-preview-sender"><Private kind="name">{email.from?.name || email.from?.address || ''}</Private></span>
+        <span className="view-preview-subject">{email.subject ? <Private kind="text">{email.subject}</Private> : t('views.preview.noSubject')}</span>
         <span className="view-preview-date">{email.date ? new Date(email.date).toLocaleDateString() : ''}</span>
       </li>)}
     </ul>}

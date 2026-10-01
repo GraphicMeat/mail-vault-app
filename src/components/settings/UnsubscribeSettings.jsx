@@ -11,6 +11,8 @@ import { formatCount } from '../../utils/formatCount';
 import { Button } from '../ui/Button';
 import { SettingsPageLayout, SettingsSection } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 const CELL = 'py-1.5 px-2 text-left align-middle';
 const byLastAt = (a, b) => (Date.parse(b.lastAt) || 0) - (Date.parse(a.lastAt) || 0);
@@ -61,6 +63,7 @@ function ScopePills({ label, options, value, onChange }) {
  */
 export function UnsubscribeSettings({ onMinimize }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const accounts = useMailStore(s => s.accounts);
   const accountColors = useSettingsStore(s => s.accountColors);
   const byAccount = useUnsubscribeSendersStore(s => s.byAccount);
@@ -89,9 +92,9 @@ export function UnsubscribeSettings({ onMinimize }) {
       count: accounts.reduce((sum, account) => sum + (byAccount[account.id]?.senders.length || 0), 0) },
     ...accounts.map(account => {
       const entry = byAccount[account.id];
-      return { value: account.id, label: account.email, color: getAccountColor(accountColors, account),
+      return { value: account.id, label: pa(account.email, 'email'), color: getAccountColor(accountColors, account),
         state: stateOf(entry), count: entry?.senders.length || 0,
-        title: entry?.status === 'error' ? t('unsubscribe.accountLoadFailed', { account: account.email, error: entry.error }) : undefined };
+        title: entry?.status === 'error' ? t('unsubscribe.accountLoadFailed', { account: pa(account.email, 'email'), error: entry.error }) : undefined };
     }),
   ];
 
@@ -124,7 +127,7 @@ export function UnsubscribeSettings({ onMinimize }) {
       {accounts.length > 1 && <ScopePills label={t('unsubscribe.scope')} options={scopes} value={current} onChange={setScope} />}
       {failed.length > 0 && <div role="alert" className="mb-3 space-y-1">
         {failed.map(({ account, entry }) => <p key={account.id} className="text-sm text-mail-danger">
-          {t('unsubscribe.accountLoadFailed', { account: account.email, error: entry.error })}
+          {t('unsubscribe.accountLoadFailed', { account: pa(account.email, 'email'), error: entry.error })}
         </p>)}
       </div>}
       {loading && senders.length === 0 && <p className="text-sm text-mail-text-muted" aria-busy="true">{t('unsubscribe.loading')}</p>}
@@ -138,9 +141,9 @@ export function UnsubscribeSettings({ onMinimize }) {
           <th className={CELL}><span className="sr-only">{t('unsubscribe.action')}</span></th>
         </tr></thead>
         <tbody>{senders.map(sender => {
-          const label = sender.name || sender.address;
+          const label = pa(sender.name || sender.address, 'name');
           const account = allShown && accountOf(sender.accountId);
-          return <tr key={`${sender.accountId}\u0000${sender.address}`} data-sender={sender.address} className="border-b border-mail-border last:border-0">
+          return <tr key={`${sender.accountId}\u0000${sender.address}`} data-sender={pa(sender.address, 'email')} className="border-b border-mail-border last:border-0">
             <td className={`${CELL} max-w-0 w-1/2`}>
               {onMinimize
                 ? <button type="button" onClick={() => showSenderMail(sender)} aria-label={t('unsubscribe.showMail', { sender: label })}
@@ -148,10 +151,10 @@ export function UnsubscribeSettings({ onMinimize }) {
                   className="block max-w-full truncate text-left font-medium text-mail-accent-text hover:underline underline-offset-2 rounded-sm">{label}</button>
                 : <div className="font-medium text-mail-text truncate">{label}</div>}
               {(sender.name || account) && <div className="flex items-center gap-x-2 min-w-0 text-xs text-mail-text-muted">
-                {sender.name && <span className="truncate">{sender.address}</span>}
+                {sender.name && <span className="truncate"><Private kind="email">{sender.address}</Private></span>}
                 {account && <span data-testid="unsubscribe-row-account" className="inline-flex items-center gap-1 min-w-0 shrink-0 max-w-[50%]">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: getAccountColor(accountColors, account) }} aria-hidden="true" />
-                  <span className="truncate">{account.email}</span>
+                  <span className="truncate"><Private kind="email">{account.email}</Private></span>
                 </span>}
               </div>}
             </td>
@@ -179,8 +182,8 @@ export function UnsubscribeSettings({ onMinimize }) {
           <th className={`${CELL} font-medium`}>{t('unsubscribe.colStatus')}</th>
         </tr></thead>
         <tbody>{history.map((row, index) => <tr key={`${row.accountId}-${row.address}-${row.unsubscribedAt}-${index}`} className="border-b border-mail-border last:border-0">
-          <td className={CELL}>{row.address}</td>
-          <td className={`${CELL} text-xs text-mail-text-muted`}>{accountLabel(row.accountId)}</td>
+          <td className={CELL}><Private kind="email">{row.address}</Private></td>
+          <td className={`${CELL} text-xs text-mail-text-muted`}><Private kind="name">{accountLabel(row.accountId)}</Private></td>
           <td className={`${CELL} text-xs text-mail-text-muted`}>{formatDateTime(row.unsubscribedAt)}</td>
           <td className={`${CELL} text-xs`}>{methodLabel(row.method)} · {statusLabel(row.status)}</td>
         </tr>)}</tbody>

@@ -3,6 +3,8 @@ import { Check, Copy, ExternalLink, Paperclip, Star, Trash2 } from 'lucide-react
 import { send } from '../../services/transport';
 import { getCleanBase64 } from '../../services/attachmentUtils';
 import { useT, getLocale } from '../../i18n';
+import { Private } from '../privacy/Private';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 const locale = () => (getLocale() === 'zh-Hans' ? 'zh-CN' : getLocale());
 /// A card action; one it cannot take reads as unusable, never as live.
@@ -26,6 +28,7 @@ export function linkDomains(links = []) {
 /// must not download whole messages. No local copy, no preview; the file
 /// name in the attachment list stands in.
 function PhotoThumb({ copy, attachment }) {
+  const pa = usePrivateAttr();
   const [src, setSrc] = useState(null);
   const ref = useRef(null);
   useEffect(() => {
@@ -45,7 +48,7 @@ function PhotoThumb({ copy, attachment }) {
     return () => { live = false; observer.disconnect(); };
   }, [copy.accountId, copy.mailbox, copy.uid, attachment.partIndex, attachment.mime]);
   return <span ref={ref} className="block">
-    {src && <img src={src} alt={attachment.name} data-testid="note-thumb"
+    {src && <img src={src} alt={pa(attachment.name, 'filename')} data-testid="note-thumb"
       className="w-full max-h-32 object-cover rounded-md border border-mail-border" />}
   </span>;
 }
@@ -55,6 +58,7 @@ export default function NoteCard({
   onFocus, onOpen, onCopyLink, onOpenLink, onStar, onDone, onDelete,
 }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const domains = linkDomains(card.links);
   const photo = (card.attachments || []).find(attachment => String(attachment.mime || '').startsWith('image/'));
   const date = card.date ? new Date(card.date * 1000).toLocaleDateString(locale(), { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -67,7 +71,7 @@ export default function NoteCard({
   return <article
     data-testid="note-card" data-note-card data-key={card.key} data-col={col} data-row={row}
     data-starred={card.starred ? 'true' : undefined} aria-busy={busy || undefined}
-    tabIndex={active ? 0 : -1} aria-label={subject}
+    tabIndex={active ? 0 : -1} aria-label={pa(subject, 'text')}
     onFocus={event => { if (event.target === event.currentTarget) onFocus?.(); }}
     onClick={() => onOpen?.(card)}
     onKeyDown={event => {
@@ -77,8 +81,8 @@ export default function NoteCard({
     }}
     className="group flex flex-col gap-2 p-3 rounded-lg border border-mail-border bg-mail-surface cursor-pointer
       hover:border-mail-accent/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mail-accent">
-    <h3 className="text-sm font-semibold text-mail-text break-words" data-testid="note-subject">{subject}</h3>
-    {card.snippet && <p className="text-xs text-mail-text-muted line-clamp-3 break-words" data-testid="note-snippet">{card.snippet}</p>}
+    <h3 className="text-sm font-semibold text-mail-text break-words" data-testid="note-subject"><Private kind="text">{subject}</Private></h3>
+    {card.snippet && <p className="text-xs text-mail-text-muted line-clamp-3 break-words" data-testid="note-snippet"><Private kind="text">{card.snippet}</Private></p>}
     {photo && <PhotoThumb copy={card.copies[0]} attachment={photo} />}
     {domains.length > 0 && <ul className="flex flex-wrap gap-1" aria-label={t('notes.links')}>
       {domains.map(host => <li key={host} data-testid="note-domain"
@@ -87,12 +91,12 @@ export default function NoteCard({
     {card.attachments?.length > 0 && <ul className="flex flex-col gap-0.5" aria-label={t('notes.attachments')}>
       {card.attachments.map(attachment => <li key={attachment.partIndex} data-testid="note-attachment"
         className="flex items-center gap-1 text-[11px] text-mail-text-muted min-w-0">
-        <Paperclip size={11} aria-hidden="true" className="shrink-0" /><span className="truncate">{attachment.name}</span>
+        <Paperclip size={11} aria-hidden="true" className="shrink-0" /><span className="truncate"><Private kind="filename">{attachment.name}</Private></span>
       </li>)}
     </ul>}
     <div className="flex items-center gap-1.5 text-[11px] text-mail-text-muted">
       <span className="w-2 h-2 rounded-full shrink-0" data-testid="note-account-dot"
-        style={{ backgroundColor: color }} title={account?.email} aria-label={account?.email} role="img" />
+        style={{ backgroundColor: color }} title={pa(account?.email, 'email')} aria-label={pa(account?.email, 'email')} role="img" />
       <time dateTime={card.date ? new Date(card.date * 1000).toISOString() : undefined} className="flex-1">{date}</time>
       <span className="flex items-center gap-0.5 opacity-70 group-hover:opacity-100 group-focus-within:opacity-100">
         {hasLink && <button type="button" className={ACTION} data-testid="note-copy-link"

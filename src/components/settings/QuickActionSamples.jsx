@@ -10,6 +10,7 @@ import { QUICK_ACTION_PRESETS, activeQuickActionPreset } from '../../utils/quick
 import { getSenderName } from '../../utils/emailParser';
 import { displayText } from '../../utils/bidiText';
 import { useT } from '../../i18n/index.js';
+import { Private } from '../privacy/Private';
 
 // Quick actions are the one Appearance setting whose examples are the real
 // thing: the list row, the selection bar and the reader toolbar, over the
@@ -63,8 +64,8 @@ function SurfaceSample({ surface, config, rows, onAction = NOOP, list = false })
         {...NOOP_READER} isArchived={!!email.isArchived} isRead={!!email.flags?.includes('\\Seen')}
         isLocalOnly={false} isSentEmail={false} singleRecipient={false} />
       {list && <div className="quick-actions-sample-reader">
-        <strong dir="auto">{displayText(email.subject, t('common.noSubject'))}</strong>
-        <span dir="auto">{getSenderName(email)}</span>
+        <strong dir="auto"><Private kind="text">{displayText(email.subject, t('common.noSubject'))}</Private></strong>
+        <span dir="auto"><Private kind="name">{getSenderName(email)}</Private></span>
       </div>}
     </>;
   }

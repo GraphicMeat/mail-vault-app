@@ -17,6 +17,8 @@ import { EmailPreviewFrame } from './email/EmailPreviewFrame';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, tErr, useT   } from '../i18n/index.js';
+import { Private } from './privacy/Private';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 import { formatCount } from '../utils/formatCount';
 import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { SettingsPageLayout } from './ui/SettingsForm';
@@ -72,7 +74,7 @@ export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
           </Button>
           <span className="text-sm font-medium text-mail-text truncate">
             {page === 'viewer'
-              ? (store.viewerEmail?.subject || 'Email')
+              ? <Private kind="text">{store.viewerEmail?.subject || 'Email'}</Private>
               : tr('timeCapsule.snapshot', { formatSnapshotDate: formatSnapshotDate(store.activeSnapshot?.timestamp) })}
           </span>
           {page === 'browser' && (
@@ -138,6 +140,7 @@ function PremiumGate({ onUpgrade }) {
 
 export function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOpen, onCreate, onRetry, onDelete, onConfirmDelete, accountEmail }) {
   const t = useT();
+  const pa = usePrivateAttr();
   return (
     <SettingsPageLayout className="overflow-y-auto h-full">
       {/* Header card */}
@@ -146,7 +149,7 @@ export function SnapshotList({ snapshots, loading, creating, error, confirmDelet
           <div className="min-w-0">
             <h4 className="text-sm font-semibold text-mail-text">{t('timeCapsule.mailboxSnapshots')}</h4>
             <p className="text-xs text-mail-text-muted mt-0.5">
-              {accountEmail ? t('timeCapsule.pointTimeRecords', { accountEmail }) : t('timeCapsule.selectAccountViewSnapshots')}
+              {accountEmail ? t('timeCapsule.pointTimeRecords', { accountEmail: pa(accountEmail, 'email') }) : t('timeCapsule.selectAccountViewSnapshots')}
             </p>
           </div>
           <button
@@ -321,13 +324,13 @@ function SnapshotBrowser({ accountId }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm truncate flex-1 ${isHydrated ? 'font-medium text-mail-text' : 'text-mail-text-muted italic'}`}>
-                          {email.subject || (isHydrated ? '(No subject)' : t('timeCapsule.uid', { email: email.uid }))}
+                          {email.subject ? <Private kind="text">{email.subject}</Private> : (isHydrated ? '(No subject)' : t('timeCapsule.uid', { email: email.uid }))}
                         </span>
                         {hasAttach && <Paperclip size={12} className="text-mail-text-muted shrink-0" />}
                         {email.date && <span className="text-[11px] text-mail-text-muted shrink-0">{formatTcEmailDate(email.date)}</span>}
                       </div>
                       {fromStr && (
-                        <p className="text-xs text-mail-text-muted truncate mt-0.5">{fromStr}</p>
+                        <p className="text-xs text-mail-text-muted truncate mt-0.5"><Private kind="name">{fromStr}</Private></p>
                       )}
                     </div>
                   </button>
@@ -371,11 +374,11 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
 
       {/* Email header */}
       <div className="px-6 py-4 border-b border-mail-border shrink-0 max-h-[35vh] overflow-y-auto break-words">
-        <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || '(No subject)'}</h3>
+        <h3 className="text-lg font-semibold text-mail-text mb-2"><Private kind="text">{email.subject || '(No subject)'}</Private></h3>
         <div className="text-sm text-mail-text-muted space-y-0.5">
-          <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text">{from}</span></p>
-          {to && <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text">{to}</span></p>}
-          {cc && <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('timeCapsule.cc')}</span> <span className="text-mail-text">{cc}</span></p>}
+          <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text"><Private kind="name">{from}</Private></span></p>
+          {to && <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text"><Private kind="name">{to}</Private></span></p>}
+          {cc && <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('timeCapsule.cc')}</span> <span className="text-mail-text"><Private kind="name">{cc}</Private></span></p>}
           <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('timeCapsule.date')}</span> <span className="text-mail-text">{formatDateTime(email.date)}</span></p>
         </div>
       </div>
@@ -385,7 +388,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
         {email.html ? (
           <EmailPreviewFrame html={email.html} title={t('timeCapsule.snapshotEmailBody')} message={email} />
         ) : email.text || email.textBody ? (
-          <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{email.text || email.textBody}</pre>
+          <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4"><Private kind="text">{email.text || email.textBody}</Private></pre>
         ) : (
           <p className="text-sm text-mail-text-muted italic px-6 py-4">{t('timeCapsule.noMessageBodyAvailable')}</p>
         )}

@@ -8,6 +8,7 @@ import { useFieldStore } from '../stores/fieldStore';
 import { useMailStore } from '../stores/mailStore';
 import { useUnsavedStore } from '../stores/unsavedStore';
 import { useT } from '../i18n/index.js';
+import { Private } from './privacy/Private';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
 import { TypeaheadChips } from './ui/TypeaheadChips';
@@ -516,7 +517,7 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
           className="view-choice-button" aria-pressed={chosenAccounts.includes(account.id)}
           onClick={() => setChosenAccounts(current => (current.includes(account.id)
             ? current.filter(id => id !== account.id)
-            : [...current, account.id]))}>{account.email}</button>)}
+            : [...current, account.id]))}><Private kind="email">{account.email}</Private></button>)}
       </div>
     </div>}
 

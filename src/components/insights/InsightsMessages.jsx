@@ -3,6 +3,7 @@ import {X} from 'lucide-react';
 import {Button} from '../ui/Button';
 import {EmailViewer} from '../EmailViewer';
 import {useT,getLocale} from '../../i18n';
+import {Private} from '../privacy/Private';
 
 const ROW_HEIGHT=76, WINDOW_ROWS=24, OVERSCAN=4;
 export default function InsightsMessages({messages=[],loading=false,onClose,onOpenMessage,detailOpen=false,onDetailChange,onCloseReader,onCancel,onComposeReply}) {
@@ -42,7 +43,7 @@ export default function InsightsMessages({messages=[],loading=false,onClose,onOp
             return <li key={match.key} aria-posinset={index+1} aria-setsize={messages.length} style={{position:'absolute',height:ROW_HEIGHT,top:index*ROW_HEIGHT,left:0,right:0}}>
               <button type="button" data-testid="insights-match" data-key={match.key} data-account-id={copy?.accountId} data-mailbox={copy?.mailbox} data-uid={copy?.uid} data-index={index}
                 onKeyDown={e=>move(e,index)} tabIndex={index===active?0:-1} onFocus={()=>setActive(index)} onClick={()=>open(match)} aria-busy={pending===match.key}>
-                <strong>{match.subject || t('insights.untitled')}</strong><span>{match.from?.name || match.from?.address}</span>
+                <strong>{match.subject ? <Private kind="text">{match.subject}</Private> : t('insights.untitled')}</strong><span><Private kind="name">{match.from?.name || match.from?.address}</Private></span>
                 <small>{dateText(match.eventAt)} · {copy?.mailbox}</small>
               </button>
             </li>;
