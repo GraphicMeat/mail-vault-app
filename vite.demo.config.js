@@ -28,6 +28,8 @@ export default defineConfig({
   build: {
     outDir: resolve(process.cwd(), 'website/demo'),
     emptyOutDir: true,
+    // Same as vite.config.js: a small font would otherwise inline as data:.
+    assetsInlineLimit: file => (/\.(woff2?|ttf|otf|eot)$/i.test(file) ? false : undefined),
     rollupOptions: {
       input: resolve(process.cwd(), 'src/demo/index.html'),
       output: {

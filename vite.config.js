@@ -10,6 +10,9 @@ export default defineConfig({
     format: 'es'
   },
   build: {
+    // The CSP has `font-src 'self'` (no data:), so a font under the 4KB inline
+    // limit would be inlined into the CSS and blocked. Ship fonts as files.
+    assetsInlineLimit: file => (/\.(woff2?|ttf|otf|eot)$/i.test(file) ? false : undefined),
     rollupOptions: {
       input: 'app.html'
     }
