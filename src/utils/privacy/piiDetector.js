@@ -75,6 +75,16 @@ export function buildNameDictionary({ names = [] } = {}) {
 
 export const EMPTY_DICTIONARY = Object.freeze(buildNameDictionary({ names: [] }));
 
+/** Both dictionaries' names in one (a frame's own parties on top of the global set). */
+export function unionDictionaries(a, b) {
+  if (!b?.size) return a;
+  if (!a?.size) return b;
+  const fullNames = new Set([...a.fullNames, ...b.fullNames]);
+  const tokens = new Set([...a.tokens, ...b.tokens]);
+  const unspaced = new Set([...a.unspaced, ...b.unspaced]);
+  return { fullNames, tokens, unspaced, unspacedMax: Math.max(a.unspacedMax, b.unspacedMax), size: tokens.size + fullNames.size + unspaced.size };
+}
+
 const EMAIL = /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
 // A run that starts and ends on a digit, at most one leading '+' and '('.
 const PHONE = /(?<![\p{L}\p{N}+])\+?\(?\d[\d\s().-]{5,18}\d(?![\p{L}\p{N}])/gu;

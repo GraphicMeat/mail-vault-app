@@ -36,7 +36,7 @@ export function OriginalThemeToggle({ dark, onToggle, testid = 'compose-original
 // over IPC, with no store to read a thread from). Light runs nothing: the
 // sandbox has no allow-scripts. Dark needs Dark Reader, so it takes the reading
 // pane's model: scripts allowed, and the frame's nonce CSP runs only ours.
-export function OriginalFrame({ html, dark, padding = '12px 16px', title, className = '', autoSize = true }) {
+export function OriginalFrame({ html, dark, padding = '12px 16px', title, className = '', autoSize = true, message = null }) {
   const frameRef = useRef(null);
   const palette = useThemeStore(s => s.palette);
   // Same gate the reading pane uses (EmailViewer/ChatBubbleView/
@@ -60,7 +60,7 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
       privacy: privacyOn,
     });
   }, [html, dark, palette, padding, trackerBlocking, privacyOn]);
-  useBodyPrivacy(frameRef, srcDoc);
+  useBodyPrivacy(frameRef, srcDoc, { message });
   return (
     <iframe
       ref={frameRef}

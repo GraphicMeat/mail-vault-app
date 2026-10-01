@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "개인정보 보호 모드는 프리미엄 기능입니다",
   "privacy.upsellBody": "화면을 녹화하거나 공공장소에서 메일을 읽어도 누구에게 쓰는지 드러나지 않습니다.",
   "privacy.notificationTitle": "새 메시지",
-  "privacy.sourceBlocked": "메시지 소스를 보려면 개인정보 보호 모드를 끄세요."
+  "privacy.sourceBlocked": "메시지 소스를 보려면 개인정보 보호 모드를 끄세요.",
+  "privacy.windowBlocked": "이 메시지를 별도 창에서 열려면 개인정보 보호 모드를 끄세요."
 }

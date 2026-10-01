@@ -1,12 +1,16 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { usePrivacyActive, attachPeekToDocument } from './usePrivacy';
 import { usePrivacyStore } from '../stores/privacyStore';
-import { usePrivacyDictStore, getPrivacyDictionary, isPrivacyDictionaryReady } from '../utils/privacy/privacyDictionary';
-import { applyPrivacyRedaction, restorePrivacyRedaction, releasePrivacyGate, PRIVACY_GATE_ID } from '../utils/iframePrivacyRedact';
+import { usePrivacyDictStore, getPrivacyDictionary, isPrivacyDictionaryReady, collectPrivacyNames } from '../utils/privacy/privacyDictionary';
+import { buildNameDictionary, unionDictionaries } from '../utils/privacy/piiDetector';
+import {
+  applyPrivacyRedaction, restorePrivacyRedaction, releasePrivacyGate, reinstatePrivacyGate, isPrivacyGated,
+} from '../utils/iframePrivacyRedact';
 
 // When the pass first saw each frame document: the readiness wait is per
 // document, so a dictionary update mid-wait does not restart the clock.
 const firstSeen = new WeakMap();
+let failureLogged = false;
 
 const frameDoc = (iframe) => {
   try { return iframe.contentDocument || iframe.contentWindow?.document || null; } catch { return null; }
@@ -59,18 +63,30 @@ function useFrameEffect(iframeRef, effect, deps) {
  * paints. While the contacts index is still loading, the gate is held for up
  * to `readyTimeoutMs`; after that the frame shows with what the dictionary
  * has (patterns plus every name on loaded headers), and is masked again when
- * the index lands.
+ * the index lands. `message`, the message in this frame, adds its own
+ * parties to this frame's pass, so they are masked even if the global
+ * dictionary never arrives.
+ * ponytail: the hold is a blank frame; the spec's small spinner is not built,
+ * revisit if a held frame reads as broken.
+ *
+ * A pass that throws fails closed: the gate goes back on and the body stays
+ * hidden until a later pass succeeds.
  */
-export function useBodyPrivacy(iframeRef, contentKey, { readyTimeoutMs = 3000 } = {}) {
+export function useBodyPrivacy(iframeRef, contentKey, { message = null, readyTimeoutMs = 3000 } = {}) {
   const active = usePrivacyActive();
   const enabled = usePrivacyStore(s => s.enabled);
   const version = usePrivacyDictStore(s => s.version);
+  // Keyed by the names, not the object: callers often pass a fresh merge per render.
+  const ownKey = useMemo(() => (message ? collectPrivacyNames({ emails: [message] }).join('\u0000') : ''), [message]);
+  const ownDict = useMemo(() => (ownKey ? buildNameDictionary({ names: ownKey.split('\u0000') }) : null), [ownKey]);
 
   // Layout timing: when masking turns on or a peek ends, the frame on screen
   // is masked before the next paint, in step with the React-rendered fields.
   useFrameEffect(iframeRef, (iframe) => {
     let observer = null;
     let timer = null;
+    let dict = null; // built once per run: the run restarts on every dictionary change
+    const dictNow = () => (dict ||= unionDictionaries(getPrivacyDictionary(), ownDict));
 
     const pass = () => {
       const doc = frameDoc(iframe);
@@ -83,15 +99,21 @@ export function useBodyPrivacy(iframeRef, contentKey, { readyTimeoutMs = 3000 } 
         releasePrivacyGate(doc);
         return;
       }
-      if (!firstSeen.has(doc)) firstSeen.set(doc, Date.now());
-      // Only a gated frame is worth holding: one already on screen is masked
-      // now with what the dictionary has.
-      if (!isPrivacyDictionaryReady() && doc.getElementById(PRIVACY_GATE_ID)
-        && Date.now() - firstSeen.get(doc) < readyTimeoutMs) {
-        timer = setTimeout(pass, 150);
-        return; // gate stays on
+      try {
+        if (!firstSeen.has(doc)) firstSeen.set(doc, Date.now());
+        // Only a gated frame is worth holding: one already on screen is masked
+        // now with what the dictionary has.
+        if (!isPrivacyDictionaryReady() && isPrivacyGated(doc)
+          && Date.now() - firstSeen.get(doc) < readyTimeoutMs) {
+          timer = setTimeout(pass, 150);
+          return; // gate stays on
+        }
+        applyPrivacyRedaction(doc, dictNow());
+      } catch (err) {
+        reinstatePrivacyGate(doc);
+        if (!failureLogged) { failureLogged = true; console.error('[privacy] masking a message frame failed; it stays hidden', err); }
+        return;
       }
-      applyPrivacyRedaction(doc, getPrivacyDictionary());
       const MO = doc.defaultView?.MutationObserver;
       if (MO) {
         // Runs as a microtask, before the next paint: new text is masked before it is seen.
@@ -107,7 +129,7 @@ export function useBodyPrivacy(iframeRef, contentKey, { readyTimeoutMs = 3000 } 
       observer?.disconnect();
       clearTimeout(timer);
     };
-  }, [contentKey, active, version, readyTimeoutMs]);
+  }, [contentKey, active, version, ownDict, readyTimeoutMs]);
 
   // Option-hold peek from inside the frame. Its own effect: a peek flips
   // `active` above, and re-running this with it would dispose the listener

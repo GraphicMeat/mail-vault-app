@@ -231,7 +231,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   // The full-view window is a third reader of the same body — the highlight
   // follows the message, not the pane it is drawn in. Privacy masking first:
   // it must run on `load` before the highlight.
-  useBodyPrivacy(iframeRef, iframeContent);
+  useBodyPrivacy(iframeRef, iframeContent, { message: email });
   useSearchHighlight(iframeRef, iframeContent);
 
   useEffect(() => {

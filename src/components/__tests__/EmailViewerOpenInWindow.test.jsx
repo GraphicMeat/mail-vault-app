@@ -93,7 +93,7 @@ describe('EmailViewer under privacy mode', () => {
     renderViewer({ html: '<p>Rich <b>body</b></p>', text: 'Rich body' }, { showOpenInWindow: true });
     openInWindow();
     expect(windowCalls()).toHaveLength(0);
-    expect(useMailStore.getState().error).toBe(t('privacy.sourceBlocked'));
+    expect(useMailStore.getState().error).toBe(t('privacy.windowBlocked'));
   });
 
   it('the reading pane frame starts gated', () => {

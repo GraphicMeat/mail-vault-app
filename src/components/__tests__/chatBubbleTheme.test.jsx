@@ -14,6 +14,7 @@ vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: () => null }));
 const { ChatBubbleView } = await import('../ChatBubbleView');
 const { useThemeStore } = await import('../../stores/themeStore');
 const { getEmailColors } = await import('../../utils/mailChrome');
+const { usePrivacyStore } = await import('../../stores/privacyStore');
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
 });
@@ -34,5 +35,22 @@ describe('chat HTML theme', () => {
     expect(frame.getAttribute('srcdoc')).toContain(getEmailColors('light', 'graphite').text);
     act(() => useThemeStore.setState({ theme: 'dark', palette: 'indigo' }));
     expect(frame.getAttribute('srcdoc')).toContain(getEmailColors('dark', 'indigo').text);
+  });
+
+  it('privacy mode: the hand-built bubble document starts gated, inline and in the head', () => {
+    usePrivacyStore.setState({ enabled: true });
+    try {
+      const email = { uid: 8, _accountId: 'demo', _mailbox: 'INBOX', date: '2026-09-01',
+        from: { name: 'Nell', address: 'nell@example.com' }, to: [], subject: 'Studio plans',
+        html: '<p>Shall we meet at two?</p>', text: 'Shall we meet at two?', flags: [] };
+      const { container } = render(<ChatBubbleView correspondent={{ name: 'Nell', email: 'nell@example.com' }}
+        threadId="studio" threadsMap={new Map([['studio', { subject: 'Studio plans', emails: [email] }]])}
+        userEmail="rowan@example.com" onBack={() => {}} />);
+      const doc = new DOMParser().parseFromString(container.querySelector('iframe').getAttribute('srcdoc'), 'text/html');
+      expect(doc.head.querySelector('style#mv-privacy-gate')).not.toBeNull();
+      expect(doc.documentElement.getAttribute('style')).toBe('opacity:0!important');
+    } finally {
+      usePrivacyStore.setState({ enabled: false });
+    }
   });
 });

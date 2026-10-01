@@ -383,7 +383,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
       {/* Email body */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {email.html ? (
-          <EmailPreviewFrame html={email.html} title={t('timeCapsule.snapshotEmailBody')} />
+          <EmailPreviewFrame html={email.html} title={t('timeCapsule.snapshotEmailBody')} message={email} />
         ) : email.text || email.textBody ? (
           <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{email.text || email.textBody}</pre>
         ) : (

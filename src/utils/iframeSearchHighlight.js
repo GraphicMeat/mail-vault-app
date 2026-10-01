@@ -13,6 +13,8 @@
  * author wrote it. Clearing puts the original text nodes back.
  */
 
+import { isPrivacyGated } from './iframePrivacyRedact';
+
 const MARK_CLASS = 'mv-search-hit';
 const STYLE_ID = 'mv-search-hit-style';
 // Their text is markup, not reading matter; `TEXTAREA` because a value is not
@@ -61,6 +63,11 @@ function ensureStyle(doc) {
 export function applySearchHighlight(doc, terms) {
   clearSearchHighlight(doc);
   if (!doc?.body || !terms?.length) return 0;
+  // Privacy mode has not masked this frame yet: a mark now would split a name
+  // or an address into pieces the redaction pass no longer recognizes, and
+  // they would show when the gate comes off. useSearchHighlight paints again
+  // on PRIVACY_RELEASED_EVENT.
+  if (isPrivacyGated(doc)) return 0;
 
   const re = new RegExp(terms.map(escapeRegExp).join('|'), 'gi');
   // Collected first: replacing a node while the walker is on it invalidates

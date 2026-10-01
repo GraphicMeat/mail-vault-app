@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "Privacy mode is a Premium feature",
   "privacy.upsellBody": "Record your screen or read mail in public without showing who you write to.",
   "privacy.notificationTitle": "New message",
-  "privacy.sourceBlocked": "Turn off privacy mode to view the message source."
+  "privacy.sourceBlocked": "Turn off privacy mode to view the message source.",
+  "privacy.windowBlocked": "Turn off privacy mode to open this message in its own window."
 }

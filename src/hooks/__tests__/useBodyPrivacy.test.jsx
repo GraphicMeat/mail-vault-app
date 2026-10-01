@@ -8,6 +8,9 @@ import { setPrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 import { buildNameDictionary, EMPTY_DICTIONARY } from '../../utils/privacy/piiDetector';
 import { buildEmailIframeHtml } from '../../utils/emailIframeTemplate';
 import { PRIVACY_GATE_ID } from '../../utils/iframePrivacyRedact';
+import { applySearchHighlight } from '../../utils/iframeSearchHighlight';
+import { useSearchHighlight } from '../useSearchHighlight';
+import { useSearchStore } from '../../stores/searchStore';
 
 // jsdom does not load srcdoc, so the test frame's document is written by hand.
 function Frame({ html, show = true }) {
@@ -15,13 +18,20 @@ function Frame({ html, show = true }) {
   useBodyPrivacy(ref, html, { readyTimeoutMs: 3000 });
   return show ? <iframe ref={ref} title="t" /> : null;
 }
+// The reader's real pairing: mask first, then the search highlight.
+function SearchFrame({ html, message = null }) {
+  const ref = useRef(null);
+  useBodyPrivacy(ref, html, { message, readyTimeoutMs: 3000 });
+  useSearchHighlight(ref, html);
+  return <iframe ref={ref} title="t" />;
+}
 function writeFrame(iframe, html) {
   const d = iframe.contentDocument; d.open(); d.write(html); d.close();
   iframe.dispatchEvent(new Event('load'));
 }
 
 beforeEach(() => { vi.useFakeTimers(); usePrivacyStore.setState({ enabled: true, peek: false, captureMask: false }); });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); useSearchStore.setState({ searchActive: false, searchQuery: '' }); });
 
 describe('useBodyPrivacy', () => {
   it('keeps the body gated until the dictionary is ready, then shows it masked', () => {
@@ -98,6 +108,52 @@ describe('useBodyPrivacy', () => {
     expect(iframe.contentDocument.getElementById(PRIVACY_GATE_ID)).toBeNull();
     expect(iframe.contentDocument.body.textContent).not.toContain('John');
   });
+  it('search never marks a held frame, so no name or address is split past the mask; it paints after release', () => {
+    setPrivacyDictionary(EMPTY_DICTIONARY, { ready: false });
+    useSearchStore.setState({ searchActive: true, searchQuery: 'smi acme hello' });
+    const html = buildEmailIframeHtml({ bodyHtml: '<p>John Smith jane@acme.com hello</p>', privacy: true });
+    const { container } = render(<SearchFrame html={html} />);
+    const iframe = container.querySelector('iframe');
+    act(() => writeFrame(iframe, html));
+    const doc = iframe.contentDocument;
+    expect(applySearchHighlight(doc, ['smi'])).toBe(0);
+    expect(applySearchHighlight(doc, ['acme'])).toBe(0);
+    expect(doc.querySelectorAll('mark')).toHaveLength(0);
+    act(() => setPrivacyDictionary(buildNameDictionary({ names: ['John Smith'] }), { ready: true }));
+    act(() => vi.advanceTimersByTime(3200));
+    expect(doc.getElementById(PRIVACY_GATE_ID)).toBeNull();
+    expect(doc.body.textContent).not.toMatch(/Smith|jane@acme\.com/);
+    const marks = [...doc.querySelectorAll('mark.mv-search-hit')].map(m => m.textContent);
+    expect(marks).toEqual(['hello']);
+  });
+  it("masks the frame's own parties after the hold even when the global dictionary never arrives", () => {
+    setPrivacyDictionary(EMPTY_DICTIONARY, { ready: false });
+    const message = { uid: 1, from: { name: 'John Smith', address: 'j@x.com' }, to: [] };
+    const html = buildEmailIframeHtml({ bodyHtml: '<p>John Smith</p>', privacy: true });
+    const { container } = render(<SearchFrame html={html} message={message} />);
+    const iframe = container.querySelector('iframe');
+    act(() => writeFrame(iframe, html));
+    act(() => vi.advanceTimersByTime(3200));
+    expect(iframe.contentDocument.getElementById(PRIVACY_GATE_ID)).toBeNull();
+    expect(iframe.contentDocument.body.textContent).not.toMatch(/John|Smith/);
+  });
+  it('fails closed: a pass that throws puts the gate back and logs once', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A dictionary missing its sets makes the redaction itself throw.
+    setPrivacyDictionary({ fullNames: null, tokens: null, unspaced: null, unspacedMax: 0, size: 1 }, { ready: true });
+    const html = buildEmailIframeHtml({ bodyHtml: '<p>John Smith</p>', privacy: true });
+    const { container } = render(<Frame html={html} />);
+    const iframe = container.querySelector('iframe');
+    act(() => writeFrame(iframe, html));
+    const doc = iframe.contentDocument;
+    expect(doc.getElementById(PRIVACY_GATE_ID)).not.toBeNull();
+    expect(doc.documentElement.getAttribute('style')).toBe('opacity:0!important');
+    act(() => iframe.dispatchEvent(new Event('load')));
+    expect(error).toHaveBeenCalledTimes(1);
+    act(() => setPrivacyDictionary(buildNameDictionary({ names: ['John Smith'] }), { ready: true }));
+    expect(doc.getElementById(PRIVACY_GATE_ID)).toBeNull();
+    expect(doc.body.textContent).not.toMatch(/John|Smith/);
+  });
 });
 
 describe('usePrivacyFrameGate', () => {
@@ -111,6 +167,19 @@ describe('usePrivacyFrameGate', () => {
     act(() => usePrivacyStore.setState({ enabled: false, peek: false, captureMask: true }));
     expect(out.gate).toBe(false); // a capture masks in place; a reload would blank it
     act(() => usePrivacyStore.setState({ captureMask: false }));
+    expect(out.gate).toBe(false);
+  });
+  it('gates in the main window too until the persisted choice has loaded', () => {
+    let hydrated = false;
+    const listeners = [];
+    vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockImplementation(() => hydrated);
+    vi.spyOn(usePrivacyStore.persist, 'onFinishHydration').mockImplementation((cb) => { listeners.push(cb); return () => {}; });
+    usePrivacyStore.setState({ enabled: false });
+    const out = {};
+    render(<Probe out={out} />);
+    expect(out.gate).toBe(true);
+    hydrated = true;
+    act(() => listeners.forEach(l => l()));
     expect(out.gate).toBe(false);
   });
 });

@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "La modalità privacy è una funzione Premium",
   "privacy.upsellBody": "Registra lo schermo o leggi la posta in pubblico senza mostrare a chi scrivi.",
   "privacy.notificationTitle": "Nuovo messaggio",
-  "privacy.sourceBlocked": "Disattiva la modalità privacy per vedere il sorgente del messaggio."
+  "privacy.sourceBlocked": "Disattiva la modalità privacy per vedere il sorgente del messaggio.",
+  "privacy.windowBlocked": "Disattiva la modalità privacy per aprire questo messaggio in una finestra separata."
 }

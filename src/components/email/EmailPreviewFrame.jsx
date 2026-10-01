@@ -21,7 +21,7 @@ export function buildEmailPreviewHtml(html, trackerBlocking, privacy = false) {
 
 // No `allow-scripts`: nothing runs in here at all, not even our own fold or
 // Dark Reader scripts, which is stricter than the reader and fine for a preview.
-export function EmailPreviewFrame({ html, title }) {
+export function EmailPreviewFrame({ html, title, message = null }) {
   const [height, setHeight] = useState(400);
   const frameRef = useRef(null);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
@@ -30,7 +30,7 @@ export function EmailPreviewFrame({ html, title }) {
   // re-render would reload the frame and loop on its own load event.
   const doc = useMemo(() => buildEmailPreviewHtml(html, trackerBlocking, privacyOn), [html, trackerBlocking, privacyOn]);
   // No scripts in here, but same-origin: the parent's masking pass reaches it.
-  useBodyPrivacy(frameRef, doc);
+  useBodyPrivacy(frameRef, doc, { message });
 
   return (
     <iframe

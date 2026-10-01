@@ -1,4 +1,5 @@
 import { redactTree, PII_CLASS } from './privacy/redactDom';
+import { PRIVACY_GATE_ID, PRIVACY_GATE_CSS, PRIVACY_GATE_HTML_STYLE } from './emailIframeTemplate';
 
 /**
  * Privacy mode inside a message frame. Same parent-side walking as the search
@@ -8,12 +9,43 @@ import { redactTree, PII_CLASS } from './privacy/redactDom';
  * so a peek can put them back while nothing that clones or serializes the
  * frame ever finds them.
  */
-export const PRIVACY_GATE_ID = 'mv-privacy-gate';
+export { PRIVACY_GATE_ID };
+/** Fired on the <iframe> element when its gate comes off (useSearchHighlight paints then). */
+export const PRIVACY_RELEASED_EVENT = 'mv-privacy-released';
 const textOriginals = new WeakMap(); // span -> original text
 const attrOriginals = new WeakMap(); // element -> Map(name -> original | null)
 
+// Ours is in <head>: an element of the mail's own carrying the id is not the gate.
+const gateOf = (doc) => doc?.head?.querySelector?.(`style#${PRIVACY_GATE_ID}`) || null;
+const inlineGated = (doc) => doc?.documentElement?.getAttribute?.('style') === PRIVACY_GATE_HTML_STYLE;
+
+/** Whether the body is still held back, unmasked text underneath. */
+export function isPrivacyGated(doc) {
+  return !!gateOf(doc) || inlineGated(doc);
+}
+
 export function releasePrivacyGate(doc) {
-  doc?.getElementById?.(PRIVACY_GATE_ID)?.remove();
+  const gate = gateOf(doc);
+  const inline = inlineGated(doc);
+  if (!gate && !inline) return;
+  gate?.remove();
+  if (inline) doc.documentElement.removeAttribute('style');
+  const host = doc.defaultView?.frameElement;
+  const HostEvent = host?.ownerDocument?.defaultView?.Event;
+  if (HostEvent) host.dispatchEvent(new HostEvent(PRIVACY_RELEASED_EVENT));
+}
+
+/** Fail closed: hide the body again (a masking pass threw). */
+export function reinstatePrivacyGate(doc) {
+  const root = doc?.documentElement;
+  if (!root) return;
+  if (!gateOf(doc) && doc.head) {
+    const style = doc.createElement('style');
+    style.id = PRIVACY_GATE_ID;
+    style.textContent = PRIVACY_GATE_CSS;
+    doc.head.appendChild(style);
+  }
+  root.setAttribute('style', PRIVACY_GATE_HTML_STYLE);
 }
 
 export function restorePrivacyRedaction(doc) {

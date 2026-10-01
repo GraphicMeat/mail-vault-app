@@ -24,6 +24,7 @@ vi.mock('../../stores/safeStorage', () => {
 
 const { useSettingsStore } = await import('../../stores/settingsStore');
 const { OriginalFrame } = await import('../OriginalFrame');
+const { usePrivacyStore } = await import('../../stores/privacyStore');
 
 const PREMIUM = { hasSubscription: true, premiumAccess: true, status: 'active' };
 const FREE = { hasSubscription: false };
@@ -51,5 +52,20 @@ describe('OriginalFrame', () => {
 
   it('keeps the beacon for a free user, matching the reading pane', () => {
     expect(renderFrame(FREE, true)).toContain(BEACON);
+  });
+});
+
+describe('OriginalFrame under privacy mode', () => {
+  afterEach(() => usePrivacyStore.setState({ enabled: false }));
+  it('starts gated (head style and inline html opacity), and plain when privacy is off', () => {
+    usePrivacyStore.setState({ enabled: true });
+    const gated = new DOMParser().parseFromString(renderFrame(FREE), 'text/html');
+    expect(gated.head.querySelector('style#mv-privacy-gate')).not.toBeNull();
+    expect(gated.documentElement.getAttribute('style')).toBe('opacity:0!important');
+    cleanup();
+    usePrivacyStore.setState({ enabled: false });
+    const plain = new DOMParser().parseFromString(renderFrame(FREE), 'text/html');
+    expect(plain.getElementById('mv-privacy-gate')).toBeNull();
+    expect(plain.documentElement.hasAttribute('style')).toBe(false);
   });
 });

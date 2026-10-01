@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "El modo privacidad es una función Premium",
   "privacy.upsellBody": "Graba tu pantalla o lee el correo en público sin mostrar a quién escribes.",
   "privacy.notificationTitle": "Mensaje nuevo",
-  "privacy.sourceBlocked": "Desactiva el modo privacidad para ver el código fuente del mensaje."
+  "privacy.sourceBlocked": "Desactiva el modo privacidad para ver el código fuente del mensaje.",
+  "privacy.windowBlocked": "Desactiva el modo privacidad para abrir este mensaje en su propia ventana."
 }

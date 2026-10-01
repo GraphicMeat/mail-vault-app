@@ -244,7 +244,16 @@ export function emailScriptNonce() {
 // because a descendant's own `visibility: visible` (a responsive mail's
 // show/hide rules) beats the body rule; nothing inside can undo an ancestor's
 // opacity. Shared with ChatBubbleView, which builds its own document.
-export const PRIVACY_FRAME_HEAD = `<style id="mv-privacy-gate">body{visibility:hidden!important}html{opacity:0!important}</style>
+//
+// Our own <html> also carries the opacity inline (PRIVACY_HTML_ATTR): an inline
+// !important beats any !important in the mail's stylesheets, and a nested
+// <html style> in the mail cannot replace an attribute that is already there.
+// releasePrivacyGate removes both.
+export const PRIVACY_GATE_ID = 'mv-privacy-gate';
+export const PRIVACY_GATE_CSS = 'body{visibility:hidden!important}html{opacity:0!important}';
+export const PRIVACY_GATE_HTML_STYLE = 'opacity:0!important';
+export const PRIVACY_HTML_ATTR = ` style="${PRIVACY_GATE_HTML_STYLE}"`;
+export const PRIVACY_FRAME_HEAD = `<style id="${PRIVACY_GATE_ID}">${PRIVACY_GATE_CSS}</style>
     <style>.mv-pii{filter:blur(5px);user-select:none}</style>`;
 
 // Build a complete HTML document for an email iframe.
@@ -297,7 +306,7 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
   // those). <meta charset> follows immediately, well inside WKWebView's 1024-byte
   // scan window, so file:// decoding is unaffected.
   return `<!DOCTYPE html>
-<html data-mv-theme="${themeTag}">
+<html data-mv-theme="${themeTag}"${privacy ? PRIVACY_HTML_ATTR : ''}>
   <head>
     <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">
     <meta charset="UTF-8">

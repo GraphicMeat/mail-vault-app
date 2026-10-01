@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "Le mode confidentialité est une fonctionnalité Premium",
   "privacy.upsellBody": "Enregistrez votre écran ou lisez vos e-mails en public sans montrer à qui vous écrivez.",
   "privacy.notificationTitle": "Nouveau message",
-  "privacy.sourceBlocked": "Désactivez le mode confidentialité pour afficher la source du message."
+  "privacy.sourceBlocked": "Désactivez le mode confidentialité pour afficher la source du message.",
+  "privacy.windowBlocked": "Désactivez le mode confidentialité pour ouvrir ce message dans sa propre fenêtre."
 }

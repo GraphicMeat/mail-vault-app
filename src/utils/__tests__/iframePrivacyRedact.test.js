@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { buildNameDictionary } from '../privacy/piiDetector';
-import { applyPrivacyRedaction, restorePrivacyRedaction, releasePrivacyGate, PRIVACY_GATE_ID } from '../iframePrivacyRedact';
+import { applyPrivacyRedaction, restorePrivacyRedaction, releasePrivacyGate, isPrivacyGated, PRIVACY_GATE_ID } from '../iframePrivacyRedact';
 import { applySearchHighlight, clearSearchHighlight } from '../iframeSearchHighlight';
 import { buildEmailIframeHtml } from '../emailIframeTemplate';
 
@@ -43,5 +43,21 @@ describe('iframe privacy redaction', () => {
     releasePrivacyGate(doc);
     expect(() => releasePrivacyGate(doc)).not.toThrow();
     expect(doc.getElementById(PRIVACY_GATE_ID)).toBeNull();
+  });
+  it('our <html> carries the gate inline until release, and a plain frame never does', () => {
+    const doc = docOf('<p>John Smith</p>');
+    expect(doc.documentElement.getAttribute('style')).toBe('opacity:0!important');
+    applyPrivacyRedaction(doc, dict);
+    expect(doc.documentElement.hasAttribute('style')).toBe(false);
+    const plain = new DOMParser().parseFromString(buildEmailIframeHtml({ bodyHtml: '<p>x</p>' }), 'text/html');
+    expect(plain.documentElement.hasAttribute('style')).toBe(false);
+  });
+  it("a mail's nested <html style> leaves the frame gated", () => {
+    // Browsers keep an attribute <html> already has (HTML spec, "in body", an
+    // html start tag adds only missing attributes). jsdom's parser overwrites it,
+    // so here only the head gate is asserted; it alone still hides the body.
+    const doc = docOf('<blockquote><html style="opacity:1"><body><p>quoted</p></body></html></blockquote>');
+    expect(doc.head.querySelector(`style#${PRIVACY_GATE_ID}`)).not.toBeNull();
+    expect(isPrivacyGated(doc)).toBe(true);
   });
 });

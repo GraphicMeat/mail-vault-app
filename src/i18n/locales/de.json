@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "Der Datenschutzmodus ist eine Premium-Funktion",
   "privacy.upsellBody": "Nimm deinen Bildschirm auf oder lies Mails in der Öffentlichkeit, ohne zu zeigen, wem du schreibst.",
   "privacy.notificationTitle": "Neue Nachricht",
-  "privacy.sourceBlocked": "Schalte den Datenschutzmodus aus, um den Quelltext der Nachricht anzuzeigen."
+  "privacy.sourceBlocked": "Schalte den Datenschutzmodus aus, um den Quelltext der Nachricht anzuzeigen.",
+  "privacy.windowBlocked": "Schalte den Datenschutzmodus aus, um diese Nachricht in einem eigenen Fenster zu öffnen."
 }

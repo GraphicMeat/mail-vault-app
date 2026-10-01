@@ -557,7 +557,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
               <Loader className="w-5 h-5 animate-spin text-mail-text-muted" />
             </div>
           ) : htmlContent ? (
-            <EmailPreviewFrame html={htmlContent} title={t('settings.cleanup.emailPreview')} />
+            <EmailPreviewFrame html={htmlContent} title={t('settings.cleanup.emailPreview')} message={previewEmail} />
           ) : previewEmail?.textBody || previewEmail?.text ? (
             <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{previewEmail.textBody || previewEmail.text}</pre>
           ) : previewError ? (

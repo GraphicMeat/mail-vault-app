@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "隐私模式是高级版功能",
   "privacy.upsellBody": "录制屏幕或在公共场所阅读邮件时，不会暴露你在给谁写信。",
   "privacy.notificationTitle": "新消息",
-  "privacy.sourceBlocked": "请先关闭隐私模式，再查看邮件源码。"
+  "privacy.sourceBlocked": "请先关闭隐私模式，再查看邮件源码。",
+  "privacy.windowBlocked": "请先关闭隐私模式，再在单独窗口中打开此邮件。"
 }

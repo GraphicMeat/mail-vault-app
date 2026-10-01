@@ -44,7 +44,7 @@ import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors } from '../utils/mailChrome';
-import { neutralizeEmailDarkScheme, emailScriptNonce, PRIVACY_FRAME_HEAD } from '../utils/emailIframeTemplate';
+import { neutralizeEmailDarkScheme, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 import { TagChips } from './TagChips';
@@ -523,7 +523,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const nonce = emailScriptNonce();
     const builtHtml = `
       <!DOCTYPE html>
-      <html>
+      <html${privacyOn ? PRIVACY_HTML_ATTR : ''}>
         <head>
           <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">
           <meta charset="UTF-8">
@@ -578,7 +578,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
   const iframeHtmlContent = iframeContent?.html || '';
   // One ref for both frames (original and cleaned): the hook follows whichever is mounted.
-  useBodyPrivacy(iframeRef, iframeHtmlContent);
+  useBodyPrivacy(iframeRef, iframeHtmlContent, { message: mergedEmail });
   const chatScanAlert = iframeContent?.alertLevel || null;
   const chatTrackerSummary = iframeContent?.trackerSummary || null;
 

@@ -3568,5 +3568,6 @@
   "privacy.upsellTitle": "プライバシーモードはPremiumの機能です",
   "privacy.upsellBody": "画面を録画したり、人前でメールを読んだりしても、誰に宛てて書いているかを見せずに済みます。",
   "privacy.notificationTitle": "新着メッセージ",
-  "privacy.sourceBlocked": "メッセージのソースを表示するには、プライバシーモードをオフにしてください。"
+  "privacy.sourceBlocked": "メッセージのソースを表示するには、プライバシーモードをオフにしてください。",
+  "privacy.windowBlocked": "このメッセージを別ウィンドウで開くには、プライバシーモードをオフにしてください。"
 }

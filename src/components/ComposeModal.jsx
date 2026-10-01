@@ -1932,7 +1932,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                 ) : (
                   <div data-testid="compose-context-panel" className="flex-1 min-h-0 overflow-y-auto px-4 pb-3">
                     <div data-testid="compose-quoted" className="pt-2">
-                      <OriginalFrame html={contextHtml} dark={originalDark} title={t('compose.originalMessage')} />
+                      <OriginalFrame html={contextHtml} dark={originalDark} title={t('compose.originalMessage')} message={actionReplyTo} />
                     </div>
                   </div>
                 )

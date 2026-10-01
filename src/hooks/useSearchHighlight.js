@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSearchStore } from '../stores/searchStore';
 import { applySearchHighlight, highlightTerms } from '../utils/iframeSearchHighlight';
+import { PRIVACY_RELEASED_EVENT } from '../utils/iframePrivacyRedact';
 
 /**
  * Paint the open search's terms into a message-body iframe.
@@ -26,9 +27,14 @@ export function useSearchHighlight(iframeRef, contentKey) {
         applySearchHighlight(iframe.contentDocument || iframe.contentWindow?.document, terms);
       } catch { /* the frame is detached, or its document is not ours to read */ }
     };
-    // Once now (the document may already be loaded) and again on every load.
+    // Once now (the document may already be loaded), again on every load, and
+    // when privacy mode reveals a frame it held back (nothing paints under its gate).
     paint();
     iframe.addEventListener('load', paint);
-    return () => iframe.removeEventListener('load', paint);
+    iframe.addEventListener(PRIVACY_RELEASED_EVENT, paint);
+    return () => {
+      iframe.removeEventListener('load', paint);
+      iframe.removeEventListener(PRIVACY_RELEASED_EVENT, paint);
+    };
   }, [iframeRef, query, contentKey]);
 }
