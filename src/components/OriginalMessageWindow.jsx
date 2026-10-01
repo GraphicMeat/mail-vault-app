@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useThemeStore } from '../stores/themeStore';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { useT } from '../i18n/index.js';
+import { startPrivacySync } from '../utils/privacy/privacySync';
 
 const token = new URLSearchParams(window.location.search).get('original');
 
@@ -15,6 +16,9 @@ export function OriginalMessageWindow() {
   const defaultDark = useDefaultEmailDark();
   const [darkOverride, setDarkOverride] = useState(null);
   const dark = darkOverride ?? defaultDark;
+
+  // Mask changes made in the main window reach this webview.
+  useEffect(() => startPrivacySync(), []);
 
   useEffect(() => {
     let disposed = false;

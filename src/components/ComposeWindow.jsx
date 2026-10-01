@@ -7,6 +7,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { isComposeMessage } from '../services/composeWindow';
 import { setLocale } from '../i18n/index.js';
+import { startPrivacySync } from '../utils/privacy/privacySync';
 
 const composeId = new URLSearchParams(window.location.search).get('compose');
 const token = new URLSearchParams(window.location.search).get('token');
@@ -100,6 +101,9 @@ export function ComposeWindow() {
       setAiSettings: value => relaySetting('aiSettings', value),
     });
   }, [relaySetting]);
+
+  // Mask changes made in the main window reach this webview.
+  useEffect(() => startPrivacySync(), []);
 
   useEffect(() => {
     let unlisten;

@@ -102,6 +102,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { createComposeWindowOwner } from './services/composeWindow';
+import { startPrivacySync } from './utils/privacy/privacySync';
 import { createComposeSend, scheduleCompose } from './services/composeSend';
 import { getAccountCacheMailboxes } from './services/cacheManager';
 import { formatCount } from './utils/formatCount';
@@ -1040,6 +1041,9 @@ function App() {
     }).catch(() => {}); // not in Tauri
     return () => { active = false; if (stop) stop(); };
   }, []);
+
+  // Broadcast privacy-mode changes to the detached windows.
+  useEffect(() => startPrivacySync(), []);
 
   // Listen for server crash events from the Rust backend
   useEffect(() => {

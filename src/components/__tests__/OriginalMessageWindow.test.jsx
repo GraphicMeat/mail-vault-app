@@ -10,7 +10,8 @@ import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-libra
 
 const { handlers, emit } = vi.hoisted(() => ({ handlers: [], emit: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (_name, handler) => { handlers.push(handler); return () => {}; }),
+  // The privacy-mode sync listener is not the window's payload handler.
+  listen: vi.fn(async (name, handler) => { if (name !== 'privacy-mode-changed') handlers.push(handler); return () => {}; }),
   emit,
 }));
 vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'original-1' }) }));

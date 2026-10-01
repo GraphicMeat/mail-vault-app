@@ -14,6 +14,7 @@ import { useAutoTagStore } from '../stores/autoTagStore';
 import { useFieldStore } from '../stores/fieldStore';
 import { useNetActivityStore } from '../stores/netActivityStore';
 import { pinQuickActionScope } from '../hooks/useQuickActionConfiguration';
+import { startPrivacySync } from '../utils/privacy/privacySync';
 
 const token = new URLSearchParams(window.location.search).get('settings');
 
@@ -37,6 +38,9 @@ const hydrated = store => store.persist?.hasHydrated?.() ? Promise.resolve() : n
 export function SettingsWindow() {
   const [initial, setInitial] = useState(null);
   const [error, setError] = useState('');
+
+  // Mask changes made in the main window reach this webview.
+  useEffect(() => startPrivacySync(), []);
 
   useEffect(() => {
     let disposed = false;
