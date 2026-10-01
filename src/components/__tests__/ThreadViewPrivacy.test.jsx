@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 
 const { bodies } = vi.hoisted(() => ({ bodies: new Map() }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
@@ -18,7 +18,14 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
   return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: bodies }, registerListener: () => () => {} }) };
 });
 vi.mock('../email/EmailActionBar', () => ({
-  EmailActionBar: ({ onOpenInWindow }) => <button type="button" data-testid="open-window-stub" onClick={onOpenInWindow} />,
+  EmailActionBar: ({ onOpenInWindow, onViewSource }) => <>
+    <button type="button" data-testid="open-window-stub" onClick={onOpenInWindow} />
+    <button type="button" data-testid="view-source-stub" onClick={onViewSource} />
+  </>,
+}));
+vi.mock('../../services/db', async (orig) => ({
+  ...(await orig()),
+  getVerifiedRawSource: vi.fn(async () => ({ b64: btoa('Subject: Secret plans'), error: null })),
 }));
 vi.mock('../email/QuickReplyChips', () => ({ QuickReplyChips: () => null }));
 vi.mock('../TagChips', () => ({ TagChips: () => null }));
@@ -34,13 +41,13 @@ const { t } = await import('../../i18n');
 const { setPrivacyDictionary } = await import('../../utils/privacy/privacyDictionary');
 const { EMPTY_DICTIONARY } = await import('../../utils/privacy/piiDetector');
 
-const email = { uid: 7, _mailbox: 'INBOX', date: '2026-09-01', from: { name: 'Older', address: 'old@example.com' }, to: [], subject: 'Earlier', flags: [] };
+const email = { uid: 7, _accountId: 'acc', _mailbox: 'INBOX', date: '2026-09-01', from: { name: 'Older', address: 'old@example.com' }, to: [], subject: 'Earlier', flags: [] };
 const thread = { threadId: 'one', subject: 'Conversation', emails: [email], messageCount: 1 };
 const invoke = vi.fn(async () => {});
 
 beforeEach(() => {
   useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first', emailViewerTheme: 'light' });
-  bodies.set('|INBOX|7', { status: 'loaded', email: { uid: 7, html: '<p>Older body</p>', text: 'Older body' } });
+  bodies.set('acc|INBOX|7', { status: 'loaded', email: { uid: 7, html: '<p>Older body</p>', text: 'Older body' } });
   usePrivacyStore.setState({ enabled: true, peek: false });
   useMailStore.setState({ error: null });
   window.__TAURI__ = { core: { invoke } };
@@ -68,6 +75,21 @@ describe('ThreadView under privacy mode', () => {
     expect(useMailStore.getState().error).toBe(t('privacy.windowBlocked'));
   });
 
+  it('withholds the raw source behind a notice', async () => {
+    render(<ThreadView thread={thread} onComposeReply={vi.fn()} />);
+    fireEvent.click(screen.getAllByTestId('view-source-stub')[0]);
+    await screen.findByTestId('privacy-source-blocked');
+    expect(document.body.textContent).not.toContain('Secret plans');
+  });
+
+  it('control: with privacy off the raw source shows', async () => {
+    usePrivacyStore.setState({ enabled: false });
+    render(<ThreadView thread={thread} onComposeReply={vi.fn()} />);
+    fireEvent.click(screen.getAllByTestId('view-source-stub')[0]);
+    await waitFor(() => expect(document.body.textContent).toContain('Secret plans'));
+    expect(screen.queryByTestId('privacy-source-blocked')).toBeNull();
+  });
+
   it('control: with privacy off the window opens', () => {
     usePrivacyStore.setState({ enabled: false });
     render(<ThreadView thread={thread} onComposeReply={vi.fn()} />);
@@ -80,7 +102,7 @@ describe('ThreadView under privacy mode', () => {
     try {
       setPrivacyDictionary(EMPTY_DICTIONARY, { ready: false });
       const sender = { ...email, from: { name: 'Marisol Quintero', address: 'mq@example.com' } };
-      bodies.set('|INBOX|7', { status: 'loaded', email: { uid: 7, html: '<p>Thanks, Marisol Quintero</p>', text: 'Thanks' } });
+      bodies.set('acc|INBOX|7', { status: 'loaded', email: { uid: 7, html: '<p>Thanks, Marisol Quintero</p>', text: 'Thanks' } });
       render(<ThreadView thread={{ ...thread, emails: [sender] }} onComposeReply={vi.fn()} />);
       const iframe = document.querySelector('iframe');
       act(() => {

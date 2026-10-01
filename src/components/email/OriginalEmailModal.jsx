@@ -5,10 +5,13 @@ import { Button } from '../ui/Button';
 import { AttachmentItem } from './AttachmentBar';
 import { formatDateTime } from '../../utils/dateFormat';
 import { useT } from '../../i18n/index.js';
+import { usePrivacySourceBlocked } from '../../hooks/usePrivacy';
+import { SourceBlocked } from '../privacy/SourceBlocked';
 
 // Modal for viewing full original email
 export function OriginalEmailModal({ email, onClose }) {
   const t = useT();
+  const blocked = usePrivacySourceBlocked();
   return (
     <Dialog
       open={Boolean(email)}
@@ -27,6 +30,7 @@ export function OriginalEmailModal({ email, onClose }) {
             </Button>
           </div>
 
+          {blocked ? <SourceBlocked /> : <>
           {/* Email Details */}
           <div className="p-4 border-b border-mail-border space-y-2 text-sm shrink-0 overflow-y-auto max-h-[35vh]">
             <div className="flex gap-2">
@@ -72,6 +76,7 @@ export function OriginalEmailModal({ email, onClose }) {
               </div>
             </div>
           )}
+          </>}
       </>
     </Dialog>
   );

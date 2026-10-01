@@ -30,6 +30,7 @@ vi.mock('../../stores/safeStorage', () => {
 window.history.replaceState({}, '', '/?original=tok');
 const { OriginalMessageWindow } = await import('../OriginalMessageWindow');
 const { useSettingsStore } = await import('../../stores/settingsStore');
+const { usePrivacyStore } = await import('../../stores/privacyStore');
 
 const PREMIUM = { hasSubscription: true, premiumAccess: true, status: 'active' };
 const BEACON = 'https://example.list-manage.com/track/open.php?u=8f2&id=a91';
@@ -46,7 +47,7 @@ async function deliver(payload) {
 }
 
 beforeEach(() => useSettingsStore.setState({ emailViewerTheme: 'light' }));
-afterEach(() => { cleanup(); handlers.length = 0; vi.clearAllMocks(); });
+afterEach(() => { cleanup(); handlers.length = 0; vi.clearAllMocks(); usePrivacyStore.setState({ enabled: false }); });
 
 describe('the original message window', () => {
   it('opens in the theme the compose pane sent', async () => {
@@ -93,5 +94,15 @@ describe('the original message window', () => {
     useSettingsStore.setState({ billingProfile: PREMIUM, trackerBlockingEnabled: false });
     await deliver({ html: `<p>Hi</p><img src="${BEACON}" width="1" height="1">` });
     expect(document.querySelector('iframe').getAttribute('srcdoc')).toContain(BEACON);
+  });
+
+  it('shows a notice instead of the original while privacy mode is on', async () => {
+    usePrivacyStore.setState({ enabled: true });
+    render(<OriginalMessageWindow />);
+    await waitFor(() => expect(handlers.length).toBeGreaterThan(0));
+    act(() => handlers.at(-1)({ payload: { token: 'tok', html: '<p>Original body</p>' } }));
+    await screen.findByTestId('privacy-source-blocked');
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.queryByTestId('original-window-theme')).toBeNull();
   });
 });

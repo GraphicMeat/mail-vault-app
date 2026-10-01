@@ -34,6 +34,17 @@ export function usePrivacyActive() {
 }
 
 /**
+ * The raw message source cannot be masked field by field, so it is withheld
+ * while privacy is on, and until the choice is known (fail closed). Peek does
+ * not lift it.
+ */
+export function usePrivacySourceBlocked() {
+  const enabled = usePrivacyStore(s => s.enabled);
+  const hydrated = useSyncExternalStore(subscribeHydration, isHydrated);
+  return enabled || !hydrated;
+}
+
+/**
  * The value split into masked and plain runs, computed in render (never in an
  * effect) so a masked field never paints its real text first. `null` when
  * privacy is off: callers render the plain value.

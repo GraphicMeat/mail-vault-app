@@ -23,6 +23,8 @@ import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { useSearchHighlight } from '../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
 import { refuseWindowUnderPrivacy } from '../utils/privacy/windowBlocked';
+import { usePrivacySourceBlocked } from '../hooks/usePrivacy';
+import { SourceBlocked } from './privacy/SourceBlocked';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
@@ -121,6 +123,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const [pendingDelete, setPendingDelete] = useState(null);
   const [pendingPurge, setPendingPurge] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
+  const sourceBlocked = usePrivacySourceBlocked();
   const [rawSource, setRawSource] = useState(null);
   const [rawError, setRawError] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
@@ -817,9 +820,11 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             </p>
           )}
           {showRaw && (rawSource || rawError) ? (
-            <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'email-raw-error' : undefined}>
-              {rawError || atob(rawSource)}
-            </pre>
+            sourceBlocked ? <SourceBlocked /> : (
+              <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'email-raw-error' : undefined}>
+                {rawError || atob(rawSource)}
+              </pre>
+            )
           ) : selectedEmail.pgp === 'locked' ? (
             <PgpLockedNotice />
           ) : selectedEmail.html ? (

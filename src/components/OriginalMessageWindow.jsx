@@ -5,6 +5,8 @@ import { useThemeStore } from '../stores/themeStore';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { useT } from '../i18n/index.js';
 import { startPrivacySync } from '../utils/privacy/privacySync';
+import { usePrivacySourceBlocked } from '../hooks/usePrivacy';
+import { SourceBlocked } from './privacy/SourceBlocked';
 
 const token = new URLSearchParams(window.location.search).get('original');
 
@@ -16,6 +18,7 @@ export function OriginalMessageWindow() {
   const defaultDark = useDefaultEmailDark();
   const [darkOverride, setDarkOverride] = useState(null);
   const dark = darkOverride ?? defaultDark;
+  const blocked = usePrivacySourceBlocked();
 
   // Mask changes made in the main window reach this webview.
   useEffect(() => startPrivacySync(), []);
@@ -39,7 +42,7 @@ export function OriginalMessageWindow() {
   }, []);
 
   return <main className="flex h-screen flex-col gap-2 bg-mail-bg p-3" aria-busy={!html}>
-    {html && <>
+    {blocked ? <SourceBlocked /> : html && <>
       <div className="flex shrink-0 justify-end">
         <OriginalThemeToggle dark={dark} onToggle={() => setDarkOverride(!dark)} testid="original-window-theme" />
       </div>

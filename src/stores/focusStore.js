@@ -6,6 +6,9 @@ import { sendNotification } from '../services/api';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { decide } from '../utils/notificationPolicy.js';
 import { useSettingsStore } from './settingsStore';
+import { usePrivacyStore } from './privacyStore';
+import { getPrivacyDictionary } from '../utils/privacy/privacyDictionary';
+import { maskString } from '../utils/privacy/piiDetector';
 
 /**
  * A focus session: a countdown that covers the whole window while it runs.
@@ -185,6 +188,12 @@ export function clearNotificationDecisions() {
  * ever shows up in "why didn't I get this".
  */
 export function notify(title, body, sound, target, mailCtx) {
+  // Privacy mode: a banner is on screen too. Mail banners say only that mail
+  // came; anything else is masked like the window behind it.
+  if (usePrivacyStore.getState().enabled) {
+    if (mailCtx) { title = t('privacy.notificationTitle'); body = ''; }
+    else { const d = getPrivacyDictionary(); title = maskString(title, d); body = maskString(body, d); }
+  }
   const selectedSound = normalizeNotificationSound(sound);
   const audible = selectedSound !== 'none';
   const s = useFocusStore.getState();
