@@ -7,7 +7,8 @@ import { usePrivateSegments } from '../../hooks/usePrivacy';
  * gets is "xxxx", so nothing de-blurs back into a name.
  */
 export function Private({ kind = 'text', children }) {
-  const value = children == null ? '' : String(children);
+  // toArray drops null/false and flattens, so `{a}{' '}{b}` joins as one string.
+  const value = React.Children.toArray(children).join('');
   const segments = usePrivateSegments(value, kind);
   if (!segments) return value;
   return segments.map((seg, i) => (seg.masked

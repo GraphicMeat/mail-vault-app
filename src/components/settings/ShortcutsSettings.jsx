@@ -3,6 +3,21 @@ import { useSettingsStore, DEFAULT_SHORTCUTS } from '../../stores/settingsStore'
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { Keyboard, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { shortcutParts } from '../../utils/shortcutParts';
+
+// Format keybinding for display
+export const formatKeybindingDisplay = (keybinding) => {
+  if (!keybinding) return '\u2014';
+  const modMap = { Meta: '\u2318', Ctrl: '\u2303', Alt: '\u2325', Shift: '\u21E7' };
+  if (keybinding.includes('+')) {
+    return shortcutParts(keybinding).map(p => modMap[p] || p).join('');
+  }
+  if (keybinding.includes(' ')) {
+    return keybinding.split(' ').join(' then ');
+  }
+  if (keybinding === 'Escape') return 'Esc';
+  return keybinding;
+};
 
 export function ShortcutsSettings({ active = true }) {
   const t = useT();
@@ -129,20 +144,6 @@ export function ShortcutsSettings({ active = true }) {
     { title: t('settings.shortcuts.selection'), actions: ['toggleSelect', 'escape'] },
     { title: 'UI', actions: ['focusSearch', 'showShortcuts', 'openSettings', 'togglePrivacyMode'] },
   ];
-
-  // Format keybinding for display
-  const formatKeybindingDisplay = (keybinding) => {
-    if (!keybinding) return '\u2014';
-    const modMap = { Meta: '\u2318', Ctrl: '\u2303', Alt: '\u2325', Shift: '\u21E7' };
-    if (keybinding.includes('+')) {
-      return keybinding.split('+').map(p => modMap[p] || p).join('');
-    }
-    if (keybinding.includes(' ')) {
-      return keybinding.split(' ').join(' then ');
-    }
-    if (keybinding === 'Escape') return 'Esc';
-    return keybinding;
-  };
 
   return (
     <>

@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, renderHook, act, cleanup } from '@testing-library/react';
 import { Private } from '../Private';
-import { usePrivacyActive } from '../../../hooks/usePrivacy';
+import { usePrivacyActive, usePrivateAttr } from '../../../hooks/usePrivacy';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { setPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
 import { buildNameDictionary } from '../../../utils/privacy/piiDetector';
@@ -34,6 +34,34 @@ describe('<Private>', () => {
     usePrivacyStore.setState({ enabled: true });
     const { container } = render(<Private kind="filename">Jane Roe CV.pdf</Private>);
     expect(container.textContent).toBe('xxxx xxx xx.pdf');
+  });
+  it('masks a whole filename whose tail after the dot is not an extension', () => {
+    usePrivacyStore.setState({ enabled: true });
+    const a = render(<Private kind="filename">Letter to Mr. Jones</Private>);
+    expect(a.container.textContent).toBe('xxxxxx xx xx. xxxxx');
+    const b = render(<Private kind="filename">john.smith</Private>);
+    expect(b.container.textContent).toBe('xxxx.xxxxx');
+  });
+  it('keeps only a real extension', () => {
+    usePrivacyStore.setState({ enabled: true });
+    const { container } = render(<Private kind="filename">CV_Joanna.pdf</Private>);
+    expect(container.textContent).toBe('xx_xxxxxx.pdf');
+  });
+  it('attributes use the same filename rule', () => {
+    usePrivacyStore.setState({ enabled: true });
+    const { result } = renderHook(() => usePrivateAttr());
+    expect(result.current('CV_Joanna.pdf', 'filename')).toBe('xx_xxxxxx.pdf');
+    expect(result.current('john.smith', 'filename')).toBe('xxxx.xxxxx');
+  });
+  it('joins array children and drops false', () => {
+    usePrivacyStore.setState({ enabled: true });
+    const a = render(<Private kind="text">{'Lunch with '}{'John'}{' '}{'Smith'}{'?'}</Private>);
+    expect(a.container.textContent).toBe('Lunch with xxxx xxxxx?');
+    usePrivacyStore.setState({ enabled: false });
+    const b = render(<Private kind="name">{false}</Private>);
+    expect(b.container.textContent).toBe('');
+    const c = render(<Private kind="name">{'John'}{' '}{'Smith'}</Private>);
+    expect(c.container.textContent).toBe('John Smith');
   });
   it('peek reveals, release masks again', () => {
     usePrivacyStore.setState({ enabled: true });

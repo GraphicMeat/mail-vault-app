@@ -4,6 +4,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { t as tr, useT  } from '../i18n/index.js';
+import { shortcutParts } from '../utils/shortcutParts';
 
 const ACTION_LABELS = () => ({
   nextEmail: tr('settings.shortcuts.nextEmail'),
@@ -55,13 +56,12 @@ function formatModifier(mod) {
 }
 
 /** Parse a keybinding string into displayable key badges */
-function parseKeybinding(keybinding) {
+export function parseKeybinding(keybinding) {
   if (!keybinding) return [];
 
   // Modifier combo like "Meta+,"
   if (keybinding.includes('+')) {
-    const parts = keybinding.split('+');
-    return parts.map(p => formatModifier(p));
+    return shortcutParts(keybinding).map(p => formatModifier(p));
   }
 
   // Multi-key sequence like "g i"
