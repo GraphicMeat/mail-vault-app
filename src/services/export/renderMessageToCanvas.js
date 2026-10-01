@@ -108,7 +108,9 @@ function adopt(canvas) {
   return copy;
 }
 
-export async function renderMessageToCanvas({ message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs }) {
+// `onCloneNode`: handed to the rasterizer, which calls it with the cloned
+// tree before drawing (a social card's belt-and-braces redaction pass).
+export async function renderMessageToCanvas({ message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode }) {
   const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle });
   const frame = await mountExportFrame(html, { loadTimeoutMs });
   try {
@@ -120,6 +122,7 @@ export async function renderMessageToCanvas({ message, bodyHtml, account, mailbo
       scale: EXPORT_SCALE, backgroundColor: '#ffffff',
       width: EXPORT_WIDTH_PX, height: frame.height,
       font: false, timeout: 3000,
+      ...(onCloneNode ? { onCloneNode } : {}),
     };
     trace('dom-to-canvas', { visibility: document.visibilityState });
     try {

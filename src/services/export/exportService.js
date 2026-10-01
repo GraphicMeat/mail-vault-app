@@ -155,6 +155,27 @@ function buildSidecars(items, stemFor) {
 
 const stemOf = (fileName) => fileName.replace(/\.[^.]+$/, '');
 
+/**
+ * One message made ready for a social card: the same hydrate → prepareBody →
+ * redact steps buildExport runs, for a canvas instead of files.
+ * `redact`: null, or `{ dict, format }`; the message's own parties join the
+ * dictionary, as in buildExport.
+ */
+export async function prepareSocialMessage(message, { mirror = true, redact = null, fetchAsset = fetchAssetViaTauri } = {}) {
+  const dated = message.date instanceof Date ? message : { ...message, date: asDate(message.date) };
+  const location = resolveEmailLocation(dated, useMailStore.getState());
+  const full = await hydrateInlineImages(await hydrate(dated), location?.accountId, location?.mailbox);
+  const accountEmail = accountEmailOf(dated, useMailStore.getState());
+  const totals = { mirrored: 0, failed: 0, pixelsRemoved: 0, bytes: 0 };
+  const body = await prepareBody(full, mirror, url => fetchAsset(url, accountEmail), totals);
+  if (!redact) return { message: full, body };
+  const dict = unionDictionaries(redact.dict, buildNameDictionary({ names: collectPrivacyNames({ emails: [full] }) }));
+  return {
+    message: redactMessageForExport(full, dict),
+    body: redactBodyForExport(body, dict, { format: redact.format || 'image' }),
+  };
+}
+
 // `redact`: null, or `{ style: 'blur' | 'bar', dict }` for a private export.
 // Everything that reaches a file (names, headers, body, footer, attachment
 // names) is masked; `stats` is unchanged.
