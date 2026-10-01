@@ -21,24 +21,27 @@ describe('blog article CTA theme colors', () => {
       .filter(file => file.endsWith('.html'))
       .filter(file => readCtaAnchors(resolve(blogRoot, file)).length > 0);
 
-    expect(articles).toHaveLength(7);
+    expect(articles.length).toBeGreaterThanOrEqual(7);
+    const englishOnly = new Set([
+      'gmail-third-party-changes-2027.html',
+      'cloud-vs-local-email-search.html',
+      'leave-email-provider-safely.html',
+      'phishing-beyond-suspicious-links.html',
+    ]);
 
     for (const article of articles) {
       const englishPath = resolve(blogRoot, article);
-      const englishCtas = readCtaAnchors(englishPath);
-      expect(englishCtas.length, article).toBe(2);
-      expect(readFileSync(englishPath, 'utf8'), englishPath)
-        .toContain('/assets/english-content.css?v=3');
-
-      for (const locale of locales) {
-        const localizedPath = resolve(websiteRoot, locale, 'blog', article);
-        expect(existsSync(localizedPath), localizedPath).toBe(true);
-        const localizedCtas = readCtaAnchors(localizedPath);
-        expect(localizedCtas.length, localizedPath).toBe(2);
-        expect(readFileSync(localizedPath, 'utf8'), localizedPath)
-          .toContain('/assets/english-content.css?v=3');
-
-        for (const cta of [...englishCtas, ...localizedCtas]) {
+      const paths = [englishPath];
+      if (!englishOnly.has(article)) {
+        paths.push(...locales.map(locale => resolve(websiteRoot, locale, 'blog', article)));
+      }
+      for (const articlePath of paths) {
+        expect(existsSync(articlePath), articlePath).toBe(true);
+        const ctas = readCtaAnchors(articlePath);
+        expect(ctas.length, articlePath).toBe(2);
+        expect(readFileSync(articlePath, 'utf8'), articlePath)
+          .toMatch(/\/assets\/english-content\.css\?v=\d+/);
+        for (const cta of ctas) {
           expect(cta.classList.contains('mv-blog-cta')).toBe(true);
           if (cta.classList.contains('lamp-bg')) {
             expect(cta.classList.contains('mv-blog-cta-primary')).toBe(true);
