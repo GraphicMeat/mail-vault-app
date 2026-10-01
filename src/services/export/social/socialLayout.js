@@ -1,0 +1,50 @@
+// Where the card and its content sit on a social image. Pure math, so the
+// painter (composeSocialImage) only draws what this decides.
+//
+// Every output pixel is 2x: the content canvas comes from the rasterizer at
+// 2x already, a preset of 1080x1080 is saved as 2160x2160, and padding is
+// given in CSS px.
+export const SIZE_PRESETS = {
+  auto: null,
+  square: { w: 1080, h: 1080 },
+  portrait: { w: 1080, h: 1350 },
+  landscape: { w: 1600, h: 900 },
+  story: { w: 1080, h: 1920 },
+};
+const CHROME_CSS_PX = 28;
+const OUT = 2; // output pixels per CSS px, and per preset px
+
+/**
+ * auto: the canvas is the card plus padding, content drawn 1:1.
+ * fixed size: `crop` (an email card) fills the width and cuts a tall mail to
+ * its top; `contain` (an app window) fits the whole shot, centered.
+ */
+export function layoutSocial({ contentW, contentH, size, padding, chrome, fit }) {
+  const pad = padding * OUT;
+  const chromeH = chrome ? CHROME_CSS_PX * OUT : 0;
+  if (!size) {
+    const card = { x: pad, y: pad, w: contentW, h: contentH + chromeH };
+    return {
+      canvasW: contentW + pad * 2, canvasH: card.h + pad * 2, card, chromeH, cropped: false,
+      content: { sx: 0, sy: 0, sw: contentW, sh: contentH, dx: pad, dy: pad + chromeH, dw: contentW, dh: contentH },
+    };
+  }
+  const canvasW = size.w * OUT;
+  const canvasH = size.h * OUT;
+  const availW = canvasW - pad * 2;
+  const availH = canvasH - pad * 2 - chromeH;
+  let scale; let sh = contentH; let cropped = false;
+  if (fit === 'crop') {
+    scale = availW / contentW;
+    if (contentH * scale > availH) { sh = Math.floor(availH / scale); cropped = true; }
+  } else {
+    scale = Math.min(availW / contentW, availH / contentH);
+  }
+  const dw = Math.round(contentW * scale);
+  const dh = Math.round(sh * scale);
+  const card = { x: Math.round((canvasW - dw) / 2), y: Math.round((canvasH - dh - chromeH) / 2), w: dw, h: dh + chromeH };
+  return {
+    canvasW, canvasH, card, chromeH, cropped,
+    content: { sx: 0, sy: 0, sw: contentW, sh, dx: card.x, dy: card.y + chromeH, dw, dh },
+  };
+}
