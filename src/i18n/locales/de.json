@@ -640,6 +640,7 @@
   "errors.conn.serverSSecurityCertificateCould": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden.",
   "errors.connectionFailed": "Verbindung fehlgeschlagen",
   "errors.composeArchiveOutgoing": "Ausgehende Nachricht konnte nicht archiviert werden: {{error}}",
+  "errors.composeAttachmentUnavailable": "Der Anhang {{filename}} konnte nicht aus der ursprünglichen E-Mail gelesen werden",
   "errors.composeBuildOutgoingMime": "Ausgehende Nachricht konnte nicht erstellt werden: {{error}}",
   "errors.composeMissingSchedule": "Ein Sendezeitpunkt ist erforderlich.",
   "errors.composeRefreshAccount": "Konto konnte nicht aktualisiert werden.",

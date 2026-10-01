@@ -11,6 +11,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
+import { withAttachmentBytes } from './attachmentUtils';
 import { parseReferenceList, splitRecipients } from '../utils/emailParser';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { zonedTimeToEpoch } from '../utils/scheduledTime';
@@ -65,7 +66,7 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
   const fromAddress = snapshot._fromAddress || account.email;
   const sendAsEmail = fromAddress !== account.email ? fromAddress : '';
   const inline = extractInlineImages(snapshot.body || '');
-  const attachments = snapshot.attachments || [];
+  const attachments = await withAttachmentBytes(snapshot.attachments || []);
   const emailAttachments = [
     ...attachments.map(att => ({
       filename: att.filename,

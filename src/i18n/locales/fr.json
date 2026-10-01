@@ -640,6 +640,7 @@
   "errors.conn.serverSSecurityCertificateCould": "Le certificat de sécurité du serveur n'a pas pu être vérifié.",
   "errors.connectionFailed": "Échec de la connexion",
   "errors.composeArchiveOutgoing": "Impossible d’archiver le message sortant : {{error}}",
+  "errors.composeAttachmentUnavailable": "Impossible de lire la pièce jointe {{filename}} de l’e-mail d’origine",
   "errors.composeBuildOutgoingMime": "Impossible de créer le message sortant : {{error}}",
   "errors.composeMissingSchedule": "Une heure d’envoi est requise.",
   "errors.composeRefreshAccount": "Impossible d’actualiser le compte.",

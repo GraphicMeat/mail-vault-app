@@ -640,6 +640,7 @@
   "errors.conn.serverSSecurityCertificateCould": "서버의 보안 인증서를 확인할 수 없습니다.",
   "errors.connectionFailed": "연결 실패",
   "errors.composeArchiveOutgoing": "보낸 메시지를 보관하지 못했습니다: {{error}}",
+  "errors.composeAttachmentUnavailable": "원본 이메일에서 첨부 파일 {{filename}}을(를) 읽지 못했습니다",
   "errors.composeBuildOutgoingMime": "보낼 메시지를 만들지 못했습니다: {{error}}",
   "errors.composeMissingSchedule": "보낼 시간을 지정해야 합니다.",
   "errors.composeRefreshAccount": "계정을 새로 고치지 못했습니다.",

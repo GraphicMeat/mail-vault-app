@@ -618,6 +618,7 @@
   "errors.billingUnreachable": "Could not reach billing service. Check your internet connection.",
   "errors.cannotOpenBrowser": "Could not open browser. Please allow pop-ups for this app.",
   "errors.composeArchiveOutgoing": "Could not archive the outgoing email locally: {{error}}",
+  "errors.composeAttachmentUnavailable": "Could not read the attachment {{filename}} from the original email",
   "errors.composeBuildOutgoingMime": "Could not prepare the outgoing email: {{error}}",
   "errors.composeMissingSchedule": "Choose a time and time zone for this scheduled email.",
   "errors.composeRefreshAccount": "Could not refresh account credentials.",

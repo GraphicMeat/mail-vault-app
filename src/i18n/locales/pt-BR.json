@@ -640,6 +640,7 @@
   "errors.conn.serverSSecurityCertificateCould": "Não foi possível verificar o certificado de segurança do servidor.",
   "errors.connectionFailed": "Falha na conexão",
   "errors.composeArchiveOutgoing": "Não foi possível arquivar a mensagem enviada: {{error}}",
+  "errors.composeAttachmentUnavailable": "Não foi possível ler o anexo {{filename}} do e-mail original",
   "errors.composeBuildOutgoingMime": "Não foi possível criar a mensagem enviada: {{error}}",
   "errors.composeMissingSchedule": "É necessário definir um horário de envio.",
   "errors.composeRefreshAccount": "Não foi possível atualizar a conta.",

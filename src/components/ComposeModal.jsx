@@ -4,6 +4,7 @@ import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
+import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
@@ -30,6 +31,7 @@ import { firstRecipient } from '../utils/mailto';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
+import { withAttachmentBytes } from '../services/attachmentUtils';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 import { buildQuoteBlocks, replyWireHtml } from '../utils/replyQuote';
 import { clampComposeSize } from '../utils/composeSize';
@@ -545,13 +547,25 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       });
 
       if (replyTo.attachments?.length > 0) {
-        setAttachments(replyTo.attachments.map(att => ({
+        // The light fetch that loaded the original carries no attachment
+        // bytes. `_source` is where they are read back from: here, so autosave
+        // has them, and again at send for any still missing then.
+        // Located the way the body resolver found the original: a row in a
+        // single-account folder carries no `_accountId` or `_mailbox`.
+        const loc = resolveEmailLocation(replyTo, useMailStore.getState());
+        const forwarded = replyTo.attachments.map((att, i) => ({
           filename: att.filename,
           contentType: att.contentType,
           size: att.size,
           content: att.content,
-          isFromOriginal: true
-        })));
+          isFromOriginal: true,
+          ...(!att.content && loc && replyTo.uid != null
+            ? { _source: { ...loc, uid: replyTo.uid, attachmentIndex: att._originalIndex ?? i } } : {}),
+        }));
+        setAttachments(forwarded);
+        withAttachmentBytes(forwarded).then(full => {
+          if (full !== forwarded) setAttachments(prev => prev.map(att => full[forwarded.indexOf(att)] || att));
+        }).catch(err => console.warn('[ComposeModal] forwarded attachments not read yet:', err));
       }
     }
   // composeContextVisible is the default for a newly opened reply. Toggling
@@ -955,6 +969,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         content: att.content,
         encoding: 'base64',
         contentType: att.contentType,
+        _source: att._source,
       }));
       const signature = JSON.stringify([
         selectedAccountId, composeFrom, formData.to, formData.cc, formData.bcc,
@@ -999,6 +1014,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           if (!draftMailboxRef.current) {
             draftMailboxRef.current = await resolveDraftsMailbox(selectedAccountId);
           }
+          if (payload.attachments) payload.attachments = await withAttachmentBytes(payload.attachments);
           await saveLocalDraft({
             account: selectedAccount,
             accountId: selectedAccountId,

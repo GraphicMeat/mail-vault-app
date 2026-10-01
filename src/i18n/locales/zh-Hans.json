@@ -640,6 +640,7 @@
   "errors.conn.serverSSecurityCertificateCould": "无法验证服务器的安全证书。",
   "errors.connectionFailed": "连接失败",
   "errors.composeArchiveOutgoing": "无法存档发出的邮件：{{error}}",
+  "errors.composeAttachmentUnavailable": "无法从原始邮件读取附件 {{filename}}",
   "errors.composeBuildOutgoingMime": "无法创建发出的邮件：{{error}}",
   "errors.composeMissingSchedule": "请设置发送时间。",
   "errors.composeRefreshAccount": "无法刷新账户。",

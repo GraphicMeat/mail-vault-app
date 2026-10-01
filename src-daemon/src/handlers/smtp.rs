@@ -35,11 +35,12 @@ fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
         .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, "Missing or invalid account".to_string()))
 }
 
+/// serde's own reason rides along ("missing field `content`"): without it a
+/// malformed payload read only as "Missing or invalid email".
 fn email_arg(id: &Value, params: &Value) -> Result<smtp::OutgoingEmail, RpcResponse> {
-    params
-        .get("email")
-        .and_then(|v| serde_json::from_value::<smtp::OutgoingEmail>(v.clone()).ok())
-        .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, "Missing or invalid email".to_string()))
+    let invalid = |why: String| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, why);
+    let email = params.get("email").ok_or_else(|| invalid("Missing email".to_string()))?;
+    serde_json::from_value::<smtp::OutgoingEmail>(email.clone()).map_err(|e| invalid(format!("Invalid email: {e}")))
 }
 
 /// Ported verbatim from `commands.rs`'s `built_mime_json`: raw base64, the
@@ -446,6 +447,21 @@ mod tests {
 
         let resp = call(&s, "smtp_build_draft_mime", json!({"account": account_json(&server), "email": draft})).await;
         resp.result.expect("smtp_build_draft_mime must accept a draft with no recipient yet");
+    }
+
+    // A forward used to hand over attachments with no bytes (the light fetch
+    // carries none), and the reason was dropped: the user saw only "Missing or
+    // invalid email". The field serde stumbled on has to reach them.
+    #[tokio::test]
+    async fn build_mime_names_the_field_a_malformed_email_is_missing() {
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let mut email = outgoing_email("to@example.com");
+        email["attachments"] = json!([{ "filename": "a.pdf", "contentType": "application/pdf" }]);
+
+        let resp = call(&s, "smtp_build_mime", json!({"account": account_json(&server), "email": email})).await;
+        let message = resp.error.expect("an attachment without content must be refused").message;
+        assert!(message.contains("content"), "{message}");
     }
 
     #[tokio::test]

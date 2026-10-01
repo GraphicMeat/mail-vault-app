@@ -133,6 +133,42 @@ describe('buildOutgoingPayload', () => {
 
     expect(built.outgoingPayload.html.endsWith(`<hr>${header}<blockquote><p>Prior message</p></blockquote>`)).toBe(true);
   });
+
+  // A forward copies the original's attachment list, and the light fetch that
+  // loaded it carries no bytes. Without them the daemon refused the whole
+  // payload ("Missing or invalid email") and the forward could not be sent.
+  it('reads a forwarded attachment\'s bytes back from the original message', async () => {
+    const source = index => ({ accountId: 'acct-2', mailbox: 'INBOX', uid: 9, attachmentIndex: index });
+    invoke.mockImplementation(async (cmd) => (cmd === 'maildir_read_attachments' ? ['UERGMQ==', 'UERGMg=='] : undefined));
+    const built = await buildOutgoingPayload({
+      snapshot: { ...snapshot, attachments: [
+        { filename: 'mine.txt', contentType: 'text/plain', content: 'aGk=' },
+        { filename: 'a.pdf', contentType: 'application/pdf', _source: source(1) },
+        { filename: 'b.pdf', contentType: 'application/pdf', _source: source(3) },
+      ] },
+      account, settings: {},
+    });
+
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === 'maildir_read_attachments'))
+      .toEqual([['maildir_read_attachments', { accountId: 'acct-2', mailbox: 'INBOX', uid: 9, attachmentIndices: [1, 3] }]]);
+    expect(built.outgoingPayload.attachments.map(a => [a.filename, a.content]))
+      .toEqual([['mine.txt', 'aGk='], ['a.pdf', 'UERGMQ=='], ['b.pdf', 'UERGMg==']]);
+    invoke.mockImplementation(async () => undefined);
+  });
+
+  it('refuses, naming the file, when a forwarded attachment cannot be read', async () => {
+    invoke.mockImplementation(async (cmd) => (cmd === 'maildir_read_attachments' ? [null] : undefined));
+    await expect(buildOutgoingPayload({
+      snapshot: { ...snapshot, attachments: [
+        { filename: 'gone.pdf', _source: { accountId: 'acct-1', mailbox: 'INBOX', uid: 9, attachmentIndex: 0 } },
+      ] },
+      account, settings: {},
+    })).rejects.toThrow('gone.pdf');
+    await expect(buildOutgoingPayload({
+      snapshot: { ...snapshot, attachments: [{ filename: 'nowhere.pdf' }] }, account, settings: {},
+    })).rejects.toThrow('nowhere.pdf');
+    invoke.mockImplementation(async () => undefined);
+  });
 });
 
 describe('createComposeSend', () => {

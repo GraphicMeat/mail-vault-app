@@ -7,6 +7,7 @@
  * lazy loading via `maildir_read_attachment`.
  */
 import { send } from './transport';
+import { t } from '../i18n/index.js';
 import { avoidReserved, isWindowsPlatform } from '../stores/slices/unifiedHelpers.js';
 
 /** Bare base64 from a daemon read or a `data:` URI: the prefix and any line breaks dropped. */
@@ -127,6 +128,49 @@ export async function hydrateInlineImages(email, accountId, mailbox) {
   });
 
   return hydrated ? { ...email, attachments } : email;
+}
+
+/**
+ * `attachments` with every missing `content` read back from where `_source`
+ * says it came from: `{ accountId, mailbox, uid, attachmentIndex }`.
+ *
+ * A forward copies the original's attachment list, and the light fetch that
+ * loaded it carries no bytes. One daemon call per source message. A file that
+ * cannot be read throws, naming it: the daemon refuses a payload with a
+ * contentless attachment anyway, and sending without the file would be worse.
+ *
+ * Returns the same array when nothing is missing.
+ */
+export async function withAttachmentBytes(attachments) {
+  const unavailable = att => new Error(t('errors.composeAttachmentUnavailable', { filename: att.filename || '' }));
+  const groups = new Map();
+  for (const att of attachments) {
+    if (att.content) continue;
+    const src = att._source;
+    if (!src) throw unavailable(att);
+    const key = `${src.accountId}\u0000${src.mailbox}\u0000${src.uid}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(att);
+  }
+  if (!groups.size) return attachments;
+
+  const filled = new Map();
+  for (const group of groups.values()) {
+    const { accountId, mailbox, uid } = group[0]._source;
+    let contents;
+    try {
+      contents = await send('maildir_read_attachments', {
+        accountId, mailbox, uid, attachmentIndices: group.map(att => att._source.attachmentIndex),
+      });
+    } catch {
+      throw unavailable(group[0]);
+    }
+    group.forEach((att, i) => {
+      if (typeof contents?.[i] !== 'string') throw unavailable(att);
+      filled.set(att, contents[i]);
+    });
+  }
+  return attachments.map(att => (filled.has(att) ? { ...att, content: filled.get(att) } : att));
 }
 
 /**

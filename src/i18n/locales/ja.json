@@ -640,6 +640,7 @@
   "errors.conn.serverSSecurityCertificateCould": "サーバーのセキュリティ証明書を検証できませんでした。",
   "errors.connectionFailed": "接続に失敗しました",
   "errors.composeArchiveOutgoing": "送信メッセージをアーカイブできませんでした: {{error}}",
+  "errors.composeAttachmentUnavailable": "元のメールから添付ファイル {{filename}} を読み込めませんでした",
   "errors.composeBuildOutgoingMime": "送信メッセージを作成できませんでした: {{error}}",
   "errors.composeMissingSchedule": "送信時刻を指定してください。",
   "errors.composeRefreshAccount": "アカウントを更新できませんでした。",

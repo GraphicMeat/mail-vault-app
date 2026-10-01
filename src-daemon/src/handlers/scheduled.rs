@@ -45,11 +45,12 @@ fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
         .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, "Missing or invalid account".to_string()))
 }
 
+/// serde's own reason rides along ("missing field `content`"): without it a
+/// malformed payload read only as "Missing or invalid email".
 fn email_arg(id: &Value, params: &Value) -> Result<OutgoingEmail, RpcResponse> {
-    params
-        .get("email")
-        .and_then(|v| serde_json::from_value::<OutgoingEmail>(v.clone()).ok())
-        .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, "Missing or invalid email".to_string()))
+    let invalid = |why: String| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, why);
+    let email = params.get("email").ok_or_else(|| invalid("Missing email".to_string()))?;
+    serde_json::from_value::<OutgoingEmail>(email.clone()).map_err(|e| invalid(format!("Invalid email: {e}")))
 }
 
 fn json_of<T: serde::Serialize>(v: T) -> Result<Value, String> {

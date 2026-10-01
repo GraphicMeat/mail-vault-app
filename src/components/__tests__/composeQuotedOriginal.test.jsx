@@ -11,11 +11,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { act, render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
-const { buildOutgoingMime, saveLocalDraft } = vi.hoisted(() => ({
+const { buildOutgoingMime, saveLocalDraft, readAttachments } = vi.hoisted(() => ({
   buildOutgoingMime: vi.fn().mockResolvedValue({
     rawBase64: 'AAAA', messageId: '<mine@example.test>', rawSize: 4,
   }),
   saveLocalDraft: vi.fn().mockResolvedValue(undefined),
+  readAttachments: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
@@ -88,6 +89,10 @@ vi.mock('../../services/db', () => ({
   saveAccount: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/authUtils', () => ({ ensureFreshToken: vi.fn(async (a) => a) }));
+vi.mock('../../services/transport', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, send: (cmd, args) => (cmd === 'maildir_read_attachments' ? readAttachments(args) : actual.send(cmd, args)) };
+});
 
 const account = { id: 'acct-1', email: 'me@example.test', name: 'Me' };
 const mail = {
@@ -744,6 +749,30 @@ describe('the quoted original in a reply', () => {
     const pane = await screen.findByTestId('original-thread');
     expect(pane.getAttribute('data-subjects')).toBe('Quote request|Follow up');
     expect(pane.getAttribute('data-read-only')).toBe('true');
+  });
+
+  // The reading pane loads a message without its attachment bytes. A forward
+  // of it went out with contentless attachments, which the daemon refused
+  // ("Missing or invalid email"). A row in a single-account folder carries no
+  // `_accountId` or `_mailbox`, so the bytes are read from where the view
+  // locates it.
+  it('forwards the original\'s attachments with their bytes read from where it lives', async () => {
+    readAttachments.mockResolvedValue(['UERGMQ==', 'UERGMg==']);
+    const light = { ...original, attachments: [
+      { filename: 'a.pdf', contentType: 'application/pdf', size: 4 },
+      { filename: 'b.pdf', contentType: 'application/pdf', size: 4 },
+    ] };
+    render(<ComposeModal mode="forward" replyTo={light} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    await screen.findByText('b.pdf');
+
+    fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
+
+    expect(readAttachments).toHaveBeenCalledWith({ accountId: 'acct-1', mailbox: 'INBOX', uid: 10, attachmentIndices: [0, 1] });
+    expect(buildOutgoingMime.mock.calls[0][1].attachments.map(a => [a.filename, a.content]))
+      .toEqual([['a.pdf', 'UERGMQ=='], ['b.pdf', 'UERGMg==']]);
+    readAttachments.mockReset();
   });
 
   it('keeps reading context available while forwarding without adding a second outgoing quote', async () => {
