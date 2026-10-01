@@ -10,6 +10,7 @@ import { useUnsavedStore } from '../stores/unsavedStore';
 import { useT } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateTag } from './SearchTagInput';
+import { usePrivateAttr } from '../hooks/usePrivacy';
 import { Button } from './ui/Button';
 import { SettingsSection } from './ui/SettingsForm';
 import { TypeaheadChips } from './ui/TypeaheadChips';
@@ -87,10 +88,13 @@ const dropTargetAt = (event, root) => {
 /// both use it. `suggest` turns the input into a typeahead: `(text, offset)`
 /// in, `[{ value, label, detail }]` out, never a rejection. With `pageSize`,
 /// a full page means there may be more, fetched as the list is scrolled.
-function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput, suggest, pageSize, minChars = 1 }) {
+/// `people`: every word names a sender, so privacy mode masks it whole.
+function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups, input, setInput, suggest, pageSize, minChars = 1, people = false }) {
   const t = useT();
   // A word like `from:ann@x.test` names someone: masked like a search tag.
   const privateTag = usePrivateTag();
+  const pa = usePrivateAttr();
+  const shownKey = key => (people ? pa(key, 'name') : privateTag(key));
   const root = useRef(null);
   const [suggestions, setSuggestions] = useState([]);
   /// The text being paged, how far it got, and whether a page is in flight.
@@ -196,8 +200,8 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
             <span className={`view-query-key${isOver({ g, i }) ? ' is-over' : ''}${isCarried(g, i) ? ' is-dragging' : ''}`}
               data-drop={`w:${g}:${i}`} title={t('views.query.dragHint')}
               onPointerDown={startDrag({ kind: 'word', g, i }, key)}>
-              {privateTag(key)}
-              <button type="button" className="view-query-key-remove" aria-label={`${t('common.remove')} ${privateTag(key)}`}
+              {shownKey(key)}
+              <button type="button" className="view-query-key-remove" aria-label={`${t('common.remove')} ${shownKey(key)}`}
                 onPointerDown={event => event.stopPropagation()}
                 onClick={() => setGroups(current => removeWord(current, g, i))}>
                 <X size={12} aria-hidden="true" />
@@ -230,7 +234,7 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
     <p id={`${prefix}-hint`} className="view-query-hint">{hint}</p>
     {ghost && createPortal(<div className="account-settings-drag-preview" aria-hidden="true"
       data-testid={`${prefix}-ghost`} style={{ left: ghost.x + 12, top: ghost.y + 12 }}>
-      <span>{privateTag(ghost.label)}</span>
+      <span>{ghost.item.kind === 'word' ? shownKey(ghost.label) : ghost.label}</span>
     </div>, document.body)}
   </div>;
 }
@@ -290,13 +294,15 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
   /// Senders the index holds, in the accounts the view reads (none chosen is
   /// every account). Joined into a key so the lookup is stable across renders.
   const accountKey = (chosenAccounts.length ? chosenAccounts : accounts.map(account => account.id)).join('\n');
+  // Masked here, not in TypeaheadChips: only this list's options are people.
+  const pa = usePrivateAttr();
   const suggestSenders = useCallback(prefix => daemonCall('views.suggest_senders', {
     prefix, accounts: accountKey ? accountKey.split('\n') : [], limit: 8,
   }).then(found => (Array.isArray(found) ? found : []).map(sender => ({
     value: sender.address,
-    label: sender.name || sender.address,
-    detail: [sender.name ? sender.address : '', sender.count].filter(Boolean).join(' · '),
-  }))).catch(() => []), [accountKey]);
+    label: sender.name ? pa(sender.name, 'name') : pa(sender.address, 'email'),
+    detail: [sender.name ? pa(sender.address, 'email') : '', sender.count].filter(Boolean).join(' · '),
+  }))).catch(() => []), [accountKey, pa]);
   /// Words and phrases from the subjects and attachment names of the mail the
   /// view reads, most messages first, a page at a time.
   const suggestTerms = useCallback((prefix, offset) => daemonCall('views.suggest_terms', {
@@ -464,7 +470,7 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
 
     <QueryGroupsField prefix="view-sender" label={t('views.filter.sender')} placeholder={t('views.sender.placeholder')}
       hint={t('views.sender.hint')} groups={senderGroups} setGroups={setSenderGroups} input={senderInput} setInput={setSenderInput}
-      suggest={suggestSenders} />
+      suggest={suggestSenders} people />
 
     </SettingsSection>
 

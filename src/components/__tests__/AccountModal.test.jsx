@@ -215,3 +215,20 @@ describe('AccountModal: what the connection test reached', () => {
     expect(screen.queryByText(/Connected to /)).toBeNull();
   });
 });
+
+describe('AccountModal — privacy mode', () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  it('hides the paint of the typed address and display name (ruling R14)', async () => {
+    const { usePrivacyStore } = await import('../../stores/privacyStore');
+    vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+    usePrivacyStore.setState({ enabled: true });
+    try {
+      const emailInput = await openGmailStep2();
+      expect(emailInput.className).toContain('mv-private-input');
+      expect(screen.getByLabelText('Display Name (optional)').className).toContain('mv-private-input');
+    } finally {
+      usePrivacyStore.setState({ enabled: false });
+    }
+  });
+});

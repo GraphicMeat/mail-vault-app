@@ -3,6 +3,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
+import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { send } from '../../services/transport';
 import { getCachedMailboxEntry } from '../../services/db';
 import { isGraphAccount } from '../../services/graphConfig';
@@ -38,6 +39,7 @@ export const LONG_UPLOAD_BYTES = 1024 ** 3;
  */
 export default function MboxImportDialog({ sourcePath, accounts, defaultAccountId, onCancel, onConfirm, resumable, onResume, onStartOver }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const id = useId();
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [mode, setMode] = useState('local');
@@ -122,7 +124,7 @@ export default function MboxImportDialog({ sourcePath, accounts, defaultAccountI
         <label htmlFor={`${id}-account`} className="block mb-1 text-sm text-mail-text-muted">{t('settings.backup.restore.mboxAccount')}</label>
         <select id={`${id}-account`} value={accountId} onChange={(e) => changeAccount(e.target.value)} data-testid="mbox-import-account"
           className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text focus:border-mail-accent">
-          {accounts.map((a) => <option key={a.id} value={a.id}>{a.email}</option>)}
+          {accounts.map((a) => <option key={a.id} value={a.id}>{pa(a.email, 'email')}</option>)}
         </select>
       </div>
 

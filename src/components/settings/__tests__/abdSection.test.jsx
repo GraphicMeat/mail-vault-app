@@ -22,6 +22,7 @@ import AbdSection from '../abd/AbdSection';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useAbdStore } from '../../../stores/abdStore';
 import { t } from '../../../i18n';
+import { usePrivacyStore } from '../../../stores/privacyStore';
 
 const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
 const READY = { displayPath: '/Volumes/Backup', status: 'ready', platform: 'macos', lastValidatedAt: 1, lastError: null };
@@ -204,5 +205,20 @@ describe('a Settings window of its own', () => {
     await waitFor(() => expect(svc.watchAbd).toHaveBeenCalledOnce());
     view.unmount();
     await waitFor(() => expect(stop).toHaveBeenCalled());
+  });
+});
+
+describe('privacy mode', () => {
+  it('masks the account choices', () => {
+    vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+    usePrivacyStore.setState({ enabled: true });
+    try {
+      render(<AbdSection />);
+      const options = [...screen.getByTestId('abd-account').querySelectorAll('option')].map(o => o.textContent);
+      expect(options).toEqual(['xxxx@xxxx.xxxx', 'xxxx@xxxxxxx.xxxx']);
+    } finally {
+      usePrivacyStore.setState({ enabled: false });
+      vi.restoreAllMocks();
+    }
   });
 });

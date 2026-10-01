@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { t, useT  } from '../i18n/index.js';
 import { T } from '../i18n/T.jsx';
-import { usePrivateAttr } from '../hooks/usePrivacy';
+import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
 
 const LOCATION_OPTIONS = [
   { id: 'all', labelKey: 'search.location.all', icon: Layers },
@@ -47,6 +47,7 @@ const LOCATION_OPTIONS = [
 export function SearchBar({ autoFocus = false }) {
   const t = useT();
   const pa = usePrivateAttr();
+  const privateInput = usePrivateInputClass();
   const searchQuery = useSearchStore(s => s.searchQuery);
   const searchFilters = useSearchStore(s => s.searchFilters);
   const searchActive = useSearchStore(s => s.searchActive);
@@ -498,9 +499,9 @@ export function SearchBar({ autoFocus = false }) {
                       value={searchFilters.sender}
                       onChange={(e) => handleFilterChange('sender', e.target.value)}
                       placeholder={t('search.emailName')}
-                      className="w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg
+                      className={`${privateInput} w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-sm text-mail-text placeholder-mail-text-muted
-                                focus:border-mail-accent focus:outline-none"
+                                focus:border-mail-accent focus:outline-none`}
                     />
                   </div>
 

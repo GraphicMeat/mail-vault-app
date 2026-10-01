@@ -58,6 +58,7 @@ const { useInsightsStore } = await import('../../stores/insightsStore');
 const { AccountSettings } = await import('../settings/AccountSettings');
 const { NetworkActivity } = await import('../settings/NetworkActivity');
 const { useNetActivityStore } = await import('../../stores/netActivityStore');
+const { AccountReorderList } = await import('../settings/AccountReorderList');
 const { t } = await import('../../i18n');
 
 const ACCOUNT = { id: 'own', name: OWEN, email: OWEN_ADDR };
@@ -169,4 +170,37 @@ describe('privacy leak guard: views and settings', () => {
     expect(document.body.textContent).toContain(`Lunch with ${MASKED_JOANNA}`);
     expectNoLeak(document.body);
   });
+
+  it('explorer: masked sender keys stay distinct in the DOM, and hold no address', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 700, height: 500, top: 0, left: 0, right: 700, bottom: 500 });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(500);
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+    // Same length as joanna.k@example.org: filler would make the two keys equal.
+    const other = { ...MESSAGE, uid: 2, from: { name: OWEN, address: 'owenashc@example.org' } };
+    const keyOf = e => `${e._accountId}:${e._mailbox}:${e.uid}`;
+    render(<ExplorerView emails={[MESSAGE, other]} conversationEmails={[MESSAGE, other]} context={{ activeAccountId: 'own', activeMailbox: 'INBOX' }}
+      rootLabel="Inbox" selectedEmailIds={new Set()} getSelectionKey={keyOf} onSetSelection={() => {}} renderEmail={() => null} />);
+    fireEvent.change(screen.getByTestId('explorer-grouping'), { target: { value: 'sender' } });
+    const keys = screen.getAllByTestId('explorer-group-row').map(row => row.dataset.explorerKey);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+    expectNoLeak(document.body);
+  });
+
+  it('account reorder: the live announcement names the moved account masked', () => {
+    const second = { id: 'two', name: JOANNA, email: JOANNA_ADDR };
+    render(<AccountReorderList accounts={[ACCOUNT, second]} onReorder={() => {}} privateKind="email">{() => null}</AccountReorderList>);
+    fireEvent.keyDown(screen.getAllByRole('button')[0], { key: 'ArrowDown' });
+    const live = document.querySelector('[aria-live="polite"]');
+    expect(live.textContent).toContain('xxxx@xxx.xxxxxxx');
+    expectNoLeak(document.body);
+  });
+
+  it('reorder of views or quick actions keeps the moved label readable', () => {
+    const views = [{ id: 'a', email: 'Receipts' }, { id: 'b', email: 'Travel' }];
+    render(<AccountReorderList accounts={views} onReorder={() => {}}>{() => null}</AccountReorderList>);
+    fireEvent.keyDown(screen.getAllByRole('button')[0], { key: 'ArrowDown' });
+    expect(document.querySelector('[aria-live="polite"]').textContent).toContain('Receipts');
+  });
 });
+

@@ -32,6 +32,7 @@ vi.mock('../../stores/mailStore', () => ({
 }));
 
 const { ViewEditor } = await import('../ViewEditor');
+const { usePrivacyStore } = await import('../../stores/privacyStore');
 
 const SUGGESTIONS = [
   { address: 'ann@acme.test', name: 'Ann Lee', count: 12 },
@@ -297,5 +298,29 @@ describe('tag typeahead', () => {
     fireEvent.keyDown(screen.getByTestId('view-tags'), { key: 'Backspace' });
     submit();
     expect(saved().def.tags).toEqual(['t1']);
+  });
+});
+
+describe('sender field in privacy mode', () => {
+  beforeEach(() => {
+    vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+    usePrivacyStore.setState({ enabled: true });
+  });
+  afterEach(() => { usePrivacyStore.setState({ enabled: false }); vi.restoreAllMocks(); });
+
+  it('masks each sender word whole, and the suggested names and addresses', async () => {
+    render(<ViewEditor view={{ ...VIEW, def: { ...VIEW.def, sender: 'ann@acme.test' } }} onClose={() => {}} showPreview={false} />);
+    const group = screen.getByTestId('view-sender-group-0');
+    expect(group.textContent).toContain('xxx@xxxx.xxxx');
+    expect(group.innerHTML).not.toContain('ann@acme.test');
+    fireEvent.change(screen.getByTestId('view-sender'), { target: { value: 'ac' } });
+    const options = await suggestions();
+    const text = options.map(o => o.textContent).join('|');
+    expect(text).not.toMatch(/Ann Lee|ann@acme|acme\.test/);
+    expect(options[0].textContent).toContain('xxx xxx');
+    // The pick still adds the real sender: masking is paint only.
+    fireEvent.click(options[0]);
+    submit();
+    expect(saved().def.sender).toContain('ann@acme.test');
   });
 });

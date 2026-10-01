@@ -774,10 +774,10 @@ export function AccountModal({ onClose, onSuccess }) {
                   value={formData.name}
                   onChange={handleInputChange}
                   placeholder={t('account.johnDoe')}
-                  className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                  className={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                             text-mail-text placeholder-mail-text-muted
                             focus:border-mail-accent focus:ring-1 focus:ring-mail-accent
-                            transition-all"
+                            transition-all`}
                 />
               </div>
 

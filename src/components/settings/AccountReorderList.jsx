@@ -79,7 +79,7 @@ export function AccountReorderList({ accounts, selectedAccountId, onReorder, chi
     if (ids.every((id, index) => id === accounts[index]?.id)) return;
     onReorder(ids);
     setAnnouncement(t('settings.accounts.accountMoved', {
-      email: accounts.find(account => account.id === accountId)?.email,
+      email: shown(accounts.find(account => account.id === accountId)?.email),
       position: ids.indexOf(accountId) + 1,
       total: ids.length,
     }));

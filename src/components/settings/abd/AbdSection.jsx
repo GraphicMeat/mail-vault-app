@@ -11,6 +11,7 @@ import { MODE_ARCHIVE, MODE_BACKUP, isFinished } from '../../../utils/abdFrame';
 import { IS_APPSTORE_BUILD } from '../../../utils/buildFlags';
 import { statusText } from '../../abd/abdText';
 import { useT } from '../../../i18n/index.js';
+import { usePrivateAttr } from '../../../hooks/usePrivacy';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
@@ -31,6 +32,7 @@ function PremiumBadge() {
  */
 export default function AbdSection({ onUpgrade }) {
   const t = useT();
+  const pa = usePrivateAttr();
   const accounts = useAccountStore(s => s.accounts);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
@@ -109,7 +111,7 @@ export default function AbdSection({ onUpgrade }) {
         <label htmlFor="abd-account" className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.abd.account')}</label>
         <select id="abd-account" data-testid="abd-account" className={selectClass} value={account.id}
           onChange={e => { setAccountId(e.target.value); setUpsell(null); }}>
-          {visible.map(a => <option key={a.id} value={a.id}>{a.email}</option>)}
+          {visible.map(a => <option key={a.id} value={a.id}>{pa(a.email, 'email')}</option>)}
         </select>
         {graph && <p className="mt-2 text-xs text-mail-text-muted" data-testid="abd-graph-hint">{t('settings.backup.abd.graphHint')}</p>}
       </div>

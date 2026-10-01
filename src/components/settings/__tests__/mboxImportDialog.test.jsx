@@ -519,3 +519,17 @@ it('a separate-folder import names the new folder and opens it', async () => {
     useMailStore.setState({ activateAccount: original });
   }
 });
+
+it('masks the account choices while privacy mode is on', async () => {
+  const { usePrivacyStore } = await import('../../../stores/privacyStore');
+  vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+  usePrivacyStore.setState({ enabled: true });
+  try {
+    const dialog = await openDialog();
+    const options = [...within(dialog).getByTestId('mbox-import-account').querySelectorAll('option')].map(o => o.textContent);
+    expect(options.length).toBeGreaterThan(0);
+    for (const text of options) expect(text).toMatch(/^[x@.]+$/);
+  } finally {
+    usePrivacyStore.setState({ enabled: false });
+  }
+});

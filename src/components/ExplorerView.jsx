@@ -8,12 +8,18 @@ import { formatEmailDate } from '../utils/dateFormat';
 import { displayText } from '../utils/bidiText';
 import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
 import { filterUnread } from '../utils/emailParser';
-import { usePrivateAttr } from '../hooks/usePrivacy';
+import { usePrivateAttr, usePrivacyActive } from '../hooks/usePrivacy';
 import '../styles/explorer.css';
 
 const EMPTY_PATH = Object.freeze([]);
 const EMPTY_CONTEXT = Object.freeze({});
 const isUnread = email => !email.flags?.includes('\\Seen');
+// FNV-1a, base 36: a short tag that tells keys apart without spelling one out.
+const keyTag = (s) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+};
 
 // What privacy mode masks in a group's [label, detail], by group kind. A date
 // group names no one.
@@ -37,9 +43,11 @@ export function ExplorerView({
 }) {
   const t = useT();
   const pa = usePrivateAttr();
-  // A sender group's key holds the address: the DOM gets it masked, and the
-  // focus check below compares masked to masked.
-  const domKey = useCallback(key => pa(String(key), 'name'), [pa]);
+  // A sender group's key holds the address, so while masking the DOM gets a
+  // tag of it instead: distinct per key (filler would make two senders of
+  // the same length look alike to the focus check below), never the text.
+  const masking = usePrivacyActive();
+  const domKey = useCallback(key => (masking ? `k${keyTag(String(key))}` : String(key)), [masking]);
   const storedGrouping = useSettingsStore(s => s.explorerGrouping);
   // A saved view brings its own grouping, and a change made inside it goes
   // back to the view (`onGroupingChange`), never to the settings store:
