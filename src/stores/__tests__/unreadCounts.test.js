@@ -14,7 +14,7 @@ vi.mock('../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 
 const { useSnoozeStore } = await import('../snoozeStore');
 const {
-  selectTotalUnread, isCompleteCache, recountInbox, shiftInbox, addArrivals, applyRecounts, forgetAccount,
+  selectTotalUnread, unreadRows, isCompleteCache, recountInbox, shiftInbox, addArrivals, applyRecounts, forgetAccount,
 } = await import('../unreadCounts');
 
 const counts = () => settings.getState().unreadPerAccount;
@@ -22,25 +22,57 @@ const unread = (uid, extra = {}) => ({ uid, flags: [], ...extra });
 const seen = (uid) => ({ uid, flags: ['\\Seen'] });
 
 beforeEach(() => {
-  settings.setState({ unreadPerAccount: { a1: 7, a2: 5 }, hiddenAccounts: {} });
+  settings.setState({ unreadPerAccount: { a1: 7, a2: 5 }, hiddenAccounts: {}, displayNames: {}, getOrderedAccounts: undefined });
   useSnoozeStore.setState({ rows: [] });
 });
 
 describe('the total', () => {
+  const accounts = [{ id: 'a1', email: 'one@example.com' }, { id: 'a2', email: 'two@example.com' }];
+
   it('is the sum of the accounts that are not hidden, computed from the counts', () => {
-    expect(selectTotalUnread(settings.getState())).toBe(12);
+    expect(selectTotalUnread(settings.getState(), accounts)).toBe(12);
     settings.setState({ hiddenAccounts: { a2: true } });
-    expect(selectTotalUnread(settings.getState())).toBe(7);
+    expect(selectTotalUnread(settings.getState(), accounts)).toBe(7);
   });
 
   it('follows every write of a count', () => {
     shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: unread(1) }], -1);
-    expect(selectTotalUnread(settings.getState())).toBe(11);
+    expect(selectTotalUnread(settings.getState(), accounts)).toBe(11);
   });
 
   it('reads a settings object with no hidden map as nothing hidden', () => {
-    expect(selectTotalUnread({ unreadPerAccount: { a1: 2 } })).toBe(2);
-    expect(selectTotalUnread({})).toBe(0);
+    expect(selectTotalUnread({ unreadPerAccount: { a1: 2 } }, accounts)).toBe(2);
+    expect(selectTotalUnread({}, accounts)).toBe(0);
+  });
+
+  // A count left behind by an account that is gone still counted on the dock.
+  // The badge sums the rows the sidebar shows, no more.
+  it('counts no account the sidebar does not show', () => {
+    settings.setState({ unreadPerAccount: { a1: 7, a2: 5, gone: 10 } });
+    expect(selectTotalUnread(settings.getState(), accounts)).toBe(12);
+    expect(selectTotalUnread(settings.getState(), [])).toBe(0);
+  });
+});
+
+describe('the rows', () => {
+  it('are the sidebar accounts in its order, labelled as it labels them, hidden ones left out', () => {
+    settings.setState({
+      unreadPerAccount: { a1: 7, a2: 5, a3: 1 },
+      hiddenAccounts: { a3: true },
+      displayNames: { a2: 'Work' },
+      getOrderedAccounts: (list) => [...list].reverse(),
+    });
+    const list = [
+      { id: 'a1', name: 'Me', email: 'one@example.com' },
+      { id: 'a2', email: 'two@example.com' },
+      { id: 'a3', email: 'three@example.com' },
+      { id: 'a4', email: 'four@example.com' },
+    ];
+    expect(unreadRows(settings.getState(), list)).toEqual([
+      { id: 'a4', label: 'four@example.com', unread: 0 },
+      { id: 'a2', label: 'Work', unread: 5 },
+      { id: 'a1', label: 'Me', unread: 7 },
+    ]);
   });
 });
 

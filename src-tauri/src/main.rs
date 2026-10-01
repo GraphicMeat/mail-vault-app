@@ -24,8 +24,61 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 /// Setting text on the existing items beats rebuilding the menu: the `#[cfg]`
 /// guards around `check_updates` (absent on MAS builds) and the per-platform
 /// Settings accelerator stay exactly where they are.
-/// Handle to the tray menu, kept because `TrayIcon` exposes no way back to it.
-struct TrayMenu(tauri::menu::Menu<tauri::Wry>);
+/// Handle to the tray menu, kept because `TrayIcon` exposes no way back to it,
+/// and how many account rows (their separator included) `set_tray_accounts`
+/// last put in it.
+struct TrayMenu(tauri::menu::Menu<tauri::Wry>, std::sync::Mutex<usize>);
+
+/// Where the account rows start: under Compose and its separator.
+const TRAY_ACCOUNTS_AT: usize = 2;
+/// Menu id prefix of an account row; the rest of the id is the account id.
+const TRAY_ACCOUNT_PREFIX: &str = "tray_account:";
+
+#[derive(Deserialize)]
+struct TrayAccount {
+    id: String,
+    label: String,
+    unread: u32,
+}
+
+/// An account row's text: the sidebar's label and, when there is any, its
+/// unread count. A bare `&` on Windows underlines the next letter instead.
+fn tray_account_text(label: &str, unread: u32) -> String {
+    let label = if cfg!(windows) { label.replace('&', "&&") } else { label.to_string() };
+    if unread > 0 { format!("{label} ({unread})") } else { label }
+}
+
+/// The tray menu's account rows, one per sidebar account in its order, with the
+/// unread counts the sidebar shows (the dock badge is their sum). The frontend
+/// pushes them whenever one changes; the rows are swapped out wholesale, so the
+/// fixed items keep the labels `apply_menu_labels` gave them.
+#[tauri::command]
+fn set_tray_accounts(app: tauri::AppHandle, accounts: Vec<TrayAccount>) -> Result<(), String> {
+    let Some(tray) = app.try_state::<TrayMenu>() else { return Ok(()) };
+    let mut shown = tray.1.lock().map_err(|e| e.to_string())?;
+    while *shown > 0 {
+        tray.0.remove_at(TRAY_ACCOUNTS_AT).map_err(|e| e.to_string())?;
+        *shown -= 1;
+    }
+    if accounts.is_empty() {
+        return Ok(());
+    }
+    for (i, account) in accounts.iter().enumerate() {
+        let item = MenuItem::with_id(
+            &app,
+            format!("{TRAY_ACCOUNT_PREFIX}{}", account.id),
+            tray_account_text(&account.label, account.unread),
+            true,
+            None::<&str>,
+        ).map_err(|e| e.to_string())?;
+        tray.0.insert(&item, TRAY_ACCOUNTS_AT + i).map_err(|e| e.to_string())?;
+        *shown += 1;
+    }
+    let sep = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
+    tray.0.insert(&sep, TRAY_ACCOUNTS_AT + accounts.len()).map_err(|e| e.to_string())?;
+    *shown += 1;
+    Ok(())
+}
 
 #[tauri::command]
 fn apply_menu_labels(
@@ -3470,6 +3523,7 @@ fn main() {
             send_notification,
             notification_sound::preview_notification_sound,
             set_badge_count,
+            set_tray_accounts,
             check_running_from_dmg,
             save_attachment_to,
             read_file_base64,
@@ -3842,13 +3896,19 @@ fn main() {
             });
 
             // --- Set up system tray ---
+            // Compose, then the account rows (`set_tray_accounts` inserts them
+            // at TRAY_ACCOUNTS_AT once the frontend knows the accounts).
+            let tray_compose = MenuItem::with_id(app, "tray_compose", "Compose", true, None::<&str>)?;
             let tray_show = MenuItem::with_id(app, "show", "Show MailVault", true, None::<&str>)?;
             let tray_view_logs = MenuItem::with_id(app, "tray_view_logs", "View Logs", true, None::<&str>)?;
             let tray_quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let sep0 = PredefinedMenuItem::separator(app)?;
             let sep1 = PredefinedMenuItem::separator(app)?;
             let sep2 = PredefinedMenuItem::separator(app)?;
 
             let tray_menu = Menu::with_items(app, &[
+                &tray_compose as &dyn tauri::menu::IsMenuItem<_>,
+                &sep0 as &dyn tauri::menu::IsMenuItem<_>,
                 &tray_show as &dyn tauri::menu::IsMenuItem<_>,
                 &sep1 as &dyn tauri::menu::IsMenuItem<_>,
                 &tray_view_logs as &dyn tauri::menu::IsMenuItem<_>,
@@ -3860,11 +3920,11 @@ fn main() {
             // `on_menu_event` above already handles it, and
             // `apply_menu_labels` localizes it.
             #[cfg(windows)]
-            tray_menu.insert(&check_updates, 2)?;
+            tray_menu.insert(&check_updates, 4)?;
 
             // TrayIcon exposes no `menu()` accessor, so keep a handle to the tray
             // menu in state — `apply_menu_labels` relabels it alongside the menu bar.
-            app.manage(TrayMenu(tray_menu.clone()));
+            app.manage(TrayMenu(tray_menu.clone(), std::sync::Mutex::new(0)));
 
             // The black template glyph suits the macOS menu bar only; on a dark
             // Windows taskbar or GNOME top bar it all but disappears. Everything
@@ -3879,8 +3939,14 @@ fn main() {
                 .icon(tray_icon_image)
                 .icon_as_template(true)
                 .menu(&tray_menu)
-                .show_menu_on_left_click(false)
+                // A menu bar extra opens its menu on a click; a Windows or
+                // Linux tray icon brings the window back and keeps the menu
+                // on the right button.
+                .show_menu_on_left_click(cfg!(target_os = "macos"))
                 .on_tray_icon_event(|tray, event| {
+                    if cfg!(target_os = "macos") {
+                        return;
+                    }
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
@@ -3889,7 +3955,21 @@ fn main() {
                     }
                 })
                 .on_menu_event(|app, event| {
-                    match event.id().as_ref() {
+                    let id = event.id().as_ref();
+                    // Compose and an account row bring the window forward
+                    // first; the page does the rest, as the sidebar would.
+                    if id == "tray_compose" || id.starts_with(TRAY_ACCOUNT_PREFIX) {
+                        if let Some(window) = app.get_webview_window("main") {
+                            show_main_window(&window);
+                        }
+                        if let Some(account_id) = id.strip_prefix(TRAY_ACCOUNT_PREFIX) {
+                            let _ = app.emit_to("main", "tray-open-account", account_id);
+                        } else {
+                            let _ = app.emit_to("main", "tray-compose", ());
+                        }
+                        return;
+                    }
+                    match id {
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
                                 show_main_window(&window);

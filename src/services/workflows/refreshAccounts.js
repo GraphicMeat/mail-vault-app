@@ -297,7 +297,7 @@ export async function refreshAllAccounts(options = {}) {
   // total is derived from the counts (unreadCounts), so the accounts this run
   // skipped (already fresh, no credentials, the active one) still count.
   applyRecounts(countedUnread);
-  const totalUnread = selectTotalUnread(useSettingsStore.getState());
+  const totalUnread = selectTotalUnread(useSettingsStore.getState(), get().accounts);
 
   const newEmailCount = get().emails.length;
   const newEmails = Math.max(0, newEmailCount - previousEmailCount);

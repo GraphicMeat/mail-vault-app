@@ -1,6 +1,6 @@
 // The one owner of the sidebar's per-account unread counts (`unreadPerAccount`,
-// persisted in settingsStore) and of the total the dock badge shows, which is
-// derived from them and stored nowhere.
+// persisted in settingsStore) and of the total the dock badge shows and the
+// tray menu's rows, which are derived from them and stored nowhere.
 //
 // It used to be written from five places with five rules: a recount of the
 // rows the list held (a window onto a folder, or the rows of ANOTHER folder in
@@ -25,13 +25,23 @@ const settings = () => useSettingsStore.getState();
 export const isCompleteCache = (cache) =>
   Array.isArray(cache?.emails) && !(cache.totalEmails > cache.emails.length);
 
-/// What the dock badge shows: every account that is not hidden.
-export function selectTotalUnread(state) {
+/// The sidebar's account rows as the tray menu lists them: `accounts` in the
+/// sidebar's order, hidden ones left out, labelled and counted as it does.
+/// A count whose account is not in `accounts` (one removed, or not loaded yet)
+/// is no row. It stays in the store: a list still loading is not a removal.
+export function unreadRows(state, accounts) {
   const hidden = state?.hiddenAccounts || {};
-  return Object.entries(state?.unreadPerAccount || {})
-    .filter(([id]) => !hidden[id])
-    .reduce((sum, [, count]) => sum + (count || 0), 0);
+  const counts = state?.unreadPerAccount || {};
+  const names = state?.displayNames || {};
+  const ordered = state?.getOrderedAccounts ? state.getOrderedAccounts(accounts || []) : (accounts || []);
+  return ordered
+    .filter(a => !hidden[a.id])
+    .map(a => ({ id: a.id, label: names[a.id] || a.name || a.email, unread: counts[a.id] || 0 }));
 }
+
+/// What the dock badge shows: the sum of the sidebar's rows, no more.
+export const selectTotalUnread = (state, accounts) =>
+  unreadRows(state, accounts).reduce((sum, row) => sum + row.unread, 0);
 
 /// The unread count of `accountId`'s INBOX as `cache` (`{ emails, totalEmails }`)
 /// tells it, or null when the cache is not complete. Less what a local snooze

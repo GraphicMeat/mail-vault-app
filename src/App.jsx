@@ -1099,6 +1099,38 @@ function App() {
     return () => { active = false; if (unlisten) unlisten(); };
   }, []);
 
+  // The tray menu's Compose and account rows. Rust has already brought the
+  // window forward; these do what the sidebar's Compose button and account
+  // row do. Settings open over the mail goes to its minimized chip, unsaved
+  // edits and all, rather than hiding the inbox the click asked for.
+  const trayActions = useRef(null);
+  trayActions.current = {
+    compose: () => setComposeState({}),
+    showMail: () => {
+      if (showSettings && !settingsMinimized) minimizeSettings();
+      openMailFromSidebar();
+    },
+  };
+  useEffect(() => {
+    let unlisteners = [];
+    let active = true;
+    import('@tauri-apps/api/event').then(({ listen }) => Promise.all([
+      listen('tray-compose', () => trayActions.current.compose()),
+      listen('tray-open-account', ({ payload: accountId }) => {
+        if (typeof accountId !== 'string') return;
+        trayActions.current.showMail();
+        void import('./stores/viewStore').then(({ useViewStore }) => {
+          if (useViewStore.getState().activeViewId) useViewStore.getState().closeView();
+          return useMailStore.getState().activateAccount(accountId, 'INBOX');
+        }).catch(e => console.warn('[tray] could not open the account inbox:', e));
+      }),
+    ])).then(fns => {
+      if (!active) fns.forEach(fn => fn());
+      else unlisteners = fns;
+    }).catch(() => {}); // not in Tauri
+    return () => { active = false; unlisteners.forEach(fn => fn()); };
+  }, []);
+
   // Listen for report-bug event from native menu
   useEffect(() => {
     let unlisten;

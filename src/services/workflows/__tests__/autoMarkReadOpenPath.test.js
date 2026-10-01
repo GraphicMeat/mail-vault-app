@@ -247,7 +247,7 @@ function parked() {
 const never = () => new Promise(() => {});
 
 const badge = (id) => unreadPerAccount[id];
-const total = () => selectTotalUnread({ hiddenAccounts: {}, unreadPerAccount });
+const total = () => selectTotalUnread({ hiddenAccounts: {}, unreadPerAccount }, [A, B, G]);
 const storeFlags = (uid, accountId = null) => useMailStore.getState().emails
   .find(e => e.uid === uid && (!accountId || e._accountId === accountId)).flags;
 

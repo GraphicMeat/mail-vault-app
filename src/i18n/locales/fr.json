@@ -1004,6 +1004,7 @@
   "menu.quit_app": "Quitter",
   "menu.report_bug": "Signaler un bug…",
   "menu.show": "Afficher MailVault",
+  "menu.tray_compose": "Écrire",
   "menu.tray_view_logs": "Voir les journaux",
   "migration.toast.chooseWhatDoEmailsAlready": "Choisissez le sort des e-mails déjà copiés vers la destination.",
   "migration.toast.discardIncompleteMigration": "Abandonner la migration incomplète ?",

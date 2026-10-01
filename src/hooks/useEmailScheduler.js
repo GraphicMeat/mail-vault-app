@@ -4,7 +4,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
-import { recountInbox, addArrivals, isCompleteCache, selectTotalUnread } from '../stores/unreadCounts';
+import { recountInbox, addArrivals, isCompleteCache, selectTotalUnread, unreadRows } from '../stores/unreadCounts';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
 import { invalidateRestoreDescriptors } from '../services/cacheManager';
@@ -108,9 +108,12 @@ export function useEmailScheduler() {
   const refreshAllAccounts = useAccountStore(s => s.refreshAllAccounts);
   const accounts = useAccountStore(s => s.accounts);
   const emails = useMessageListStore(s => s.emails);
-  // Derived from the sidebar's counts (unreadCounts), so whatever moves one
-  // moves the dock badge's dependency too.
-  const totalUnread = useSettingsStore(selectTotalUnread);
+  // What the sidebar rows are made of (unreadCounts.unreadRows): whatever
+  // moves a row moves the dock badge and the tray menu with it.
+  const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
+  const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
+  const displayNames = useSettingsStore(s => s.displayNames);
+  const accountOrder = useSettingsStore(s => s.accountOrder);
   const {
     refreshInterval,
     refreshOnLaunch,
@@ -124,6 +127,8 @@ export function useEmailScheduler() {
   const hasRefreshedOnLaunch = useRef(false);
   const hasReplayedOps = useRef(false);
   const lastBadgeCount = useRef(-1);
+  const lastTrayRows = useRef('');
+  const hadAccounts = useRef(false);
 
   // ── IDLE: register watchers, then follow the daemon's change feed ──
   //
@@ -305,6 +310,21 @@ export function useEmailScheduler() {
     return () => { stopped = true; unlisten?.(); };
   }, []);
 
+  // The badge's total, over the accounts the sidebar shows.
+  const totalUnreadNow = () => selectTotalUnread(useSettingsStore.getState(), useMailStore.getState().accounts);
+
+  // The tray menu's account rows; Rust only hears about a change.
+  const updateTray = async (rows) => {
+    const signature = JSON.stringify(rows);
+    if (signature === lastTrayRows.current) return;
+    try {
+      await invoke('set_tray_accounts', { accounts: rows });
+      lastTrayRows.current = signature;
+    } catch (error) {
+      console.error('[scheduler] Failed to update the tray menu:', error);
+    }
+  };
+
   // Update badge count
   const updateBadge = async (count) => {
     if (!invoke) return;
@@ -313,6 +333,7 @@ export function useEmailScheduler() {
       // Clear badge if disabled
       try {
         await invoke('set_badge_count', { count: 0 });
+        lastBadgeCount.current = 0;
       } catch (error) {
         console.error('[scheduler] Failed to clear badge:', error);
       }
@@ -347,7 +368,7 @@ export function useEmailScheduler() {
       // Update badge to reflect total unread across ALL accounts
       if (result) {
         if (badgeMode === 'unread') {
-          updateBadge(selectTotalUnread(useSettingsStore.getState()));
+          updateBadge(totalUnreadNow());
         } else {
           updateBadge(useMailStore.getState().emails.length);
         }
@@ -419,31 +440,36 @@ export function useEmailScheduler() {
     };
   }, [refreshInterval, accounts.length]);
 
-  // Update badge when settings change or unread count changes.
-  // Debounced to avoid oscillation during IMAP pagination (emails array changes every page).
+  // Update the badge and the tray menu's rows when settings, the accounts or
+  // their unread counts change. Debounced to avoid oscillation during IMAP
+  // pagination (emails array changes every page).
   const badgeTimerRef = useRef(null);
   useEffect(() => {
     if (!invoke) return;
 
-    if (!badgeEnabled) {
-      updateBadge(0);
-      return;
-    }
+    if (!badgeEnabled) updateBadge(0);
 
     // Debounce: wait 2s after last change before updating badge.
     // During IMAP sync, emails.length changes every ~1s per page — we want the final stable value.
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
     badgeTimerRef.current = setTimeout(() => {
+      const accountsNow = useMailStore.getState().accounts;
+      // Accounts not loaded yet: their counts would read as a 0 on the dock.
+      if (!accountsNow.length && !hadAccounts.current) return;
+      hadAccounts.current = true;
+      const rows = unreadRows(useSettingsStore.getState(), accountsNow);
+      updateTray(rows);
+      if (!badgeEnabled) return;
       if (badgeMode === 'unread') {
-        // Unread across ALL accounts (not just current view)
-        updateBadge(selectTotalUnread(useSettingsStore.getState()));
+        // Unread across every account the sidebar shows (not just current view)
+        updateBadge(rows.reduce((sum, row) => sum + row.unread, 0));
       } else {
         updateBadge(useMailStore.getState().emails.length);
       }
     }, 2000);
 
     return () => { if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current); };
-  }, [badgeEnabled, badgeMode, emails.length, totalUnread]);
+  }, [badgeEnabled, badgeMode, emails.length, accounts, unreadPerAccount, hiddenAccounts, displayNames, accountOrder]);
 
   return { doRefresh };
 }

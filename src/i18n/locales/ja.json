@@ -1004,6 +1004,7 @@
   "menu.quit_app": "終了",
   "menu.report_bug": "不具合を報告…",
   "menu.show": "MailVault を表示",
+  "menu.tray_compose": "新規作成",
   "menu.tray_view_logs": "ログを表示",
   "migration.toast.chooseWhatDoEmailsAlready": "移動先にコピー済みのメールをどうするか選んでください。",
   "migration.toast.discardIncompleteMigration": "未完了の移行を破棄しますか？",

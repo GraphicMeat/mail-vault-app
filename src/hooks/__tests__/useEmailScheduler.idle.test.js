@@ -655,6 +655,8 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
   describe('dock badge', () => {
     const badgeCalls = () => mockInvoke.mock.calls.filter(c => c[0] === 'set_badge_count').map(c => c[1].count);
 
+    beforeEach(() => { mailStore.setState({ accounts: [IMAP_A, IMAP_B] }); });
+
     it('follows a message marked read, without a refresh', async () => {
       settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3, a2: 2 } });
       mockInvoke.mockClear();
@@ -680,6 +682,58 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(badgeCalls().at(-1)).toBe(3);
     });
+
+    // The dock counted more than the sidebar rows added up to.
+    it('leaves out a count whose account is gone', async () => {
+      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3, a2: 2, gone: 10 } });
+      mockInvoke.mockClear();
+
+      renderHook(() => useEmailScheduler());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+
+      expect(badgeCalls().at(-1)).toBe(5);
+    });
+
+    it('waits for the accounts: counts with none loaded would paint a 0', async () => {
+      mailStore.setState({ accounts: [] });
+      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3 } });
+      mockInvoke.mockClear();
+
+      renderHook(() => useEmailScheduler());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(badgeCalls()).toEqual([]);
+
+      act(() => { mailStore.setState({ accounts: [IMAP_A] }); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(badgeCalls().at(-1)).toBe(3);
+    });
+  });
+
+  // The menu bar menu lists the sidebar's accounts with their counts, whatever
+  // the dock badge setting.
+  describe('tray menu', () => {
+    const trayCalls = () => mockInvoke.mock.calls.filter(c => c[0] === 'set_tray_accounts').map(c => c[1].accounts);
+
+    it('pushes the sidebar rows, and again only when one changes', async () => {
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B] });
+      settingsStore.setState({ badgeEnabled: false, unreadPerAccount: { a1: 3, gone: 10 }, displayNames: { a2: 'Work' } });
+      mockInvoke.mockClear();
+
+      renderHook(() => useEmailScheduler());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(trayCalls()).toEqual([[
+        { id: 'a1', label: 'a@one.co', unread: 3 },
+        { id: 'a2', label: 'Work', unread: 0 },
+      ]]);
+
+      act(() => { settingsStore.setState({ badgeMode: 'all' }); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(trayCalls()).toHaveLength(1);
+
+      act(() => { shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { flags: [] } }], -1); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(trayCalls().at(-1)[0].unread).toBe(2);
+    });
   });
 
   // All Inboxes painted the arrival from the daemon's cache while the sidebar
@@ -700,7 +754,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
       expect(settingsStore.getState().unreadPerAccount).toEqual({ a1: 3, a2: 2 });
-      expect(selectTotalUnread(settingsStore.getState())).toBe(5);
+      expect(selectTotalUnread(settingsStore.getState(), [{ id: 'a1' }, { id: 'a2' }])).toBe(5);
     });
 
     it('recounts on a flags-only change too (read on another device)', async () => {
@@ -759,7 +813,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
       expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
-      expect(selectTotalUnread(settingsStore.getState())).toBe(1);
+      expect(selectTotalUnread(settingsStore.getState(), [{ id: 'a1' }, { id: 'a2' }])).toBe(1);
 
       useSnoozeStore.getState().applyEvent({ id: 's1', state: 'woken' });
       await flush();

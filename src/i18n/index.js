@@ -63,7 +63,7 @@ const _loaders = {
 const MENU_IDS = [
   'check_updates', 'open_settings', 'report_bug', 'export_logs', 'logs_submenu',
   'open_website', 'open_blog', 'open_more_apps', 'open_shortcuts', 'quit_app', 'file_submenu',
-  'show', 'tray_view_logs', 'quit',
+  'tray_compose', 'show', 'tray_view_logs', 'quit',
 ];
 
 async function _pushMenuLabels() {

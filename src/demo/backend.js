@@ -1039,7 +1039,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'check_network_connectivity': return true;
       case 'spellcheck_status': return { available: false, language: null };
       case 'get_client_info': return { version: '2.13.1-demo', platform: 'browser', simulated: true };
-      case 'set_badge_count': case 'apply_menu_labels': case 'set_update_track': return { success: true, simulated: true };
+      case 'set_badge_count': case 'set_tray_accounts': case 'apply_menu_labels': case 'set_update_track': return { success: true, simulated: true };
       case 'archive_emails': {
         const rows = (args.uids || []).map(uid => find({ accountId, mailbox, uid })).filter(Boolean);
         rows.forEach(row => { row.vaultPresent = true; row.vaultFlags = [...new Set([...(row.vaultFlags || []), 'archived'])]; row._origin = 'local'; });

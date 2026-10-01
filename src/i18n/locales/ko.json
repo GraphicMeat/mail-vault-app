@@ -1004,6 +1004,7 @@
   "menu.quit_app": "종료",
   "menu.report_bug": "버그 신고…",
   "menu.show": "MailVault 표시",
+  "menu.tray_compose": "새 메일",
   "menu.tray_view_logs": "로그 보기",
   "migration.toast.chooseWhatDoEmailsAlready": "대상에 이미 복사된 메일을 어떻게 할지 선택하세요.",
   "migration.toast.discardIncompleteMigration": "완료되지 않은 이전을 취소할까요?",

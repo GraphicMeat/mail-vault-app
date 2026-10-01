@@ -1004,6 +1004,7 @@
   "menu.quit_app": "退出",
   "menu.report_bug": "报告问题…",
   "menu.show": "显示 MailVault",
+  "menu.tray_compose": "写邮件",
   "menu.tray_view_logs": "查看日志",
   "migration.toast.chooseWhatDoEmailsAlready": "请选择如何处理已复制到目标位置的邮件。",
   "migration.toast.discardIncompleteMigration": "要放弃未完成的迁移吗？",
