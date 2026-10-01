@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useMailStore } from '../../stores/mailStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { usePrivacyStore } from '../../stores/privacyStore';
 import { EmailViewer } from '../EmailViewer';
 import { t } from '../../i18n';
 
@@ -53,7 +54,7 @@ beforeEach(() => {
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })));
   invoke.mockClear();
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.__TAURI__; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.__TAURI__; usePrivacyStore.setState({ enabled: false, peek: false }); });
 
 describe('EmailViewer open in new window', () => {
   it('is not offered unless the reader asks for it', () => {
@@ -83,5 +84,21 @@ describe('EmailViewer open in new window', () => {
     renderViewer({ html: '<p>Rich <b>body</b></p>', text: 'Rich body' }, { showOpenInWindow: true });
     openInWindow();
     expect(windowCalls()[0][1].html).toContain('<b>body</b>');
+  });
+});
+
+describe('EmailViewer under privacy mode', () => {
+  it('keeps the message in the pane: the file:// window cannot be masked', () => {
+    usePrivacyStore.setState({ enabled: true });
+    renderViewer({ html: '<p>Rich <b>body</b></p>', text: 'Rich body' }, { showOpenInWindow: true });
+    openInWindow();
+    expect(windowCalls()).toHaveLength(0);
+    expect(useMailStore.getState().error).toBe(t('privacy.sourceBlocked'));
+  });
+
+  it('the reading pane frame starts gated', () => {
+    usePrivacyStore.setState({ enabled: true });
+    const { container } = renderViewer({ html: '<p>Rich <b>body</b></p>', text: 'Rich body' });
+    expect(container.querySelector('iframe').getAttribute('srcdoc')).toContain('id="mv-privacy-gate"');
   });
 });

@@ -11,6 +11,8 @@ import { isRowArchived } from '../../utils/quickActionFacts';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { PgpDecryptedBadge, PgpLockedNotice } from './PgpStatus';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
+import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
+import { usePrivacyStore } from '../../stores/privacyStore';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
@@ -82,6 +84,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   const theme = effectiveTheme ?? appTheme;
   const isDark = theme === 'dark';
   const emailColors = getEmailColors(theme, palette);
+  const privacyOn = usePrivacyFrameGate();
 
   const { newContent, quotedContent } = useMemo(
     () => splitQuotedContent(loadedEmail?.text || loadedEmail?.textBody || ''),
@@ -133,10 +136,13 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
       extraHead,
       extraBody: `${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}`,
       nonce,
+      privacy: privacyOn,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
-  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette]);
+  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette, privacyOn]);
 
+  // Privacy masking first: it must run on `load` before the search highlight.
+  useBodyPrivacy(iframeRef, iframeContent);
   // The thread is a second reader of the same body — including for the search
   // highlight, or a hit opened in thread mode is marked nowhere.
   useSearchHighlight(iframeRef, iframeContent);
@@ -500,6 +506,12 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
             onOpenInWindow={() => {
               const invoke = window.__TAURI__?.core?.invoke;
               if (!invoke) return;
+              // Same as the reader: the file:// window is out of reach of the masking pass.
+              if (usePrivacyStore.getState().enabled) {
+                const notice = t('privacy.sourceBlocked');
+                useMailStore.setState({ error: notice, errorType: 'warning', errorTypeFor: notice });
+                return;
+              }
               const bodyEntry = bodiesMapRef.current.get(key);
               const loaded = bodyEntry?.email;
               const rawHtml = loaded?.html || '';

@@ -6,6 +6,7 @@ import { buildEmailIframeHtml, attachEmailIframeAutoSize, emailScriptNonce } fro
 import { frameBody } from '../stores/netActivityStore';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getEmailColors } from '../utils/mailChrome';
+import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
 import { useT } from '../i18n/index.js';
 
 // The theme the reading pane opens a message in: the email theme setting, or
@@ -45,6 +46,9 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
   // window for free: it hydrates the same persisted settings file, same as
   // `useDefaultEmailDark` already does for the theme.
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
+  // The compose pane's quoted original is a reader too, often in a detached
+  // window (the gate holds there until the persisted choice is read).
+  const privacyOn = usePrivacyFrameGate();
   useEffect(() => (autoSize ? attachEmailIframeAutoSize(frameRef.current) : undefined), [autoSize]);
   const srcDoc = useMemo(() => {
     const nonce = emailScriptNonce();
@@ -53,8 +57,10 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
       themeTag: dark ? 'dark' : 'light',
       extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}<style>body { padding: ${padding}; }</style>`,
       nonce,
+      privacy: privacyOn,
     });
-  }, [html, dark, palette, padding, trackerBlocking]);
+  }, [html, dark, palette, padding, trackerBlocking, privacyOn]);
+  useBodyPrivacy(frameRef, srcDoc);
   return (
     <iframe
       ref={frameRef}

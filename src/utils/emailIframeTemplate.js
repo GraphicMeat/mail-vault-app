@@ -238,6 +238,15 @@ export function emailScriptNonce() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
 }
 
+// Privacy mode's first-paint gate. The frame arrives with its body hidden and
+// only applyPrivacyRedaction (iframePrivacyRedact.js) removes #mv-privacy-gate,
+// after masking, so the real text never paints. The `html` opacity is there
+// because a descendant's own `visibility: visible` (a responsive mail's
+// show/hide rules) beats the body rule; nothing inside can undo an ancestor's
+// opacity. Shared with ChatBubbleView, which builds its own document.
+export const PRIVACY_FRAME_HEAD = `<style id="mv-privacy-gate">body{visibility:hidden!important}html{opacity:0!important}</style>
+    <style>.mv-pii{filter:blur(5px);user-select:none}</style>`;
+
 // Build a complete HTML document for an email iframe.
 //
 // opts:
@@ -260,7 +269,9 @@ export function emailScriptNonce() {
 //                <script nonce> matches the policy.
 //   tableMode  — 'preserve' (let emails own their table layout, default)
 //              | 'clip'    (legacy: table-layout:fixed to clip overflow)
-export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead = '', extraBody = '', nonce = emailScriptNonce(), tableMode = 'preserve' } = {}) {
+//   privacy    — hide the body until the parent's redaction pass has masked it
+//                (useBodyPrivacy). See PRIVACY_FRAME_HEAD.
+export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead = '', extraBody = '', nonce = emailScriptNonce(), tableMode = 'preserve', privacy = false } = {}) {
   const tableCss = tableMode === 'clip'
     ? 'table { table-layout: fixed; width: 100% !important; overflow: hidden; } td, th { overflow: hidden; text-overflow: ellipsis; }'
     : 'table { max-width: 100% !important; width: auto !important; }';
@@ -326,6 +337,7 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
       blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid #ddd; overflow: hidden; }
     </style>
     ${extraHead}
+    ${privacy ? PRIVACY_FRAME_HEAD : ''}
   </head>
   <body>${body}${extraBody}</body>
 </html>`;

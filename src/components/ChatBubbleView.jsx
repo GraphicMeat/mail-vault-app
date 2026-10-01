@@ -15,6 +15,7 @@ import {
   isFromUser
 } from '../utils/emailParser';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
+import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
 import { resolveEmailLocation, selectionKey, emailScopeKey, inLocalFolder } from '../stores/slices/unifiedHelpers';
 import { isRowArchived } from '../utils/quickActionFacts';
 import {
@@ -43,7 +44,7 @@ import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors } from '../utils/mailChrome';
-import { neutralizeEmailDarkScheme, emailScriptNonce } from '../utils/emailIframeTemplate';
+import { neutralizeEmailDarkScheme, emailScriptNonce, PRIVACY_FRAME_HEAD } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 import { TagChips } from './TagChips';
@@ -298,6 +299,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const backedUpScopes = useMailStore(s => s.backedUpScopes);
   const backupConfigured = useMailStore(s => s.backupConfigured);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
+  const privacyOn = usePrivacyFrameGate();
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
@@ -565,15 +567,20 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             }
             ${indicatorStyle}
           </style>
+          ${privacyOn ? PRIVACY_FRAME_HEAD : ''}
         </head>
         <body>${neutralizeEmailDarkScheme(scannedBody)}${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}</body>
       </html>
     `;
     return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };
-  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette]);
+  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette, privacyOn]);
 
   // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
   const iframeHtmlContent = iframeContent?.html || '';
+  // The original and the cleaned view are two frames on one ref: a key that
+  // differs per branch (both are stable per build) re-attaches to whichever
+  // is mounted.
+  useBodyPrivacy(iframeRef, isOriginalVisible ? iframeContent : iframeHtmlContent);
   const chatScanAlert = iframeContent?.alertLevel || null;
   const chatTrackerSummary = iframeContent?.trackerSummary || null;
 

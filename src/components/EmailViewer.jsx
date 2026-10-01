@@ -21,6 +21,8 @@ import { describeMessageState, useBackedUp } from './email/MessageStateIcon';
 import { custodyRowFor } from '../stores/slices/custody';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { useSearchHighlight } from '../hooks/useSearchHighlight';
+import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
+import { usePrivacyStore } from '../stores/privacyStore';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
@@ -106,6 +108,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
+  const privacyOn = usePrivacyFrameGate();
   const appTheme = useThemeStore(s => s.theme);
   const palette = useThemeStore(s => s.palette);
   // Default email theme: user preference ('light'|'dark') or follow app theme.
@@ -437,10 +440,13 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       extraHead,
       extraBody: `${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}`,
       nonce,
+      privacy: privacyOn,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
-  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, palette, signatureDisplay]);
+  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, palette, signatureDisplay, privacyOn]);
 
+  // Privacy masking first: it must run on `load` before the search highlight.
+  useBodyPrivacy(iframeRef, iframeContent);
   // Terms from the open search, painted into the body the results list opened.
   useSearchHighlight(iframeRef, iframeContent);
 
@@ -599,6 +605,13 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const openInWindow = () => {
     const invoke = window.__TAURI__?.core?.invoke;
     if (!invoke || !(selectedEmail?.html || selectedEmail?.text)) return;
+    // The file:// window is out of reach of the masking pass: privacy mode
+    // keeps the message in the pane.
+    if (usePrivacyStore.getState().enabled) {
+      const notice = t('privacy.sourceBlocked');
+      useMailStore.setState({ error: notice, errorType: 'warning', errorTypeFor: notice });
+      return;
+    }
     // Build a standalone document so the popup matches the in-app
     // view: charset declared, plus inline Dark Reader when dark. A plain-text
     // message (a note to self, often) goes as escaped paragraphs.

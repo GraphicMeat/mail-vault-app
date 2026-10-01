@@ -23,6 +23,7 @@ import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
+import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { getSelectionGeneration } from '../../services/workflows/selectEmail';
 import { EmailActionBar } from './EmailActionBar';
@@ -52,6 +53,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const backedUpScopes = useMailStore(s => s.backedUpScopes);
   const backupConfigured = useMailStore(s => s.backupConfigured);
   const iframeRef = useRef(null);
+  const privacyOn = usePrivacyFrameGate();
   const selectedReplyHtml = () => {
     const frame = iframeRef.current;
     return replySelection(frame?.contentDocument?.body, frame?.contentWindow?.getSelection?.());
@@ -221,12 +223,15 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
       themeTag: theme,
       extraHead: isDark ? getDarkReaderInlineScripts({ palette, nonce }) : '',
       nonce,
+      privacy: privacyOn,
     });
-  }, [email, trackerBlocking, theme, palette]);
+  }, [email, trackerBlocking, theme, palette, privacyOn]);
 
   // Intercept links and prevent native context menu in full-view iframe
   // The full-view window is a third reader of the same body — the highlight
-  // follows the message, not the pane it is drawn in.
+  // follows the message, not the pane it is drawn in. Privacy masking first:
+  // it must run on `load` before the highlight.
+  useBodyPrivacy(iframeRef, iframeContent);
   useSearchHighlight(iframeRef, iframeContent);
 
   useEffect(() => {

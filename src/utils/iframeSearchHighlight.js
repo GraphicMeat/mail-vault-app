@@ -66,7 +66,10 @@ export function applySearchHighlight(doc, terms) {
   // Collected first: replacing a node while the walker is on it invalidates
   // the traversal.
   const walker = doc.createTreeWalker(doc.body, 4 /* SHOW_TEXT */, {
+    // Privacy mode's masked runs are not text to search: a hit there would say
+    // where the name is, and clearing would flatten the mask's span.
     acceptNode: (node) => (node.data.trim() && !SKIP_TAGS.has(node.parentNode?.nodeName)
+      && !node.parentNode?.closest?.('.mv-pii')
       ? 1 /* ACCEPT */
       : 2 /* REJECT */),
   });
