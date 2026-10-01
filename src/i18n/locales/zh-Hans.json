@@ -1423,6 +1423,7 @@
   "search.inAllFolders": "（在所有文件夹中）",
   "search.inFolder": "（在 {{folder}} 中）",
   "search.inUnifiedFolder": "（在所有账户的 {{folder}} 中）",
+  "search.fromTotal": "（共 {{total}} 封邮件）",
   "search.durationMs": "{{ms}} 毫秒",
   "search.inFolderAndSubfolders": "在“{{folder}}”及其子文件夹中",
   "search.includeSubfolders": "包含子文件夹",

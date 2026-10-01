@@ -253,6 +253,19 @@ describe('the results summary', () => {
     clock.mockRestore();
   });
 
+  it('says how many saved emails the search read, from the index', async () => {
+    const view = render(<SearchBar />);
+    await act(async () => { await startCurrent(); });
+    act(() => harness.runs[0].onProgress({
+      searchId: harness.runs[0].request.searchId, sequence: 1, lane: 'local',
+      rows: [row(1, 'hit', 'a', 'INBOX')], completed: 1, total: 1, localMode: 'index', fallbackReason: null,
+      coverage: { indexed: 48000, total: 48000, complete: true, matched: 1, shown: 1 },
+      failures: [], terminal: 'complete', errorKey: null,
+    }));
+    expect(view.getByTestId('search-summary').textContent)
+      .toBe('Found 1 results in Inbox across all accounts from 48,000 emails');
+  });
+
   it('shows no duration while the search is still running', async () => {
     const view = render(<SearchBar />);
     await act(async () => { await startCurrent(); });

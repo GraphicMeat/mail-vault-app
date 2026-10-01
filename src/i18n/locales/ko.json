@@ -1423,6 +1423,7 @@
   "search.inAllFolders": " (모든 폴더)",
   "search.inFolder": " ({{folder}} 내)",
   "search.inUnifiedFolder": " (모든 계정의 {{folder}} 내)",
+  "search.fromTotal": " (전체 {{total}}개 중)",
   "search.durationMs": "{{ms}}ms",
   "search.inFolderAndSubfolders": " {{folder}} 및 하위 폴더에서",
   "search.includeSubfolders": "하위 폴더 포함",

@@ -1423,6 +1423,7 @@
   "search.inAllFolders": " in allen Ordnern",
   "search.inFolder": " in {{folder}}",
   "search.inUnifiedFolder": " in {{folder}} aller Konten",
+  "search.fromTotal": " aus {{total}} E-Mails",
   "search.durationMs": "{{ms}} ms",
   "search.inFolderAndSubfolders": " in {{folder}} und dessen Unterordnern",
   "search.includeSubfolders": "Unterordner einbeziehen",

@@ -730,6 +730,8 @@ export function SearchBar({ autoFocus = false }) {
                 {scopedToBranch && t('search.inFolderAndSubfolders', {
                   folder: pickedFolder === 'current' ? currentFolderName : decodeImapUtf7(pickedFolder),
                 })}
+                {/* The index counts every message in the folders searched. */}
+                {searchIndexCoverage?.total > 0 && t('search.fromTotal', { total: searchIndexCoverage.total.toLocaleString() })}
               </span>
               {searchDurationMs != null && (
                 <span className="ml-2 tabular-nums" data-testid="search-duration">
