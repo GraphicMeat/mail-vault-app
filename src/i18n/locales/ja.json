@@ -3293,6 +3293,8 @@
   "workspace.twoLineRows": "2行",
   "workspace.twoLineRowsHint": "差出人の下に件名を表示。狭いペインでも読みやすくなります。",
   "workspace.unread": "未読",
+  "workspace.menuBar": "メニューバー",
+  "workspace.menuBarHint": "タイトルバーの下に「ファイル」と「ログ」のメニューを表示します。",
   "autoTag.remote.sampleHeading": "メール:",
   "autoTag.remote.sampleQuestion": "このメールはルールに一致しますか？",
   "autoTag.editorIntro": "判別するメールを説明し、タグを選んで結果を確認します。保存して有効にするまで変更は適用されません。",

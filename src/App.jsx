@@ -509,9 +509,9 @@ function App() {
   useEffect(() => useSettingsStore.subscribe((state, prev) => {
     // Aliases too: a compose window's "Add address..." sends the user to
     // Settings here, and the address they add belongs in that window's From row.
-    if (['billingProfile', 'appFont', 'textScale', 'aliases', 'sendAsAddresses'].some(key => state[key] !== prev[key])) {
-      const { billingProfile, appFont, textScale, aliases, sendAsAddresses } = state;
-      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale, aliases, sendAsAddresses });
+    if (['billingProfile', 'appFont', 'textScale', 'showMenuBar', 'aliases', 'sendAsAddresses'].some(key => state[key] !== prev[key])) {
+      const { billingProfile, appFont, textScale, showMenuBar, aliases, sendAsAddresses } = state;
+      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale, showMenuBar, aliases, sendAsAddresses });
     }
   }), []);
 

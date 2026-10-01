@@ -3293,6 +3293,8 @@
   "workspace.twoLineRows": "两行",
   "workspace.twoLineRowsHint": "发件人在主题上方，窄窗格中也清晰易读。",
   "workspace.unread": "未读",
+  "workspace.menuBar": "菜单栏",
+  "workspace.menuBarHint": "在标题栏下方显示“文件”和“日志”菜单。",
   "autoTag.remote.sampleHeading": "邮件：",
   "autoTag.remote.sampleQuestion": "这封邮件符合该规则吗？",
   "autoTag.editorIntro": "描述要识别的邮件，选择标签，然后查看结果。保存并启用规则前不会更改邮件。",

@@ -3293,6 +3293,8 @@
   "workspace.twoLineRows": "Dos líneas",
   "workspace.twoLineRowsHint": "Remitente sobre el asunto. Fácil de leer en cualquier panel.",
   "workspace.unread": "No leídos",
+  "workspace.menuBar": "Barra de menús",
+  "workspace.menuBarHint": "Muestra el menú Archivo y Registros bajo la barra de título.",
   "autoTag.remote.sampleHeading": "Correo:",
   "autoTag.remote.sampleQuestion": "¿Este correo coincide con la regla?",
   "autoTag.editorIntro": "Indica qué reconocer, elige una etiqueta y revisa el resultado. Nada cambia hasta guardar y activar la regla.",

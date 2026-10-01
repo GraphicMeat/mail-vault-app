@@ -585,6 +585,7 @@ export const useSettingsStore = create(
       actionButtonDisplay: 'icon-label', // 'icon-only' | 'icon-label' | 'text-only'
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
       appFont: DEFAULT_APP_FONT, // an APP_FONTS id (utils/appFont.js) — the app's own UI font
+      showMenuBar: true, // Linux only: the File/Logs menu bar under the title bar (utils/menuBar.js)
       textScale: 1, // one of TEXT_SCALES — native webview zoom of the whole UI
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       viewsSectionCollapsed: false, // Whether the sidebar's Views section is folded away
@@ -1386,6 +1387,7 @@ export const useSettingsStore = create(
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
+      setShowMenuBar: (visible) => set({ showMenuBar: visible !== false }),
       setAppFont: (id) => set({ appFont: normalizeAppFont(id) }),
       setTextScale: (value) => set({ textScale: normalizeTextScale(value) }),
       setQuickActionSurface: (surface, scope, config) => set(state => ({
@@ -1639,6 +1641,7 @@ export const useSettingsStore = create(
           actionButtonDisplay: 'icon-label',
           emailViewerTheme: 'system',
           appFont: DEFAULT_APP_FONT,
+          showMenuBar: true,
           textScale: 1,
           sidebarCollapsed: false,
           viewsSectionCollapsed: false,

@@ -4,6 +4,8 @@ import { useSettingsStore, normalizeListPreviewLines } from '../../stores/settin
 import { SettingRow } from '../ui/SettingRow';
 import { SidebarLayoutPreview, WorkspacePreview } from './PreferencePreview';
 import { useT } from '../../i18n/index.js';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { IS_LINUX } from '../../utils/menuBar';
 
 const PREVIEW_LINE_CHOICES = [[0, 'listPreview.off'], [1, 'listPreview.one'], [2, 'listPreview.two'], [3, 'listPreview.three']];
 
@@ -82,6 +84,10 @@ export function WorkspaceSettings({ windowIsNarrow }) {
         </div>
       </SettingRow>
       {chat && <p className="mt-2 text-xs text-mail-text-muted">{t('workspace.emailViewOnly')}</p>}
+      {IS_LINUX && <SettingRow label={t('workspace.menuBar')} description={t('workspace.menuBarHint')}>
+        <ToggleSwitch active={settings.showMenuBar !== false} testId="show-menu-bar"
+          onClick={() => settings.setShowMenuBar(settings.showMenuBar === false)} />
+      </SettingRow>}
     </section>
   );
 }
