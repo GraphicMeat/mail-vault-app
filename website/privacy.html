@@ -145,7 +145,7 @@
           <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
             <li><strong>Updates.</strong> The app checks GitHub for new versions and release notes. These requests carry no personal data.</li>
             <li><strong>Premium.</strong> If you subscribe to Premium, the email address you choose for the subscription, a random identifier for this device, its name, platform, operating system version, and app version are sent to our billing server to manage your subscription and devices. Payments are processed by Stripe. Billing never uses or receives Google user data or any email content.</li>
-            <li><strong>AI features you turn on.</strong> AI features run on your computer by default, using your operating system's built-in model or a model you download from Hugging Face. If you connect your own AI provider instead, the text you ask it to work on is sent to that provider under your own account and its terms.</li>
+            <li><strong>AI features you turn on.</strong> AI features run on your computer by default, using your operating system's on-device model or an open-weight model you download once from Hugging Face and then run offline. If you connect your own AI provider instead, the text you ask it to work on is sent to that provider under your own account and its terms. Mail from Gmail and Google Workspace accounts is never sent to a connected AI provider; it is only processed on your computer (see Google User Data below).</li>
             <li><strong>Images in messages.</strong> Showing images hosted elsewhere contacts the server that hosts them, as in any email client.</li>
           </ul>
         </section>
@@ -183,11 +183,23 @@
           </p>
           <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
             <li>sending an email, which Gmail delivers to the recipients you choose;</li>
-            <li>backing up or exporting mail to a folder or drive you choose;</li>
-            <li>connecting your own AI provider and asking it to work on a message (off by default; see above).</li>
+            <li>backing up or exporting mail to a folder or drive you choose.</li>
           </ul>
           <p class="text-slate-600 dark:text-slate-400 leading-relaxed mt-3">
             Google user data is used only to provide the app features listed above. It is not used for billing, our newsletter, website analytics, marketing, or any other purpose. It is never used for advertising of any kind, never sold to data brokers or anyone else, never used to determine creditworthiness or for lending, and never used to develop, improve, or train artificial intelligence or machine learning models, whether ours or anyone else's.
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">AI Features and Google User Data</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault's AI features (summaries, writing help, quick replies, and automatic tags) process Gmail messages only with models that run entirely on your computer:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li>Apple's on-device foundation model, built into macOS;</li>
+            <li>an open-weight model such as Llama, downloaded once from Hugging Face and then run offline in MailVault. Hugging Face only hosts the model file; nothing is sent back to it;</li>
+            <li>an Ollama server running on your own computer.</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed mt-3">
+            Mail from a Google account is never sent to a cloud AI provider, even if you connect one for your other accounts. MailVault integrates no third-party AI service that receives Google user data. Google user data, raw or derived, is processed locally and is never shared with any model provider, and it is never used to create, train, or improve any AI or machine learning model, including foundational or generalized models.
           </p>
 
           <h3 class="text-lg font-semibold mt-6 mb-2">How We Protect It</h3>
@@ -205,7 +217,7 @@
 
           <h3 class="text-lg font-semibold mt-6 mb-2">Limited Use</h3>
           <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
-            MailVault's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.
+            MailVault's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements. The use of raw or derived user data received from Google Workspace APIs will adhere to the <a href="https://developers.google.com/workspace/workspace-api-user-data-developer-policy" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Google Workspace API User Data and Developer Policy</a>, including the Limited Use requirements.
           </p>
         </section>
 
