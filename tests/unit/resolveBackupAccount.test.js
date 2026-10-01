@@ -201,7 +201,7 @@ describe('resolveBackupAccount', () => {
       oauth2Transport: 'graph',
     };
     await resolveServerAccount('acc-graph', malformedGraph);
-    expect(apiMod.refreshOAuth2Token).toHaveBeenCalledWith('ref123', undefined, undefined, undefined, true, 'vader@outlook.com');
+    expect(apiMod.refreshOAuth2Token).toHaveBeenCalledWith('ref123', undefined, undefined, undefined, true, 'vader@outlook.com', undefined);
     expect(tokenOwner('new-header.new-payload.new-signature')).toBe('vader@outlook.com');
   });
 
@@ -216,7 +216,7 @@ describe('resolveBackupAccount', () => {
       oauth2Transport: 'graph',
     };
     await resolveServerAccount('acc-graph', expired);
-    expect(apiMod.refreshOAuth2Token).toHaveBeenCalledWith('ref123', undefined, undefined, undefined, true, 'vader@outlook.com');
+    expect(apiMod.refreshOAuth2Token).toHaveBeenCalledWith('ref123', undefined, undefined, undefined, true, 'vader@outlook.com', undefined);
     expect(tokenOwner('expiry.refreshed.token')).toBe('vader@outlook.com');
     // The token it came in with is still the account's: a call already
     // holding it is still that account's request.

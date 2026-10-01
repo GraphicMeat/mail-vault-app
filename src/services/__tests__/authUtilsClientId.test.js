@@ -92,13 +92,13 @@ describe('refresh callers pass account.oauth2ClientId', () => {
     const args = mockRefreshOAuth2Token.mock.calls[0];
     expect(args[0]).toBe('old-rt');
     expect(args[1]).toBe('google');
-    expect(args[5]).toBe(NEW);
+    expect(args[6]).toBe(NEW);
   });
 
   it('the expiry refresh sends nothing for a legacy account, which the daemon reads as Thunderbird', async () => {
     await ensureFreshToken(googleAccount());
     expect(mockRefreshOAuth2Token).toHaveBeenCalledTimes(1);
-    expect(mockRefreshOAuth2Token.mock.calls[0][5]).toBeUndefined();
+    expect(mockRefreshOAuth2Token.mock.calls[0][6]).toBeUndefined();
   });
 
   it('the forced refresh of a malformed Graph token sends the account stamp too', async () => {
@@ -111,7 +111,7 @@ describe('refresh callers pass account.oauth2ClientId', () => {
     mockRefreshOAuth2Token.mockResolvedValue({ accessToken: 'a.b.c', refreshToken: 'new-rt', expiresAt: Date.now() + 3600_000 });
     await resolveServerAccount('m1', account);
     expect(mockRefreshOAuth2Token).toHaveBeenCalled();
-    expect(mockRefreshOAuth2Token.mock.calls[0][5]).toBe(OLD);
+    expect(mockRefreshOAuth2Token.mock.calls[0][6]).toBe(OLD);
   });
 
   it('a refresh never rewrites the stamp on the account', async () => {
