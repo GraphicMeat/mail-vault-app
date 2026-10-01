@@ -96,3 +96,28 @@ describe('the sent HTML', () => {
     expect(code.style.backgroundColor).toBe('rgb(255, 255, 0)');
   });
 });
+
+describe('typography stays out of the editor', () => {
+  // No Typography extension is registered, so `--`, quotes and `...` reach the
+  // message as typed. Pinned for code in particular: a dash or curly quote
+  // inside code changes a command or a string literal.
+  it('keeps `--` and straight quotes literal inside a code block', async () => {
+    const editor = await mount();
+    await type(editor, '``` ');
+    await type(editor, 'ls --all "x" ... -> (c)');
+    expect(editor.isActive('codeBlock')).toBe(true);
+    expect(editor.getHTML()).toContain('<pre><code>ls --all "x" ... -&gt; (c)</code></pre>');
+  });
+
+  it('keeps `--` and straight quotes literal inside inline code', async () => {
+    const editor = await mount();
+    await type(editor, 'run `ls --all "x"` now');
+    expect(editor.getHTML()).toBe('<p>run <code>ls --all "x"</code> now</p>');
+  });
+
+  it('leaves the same input outside code as typed too', async () => {
+    const editor = await mount();
+    await type(editor, 'a -- "x" ... -> (c)');
+    expect(editor.getText()).toBe('a -- "x" ... -> (c)');
+  });
+});
