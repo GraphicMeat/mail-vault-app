@@ -91,11 +91,17 @@ describe('Privacy mode', function () {
     // Luke's INBOX holds the one HTML message: its body renders in the frame.
     await waitForEmails();
     await clickSidebarItem(LUKE);
-    await browser.waitUntil(() => browser.execute(() =>
-      (document.querySelector('[data-testid="sidebar"]')?.innerText || '').includes('INBOX')), {
-      timeout: 15_000, interval: 300, timeoutMsg: `${LUKE} never listed an INBOX`,
-    });
-    await clickSidebarItem('INBOX');
+    // The first INBOX after luke's row: another account's folders may be listed above it.
+    await browser.waitUntil(() => browser.execute((email) => {
+      let pastLuke = false;
+      for (const el of document.querySelector('[data-testid="sidebar"]')?.querySelectorAll('*') || []) {
+        if (el.children.length !== 0) continue;
+        const text = (el.textContent || '').trim();
+        if (text === email) pastLuke = true;
+        else if (pastLuke && text === 'INBOX') { el.click(); return true; }
+      }
+      return false;
+    }, LUKE), { timeout: 15_000, interval: 300, timeoutMsg: `no INBOX listed under ${LUKE}` });
     await browser.waitUntil(async () => !!(await rowSender()), {
       timeout: 60_000, interval: 500, timeoutMsg: `no "${HTML_QUOTED_SUBJECT}" row in ${LUKE}'s INBOX`,
     });
