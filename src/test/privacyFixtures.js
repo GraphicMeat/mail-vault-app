@@ -24,22 +24,31 @@ export const FIXTURE_MESSAGE = {
 
 export const NEEDLES = [
   ...PEOPLE.names, ...PEOPLE.names.flatMap(n => n.split(' ')),
-  ...PEOPLE.emails, ...PEOPLE.phones, 'Joanna_Kowalczyk',
+  ...PEOPLE.emails, ...PEOPLE.emails.map(e => e.split('@')[0]),
+  ...PEOPLE.phones, ...PEOPLE.phones.map(p => p.replace(/\s/g, '')), 'Joanna_Kowalczyk',
 ];
 
 /**
- * No needle in the text or in any attribute a reader, a tooltip or a link
- * exposes. Pass `document.body` to cover what a surface portals out of its
- * container (dialogs, popovers).
+ * No needle in the text or in any attribute of any element (a DOM clone or a
+ * screen reader gets those too), nor in an input's live value. Pass
+ * `document.body` to cover what a surface portals out of its container
+ * (dialogs, popovers).
+ *
+ * Two deliberate exceptions: an editable person field masked by CSS
+ * (`.mv-private-input`, ruling R14) keeps its value, since the user types into
+ * it; and a message frame's `srcdoc` is the body source the frame's own
+ * redaction pass masks after load (useBodyPrivacy, guarded by its own tests).
  */
 export function expectNoLeak(root) {
   const haystacks = [root.textContent];
   for (const el of root.querySelectorAll('*')) {
-    for (const a of ['title', 'alt', 'aria-label', 'href', 'placeholder', 'value']) {
-      const v = el.getAttribute(a); if (v) haystacks.push(v);
+    const typedInto = el.classList.contains('mv-private-input');
+    for (const { name, value } of el.attributes) {
+      if (!value || name === 'srcdoc' || (typedInto && name === 'value')) continue;
+      haystacks.push(value);
     }
     // A live input's typed value is a property, not the attribute.
-    if ('value' in el && typeof el.value === 'string' && el.value) haystacks.push(el.value);
+    if (!typedInto && 'value' in el && typeof el.value === 'string' && el.value) haystacks.push(el.value);
   }
   const all = haystacks.join('\n');
   for (const needle of NEEDLES) expect(all, `leaked "${needle}"`).not.toContain(needle);

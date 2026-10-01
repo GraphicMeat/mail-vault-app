@@ -56,6 +56,8 @@ const { ChatBubbleView } = await import('../ChatBubbleView');
 const { AddressText } = await import('../email/AddressText');
 const { ContactsPickerButton } = await import('../ContactsPicker');
 const { SearchTagInput } = await import('../SearchTagInput');
+const { UnsubscribeHost } = await import('../UnsubscribeHost');
+const { useUnsubscribeStore } = await import('../../stores/unsubscribeStore');
 
 const [JOANNA, ROKAS, OWEN] = PEOPLE.names;
 const [JOANNA_ADDR, ROKAS_ADDR, OWEN_ADDR] = PEOPLE.emails;
@@ -139,6 +141,12 @@ describe('privacy leak guard', () => {
     render(<EmailSenderInfo email={MESSAGE} variant="single" expanded onReply={vi.fn()} onToggle={vi.fn()} />);
     document.querySelectorAll(`[aria-label="${t('email.sender.senderDetails')}"]`).forEach(el => fireEvent.click(el));
     clickAll('sender-verification');
+    // Each surface in this case rendered: the header, both sender-info
+    // variants, the sender popover and the verification popover.
+    expect(screen.getAllByTestId('sender-insights-toggle').length).toBe(3);
+    expect(screen.getAllByTestId('sender-header').length).toBe(2);
+    expect(screen.getAllByTestId('popover-address').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(t('email.header.senderDetails')).length).toBeGreaterThan(0);
     expect(document.body.textContent).toContain(MASKED_JOANNA);
     expectNoLeak(document.body);
   });
@@ -189,6 +197,9 @@ describe('privacy leak guard', () => {
     render(<ChatTopicsList correspondent={correspondent} topics={[{ ...THREAD, dateRange: { start: MESSAGE.date, end: MESSAGE.date } }]} onBack={vi.fn()} onSelectTopic={vi.fn()} />);
     render(<ChatBubbleView correspondent={correspondent} threadId="t1" threadsMap={new Map([['t1', THREAD]])}
       userEmail={OWEN_ADDR} onBack={vi.fn()} />);
+    // All three rendered: the topics header and the bubble view's back control.
+    expect(screen.getByText(t('chat.topicsCount', { count: 1 }))).toBeTruthy();
+    expect(screen.getByRole('button', { name: t('workspace.backTopics') })).toBeTruthy();
     expect(document.body.textContent).toContain(MASKED_JOANNA);
     expectNoLeak(document.body);
   });
@@ -213,6 +224,23 @@ describe('privacy leak guard', () => {
     expect(screen.getAllByTestId('search-tag').length).toBe(2);
     expect(screen.getByTestId('search-suggestion')).toBeTruthy();
     expectNoLeak(document.body);
+  });
+
+  it('unsubscribe confirm and outcome toast', () => {
+    useUnsubscribeStore.setState({ pending: { name: JOANNA, sender: JOANNA_ADDR, accountId: 'own' }, busy: false,
+      result: { type: 'success', kind: 'done', sender: JOANNA_ADDR } });
+    render(<UnsubscribeHost />);
+    expect(screen.getByText(t('unsubscribe.confirmBody'))).toBeTruthy();
+    expect(document.body.textContent).toContain(MASKED_JOANNA);
+    expectNoLeak(document.body);
+    useUnsubscribeStore.setState({ pending: null, result: null });
+  });
+
+  it('privacy OFF: a search tag keeps its exact text in the title', () => {
+    usePrivacyStore.setState({ enabled: false });
+    const tag = `From:"${JOANNA}"`;
+    render(<SearchTagInput tags={[tag]} onTagsChange={vi.fn()} draft="" onDraftChange={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.getByTestId('search-tag-text').getAttribute('title')).toBe(tag);
   });
 
   it('sanity: with privacy OFF the same EmailRow DOES show the name', () => {

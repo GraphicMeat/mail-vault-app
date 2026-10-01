@@ -15,12 +15,26 @@ const [JOANNA_ADDR, ROKAS_ADDR, OWEN_ADDR] = PEOPLE.emails;
 const MESSAGE = { ...FIXTURE_MESSAGE, _accountId: 'own', _mailbox: 'INBOX', isArchived: true, messageId: '<m1@test>' };
 const MASKED_JOANNA = 'xxxxxx xxxxxxxxx';
 
-vi.mock('../../services/daemonClient', () => ({
-  daemonCall: vi.fn(async (method) => (method === 'deleted.list' ? [{
+const DAEMON = {
+  'deleted.list': () => [{
     id: 'b1', accountId: 'own', mailbox: 'INBOX', uid: 1, deletedAt: Date.UTC(2026, 8, 27, 10),
     row: { subject: MESSAGE.subject, from: MESSAGE.from, date: '2026-09-20T08:00:00Z' },
-  }] : null)),
+  }],
+  'net.activity': () => ({ events: [{ atMs: Date.now(), direction: 'out', process: 'helper', protocol: 'imap', host: 'imap.example.test',
+    ip: '192.0.2.1', port: 993, purpose: 'sync', account: OWEN_ADDR, bytesUp: 100, bytesDown: 2000, durationMs: 1500,
+    result: 'ok', commands: null, country: 'DE' }] }),
+  'net.geo': () => ({ countries: [] }),
+  'net.summary': () => ({ hosts: 1, sent: 0, received: 0, accounts: [] }),
+  'net.retention': () => ({ retention: 'week' }),
+};
+vi.mock('../../services/daemonClient', () => ({
+  daemonCall: vi.fn(async (method) => DAEMON[method]?.() ?? null),
   DaemonError: class DaemonError extends Error {},
+}));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
+vi.mock('../../services/db', async importOriginal => ({ ...await importOriginal(), getCachedMailboxes: async () => [], saveAccount: async () => {} }));
+vi.mock('../../services/aliasDiscovery', () => ({
+  refreshAliases: vi.fn(async () => ({ added: [], suggestions: [], providerStatus: 'unsupported' })),
 }));
 vi.mock('../EmailViewer', () => ({ EmailViewer: () => null }));
 vi.mock('../../services/trackerVerdicts', () => ({ backfillTrackerVerdicts: vi.fn() }));
@@ -39,6 +53,12 @@ const { default: InsightsMessages } = await import('../insights/InsightsMessages
 const { default: SenderList } = await import('../insights/SenderList');
 const { DeletedEmailsSettings } = await import('../settings/DeletedEmailsSettings');
 const { NotificationSettings } = await import('../settings/NotificationSettings');
+const { default: InsightsPage } = await import('../insights/InsightsPage');
+const { useInsightsStore } = await import('../../stores/insightsStore');
+const { AccountSettings } = await import('../settings/AccountSettings');
+const { NetworkActivity } = await import('../settings/NetworkActivity');
+const { useNetActivityStore } = await import('../../stores/netActivityStore');
+const { t } = await import('../../i18n');
 
 const ACCOUNT = { id: 'own', name: OWEN, email: OWEN_ADDR };
 
@@ -97,6 +117,42 @@ describe('privacy leak guard: views and settings', () => {
     render(<DeletedEmailsSettings />);
     await screen.findByTestId('deleted-list');
     expect(document.body.textContent).toContain(MASKED_JOANNA);
+    expectNoLeak(document.body);
+  });
+
+  it('insights page with a selected sender, its account filter and coverage', () => {
+    const noop = vi.fn();
+    useInsightsStore.setState({ isOpen: true, tab: 'map', status: 'ready', progress: null, selection: null, messages: [], error: null,
+      query: { startDate: '2026-09-01', endDate: '2026-09-09', accountIds: ['own'], direction: 'received', timeZone: 'UTC', senderAddress: JOANNA_ADDR },
+      preferences: { range: 'custom' },
+      coverage: { status: 'partial', folders: [{ accountId: 'own', mailbox: 'INBOX', cachedHeaders: 2, knownServerMessages: 700, missingHeaders: 698 }] },
+      result: { totals: { received: 1, sent: 0, both: 1 }, days: [], lanes: [], unknownDateCount: 0, fallbackDateCount: 0, uncertainIdentityCount: 0,
+        senders: [{ address: JOANNA_ADDR, name: JOANNA, count: 4, received: 3, sent: 1, lastAt: '2026-09-08T12:00:00Z', automationEvidence: [] }] },
+      setTab: noop, setQuery: noop, refresh: noop, selectDay: noop, loadMessages: noop, selectSender: noop });
+    render(<InsightsPage onClose={() => {}} />);
+    expect(screen.getByTestId('insights-clear-sender')).toBeTruthy();
+    expect(document.body.textContent).toContain(MASKED_JOANNA);
+    expectNoLeak(document.body);
+  });
+
+  it('account settings: identity header, address field and the remove confirmation', () => {
+    useSettingsStore.setState({ signatures: {}, displayNames: {}, sendAsAddresses: {}, aliases: {}, dismissedAliases: {}, accountColors: {}, accountOrder: [], hiddenAccounts: {} });
+    useMailStore.setState({ mailboxes: [], connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+    render(<AccountSettings accounts={[ACCOUNT]} />);
+    // The masked run is aria-hidden, so the heading is found by its place.
+    expect(document.querySelector('.account-settings-identity h3').textContent).toBe('xxxx xxxxxxxx');
+    expectNoLeak(document.body);
+    fireEvent.click(screen.getByRole('tab', { name: t('settings.accounts.sectionAdvanced') }));
+    fireEvent.click(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') }));
+    expect(document.body.textContent).toContain('xxxx@xxx.xxxxxxx');
+    expectNoLeak(document.body);
+  });
+
+  it('network activity row', async () => {
+    useNetActivityStore.setState({ events: [], frozen: null, loadError: false, remoteImages: { blocked: 0, loaded: 0 },
+      query: { range: 'day', account: '', country: '' }, retention: 'week', retentionError: false });
+    render(<NetworkActivity />);
+    expect((await screen.findByTestId('net-account')).textContent).toBe('xxxx@xxx.xxxxxxx');
     expectNoLeak(document.body);
   });
 

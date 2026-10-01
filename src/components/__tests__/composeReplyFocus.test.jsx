@@ -175,3 +175,23 @@ describe('compose focus on open', () => {
     });
   });
 });
+
+// Ruling R14: a recipient or subject field cannot swap its value for filler
+// (the user types into it), so privacy mode hides its paint with a class.
+describe('compose person fields under privacy mode', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const fields = () => ['compose-to', 'compose-cc', 'compose-bcc', 'compose-subject'].map(id => screen.queryByTestId(id)).filter(Boolean);
+
+  it('carry mv-private-input while privacy is on, and not when it is off', async () => {
+    const { usePrivacyStore } = await import('../../stores/privacyStore');
+    vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+    usePrivacyStore.setState({ enabled: true, peek: false, captureMask: false });
+    const view = render(<ComposeModal mode="new" initialData={{ to: 'Joanna Kowalczyk <joanna.k@example.org>', subject: 'Lunch' }} {...baseProps} />);
+    await screen.findByTestId('compose-to');
+    expect(fields().length).toBeGreaterThanOrEqual(2);
+    for (const field of fields()) expect(field.className).toContain('mv-private-input');
+    usePrivacyStore.setState({ enabled: false });
+    view.rerender(<ComposeModal mode="new" initialData={{ to: 'Joanna Kowalczyk <joanna.k@example.org>', subject: 'Lunch' }} {...baseProps} />);
+    for (const field of fields()) expect(field.className).not.toContain('mv-private-input');
+  });
+});

@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, renderHook, act, cleanup } from '@testing-library/react';
 import { Private } from '../Private';
-import { usePrivacyActive, usePrivateAttr } from '../../../hooks/usePrivacy';
+import { usePrivacyActive, usePrivateAttr, usePrivateInputClass } from '../../../hooks/usePrivacy';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { setPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
 import { buildNameDictionary } from '../../../utils/privacy/piiDetector';
@@ -62,6 +62,13 @@ describe('<Private>', () => {
     expect(b.container.textContent).toBe('');
     const c = render(<Private kind="name">{'John'}{' '}{'Smith'}</Private>);
     expect(c.container.textContent).toBe('John Smith');
+  });
+  it('editable person fields get the paint-hiding class only while masking', () => {
+    const { result, rerender } = renderHook(() => usePrivateInputClass());
+    expect(result.current).toBe('');
+    act(() => usePrivacyStore.setState({ enabled: true }));
+    rerender();
+    expect(result.current).toBe('mv-private-input');
   });
   it('peek reveals, release masks again', () => {
     usePrivacyStore.setState({ enabled: true });
