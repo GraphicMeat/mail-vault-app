@@ -6,7 +6,7 @@
 //! row always wins, and every id the file's rows point at is remapped to the
 //! target's id for the same thing.
 
-use crate::app_db::{auto_tags, db::in_txn, fields, tags, views};
+use crate::app_db::{auto_tags, db::{in_read_txn, in_txn}, fields, tags, views};
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 
@@ -41,7 +41,7 @@ pub struct MergeReport {
 /// Everything the transfer carries, read in one transaction so the four lists
 /// agree with each other.
 pub fn snapshot(conn: &Connection) -> Result<AppConfig, String> {
-    in_txn(conn, || {
+    in_read_txn(conn, || {
         Ok(AppConfig {
             tags: tags::list(conn)?
                 .into_iter()

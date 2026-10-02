@@ -17,7 +17,7 @@
 //! `pending_backup_purge` are work the user already confirmed; losing them
 //! silently is worse than reporting an unreadable store.
 
-use rusqlite::{Connection, ErrorCode, OptionalExtension};
+use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, TransactionBehavior};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
@@ -475,14 +475,30 @@ fn schema_version(conn: &Connection) -> Result<i64, OpenError> {
     Ok(version)
 }
 
-/// Run `f` inside a transaction, or inline when the caller already opened
-/// one. SQLite has no nested `BEGIN`, and the legacy import wraps every store
-/// in one transaction while each store's own writer wants one too.
+/// Run `f` inside a write transaction, or inline when the caller already
+/// opened one. SQLite has no nested `BEGIN`, and the legacy import wraps every
+/// store in one transaction while each store's own writer wants one too.
+///
+/// `BEGIN IMMEDIATE`: the app and the daemon both write this file, and a
+/// deferred transaction that reads before it writes gets "database is locked"
+/// at once when the other holds the write lock (SQLite never runs the busy
+/// handler to upgrade a read into a write). Taking the lock up front waits it
+/// out under `busy_timeout` instead.
 pub fn in_txn<T>(conn: &Connection, f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    txn(conn, TransactionBehavior::Immediate, f)
+}
+
+/// `in_txn` for a read that has to see one consistent state: it never takes
+/// the write lock, so it never waits behind the other process's writer.
+pub fn in_read_txn<T>(conn: &Connection, f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    txn(conn, TransactionBehavior::Deferred, f)
+}
+
+fn txn<T>(conn: &Connection, behavior: TransactionBehavior, f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     if !conn.is_autocommit() {
         return f();
     }
-    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let tx = Transaction::new_unchecked(conn, behavior).map_err(|e| e.to_string())?;
     let out = f()?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(out)
@@ -525,6 +541,34 @@ mod tests {
         let p = std::env::temp_dir().join(format!("mv-appdb-{name}-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    /// The app and the daemon both write app.db. A transaction that reads and
+    /// then writes must wait out the other one's write lock: a deferred one
+    /// is answered "database is locked" on the spot, because SQLite never
+    /// calls the busy handler to upgrade a read into a write.
+    #[test]
+    fn a_read_then_write_transaction_waits_out_another_writer() {
+        let dir = scratch("txn-busy");
+        let holder = open(&dir).unwrap();
+        let conn = open(&dir).unwrap();
+        let (locked, wait_locked) = std::sync::mpsc::channel();
+        let other = std::thread::spawn(move || {
+            holder.execute_batch("BEGIN IMMEDIATE; INSERT OR REPLACE INTO meta(key, value) VALUES ('other', '1');").unwrap();
+            locked.send(()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            holder.execute_batch("COMMIT;").unwrap();
+        });
+        wait_locked.recv().unwrap();
+
+        let wrote = in_txn(&conn, || {
+            let seen = meta_get(&conn, "mine");
+            meta_set(&conn, "mine", &format!("{seen:?}"))
+        });
+
+        other.join().unwrap();
+        assert_eq!(wrote, Ok(()));
+        assert_eq!(meta_get(&conn, "other").as_deref(), Some("1"));
     }
 
     #[test]
