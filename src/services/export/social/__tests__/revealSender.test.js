@@ -55,6 +55,6 @@ describe('buildRevealSet', () => {
 
   it('with no accounts known, only the recipients are excluded', () => {
     expect(set(spam, {})).toEqual(['collect@elsewhere.example', 'prize desk', 'win@prize.example']);
-    expect(set({ ...spam, from: { address: 'rokas@example.lt' } }, {})).toEqual(['collect@elsewhere.example'].filter(() => false));
+    expect(set({ ...spam, from: { address: 'rokas@example.lt' } }, {})).toEqual(['collect@elsewhere.example']); // the recipient From is still excluded
   });
 });
