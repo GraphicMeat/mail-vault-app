@@ -225,13 +225,15 @@ mod tests {
             .unwrap();
     }
 
+    /// A tags RPC's result, or a panic that carries the RPC's error: a bare
+    /// `expect` on `result` reported only "ensure" when CI failed here once.
+    async fn tags_rpc(s: &Arc<DaemonState>, method: &str, params: serde_json::Value) -> serde_json::Value {
+        let resp = crate::handlers::tags::route(s, method, &params, json!(1)).await.expect("routed");
+        resp.result.unwrap_or_else(|| panic!("{method} failed: {:?}", resp.error))
+    }
+
     async fn tag_count(s: &Arc<DaemonState>) -> i64 {
-        let listed = crate::handlers::tags::route(s, "tags.list", &json!({}), json!(1))
-            .await
-            .expect("routed")
-            .result
-            .expect("tags.list");
-        listed[0]["count"].as_i64().unwrap()
+        tags_rpc(s, "tags.list", json!({})).await[0]["count"].as_i64().unwrap()
     }
 
     async fn create_rule(s: &Arc<DaemonState>, tag_id: &str, allow_remote: bool, provider: serde_json::Value) -> auto_tags::Rule {
@@ -267,14 +269,7 @@ mod tests {
     }
 
     async fn tag_named(s: &Arc<DaemonState>, name: &str) -> String {
-        crate::handlers::tags::route(s, "tags.ensure", &json!({"name": name, "color": ""}), json!(1))
-            .await
-            .expect("routed")
-            .result
-            .expect("ensure")["id"]
-            .as_str()
-            .unwrap()
-            .to_string()
+        tags_rpc(s, "tags.ensure", json!({"name": name, "color": ""})).await["id"].as_str().unwrap().to_string()
     }
 
     #[tokio::test]
