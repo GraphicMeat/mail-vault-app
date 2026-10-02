@@ -1,0 +1,150 @@
+[
+  {
+    "file": "thunderbird.webp",
+    "source": "https://www.thunderbird.net/en-US/",
+    "originalImage": "https://www.thunderbird.net/media/img/thunderbird/new/testimonials/unified-inbox.png",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 700,
+    "height": 700
+  },
+  {
+    "file": "outlook.webp",
+    "source": "https://www.microsoft.com/en-us/microsoft-365/outlook/email-and-calendar-software-microsoft-outlook",
+    "originalImage": "https://cdn-dynmedia-1.microsoft.com/is/image/microsoftcorp/1032407-accordion-3.1-800x513?fit=constrain&fmt=png-alpha&wid=1600",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 1600,
+    "height": 1027
+  },
+  {
+    "file": "apple-mail.webp",
+    "source": "https://support.apple.com/guide/mail/welcome/mac",
+    "originalImage": "https://ipcdn-web.apple.com/assets/v2/web/ca4c7412-b7a7-4282-894b-dc6a91eef72c",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 814,
+    "height": 532
+  },
+  {
+    "file": "em-client.webp",
+    "source": "https://www.emclient.com/",
+    "originalImage": "https://www.emclient.com/assets/img/localized/en/homepage/emc-hero-desktop.png",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 1600,
+    "height": 1100
+  },
+  {
+    "file": "mailbird.webp",
+    "source": "https://www.getmailbird.com/",
+    "originalImage": "https://www.getmailbird.com/assets/components/phpthumbof/cache/mb3-unified-account-feature.b22522a8657513e09862d6956824a71e.webp",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 1152,
+    "height": 1042
+  },
+  {
+    "file": "superhuman.webp",
+    "source": "https://superhuman.com/mail",
+    "originalImage": "https://superhumanstatic.com/vwfkeyj6n9ac/18jmebKXz7ex5K6xJf5dQ3/52010755628b56b086c83c494b3f86e6/Respond_Faster_2.png?w=1080",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 1080,
+    "height": 940
+  },
+  {
+    "file": "shortwave.webp",
+    "source": "https://www.shortwave.com/",
+    "originalImage": "https://www.shortwave.com/_next/static/media/find_answers_from_your_emails.681cbdd9.png",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 1600,
+    "height": 896
+  },
+  {
+    "file": "spark.webp",
+    "source": "https://sparkmailapp.com/features/ai-assistant",
+    "originalImage": "https://cdn-rdstaticassets.readdle.com/spark/img/spark3/features/ai-assistant/banner-device-updated.png",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 775,
+    "height": 462
+  },
+  {
+    "file": "canary.webp",
+    "source": "https://canarymail.io/",
+    "originalImage": "https://cdn.prod.website-files.com/6774d6b0372116ea34d8e8a9/67766d601290b76b03be15d8_Summarize.avif",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 591,
+    "height": 1200
+  },
+  {
+    "file": "gmail-gemini.webp",
+    "source": "https://workspace.google.com/products/gmail/",
+    "originalImage": "https://lh3.googleusercontent.com/DiRoJ_fwFfEGfrG3kDOJYHKvDJQv6t1P_vTWo5bgfMhez9uhvLvR-39H83FOOfQ0xdgfiFgsGnf0-VVV8uWalkv4YNEI8lDt5HTm=e365-pa-nu-rw-w1368",
+    "accessed": "2026-10-02",
+    "credit": "Official vendor product illustration / screenshot",
+    "width": 1368,
+    "height": 1000
+  },
+  {
+    "file": "mailvault-01-custody.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/screenshots/ph-gallery-01-custody-2540x1520.png",
+    "credit": "MailVault Product Hunt tour; demo data",
+    "width": 1600,
+    "height": 957
+  },
+  {
+    "file": "mailvault-03-archive-backup-delete.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/screenshots/ph-gallery-03-archive-backup-delete-2540x1520.png",
+    "credit": "MailVault Product Hunt tour; demo data",
+    "width": 1600,
+    "height": 957
+  },
+  {
+    "file": "mailvault-04-search.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/screenshots/ph-gallery-04-search-2540x1520.png",
+    "credit": "MailVault Product Hunt tour; demo data",
+    "width": 1600,
+    "height": 957
+  },
+  {
+    "file": "mailvault-06-notes-board.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/screenshots/ph-gallery-06-notes-board-2540x1520.png",
+    "credit": "MailVault Product Hunt tour; demo data",
+    "width": 1600,
+    "height": 957
+  },
+  {
+    "file": "mailvault-07-network-activity.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/screenshots/ph-gallery-07-network-activity-2540x1520.png",
+    "credit": "MailVault Product Hunt tour; demo data",
+    "width": 1600,
+    "height": 957
+  },
+  {
+    "file": "mailvault-08-scheduled-send.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/screenshots/ph-gallery-08-scheduled-send-2540x1520.png",
+    "credit": "MailVault Product Hunt tour; demo data",
+    "width": 1600,
+    "height": 957
+  },
+  {
+    "file": "mailvault-ai-writing.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/final/MailVault-tour-1080p30.mp4",
+    "timestamp": "06:12",
+    "credit": "Frame from MailVault product tour; demo data",
+    "width": 1600,
+    "height": 900
+  },
+  {
+    "file": "mailvault-ai-summary.webp",
+    "source": "/Users/Rokas/Movies/MailVault PH Tour/final/MailVault-tour-1080p30.mp4",
+    "timestamp": "06:22",
+    "credit": "Frame from MailVault product tour; demo data",
+    "width": 1600,
+    "height": 900
+  }
+]

@@ -1,0 +1,60 @@
+/* Scoped editorial additions; shared navigation and existing articles stay intact. */
+.mv-review-wrap { max-width:880px; margin:auto; padding-inline:24px; }
+.mv-review-heading { margin:36px 0 32px; }
+.mv-content-page main .mv-review h1 { max-width:26ch; margin:12px 0 20px; line-height:1.13; }
+.mv-content-page main .mv-review .prose { max-width:none; }
+.mv-review p, .mv-review li { line-height:1.75; }
+.mv-review li { margin-block:12px; }
+.mv-review .prose ol, .mv-review .prose ul { padding-left:24px; }
+.mv-review .prose ol { list-style:decimal; }
+.mv-review .prose ul { list-style:disc; }
+.mv-review-source { display:inline; font-size:.85em; white-space:normal; }
+.mv-review .prose a:not(.mv-button) { text-decoration:underline; text-underline-offset:3px; }
+.mv-review-small, .mv-review-method { font-size:.88rem; color:var(--mv-muted); }
+.mv-review-method { margin:24px 0; padding:16px 20px; border:1px solid var(--mv-line); border-radius:12px; }
+.mv-review-method summary { cursor:pointer; color:var(--mv-ink); font-weight:600; }
+.mv-review-method p { margin-top:12px; }
+.mv-review-pick { margin:28px 0; padding:28px; background:var(--mv-surface); border:1px solid var(--mv-line); border-left:4px solid var(--mv-accent); border-radius:12px; }
+.mv-content-page main .mv-review-pick h2 { margin:8px 0 12px; }
+.mv-review-pick p { margin-bottom:18px; }
+.mv-review .prose .mv-button { text-decoration:none; }
+.mv-review .prose .mv-button:not(.mv-secondary) { color:#fff; }
+.mv-review-actions, .mv-review-toc { display:flex; flex-wrap:wrap; gap:12px; }
+.mv-review-toc { margin:24px 0; padding-block:16px; border-block:1px solid var(--mv-line); column-gap:24px; font-size:.92rem; }
+.mv-review-figure { margin:32px 0; }
+.mv-review-figure img { display:block; width:100%; height:auto; border-radius:12px; }
+.mv-review-figure figcaption { margin-top:12px; color:var(--mv-muted); font-size:.85rem; line-height:1.6; }
+.mv-review-vendor { padding:20px; border:1px solid var(--mv-line); border-radius:14px; background:var(--mv-surface); }
+.mv-review-vendor img { max-height:500px; object-fit:contain; }
+.mv-review-table-wrap { margin:24px 0 12px; overflow-x:auto; border:1px solid var(--mv-line); border-radius:12px; }
+.mv-review-table { width:100%; min-width:650px; border-collapse:collapse; text-align:left; font-size:.9rem; }
+.mv-review-table caption { text-align:left; padding:18px; font-weight:700; color:var(--mv-ink); }
+.mv-review-table th, .mv-review-table td { padding:16px; vertical-align:top; border-top:1px solid var(--mv-line); line-height:1.6; }
+.mv-review-table thead th { background:var(--mv-surface); color:var(--mv-ink); }
+.mv-review-table th:first-child { width:24%; }
+.mv-review-table td { width:38%; }
+.mv-review-table th:nth-child(2), .mv-review-table td:nth-child(2) { background:var(--mv-surface); }
+.mv-review-series { border-top:1px solid var(--mv-line); margin-top:48px; padding-top:12px; }
+.mv-review-series h3 { margin-top:24px; }
+.mv-review-series [aria-current] { color:var(--mv-ink); font-weight:600; }
+.mv-review-index { margin:0 0 48px; padding:28px; border:1px solid var(--mv-line); background:var(--mv-surface); border-radius:16px; }
+.mv-content-page main .mv-review-index h2 { margin:12px 0; }
+.mv-review-index h3 { margin:28px 0 16px; font-weight:700; }
+.mv-review-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.mv-review-card { display:block; padding:18px; border:1px solid var(--mv-line); background:var(--mv-card); border-radius:12px; color:var(--mv-ink); }
+.mv-review-card:hover { border-color:var(--mv-accent); }
+.mv-review-card img { width:100%; height:156px; object-fit:contain; margin-bottom:16px; }
+.mv-review-card span, .mv-review-card small { display:block; color:var(--mv-muted); font-size:.78rem; }
+.mv-review-card h4 { font-size:1.18rem; margin:8px 0; font-weight:700; }
+.mv-review-card p { font-size:.88rem; color:var(--mv-muted); margin-bottom:16px; }
+.mv-review a:focus-visible, .mv-review-index a:focus-visible, .mv-review summary:focus-visible, .mv-review-table-wrap:focus-visible { outline:3px solid var(--mv-accent); outline-offset:4px; }
+@media(max-width:760px) {
+  .mv-review-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .mv-review-wrap { padding-inline:20px; }
+}
+@media(max-width:500px) {
+  .mv-review-grid { grid-template-columns:1fr; }
+  .mv-review-index, .mv-review-pick { padding:20px; }
+  .mv-review-vendor { padding:12px; }
+  .mv-review-heading { margin-top:28px; }
+}
