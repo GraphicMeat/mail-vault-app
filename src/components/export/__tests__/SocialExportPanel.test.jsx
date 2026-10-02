@@ -9,6 +9,9 @@ const buildSocialExport = vi.fn(async () => ({ ok: true, file: { name: 'x - soci
 const composeSocialImage = vi.fn(() => stubCanvas());
 const saveOneFile = vi.fn(async () => ({ path: '/tmp/x.png', failed: [] }));
 const setSocialExport = vi.fn();
+const isSpam = vi.hoisted(() => vi.fn(() => false));
+vi.mock('../../../utils/spamFolder', () => ({ isSpamMessage: (...a) => isSpam(...a) }));
+vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => ({}) } }));
 
 vi.mock('../../../services/export/social/buildSocialExport', () => ({
   buildSocialContent: (...a) => buildSocialContent(...a),
@@ -34,13 +37,13 @@ vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   DEFAULT_SOCIAL_EXPORT: {
     content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
-    padding: 64, radius: 16, shadow: true, chrome: true, appTheme: null, mailTheme: null,
+    padding: 64, radius: 16, shadow: true, chrome: true, senderDetails: false, links: false, appTheme: null, mailTheme: null,
   },
   useSettingsStore: (sel) => sel(settingsState),
 }));
 
 import { SocialExportPanel } from '../SocialExportPanel';
-import { SIZE_PRESETS } from '../../../services/export/social/socialLayout';
+import { SIZE_PRESETS, rangeMarkLeft } from '../../../services/export/social/socialLayout';
 import { FIXTURE_MESSAGE } from '../../../test/privacyFixtures';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useThemeStore } from '../../../stores/themeStore';
@@ -52,6 +55,8 @@ beforeEach(() => {
     setSocialExport, billingProfile: { hasSubscription: true }, localeEpoch: 0,
   };
   [buildSocialContent, buildSocialExport, composeSocialImage, saveOneFile, setSocialExport].forEach(m => m.mockClear());
+  isSpam.mockReset();
+  isSpam.mockReturnValue(false);
   getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ clearRect() {}, drawImage() {} });
   vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 50, height: 50, close: vi.fn() })));
 });
@@ -241,5 +246,135 @@ describe('SocialExportPanel', () => {
     act(() => usePrivacyStore.setState({ enabled: true }));
     expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'dark' });
     expect(screen.queryByRole('img', { name: /preview/i })).toBeNull();
+  });
+
+  describe('Show sender, Sender details, Links and the macOS corner tick', () => {
+    const toggle = (name) => screen.getByRole('switch', { name });
+    const lastOptions = () => buildSocialContent.mock.calls.at(-1)[1];
+
+    it('Show sender starts on for a message in the spam folder, off for any other, and is never stored', async () => {
+      isSpam.mockReturnValue(true);
+      renderPanel();
+      expect(isSpam.mock.calls[0][0]).toBe(FIXTURE_MESSAGE);
+      expect(toggle('Show sender').getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByText(/keeps the spam sender's address visible/i)).toBeTruthy();
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
+      expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark', revealSender: true });
+      cleanup();
+      isSpam.mockReturnValue(false);
+      buildSocialContent.mockClear();
+      renderPanel();
+      expect(toggle('Show sender').getAttribute('aria-checked')).toBe('false');
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
+      expect(buildSocialContent.mock.calls[0][1]).not.toHaveProperty('revealSender');
+      fireEvent.click(toggle('Show sender'));
+      for (const [patch] of setSocialExport.mock.calls) expect(patch).not.toHaveProperty('revealSender');
+    });
+
+    it('is offered whenever the image is redacted, including by privacy mode, and not otherwise', async () => {
+      renderPanel();
+      expect(screen.getByRole('switch', { name: 'Show sender' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+      expect(screen.queryByRole('switch', { name: 'Show sender' })).toBeNull();
+      cleanup();
+      usePrivacyStore.setState({ enabled: true });
+      renderPanel();
+      expect(screen.getByRole('switch', { name: 'Show sender' })).toBeTruthy();
+    });
+
+    it('turning it off rebuilds without the reveal and never serves the revealed canvas; turning it on again hits the cache', async () => {
+      isSpam.mockReturnValue(true);
+      const revealed = { width: 200, height: 300, tag: 'revealed' };
+      const masked = { width: 200, height: 300, tag: 'masked' };
+      buildSocialContent.mockResolvedValueOnce(revealed).mockResolvedValueOnce(masked);
+      renderPanel();
+      await waitFor(() => expect(composeSocialImage.mock.calls.at(-1)?.[0].content).toBe(revealed));
+      fireEvent.click(toggle('Show sender'));
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(2));
+      expect(lastOptions()).not.toHaveProperty('revealSender');
+      await waitFor(() => expect(lastCompose().content).toBe(masked));
+      fireEvent.click(toggle('Show sender'));
+      await waitFor(() => expect(lastCompose().content).toBe(revealed));
+      expect(buildSocialContent).toHaveBeenCalledTimes(2); // cached
+      // Redaction off and on again must not keep the reveal around either.
+      fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+      await waitFor(() => expect(lastOptions()).toMatchObject({ redact: false }));
+      expect(lastOptions()).not.toHaveProperty('revealSender');
+    });
+
+    it('saves with the reveal when it is on and redacting, and without when redaction is off', async () => {
+      isSpam.mockReturnValue(true);
+      renderPanel();
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options).toMatchObject({ redact: true, revealSender: true });
+      buildSocialExport.mockClear();
+      fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options).toMatchObject({ redact: false, revealSender: false });
+    });
+
+    it('Sender details is remembered, builds the box, and is offered for the card and the app window', async () => {
+      renderPanel();
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(1));
+      expect(toggle('Sender details').getAttribute('aria-checked')).toBe('false');
+      fireEvent.click(toggle('Sender details'));
+      expect(setSocialExport).toHaveBeenCalledWith({ senderDetails: true });
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(2));
+      expect(lastOptions()).toMatchObject({ content: 'card', senderDetails: true });
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      await waitFor(() => expect(lastOptions()).toMatchObject({ content: 'app', senderDetails: true }));
+      expect(toggle('Sender details').getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('Links is a card-only toggle, remembered, and its option never reaches the app window', async () => {
+      settingsState.socialExport = { ...settingsState.socialExport, links: true };
+      renderPanel();
+      expect(toggle('Links').getAttribute('aria-checked')).toBe('true');
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
+      expect(buildSocialContent.mock.calls[0][1]).toMatchObject({ content: 'card', links: true });
+      fireEvent.click(toggle('Links'));
+      expect(setSocialExport).toHaveBeenCalledWith({ links: false });
+      fireEvent.click(toggle('Links'));
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      expect(screen.queryByRole('switch', { name: 'Links' })).toBeNull();
+      await waitFor(() => expect(lastOptions().content).toBe('app'));
+      expect(lastOptions()).not.toHaveProperty('links');
+      fireEvent.click(screen.getByRole('button', { name: /email card/i }));
+      expect(screen.getByRole('switch', { name: 'Links' })).toBeTruthy();
+    });
+
+    it('a different Links or Sender details choice is a different render, not the cached one', async () => {
+      renderPanel();
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(1));
+      fireEvent.click(toggle('Links'));
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(2));
+      fireEvent.click(toggle('Links'));
+      await waitFor(() => expect(lastCompose()).toBeTruthy());
+      expect(buildSocialContent).toHaveBeenCalledTimes(2); // links off again: the first render, cached
+    });
+
+    it('the Radius slider spans 0 to 40 and a macOS tick under it sets the macOS window radius, 26', async () => {
+      renderPanel();
+      const slider = screen.getByRole('slider', { name: 'Corners' });
+      expect([slider.min, slider.max]).toEqual(['0', '40']);
+      expect(slider.value).toBe('16');
+      const tick = screen.getByRole('button', { name: /macos window corner radius/i });
+      expect(tick.textContent).toBe('macOS');
+      fireEvent.click(tick);
+      expect(setSocialExport).toHaveBeenCalledWith({ radius: 26 });
+      await waitFor(() => expect(lastCompose().radius).toBe(26));
+      expect(screen.getByRole('slider', { name: 'Corners' }).value).toBe('26');
+    });
+
+    it('the tick sits where the thumb centre is at 26 of 0..40 (16px thumb)', () => {
+      expect(rangeMarkLeft(26, 0, 40)).toBe('calc(8px + 0.65 * (100% - 16px))');
+      expect(rangeMarkLeft(0, 0, 40)).toBe('calc(8px + 0 * (100% - 16px))');
+      expect(rangeMarkLeft(40, 0, 40)).toBe('calc(8px + 1 * (100% - 16px))');
+    });
   });
 });

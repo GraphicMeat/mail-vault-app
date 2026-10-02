@@ -13,6 +13,11 @@ export const SIZE_PRESETS = {
 };
 // The corner radius of a macOS Tahoe window: the Radius slider's tick, and its default.
 export const MACOS_WINDOW_RADIUS = 26;
+// Where a value sits along a range input, as a CSS `left` for a mark drawn over
+// it: the thumb's centre travels from half a thumb in to half a thumb short of
+// the far end, not the full width.
+export const rangeMarkLeft = (value, min, max, thumbPx = 16) =>
+  `calc(${thumbPx / 2}px + ${(value - min) / (max - min)} * (100% - ${thumbPx}px))`;
 const CHROME_CSS_PX = 28;
 const OUT = 2; // output pixels per CSS px, and per preset px
 

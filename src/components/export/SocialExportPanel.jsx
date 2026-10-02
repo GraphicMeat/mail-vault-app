@@ -6,12 +6,14 @@ import { useT } from '../../i18n/index.js';
 import { useSettingsStore, DEFAULT_SOCIAL_EXPORT } from '../../stores/settingsStore';
 import { buildSocialContent, buildSocialExport, chromeTheme } from '../../services/export/social/buildSocialExport';
 import { composeSocialImage } from '../../services/export/social/composeSocialImage';
-import { SIZE_PRESETS } from '../../services/export/social/socialLayout';
+import { SIZE_PRESETS, MACOS_WINDOW_RADIUS, rangeMarkLeft } from '../../services/export/social/socialLayout';
 import { loadWatermark } from '../../services/export/social/socialWatermark';
 import { GRADIENT_PRESETS, SOLID_PRESETS, DEFAULT_CUSTOM_STOPS, cssGradient } from '../../services/export/social/socialBackgrounds';
 import { saveOneFile } from '../../services/export/exportSaver';
 import { usePrivacyStore } from '../../stores/privacyStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { useMailStore } from '../../stores/mailStore';
+import { isSpamMessage } from '../../utils/spamFolder';
 
 const PREVIEW_W = 360;
 const PREVIEW_H = 420;
@@ -24,6 +26,7 @@ const SIZES = [
   { value: 'landscape', label: '16:9' },
   { value: 'story', label: '9:16' },
 ];
+const RADIUS_MAX = 40;
 const CHECKERBOARD = 'repeating-conic-gradient(#d4d4d8 0% 25%, #ffffff 0% 50%) 50% / 12px 12px';
 
 // A compact one-of-a-few row: the settings SegmentedChoice is a 48px tab row.
@@ -85,6 +88,8 @@ export function SocialExportPanel({ message, onDone }) {
   // Seeded once: the panel owns its style while open and writes through.
   const [prefs, setPrefs] = useState(() => ({ ...DEFAULT_SOCIAL_EXPORT, ...saved }));
   const [redact, setRedact] = useState(true);
+  // Per open, like redact: a spam message names its sender, anything else does not.
+  const [revealSender, setRevealSender] = useState(() => isSpamMessage(message, useMailStore.getState()));
   // Privacy mode on: a social image never shows anyone, whatever the checkbox said.
   const privacyOn = usePrivacyStore(s => s.enabled);
   const redacting = redact || privacyOn;
@@ -139,24 +144,36 @@ export function SocialExportPanel({ message, onDone }) {
     return () => { live = false; };
   }, []);
 
+  // The boxes (and the reveal) are part of the picture: a different choice is a different render.
+  const reveal = redacting && revealSender;
+  const details = prefs.senderDetails === true;
+  const withLinks = isCard && prefs.links === true;
+
   useEffect(() => {
-    const key = `${prefs.content}|${redacting}|${theme}|${isCard ? mailTheme : ''}`;
+    const key = `${prefs.content}|${redacting}|${theme}|${isCard ? mailTheme : ''}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}`;
     const id = ++request.current;
     const hit = cache.current.get(key);
     if (hit) { setContent(hit); setLoading(false); return; }
     // The old content goes now: an unredacted canvas must not stay painted
-    // while the redacted one builds (privacy mode turned on mid-preview).
+    // while the redacted one builds (privacy mode turned on mid-preview), nor
+    // one that shows a sender after Show sender was turned off.
     setContent(null);
     setLoading(true);
     setNotice(null);
-    buildSocialContent(message, { content: prefs.content, redact: redacting, theme, ...(isCard ? { mailTheme } : {}) })
+    buildSocialContent(message, {
+      content: prefs.content, redact: redacting, theme,
+      ...(isCard ? { mailTheme } : {}),
+      ...(reveal ? { revealSender: true } : {}),
+      ...(details ? { senderDetails: true } : {}),
+      ...(withLinks ? { links: true } : {}),
+    })
       .then((canvas) => {
         cache.current.set(key, canvas);
         if (request.current === id) setContent(canvas);
       })
       .catch(() => { if (request.current === id) { setContent(null); setNotice(t('export.dialog.messageCouldExported')); } })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [message, prefs.content, redacting, theme, mailTheme]);
+  }, [message, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks]);
 
   useEffect(() => {
     if (!content) return;
@@ -184,7 +201,7 @@ export function SocialExportPanel({ message, onDone }) {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting, appTheme: theme, mailTheme } });
+      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting, appTheme: theme, mailTheme, revealSender: reveal } });
       if (!result.ok) {
         setNotice(result.reason === 'premium' ? t('export.dialog.exportPremiumFeature') : t('export.dialog.messageCouldExported'));
         return;
@@ -287,13 +304,22 @@ export function SocialExportPanel({ message, onDone }) {
               aria-label={t('export.social.padding')} onChange={e => update({ padding: Number(e.target.value) })} />
           </label>
 
-          <label className="block space-y-1">
+          <div className="space-y-1">
             <span className="flex justify-between text-xs font-medium text-mail-text-muted">
               <span>{t('export.social.radius')}</span><span>{prefs.radius}</span>
             </span>
-            <input type="range" min="0" max="40" step="1" value={prefs.radius} className="w-full"
+            <input type="range" min="0" max={RADIUS_MAX} step="1" value={prefs.radius} className="w-full"
               aria-label={t('export.social.radius')} onChange={e => update({ radius: Number(e.target.value) })} />
-          </label>
+            {/* Our own mark: WKWebView draws no <datalist> ticks. */}
+            <div className="relative h-6">
+              <button type="button" aria-label={t('export.social.radiusMacosAria')} onClick={() => update({ radius: MACOS_WINDOW_RADIUS })}
+                style={{ left: rangeMarkLeft(MACOS_WINDOW_RADIUS, 0, RADIUS_MAX) }}
+                className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-[10px] leading-tight text-mail-text-muted hover:text-mail-text">
+                <span aria-hidden="true" className="block w-px h-1.5 bg-mail-text-muted" />
+                <span aria-hidden="true">{t('export.social.radiusMacos')}</span>
+              </button>
+            </div>
+          </div>
 
           <div className="flex items-center justify-between">
             <span className="text-sm text-mail-text">{t('export.social.shadow')}</span>
@@ -303,6 +329,17 @@ export function SocialExportPanel({ message, onDone }) {
             <span className="text-sm text-mail-text">{t('export.social.chrome')}</span>
             <ToggleSwitch active={prefs.chrome} label={t('export.social.chrome')} onClick={() => update({ chrome: !prefs.chrome })} />
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-mail-text">{t('export.social.senderDetails')}</span>
+            <ToggleSwitch active={details} label={t('export.social.senderDetails')} onClick={() => update({ senderDetails: !details })} />
+          </div>
+          {/* The reader already marks a risky link in the body, so the app window has no list. */}
+          {isCard && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-mail-text">{t('export.social.links')}</span>
+              <ToggleSwitch active={withLinks} label={t('export.social.links')} onClick={() => update({ links: !withLinks })} />
+            </div>
+          )}
 
           <label className={`flex items-start gap-2 ${privacyOn ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
             <input type="checkbox" checked={redacting} disabled={privacyOn} onChange={e => setRedact(e.target.checked)} className="mt-0.5" />
@@ -311,6 +348,16 @@ export function SocialExportPanel({ message, onDone }) {
               {privacyOn && <span className="block text-xs text-mail-text-muted">{t('export.social.redactForced')}</span>}
             </span>
           </label>
+
+          {redacting && (
+            <div className="flex items-start justify-between gap-3">
+              <span>
+                <span className="block text-sm text-mail-text">{t('export.social.revealSender')}</span>
+                <span className="block text-xs text-mail-text-muted">{t('export.social.revealSenderHint')}</span>
+              </span>
+              <ToggleSwitch active={revealSender} label={t('export.social.revealSender')} onClick={() => setRevealSender(v => !v)} />
+            </div>
+          )}
         </div>
       </div>
 
