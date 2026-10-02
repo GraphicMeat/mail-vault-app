@@ -10,6 +10,7 @@ import { redactMessageForExport } from '../exportRedact';
 import { singleName } from '../exportNaming';
 import { captureAppWindow } from './captureAppWindow';
 import { composeSocialImage } from './composeSocialImage';
+import { loadWatermark } from './socialWatermark';
 import { SIZE_PRESETS } from './socialLayout';
 
 const asDate = (value) => (value instanceof Date ? value : new Date(value));
@@ -65,6 +66,7 @@ export async function buildSocialExport({ message, options }) {
     const theme = options.appTheme ?? useThemeStore.getState().theme;
     const dict = redact ? await socialDictionary(dated) : null;
     const content = await buildSocialContent(dated, { content: options.content, redact, dict, theme });
+    const watermark = await loadWatermark();
     const canvas = composeSocialImage({
       content,
       size: SIZE_PRESETS[options.size] ?? null,
@@ -75,6 +77,7 @@ export async function buildSocialExport({ message, options }) {
       chrome: options.chrome,
       theme: chromeTheme(options.content, theme),
       fit: options.content === 'app' ? 'contain' : 'crop',
+      watermark,
     });
     const named = redact ? redactMessageForExport(dated, dict) : dated;
     const name = singleName(named, 'png').replace(/\.png$/, ' - social.png');

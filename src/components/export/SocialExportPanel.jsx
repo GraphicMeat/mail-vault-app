@@ -7,6 +7,7 @@ import { useSettingsStore, DEFAULT_SOCIAL_EXPORT } from '../../stores/settingsSt
 import { buildSocialContent, buildSocialExport, chromeTheme } from '../../services/export/social/buildSocialExport';
 import { composeSocialImage } from '../../services/export/social/composeSocialImage';
 import { SIZE_PRESETS } from '../../services/export/social/socialLayout';
+import { loadWatermark } from '../../services/export/social/socialWatermark';
 import { GRADIENT_PRESETS, SOLID_PRESETS, DEFAULT_CUSTOM_STOPS, cssGradient } from '../../services/export/social/socialBackgrounds';
 import { saveOneFile } from '../../services/export/exportSaver';
 import { usePrivacyStore } from '../../stores/privacyStore';
@@ -92,6 +93,7 @@ export function SocialExportPanel({ message, onDone }) {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [watermark, setWatermark] = useState(null);
   const previewRef = useRef(null);
   const request = useRef(0);
   const cache = useRef(new Map());
@@ -124,6 +126,13 @@ export function SocialExportPanel({ message, onDone }) {
 
   useEffect(() => { cache.current = new Map(); }, [message]);
 
+  // The preview carries the mark Save puts on, once it has decoded.
+  useEffect(() => {
+    let live = true;
+    loadWatermark().then((mark) => { if (live) setWatermark(mark); });
+    return () => { live = false; };
+  }, []);
+
   useEffect(() => {
     const key = `${prefs.content}|${redacting}|${prefs.content === 'app' ? theme : ''}`;
     const id = ++request.current;
@@ -148,7 +157,7 @@ export function SocialExportPanel({ message, onDone }) {
     const out = composeSocialImage({
       content, size: SIZE_PRESETS[prefs.size] ?? null, background,
       padding: prefs.padding, radius: prefs.radius, shadow: prefs.shadow, chrome: prefs.chrome,
-      theme: frameTheme, fit: prefs.content === 'app' ? 'contain' : 'crop', maxSize: PREVIEW_MAX,
+      theme: frameTheme, fit: prefs.content === 'app' ? 'contain' : 'crop', maxSize: PREVIEW_MAX, watermark,
     });
     const canvas = previewRef.current;
     if (!canvas || !out.width || !out.height) return;
@@ -163,7 +172,7 @@ export function SocialExportPanel({ message, onDone }) {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(out, 0, 0, canvas.width, canvas.height);
-  }, [content, prefs.size, prefs.padding, prefs.radius, prefs.shadow, prefs.chrome, prefs.content, background, frameTheme]);
+  }, [content, prefs.size, prefs.padding, prefs.radius, prefs.shadow, prefs.chrome, prefs.content, background, frameTheme, watermark]);
 
   const save = async () => {
     setBusy(true);

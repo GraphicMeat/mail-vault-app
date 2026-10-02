@@ -18,6 +18,8 @@ vi.mock('../../../services/export/social/buildSocialExport', () => ({
 vi.mock('../../../services/export/social/composeSocialImage', () => ({
   composeSocialImage: (...a) => composeSocialImage(...a),
 }));
+const MARK = { naturalWidth: 478, naturalHeight: 84 };
+vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => MARK }));
 vi.mock('../../../services/export/exportSaver', () => ({
   saveOneFile: (...a) => saveOneFile(...a),
 }));
@@ -71,6 +73,11 @@ describe('SocialExportPanel', () => {
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
     // The preview composes at preview size; only Save renders full size.
     expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, fit: 'crop', maxSize: { w: 720, h: 840 } });
+  });
+
+  it('the preview carries the maker\'s mark once it has loaded', async () => {
+    renderPanel();
+    await waitFor(() => expect(lastCompose()?.watermark).toBe(MARK));
   });
 
   it('re-composes at 9:16 from the cached content, and remembers the size', async () => {

@@ -66,5 +66,36 @@ describe('composeSocialImage', () => {
     expect(log).toContainEqual(['setTransform', scale, 0, 0, scale, 0, 0]);
     expect(log).toContainEqual(['set:shadowBlur', 80 * scale]);
   });
-});
 
+  it('puts the maker\'s mark in the band under the card, right-aligned with it, after the card', () => {
+    const content = contentCanvas(1640, 1200);
+    const mark = { naturalWidth: 478, naturalHeight: 84 };
+    composeSocialImage({ ...base, content, size: null, background: { type: 'solid', id: 'white' }, shadow: false, watermark: mark });
+    const L = layoutSocial({ contentW: 1640, contentH: 1200, size: null, padding: 64, chrome: true, fit: 'crop' });
+    const at = log.findIndex(([k, img]) => k === 'drawImage' && img === mark);
+    expect(at).toBeGreaterThan(log.findIndex(([k, img]) => k === 'drawImage' && img === content));
+    const [, , x, y, w, h] = log[at];
+    const bottom = L.card.y + L.card.h;
+    expect(y).toBeGreaterThanOrEqual(bottom);
+    expect(y + h).toBeLessThanOrEqual(L.canvasH);
+    expect(x + w).toBe(L.card.x + L.card.w);
+    expect(h).toBeGreaterThanOrEqual(40);
+    expect(w / h).toBeCloseTo(478 / 84, 1);
+  });
+
+  it('with no padding, puts the mark inside the card\'s bottom-right corner', () => {
+    const content = contentCanvas(1640, 1200);
+    const mark = { naturalWidth: 478, naturalHeight: 84 };
+    const out = composeSocialImage({ ...base, padding: 0, content, size: null, background: { type: 'solid', id: 'white' }, shadow: false, watermark: mark });
+    const [, , x, y, w, h] = log.find(([k, img]) => k === 'drawImage' && img === mark);
+    expect(x + w).toBeLessThan(out.width);
+    expect(y + h).toBeLessThan(out.height);
+    expect(x).toBeGreaterThan(0);
+  });
+
+  it('draws no mark without one', () => {
+    const content = contentCanvas(1640, 1200);
+    composeSocialImage({ ...base, content, size: null, background: { type: 'solid', id: 'white' }, shadow: false });
+    expect(log.filter(([k]) => k === 'drawImage')).toHaveLength(1);
+  });
+});

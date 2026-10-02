@@ -12,6 +12,9 @@ vi.mock('../../renderMessageToCanvas', () => ({
 }));
 vi.mock('../captureAppWindow', () => ({ captureAppWindow: (...a) => captureAppWindow(...a) }));
 vi.mock('../composeSocialImage', () => ({ composeSocialImage: (...a) => composeSocialImage(...a) }));
+const MARK = { naturalWidth: 478, naturalHeight: 84 };
+const loadWatermark = vi.fn(async () => MARK);
+vi.mock('../socialWatermark', () => ({ loadWatermark: (...a) => loadWatermark(...a) }));
 vi.mock('../../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   useSettingsStore: { getState: () => ({ billingProfile: { hasSubscription: true } }) },
@@ -110,5 +113,14 @@ describe('buildSocialExport', () => {
     renderMessageToCanvas.mockRejectedValueOnce(new Error('frame'));
     const r = await buildSocialExport({ message, options });
     expect(r).toMatchObject({ ok: false, reason: 'render' });
+  });
+
+  it('puts the maker\'s mark on the saved image, and still saves when it cannot load', async () => {
+    await buildSocialExport({ message, options });
+    expect(composeSocialImage.mock.calls[0][0].watermark).toBe(MARK);
+    loadWatermark.mockResolvedValueOnce(null);
+    const r = await buildSocialExport({ message, options });
+    expect(r.ok).toBe(true);
+    expect(composeSocialImage.mock.calls[1][0].watermark).toBeNull();
   });
 });
