@@ -231,7 +231,7 @@ describe('Social export: spam sender, sender details and links', function () {
     // The open message's header and popover are there, with filler where the sender was.
     expect(r.text).toContain('Sender Details');
     expect(r.text).toContain('Authentication');
-    expect(r.text).toMatch(/x{3}@x{4}\.x{8}\.x{4}/); // news@verified.mock.test
+    expect(r.text).toMatch(/x{4}@x{8}\.x{4}\.x{4}/); // news@verified.mock.test
     expect(r.text).toMatch(/x{8} x{6}/); // Verified Sender
     expect(r.text).not.toContain(SENDER_ADDRESS);
     expect(r.text).not.toContain(SENDER_NAME);
