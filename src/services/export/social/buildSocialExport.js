@@ -42,6 +42,20 @@ function dictionaryWithReveal(dict, message, { redact, revealSender }) {
   return reveal.size ? { ...dict, reveal } : dict;
 }
 
+// The sender-details and links boxes are masked as they are built (their values
+// through the dictionary, their labels are ours): the header's safety-net pass
+// skips them, or a label sharing a name token ("Sender Details" beside a contact
+// called Sender) comes out as filler. Set aside, the rest redacted, put back.
+function redactOutsideBoxes(clone, dict, hooks) {
+  const boxes = [...(clone.querySelectorAll?.('[data-mv-box]') || [])].map((box) => {
+    const mark = box.ownerDocument.createComment('');
+    box.replaceWith(mark);
+    return [mark, box];
+  });
+  redactTree(clone, dict, hooks);
+  for (const [mark, box] of boxes) mark.replaceWith(box);
+}
+
 // The window frame (card background and title bar) follows the Appearance
 // theme, for the card and the app window alike.
 export const chromeTheme = (_content, appTheme) => (appTheme === 'dark' ? 'dark' : 'light');
@@ -95,8 +109,8 @@ export async function buildSocialContent(message, { content, redact, dict, theme
     redactStyle: red ? 'blur' : undefined,
     extrasHtml: extrasHtml || undefined,
     onCloneNode: red ? (clone) => { redactTree(clone, d); } : undefined,
-    onCloneHead: keep
-      ? (clone) => { redactTree(clone, d, { keep: (text) => keep.has(String(text).trim().toLowerCase()) }); }
+    onCloneHead: red
+      ? (clone) => redactOutsideBoxes(clone, d, keep ? { keep: (text) => keep.has(String(text).trim().toLowerCase()) } : {})
       : undefined,
   });
 }

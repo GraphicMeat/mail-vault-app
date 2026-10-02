@@ -216,6 +216,22 @@ describe('buildSocialExport', () => {
       expect(body.textContent).toBe('xxxxx xxxx');
     });
 
+    it('the header pass leaves the pre-masked boxes alone: a label sharing a name token stays readable', async () => {
+      for (const revealSender of [false, true]) {
+        renderSocialCard.mockClear();
+        await buildSocialExport({ message: spam, options: { ...options, revealSender, senderDetails: true } });
+        const { onCloneHead } = renderSocialCard.mock.calls[0][0];
+        const head = document.createElement('div');
+        // "Desk" is a token of the sender's name: in the header it is masked, in a box label it is ours.
+        head.innerHTML = '<p>Rokas Ambrazevičius</p><section data-mv-box="sender"><h2>Desk Details</h2></section><p>Desk</p>';
+        onCloneHead(head);
+        expect(head.querySelector('[data-mv-box] h2').textContent, String(revealSender)).toBe('Desk Details');
+        expect(head.textContent).not.toContain('Rokas');
+        expect(head.lastElementChild.textContent).toBe('xxxx');
+        expect(head.children[1].matches('[data-mv-box]')).toBe(true);
+      }
+    });
+
     it('card: the sender-details box and the links list go to the header, masked', async () => {
       await buildSocialExport({ message: spam, options: { ...options, senderDetails: true, links: true } });
       const { extrasHtml } = renderSocialCard.mock.calls[0][0];
