@@ -70,6 +70,16 @@ describe('buildSocialExport', () => {
     noLeak(r.file.name);
   });
 
+  it('an own appTheme beats the app theme: the capture and the frame both use it', async () => {
+    useThemeStore.setState({ theme: 'dark' });
+    await buildSocialExport({ message, options: { ...options, content: 'app', appTheme: 'light' } });
+    expect(captureAppWindow.mock.calls[0][0].theme).toBe('light');
+    expect(composeSocialImage.mock.calls[0][0].theme).toBe('light');
+    await buildSocialExport({ message, options: { ...options, content: 'app', appTheme: null } });
+    expect(captureAppWindow.mock.calls[1][0].theme).toBe('dark');
+    expect(composeSocialImage.mock.calls[1][0].theme).toBe('dark');
+  });
+
   it('a card is never dark, an app shot in a light app is light', async () => {
     await buildSocialExport({ message, options });
     expect(composeSocialImage.mock.calls[0][0].theme).toBe('light');

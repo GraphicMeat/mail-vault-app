@@ -122,12 +122,14 @@ export const normalizeListPreviewLines = value => [0, 1, 2, 3].includes(value) ?
 export const DEFAULT_SOCIAL_EXPORT = Object.freeze({
   content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
   padding: 64, radius: 16, shadow: true, chrome: true,
+  appTheme: null, // app window shot: 'light' | 'dark', null follows the app
 });
 const SOCIAL_BACKGROUNDS = ['gradient', 'solid', 'custom', 'transparent'];
 export const normalizeSocialExport = (value) => {
   const v = value && typeof value === 'object' ? value : {};
   const out = Object.fromEntries(Object.keys(DEFAULT_SOCIAL_EXPORT).map(k => [k, v[k] ?? DEFAULT_SOCIAL_EXPORT[k]]));
   if (!SOCIAL_BACKGROUNDS.includes(out.background?.type)) out.background = DEFAULT_SOCIAL_EXPORT.background;
+  if (out.appTheme !== 'light' && out.appTheme !== 'dark') out.appTheme = null;
   return out;
 };
 export const normalizeSearchMailboxConcurrency = value => {

@@ -37,7 +37,7 @@ import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/ifram
 import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
-import { useThemeStore } from '../stores/themeStore';
+import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { linkifyHtml } from '../utils/linkify';
 import { summarizeTrackers } from '../utils/trackerDetect';
@@ -304,7 +304,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
-  const theme = useThemeStore(s => s.theme);
+  const theme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);

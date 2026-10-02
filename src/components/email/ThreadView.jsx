@@ -20,7 +20,7 @@ import { useMailFonts } from '../../hooks/useMailFonts';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
-import { useThemeStore } from '../../stores/themeStore';
+import { useThemeStore, selectTheme } from '../../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, attachEmailIframeAutoSize, emailScriptNonce } from '../../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import {
@@ -84,7 +84,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
-  const appTheme = useThemeStore(s => s.theme);
+  const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const theme = effectiveTheme ?? appTheme;
   const isDark = theme === 'dark';
@@ -361,7 +361,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const moveButtonRef = useRef(null);
-  const appTheme = useThemeStore(s => s.theme);
+  const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   // Default: user preference ('light'|'dark') or follow app theme.

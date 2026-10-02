@@ -737,6 +737,7 @@
   "export.dialog.saveMessageOrThreadOffline": "メッセージやスレッド全体を画像として、またはオフラインでも開ける単一の HTML ファイルとして保存できます。エクスポートは Premium 機能です。",
   "export.dialog.seeSamples": "サンプルを見る",
   "export.imageNotMirrored": "画像は保存されていません ({{host}})",
+  "export.social.appearance": "外観",
   "export.social.background": "背景",
   "export.social.chrome": "ウインドウ枠",
   "export.social.content": "内容",

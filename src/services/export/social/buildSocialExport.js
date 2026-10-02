@@ -33,11 +33,11 @@ const mustRedact = (redact) => !!redact || usePrivacyStore.getState().enabled;
  * The panel caches it per (content, redact) and re-composes on style changes.
  * `dict` skips a second dictionary wait when the caller has one.
  */
-export async function buildSocialContent(message, { content, redact, dict } = {}) {
+export async function buildSocialContent(message, { content, redact, dict, theme } = {}) {
   const dated = { ...message, date: asDate(message.date) };
   const red = mustRedact(redact);
   const d = red ? (dict ?? await socialDictionary(dated)) : null;
-  if (content === 'app') return captureAppWindow({ redact: red, dict: d });
+  if (content === 'app') return captureAppWindow({ redact: red, dict: d, theme });
   const prepared = await prepareSocialMessage(dated, { mirror: true, redact: red ? { dict: d, format: 'image' } : null });
   return renderMessageToCanvas({
     message: prepared.message,
@@ -54,15 +54,17 @@ const toBase64 = (canvas) => {
 
 /**
  * `options = { content: 'card'|'app', size: keyof SIZE_PRESETS, background,
- * padding, radius, shadow, chrome, redact }`.
+ * padding, radius, shadow, chrome, redact, appTheme }`. `appTheme`
+ * ('light' | 'dark', null follows the app) is the theme the app window is shot in.
  */
 export async function buildSocialExport({ message, options }) {
   if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) return { ok: false, reason: 'premium' };
   const dated = { ...message, date: asDate(message.date) };
   const redact = mustRedact(options.redact);
   try {
+    const theme = options.appTheme ?? useThemeStore.getState().theme;
     const dict = redact ? await socialDictionary(dated) : null;
-    const content = await buildSocialContent(dated, { content: options.content, redact, dict });
+    const content = await buildSocialContent(dated, { content: options.content, redact, dict, theme });
     const canvas = composeSocialImage({
       content,
       size: SIZE_PRESETS[options.size] ?? null,
@@ -71,7 +73,7 @@ export async function buildSocialExport({ message, options }) {
       radius: options.radius,
       shadow: options.shadow,
       chrome: options.chrome,
-      theme: chromeTheme(options.content, useThemeStore.getState().theme),
+      theme: chromeTheme(options.content, theme),
       fit: options.content === 'app' ? 'contain' : 'crop',
     });
     const named = redact ? redactMessageForExport(dated, dict) : dated;

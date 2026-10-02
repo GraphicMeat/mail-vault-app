@@ -737,6 +737,7 @@
   "export.dialog.saveMessageOrThreadOffline": "把一封邮件或整个会话保存为图片，或保存为断网也能打开的单个 HTML 文件。导出是 Premium 功能。",
   "export.dialog.seeSamples": "查看示例",
   "export.imageNotMirrored": "图片未保存 ({{host}})",
+  "export.social.appearance": "外观",
   "export.social.background": "背景",
   "export.social.chrome": "窗口边框",
   "export.social.content": "内容",

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
-import { useThemeStore } from '../stores/themeStore';
+import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { frameBody } from '../stores/netActivityStore';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
@@ -13,7 +13,7 @@ import { useMailFonts } from '../hooks/useMailFonts';
 // The theme the reading pane opens a message in: the email theme setting, or
 // the app's own when that is "system".
 export function useDefaultEmailDark() {
-  const appTheme = useThemeStore(s => s.theme);
+  const appTheme = useThemeStore(selectTheme);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   return (emailViewerTheme && emailViewerTheme !== 'system' ? emailViewerTheme : appTheme) === 'dark';
 }

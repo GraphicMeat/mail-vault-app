@@ -2,12 +2,20 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 
+// What the reader surfaces render in: the transient capture override (the
+// social export shooting the app in the other theme) or the real theme.
+export const selectTheme = (s) => s.captureTheme ?? s.theme;
+
 export const useThemeStore = create(
   persist(
     (set, get) => ({
       theme: 'dark', // 'light' | 'dark'
       palette: 'graphite', // 'indigo' | 'graphite'; independent of light/dark
-      
+      // Transient override for a capture ('light' | 'dark' | null); never
+      // persisted and kept apart from `theme` so nothing that follows the real
+      // theme (other windows, settings) sees it.
+      captureTheme: null,
+
       toggleTheme: () => {
         const newTheme = get().theme === 'dark' ? 'light' : 'dark';
         set({ theme: newTheme });
@@ -20,6 +28,12 @@ export const useThemeStore = create(
         document.documentElement.setAttribute('data-theme', theme);
       },
 
+      setCaptureTheme: (theme) => {
+        const next = theme === 'light' || theme === 'dark' ? theme : null;
+        set({ captureTheme: next });
+        document.documentElement.setAttribute('data-theme', next ?? get().theme);
+      },
+
       setPalette: (palette) => {
         if (!['indigo', 'graphite'].includes(palette)) return;
         set({ palette });
@@ -27,7 +41,7 @@ export const useThemeStore = create(
       },
       
       initTheme: () => {
-        const theme = get().theme;
+        const theme = get().captureTheme ?? get().theme;
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.setAttribute('data-palette', get().palette || 'graphite');
       }
@@ -35,6 +49,7 @@ export const useThemeStore = create(
     {
       name: 'mailvault-theme',
       storage: createJSONStorage(() => safeStorage),
+      partialize: (s) => ({ theme: s.theme, palette: s.palette }),
       onRehydrateStorage: () => (state) => state?.initTheme(),
     }
   )

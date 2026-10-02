@@ -32,7 +32,7 @@ vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   DEFAULT_SOCIAL_EXPORT: {
     content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
-    padding: 64, radius: 16, shadow: true, chrome: true,
+    padding: 64, radius: 16, shadow: true, chrome: true, appTheme: null,
   },
   useSettingsStore: (sel) => sel(settingsState),
 }));
@@ -67,7 +67,7 @@ describe('SocialExportPanel', () => {
     renderPanel();
     expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
     await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
-    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true });
+    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark' });
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
     // The preview composes at preview size; only Save renders full size.
     expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, fit: 'crop', maxSize: { w: 720, h: 840 } });
@@ -110,19 +110,61 @@ describe('SocialExportPanel', () => {
     }
   });
 
-  it('has no theme choice: the card is light, the app window frame follows the app theme', async () => {
+  it('the card is light and has no Appearance choice; the app window frame follows the app theme', async () => {
     useThemeStore.setState({ theme: 'dark' });
     renderPanel();
-    expect(screen.queryByRole('button', { name: /^dark$/i })).toBeNull();
+    expect(screen.queryByRole('group', { name: /appearance/i })).toBeNull();
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
     expect(lastCompose().theme).toBe('light');
     fireEvent.click(screen.getByRole('button', { name: /app window/i }));
-    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'dark' }));
     await waitFor(() => expect(lastCompose().theme).toBe('dark'));
     act(() => useThemeStore.setState({ theme: 'light' }));
     await waitFor(() => expect(lastCompose().theme).toBe('light'));
-    // The theme is not part of the content: no second capture.
-    expect(buildSocialContent).toHaveBeenCalledTimes(2);
+    // Following the app: a new app theme is a different shot.
+    expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'light' });
+  });
+
+  it('shows Light and Dark only for the app window, preselected to the app theme', async () => {
+    useThemeStore.setState({ theme: 'dark' });
+    renderPanel();
+    expect(screen.queryByRole('button', { name: /^light$/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+    const group = await screen.findByRole('group', { name: /appearance/i });
+    expect(group.querySelector('[aria-pressed="true"]').textContent).toBe('Dark');
+    expect(group.querySelectorAll('button')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: /email card/i }));
+    expect(screen.queryByRole('group', { name: /appearance/i })).toBeNull();
+  });
+
+  it('picking Light shoots the app window again in light, and remembers it', async () => {
+    useThemeStore.setState({ theme: 'dark' });
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toMatchObject({ content: 'app', theme: 'dark' }));
+    const before = buildSocialContent.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: /^light$/i }));
+    await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(before + 1));
+    expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'light' });
+    expect(setSocialExport).toHaveBeenCalledWith({ appTheme: 'light' });
+    await waitFor(() => expect(lastCompose().theme).toBe('light'));
+    // Back to the first theme: served from the cache, not captured a third time.
+    fireEvent.click(screen.getByRole('button', { name: /^dark$/i }));
+    await waitFor(() => expect(lastCompose().theme).toBe('dark'));
+    expect(buildSocialContent).toHaveBeenCalledTimes(before + 1);
+  });
+
+  it('saves with the picked appearance, and a saved choice wins over the app theme', async () => {
+    settingsState.socialExport = { ...settingsState.socialExport, content: 'app', appTheme: 'light' };
+    useThemeStore.setState({ theme: 'dark' });
+    renderPanel();
+    await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
+    expect(buildSocialContent.mock.calls[0][1]).toMatchObject({ content: 'app', theme: 'light' });
+    const save = screen.getByRole('button', { name: /save png/i });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
+    await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+    expect(buildSocialExport.mock.calls[0][0].options).toMatchObject({ content: 'app', appTheme: 'light' });
   });
 
   it('names each background swatch', () => {
@@ -148,12 +190,12 @@ describe('SocialExportPanel', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
     fireEvent.click(screen.getByRole('button', { name: /app window/i }));
-    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: false }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: false, theme: 'dark' }));
     await waitFor(() => expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy());
     // Not cached yet: the redacted capture is still building when privacy turns on.
     buildSocialContent.mockImplementationOnce(() => new Promise(() => {}));
     act(() => usePrivacyStore.setState({ enabled: true }));
-    expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true });
+    expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'dark' });
     expect(screen.queryByRole('img', { name: /preview/i })).toBeNull();
   });
 });

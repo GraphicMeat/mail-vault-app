@@ -12,7 +12,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSyncStore } from '../stores/syncStore';
 import { useUiStore } from '../stores/uiStore';
-import { useThemeStore } from '../stores/themeStore';
+import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import * as api from '../services/api';
@@ -609,7 +609,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // count fell back and climbed again and looked like a reload each time.
   const cacheFilling = totalEmails > 0 && cachedCount > 0 && cachedCount < totalEmails;
 
-  const { theme, toggleTheme } = useThemeStore();
+  const theme = useThemeStore(selectTheme);
+  const toggleTheme = useThemeStore(s => s.toggleTheme);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const displayNames = useSettingsStore(s => s.displayNames);
   const accountColors = useSettingsStore(s => s.accountColors);

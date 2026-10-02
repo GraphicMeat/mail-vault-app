@@ -737,6 +737,7 @@
   "export.dialog.saveMessageOrThreadOffline": "메시지나 스레드 전체를 이미지로, 또는 오프라인에서도 열리는 단일 HTML 파일로 저장하세요. 내보내기는 Premium 기능입니다.",
   "export.dialog.seeSamples": "샘플 보기",
   "export.imageNotMirrored": "이미지가 보존되지 않음 ({{host}})",
+  "export.social.appearance": "모양",
   "export.social.background": "배경",
   "export.social.chrome": "창 테두리",
   "export.social.content": "내용",

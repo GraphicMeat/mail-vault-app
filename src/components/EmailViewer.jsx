@@ -51,7 +51,7 @@ import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocati
 import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
-import { useThemeStore } from '../stores/themeStore';
+import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
@@ -113,7 +113,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const privacyOn = usePrivacyFrameGate();
-  const appTheme = useThemeStore(s => s.theme);
+  const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   // Default email theme: user preference ('light'|'dark') or follow app theme.
   const theme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;

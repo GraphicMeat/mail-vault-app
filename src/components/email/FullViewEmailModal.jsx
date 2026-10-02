@@ -7,7 +7,7 @@ import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey, selectionK
 import { isRowArchived } from '../../utils/quickActionFacts';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
-import { useThemeStore } from '../../stores/themeStore';
+import { useThemeStore, selectTheme } from '../../stores/themeStore';
 import { getEmailColors } from '../../utils/mailChrome';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import { formatDateTime } from '../../utils/dateFormat';
@@ -70,7 +70,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const moveButtonRef = useRef(null);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
-  const appTheme = useThemeStore(s => s.theme);
+  const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   const [themeOverride, setThemeOverride] = useState(null);

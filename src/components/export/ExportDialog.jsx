@@ -11,6 +11,7 @@ import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { t, useT  } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { usePrivacyStore } from '../../stores/privacyStore';
+import { useThemeStore } from '../../stores/themeStore';
 import { ensurePrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 import { SocialExportPanel } from './SocialExportPanel';
 
@@ -37,6 +38,10 @@ function Choice({ name, value, checked, onChange, icon: Icon, label, hint, disab
 
 export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgrade, onShowSamples }) {
   const t = useT();
+  // The capture can flip the page theme under the dialog (a Light/Dark app shot):
+  // pinning the real theme on the panel re-declares its variables for its subtree.
+  const liveTheme = useThemeStore(s => s.theme);
+  const palette = useThemeStore(s => s.palette);
   const pa = usePrivateAttr();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
@@ -136,7 +141,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
   return (
     <Dialog open={open} onClose={onClose} dismissable={!busy} z={Z.dialog} portal size={isSocial ? 'xl' : 'md'}
       title={isThread ? t('export.dialog.exportMessagesTitle', { count: messages.length }) : t('export.dialog.exportMessageTitle')}
-      panelBg="bg-mail-surface" data-capture-exclude="">
+      panelBg="bg-mail-surface" data-capture-exclude="" data-theme={liveTheme} data-palette={palette}>
       {!isPremium ? (
         <>
           <p className="text-sm text-mail-text-muted">

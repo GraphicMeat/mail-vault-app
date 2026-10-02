@@ -737,6 +737,7 @@
   "export.dialog.saveMessageOrThreadOffline": "Enregistrez un message ou un fil entier sous forme d'image, ou de fichier HTML unique qui continue de fonctionner hors ligne. L'export est une fonction Premium.",
   "export.dialog.seeSamples": "Voir des exemples",
   "export.imageNotMirrored": "Image non copiée ({{host}})",
+  "export.social.appearance": "Apparence",
   "export.social.background": "Arrière-plan",
   "export.social.chrome": "Cadre de fenêtre",
   "export.social.content": "Contenu",

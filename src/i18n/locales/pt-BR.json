@@ -737,6 +737,7 @@
   "export.dialog.saveMessageOrThreadOffline": "Salve uma mensagem ou uma conversa inteira como imagem, ou como um único arquivo HTML que continua funcionando offline. Exportar é um recurso Premium.",
   "export.dialog.seeSamples": "Ver exemplos",
   "export.imageNotMirrored": "Imagem não copiada ({{host}})",
+  "export.social.appearance": "Aparência",
   "export.social.background": "Fundo",
   "export.social.chrome": "Moldura da janela",
   "export.social.content": "Conteúdo",

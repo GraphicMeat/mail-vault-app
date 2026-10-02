@@ -1,6 +1,8 @@
 import { domToCanvas } from 'modern-screenshot';
 import { redactTree } from '../../../utils/privacy/redactDom';
 import { usePrivacyStore } from '../../../stores/privacyStore';
+import { useThemeStore } from '../../../stores/themeStore';
+import { PRIVACY_GATE_ID } from '../../../utils/emailIframeTemplate.js';
 import { isUiString } from '../../../i18n/index.js';
 import { fetchAssetViaTauri } from '../exportService';
 
@@ -12,6 +14,12 @@ import { fetchAssetViaTauri } from '../exportService';
  * (captureMask: React fields mask in the same render, the reader frames are
  * masked in place by useBodyPrivacy), and the clone is masked again before it
  * is drawn, which catches any text a render site missed.
+ *
+ * With `theme` ('light' | 'dark') different from the app's, the app is flipped
+ * to it for the length of the capture (themeStore's transient captureTheme:
+ * the reader frames rebuild in that theme, the CSS variables follow
+ * data-theme) and flipped back after. Captures run one at a time, so two
+ * overlapping calls never fight over the theme or the mask.
  *
  * Message frames are drawn separately: each frame's body is rendered on its
  * own and painted over the frame's visible rect (ruling R16: the probe that
@@ -126,21 +134,72 @@ async function compositeFrames(canvas, root, onCloneNode) {
   }
 }
 
-// Redacted captures in flight. A preview capture and a Save can overlap; the
-// first to finish must not lift the mask under the other.
-let masking = 0;
+// A flipped theme rebuilds every reader frame (a new srcdoc: the document
+// reloads, and in dark Dark Reader injects its scripts). Capturing before that
+// settles would draw the old theme or a half-painted frame.
+const READY_TIMEOUT_MS = 2000;
+const POLL_MS = 16;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function captureAppWindow({ redact, dict }) {
-  const root = document.getElementById('root');
-  if (!root) throw new Error('no app root');
-  const privacy = usePrivacyStore.getState();
-  if (redact) masking += 1;
+const frameDoc = (iframe) => {
+  try { return iframe.contentDocument; } catch { return null; }
+};
+
+function snapshotFrames(root) {
+  const snapshot = new Map();
+  for (const iframe of root.querySelectorAll('iframe')) {
+    if (keep(iframe)) snapshot.set(iframe, { srcdoc: iframe.getAttribute('srcdoc'), doc: frameDoc(iframe) });
+  }
+  return snapshot;
+}
+
+// Every frame whose srcdoc changed (or that is new) has loaded its new document.
+function framesReady(root, before, redact) {
+  for (const iframe of root.querySelectorAll('iframe')) {
+    if (!keep(iframe)) continue;
+    const old = before.get(iframe);
+    if (old && iframe.getAttribute('srcdoc') === old.srcdoc) continue;
+    const doc = frameDoc(iframe);
+    if (!doc) continue; // unreadable: the composite skips it too
+    if (doc === old?.doc || doc.readyState !== 'complete' || !doc.body) return false;
+    if (redact && doc.getElementById(PRIVACY_GATE_ID)) return false;
+  }
+  return true;
+}
+
+async function waitForFrames(root, before, redact) {
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  while (!framesReady(root, before, redact) && Date.now() < deadline) await sleep(POLL_MS);
+  await nextPaint();
+}
+
+// Redacted captures queued or in flight. A preview capture and a Save can
+// overlap; the mask stays up from the first call until the last one ends, with
+// no gap between two back-to-back captures.
+let masking = 0;
+// Captures run strictly one after the other.
+let queue = Promise.resolve();
+
+async function capture({ redact, dict, theme }) {
+  let flipped = false;
   try {
+    const root = document.getElementById('root');
+    if (!root) throw new Error('no app root');
+    const privacy = usePrivacyStore.getState();
     if (redact) {
       privacy.setPeek(false);
       privacy.setCaptureMask(true);
       // One frame for React to render masked, one for the frames' pass to land.
       await nextPaint();
+    }
+    const themes = useThemeStore.getState();
+    if ((theme === 'light' || theme === 'dark') && theme !== themes.theme && theme !== themes.captureTheme) {
+      // The mask is already up: nothing unmasked paints in the other theme.
+      const before = snapshotFrames(root);
+      flipped = true;
+      themes.setCaptureTheme(theme);
+      await nextPaint();
+      await waitForFrames(root, before, redact);
     }
     const canvas = await domToCanvas(root, {
       ...RASTER, filter: keep, onCloneNode: cloneHook(redact, dict, chromeHooks),
@@ -150,8 +209,16 @@ export async function captureAppWindow({ redact, dict }) {
     await compositeFrames(canvas, root, cloneHook(redact, dict));
     return canvas;
   } finally {
+    if (flipped) useThemeStore.getState().setCaptureTheme(null);
     if (redact && --masking === 0) usePrivacyStore.getState().setCaptureMask(false);
   }
+}
+
+export function captureAppWindow({ redact, dict, theme } = {}) {
+  if (redact) masking += 1;
+  const run = queue.then(() => capture({ redact, dict, theme }));
+  queue = run.catch(() => {});
+  return run;
 }
 
 // The e2e probe calls the capture without driving the export dialog.

@@ -71,7 +71,10 @@ vi.mock('../../stores/mailStore', () => ({ useMailStore }));
 
 vi.mock('../../stores/accountStore', () => ({ useAccountStore: selector => selector(mocks.accountState) }));
 vi.mock('../../stores/messageListStore', () => ({ useMessageListStore: selector => selector(mocks.messageListState) }));
-vi.mock('../../stores/themeStore', () => ({ useThemeStore: selector => selector({ theme: 'light', palette: 'graphite' }) }));
+vi.mock('../../stores/themeStore', () => ({
+  useThemeStore: selector => selector({ theme: 'light', palette: 'graphite' }),
+  selectTheme: s => s.captureTheme ?? s.theme,
+}));
 vi.mock('../../services/cacheManager', () => ({ getAccountCacheMailboxes: accountId => mocks.folders[accountId] || [] }));
 vi.mock('../../services/workflows/messageMutations', () => ({
   applyFlagToKeys: (...args) => mocks.applyFlagToKeys(...args),

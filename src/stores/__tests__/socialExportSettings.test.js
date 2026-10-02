@@ -30,4 +30,17 @@ describe('social export style', () => {
     const merged = _mergePersistedSettings({ socialExport: { theme: 'dark' } }, useSettingsStore.getState()).socialExport;
     expect(merged).not.toHaveProperty('theme');
   });
+
+  it('appTheme: follows the app by default, keeps light or dark, drops anything else', () => {
+    expect(DEFAULT_SOCIAL_EXPORT.appTheme).toBeNull();
+    const merge = (socialExport) => _mergePersistedSettings({ socialExport }, useSettingsStore.getState()).socialExport;
+    expect(merge({ appTheme: 'light' }).appTheme).toBe('light');
+    expect(merge({ appTheme: 'dark' }).appTheme).toBe('dark');
+    for (const junk of ['sepia', 5, {}, undefined, null]) expect(merge({ appTheme: junk }).appTheme).toBeNull();
+    const { setSocialExport } = useSettingsStore.getState();
+    setSocialExport({ appTheme: 'light' });
+    expect(useSettingsStore.getState().socialExport.appTheme).toBe('light');
+    setSocialExport({ appTheme: 'blue' });
+    expect(useSettingsStore.getState().socialExport.appTheme).toBeNull();
+  });
 });

@@ -66,11 +66,12 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * The "Social" format of the export dialog: one message as a styled PNG,
  * either a card on a background or the app window with the message open.
  *
- * The content is rendered once per (content, redact) and cached; every style
- * change re-composes from the cache. The style is remembered in settings;
- * redaction is on every time the panel opens (and cannot be turned off while
- * privacy mode is on), and an own image is never stored. The card is light;
- * the app window's frame follows the app theme.
+ * The content is rendered once per (content, redact, app theme) and cached;
+ * every style change re-composes from the cache. The style is remembered in
+ * settings; redaction is on every time the panel opens (and cannot be turned
+ * off while privacy mode is on), and an own image is never stored. The card is
+ * light; the app window is shot in the chosen Light/Dark (the app's own theme
+ * until one is picked) and its frame follows that.
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
@@ -95,7 +96,9 @@ export function SocialExportPanel({ message, onDone }) {
   const request = useRef(0);
   const cache = useRef(new Map());
 
-  const theme = chromeTheme(prefs.content, appTheme);
+  // The app window is shot in this theme, and its frame follows it.
+  const theme = prefs.appTheme ?? appTheme;
+  const frameTheme = chromeTheme(prefs.content, theme);
   const background = imageActive && ownImage ? ownImage : prefs.background;
 
   const update = (patch) => {
@@ -122,7 +125,7 @@ export function SocialExportPanel({ message, onDone }) {
   useEffect(() => { cache.current = new Map(); }, [message]);
 
   useEffect(() => {
-    const key = `${prefs.content}|${redacting}`;
+    const key = `${prefs.content}|${redacting}|${prefs.content === 'app' ? theme : ''}`;
     const id = ++request.current;
     const hit = cache.current.get(key);
     if (hit) { setContent(hit); setLoading(false); return; }
@@ -131,21 +134,21 @@ export function SocialExportPanel({ message, onDone }) {
     setContent(null);
     setLoading(true);
     setNotice(null);
-    buildSocialContent(message, { content: prefs.content, redact: redacting })
+    buildSocialContent(message, { content: prefs.content, redact: redacting, theme })
       .then((canvas) => {
         cache.current.set(key, canvas);
         if (request.current === id) setContent(canvas);
       })
       .catch(() => { if (request.current === id) { setContent(null); setNotice(t('export.dialog.messageCouldExported')); } })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [message, prefs.content, redacting]);
+  }, [message, prefs.content, redacting, theme]);
 
   useEffect(() => {
     if (!content) return;
     const out = composeSocialImage({
       content, size: SIZE_PRESETS[prefs.size] ?? null, background,
       padding: prefs.padding, radius: prefs.radius, shadow: prefs.shadow, chrome: prefs.chrome,
-      theme, fit: prefs.content === 'app' ? 'contain' : 'crop', maxSize: PREVIEW_MAX,
+      theme: frameTheme, fit: prefs.content === 'app' ? 'contain' : 'crop', maxSize: PREVIEW_MAX,
     });
     const canvas = previewRef.current;
     if (!canvas || !out.width || !out.height) return;
@@ -160,13 +163,13 @@ export function SocialExportPanel({ message, onDone }) {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(out, 0, 0, canvas.width, canvas.height);
-  }, [content, prefs.size, prefs.padding, prefs.radius, prefs.shadow, prefs.chrome, prefs.content, background, theme]);
+  }, [content, prefs.size, prefs.padding, prefs.radius, prefs.shadow, prefs.chrome, prefs.content, background, frameTheme]);
 
   const save = async () => {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting } });
+      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting, appTheme: theme } });
       if (!result.ok) {
         setNotice(result.reason === 'premium' ? t('export.dialog.exportPremiumFeature') : t('export.dialog.messageCouldExported'));
         return;
@@ -210,6 +213,13 @@ export function SocialExportPanel({ message, onDone }) {
             <Chips label={t('export.social.content')} value={prefs.content} onChange={v => update({ content: v })}
               options={[{ value: 'card', label: t('export.social.contentCard') }, { value: 'app', label: t('export.social.contentApp') }]} />
           </Field>
+
+          {prefs.content === 'app' && (
+            <Field label={t('export.social.appearance')}>
+              <Chips label={t('export.social.appearance')} value={theme} onChange={v => update({ appTheme: v })}
+                options={[{ value: 'light', label: t('settings.colors.light') }, { value: 'dark', label: t('settings.colors.dark') }]} />
+            </Field>
+          )}
 
           <Field label={t('export.social.size')}>
             <Chips label={t('export.social.size')} value={prefs.size} onChange={v => update({ size: v })} options={sizeOptions} />
