@@ -24,8 +24,9 @@ vi.mock('../../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   useSettingsStore: { getState: () => ({ billingProfile: { hasSubscription: true } }) },
 }));
+const mail = vi.hoisted(() => ({ accounts: [] }));
 vi.mock('../../../../stores/mailStore', () => ({
-  useMailStore: { getState: () => ({ accounts: [], activeAccountId: 'acct-1', activeMailbox: 'INBOX' }) },
+  useMailStore: { getState: () => ({ accounts: mail.accounts, activeAccountId: 'acct-1', activeMailbox: 'INBOX' }) },
 }));
 // A cold host: the dictionary knows nobody, so the message's own parties must cover it.
 vi.mock('../../../../utils/privacy/privacyDictionary', async (orig) => {
@@ -47,6 +48,7 @@ const options = {
 const noLeak = (s) => NEEDLES.forEach(n => expect(s, n).not.toContain(n));
 
 beforeEach(() => {
+  mail.accounts = [];
   renderSocialCard.mockClear(); captureAppWindow.mockClear(); composeSocialImage.mockClear();
   usePrivacyStore.setState({ enabled: false });
   useThemeStore.setState({ theme: 'dark' });
@@ -149,5 +151,101 @@ describe('buildSocialExport', () => {
     const r = await buildSocialExport({ message, options });
     expect(r.ok).toBe(true);
     expect(composeSocialImage.mock.calls[1][0].watermark).toBeNull();
+  });
+
+  describe('spam sender reveal, sender details and links', () => {
+    const spam = {
+      uid: 9, subject: 'You won', date: new Date('2026-09-01T10:00:00Z'),
+      from: { name: 'Prize Desk', address: 'win@prize.example' },
+      to: [{ name: 'Rokas Ambrazevičius', address: 'rokas@example.lt' }],
+      replyTo: [{ address: 'collect@elsewhere.example' }],
+      authenticationResults: 'mx; spf=fail; dkim=pass; dmarc=pass',
+      html: '<p>Hi Rokas Ambrazevičius <a href="http://claim.example/c/rokas%40example.lt">https://bank.example</a></p>',
+    };
+
+    it('redacted with revealSender: the sender stays in the header and the file name, everyone else is masked', async () => {
+      const r = await buildSocialExport({ message: spam, options: { ...options, revealSender: true } });
+      const args = renderSocialCard.mock.calls[0][0];
+      expect(args.message.from).toEqual({ name: 'Prize Desk', address: 'win@prize.example' });
+      expect(args.message.to[0].address).toBe('xxxxx@xxxxxxx.xx');
+      expect(args.message.replyTo[0].address).toBe('collect@elsewhere.example');
+      expect(args.bodyHtml).not.toContain('Rokas');
+      expect(typeof args.onCloneHead).toBe('function');
+      expect(r.file.name).toContain('Prize Desk');
+      expect(r.file.name).not.toContain('Rokas');
+    });
+
+    it('without revealSender the sender is masked like anyone and nothing special is passed', async () => {
+      const r = await buildSocialExport({ message: spam, options });
+      const args = renderSocialCard.mock.calls[0][0];
+      expect(JSON.stringify(args.message)).not.toMatch(/win@prize|Prize Desk|collect@elsewhere/);
+      expect(args.onCloneHead).toBeUndefined();
+      expect(r.file.name).not.toContain('Prize');
+    });
+
+    it('revealSender never reveals when the image is not redacted (nothing to reveal) or the From is the user', async () => {
+      await buildSocialExport({ message: spam, options: { ...options, redact: false, revealSender: true } });
+      expect(renderSocialCard.mock.calls[0][0].onCloneHead).toBeUndefined();
+      mail.accounts = [{ id: 'acct-1', email: 'WIN@prize.example' }];
+      await buildSocialExport({ message: { ...spam, replyTo: undefined }, options: { ...options, revealSender: true } });
+      const args = renderSocialCard.mock.calls[1][0];
+      expect(args.message.from.address).toBe('xxx@xxxxx.xxxxxxx');
+      expect(args.onCloneHead).toBeUndefined();
+    });
+
+    it('privacy mode on: still reveals the sender when asked, still redacts everyone else', async () => {
+      usePrivacyStore.setState({ enabled: true });
+      await buildSocialExport({ message: spam, options: { ...options, redact: false, revealSender: true } });
+      const args = renderSocialCard.mock.calls[0][0];
+      expect(args.message.from.address).toBe('win@prize.example');
+      expect(args.message.to[0].address).toBe('xxxxx@xxxxxxx.xx');
+    });
+
+    it('the header pass keeps the revealed name and the From line, and masks the rest of the header', async () => {
+      await buildSocialExport({ message: spam, options: { ...options, revealSender: true, senderDetails: true } });
+      const { onCloneHead, onCloneNode } = renderSocialCard.mock.calls[0][0];
+      const head = document.createElement('div');
+      head.innerHTML = '<p>Prize Desk &lt;win@prize.example&gt;</p><p>Prize Desk</p><p>Rokas Ambrazevičius</p>';
+      onCloneHead(head);
+      expect(head.textContent).toContain('Prize Desk <win@prize.example>Prize Desk');
+      expect(head.textContent).not.toContain('Rokas');
+      // The body half keeps no exception.
+      const body = document.createElement('div');
+      body.innerHTML = '<p>Prize Desk</p>';
+      onCloneNode(body);
+      expect(body.textContent).toBe('xxxxx xxxx');
+    });
+
+    it('card: the sender-details box and the links list go to the header, masked', async () => {
+      await buildSocialExport({ message: spam, options: { ...options, senderDetails: true, links: true } });
+      const { extrasHtml } = renderSocialCard.mock.calls[0][0];
+      expect(extrasHtml).toContain('Sender Details');
+      expect(extrasHtml).toContain('data-mv-box="links"');
+      expect(extrasHtml).toContain('Dangerous'); // the text shows bank.example, it goes to claim.example
+      expect(extrasHtml).toContain('http://claim.example');
+      expect(extrasHtml).not.toMatch(/win@prize|Prize Desk|collect@elsewhere|rokas|Rokas/i);
+      noLeak(extrasHtml);
+    });
+
+    it('card without them: no extras at all; unredacted shows the real values', async () => {
+      await buildSocialExport({ message: spam, options });
+      expect(renderSocialCard.mock.calls[0][0].extrasHtml).toBeUndefined();
+      await buildSocialExport({ message: spam, options: { ...options, redact: false, senderDetails: true, links: true } });
+      const { extrasHtml } = renderSocialCard.mock.calls[1][0];
+      expect(extrasHtml).toContain('win@prize.example');
+      expect(extrasHtml).toContain('http://claim.example/c/rokas%40example.lt');
+    });
+
+    it('app window: passes the reveal and the open message to the capture, and never the links', async () => {
+      await buildSocialExport({ message: spam, options: { ...options, content: 'app', revealSender: true, senderDetails: true, links: true } });
+      const args = captureAppWindow.mock.calls[0][0];
+      expect([...args.reveal].sort()).toEqual(['collect@elsewhere.example', 'prize desk', 'win@prize.example']);
+      expect(args.dict.reveal).toBe(args.reveal);
+      expect(args.senderDetails).toEqual({ uid: 9, accountId: 'acct-1', mailbox: 'INBOX' });
+      expect(renderSocialCard).not.toHaveBeenCalled();
+      await buildSocialExport({ message: spam, options: { ...options, content: 'app' } });
+      expect(captureAppWindow.mock.calls[1][0].reveal).toBeUndefined();
+      expect(captureAppWindow.mock.calls[1][0].senderDetails).toBeUndefined();
+    });
   });
 });

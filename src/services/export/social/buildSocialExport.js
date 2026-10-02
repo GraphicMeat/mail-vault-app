@@ -6,7 +6,13 @@ import { buildNameDictionary, unionDictionaries } from '../../../utils/privacy/p
 import { redactTree } from '../../../utils/privacy/redactDom';
 import { prepareSocialMessage } from '../exportService';
 import { redactMessageForExport } from '../exportRedact';
+import { addressLine } from '../exportDocument';
 import { singleName } from '../exportNaming';
+import { useMailStore } from '../../../stores/mailStore';
+import { buildRevealSet } from './revealSender';
+import { senderDetailsHtml } from './senderDetails';
+import { socialLinksHtml } from './socialLinks';
+import { resolveEmailLocation } from '../../../stores/slices/unifiedHelpers';
 import { trace } from '../exportTrace';
 import { captureAppWindow } from './captureAppWindow';
 import { renderSocialCard } from './renderSocialCard';
@@ -24,6 +30,25 @@ async function socialDictionary(message) {
   return unionDictionaries(host, buildNameDictionary({ names: collectPrivacyNames({ emails: [message] }) }));
 }
 
+// The dictionary with the spam sender's exact values to leave readable, when the
+// image is redacted and asked for it. A copy: the host's dictionary is shared.
+function dictionaryWithReveal(dict, message, { redact, revealSender }) {
+  if (!redact || !revealSender || !dict || dict.reveal?.size) return dict;
+  const mail = useMailStore.getState();
+  const settings = useSettingsStore.getState();
+  const reveal = buildRevealSet(message, {
+    accounts: mail.accounts, sendAsAddresses: settings.sendAsAddresses, aliases: settings.aliases, displayNames: settings.displayNames,
+  });
+  return reveal.size ? { ...dict, reveal } : dict;
+}
+
+// What the app window's capture needs to find the open message's header: the
+// same place the reader keys it by (account, folder, uid).
+function senderDetailsTarget(message) {
+  const location = resolveEmailLocation(message, useMailStore.getState());
+  return location ? { uid: message.uid, accountId: location.accountId, mailbox: location.mailbox } : null;
+}
+
 // The window frame (card background and title bar) follows the Appearance
 // theme, for the card and the app window alike.
 export const chromeTheme = (_content, appTheme) => (appTheme === 'dark' ? 'dark' : 'light');
@@ -33,17 +58,37 @@ const mustRedact = (redact) => !!redact || usePrivacyStore.getState().enabled;
 
 /**
  * The content canvas alone (card render or app capture, redacted when asked).
- * The panel caches it per (content, redact, themes) and re-composes on style
- * changes. `dict` skips a second dictionary wait when the caller has one.
- * `theme` is the Appearance (the app window's theme, the card's header block);
- * `mailTheme` is the card's mail body, following `theme` when absent.
+ * The panel caches it per (content, redact, themes, reveal, details, links) and
+ * re-composes on style changes. `dict` skips a second dictionary wait when the
+ * caller has one. `theme` is the Appearance (the app window's theme, the card's
+ * header block); `mailTheme` is the card's mail body, following `theme` when
+ * absent. `revealSender` (redacted only) leaves a spam sender's exact name and
+ * addresses readable; `senderDetails` adds the sender-details box (the open
+ * message's real popover, in the app window); `links` adds the links list
+ * (card only).
  */
-export async function buildSocialContent(message, { content, redact, dict, theme, mailTheme } = {}) {
+export async function buildSocialContent(message, { content, redact, dict, theme, mailTheme, revealSender, senderDetails, links } = {}) {
   const dated = { ...message, date: asDate(message.date) };
   const red = mustRedact(redact);
-  const d = red ? (dict ?? await socialDictionary(dated)) : null;
-  if (content === 'app') return captureAppWindow({ redact: red, dict: d, theme });
-  const prepared = await prepareSocialMessage(dated, { mirror: true, redact: red ? { dict: d, format: 'image' } : null });
+  const d = red ? dictionaryWithReveal(dict ?? await socialDictionary(dated), dated, { redact: red, revealSender }) : null;
+  if (content === 'app') {
+    return captureAppWindow({
+      redact: red, dict: d, theme, reveal: d?.reveal,
+      senderDetails: senderDetails ? senderDetailsTarget(dated) ?? undefined : undefined,
+    });
+  }
+  const prepared = await prepareSocialMessage(dated, {
+    mirror: true, redact: red ? { dict: d, format: 'image' } : null, details: !!senderDetails, links: !!links,
+  });
+  const extrasHtml = [
+    prepared.details && senderDetailsHtml(prepared.details),
+    prepared.links && socialLinksHtml(prepared.links),
+  ].filter(Boolean).join('');
+  // A revealed name sits in a header text node of its own (and inside the From
+  // line); the safety-net pass over the header keeps exactly those, never body text.
+  const keep = red && d.reveal?.size
+    ? new Set([...d.reveal, addressLine(prepared.message.from).toLowerCase()])
+    : null;
   return renderSocialCard({
     message: prepared.message,
     bodyHtml: prepared.body,
@@ -51,13 +96,18 @@ export async function buildSocialContent(message, { content, redact, dict, theme
     mail: (mailTheme ?? theme) === 'dark' ? 'dark' : 'light',
     palette: useThemeStore.getState().palette,
     redactStyle: red ? 'blur' : undefined,
+    extrasHtml: extrasHtml || undefined,
     onCloneNode: red ? (clone) => { redactTree(clone, d); } : undefined,
+    onCloneHead: keep
+      ? (clone) => { redactTree(clone, d, { keep: (text) => keep.has(String(text).trim().toLowerCase()) }); }
+      : undefined,
   });
 }
 
 /**
  * `options = { content: 'card'|'app', size: keyof SIZE_PRESETS, background,
- * padding, radius, shadow, chrome, redact, appTheme, mailTheme }`.
+ * padding, radius, shadow, chrome, redact, appTheme, mailTheme, revealSender,
+ * senderDetails, links }`.
  * `appTheme` ('light' | 'dark', null follows the app) is the Appearance: the
  * app window's theme and the card's frame and header. `mailTheme` is the card's
  * mail body, null follows the Appearance.
@@ -68,10 +118,13 @@ export async function buildSocialExport({ message, options }) {
   const redact = mustRedact(options.redact);
   try {
     const theme = options.appTheme ?? useThemeStore.getState().theme;
-    const dict = redact ? await socialDictionary(dated) : null;
+    const dict = redact ? dictionaryWithReveal(await socialDictionary(dated), dated, { redact, revealSender: options.revealSender }) : null;
     let t = performance.now();
     const lap = (step) => { const now = performance.now(); trace(step, { ms: Math.round(now - t) }); t = now; };
-    const content = await buildSocialContent(dated, { content: options.content, redact, dict, theme, mailTheme: options.mailTheme ?? theme });
+    const content = await buildSocialContent(dated, {
+      content: options.content, redact, dict, theme, mailTheme: options.mailTheme ?? theme,
+      revealSender: options.revealSender, senderDetails: options.senderDetails, links: options.links,
+    });
     lap('social-content');
     const watermark = await loadWatermark();
     t = performance.now();
