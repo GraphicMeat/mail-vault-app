@@ -1,6 +1,6 @@
 // src/utils/privacy/__tests__/piiDetector.test.js
 import { describe, it, expect } from 'vitest';
-import { foldName, buildNameDictionary, findPii, maskText, maskString, EMPTY_DICTIONARY } from '../piiDetector';
+import { foldName, buildNameDictionary, findPii, maskText, maskString, unionDictionaries, EMPTY_DICTIONARY } from '../piiDetector';
 
 const dict = buildNameDictionary({ names: ['Rokas Ambrazevičius', 'John Smith', 'Mark Post', 'Amélie Dupont'] });
 const kinds = (text, d = dict) => findPii(text, d).map(s => [text.slice(s.start, s.end), s.kind]);
@@ -139,5 +139,47 @@ describe('fix round 1: leak classes', () => {
     expect(kinds('Łukasz wrote', d('Lukasz Nowak'))).toEqual([['Łukasz', 'name']]);
     expect(kinds('Herr STRAUSS', d('Strauß'))).toEqual([['STRAUSS', 'name']]);
     expect(foldName('Ørsted Đurić Œuvre')).toBe('orsted duric oeuvre');
+  });
+});
+
+// A spam sender's address can stay readable; nothing else does.
+describe('dictionary reveal', () => {
+  const prize = buildNameDictionary({ names: ['Prize Team'] });
+  const withReveal = (d, ...values) => ({ ...d, reveal: new Set(values) });
+
+  it('drops only the email spans whose whole text is in the set, case-insensitively', () => {
+    const d = withReveal(prize, 'spam@prize.example');
+    expect(kinds('From SPAM@Prize.example and other@prize.example', d)).toEqual([['other@prize.example', 'email']]);
+  });
+
+  it('is exact: a longer address, a prefix and a name are not revealed', () => {
+    const d = withReveal(prize, 'spam@prize.example');
+    expect(kinds('xspam@prize.example spam@prize.example.org', d).map(([t]) => t)).toEqual(['xspam@prize.example', 'spam@prize.example.org']);
+    expect(kinds('Prize Team wrote', withReveal(prize, 'prize team'))).toEqual([['Prize Team', 'name']]);
+  });
+
+  it('name tokens inside a revealed address stay unmasked as a whole, not masked piecemeal', () => {
+    // "prize" is a name token, but the address claimed its characters first.
+    expect(maskString('mail spam@prize.example now', withReveal(prize, 'spam@prize.example'))).toBe('mail spam@prize.example now');
+  });
+
+  it('a dictionary without reveal behaves as before', () => {
+    expect(kinds('spam@prize.example', prize)).toEqual([['spam@prize.example', 'email']]);
+  });
+
+  it('unionDictionaries carries reveal through every path', () => {
+    const a = withReveal(prize, 'a@x.example');
+    const b = withReveal(buildNameDictionary({ names: ['Owen Ashcombe'] }), 'b@x.example');
+    const both = unionDictionaries(a, b);
+    expect([...both.reveal].sort()).toEqual(['a@x.example', 'b@x.example']);
+    expect(both.tokens.has('prize') && both.tokens.has('owen')).toBe(true);
+    // A cold host (empty dictionary) on either side must not drop it.
+    expect([...unionDictionaries(withReveal(EMPTY_DICTIONARY, 'c@x.example'), prize).reveal]).toEqual(['c@x.example']);
+    expect([...unionDictionaries(prize, withReveal(EMPTY_DICTIONARY, 'd@x.example')).reveal]).toEqual(['d@x.example']);
+    expect(unionDictionaries(withReveal(EMPTY_DICTIONARY, 'c@x.example'), prize).tokens.has('prize')).toBe(true);
+    expect(unionDictionaries(prize, prize)).not.toHaveProperty('reveal');
+    // Neither input is mutated (the host's dictionary is shared, the empty one frozen).
+    expect(prize).not.toHaveProperty('reveal');
+    expect(EMPTY_DICTIONARY).not.toHaveProperty('reveal');
   });
 });

@@ -75,14 +75,25 @@ export function buildNameDictionary({ names = [] } = {}) {
 
 export const EMPTY_DICTIONARY = Object.freeze(buildNameDictionary({ names: [] }));
 
+// `reveal`: lowercased exact values (a spam sender's address) that stay readable
+// while everything else is masked. Never mutate a dictionary to add it: the host's
+// is shared and EMPTY_DICTIONARY is frozen.
+const mergeReveal = (a, b) => (a?.reveal || b?.reveal ? new Set([...(a?.reveal || []), ...(b?.reveal || [])]) : null);
+
 /** Both dictionaries' names in one (a frame's own parties on top of the global set). */
 export function unionDictionaries(a, b) {
-  if (!b?.size) return a;
-  if (!a?.size) return b;
+  const reveal = mergeReveal(a, b);
+  // The early returns are the cold-host case (an empty host dictionary): reveal must survive them.
+  if (!b?.size) return reveal ? { ...a, reveal } : a;
+  if (!a?.size) return reveal ? { ...b, reveal } : b;
   const fullNames = new Set([...a.fullNames, ...b.fullNames]);
   const tokens = new Set([...a.tokens, ...b.tokens]);
   const unspaced = new Set([...a.unspaced, ...b.unspaced]);
-  return { fullNames, tokens, unspaced, unspacedMax: Math.max(a.unspacedMax, b.unspacedMax), size: tokens.size + fullNames.size + unspaced.size };
+  return {
+    fullNames, tokens, unspaced, unspacedMax: Math.max(a.unspacedMax, b.unspacedMax),
+    size: tokens.size + fullNames.size + unspaced.size,
+    ...(reveal ? { reveal } : {}),
+  };
 }
 
 const EMAIL = /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
@@ -255,7 +266,11 @@ export function findPii(text, dict = EMPTY_DICTIONARY) {
     }
     covered.fill(1, f.start, f.end);
   }
-  return kept.sort((a, b) => a.start - b.start);
+  // A revealed address is dropped only now, after it has claimed its characters:
+  // name tokens inside it ("prize" of spam@prize.com) must not be masked piecemeal.
+  const reveal = dict?.reveal;
+  const shown = reveal?.size ? kept.filter(k => !(k.kind === 'email' && reveal.has(s.slice(k.start, k.end).toLowerCase()))) : kept;
+  return shown.sort((a, b) => a.start - b.start);
 }
 
 // One x per letter or digit (marks fold into their base letter), never derived from the real char.
