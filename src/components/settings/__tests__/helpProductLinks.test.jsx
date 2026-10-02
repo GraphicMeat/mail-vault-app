@@ -25,9 +25,9 @@ describe('Help & Support product links', () => {
     render(<HelpSettings onClose={() => {}} onReportBug={() => {}} />);
     const row = screen.getByTestId('settings-link-website');
     const button = row.querySelector('button');
-    expect(button.dataset.url).toBe('https://mailvaultapp.com');
+    expect(button.dataset.url).toBe('https://mailvaultapp.com/?utm_source=app&utm_medium=help_settings');
     fireEvent.click(button);
-    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com');
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/?utm_source=app&utm_medium=help_settings');
   });
 
   it('offers the GraphicMeat catalogue so people can find the other products', () => {

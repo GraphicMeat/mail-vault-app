@@ -53,7 +53,7 @@ describe('Help & Support links', function () {
     it('points the website link at the live domain', async function () {
       const row = await rowUrl('settings-link-website');
       expect(row).not.toBe(null);
-      expect(row.url).toBe('https://mailvaultapp.com');
+      expect(row.url).toBe('https://mailvaultapp.com/?utm_source=app&utm_medium=help_settings');
       expect(row.url).not.toContain('mailvault.app');
     });
 

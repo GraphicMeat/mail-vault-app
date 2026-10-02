@@ -2,9 +2,10 @@ import React from 'react';
 import { SpellCheck } from 'lucide-react';
 import { Dialog, Button } from './ui';
 import { openInBrowser } from '../services/billingApi';
+import { appLink } from '../services/appLink.js';
 import { t as tr, useT  } from '../i18n/index.js';
 
-export const SPELLCHECK_FAQ_URL = 'https://mailvaultapp.com/faq.html#linux-spellcheck-dictionary';
+export const SPELLCHECK_FAQ_URL = appLink('https://mailvaultapp.com/faq.html#linux-spellcheck-dictionary', 'spellcheck_help');
 
 // One package name per family, all for US English, because the list has to be
 // copyable rather than complete — the line under it says how to swap languages.

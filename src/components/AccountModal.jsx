@@ -14,6 +14,7 @@ import { formatCount } from '../utils/formatCount';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
+import { appLink } from '../services/appLink.js';
 
 // Common email provider configurations
 export const PROVIDER_CONFIGS = () => ({
@@ -90,7 +91,7 @@ export const PROVIDER_CONFIGS = () => ({
     smtpHost: '127.0.0.1',
     smtpPort: 1025,
     note: tr('account.mailvaultConnectsThroughProtonMail'),
-    helpUrl: 'https://mailvaultapp.com/faq.html#proton-mail-bridge',
+    helpUrl: appLink('https://mailvaultapp.com/faq.html#proton-mail-bridge', 'account_setup'),
     helpLabel: tr('account.setupGuide')
   },
   fastmail: {

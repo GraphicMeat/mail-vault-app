@@ -654,7 +654,7 @@ export function BillingSettings({ onNavigate }) {
               className="px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors flex items-center gap-1.5">
               <RefreshCw size={14} /> {t('common.retry')}
             </button>
-            <button onClick={() => openInBrowser('https://mailvaultapp.com/pricing.html').catch(() => {})}
+            <button onClick={() => openInBrowser('https://mailvaultapp.com/pricing.html?utm_source=app&utm_medium=upgrade_button').catch(() => {})}
               className="px-4 py-2 text-sm font-medium border border-mail-border rounded-lg hover:border-mail-accent transition-colors text-mail-text flex items-center gap-1.5">
               <ExternalLink size={14} /> {t('settings.billing.viewPlansBrowser')}
             </button>

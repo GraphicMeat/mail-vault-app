@@ -26,7 +26,7 @@ describe('PremiumFeaturesLink', () => {
   it('opens the premium section of the feature page', () => {
     render(<PremiumFeaturesLink />);
     fireEvent.click(screen.getByRole('button', { name: /see everything in premium/i }));
-    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/features.html#premium');
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/features.html?utm_source=app&utm_medium=premium_link#premium');
   });
 
   it('renders nothing in an App Store build', () => {

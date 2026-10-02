@@ -73,7 +73,7 @@ describe('Sidebar support buttons', function () {
 
     // The suite runs in English, so the FAQ sits at the site root — a locale
     // directory here would mean the app code leaked into the URL.
-    expect(urls.faq).toBe('https://mailvaultapp.com/faq.html');
+    expect(urls.faq).toBe('https://mailvaultapp.com/faq.html?utm_source=app&utm_medium=bug_report');
     expect(urls.report).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions/new?category=bug-reports');
     expect(urls.browse).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions');
     // The email row is not a link — it hands off to compose in-app.

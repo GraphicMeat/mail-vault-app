@@ -1387,7 +1387,7 @@ function App() {
             afterSettingsClose(() => setMailArrivalKind('onboarding'));
             openSettings({ tab: 'billing' });
           }}
-          onOpenFaq={() => { openInBrowser(faqUrl(language)).catch(() => {}); }}
+          onOpenFaq={() => { openInBrowser(faqUrl(language, 'onboarding')).catch(() => {}); }}
         />
         {settingsLayer}
         {mailArrival}

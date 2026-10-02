@@ -88,7 +88,7 @@ describe('BugReportDialog', () => {
     const onClose = vi.fn();
     render(<BugReportDialog open onClose={onClose} onEmail={() => {}} />);
     click('bug-option-faq');
-    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html');
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html?utm_source=app&utm_medium=bug_report');
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -166,7 +166,7 @@ describe('BugReportDialog', () => {
     expect(screen.getByTestId('bug-option-idea').textContent).toContain('The thing you wish MailVault did');
 
     click('bug-option-faq');
-    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html');
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html?utm_source=app&utm_medium=bug_report');
     expect(screen.getByTestId('bug-option-discussions').querySelector('button').disabled).toBe(false);
   });
 

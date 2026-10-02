@@ -15,6 +15,7 @@ import { Dialog } from '../ui/Dialog';
 import { Z } from '../ui/layers';
 import { PremiumGallery } from '../onboarding/PremiumGallery';
 import { faqUrl } from '../../services/faqUrl';
+import { appLink } from '../../services/appLink.js';
 import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 
 // ponytail: the native Help menu's three links (src-tauri/src/main.rs), plus the
@@ -25,13 +26,13 @@ const LINKS = () => ([
     testid: 'settings-link-website',
     title: tr('settings.help.mailvaultWebsite'),
     subtitle: tr('settings.help.docsFaqLatestRelease'),
-    url: 'https://mailvaultapp.com',
+    url: appLink('https://mailvaultapp.com/', 'help_settings'),
   },
   {
     testid: 'settings-link-blog',
     title: tr('settings.help.blog'),
     subtitle: tr('settings.help.blogSubtitle'),
-    url: 'https://mailvaultapp.com/blog.html',
+    url: appLink('https://mailvaultapp.com/blog.html', 'help_settings'),
   },
   {
     // Google's OAuth verification requires the privacy policy to be easy to
@@ -102,8 +103,8 @@ export function HelpSettings({ onClose, onReportBug }) {
               <div className="text-sm text-mail-text-muted">{t('settings.help.faqSubtitle')}</div>
             </div>
             <Button variant="subtle"
-              onClick={() => openInBrowser(faqUrl(language)).catch(() => {})}
-              data-url={faqUrl(language)}
+              onClick={() => openInBrowser(faqUrl(language, 'help_settings')).catch(() => {})}
+              data-url={faqUrl(language, 'help_settings')}
             >
               <HelpCircle size={16} />
               {t('common.open')}

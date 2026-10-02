@@ -3,8 +3,9 @@ import { ExternalLink } from 'lucide-react';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { openInBrowser } from '../services/billingApi';
 import { useT } from '../i18n/index.js';
+import { appLink } from '../services/appLink.js';
 
-const FEATURES_URL = 'https://mailvaultapp.com/features.html#premium';
+const FEATURES_URL = appLink('https://mailvaultapp.com/features.html#premium', 'premium_link');
 
 /**
  * "See everything in Premium" — the one link every premium gate shares, so a

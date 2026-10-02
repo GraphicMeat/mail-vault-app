@@ -24,7 +24,7 @@ describe('Help: premium gallery and FAQ', () => {
   it('opens the FAQ in the running language', () => {
     render(<HelpSettings onClose={() => {}} onReportBug={() => {}} />);
     fireEvent.click(screen.getByTestId('settings-link-faq').querySelector('button'));
-    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html');
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html?utm_source=app&utm_medium=help_settings');
   });
 
   it('reopens the premium gallery without a reset', () => {

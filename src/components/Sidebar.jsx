@@ -38,6 +38,7 @@ import { mailboxLabel } from '../utils/imapUtf7';
 import { connectionFailureStatus } from '../utils/connectionError';
 import { Private } from './privacy/Private';
 import { usePrivateAttr } from '../hooks/usePrivacy';
+import { appLink } from '../services/appLink.js';
 import {
   Inbox,
   Network,
@@ -927,7 +928,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       {connectionErrorType === 'outlookOAuth' && (
         <button
           onClick={async () => {
-            const url = 'https://mailvaultapp.com/faq.html#microsoft-outlook-oauth2';
+            const url = appLink('https://mailvaultapp.com/faq.html#microsoft-outlook-oauth2', 'connection_error');
             if (window.__TAURI__) {
               const { open } = await import('@tauri-apps/plugin-shell');
               await open(url);

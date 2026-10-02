@@ -1,3 +1,5 @@
+import { appLink } from './appLink.js';
+
 /**
  * App locale codes and website directory names are two different sets. The
  * screenshot work already paid for this once: `pt-BR` and `zh-Hans` land in
@@ -9,7 +11,9 @@ const DIRS = {
   'pt-BR': 'pt-br', ja: 'ja', ko: 'ko', 'zh-Hans': 'zh',
 };
 
-export function faqUrl(locale) {
+export function faqUrl(locale, medium) {
   const dir = DIRS[locale] ?? '';
-  return `https://mailvaultapp.com/${dir ? `${dir}/` : ''}faq.html`;
+  const url = `https://mailvaultapp.com/${dir ? `${dir}/` : ''}faq.html`;
+  // Opened from the app: tag where from (see appLink).
+  return medium ? appLink(url, medium) : url;
 }

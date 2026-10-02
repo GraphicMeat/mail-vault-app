@@ -147,7 +147,7 @@ describe('the instructions themselves', () => {
     fireEvent.mouseDown(button());
     fireEvent.click(screen.getByTestId('spellcheck-help-guide'));
     expect(openInBrowser).toHaveBeenCalledWith(
-      'https://mailvaultapp.com/faq.html#linux-spellcheck-dictionary'
+      'https://mailvaultapp.com/faq.html?utm_source=app&utm_medium=spellcheck_help#linux-spellcheck-dictionary'
     );
   });
 });

@@ -43,7 +43,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
   const language = useSettingsStore(s => s.language) || 'en';
   const lastBugReportAt = useSettingsStore(s => s.lastBugReportAt);
   const openAndClose = (url) => () => { openInBrowser(url).catch(() => {}); onClose(); };
-  const FAQ = faqUrl(language);
+  const FAQ = faqUrl(language, 'bug_report');
 
   // Forces a re-render once a second, only while the dialog is open and the
   // cooldown is actually counting down, so the countdown reads live without a
