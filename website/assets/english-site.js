@@ -78,12 +78,15 @@
   const steps = document.querySelector('#already-installed');
   if (steps && selectedPlan !== 'free' && pageLanguage === 'en') document.title = selectedPlan === 'yearly' ? 'Set up your MailVault yearly trial' : 'Set up MailVault monthly Premium';
 
-  const mobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  // Phones and tablets, iPadOS included: it reports a Mac user agent but has touch points.
+  const mobile = /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
   const linux = /Linux/.test(navigator.userAgent) && !mobile;
   const mac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !mobile;
   const windows = /Windows NT/.test(navigator.userAgent) && !mobile;
   if (mobile) document.querySelectorAll('.mv-mobile-device').forEach(el => { el.hidden = false; });
-  const heroPlatform = mac ? 'mac' : windows ? 'windows' : linux ? 'linux' : '';
+  // A phone cannot run MailVault, so the homepage offers to email the link
+  // instead (data-hero-platform="mobile"). Pages without that offer keep the fallback.
+  const heroPlatform = mobile ? 'mobile' : mac ? 'mac' : windows ? 'windows' : linux ? 'linux' : '';
   const ownPlatform = heroPlatform && document.querySelector('[data-platform="' + heroPlatform + '"]');
   if (ownPlatform) ownPlatform.parentElement.prepend(ownPlatform);
   if (heroPlatform && document.querySelector('[data-hero-platform="' + heroPlatform + '"]')) {
@@ -117,7 +120,7 @@
 
   // Same anonymous aggregate event as the existing site; no app telemetry or IDs.
   const productionHost = ['mailvaultapp.com', 'www.mailvaultapp.com'].includes(location.hostname);
-  const pageVersion = 'homepage-en-20260922';
+  const pageVersion = 'homepage-en-20261002';
   function acquisitionEvent(name, properties = {}) {
     if (!productionHost) return;
     try {
@@ -152,7 +155,7 @@
   const cta = 'a.mv-button, button.mv-button, .mv-text-link, .mv-navlinks a, .mv-mobile-menu nav a, .mv-footer nav a, .mv-community-actions > *, .mv-social';
   document.addEventListener('click', e => {
     const el = e.target.closest?.(cta);
-    if (!el || el.matches('[data-acquisition-event], [data-acquisition-download]')) return;
+    if (!el || el.matches('[data-acquisition-event], [data-acquisition-download]') || el.closest('[data-send-link]')) return;
     const href = el.getAttribute('href');
     const url = href && new URL(href, location.href);
     const target = !url ? '#' + (el.id || (el.matches('[data-vote]') ? 'heart' : 'button'))
@@ -310,6 +313,68 @@
         form.reset();
       } catch (error) {
         status.textContent = error.name === 'TypeError' || error.name === 'TimeoutError' ? runtimeText('newsletterReachError', 'We could not reach the server. Check your connection and try again.') : error.message;
+      } finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
+    });
+  });
+  // Email me the download link (phones and tablets). The forms also post
+  // without a script; the API then redirects back with ?send_link=<outcome>.
+  const sendLinkCopy = {
+    invalid: () => runtimeText('sendLinkInvalid', 'Check the email address and try again.'),
+    limited: () => runtimeText('sendLinkLimited', 'Too many tries. Please try again later.'),
+    failed: () => runtimeText('sendLinkFailed', 'We could not send it right now. Please try again in a moment.'),
+  };
+  function openSendLink(form) {
+    const opener = document.querySelector('[data-send-link-open][aria-controls="' + form.id + '"]');
+    if (opener) { opener.hidden = true; opener.setAttribute('aria-expanded', 'true'); }
+    form.hidden = false;
+  }
+  function sendLinkDone(form) {
+    openSendLink(form);
+    form.hidden = true;
+    const done = document.querySelector('[data-send-link-done="' + form.dataset.sendLink + '"]');
+    if (done) { done.hidden = false; done.focus(); }
+  }
+  document.querySelectorAll('[data-send-link-open]').forEach(button => button.addEventListener('click', () => {
+    const form = document.getElementById(button.getAttribute('aria-controls'));
+    if (!form) return;
+    openSendLink(form);
+    form.elements.email.focus();
+  }));
+  document.querySelectorAll('[data-send-link]').forEach(form => {
+    const status = form.querySelector('[data-send-link-status]');
+    const placement = form.dataset.sendLink;
+    // The localized pages are copies of the English one, so the language comes from the path.
+    form.elements.lang.value = locale.slice(1) || 'en';
+    const returned = query.get('send_link');
+    const returnedHere = (location.hash === '#download' ? 'final' : 'hero') === placement;
+    if (mobile && returned && returnedHere) {
+      if (returned === 'sent') sendLinkDone(form);
+      else if (sendLinkCopy[returned]) { openSendLink(form); status.textContent = sendLinkCopy[returned](); }
+    }
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const button = form.querySelector('[type="submit"]');
+      if (button.disabled) return;
+      const label = button.textContent;
+      button.disabled = true;
+      button.textContent = runtimeText('sendLinkSending', 'Sending…');
+      button.setAttribute('aria-busy', 'true');
+      status.textContent = '';
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ email: form.elements.email.value, lang: form.elements.lang.value, website: form.elements.website.value, placement }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (response.ok) {
+          sendLinkDone(form);
+          acquisitionEvent('send_link', { placement });
+          return;
+        }
+        status.textContent = (response.status === 400 ? sendLinkCopy.invalid : response.status === 429 ? sendLinkCopy.limited : sendLinkCopy.failed)();
+      } catch {
+        status.textContent = runtimeText('newsletterReachError', 'We could not reach the server. Check your connection and try again.');
       } finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
     });
   });

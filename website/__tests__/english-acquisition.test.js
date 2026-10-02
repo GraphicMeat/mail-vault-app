@@ -6,11 +6,12 @@ import { resolve } from 'node:path';
 const root = resolve('website');
 const source = readFileSync(resolve(root, 'assets/english-site.js'), 'utf8');
 const sessions = [];
-function page(file, search = '', fetch = vi.fn().mockRejectedValue(new Error('offline')), { userAgent, gm, hostname = 'mailvaultapp.com', path = file, markup } = {}) {
+function page(file, search = '', fetch = vi.fn().mockRejectedValue(new Error('offline')), { userAgent, gm, hostname = 'mailvaultapp.com', path = file, markup, touchPoints } = {}) {
   const dom = new JSDOM(markup || readFileSync(resolve(root, file), 'utf8'), {url:'https://' + hostname + '/' + path + search, runScripts:'outside-only'});
   sessions.push(dom);
   const w = dom.window;
   if (userAgent) Object.defineProperty(w.navigator, 'userAgent', { configurable:true, value:userAgent });
+  if (touchPoints !== undefined) Object.defineProperty(w.navigator, 'maxTouchPoints', { configurable:true, value:touchPoints });
   w.matchMedia = () => ({matches:false});
   w.fetch = fetch;
   w.gm = gm;
@@ -61,7 +62,7 @@ describe('English acquisition journey', () => {
     const {w} = page('get-started.html', '?plan=yearly', undefined, {gm});
     w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
     w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
-    expect(gm.mock.calls.filter(([name]) => name === 'setup_view')).toEqual([['setup_view', {page_version:'homepage-en-20260922',plan:'yearly'}]]);
+    expect(gm.mock.calls.filter(([name]) => name === 'setup_view')).toEqual([['setup_view', {page_version:'homepage-en-20261002',plan:'yearly'}]]);
   });
   it('keeps usable release links when GitHub is unavailable', async () => {
     const {doc} = page('thank-you.html', '?platform=mac');
@@ -74,11 +75,29 @@ describe('English acquisition journey', () => {
     ['Linux', 'Mozilla/5.0 (X11; Linux x86_64)', 'linux'],
     ['Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'windows'],
     ['unknown desktop', 'Mozilla/5.0 (ExampleOS)', 'fallback'],
-    ['mobile', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)', 'fallback'],
+    ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)', 'mobile'],
+    ['Android phone', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36', 'mobile'],
+    ['Android tablet', 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36', 'mobile'],
   ])('uses %s hero action for %s', (_name, userAgent, visible) => {
     const {doc} = page('index.html', '', undefined, {userAgent});
-    for (const action of ['mac','windows','linux','fallback']) expect(doc.querySelector('.hm-hero-actions [data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
+    for (const action of ['mac','windows','linux','fallback','mobile']) expect(doc.querySelector('.hm-hero-actions [data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
     expect(doc.querySelector('a[href="/get-started.html?plan=free#platforms"]')).not.toBeNull();
+  });
+  it('treats an iPad that reports a Mac user agent as a tablet, and a Mac as a Mac', () => {
+    const ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+    const ipad = page('index.html', '', undefined, {userAgent:ua, touchPoints:5}).doc;
+    expect(ipad.querySelector('.hm-hero-actions [data-hero-platform="mobile"]').hidden).toBe(false);
+    expect(ipad.querySelector('.hm-hero-actions [data-hero-platform="mac"]').hidden).toBe(true);
+    const mac = page('index.html', '', undefined, {userAgent:ua, touchPoints:0}).doc;
+    expect(mac.querySelector('.hm-hero-actions [data-hero-platform="mobile"]').hidden).toBe(true);
+    expect(mac.querySelector('.hm-hero-actions [data-hero-platform="mac"]').hidden).toBe(false);
+  });
+  it('keeps the email-me-the-link offer away from desktop visitors and other pages', () => {
+    const desktop = page('index.html', '', undefined, {userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}).doc;
+    for (const el of desktop.querySelectorAll('[data-hero-platform="mobile"], [data-send-link], [data-send-link-done]')) expect(el.hidden).toBe(true);
+    // The setup page has no such offer, so a phone still gets its fallback there.
+    const setup = page('get-started.html', '', undefined, {userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)'}).doc;
+    expect(setup.querySelector('[data-hero-platform="fallback"]').hidden).toBe(false);
   });
   it('puts the visitor’s own platform first on the download page, Windows included', () => {
     const {doc,fetch}=page('get-started.html','',undefined,{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'});
@@ -158,6 +177,76 @@ describe('English acquisition journey', () => {
     if (text) expect(proof.querySelector('[data-download-total]').textContent).toBe(text);
     expect(proof.querySelector('a').getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app/releases');
   });
+  describe('email me the download link', () => {
+    const phone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    const api = (status) => vi.fn(async (url) => String(url).endsWith('/api/send-link') ? {ok:status < 300, status, json:async()=>({})} : Promise.reject(new Error('offline')));
+    const open = (doc, placement = 'hero') => {
+      const opener = doc.querySelector('[data-send-link-open][aria-controls="send-link-' + placement + '"]');
+      opener.click();
+      return { opener, form: doc.getElementById('send-link-' + placement) };
+    };
+    it('reveals the form in place and records the reveal as an email_link CTA', () => {
+      const gm = vi.fn();
+      const {doc} = page('index.html', '', undefined, {userAgent:phone, gm});
+      const { opener, form } = open(doc);
+      expect(opener.hidden).toBe(true);
+      expect(opener.getAttribute('aria-expanded')).toBe('true');
+      expect(form.hidden).toBe(false);
+      expect(doc.activeElement).toBe(form.elements.email);
+      expect(form.elements.email.type).toBe('email');
+      expect(form.elements.email.required).toBe(true);
+      expect(form.elements.email.autocomplete).toBe('email');
+      expect(doc.querySelector('label[for="' + form.elements.email.id + '"]')).not.toBeNull();
+      expect(form.elements.website.tabIndex).toBe(-1);
+      expect(form.elements.website.closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(form.getAttribute('method')).toBe('post');
+      expect(form.getAttribute('action')).toBe('/api/send-link');
+      expect(gm.mock.calls).toEqual([['home_cta', {page_version:'homepage-en-20261002', placement:'hero', destination:'email_link'}]]);
+    });
+    it('sends the address with the page language and shows the sent state', async () => {
+      const gm = vi.fn();
+      const fetch = api(200);
+      const {w,doc} = page('index.html', '', fetch, {userAgent:phone, gm, path:'de/index.html'});
+      const { form } = open(doc, 'final');
+      form.elements.email.value = 'reader@example.com';
+      const submit = form.querySelector('[type="submit"]');
+      submit.addEventListener('click', e => { e.preventDefault(); form.dispatchEvent(new w.Event('submit', {cancelable:true})); });
+      submit.click();
+      await tick();
+      const [url, options] = fetch.mock.calls.find(([u]) => String(u).endsWith('/api/send-link'));
+      expect(new URL(url).pathname).toBe('/api/send-link');
+      expect(JSON.parse(options.body)).toEqual({email:'reader@example.com', lang:'de', website:'', placement:'final'});
+      expect(form.hidden).toBe(true);
+      const done = doc.querySelector('[data-send-link-done="final"]');
+      expect(done.hidden).toBe(false);
+      expect(doc.activeElement).toBe(done);
+      // The reveal, then the send: no generic cta_click for the form's own button.
+      expect(gm.mock.calls.map(([name]) => name)).toEqual(['home_cta', 'send_link']);
+      expect(gm).toHaveBeenLastCalledWith('send_link', {page_version:'homepage-en-20261002', placement:'final'});
+    });
+    it.each([[400,'Check the email address'],[429,'Too many tries'],[503,'could not send it']])('explains a %s and lets the visitor retry', async (status, text) => {
+      const gm = vi.fn();
+      const {w,doc} = page('index.html', '', api(status), {userAgent:phone, gm});
+      const { form } = open(doc);
+      form.elements.email.value = 'reader@example.com';
+      form.dispatchEvent(new w.Event('submit', {cancelable:true}));
+      await tick();
+      expect(form.hidden).toBe(false);
+      expect(form.querySelector('[data-send-link-status]').textContent).toContain(text);
+      expect(form.querySelector('[type="submit"]').disabled).toBe(false);
+      expect(form.elements.email.value).toBe('reader@example.com');
+      expect(gm.mock.calls.filter(([name]) => name === 'send_link')).toEqual([]);
+    });
+    it('shows the result of a form post made without a script', () => {
+      const {doc} = page('index.html', '?send_link=sent#download', undefined, {userAgent:phone});
+      expect(doc.getElementById('send-link-final').hidden).toBe(true);
+      expect(doc.querySelector('[data-send-link-done="final"]').hidden).toBe(false);
+      expect(doc.querySelector('[data-send-link-done="hero"]').hidden).toBe(true);
+      const limited = page('index.html', '?send_link=limited', undefined, {userAgent:phone}).doc;
+      expect(limited.getElementById('send-link-hero').hidden).toBe(false);
+      expect(limited.querySelector('#send-link-hero [data-send-link-status]').textContent).toContain('Too many tries');
+    });
+  });
   it('switches the theme from the bar and from the phone menu', () => {
     const {w,doc}=page('features.html');
     const [bar,menu]=doc.querySelectorAll('.mv-theme');
@@ -200,10 +289,10 @@ describe('English acquisition journey', () => {
     const link = doc.querySelector('[data-acquisition-destination="demo"]');
     link.addEventListener('click', e => e.preventDefault());
     link.click();
-    expect(w.gm.q).toEqual([['home_cta', {page_version:'homepage-en-20260922',placement:'hero',destination:'demo'}]]);
+    expect(w.gm.q).toEqual([['home_cta', {page_version:'homepage-en-20261002',placement:'hero',destination:'demo'}]]);
     const tracker = vi.fn();
     w.gm.q.forEach(args => tracker(...args));
-    expect(tracker).toHaveBeenCalledExactlyOnceWith('home_cta', {page_version:'homepage-en-20260922',placement:'hero',destination:'demo'});
+    expect(tracker).toHaveBeenCalledExactlyOnceWith('home_cta', {page_version:'homepage-en-20261002',placement:'hero',destination:'demo'});
 
     const local = page('index.html', '', undefined, {hostname:'127.0.0.1'});
     const localLink = local.doc.querySelector('[data-acquisition-destination="demo"]');
@@ -220,10 +309,10 @@ describe('English acquisition journey', () => {
     click(doc.querySelector('#want-this-btn'));
     click(doc.querySelector('.mv-footer nav a[href^="https://github.com/"]'));
     expect(gm.mock.calls).toEqual([
-      ['cta_click', {page_version:'homepage-en-20260922', target:'/demo/', placement:'header'}],
-      ['cta_click', {page_version:'homepage-en-20260922', target:'/pricing.html', placement:'header'}],
-      ['cta_click', {page_version:'homepage-en-20260922', target:'#want-this-btn', placement:'newsletter'}],
-      ['cta_click', {page_version:'homepage-en-20260922', target:'github.com/GraphicMeat/mail-vault-app', placement:'footer'}],
+      ['cta_click', {page_version:'homepage-en-20261002', target:'/demo/', placement:'header'}],
+      ['cta_click', {page_version:'homepage-en-20261002', target:'/pricing.html', placement:'header'}],
+      ['cta_click', {page_version:'homepage-en-20261002', target:'#want-this-btn', placement:'newsletter'}],
+      ['cta_click', {page_version:'homepage-en-20261002', target:'github.com/GraphicMeat/mail-vault-app', placement:'footer'}],
     ]);
   });
   it('leaves named acquisition CTAs to their own event', () => {
@@ -235,9 +324,13 @@ describe('English acquisition journey', () => {
     expect(gm.mock.calls.map(([name]) => name)).toEqual(['home_cta']);
   });
   it('tags the tracker on every tracked page', () => {
-    const tagged = (html) => /<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="redesign-2026-09">\s*<\/script>/.test(html);
-    for (const file of ['index.html','pricing.html','get-started.html','thank-you.html','changelog.html','features/tags.html','blog.html','faq.html']) {
+    const tagged = (html, tag = 'redesign-2026-09') => new RegExp('<script defer src="/gm\\.js[^"]*" data-site="mailvault" data-tag="' + tag + '">\\s*</script>').test(html);
+    for (const file of ['pricing.html','get-started.html','thank-you.html','updates-confirm.html','changelog.html','features/tags.html','blog.html','faq.html']) {
       expect(tagged(readFileSync(resolve(root, file), 'utf8')), file).toBe(true);
+    }
+    // The homepage carries its own tag so the mobile hero can be compared before and after.
+    for (const file of ['index.html', 'de/index.html', 'ja/index.html']) {
+      expect(tagged(readFileSync(resolve(root, file), 'utf8'), 'mobile-hero-2026-10'), file).toBe(true);
     }
     expect(tagged(readFileSync(resolve('src/demo/index.html'), 'utf8').replace('src="/gm.js"', 'src="/gm.js?v=x"'))).toBe(true);
   });
@@ -263,7 +356,7 @@ describe('English acquisition journey', () => {
     link.addEventListener('click',e=>e.preventDefault());
     link.click();
     expect(w.navigator.sendBeacon).toHaveBeenCalledExactlyOnceWith('/api/metrics/e','download_click');
-    expect(gm).toHaveBeenLastCalledWith('download_action', {page_version:'homepage-en-20260922',platform:'mac',destination:'file'});
+    expect(gm).toHaveBeenLastCalledWith('download_action', {page_version:'homepage-en-20261002',platform:'mac',destination:'file'});
     expect(gm.mock.calls.filter(([name]) => name === 'download_action')).toHaveLength(1);
   });
   it('rejects an unexpected release download destination', async()=>{
@@ -274,7 +367,7 @@ describe('English acquisition journey', () => {
     expect(link.href).toMatch(/releases\/latest$/);
     link.addEventListener('click',e=>e.preventDefault());
     link.click();
-    expect(gm).toHaveBeenLastCalledWith('download_action', {page_version:'homepage-en-20260922',platform:'mac',destination:'fallback'});
+    expect(gm).toHaveBeenLastCalledWith('download_action', {page_version:'homepage-en-20261002',platform:'mac',destination:'fallback'});
   });
   it('reports signup failure honestly, reenables retry, and preserves the address', async()=>{
     const {w,doc}=page('index.html','',vi.fn().mockResolvedValue({ok:false,status:503}));

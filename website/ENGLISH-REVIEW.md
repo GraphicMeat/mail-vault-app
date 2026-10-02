@@ -38,9 +38,9 @@ Root `index.html` exactly matches `website/index.html`; its large diff replaces 
 outdated legacy copy. No new dependencies, backend/billing changes, or desktop mail
 behavior are included.
 
-First-party events are production-only: `home_cta`, `setup_view`, `download_action`,
+First-party events are production-only: `home_cta`, `setup_view`, `download_action`, `send_link`,
 `demo_open`, `demo_download`, and `demo_tour_start`, with
-`page_version: homepage-en-20260922`. Properties identify placement, plan, platform,
+`page_version: homepage-en-20261002`. Properties identify placement, plan, platform,
 and file/store/fallback destinations without user identifiers. The legacy download
 counter covers actual installer/store controls, so historical comparisons must
 account for that instrumentation change. No app telemetry or user-level attribution
