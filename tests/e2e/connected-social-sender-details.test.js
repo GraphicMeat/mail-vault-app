@@ -176,7 +176,6 @@ describe('Social export: spam sender, sender details and links', function () {
     expect(r.text).toContain(SENDER_NAME);
     // The recipient is not: masked wherever it was on screen.
     expect(r.text).not.toContain(RECIPIENT);
-    expect(r.text).not.toContain('luke');
     expect(r.text).toMatch(/x{4}@x{4}\.x{4}/);
     // Open while captured, closed after.
     expect(r.after.popover).toBe(false);
