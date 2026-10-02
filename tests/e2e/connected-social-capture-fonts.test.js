@@ -41,27 +41,30 @@ describe('Social export app capture draws in the app font', function () {
         const root = document.getElementById('root');
         const probe = document.createElement('div');
         probe.id = 'mv-capfont-probe';
-        probe.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;background:#fff;color:#000;'
-          + 'padding:8px;white-space:nowrap;font:400 28px/40px "Instrument Sans";';
+        // A white bar across the whole window: the scan below reads only inside
+        // it, so the app around it never counts as ink, whichever face draws.
+        probe.style.cssText = 'position:fixed;left:0;right:0;top:0;height:56px;overflow:hidden;z-index:2147483647;'
+          + 'background:#fff;color:#000;padding:8px;box-sizing:border-box;white-space:nowrap;font:400 20px/40px "Instrument Sans";';
         const live = document.createElement('span');
         live.textContent = text;
         const fallback = document.createElement('span');
         fallback.textContent = text;
-        fallback.style.cssText = 'position:absolute;visibility:hidden;font:400 28px/40px -apple-system, Helvetica, sans-serif;';
+        fallback.style.cssText = 'position:absolute;visibility:hidden;font:400 20px/40px -apple-system, Helvetica, sans-serif;';
         probe.append(live, fallback);
         root.appendChild(probe);
-        await document.fonts.load('400 28px "Instrument Sans"');
+        await document.fonts.load('400 20px "Instrument Sans"');
         await document.fonts.ready;
         const liveRect = live.getBoundingClientRect();
+        const barRect = probe.getBoundingClientRect();
         const rootRect = root.getBoundingClientRect();
         const started = performance.now();
         const canvas = await window.__MV_CAPTURE_APP__({ redact: false, dict: null });
         const ms = Math.round(performance.now() - started);
         const scale = canvas.width / rootRect.width;
-        const x0 = Math.floor((liveRect.left - rootRect.left) * scale);
-        const y0 = Math.floor((liveRect.top - rootRect.top) * scale);
-        const w = Math.min(canvas.width - x0, Math.ceil((liveRect.width * 1.5) * scale));
-        const h = Math.ceil(liveRect.height * scale);
+        const x0 = Math.ceil((barRect.left - rootRect.left + 2) * scale);
+        const y0 = Math.ceil((barRect.top - rootRect.top + 2) * scale);
+        const w = Math.min(canvas.width - x0, Math.floor((barRect.width - 4) * scale));
+        const h = Math.floor((barRect.height - 4) * scale);
         let pixels;
         try {
           pixels = canvas.getContext('2d').getImageData(x0, y0, w, h).data;
@@ -79,11 +82,12 @@ describe('Social export app capture draws in the app font', function () {
         }
         done({
           ms,
+          barWidth: barRect.width,
           scale,
           liveWidth: liveRect.width,
           fallbackWidth: fallback.getBoundingClientRect().width,
           inkWidth: right < 0 ? null : (right - left + 1) / scale,
-          checked: document.fonts.check('400 28px "Instrument Sans"'),
+          checked: document.fonts.check('400 20px "Instrument Sans"'),
         });
       })().catch(e => done({ error: String(e?.message || e) }));
     }, TEXT);
