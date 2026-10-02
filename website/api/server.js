@@ -139,6 +139,32 @@ const FORM_RESULTS = {
 };
 const redirectForm = (res, kind, ok) => res.redirect(303, FORM_RESULTS[kind][ok ? 'ok' : 'error']);
 
+// Email-me-the-link results: one fixed string per locale, placement and outcome,
+// built here once. The posted lang and placement fields only pick a row.
+const { LOCALES: SEND_LINK_LOCALES, resolveLocale, localePath, renderConfirmPage } = require('./send-link-email');
+const SEND_LINK_ANCHORS = { hero: '#main', final: '#download' };
+const SEND_LINK_RESULTS = {};
+const CONFIRM_RESULTS = {};
+for (const locale of Object.keys(SEND_LINK_LOCALES)) {
+  const home = localePath(locale);
+  SEND_LINK_RESULTS[locale] = {};
+  for (const [placement, anchor] of Object.entries(SEND_LINK_ANCHORS)) {
+    SEND_LINK_RESULTS[locale][placement] = {};
+    for (const outcome of ['sent', 'invalid', 'limited', 'failed']) {
+      SEND_LINK_RESULTS[locale][placement][outcome] = `${home}?send_link=${outcome}${anchor}`;
+    }
+  }
+  // updates-confirm.html shows each state with :target, so it needs no script.
+  CONFIRM_RESULTS[locale] = {};
+  for (const outcome of ['subscribed', 'expired', 'failed']) {
+    CONFIRM_RESULTS[locale][outcome] = `${home}updates-confirm.html#${outcome}`;
+  }
+}
+const pickPlacement = (value) => (Object.prototype.hasOwnProperty.call(SEND_LINK_ANCHORS, value) ? value : 'hero');
+const redirectSendLink = (res, body, outcome) => res.redirect(303,
+  SEND_LINK_RESULTS[resolveLocale(body && body.lang)][pickPlacement(body && body.placement)][outcome === 'unavailable' ? 'failed' : outcome]);
+const redirectConfirm = (res, lang, outcome) => res.redirect(303, CONFIRM_RESULTS[resolveLocale(lang)][outcome]);
+
 // Field caps. The client sets maxlength; a POST does not have to honour it.
 const LIMITS = { email: 254 };
 const tooLong = (value, max) => typeof value === 'string' && value.length > max;
@@ -300,40 +326,31 @@ app.post('/api/features/:id/vote', voteLimiter, async (req, res) => {
 // Newsletter Subscription
 // -------------------------------------------
 
-app.post('/api/subscribe', async (req, res) => {
-  try {
-    const db = getPool();
-    const { email } = req.body;
+// One subscribe path for the newsletter form and for the "Yes, send me updates"
+// button behind the email-me-the-link mail. Resolves to { created } and throws
+// when the database does; each route decides how to answer.
+async function addSubscriber(email, req) {
+  const db = getPool();
+  const address = email.toLowerCase();
 
-    if (!email || !isValidEmail(email) || tooLong(email, LIMITS.email)) {
-      if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
-      return res.status(400).json({ error: 'Valid email is required' });
-    }
+  const [existing] = await db.execute('SELECT id FROM subscribers WHERE email = ?', [address]);
+  if (existing.length > 0) return { created: false };
 
-    // Check if already subscribed
-    const [existing] = await db.execute('SELECT id FROM subscribers WHERE email = ?', [email.toLowerCase()]);
+  await db.execute(
+    'INSERT INTO subscribers (email, ip_hash) VALUES (?, ?)',
+    [address, hashIP(getClientIP(req))]
+  );
 
-    if (existing.length > 0) {
-      if (isFormPost(req)) return redirectForm(res, 'subscribe', true);
-      return res.json({ success: true, message: 'Already subscribed' });
-    }
-
-    // Insert subscriber
-    await db.execute(
-      'INSERT INTO subscribers (email, ip_hash) VALUES (?, ?)',
-      [email.toLowerCase(), hashIP(getClientIP(req))]
-    );
-
-    // Mirror the subscriber into GraphicMeat's table (tagged source='mailvault')
-    // and let it send the welcome mail — it holds the only SMTP credentials.
-    // The local row above is this site's own record and stands on its own, so a
-    // partner failure is logged, not surfaced: the visitor did subscribe here.
-    sendViaGraphicMeat('subscribe', {
-      email: email.toLowerCase(),
-      fromName: 'MailVault',
-      subject: 'Welcome to MailVault updates!',
-      text: `Thanks for subscribing to MailVault updates!\n\nYou'll be the first to know about new releases, features, and tips.\n\nIn the meantime:\n- Download MailVault: https://mailvaultapp.com\n- Source code: https://github.com/GraphicMeat/mail-vault-app\n- Join the discussion: https://github.com/GraphicMeat/mail-vault-app/discussions\n\n— The MailVault Team`,
-      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto;">
+  // Mirror the subscriber into GraphicMeat's table (tagged source='mailvault')
+  // and let it send the welcome mail: it holds the only SMTP credentials.
+  // The local row above is this site's own record and stands on its own, so a
+  // partner failure is logged, not surfaced: the visitor did subscribe here.
+  sendViaGraphicMeat('subscribe', {
+    email: address,
+    fromName: 'MailVault',
+    subject: 'Welcome to MailVault updates!',
+    text: `Thanks for subscribing to MailVault updates!\n\nYou'll be the first to know about new releases, features, and tips.\n\nIn the meantime:\n- Download MailVault: https://mailvaultapp.com\n- Source code: https://github.com/GraphicMeat/mail-vault-app\n- Join the discussion: https://github.com/GraphicMeat/mail-vault-app/discussions\n\n- The MailVault Team`,
+    html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto;">
   <h2 style="color: #6366f1;">Welcome to MailVault!</h2>
   <p>Thanks for subscribing. You'll be the first to know about new releases, features, and tips.</p>
   <p>In the meantime:</p>
@@ -342,16 +359,114 @@ app.post('/api/subscribe', async (req, res) => {
     <li><a href="https://github.com/GraphicMeat/mail-vault-app" style="color: #6366f1;">Source code on GitHub</a></li>
     <li><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" style="color: #6366f1;">Join the discussion</a></li>
   </ul>
-  <p style="color: #94a3b8; font-size: 14px;">— The MailVault Team</p>
+  <p style="color: #94a3b8; font-size: 14px;">- The MailVault Team</p>
 </div>`,
-    }).catch(err => console.error('Failed to mirror subscriber to GraphicMeat:', err.message));
+  }).catch(err => console.error('Failed to mirror subscriber to GraphicMeat:', err.message));
 
+  return { created: true };
+}
+
+app.post('/api/subscribe', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !isValidEmail(email) || tooLong(email, LIMITS.email)) {
+      if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+
+    const { created } = await addSubscriber(email, req);
     if (isFormPost(req)) return redirectForm(res, 'subscribe', true);
-    res.json({ success: true, message: 'Subscribed successfully' });
+    res.json({ success: true, message: created ? 'Subscribed successfully' : 'Already subscribed' });
   } catch (error) {
     console.error('Error subscribing:', error);
     if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
     res.status(500).json({ error: 'Failed to subscribe' });
+  }
+});
+
+// -------------------------------------------
+// Email me the download link (homepage, phones and tablets)
+// -------------------------------------------
+// 1. POST /api/send-link mails the visitor the download link (send-link.js).
+// 2. The mail's "Yes, send me updates" button opens GET /api/send-link/confirm.
+//    It shows a one-button form and never subscribes: mail scanners and link
+//    prefetchers follow every GET.
+// 3. That form POSTs to /api/send-link/subscribe, which subscribes through
+//    addSubscriber() and sends the visitor to /<locale>/updates-confirm.html
+//    #subscribed, #expired or #failed. That static page shows the state with
+//    :target CSS, so the whole flow works with JavaScript off.
+// Step 2 is rendered here rather than as a static page with a script because
+// it has to work without JavaScript: a static page cannot move the token from
+// its URL into a POST body by itself, Caddy hands only /api/* to this process,
+// and the site sends no Referer header (Referrer-Policy: no-referrer).
+const sendLinkToken = require('./send-link-token');
+const { createSendLink, RESPONSES: SEND_LINK_RESPONSES } = require('./send-link');
+const sendLinkKey = sendLinkToken.deriveKey(GM_KEY);
+const sendLink = createSendLink({
+  send: sendViaGraphicMeat,
+  configured: gmConfigured,
+  key: sendLinkKey,
+  bumpMetric: (event) => bumpMetric(event),
+  validEmail: (address) => isValidEmail(address) && !tooLong(address, LIMITS.email),
+});
+
+const sendLinkLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => (isFormPost(req)
+    ? redirectSendLink(res, req.body, 'limited')
+    : res.status(429).json(SEND_LINK_RESPONSES.limited[1])),
+});
+const confirmLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited' },
+});
+
+app.post('/api/send-link', sendLinkLimiter, async (req, res) => {
+  let outcome;
+  try {
+    const { email, lang, website } = req.body || {};
+    outcome = await sendLink.request({ email, lang, website });
+  } catch (err) {
+    console.error('[send-link]', err.message);
+    outcome = 'failed';
+  }
+  if (isFormPost(req)) return redirectSendLink(res, req.body, outcome);
+  const [status, body] = SEND_LINK_RESPONSES[outcome];
+  res.status(status).json(body);
+});
+
+app.get('/api/send-link/confirm', confirmLimiter, (req, res) => {
+  const lang = resolveLocale(req.query.lang);
+  const t = typeof req.query.t === 'string' ? req.query.t : '';
+  if (!sendLinkToken.open(sendLinkKey, t).email) return redirectConfirm(res, lang, sendLinkKey ? 'expired' : 'failed');
+  res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' });
+  res.type('html').send(renderConfirmPage(lang, t));
+});
+
+app.post('/api/send-link/subscribe', confirmLimiter, async (req, res) => {
+  const { t, lang } = req.body || {};
+  const { email } = sendLinkToken.open(sendLinkKey, typeof t === 'string' ? t : '');
+  if (!email) {
+    if (isFormPost(req)) return redirectConfirm(res, lang, 'expired');
+    return res.status(400).json({ error: 'invalid_token' });
+  }
+  try {
+    const { created } = await addSubscriber(email, req);
+    if (created) bumpMetric('send_link_subscribed');
+    if (isFormPost(req)) return redirectConfirm(res, lang, 'subscribed');
+    res.json({ success: true });
+  } catch (err) {
+    // The code only: a duplicate-key message would carry the address.
+    console.error('[send-link/subscribe] failed:', err.code || 'error');
+    if (isFormPost(req)) return redirectConfirm(res, lang, 'failed');
+    res.status(503).json({ error: 'unavailable' });
   }
 });
 
@@ -363,7 +478,8 @@ app.post('/api/subscribe', async (req, res) => {
 // Events accepted from the public POST endpoint
 const PUBLIC_METRICS = new Set(['pricing_view', 'download_click']);
 // All known events (public + server-side counters); guards the DB write against typos
-const ALL_METRICS = new Set([...PUBLIC_METRICS, 'checkout_created', 'sub_activated']);
+// send_link_* are counted here only, never accepted from the browser, so a page cannot inflate them.
+const ALL_METRICS = new Set([...PUBLIC_METRICS, 'checkout_created', 'sub_activated', 'send_link_sent', 'send_link_subscribed']);
 
 // Increment today's counter for an event. Never throws — metrics must never break a caller.
 async function bumpMetric(event) {
