@@ -39,19 +39,37 @@ describe('Linux menu bar off at launch', function () {
 
   it('quits on Ctrl+Q from the page', async () => {
     // Record the command instead of running it: a quit ends the session.
+    // Tauri defines `__TAURI_INTERNALS__.invoke` and `.ipc` read-only, so the
+    // spy sits one layer down, on the `fetch` to ipc://localhost/<cmd>. The
+    // call is left pending; a miss runs the real quit and fails loudly.
+    //
+    // The key is dispatched in the page: WebKitGTK's WebDriver never delivers
+    // a Ctrl chord to it under xvfb. This proves the shortcut is wired in the
+    // real window (main.jsx, IS_LINUX, the invoke path), not GTK's routing.
     await browser.execute(() => {
-      const internals = window.__TAURI_INTERNALS__;
-      const invoke = internals.invoke;
+      const realFetch = window.fetch;
       window.__e2eQuitCalls = 0;
-      internals.invoke = (cmd, ...rest) => {
-        if (cmd === 'quit_app') { window.__e2eQuitCalls += 1; return Promise.resolve(); }
-        return invoke.call(internals, cmd, ...rest);
+      window.__e2eRestoreFetch = () => { window.fetch = realFetch; };
+      window.fetch = function (input, ...rest) {
+        const url = typeof input === 'string' ? input : input?.url;
+        if (url && url.startsWith('ipc:') && url.endsWith('/quit_app')) {
+          window.__e2eQuitCalls += 1;
+          return new Promise(() => {});
+        }
+        return realFetch.call(this, input, ...rest);
       };
     });
-    await browser.keys(['Control', 'q']);
-    await browser.keys(['Control']);
-    await browser.waitUntil(() => browser.execute(() => window.__e2eQuitCalls > 0), {
-      timeout: 5_000, interval: 100, timeoutMsg: 'Ctrl+Q never asked the shell to quit',
-    });
+    try {
+      await browser.execute(() => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'q', code: 'KeyQ', ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      await browser.waitUntil(() => browser.execute(() => window.__e2eQuitCalls > 0), {
+        timeout: 5_000, interval: 100, timeoutMsg: 'Ctrl+Q never asked the shell to quit',
+      });
+    } finally {
+      await browser.execute(() => window.__e2eRestoreFetch?.());
+    }
   });
 });
