@@ -61,7 +61,8 @@ export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, a
   const probes = (name) => [name, name.replace(/(^|[^\p{L}])(\p{L})/gu, (_, sep, c) => sep + c.toUpperCase())];
   const safeName = (name) => {
     if (findPii(name, EMPTY_DICTIONARY).length) return false;
-    return !probes(name).some(p => findPii(p, mine).length);
+    // Names only: the title-cased probe would read "Via Parcel" as a street.
+    return !probes(name).some(p => findPii(p, mine).some(span => span.kind === 'name'));
   };
 
   const reveal = new Set();
