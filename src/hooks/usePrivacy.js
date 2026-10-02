@@ -5,6 +5,11 @@ import { findPii, maskText, maskString } from '../utils/privacy/piiDetector';
 import { createPeekController } from '../utils/privacy/peekController';
 
 const STRUCTURAL = new Set(['name', 'email', 'filename']);
+// Only these may be revealed whole: a capture's spam sender is a name or an address.
+const REVEALABLE = new Set(['name', 'email']);
+const revealed = (reveal, kind, value) => !!reveal && REVEALABLE.has(kind) && reveal.has(String(value).trim().toLowerCase());
+// The dictionary a text pass uses: the host's, plus the exact addresses to leave readable.
+const withReveal = (dict, reveal) => (reveal?.size ? { ...dict, reveal } : dict);
 
 // ponytail: an allowlist, not a shape test: /^\.\w{1,8}$/ also keeps ".smith" of
 // "john.smith". An unlisted real extension gets masked too, which is safe; add to the list when one matters.
@@ -52,10 +57,12 @@ export function usePrivacySourceBlocked() {
 export function usePrivateSegments(value, kind = 'text') {
   const active = usePrivacyActive();
   const version = usePrivacyDictStore(s => s.version);
+  const reveal = usePrivacyStore(s => s.captureReveal);
   return useMemo(() => {
     if (!active) return null;
     const s = String(value ?? '');
     if (!s) return [];
+    if (revealed(reveal, kind, s)) return [{ text: s, masked: false }];
     if (STRUCTURAL.has(kind)) {
       // A filename keeps its extension: ".pdf" says nothing about anyone.
       const [stem, ext] = kind === 'filename' ? splitFilename(s) : [s, ''];
@@ -63,7 +70,7 @@ export function usePrivateSegments(value, kind = 'text') {
         ? [{ text: maskText(stem), masked: true }, { text: ext, masked: false }]
         : [{ text: maskText(s), masked: true }];
     }
-    const spans = findPii(s, getPrivacyDictionary());
+    const spans = findPii(s, withReveal(getPrivacyDictionary(), reveal));
     const out = [];
     let last = 0;
     for (const { start, end } of spans) {
@@ -74,7 +81,7 @@ export function usePrivateSegments(value, kind = 'text') {
     if (last < s.length) out.push({ text: s.slice(last), masked: false });
     return out;
   // version: the dictionary changed underneath the same value
-  }, [active, value, kind, version]);
+  }, [active, value, kind, version, reveal]);
 }
 
 /**
@@ -90,11 +97,13 @@ export function usePrivateInputClass() {
 export function usePrivateAttr() {
   const active = usePrivacyActive();
   const version = usePrivacyDictStore(s => s.version);
+  const reveal = usePrivacyStore(s => s.captureReveal);
   return useMemo(() => (value, kind = 'text') => {
     if (!active || !value) return value;
+    if (revealed(reveal, kind, value)) return value;
     if (kind === 'filename') { const [stem, ext] = splitFilename(String(value)); return maskText(stem) + ext; }
-    return STRUCTURAL.has(kind) ? maskText(value) : maskString(value, getPrivacyDictionary());
-  }, [active, version]);
+    return STRUCTURAL.has(kind) ? maskText(value) : maskString(value, withReveal(getPrivacyDictionary(), reveal));
+  }, [active, version, reveal]);
 }
 
 export function attachPeekToDocument(doc) {

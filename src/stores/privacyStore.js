@@ -13,8 +13,11 @@ import { isChildWindow } from '../utils/privacy/isChildWindow';
  * rule as a running Focus session.
  *
  * `peek` (Option held), `captureMask` (a social capture forcing masks on
- * for a moment) and `dictWanted` (a redacted export needing the name
- * dictionary without masking the UI) are never persisted.
+ * for a moment), `captureReveal` (the lowercased exact values that capture
+ * leaves readable: a spam sender), `captureSenderDetails` (the message whose
+ * sender-details popover that capture opens) and `dictWanted` (a redacted
+ * export needing the name dictionary without masking the UI) are never
+ * persisted, and never leave the window (privacySync sends `enabled` only).
  */
 export const usePrivacyStore = create(
   persist(
@@ -22,6 +25,8 @@ export const usePrivacyStore = create(
       enabled: false,
       peek: false,
       captureMask: false,
+      captureReveal: null,
+      captureSenderDetails: null,
       dictWanted: false,
       setEnabled: (on) => {
         // A detached window follows the main window's event; it never diverges.
@@ -34,6 +39,10 @@ export const usePrivacyStore = create(
       },
       setPeek: (on) => set({ peek: !!on }),
       setCaptureMask: (on) => set({ captureMask: !!on }),
+      // Any list of values in, one Set of lowercased trimmed strings out: what the hooks compare against.
+      setCaptureReveal: (values) => set({ captureReveal: values ? new Set([...values].map(v => String(v).trim().toLowerCase())) : null }),
+      // `{ uid, accountId, mailbox }` of the message, or null.
+      setCaptureSenderDetails: (target) => set({ captureSenderDetails: target || null }),
       setDictWanted: (on) => set({ dictWanted: !!on }),
     }),
     {
