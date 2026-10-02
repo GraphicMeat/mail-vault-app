@@ -147,5 +147,24 @@ describe('captureAppWindow', () => {
     await vi.waitFor(() => expect(document.getElementById('root').textContent).toContain(PEOPLE.names[0]));
     act(() => reactRoot.unmount());
   });
-});
 
+  it('keeps the app\'s own labels when a contact shares a word with them, and still masks the contact', async () => {
+    // A sender called "Google Search" puts "search" in the dictionary.
+    const dict = buildNameDictionary({ names: ['Google Search', 'Joanna Kowalczyk'] });
+    document.body.innerHTML = '<div id="root"><h2>Search Results</h2><input placeholder="Search emails..."><button>Search</button>'
+      + '<p>Joanna Kowalczyk</p><p>Google Search</p></div>';
+    await captureAppWindow({ redact: true, dict });
+    const clone = lastClone.outerHTML;
+    expect(lastClone.querySelector('h2').textContent).toBe('Search Results');
+    expect(lastClone.querySelector('button').textContent).toBe('Search');
+    expect(lastClone.querySelector('input').getAttribute('placeholder')).toBe('Search emails...');
+    expect(clone).not.toMatch(/Joanna|Kowalczyk|Google/);
+  });
+
+  it('embeds fonts (no font:false) and fetches remote images through the daemon', async () => {
+    document.body.innerHTML = '<div id="root">a</div>';
+    await captureAppWindow({ redact: false, dict: null });
+    expect(lastOpts.font).not.toBe(false);
+    expect(await lastOpts.fetchFn('tauri://localhost/assets/x.woff2')).toBe(false);
+  });
+});

@@ -1,6 +1,8 @@
 import { domToCanvas } from 'modern-screenshot';
 import { redactTree } from '../../../utils/privacy/redactDom';
 import { usePrivacyStore } from '../../../stores/privacyStore';
+import { isUiString } from '../../../i18n/index.js';
+import { fetchAssetViaTauri } from '../exportService';
 
 /**
  * A 2x picture of the app window (#root) with the message open, for a social
@@ -14,8 +16,25 @@ import { usePrivacyStore } from '../../../stores/privacyStore';
  * Message frames are drawn separately: each frame's body is rendered on its
  * own and painted over the frame's visible rect (ruling R16: the probe that
  * would have shown whether the inline clone renders was skipped).
+ *
+ * Fonts are embedded (unlike the export card, which draws in system fonts):
+ * without them the UI falls back to a wider face and every label wraps.
+ * Only the families the clone uses are fetched.
  */
 const SCALE = 2;
+
+// A remote image in a message is fetched by the daemon: inlining it from the
+// webview needs CORS, which most mail image hosts do not send.
+async function fetchRemote(url) {
+  if (!/^https?:\/\//i.test(url) || /^https?:\/\/(localhost|127\.0\.0\.1|tauri\.localhost)[:/]/i.test(url)) return false;
+  try {
+    const asset = await fetchAssetViaTauri(url);
+    return asset?.base64 ? `data:${asset.mime};base64,${asset.base64}` : false;
+  } catch {
+    return false;
+  }
+}
+const RASTER = { scale: SCALE, timeout: 3000, fetchFn: fetchRemote };
 
 export const nextPaint = () => new Promise((resolve) => {
   if (typeof requestAnimationFrame !== 'function') { setTimeout(resolve, 32); return; }
@@ -25,7 +44,11 @@ export const nextPaint = () => new Promise((resolve) => {
 // The export dialog, toasts, popovers and Focus lock say so with this attribute.
 const keep = (node) => !(node?.nodeType === 1 && node.closest?.('[data-capture-exclude]'));
 
-function cloneHook(redact, dict) {
+// ponytail: only whole catalog strings are kept; a label built from a template
+// ("Found 36 results in Inbox") is still matched against the names.
+const chromeHooks = { keep: isUiString };
+
+function cloneHook(redact, dict, hooks) {
   return (clone) => {
     // A frame's srcdoc is the raw, unmasked body; the visible content is
     // composited below. Only a frame the cloner cannot read keeps its <iframe>
@@ -33,7 +56,7 @@ function cloneHook(redact, dict) {
     // which the redaction below walks like any other subtree.
     for (const frame of clone.querySelectorAll?.('iframe[srcdoc]') || []) frame.removeAttribute('srcdoc');
     if (clone.nodeName === 'IFRAME') clone.removeAttribute('srcdoc');
-    if (redact) redactTree(clone, dict ?? undefined);
+    if (redact) redactTree(clone, dict ?? undefined, hooks);
   };
 }
 
@@ -81,7 +104,7 @@ async function compositeFrames(canvas, root, onCloneNode) {
     const vis = visibleRect(iframe, root);
     if (vis.width <= 0 || vis.height <= 0) continue;
 
-    const body = await domToCanvas(doc.body, { scale: SCALE, font: false, timeout: 3000, onCloneNode });
+    const body = await domToCanvas(doc.body, { ...RASTER, onCloneNode });
     // Where the body's box sits on the app: frame content origin + the body's
     // offset inside the frame (its margin, minus the frame's own scroll).
     const frameRect = iframe.getBoundingClientRect();
@@ -119,14 +142,18 @@ export async function captureAppWindow({ redact, dict }) {
       // One frame for React to render masked, one for the frames' pass to land.
       await nextPaint();
     }
-    const onCloneNode = cloneHook(redact, dict);
     const canvas = await domToCanvas(root, {
-      scale: SCALE, font: false, timeout: 3000, filter: keep, onCloneNode,
+      ...RASTER, filter: keep, onCloneNode: cloneHook(redact, dict, chromeHooks),
       backgroundColor: getComputedStyle(document.body).backgroundColor || null,
     });
-    await compositeFrames(canvas, root, onCloneNode);
+    // A message body is the sender's text, not the app's: no labels are kept.
+    await compositeFrames(canvas, root, cloneHook(redact, dict));
     return canvas;
   } finally {
     if (redact && --masking === 0) usePrivacyStore.getState().setCaptureMask(false);
   }
 }
+
+// The e2e probe calls the capture without driving the export dialog.
+// `VITE_E2E` is a compile-time constant, so a normal build drops this.
+if (import.meta.env.VITE_E2E === '1' && typeof window !== 'undefined') window.__MV_CAPTURE_APP__ = captureAppWindow;

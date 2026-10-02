@@ -80,6 +80,22 @@ async function _pushMenuLabels() {
 
 export const getLocale = () => _locale;
 
+// Every fixed UI string in the active language and in English (the fallback
+// can be on screen too). Templates with {{slots}} are left out: their filled-in
+// text is not in the catalog.
+let _uiStrings = null;
+let _uiStringsOf = null;
+export function isUiString(text) {
+  if (_uiStringsOf !== _catalog) {
+    _uiStrings = new Set();
+    for (const cat of [en, _catalog]) {
+      for (const v of Object.values(cat)) if (typeof v === 'string' && !v.includes('{{')) _uiStrings.add(v.trim());
+    }
+    _uiStringsOf = _catalog;
+  }
+  return _uiStrings.has(String(text ?? '').trim());
+}
+
 /**
  * Load first, publish second. Writing the store field is what re-renders every
  * subscriber, so it must happen only once `_catalog` already holds the new

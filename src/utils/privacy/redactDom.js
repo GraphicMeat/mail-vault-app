@@ -11,6 +11,9 @@ import { findPii, maskText, maskString } from './piiDetector';
  * ponytail: Detection is per text node (a name split across elements, e.g. John <b>Smith</b>,
  * is caught only token-by-token via the dictionary). <noscript> and <textarea> text is masked
  * too: noscript renders in a scriptless frame, and a textarea shows its default text.
+ *
+ * `hooks.keep(text)`: true leaves that text node or attribute value as it is (the app
+ * window capture keeps its own UI labels, which a contact named "Search" would mask).
  */
 export const PII_CLASS = 'mv-pii';
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE']);
@@ -28,6 +31,7 @@ export function redactTree(root, dict, hooks = {}) {
       const parent = node.parentNode;
       if (!node.data.trim() || SKIP_TAGS.has(parent?.nodeName?.toUpperCase())) return 2;
       if (parent?.closest?.(`.${PII_CLASS}`)) return 2;
+      if (hooks.keep?.(node.data)) return 2;
       return 1;
     },
   });
@@ -63,7 +67,7 @@ export function redactTree(root, dict, hooks = {}) {
     if (!el.getAttribute) continue;
     for (const name of TEXT_ATTRS) {
       const value = el.getAttribute(name);
-      if (!value) continue;
+      if (!value || hooks.keep?.(value)) continue;
       const next = maskString(value, dict);
       if (next !== value) { hooks.onAttr?.(el, name, value); el.setAttribute(name, next); }
     }
