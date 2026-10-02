@@ -1,5 +1,5 @@
 import { classifyLink } from '../../../utils/linkSafety';
-import { maskString } from '../../../utils/privacy/piiDetector';
+import { findPii, maskString, maskText, EMPTY_DICTIONARY } from '../../../utils/privacy/piiDetector';
 import { t } from '../../../i18n/index.js';
 import { esc } from '../exportDocument';
 
@@ -16,13 +16,27 @@ const SHOWN_SCHEME = /^\s*(https?:\/\/|javascript:|data:)/i;
 const SCRIPT_SCHEME = /^\s*(javascript|data):/i;
 const URL_LIKE = /^\s*(https?:\/\/|www\.)/i;
 
+// A host is lowercase and the name detector wants capitals, so it looks at a
+// capitalised copy and masks the same positions in the real one: "rokas.shop.example"
+// shows "xxxxx.shop.example". (Over-masking is the accepted failure.)
+function maskHost(host, dict) {
+  const probe = host.replace(/(^|[.-])(\p{L})/gu, (_, sep, c) => sep + c.toUpperCase());
+  let out = '';
+  let last = 0;
+  for (const { start, end } of findPii(probe, dict)) {
+    out += host.slice(last, start) + maskText(host.slice(start, end));
+    last = end;
+  }
+  return out + host.slice(last);
+}
+
 // Scheme and host only. A script or data link is its scheme alone: what follows is code or a payload.
-function hostOnly(href) {
+function hostOnly(href, dict = EMPTY_DICTIONARY) {
   const script = SCRIPT_SCHEME.exec(href);
   if (script) return `${script[1].toLowerCase()}:`;
   try {
     const url = new URL(/^\s*www\./i.test(href) ? `https://${href.trim()}` : href.trim());
-    return `${url.protocol}//${url.hostname}`;
+    return `${url.protocol}//${maskHost(url.hostname, dict)}`;
   } catch {
     return '';
   }
@@ -50,8 +64,8 @@ export function collectSocialLinks(bodyHtml, { dict, redact = false } = {}) {
   const links = sorted.slice(0, MAX_SOCIAL_LINKS).map(l => (redact
     ? {
       ...l,
-      href: hostOnly(l.href),
-      text: URL_LIKE.test(l.text) ? hostOnly(l.text) : maskString(l.text, dict),
+      href: hostOnly(l.href, dict),
+      text: URL_LIKE.test(l.text) ? hostOnly(l.text, dict) : maskString(l.text, dict),
     }
     : l));
   return { links, more: Math.max(0, sorted.length - MAX_SOCIAL_LINKS) };

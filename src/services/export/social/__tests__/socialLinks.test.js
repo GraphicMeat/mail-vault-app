@@ -62,6 +62,15 @@ describe('collectSocialLinks', () => {
     for (const leak of ['SECRET', 'joanna', 'frag', 'unsub', '8443', 'u:p', 'alert', '/o/123', 'Joanna']) expect(all).not.toContain(leak);
   });
 
+  it('redacted: a name in the host is masked too, whatever its case, and the rest of the host stays', () => {
+    const { links } = collectSocialLinks(
+      '<a href="https://joanna-kowalczyk.substack.example/p/1">Read</a><a href="https://kowalczyk.example/">https://Joanna.shop.example/x</a>',
+      { dict, redact: true });
+    // The second one shows another site than it goes to: red, so it leads.
+    expect(links.map(l => l.href)).toEqual(['https://xxxxxxxxx.example', 'https://xxxxxx-xxxxxxxxx.substack.example']);
+    expect(links[0].text).toBe('https://xxxxxx.shop.example');
+  });
+
   it('keeps the classification of the real link when redacting', () => {
     const { links } = collectSocialLinks('<a href="https://evil.example/login">https://bank.example</a>', { dict, redact: true });
     expect(links[0]).toMatchObject({ level: 'red', href: 'https://evil.example', insecure: false });
