@@ -1,5 +1,5 @@
 import { checkSenderVerification, parseAuthResults } from '../../../utils/senderCheck';
-import { maskText, maskString } from '../../../utils/privacy/piiDetector';
+import { maskText, findPii, EMPTY_DICTIONARY } from '../../../utils/privacy/piiDetector';
 import { t } from '../../../i18n/index.js';
 import { esc } from '../exportDocument';
 
@@ -31,19 +31,39 @@ export function senderDetailsModel(message) {
   return { address, name, issues, auth: hasAuth ? parsed : null, replyTo, noData: !hasAuth && issues.length === 0 };
 }
 
+// senderCheck's own clean-up of a display name before it quotes it.
+const quotedName = (name) => String(name).replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
+const replaceAll = (text, value, by) => (value ? text.split(value).join(by) : text);
+
 /**
  * The model as a redacted image may show it: addresses and the name masked
- * unless the dictionary reveals that exact value, the issue lines masked like
- * any text (they quote addresses and names).
+ * unless the dictionary reveals that exact value. An issue line is catalog text
+ * around a few quoted values (the From name, addresses, the From domain): only
+ * those are masked, so a known name that shares a catalog word ("Sender") never
+ * turns the line into filler.
  */
 export function maskSenderDetails(model, dict) {
   const reveal = dict?.reveal;
-  const mask = (v) => (reveal?.has(String(v).trim().toLowerCase()) ? v : maskText(v));
+  const shown = (v) => !!reveal?.has(String(v).trim().toLowerCase());
+  const mask = (v) => (shown(v) ? v : maskText(v));
+  const fromHidden = !shown(model.address);
+  const maskIssue = (text) => {
+    let out = text;
+    if (model.name && !shown(model.name)) {
+      for (const n of new Set([model.name, quotedName(model.name)])) out = replaceAll(out, n, maskText(n));
+    }
+    // Addresses (and phones) by pattern: what the reveal names stays readable.
+    const spans = findPii(out, reveal?.size ? { ...EMPTY_DICTIONARY, reveal } : EMPTY_DICTIONARY);
+    for (const { start, end } of [...spans].reverse()) out = out.slice(0, start) + maskText(out.slice(start, end)) + out.slice(end);
+    // The From domain on its own ("... differs from prize.example"), when the From is masked.
+    const domain = domainOf(model.address);
+    return fromHidden && domain ? replaceAll(out, domain, maskText(domain)) : out;
+  };
   return {
     ...model,
     address: mask(model.address),
     name: model.name ? mask(model.name) : model.name,
-    issues: model.issues.map(i => ({ ...i, text: maskString(i.text, dict) })),
+    issues: model.issues.map(i => ({ ...i, text: maskIssue(i.text) })),
     replyTo: model.replyTo ? { ...model.replyTo, address: mask(model.replyTo.address) } : null,
   };
 }

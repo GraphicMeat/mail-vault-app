@@ -54,19 +54,25 @@ describe('senderDetailsModel', () => {
 
 describe('maskSenderDetails', () => {
   const dict = buildNameDictionary({ names: ['Prize Desk', 'Rokas Ambrazevičius'] });
+  // Issue lines as senderCheck builds them: catalog text around the From name,
+  // the addresses and the From domain. Nothing else in them names anyone.
   const model = {
     ...senderDetailsModel(spoof),
-    issues: [{ level: 'warning', text: 'Reply address (collect@elsewhere.example) differs; asked Rokas Ambrazevičius' }],
+    issues: [
+      { level: 'warning', text: 'Reply-To address (collect@elsewhere.example) differs from sender' },
+      { level: 'danger', text: 'Display name "Prize Desk" but sent from win@prize.example via prize.example' },
+    ],
   };
 
-  it('masks the address, the name, the Reply-To and the people in an issue', () => {
+  it('masks the address, the name, the Reply-To and the values quoted in an issue', () => {
     const m = maskSenderDetails(model, dict);
     expect(m.address).toBe('xxx@xxxxx.xxxxxxx');
     expect(m.name).toBe('xxxxx xxxx');
     expect(m.replyTo).toEqual({ address: 'xxxxxxx@xxxxxxxxx.xxxxxxx', matches: false });
-    expect(m.issues[0].text).toBe('Reply address (xxxxxxx@xxxxxxxxx.xxxxxxx) differs; asked xxxxx xxxxxxxxxxxxx');
+    expect(m.issues[0].text).toBe('Reply-To address (xxxxxxx@xxxxxxxxx.xxxxxxx) differs from sender');
+    expect(m.issues[1].text).toBe('Display name "xxxxx xxxx" but sent from xxx@xxxxx.xxxxxxx via xxxxx.xxxxxxx');
     expect(m.auth).toEqual(model.auth);
-    expect(JSON.stringify(m)).not.toMatch(/win@|prize|collect@|Rokas/);
+    expect(JSON.stringify(m)).not.toMatch(/win@|prize|collect@|Prize/);
   });
 
   it('leaves exactly the revealed values readable, in the fields and in the issue lines', () => {
@@ -74,7 +80,14 @@ describe('maskSenderDetails', () => {
     expect(m.address).toBe('win@prize.example');
     expect(m.name).toBe('Prize Desk');
     expect(m.replyTo.address).toBe('collect@elsewhere.example');
-    expect(m.issues[0].text).toBe('Reply address (collect@elsewhere.example) differs; asked xxxxx xxxxxxxxxxxxx');
+    expect(m.issues[0].text).toBe('Reply-To address (collect@elsewhere.example) differs from sender');
+    expect(m.issues[1].text).toBe('Display name "Prize Desk" but sent from win@prize.example via prize.example');
+  });
+
+  it('never masks the catalog words of an issue, even when a known name shares one', () => {
+    const sender = buildNameDictionary({ names: ['Verified Sender', 'Authentication Smith'] });
+    const m = maskSenderDetails({ ...model, issues: [{ level: 'danger', text: 'Sender authentication failed (SPF, DMARC)' }] }, sender);
+    expect(m.issues[0].text).toBe('Sender authentication failed (SPF, DMARC)');
   });
 
   it('reveals nothing that is not in the set (the sender\'s own address stays masked)', () => {
