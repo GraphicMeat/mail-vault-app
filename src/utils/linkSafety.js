@@ -61,6 +61,55 @@ function looksLikeUrl(text) {
   return trimmed.includes('://') || trimmed.startsWith('www.');
 }
 
+/**
+ * Whether a link is worth classifying at all: a web address or a script/data
+ * scheme. Anchors, cid:, mailto:, tel: and relative links are not.
+ */
+export function isScannableHref(href) {
+  return !(!href || href.startsWith('#') || href.startsWith('cid:') ||
+    href.startsWith('mailto:') || href.startsWith('tel:') ||
+    (!href.includes('://') && !href.startsWith('javascript:') && !href.startsWith('data:')));
+}
+
+/**
+ * The verdict on one link: `level` 'red' (a script/data scheme, or text that
+ * shows one site and goes to another), 'yellow' (a redirect through a tracker
+ * to a different site) or null, with the English `reason` the in-app tooltip
+ * uses. Shared by the reader's scan and the social card's links list.
+ */
+export function classifyLink(href, text) {
+  let level = null;
+  let reason = '';
+  const actualDomain = extractDomain(href);
+  const textDomain = looksLikeUrl(text) ? extractDomain(text) : null;
+
+  // RED: javascript: or data: schemes
+  if (href.startsWith('javascript:') || href.startsWith('data:')) {
+    level = 'red';
+    reason = `Link uses dangerous ${href.split(':')[0]}: scheme`;
+  }
+  // RED: Text looks like URL but domain doesn't match href
+  else if (textDomain && actualDomain && textDomain !== actualDomain) {
+    level = 'red';
+    reason = `Link text shows ${textDomain} but goes to ${actualDomain}`;
+  }
+  // YELLOW: Redirect/tracking params in URL (skip shortener allowlist)
+  else if (actualDomain && !SHORTENER_ALLOWLIST.has(actualDomain) && REDIRECT_PARAMS.test(href)) {
+    const match = href.match(/[?&](?:url|redirect|goto|target|link|dest|destination)=([^&]+)/i);
+    if (match) {
+      try {
+        const redirectUrl = decodeURIComponent(match[1]);
+        const redirectDomain = extractDomain(redirectUrl);
+        if (redirectDomain && redirectDomain !== actualDomain) {
+          level = 'yellow';
+          reason = `Link redirects through ${actualDomain} to ${redirectDomain}`;
+        }
+      } catch { /* ignore decode errors */ }
+    }
+  }
+  return { level, reason, actualDomain, textDomain: textDomain || null };
+}
+
 // Style block markup appended to <head> when any alerts are detected.
 const INDICATOR_STYLE_CONTENT = `
   a[data-link-alert]::before {
@@ -125,46 +174,14 @@ export function scanEmailLinks(bodyHtml, key) {
     const text = link.textContent?.trim() || '';
 
     // Skip safe link types
-    if (!href || href.startsWith('#') || href.startsWith('cid:') ||
-        href.startsWith('mailto:') || href.startsWith('tel:') ||
-        (!href.includes('://') && !href.startsWith('javascript:') && !href.startsWith('data:'))) {
-      continue;
-    }
+    if (!isScannableHref(href)) continue;
 
     // Set title on ALL links so hovering shows the actual destination
     if (!link.getAttribute('title')) {
       link.setAttribute('title', href);
     }
 
-    let level = null;
-    let reason = '';
-    const actualDomain = extractDomain(href);
-    const textDomain = looksLikeUrl(text) ? extractDomain(text) : null;
-
-    // RED: javascript: or data: schemes
-    if (href.startsWith('javascript:') || href.startsWith('data:')) {
-      level = 'red';
-      reason = `Link uses dangerous ${href.split(':')[0]}: scheme`;
-    }
-    // RED: Text looks like URL but domain doesn't match href
-    else if (textDomain && actualDomain && textDomain !== actualDomain) {
-      level = 'red';
-      reason = `Link text shows ${textDomain} but goes to ${actualDomain}`;
-    }
-    // YELLOW: Redirect/tracking params in URL (skip shortener allowlist)
-    else if (actualDomain && !SHORTENER_ALLOWLIST.has(actualDomain) && REDIRECT_PARAMS.test(href)) {
-      const match = href.match(/[?&](?:url|redirect|goto|target|link|dest|destination)=([^&]+)/i);
-      if (match) {
-        try {
-          const redirectUrl = decodeURIComponent(match[1]);
-          const redirectDomain = extractDomain(redirectUrl);
-          if (redirectDomain && redirectDomain !== actualDomain) {
-            level = 'yellow';
-            reason = `Link redirects through ${actualDomain} to ${redirectDomain}`;
-          }
-        } catch { /* ignore decode errors */ }
-      }
-    }
+    const { level, reason, actualDomain, textDomain } = classifyLink(href, text);
 
     if (level) {
       alerts.push({

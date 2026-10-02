@@ -7,7 +7,7 @@
 // `accountId-mailbox-uid`, the shape selectEmail uses for its body cache.
 
 import { describe, it, expect } from 'vitest';
-import { scanEmailLinks, getCachedAlerts, getAlertsForEmails } from '../linkSafety';
+import { scanEmailLinks, getCachedAlerts, getAlertsForEmails, classifyLink, isScannableHref } from '../linkSafety';
 
 const INBOX_BODY = '<p>Body of the inbox message</p><a href="https://example.com/a">a</a>';
 const SENT_BODY = '<p>Body of the sent message</p><a href="https://example.com/b">b</a>';
@@ -82,5 +82,40 @@ describe('getAlertsForEmails', () => {
 
     // Same UID in the active account's Sent folder → also a different message.
     expect(getAlertsForEmails([{ uid: 77, _fromSentFolder: true }], state)).toBeNull();
+  });
+});
+
+// The social card's links list classifies with the same rules as the reader's scan.
+describe('classifyLink', () => {
+  it('red for a script or data scheme, and for text that shows another site', () => {
+    expect(classifyLink('javascript:x()', 'go')).toMatchObject({ level: 'red', reason: 'Link uses dangerous javascript: scheme' });
+    expect(classifyLink('data:text/html,hi', '')).toMatchObject({ level: 'red' });
+    expect(classifyLink('https://evil.test/login', 'https://bank.test')).toMatchObject({
+      level: 'red', textDomain: 'bank.test', actualDomain: 'evil.test', reason: 'Link text shows bank.test but goes to evil.test',
+    });
+  });
+
+  it('yellow for a redirect through another site, but not through an allowlisted shortener', () => {
+    expect(classifyLink('https://track.test/r?url=https%3A%2F%2Fother.test%2F', 'Offer')).toMatchObject({
+      level: 'yellow', reason: 'Link redirects through track.test to other.test',
+    });
+    expect(classifyLink('https://bit.ly/r?url=https%3A%2F%2Fother.test%2F', 'Offer').level).toBeNull();
+  });
+
+  it('no level for an ordinary link', () => {
+    expect(classifyLink('https://fine.test/a', 'A nice page')).toMatchObject({ level: null, reason: '' });
+  });
+
+  it('agrees with what the scan alerts on', () => {
+    const body = '<a href="https://evil.test/login">https://bank.test</a><a href="https://fine.test/a">ok</a>';
+    expect(scanEmailLinks(body, null).alerts.map(a => a.level)).toEqual(['red']);
+    expect(classifyLink('https://evil.test/login', 'https://bank.test').level).toBe('red');
+  });
+});
+
+describe('isScannableHref', () => {
+  it('web addresses and script/data schemes only', () => {
+    for (const href of ['https://a.test', 'http://a.test', 'javascript:x()', 'data:text/html,x']) expect(isScannableHref(href), href).toBe(true);
+    for (const href of ['', '#top', 'cid:img', 'mailto:a@b.test', 'tel:+1', '/relative', 'page.html']) expect(isScannableHref(href), href).toBe(false);
   });
 });
