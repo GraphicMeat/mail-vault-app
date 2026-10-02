@@ -145,6 +145,9 @@ export const useSearchStore = create((set, get) => ({
   // { local, server } messages each lane read, from the terminal frame; a
   // lane that did not run is null.
   searchSearched: null,
+  // { local, server } ms each lane took, from the terminal frame; a lane that
+  // did not run is null.
+  searchLaneMs: null,
 
   /// Show rows the app did not search for — a saved view's result. They
   /// arrive in the same shape the index lane of a search produces, so they go
@@ -180,6 +183,7 @@ export const useSearchStore = create((set, get) => ({
       searchStartedAt: null,
       searchDurationMs: null,
       searchSearched: null,
+      searchLaneMs: null,
       ...searchRows.showRows(kept, searchSnapshot),
     });
   },
@@ -225,6 +229,9 @@ export const useSearchStore = create((set, get) => ({
         searchSearched: terminal && (frame.localSearched != null || frame.serverSearched != null)
           ? { local: frame.localSearched ?? null, server: frame.serverSearched ?? null }
           : state.searchSearched,
+        searchLaneMs: terminal && (frame.localMs != null || frame.serverMs != null)
+          ? { local: frame.localMs ?? null, server: frame.serverMs ?? null }
+          : state.searchLaneMs,
       };
     });
     if (historyQuery) useSettingsStore.getState().addSearchToHistory?.(historyQuery);
@@ -302,6 +309,7 @@ export const useSearchStore = create((set, get) => ({
       searchStartedAt: hasCriteria ? Date.now() : null,
       searchDurationMs: null,
       searchSearched: null,
+      searchLaneMs: null,
       searchProgress: null,
       searchIndexCoverage: null,
       searchFallback: null,
@@ -405,6 +413,7 @@ export const useSearchStore = create((set, get) => ({
       searchStartedAt: null,
       searchDurationMs: null,
       searchSearched: null,
+      searchLaneMs: null,
     });
   },
 }));

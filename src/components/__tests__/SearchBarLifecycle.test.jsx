@@ -249,12 +249,24 @@ describe('the results summary', () => {
     const summary = view.getByTestId('search-summary').textContent;
     expect(summary).toContain('Found 1 results in Inbox across all accounts');
     expect(summary).not.toContain('UNIFIED');
-    expect(view.getByTestId('search-duration').textContent).toBe('0.234 s');
-    fireEvent.click(view.getByTestId('search-duration'));
-    expect(view.getByTestId('search-duration').textContent).toBe('234 ms');
-    fireEvent.click(view.getByTestId('search-duration'));
-    expect(view.getByTestId('search-duration').textContent).toBe('0.234 s');
+    // No lane times on the frame: the whole search's, under a second in ms.
+    expect(view.getByTestId('search-duration').textContent).toBe('Time: 234 ms');
     clock.mockRestore();
+  });
+
+  it('times each lane the daemon ran, in seconds from one up and never as a grouped ms count', async () => {
+    const view = render(<SearchBar />);
+    await act(async () => { await startCurrent(); });
+    act(() => harness.runs[0].onProgress({
+      searchId: harness.runs[0].request.searchId, sequence: 1, lane: null,
+      rows: [row(1, 'hit', 'a', 'INBOX')], completed: 1, total: 1, localMode: null, fallbackReason: null,
+      coverage: null, failures: [], terminal: 'complete', errorKey: null,
+      localMs: 120, serverMs: 7355,
+    }));
+    expect(view.getByTestId('search-duration').textContent).toBe('Time: 120 ms local, 7.36 s server');
+    // A lane that did not run is left out.
+    act(() => useSearchStore.setState({ searchLaneMs: { local: 1500, server: null } }));
+    expect(view.getByTestId('search-duration').textContent).toBe('Time: 1.50 s local');
   });
 
   it('counts each source against how many messages that lane read', async () => {

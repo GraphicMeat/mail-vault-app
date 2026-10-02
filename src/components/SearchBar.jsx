@@ -44,8 +44,23 @@ const LOCATION_OPTIONS = [
   { id: 'local', labelKey: 'search.location.vault', icon: HardDrive },
 ];
 
-// Milliseconds as seconds, to the clock's 1 ms resolution: "13.424".
-const formatSeconds = ms => (ms / 1000).toLocaleString(getLocale(), { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+// "234 ms" under a second, "7.36 s" from one up. Never a grouped "7,355 ms":
+// in a locale that groups with a dot that reads as seven milliseconds.
+const formatDuration = ms => (ms < 1000
+  ? t('search.durationMs', { ms: Math.round(ms) })
+  : t('search.durationSeconds', {
+    s: (ms / 1000).toLocaleString(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  }));
+
+// "Time: 120 ms local, 7.36 s server", each lane timed by the daemon; a lane
+// that did not run is left out. Without lane times, the whole search's.
+function searchTimes(laneMs, totalMs) {
+  const parts = [
+    laneMs?.local != null && t('search.localTime', { time: formatDuration(laneMs.local) }),
+    laneMs?.server != null && t('search.serverTime', { time: formatDuration(laneMs.server) }),
+  ].filter(Boolean);
+  return `${t('search.timeLabel')} ${parts.length ? parts.join(', ') : formatDuration(totalMs)}`;
+}
 
 const isLocalRow = e => e.source === 'local' || e.source === 'local-only';
 const isServerRow = e => e.source === 'server' || e.source === 'server-search';
@@ -81,8 +96,8 @@ export function SearchBar({ autoFocus = false }) {
   const searchError = useSearchStore(s => s.searchError);
   const searchResults = useSearchStore(s => s.searchResults);
   const searchDurationMs = useSearchStore(s => s.searchDurationMs);
+  const searchLaneMs = useSearchStore(s => s.searchLaneMs);
   const searchSearched = useSearchStore(s => s.searchSearched);
-  const [durationInMs, setDurationInMs] = useState(false);
   const setSearchQuery = useSearchStore(s => s.setSearchQuery);
   const setSearchFilters = useSearchStore(s => s.setSearchFilters);
   const performSearch = useSearchStore(s => s.performSearch);
@@ -764,20 +779,17 @@ export function SearchBar({ autoFocus = false }) {
                   {searchIndexCoverage?.complete && searchIndexCoverage.total > 0 && t('search.fromTotal', { total: formatCount(searchIndexCoverage.total) })}
                 </span>
                 {searchDurationMs != null && (
-                  <button type="button" className="tabular-nums underline decoration-dotted underline-offset-2 hover:text-mail-text" data-testid="search-duration"
-                    title={t('search.durationToggle')} onClick={() => setDurationInMs(v => !v)}>
-                    {durationInMs
-                      ? t('search.durationMs', { ms: formatCount(searchDurationMs) })
-                      : t('search.durationSeconds', { s: formatSeconds(searchDurationMs) })}
-                  </button>
+                  <span className="tabular-nums" data-testid="search-duration">
+                    {searchTimes(searchLaneMs, searchDurationMs)}
+                  </span>
                 )}
-                {searchResults.length > 0 && <SaveSearchAsView />}
                 {searchResults.length > 0 && (
-                  <span className="tabular-nums" data-testid="search-source-counts">
+                  <span className="ml-auto tabular-nums" data-testid="search-source-counts">
                     {resultCounts(searchResults, searchSearched)}
                   </span>
                 )}
               </div>
+              {searchResults.length > 0 && <div className="mt-1"><SaveSearchAsView /></div>}
               {/* The index caps its rows; a silent cap reads as "that's all there is". */}
               {searchIndexCoverage?.matched > searchIndexCoverage?.shown && (
                 <div className="text-xs text-mail-text-muted" data-testid="search-index-capped">

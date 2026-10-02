@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokio::sync::watch;
 
 fn default_concurrency() -> usize {
@@ -89,6 +90,12 @@ pub(crate) struct MailSearchProgress {
     /// when that lane did not run.
     pub local_searched: Option<u64>,
     pub server_searched: Option<u64>,
+    /// How long each lane took, in ms from the start of the run, on the
+    /// terminal frame; `None` exactly when that lane's `*_searched` is. The
+    /// server lane waits for the local snapshot before it publishes, so its
+    /// time is "until the server's answers were in", not bare IMAP time.
+    pub local_ms: Option<u64>,
+    pub server_ms: Option<u64>,
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -324,6 +331,8 @@ fn progress(search_id: &str) -> MailSearchProgress {
         error_key: None,
         local_searched: None,
         server_searched: None,
+        local_ms: None,
+        server_ms: None,
     }
 }
 
@@ -343,6 +352,7 @@ fn emit_progress(state: &DaemonState, run: &SearchRun, mut frame: MailSearchProg
 
 async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: SearchRunGuard) {
     let run = Arc::clone(&guard.run);
+    let started = Instant::now();
     let local_enabled = !request.targets.is_empty() && request.location != SearchLocation::Server;
     let (ready_tx, ready_rx) = watch::channel(!local_enabled);
     let local_task = local_enabled.then(|| {
@@ -355,25 +365,30 @@ async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: Se
     });
 
     let local_future = async move {
-        match local_task {
+        let report = match local_task {
             Some(task) => task.await.unwrap_or_default(),
             None => SearchReport::default(),
-        }
+        };
+        (report, elapsed_ms(started))
     };
     let server_state = Arc::clone(&state);
     let server_run = Arc::clone(&run);
     let server_request = request.clone();
     let server_future = async move {
-        if server_request.location != SearchLocation::Local {
+        let report = if server_request.location != SearchLocation::Local {
             run_server_lane(server_state, server_request, server_run, ready_rx).await
         } else {
             SearchReport::default()
-        }
+        };
+        (report, elapsed_ms(started))
     };
-    let (mut report, server_report) = tokio::join!(local_future, server_future);
-    let local_searched = (report.total_sources > 0).then_some(report.searched);
+    let ((mut report, local_ms), (server_report, server_ms)) =
+        tokio::join!(local_future, server_future);
+    let local_ran = report.total_sources > 0;
     // A server lane that reached no folder searched nothing it can count.
-    let server_searched = (server_report.successful_sources > 0).then_some(server_report.searched);
+    let server_ran = server_report.successful_sources > 0;
+    let local_searched = local_ran.then_some(report.searched);
+    let server_searched = server_ran.then_some(server_report.searched);
     report.total_sources += server_report.total_sources;
     report.successful_sources += server_report.successful_sources;
     report.completed += server_report.completed;
@@ -386,6 +401,8 @@ async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: Se
     terminal.failures = report.failures;
     terminal.local_searched = local_searched;
     terminal.server_searched = server_searched;
+    terminal.local_ms = local_ran.then_some(local_ms);
+    terminal.server_ms = server_ran.then_some(server_ms);
     if run.is_cancelled() {
         terminal.terminal = Some(SearchTerminal::Cancelled);
     } else if report.total_sources > 0 && report.successful_sources == 0 {
@@ -396,6 +413,10 @@ async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: Se
     }
     emit_progress(&state, &run, terminal);
     drop(guard);
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 #[derive(Default)]
@@ -1590,6 +1611,8 @@ mod tests {
         let terminal = frames.last().unwrap();
         assert_eq!(terminal["localSearched"], 3, "{frames:?}");
         assert!(terminal["serverSearched"].is_null(), "{frames:?}");
+        assert!(terminal["localMs"].is_u64(), "{frames:?}");
+        assert!(terminal["serverMs"].is_null(), "{frames:?}");
         let rows: usize = frames.iter().map(|f| f["rows"].as_array().map_or(0, Vec::len)).sum();
         assert_eq!(rows, 1, "{frames:?}");
     }
