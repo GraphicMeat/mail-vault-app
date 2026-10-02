@@ -69,3 +69,6 @@ export async function renderSocialCard({ message, bodyHtml, appearance = 'light'
   }
   return stack(head, body, appearance === 'dark' ? EXPORT_HEAD_DARK.bg : '#ffffff');
 }
+
+// The connected e2e spec renders cards straight through this, no dialog.
+if (import.meta.env.VITE_E2E === '1' && typeof window !== 'undefined') window.__MV_SOCIAL_CARD__ = renderSocialCard;

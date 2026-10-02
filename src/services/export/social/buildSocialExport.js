@@ -12,6 +12,7 @@ import { captureAppWindow } from './captureAppWindow';
 import { renderSocialCard } from './renderSocialCard';
 import { composeSocialImage } from './composeSocialImage';
 import { loadWatermark } from './socialWatermark';
+import { canvasToPngBase64 } from './encodePng';
 import { SIZE_PRESETS } from './socialLayout';
 
 const asDate = (value) => (value instanceof Date ? value : new Date(value));
@@ -54,24 +55,6 @@ export async function buildSocialContent(message, { content, redact, dict, theme
   });
 }
 
-// Async end to end: toDataURL encodes the whole PNG on the main thread, and a
-// story-sized card is 2160x3840 of it.
-const toBase64 = (canvas) => new Promise((resolve, reject) => {
-  const t0 = performance.now();
-  canvas.toBlob((blob) => {
-    if (!blob) { reject(new Error('PNG encode produced no data')); return; }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result);
-      trace('social-encode-total', { ms: Math.round(performance.now() - t0), bytes: blob.size });
-      resolve(url.slice(url.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error || new Error('PNG read failed'));
-    reader.readAsDataURL(blob);
-  }, 'image/png');
-  trace('social-encode-call', { ms: Math.round(performance.now() - t0) });
-});
-
 /**
  * `options = { content: 'card'|'app', size: keyof SIZE_PRESETS, background,
  * padding, radius, shadow, chrome, redact, appTheme, mailTheme }`.
@@ -106,7 +89,7 @@ export async function buildSocialExport({ message, options }) {
     lap('social-compose');
     const named = redact ? redactMessageForExport(dated, dict) : dated;
     const name = singleName(named, 'png').replace(/\.png$/, ' - social.png');
-    return { ok: true, file: { name, base64: await toBase64(canvas) }, canvas };
+    return { ok: true, file: { name, base64: await canvasToPngBase64(canvas) }, canvas };
   } catch (err) {
     return { ok: false, reason: 'render', error: String(err?.message || err) };
   }

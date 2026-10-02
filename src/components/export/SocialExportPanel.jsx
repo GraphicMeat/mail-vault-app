@@ -24,7 +24,6 @@ const SIZES = [
   { value: 'landscape', label: '16:9' },
   { value: 'story', label: '9:16' },
 ];
-const THEMES = (t) => [{ value: 'light', label: t('settings.colors.light') }, { value: 'dark', label: t('settings.colors.dark') }];
 const CHECKERBOARD = 'repeating-conic-gradient(#d4d4d8 0% 25%, #ffffff 0% 50%) 50% / 12px 12px';
 
 // A compact one-of-a-few row: the settings SegmentedChoice is a 48px tab row.
@@ -201,6 +200,7 @@ export function SocialExportPanel({ message, onDone }) {
 
   const customStops = prefs.background.type === 'custom' && prefs.background.stops?.length >= 2
     ? prefs.background.stops : DEFAULT_CUSTOM_STOPS;
+  const themeOptions = useMemo(() => [{ value: 'light', label: t('settings.colors.light') }, { value: 'dark', label: t('settings.colors.dark') }], [t]);
   const sizeOptions = useMemo(() => [{ value: 'auto', label: t('export.social.sizeAuto') }, ...SIZES], [t]);
   // A swatch's accessible name. Literal keys, so the catalog check sees each.
   const names = useMemo(() => ({
@@ -231,12 +231,12 @@ export function SocialExportPanel({ message, onDone }) {
           </Field>
 
           <Field label={t('export.social.appearance')}>
-            <Chips label={t('export.social.appearance')} value={theme} onChange={v => update({ appTheme: v })} options={THEMES(t)} />
+            <Chips label={t('export.social.appearance')} value={theme} onChange={v => update({ appTheme: v })} options={themeOptions} />
           </Field>
 
           {isCard && (
             <Field label={t('export.social.mailAppearance')}>
-              <Chips label={t('export.social.mailAppearance')} value={mailTheme} onChange={v => update({ mailTheme: v })} options={THEMES(t)} />
+              <Chips label={t('export.social.mailAppearance')} value={mailTheme} onChange={v => update({ mailTheme: v })} options={themeOptions} />
             </Field>
           )}
 

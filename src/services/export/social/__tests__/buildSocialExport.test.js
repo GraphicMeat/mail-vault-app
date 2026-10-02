@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// toBlob, not toDataURL: the PNG is encoded off the main thread. Three zero bytes read as 'AAAA'.
+// jsdom has no Worker, so the encode falls back to toBlob here. Three zero bytes read as 'AAAA'.
 const stubCanvas = () => ({
   width: 100, height: 100,
   toBlob: (cb) => cb(new Blob([new Uint8Array([0, 0, 0])], { type: 'image/png' })),
@@ -134,7 +134,7 @@ describe('buildSocialExport', () => {
     expect(r).toMatchObject({ ok: false, reason: 'render' });
   });
 
-  it('encodes the PNG off the main thread, and reports an encode that gives nothing', async () => {
+  it('encodes through toBlob where no worker exists, and reports an encode that gives nothing', async () => {
     const toBlob = vi.fn((cb) => cb(null));
     composeSocialImage.mockReturnValueOnce({ ...stubCanvas(), toBlob });
     const r = await buildSocialExport({ message, options });
