@@ -87,24 +87,59 @@ describe('Social export: spam sender, sender details and links', function () {
     console.log(`[socialcard-jpeg] ${masked.jpeg}`);
   });
 
-  /** Opens the verified-sender fixture and waits for its header. */
+  /**
+   * Opens the verified-sender fixture. The header is what names the open
+   * message (as connected-sender-verification does); the message frame is
+   * waited for separately, and described in the failure when it never comes.
+   */
   async function openFixture() {
-    await browser.waitUntil(() => browser.execute((subject) => {
+    const clickRow = () => browser.execute((subject) => {
       const row = [...document.querySelectorAll('[data-testid="email-row"]')]
         .find(r => r.offsetHeight > 0 && (r.innerText || '').includes(subject));
       if (!row) return false;
       row.click();
       return true;
-    }, SENDER_AUTH_SUBJECT), { timeout: 60_000, interval: 1000, timeoutMsg: 'fixture row never appeared' });
-    await browser.waitUntil(() => browser.execute((name) => {
+    }, SENDER_AUTH_SUBJECT);
+    const headerNamesSender = () => browser.execute((name) => {
       const header = document.querySelector('[data-testid="sender-header"]');
-      const iframe = document.querySelector('#root iframe[sandbox]');
-      return !!header && (header.innerText || '').includes(name) && !!iframe?.contentDocument?.body
-        && iframe.getBoundingClientRect().height > 20;
-    }, SENDER_NAME), { timeout: 30_000, interval: 400, timeoutMsg: 'fixture never opened in the viewer' });
-    // The To line, with the recipient the shot must mask, is behind this toggle.
-    await browser.execute(() => document.querySelector('[data-testid="header-toggle"]')?.click());
+      return !!header && (header.innerText || '').includes(name);
+    }, SENDER_NAME);
+
+    await browser.waitUntil(async () => clickRow(), { timeout: 60_000, interval: 1000, timeoutMsg: 'fixture row never appeared' });
+    // The first click can land while the list re-renders: click again until the header names the sender.
+    await browser.waitUntil(async () => {
+      if (await headerNamesSender()) return true;
+      await clickRow();
+      return false;
+    }, { timeout: 45_000, interval: 1000, timeoutMsg: 'the viewer header never named the fixture sender' });
+
+    const frames = () => browser.execute(() => [...document.querySelectorAll('#root iframe')].map((f) => {
+      const box = f.getBoundingClientRect();
+      let readable = false;
+      try { readable = !!f.contentDocument?.body; } catch { readable = false; }
+      return { sandbox: f.getAttribute('sandbox'), w: Math.round(box.width), h: Math.round(box.height), readable };
+    }));
+    let seen = [];
+    try {
+      await browser.waitUntil(async () => {
+        seen = await frames();
+        return seen.some(f => f.readable && f.h > 20);
+      }, { timeout: 30_000, interval: 400 });
+    } catch (e) {
+      log('frames at timeout', seen);
+      throw new Error(`no readable message iframe in #root: ${JSON.stringify(seen)}`);
+    }
+    // The frame's auto-size passes land up to a second after load.
     await browser.pause(1500);
+    // The To line, with the recipient the shot must mask, is behind this toggle.
+    const expanded = await browser.execute(() => {
+      const toggle = document.querySelector('[data-testid="header-toggle"]');
+      if (!toggle) return null;
+      if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+      return true;
+    });
+    expect(expanded).toBe(true);
+    await browser.pause(1000);
   }
 
   it('(b) the app window shot opens the real popover, the sender readable and the recipient masked', async function () {
@@ -186,12 +221,18 @@ describe('Social export: spam sender, sender details and links', function () {
   });
 
   it('(b) the same shot without a reveal masks the sender too', async function () {
+    // Open for real: absence assertions mean nothing against an empty window.
+    await openFixture();
     const r = await browser.executeAsync((target, done) => {
       window.__MV_CAPTURE_APP__({ redact: true, dict: null, senderDetails: target })
         .then(() => done({ text: window.__MV_CAPTURE_TEXT__() }), e => done({ error: String(e?.message || e) }));
     }, { uid: SENDER_UID, mailbox: 'INBOX' });
     expect(r.error).toBeUndefined();
+    // The open message's header and popover are there, with filler where the sender was.
     expect(r.text).toContain('Sender Details');
+    expect(r.text).toContain('Authentication');
+    expect(r.text).toMatch(/x{3}@x{4}\.x{8}\.x{4}/); // news@verified.mock.test
+    expect(r.text).toMatch(/x{8} x{6}/); // Verified Sender
     expect(r.text).not.toContain(SENDER_ADDRESS);
     expect(r.text).not.toContain(SENDER_NAME);
   });
