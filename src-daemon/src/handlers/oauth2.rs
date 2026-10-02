@@ -30,6 +30,9 @@
 //! (`scripts/probe-oauth2-loopback.py`) and the ledger.
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
+use mailvault_core::oauth2::{
+    own_google_client_available, own_google_client_id, DEFAULT_NEW_GOOGLE_CLIENT, GOOGLE_THUNDERBIRD_CLIENT_ID,
+};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -41,8 +44,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let custom_client_id = params.get("customClientId").and_then(Value::as_str).map(str::to_owned);
             let tenant_id = params.get("tenantId").and_then(Value::as_str).map(str::to_owned);
             let use_graph = params.get("useGraph").and_then(Value::as_bool).unwrap_or(false);
+            // Which Google app a NEW sign-in goes through: "thunderbird" or
+            // "mailvault". Absent means the default (Thunderbird's for now).
+            let google_client = params.get("googleClient").and_then(Value::as_str);
 
-            match state.oauth2.generate_auth_url(email, provider, custom_client_id, tenant_id, use_graph).await {
+            match state.oauth2.generate_auth_url(email, provider, custom_client_id, tenant_id, use_graph, google_client).await {
                 Ok(result) => RpcResponse::success(
                     id,
                     json!({"success": true, "authUrl": result.auth_url, "state": result.state}),
@@ -50,6 +56,20 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
+
+        // What the sign-in UI can offer: whether this build includes
+        // MailVault's own Google client, which app a new sign-in uses by
+        // default, and the two client ids (public: they are in every auth
+        // URL) so the app can tell which one an account's stamp names.
+        "oauth2_google_clients" => RpcResponse::success(
+            id,
+            json!({
+                "mailvault": own_google_client_available(),
+                "default": DEFAULT_NEW_GOOGLE_CLIENT,
+                "thunderbirdClientId": GOOGLE_THUNDERBIRD_CLIENT_ID,
+                "mailvaultClientId": own_google_client_id(),
+            }),
+        ),
 
         "oauth2_exchange" => {
             let oauth_state = match params.get("state").and_then(Value::as_str) {
@@ -225,6 +245,68 @@ mod tests {
         let result = resp.result.expect("success");
         let auth_url = result["authUrl"].as_str().expect("authUrl present");
         assert!(auth_url.starts_with("https://accounts.google.com/"), "{auth_url}");
+    }
+
+    /// The `client_id` an auth URL was built with.
+    fn url_client_id(auth_url: &str) -> String {
+        posted_field(auth_url.split('?').nth(1).unwrap_or(""), "client_id").expect("client_id in the auth URL")
+    }
+
+    // MailVault's own Google client is still in Google's review, so a new
+    // sign-in goes through Thunderbird's unless the caller asks otherwise.
+    #[tokio::test]
+    async fn auth_url_for_google_defaults_to_thunderbirds_client_in_every_build() {
+        let s = st();
+        for params in [
+            json!({"provider": "google"}),
+            json!({"provider": "google", "googleClient": "thunderbird"}),
+            json!({"provider": "google", "googleClient": "something-unknown"}),
+        ] {
+            let resp = call(&s, "oauth2_auth_url", params.clone()).await;
+            let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+            assert_eq!(url_client_id(&auth_url), GOOGLE_THUNDERBIRD_CLIENT_ID, "{params}");
+        }
+    }
+
+    #[tokio::test]
+    async fn auth_url_for_google_honours_a_mailvault_client_choice_or_refuses_it() {
+        let s = st();
+        let resp = call(&s, "oauth2_auth_url", json!({"provider": "google", "googleClient": "mailvault"})).await;
+        match own_google_client_id() {
+            Some(own_id) => {
+                let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+                assert_eq!(url_client_id(&auth_url), own_id);
+            }
+            None => {
+                assert!(resp.result.is_none(), "a build without our client must not fall back");
+                let message = resp.error.expect("error").message;
+                assert!(message.starts_with("E_GOOGLE_OWN_CLIENT_UNAVAILABLE"), "{message}");
+                assert!(message.contains("does not include its own Google sign-in"), "{message}");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn the_google_client_choice_does_not_touch_microsoft() {
+        let s = st();
+        let resp = call(&s, "oauth2_auth_url", json!({"provider": "microsoft", "googleClient": "mailvault"})).await;
+        let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+        assert!(auth_url.starts_with("https://login.microsoftonline.com/"), "{auth_url}");
+    }
+
+    #[tokio::test]
+    async fn google_clients_reports_what_this_build_offers() {
+        let s = st();
+        let result = call(&s, "oauth2_google_clients", json!({})).await.result.expect("success");
+        assert_eq!(result["mailvault"], json!(own_google_client_available()));
+        assert_eq!(result["default"], json!("thunderbird"));
+        assert_eq!(result["thunderbirdClientId"], json!(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        match own_google_client_id() {
+            Some(id) => assert_eq!(result["mailvaultClientId"], json!(id)),
+            None => assert!(result["mailvaultClientId"].is_null()),
+        }
+        // No secret ever crosses the RPC.
+        assert!(!result.to_string().contains(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
     }
 
     // Track B / Q3: Google add-account requests the id_token's email claim so

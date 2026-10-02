@@ -252,6 +252,9 @@ export const DAEMON_OWNED = new Set([
   // from inside the daemon process, not the app's -- see the ledger for the
   // unverified sandboxed-bind assumption this creates.
   'oauth2_auth_url', 'oauth2_exchange', 'oauth2_refresh',
+  // Which Google apps a new sign-in can use (whether MailVault's own is in
+  // this build, and the default).
+  'oauth2_google_clients',
   // Task 5.8: DNS (autodiscover email server settings, post-server-change
   // health probe). Tauri twins deleted in this same task — flat names, no
   // rename layer, no Tauri fallback, same reasoning as every other Phase 5

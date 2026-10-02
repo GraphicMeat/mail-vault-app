@@ -446,7 +446,9 @@ export async function findMessageId(account, messageId, { stopOnFirst = true } =
 
 // ── OAuth2 API functions ────────────────────────────────────────────────────
 
-export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId, useGraph) {
+// `googleClient` ("thunderbird" | "mailvault") picks the Google app a new
+// Google sign-in goes through; absent means the daemon's default.
+export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId, useGraph, googleClient) {
   if (IS_TAURI) {
     return tauriInvoke('oauth2_auth_url', {
       email: email || null,
@@ -454,10 +456,28 @@ export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId
       customClientId: customClientId || null,
       tenantId: tenantId || null,
       useGraph: useGraph || false,
+      googleClient: googleClient || null,
     });
   }
   const params = email ? `?login_hint=${encodeURIComponent(email)}` : '';
   return httpRequest(`/oauth2/auth-url${params}`, { method: 'GET' });
+}
+
+/**
+ * Which Google apps this build can sign in through.
+ * `mailvault`: whether MailVault's own app is included in this build.
+ * `default`: the app a new sign-in uses when none is chosen.
+ * `thunderbirdClientId` / `mailvaultClientId`: the (public) client ids, to tell
+ * which one an account's `oauth2ClientId` stamp names.
+ *
+ * @returns {Promise<{mailvault: boolean, default: string,
+ *                    thunderbirdClientId?: string, mailvaultClientId?: string|null}>}
+ */
+export async function getGoogleClients() {
+  if (IS_TAURI) {
+    return tauriInvoke('oauth2_google_clients', {});
+  }
+  return { mailvault: false, default: 'thunderbird' };
 }
 
 export async function exchangeOAuth2Code(state) {

@@ -29,8 +29,9 @@ pub const GOOGLE_THUNDERBIRD_CLIENT_ID: &str = "406964657835-aq8lmia8j95dhl1a2bv
 pub const GOOGLE_THUNDERBIRD_CLIENT_SECRET: &str = "kSmqreRr0qwBWJgbf5Y-PjSU";
 
 // MailVault's own Google "Desktop app" client, injected at compile time and
-// never committed. Release CI sets both; a build without them (tests, local
-// dev) signs new Google accounts in with Thunderbird's client instead.
+// never committed. Release CI sets both. A new sign-in uses it only when asked
+// to (`DEFAULT_NEW_GOOGLE_CLIENT` is Thunderbird's for now); a build without
+// them (tests, local dev) cannot offer it at all.
 const GOOGLE_OWN_CLIENT_ID: Option<&str> = option_env!("MAILVAULT_GOOGLE_OAUTH_CLIENT_ID");
 const GOOGLE_OWN_CLIENT_SECRET: Option<&str> = option_env!("MAILVAULT_GOOGLE_OAUTH_CLIENT_SECRET");
 
@@ -52,13 +53,55 @@ fn compiled_google_pair() -> Option<(&'static str, &'static str)> {
     own_google_pair(GOOGLE_OWN_CLIENT_ID, GOOGLE_OWN_CLIENT_SECRET)
 }
 
-/// The client for a NEW Google sign-in (Add Account, Reconnect): MailVault's
-/// own when compiled in, else Thunderbird's.
-fn google_client_for_new_sign_in(compiled: Option<(&str, &str)>) -> GoogleClient {
-    match compiled {
-        Some((id, secret)) => (id.to_string(), secret.to_string()),
-        None => thunderbird_google_client(),
+/// The Google client a NEW sign-in uses when nothing was asked for. Thunderbird's
+/// public client, because MailVault's own is still in Google's OAuth
+/// verification review (unverified-app screen, 100-user cap). Flips to
+/// `GOOGLE_CLIENT_MAILVAULT` once Google approves it: this one line is the
+/// whole switch.
+pub const DEFAULT_NEW_GOOGLE_CLIENT: &str = GOOGLE_CLIENT_THUNDERBIRD;
+
+/// A new sign-in's preference value for Thunderbird's client.
+pub const GOOGLE_CLIENT_THUNDERBIRD: &str = "thunderbird";
+/// A new sign-in's preference value for MailVault's own client.
+pub const GOOGLE_CLIENT_MAILVAULT: &str = "mailvault";
+
+/// What a refused "mailvault" preference says. The `E_` code is what the app
+/// maps to its catalog text.
+pub const OWN_GOOGLE_CLIENT_UNAVAILABLE: &str =
+    "E_GOOGLE_OWN_CLIENT_UNAVAILABLE: This build of MailVault does not include its own Google sign-in.";
+
+/// The client for a NEW Google sign-in (Add Account, Reconnect), from the
+/// caller's preference (`"thunderbird"` or `"mailvault"`).
+///
+/// - `"mailvault"` is MailVault's own client, or an error when this build does
+///   not include it. It never falls back to Thunderbird silently: the user
+///   asked for a specific app.
+/// - `"thunderbird"` and any unknown value are Thunderbird's.
+/// - No preference is `DEFAULT_NEW_GOOGLE_CLIENT`. Nobody chose that, so if the
+///   default is ever MailVault's and a build lacks it, Thunderbird's is used.
+fn google_client_for_new_sign_in(preference: Option<&str>, compiled: Option<(&str, &str)>) -> Result<GoogleClient, String> {
+    let own = |pair: (&str, &str)| (pair.0.to_string(), pair.1.to_string());
+    match preference.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(GOOGLE_CLIENT_MAILVAULT) => compiled.map(own).ok_or_else(|| OWN_GOOGLE_CLIENT_UNAVAILABLE.to_string()),
+        Some(_) => Ok(thunderbird_google_client()),
+        None if DEFAULT_NEW_GOOGLE_CLIENT == GOOGLE_CLIENT_MAILVAULT => {
+            Ok(compiled.map(own).unwrap_or_else(thunderbird_google_client))
+        }
+        None => Ok(thunderbird_google_client()),
     }
+}
+
+/// Whether this build includes MailVault's own Google client, i.e. whether a
+/// new sign-in can be pointed at it. For the UI.
+pub fn own_google_client_available() -> bool {
+    compiled_google_pair().is_some()
+}
+
+/// MailVault's own Google client id when this build includes it. Public (it
+/// is in every auth URL), so the UI can tell which client an account's stamp
+/// names. The secret never leaves this module.
+pub fn own_google_client_id() -> Option<&'static str> {
+    compiled_google_pair().map(|(id, _)| id)
 }
 
 /// The client that issued an existing grant, from the id an account (or a
@@ -85,8 +128,8 @@ fn google_client_for_stamp(stamp: Option<&str>, compiled: Option<(&str, &str)>) 
 
 /// Which Google client a flow runs with.
 enum GoogleClientChoice<'a> {
-    /// A fresh sign-in.
-    NewSignIn,
+    /// A fresh sign-in, with the caller's preference (`None` = the default).
+    NewSignIn(Option<&'a str>),
     /// A grant already issued: the id recorded for it (`None` = legacy).
     Issued(Option<&'a str>),
 }
@@ -182,7 +225,7 @@ fn get_provider_config_with(
         }
         "google" => {
             let (client_id, client_secret) = match google {
-                GoogleClientChoice::NewSignIn => google_client_for_new_sign_in(compiled),
+                GoogleClientChoice::NewSignIn(preference) => google_client_for_new_sign_in(preference, compiled)?,
                 GoogleClientChoice::Issued(stamp) => google_client_for_stamp(stamp, compiled)?,
             };
 
@@ -343,7 +386,7 @@ fn issued_flow_config(
     // A custom client id replaces the id outright (Microsoft only in the UI),
     // so there is no issued Google client to match.
     let google = if custom_client_id.is_some_and(|c| !c.is_empty()) {
-        GoogleClientChoice::NewSignIn
+        GoogleClientChoice::NewSignIn(None)
     } else {
         GoogleClientChoice::Issued(issued_client_id)
     };
@@ -374,10 +417,12 @@ impl OAuth2Manager {
         custom_client_id: Option<String>,
         tenant_id: Option<String>,
         use_graph: bool,
+        google_client: Option<&str>,
     ) -> Result<AuthUrlResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
-        // Chosen once here; the exchange reuses the id stored below.
-        let mut config = get_provider_config(provider_name, GoogleClientChoice::NewSignIn)?;
+        // Chosen once here (`google_client`: "thunderbird" or "mailvault",
+        // Google only); the exchange reuses the id stored below.
+        let mut config = get_provider_config(provider_name, GoogleClientChoice::NewSignIn(google_client))?;
         apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
 
         // For personal Microsoft accounts, request Graph API scopes instead of IMAP scopes
@@ -801,8 +846,9 @@ async fn handle_callback(stream: &mut tokio::net::TcpStream, senders: &SenderMap
 mod tests {
     use super::{
         get_provider_config_with, google_client_for_new_sign_in, google_client_for_stamp, html_escape,
-        id_token_email, issued_flow_config, own_google_pair, GoogleClientChoice, GOOGLE_THUNDERBIRD_CLIENT_ID,
-        GOOGLE_THUNDERBIRD_CLIENT_SECRET,
+        id_token_email, issued_flow_config, own_google_pair, GoogleClientChoice, DEFAULT_NEW_GOOGLE_CLIENT,
+        GOOGLE_CLIENT_MAILVAULT, GOOGLE_CLIENT_THUNDERBIRD, GOOGLE_THUNDERBIRD_CLIENT_ID,
+        GOOGLE_THUNDERBIRD_CLIENT_SECRET, OWN_GOOGLE_CLIENT_UNAVAILABLE,
     };
 
     const OWN_ID: &str = "own-client.apps.googleusercontent.com";
@@ -831,9 +877,40 @@ mod tests {
     }
 
     #[test]
-    fn a_new_sign_in_uses_our_client_when_compiled_in_else_thunderbirds() {
-        assert_eq!(google_client_for_new_sign_in(OWN), own());
-        assert_eq!(google_client_for_new_sign_in(None), thunderbird());
+    fn the_default_for_a_new_google_sign_in_is_thunderbird_until_google_verifies_ours() {
+        assert_eq!(DEFAULT_NEW_GOOGLE_CLIENT, "thunderbird");
+        assert_eq!(DEFAULT_NEW_GOOGLE_CLIENT, GOOGLE_CLIENT_THUNDERBIRD);
+    }
+
+    #[test]
+    fn a_new_sign_in_with_no_preference_uses_thunderbird_even_when_ours_is_compiled_in() {
+        for compiled in [None, OWN] {
+            assert_eq!(google_client_for_new_sign_in(None, compiled), Ok(thunderbird()));
+            assert_eq!(google_client_for_new_sign_in(Some(""), compiled), Ok(thunderbird()));
+            assert_eq!(google_client_for_new_sign_in(Some("  "), compiled), Ok(thunderbird()));
+        }
+    }
+
+    #[test]
+    fn a_thunderbird_preference_or_an_unknown_one_uses_thunderbird() {
+        for compiled in [None, OWN] {
+            assert_eq!(google_client_for_new_sign_in(Some(GOOGLE_CLIENT_THUNDERBIRD), compiled), Ok(thunderbird()));
+            assert_eq!(google_client_for_new_sign_in(Some("someone-else"), compiled), Ok(thunderbird()));
+        }
+    }
+
+    #[test]
+    fn a_mailvault_preference_uses_our_client_when_compiled_in() {
+        assert_eq!(google_client_for_new_sign_in(Some(GOOGLE_CLIENT_MAILVAULT), OWN), Ok(own()));
+        assert_eq!(google_client_for_new_sign_in(Some(" mailvault "), OWN), Ok(own()));
+    }
+
+    #[test]
+    fn a_mailvault_preference_without_the_compiled_pair_is_an_error_not_a_fallback() {
+        let err = google_client_for_new_sign_in(Some(GOOGLE_CLIENT_MAILVAULT), None).unwrap_err();
+        assert_eq!(err, OWN_GOOGLE_CLIENT_UNAVAILABLE);
+        assert!(err.starts_with("E_GOOGLE_OWN_CLIENT_UNAVAILABLE"), "{err}");
+        assert!(err.contains("This build of MailVault does not include its own Google sign-in."), "{err}");
     }
 
     #[test]
@@ -873,8 +950,15 @@ mod tests {
 
     #[test]
     fn a_google_config_always_carries_a_matched_id_and_secret() {
-        let new = get_provider_config_with("google", GoogleClientChoice::NewSignIn, OWN).unwrap();
-        assert_eq!((new.client_id, new.client_secret), (OWN_ID.to_string(), Some(OWN_SECRET.to_string())));
+        let new = get_provider_config_with("google", GoogleClientChoice::NewSignIn(None), OWN).unwrap();
+        assert_eq!(
+            (new.client_id, new.client_secret),
+            (GOOGLE_THUNDERBIRD_CLIENT_ID.to_string(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string()))
+        );
+
+        let chosen = get_provider_config_with("google", GoogleClientChoice::NewSignIn(Some("mailvault")), OWN).unwrap();
+        assert_eq!((chosen.client_id, chosen.client_secret), (OWN_ID.to_string(), Some(OWN_SECRET.to_string())));
+        assert!(get_provider_config_with("google", GoogleClientChoice::NewSignIn(Some("mailvault")), None).is_err());
 
         let legacy = get_provider_config_with("google", GoogleClientChoice::Issued(None), OWN).unwrap();
         assert_eq!(
@@ -887,7 +971,7 @@ mod tests {
 
     #[test]
     fn microsoft_ignores_the_google_client_and_never_sends_a_secret() {
-        let plain = get_provider_config_with("microsoft", GoogleClientChoice::NewSignIn, OWN).unwrap();
+        let plain = get_provider_config_with("microsoft", GoogleClientChoice::NewSignIn(Some("mailvault")), None).unwrap();
         let stamped = get_provider_config_with("microsoft", GoogleClientChoice::Issued(Some("nope")), None).unwrap();
         assert_eq!(plain.client_id, stamped.client_id);
         assert!(plain.client_secret.is_none() && stamped.client_secret.is_none());
@@ -976,9 +1060,11 @@ mod tests {
         let seen = mock_token_endpoint(r#"{"access_token":"at","refresh_token":"rt","expires_in":3600}"#).await;
         let manager = super::OAuth2Manager::new();
 
-        // New sign-in: the id in the auth URL is the id stored with the flow.
-        let auth = manager.generate_auth_url(None, Some("google".into()), None, None, false).await.unwrap();
+        // New sign-in with no preference: Thunderbird's, in every build. The id
+        // in the auth URL is the id stored with the flow.
+        let auth = manager.generate_auth_url(None, Some("google".into()), None, None, false, None).await.unwrap();
         let url_client = form_field(auth.auth_url.split('?').nth(1).unwrap(), "client_id").unwrap();
+        assert_eq!(url_client, GOOGLE_THUNDERBIRD_CLIENT_ID);
         assert_eq!(manager.pending.lock().await.get(&auth.state).unwrap().client_id, url_client);
 
         assert!(manager.deliver_code_for_tests(&auth.state, "the-code").await);
@@ -986,11 +1072,43 @@ mod tests {
         let exchange_body = seen.lock().unwrap().pop().unwrap();
         assert_eq!(form_field(&exchange_body, "grant_type").as_deref(), Some("authorization_code"));
         assert_eq!(form_field(&exchange_body, "client_id").as_deref(), Some(url_client.as_str()));
+        assert_eq!(form_field(&exchange_body, "client_secret").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
         assert_eq!(exchanged.client_id, url_client);
-        // Whichever client this build picked, a secret went with it.
-        let secret = form_field(&exchange_body, "client_secret").expect("a Google exchange carries a secret");
-        if url_client == GOOGLE_THUNDERBIRD_CLIENT_ID {
-            assert_eq!(secret, GOOGLE_THUNDERBIRD_CLIENT_SECRET);
+
+        // An explicit "thunderbird" is the same.
+        let auth = manager
+            .generate_auth_url(None, Some("google".into()), None, None, false, Some("thunderbird"))
+            .await
+            .unwrap();
+        assert_eq!(manager.pending.lock().await.get(&auth.state).unwrap().client_id, GOOGLE_THUNDERBIRD_CLIENT_ID);
+
+        // "mailvault": ours stored with the flow and posted by the exchange when
+        // this build includes it, else a refusal and no flow registered.
+        let before = manager.pending.lock().await.len();
+        match super::own_google_client_id() {
+            Some(own_id) => {
+                let auth = manager
+                    .generate_auth_url(None, Some("google".into()), None, None, false, Some("mailvault"))
+                    .await
+                    .unwrap();
+                let url_client = form_field(auth.auth_url.split('?').nth(1).unwrap(), "client_id").unwrap();
+                assert_eq!(url_client, own_id);
+                assert_eq!(manager.pending.lock().await.get(&auth.state).unwrap().client_id, own_id);
+                assert!(manager.deliver_code_for_tests(&auth.state, "the-code").await);
+                let exchanged = manager.exchange_code(&auth.state).await.unwrap();
+                let body = seen.lock().unwrap().pop().unwrap();
+                assert_eq!(form_field(&body, "client_id").as_deref(), Some(own_id));
+                assert_eq!(exchanged.client_id, own_id);
+            }
+            None => {
+                let err = manager
+                    .generate_auth_url(None, Some("google".into()), None, None, false, Some("mailvault"))
+                    .await
+                    .err()
+                    .expect("a build without our client must refuse it");
+                assert_eq!(err, OWN_GOOGLE_CLIENT_UNAVAILABLE);
+                assert_eq!(manager.pending.lock().await.len(), before);
+            }
         }
 
         // Refresh with the recorded client and with none (a legacy account).
