@@ -185,8 +185,9 @@ describe('buildMessageDocument parts', () => {
     it('head: the boxes follow the header block, styled, before any body', () => {
       const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'head', extrasHtml: extras });
       expect(html).toContain(extras);
-      expect(html.indexOf('</header>')).toBeLessThan(html.indexOf('mv-panels'));
-      expect(html.indexOf('mv-panels')).toBeLessThan(html.indexOf(extras));
+      // The class name is also a CSS rule in <head>: look for the element.
+      expect(html.indexOf('</header>')).toBeLessThan(html.indexOf('<section class="mv-panels">'));
+      expect(html.indexOf('<section class="mv-panels">')).toBeLessThan(html.indexOf(extras));
       expect(html).toContain('.mv-box {');
       expect(html).not.toContain('<main');
     });
@@ -195,6 +196,7 @@ describe('buildMessageDocument parts', () => {
       const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'body', extrasHtml: extras });
       expect(html).not.toContain('mv-box');
       expect(html).not.toContain('mv-panels');
+      expect(html).not.toContain('Sender Details');
       expect(html).toBe(buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'body' }));
     });
 
