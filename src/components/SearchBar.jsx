@@ -32,7 +32,7 @@ import {
   TrendingUp,
   HelpCircle
 } from 'lucide-react';
-import { t, useT  } from '../i18n/index.js';
+import { t, useT, getLocale } from '../i18n/index.js';
 import { T } from '../i18n/T.jsx';
 import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
 
@@ -43,6 +43,26 @@ const LOCATION_OPTIONS = [
   // everywhere else in the product, so this control names it too.
   { id: 'local', labelKey: 'search.location.vault', icon: HardDrive },
 ];
+
+// Milliseconds as seconds, to the clock's 1 ms resolution: "13.424".
+const formatSeconds = ms => (ms / 1000).toLocaleString(getLocale(), { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+const isLocalRow = e => e.source === 'local' || e.source === 'local-only';
+const isServerRow = e => e.source === 'server' || e.source === 'server-search';
+
+// "Results: 33/10,000 local, 3/2,150 server". A lane's total arrives with the
+// terminal frame; before it, or when the lane never ran, the count stands alone.
+function resultCounts(rows, searched) {
+  const part = (kind, count, total) => {
+    if (total != null) return t(`search.${kind}OfTotal`, { count: formatCount(count), total: formatCount(total) });
+    return count > 0 ? t(`search.${kind}Count`, { count: formatCount(count) }) : null;
+  };
+  const parts = [
+    part('local', rows.filter(isLocalRow).length, searched?.local),
+    part('server', rows.filter(isServerRow).length, searched?.server),
+  ].filter(Boolean);
+  return parts.length ? `${t('search.resultsLabel')} ${parts.join(', ')}` : null;
+}
 
 export function SearchBar({ autoFocus = false }) {
   const t = useT();
@@ -59,6 +79,8 @@ export function SearchBar({ autoFocus = false }) {
   const searchError = useSearchStore(s => s.searchError);
   const searchResults = useSearchStore(s => s.searchResults);
   const searchDurationMs = useSearchStore(s => s.searchDurationMs);
+  const searchSearched = useSearchStore(s => s.searchSearched);
+  const [durationInMs, setDurationInMs] = useState(false);
   const setSearchQuery = useSearchStore(s => s.setSearchQuery);
   const setSearchFilters = useSearchStore(s => s.setSearchFilters);
   const performSearch = useSearchStore(s => s.performSearch);
@@ -722,33 +744,38 @@ export function SearchBar({ autoFocus = false }) {
             </span>
           ) : (
             <>
-              <span data-testid="search-summary">
-                <T k="search.foundResults" vars={{ count: searchResults.length }}
-                   parts={[(s) => <span className="font-medium text-mail-text">{s}</span>]} />
-                {!scopedToBranch && searchFilters.folder === 'current' && (unifiedInbox
-                  ? t('search.inUnifiedFolder', { folder: currentFolderName })
-                  : t('search.inFolder', { folder: currentFolderName }))}
-                {!scopedToBranch && searchFilters.folder === 'all' && t('search.inAllFolders')}
-                {/* A branch count read as one folder's is the same lie the
-                    INBOX-only "all folders" search used to tell. */}
-                {scopedToBranch && t('search.inFolderAndSubfolders', {
-                  folder: pickedFolder === 'current' ? currentFolderName : decodeImapUtf7(pickedFolder),
-                })}
-                {/* The index counts every message in the folders searched; a
-                    half-built one counts only what it has, so it says nothing. */}
-                {searchIndexCoverage?.complete && searchIndexCoverage.total > 0 && t('search.fromTotal', { total: formatCount(searchIndexCoverage.total) })}
-              </span>
-              {searchDurationMs != null && (
-                <span className="ml-2 tabular-nums" data-testid="search-duration">
-                  {t('search.durationMs', { ms: formatCount(searchDurationMs) })}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span data-testid="search-summary">
+                  <T k="search.foundResults" vars={{ count: searchResults.length }}
+                     parts={[(s) => <span className="font-medium text-mail-text">{s}</span>]} />
+                  {!scopedToBranch && searchFilters.folder === 'current' && (unifiedInbox
+                    ? t('search.inUnifiedFolder', { folder: currentFolderName })
+                    : t('search.inFolder', { folder: currentFolderName }))}
+                  {!scopedToBranch && searchFilters.folder === 'all' && t('search.inAllFolders')}
+                  {/* A branch count read as one folder's is the same lie the
+                      INBOX-only "all folders" search used to tell. */}
+                  {scopedToBranch && t('search.inFolderAndSubfolders', {
+                    folder: pickedFolder === 'current' ? currentFolderName : decodeImapUtf7(pickedFolder),
+                  })}
+                  {/* The index counts every message in the folders searched; a
+                      half-built one counts only what it has, so it says nothing. */}
+                  {searchIndexCoverage?.complete && searchIndexCoverage.total > 0 && t('search.fromTotal', { total: formatCount(searchIndexCoverage.total) })}
                 </span>
-              )}
-              {searchResults.length > 0 && <SaveSearchAsView />}
-              {searchResults.length > 0 && (
-                <span className="ml-2 text-[10px]">
-                  {t('search.localServerCounts', { local: searchResults.filter(e => e.source === 'local' || e.source === 'local-only').length, server: searchResults.filter(e => e.source === 'server' || e.source === 'server-search').length })}
-                </span>
-              )}
+                {searchDurationMs != null && (
+                  <button type="button" className="tabular-nums underline decoration-dotted underline-offset-2 hover:text-mail-text" data-testid="search-duration"
+                    title={t('search.durationToggle')} onClick={() => setDurationInMs(v => !v)}>
+                    {durationInMs
+                      ? t('search.durationMs', { ms: formatCount(searchDurationMs) })
+                      : t('search.durationSeconds', { s: formatSeconds(searchDurationMs) })}
+                  </button>
+                )}
+                {searchResults.length > 0 && <SaveSearchAsView />}
+                {searchResults.length > 0 && (
+                  <span className="tabular-nums" data-testid="search-source-counts">
+                    {resultCounts(searchResults, searchSearched)}
+                  </span>
+                )}
+              </div>
               {/* The index caps its rows; a silent cap reads as "that's all there is". */}
               {searchIndexCoverage?.matched > searchIndexCoverage?.shown && (
                 <div className="text-xs text-mail-text-muted" data-testid="search-index-capped">

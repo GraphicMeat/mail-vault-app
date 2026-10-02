@@ -205,6 +205,14 @@ async fn search_filters_by_recipient_unread_and_excluded_words() {
     let (rows, _) = search_emails_by(&mut sess, "INBOX", &not).await.expect("not search");
     assert_eq!(subjects(rows), ["Invoice May"]);
 
+    // The folder's EXISTS rides along, match or no match: how many it searched.
+    let none = ServerSearch { query: Some("nowhere-to-be-found"), ..Default::default() };
+    let (rows, matches, exists) = search_emails_counted(&mut sess, "INBOX", &none).await.expect("counted search");
+    assert!(rows.is_empty());
+    assert_eq!((matches, exists), (0, 3));
+    let (rows, _, exists) = search_emails_counted(&mut sess, "INBOX", &unread).await.expect("counted search");
+    assert_eq!((rows.len(), exists), (2, 3));
+
     let sent = server.commands().join("\n");
     assert!(sent.contains("UID SEARCH TEXT \"Invoice\" UNSEEN"), "{sent}");
     assert!(sent.contains("UID SEARCH TO \"boss@\""), "{sent}");

@@ -249,8 +249,34 @@ describe('the results summary', () => {
     const summary = view.getByTestId('search-summary').textContent;
     expect(summary).toContain('Found 1 results in Inbox across all accounts');
     expect(summary).not.toContain('UNIFIED');
+    expect(view.getByTestId('search-duration').textContent).toBe('0.234 s');
+    fireEvent.click(view.getByTestId('search-duration'));
     expect(view.getByTestId('search-duration').textContent).toBe('234 ms');
+    fireEvent.click(view.getByTestId('search-duration'));
+    expect(view.getByTestId('search-duration').textContent).toBe('0.234 s');
     clock.mockRestore();
+  });
+
+  it('counts each source against how many messages that lane read', async () => {
+    const view = render(<SearchBar />);
+    await act(async () => { await startCurrent(); });
+    const local = { ...row(1, 'hit', 'a', 'INBOX'), source: 'local' };
+    act(() => harness.runs[0].onProgress({
+      searchId: harness.runs[0].request.searchId, sequence: 1, lane: 'local',
+      rows: [local, row(2, 'hit', 'a', 'INBOX')], completed: 1, total: 2, localMode: null, fallbackReason: null,
+      coverage: null, failures: [], terminal: null, errorKey: null,
+    }));
+    act(() => harness.runs[0].onProgress({
+      searchId: harness.runs[0].request.searchId, sequence: 2, lane: null,
+      rows: [], completed: 2, total: 2, localMode: null, fallbackReason: null,
+      coverage: null, failures: [], terminal: 'complete', errorKey: null,
+      localSearched: 10000, serverSearched: 2150,
+    }));
+    expect(view.getByTestId('search-source-counts').textContent)
+      .toBe('Results: 1/10,000 local, 1/2,150 server');
+    // A lane with no total (it never reached a folder): its count stands alone.
+    act(() => useSearchStore.setState({ searchSearched: { local: 10000, server: null } }));
+    expect(view.getByTestId('search-source-counts').textContent).toBe('Results: 1/10,000 local, 1 server');
   });
 
   it('says how many saved emails the search read, from the index', async () => {

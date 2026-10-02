@@ -2690,11 +2690,22 @@ pub async fn search_emails_by(
     mailbox: &str,
     search: &ServerSearch<'_>,
 ) -> Result<(Vec<EmailHeader>, u32), String> {
-    let _mbox = select_mailbox(session, mailbox).await?;
+    let (emails, matches, _) = search_emails_counted(session, mailbox, search).await?;
+    Ok((emails, matches))
+}
+
+/// [`search_emails_by`] plus the mailbox's EXISTS count: how many messages
+/// the server searched, which a mailbox with no match still reports.
+pub async fn search_emails_counted(
+    session: &mut ImapSession,
+    mailbox: &str,
+    search: &ServerSearch<'_>,
+) -> Result<(Vec<EmailHeader>, u32, u32), String> {
+    let exists = select_mailbox(session, mailbox).await?.exists;
 
     let criteria_parts = search.criteria();
     if criteria_parts.is_empty() {
-        return Ok((Vec::new(), 0));
+        return Ok((Vec::new(), 0, exists));
     }
 
     let search_str = criteria_parts.join(" ");
@@ -2706,7 +2717,7 @@ pub async fn search_emails_by(
     let total_matches = uids.len() as u32;
 
     if uids.is_empty() {
-        return Ok((Vec::new(), 0));
+        return Ok((Vec::new(), 0, exists));
     }
 
     // Limit to last 200
@@ -2739,7 +2750,7 @@ pub async fn search_emails_by(
         let b_key = b.internal_date.as_ref().or(b.date.as_ref());
         b_key.cmp(&a_key)
     });
-    Ok((emails, total_matches))
+    Ok((emails, total_matches, exists))
 }
 
 // ── Message-ID probe ────────────────────────────────────────────────────────

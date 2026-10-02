@@ -85,6 +85,7 @@
   "quickActions.preset.outlook",
   "quickActions.preset.thunderbird",
   "search.durationMs",
+  "search.durationSeconds",
   "search.in",
   "search.inFolder",
   "search.location.server",

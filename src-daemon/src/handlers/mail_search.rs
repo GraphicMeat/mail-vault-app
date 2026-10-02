@@ -84,6 +84,11 @@ pub(crate) struct MailSearchProgress {
     pub failures: Vec<SearchFailure>,
     pub terminal: Option<SearchTerminal>,
     pub error_key: Option<String>,
+    /// How many messages each lane read, on the terminal frame: the vault's
+    /// indexed and scanned copies, and the server folders' EXISTS. `None`
+    /// when that lane did not run.
+    pub local_searched: Option<u64>,
+    pub server_searched: Option<u64>,
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -317,6 +322,8 @@ fn progress(search_id: &str) -> MailSearchProgress {
         failures: Vec::new(),
         terminal: None,
         error_key: None,
+        local_searched: None,
+        server_searched: None,
     }
 }
 
@@ -364,6 +371,9 @@ async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: Se
         }
     };
     let (mut report, server_report) = tokio::join!(local_future, server_future);
+    let local_searched = (report.total_sources > 0).then_some(report.searched);
+    // A server lane that reached no folder searched nothing it can count.
+    let server_searched = (server_report.successful_sources > 0).then_some(server_report.searched);
     report.total_sources += server_report.total_sources;
     report.successful_sources += server_report.successful_sources;
     report.completed += server_report.completed;
@@ -374,6 +384,8 @@ async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: Se
     terminal.total = report.total;
     terminal.completed = report.completed;
     terminal.failures = report.failures;
+    terminal.local_searched = local_searched;
+    terminal.server_searched = server_searched;
     if run.is_cancelled() {
         terminal.terminal = Some(SearchTerminal::Cancelled);
     } else if report.total_sources > 0 && report.successful_sources == 0 {
@@ -393,6 +405,7 @@ struct SearchReport {
     completed: usize,
     total: usize,
     failures: Vec<SearchFailure>,
+    searched: u64,
 }
 
 struct InitialSnapshot {
@@ -410,11 +423,14 @@ struct LocalFolder {
     local_only: bool,
     fallback_reason: Option<FallbackReason>,
     custody: Arc<HashMap<(String, u32), Value>>,
+    /// The index's coverage already counted this folder's messages.
+    counted_by_index: bool,
 }
 
 struct FolderOutcome {
     folder: LocalFolder,
-    result: Result<Vec<Value>, String>,
+    /// The matching rows and how many messages the folder held.
+    result: Result<(Vec<Value>, u64), String>,
 }
 
 struct LocalReadyOnDrop(Option<watch::Sender<bool>>);
@@ -610,6 +626,7 @@ async fn run_local_lane(
                     .map(|_| FallbackReason::Unavailable)
             });
         let mut account_has_index = false;
+        let mut index_counted = HashSet::new();
         let mut index_failed =
             snapshot.on_disk_error.is_some() || snapshot.indexed_dirs_error.is_some();
 
@@ -658,6 +675,10 @@ async fn run_local_lane(
                     let coverage_complete = result.coverage.complete;
                     account_has_index = true;
                     has_coverage = true;
+                    // Every message in the batch's folders, once: a folder still
+                    // building is counted here and not again by its scan.
+                    report.searched += result.coverage.total;
+                    index_counted.extend(result.coverage.uncovered_vault_dirs.iter().cloned());
                     aggregate.indexed += result.coverage.indexed;
                     aggregate.total += result.coverage.total;
                     aggregate.matched += result.page.total;
@@ -765,11 +786,12 @@ async fn run_local_lane(
             let (mailbox, local_only, _) = mailbox_for_vault_dir(&dir, &target.known_mailboxes);
             jobs.push(LocalFolder {
                 account_id: target.account_id.clone(),
-                vault_dir: dir,
                 mailbox,
                 local_only,
                 fallback_reason,
                 custody: Arc::clone(&snapshot.custody),
+                counted_by_index: index_counted.contains(&dir),
+                vault_dir: dir,
             });
         }
 
@@ -818,7 +840,7 @@ async fn run_local_lane(
                 let folder_for_blocking = folder.clone();
                 let state_for_blocking = Arc::clone(&state);
                 let run_for_blocking = Arc::clone(&run);
-                let result = tokio::task::spawn_blocking(move || -> Result<Vec<Value>, String> {
+                let result = tokio::task::spawn_blocking(move || -> Result<(Vec<Value>, u64), String> {
                     if run_for_blocking.is_cancelled() {
                         return Err("cancelled".into());
                     }
@@ -866,7 +888,7 @@ async fn run_local_lane(
                             rows.push(row);
                         }
                     }
-                    Ok(rows)
+                    Ok((rows, uids.len() as u64))
                 })
                 .await
                 .map_err(|error| format!("local folder task failed: {error}"))
@@ -887,8 +909,11 @@ async fn run_local_lane(
         frame.total = report.total;
         frame.coverage = has_coverage.then(|| aggregate.clone());
         match outcome.result {
-            Ok(rows) => {
+            Ok((rows, searched)) => {
                 report.successful_sources += 1;
+                if !outcome.folder.counted_by_index {
+                    report.searched += searched;
+                }
                 frame.rows = rows;
                 fallback_shown += frame.rows.len();
             }
@@ -923,7 +948,8 @@ struct ServerMailboxJob {
 
 struct ServerMailboxOutcome {
     job: ServerMailboxJob,
-    result: Result<Vec<Value>, String>,
+    /// The matching rows and the folder's EXISTS count.
+    result: Result<(Vec<Value>, u64), String>,
 }
 
 async fn run_server_lane(
@@ -1007,7 +1033,7 @@ async fn run_server_lane(
                                 exclude: &exclude,
                                 ..Default::default()
                             };
-                            let (emails, _) = mailvault_core::imap::search_emails_by(&mut session, &mailbox, &search)
+                            let (emails, _, exists) = mailvault_core::imap::search_emails_counted(&mut session, &mailbox, &search)
                                 .await
                                 .map_err(|error| format!("Failed to search emails: {error}"))?;
                             let mut rows = Vec::new();
@@ -1025,7 +1051,7 @@ async fn run_server_lane(
                                 }
                                 rows.push(row);
                             }
-                            Ok((rows, session, Some(mailbox)))
+                            Ok(((rows, u64::from(exists)), session, Some(mailbox)))
                         }
                     })
                     .await;
@@ -1043,8 +1069,9 @@ async fn run_server_lane(
         frame.completed = report.completed;
         frame.total = report.total;
         match outcome.result {
-            Ok(mut rows) => {
+            Ok((mut rows, exists)) => {
                 report.successful_sources += 1;
+                report.searched += exists;
                 // The preview line the folder's own list stamps on these rows.
                 // Off the async worker: it may wait ~50 ms for the index lock.
                 let snippet_state = Arc::clone(&state);
@@ -1547,6 +1574,24 @@ mod tests {
         assert_eq!(event["searchId"], "empty");
         assert_eq!(event["terminal"], "complete");
         wait_until(|| state.search_runs.lock().unwrap().is_empty()).await;
+    }
+
+    #[tokio::test]
+    async fn terminal_frame_counts_every_message_the_local_scan_read() {
+        let (tmp, state) = state();
+        write_mail(tmp.path(), "acct", "INBOX", 1, "needle", "body");
+        write_mail(tmp.path(), "acct", "INBOX", 2, "other", "body");
+        write_mail(tmp.path(), "acct", "INBOX", 3, "other", "body");
+        let mut rx = state.events.subscribe();
+        let mut req = request("counted", 1);
+        req["query"] = "needle".into();
+        assert_eq!(call(&state, "mail_search_start", req).await.result.unwrap()["started"], true);
+        let frames = collect_until_terminal(&mut rx, "counted").await;
+        let terminal = frames.last().unwrap();
+        assert_eq!(terminal["localSearched"], 3, "{frames:?}");
+        assert!(terminal["serverSearched"].is_null(), "{frames:?}");
+        let rows: usize = frames.iter().map(|f| f["rows"].as_array().map_or(0, Vec::len)).sum();
+        assert_eq!(rows, 1, "{frames:?}");
     }
 
     #[tokio::test]
