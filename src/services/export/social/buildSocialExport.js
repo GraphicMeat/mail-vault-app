@@ -94,3 +94,8 @@ export async function buildSocialExport({ message, options }) {
     return { ok: false, reason: 'render', error: String(err?.message || err) };
   }
 }
+
+// The connected e2e spec composes a full image (card, background, lockup) through this.
+if (import.meta.env.VITE_E2E === '1' && typeof window !== 'undefined') {
+  window.__MV_SOCIAL_COMPOSE__ = { composeSocialImage, loadWatermark, sizes: SIZE_PRESETS };
+}

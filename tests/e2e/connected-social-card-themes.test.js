@@ -45,6 +45,30 @@ describe('Social card: Appearance and Email content themes', function () {
     })().catch(e => done({ error: String(e?.message || e) }));
   }, BODY, appearance, mail);
 
+  // Cold first: the first render pays warmup. A main-thread ticker records the
+  // longest gap while it runs, which is how long the UI could not respond.
+  it('logs how long a cold card render and an app capture hold the main thread', async function () {
+    const r = await browser.executeAsync((body, done) => {
+      (async () => {
+        const watch = async (fn) => {
+          let last = performance.now(); let longest = 0; let ticking = true;
+          const tick = () => { const now = performance.now(); longest = Math.max(longest, now - last); last = now; if (ticking) setTimeout(tick, 0); };
+          setTimeout(tick, 0);
+          const t0 = performance.now();
+          await fn();
+          ticking = false;
+          return { ms: Math.round(performance.now() - t0), longestMainGapMs: Math.round(longest) };
+        };
+        const message = { subject: 'Cold probe', from: { name: 'Probe', address: 'probe@example.com' }, to: [], date: new Date() };
+        const card = await watch(() => window.__MV_SOCIAL_CARD__({ message, bodyHtml: body, appearance: 'light', mail: 'light', palette: 'indigo' }));
+        const app = typeof window.__MV_CAPTURE_APP__ === 'function' ? await watch(() => window.__MV_CAPTURE_APP__({ redact: false, dict: null })) : null;
+        done({ card, app });
+      })().catch(e => done({ error: String(e?.message || e) }));
+    }, BODY);
+    log('main-thread', r);
+    expect(r.error).toBeUndefined();
+  });
+
   for (const [appearance, mail] of [['light', 'light'], ['dark', 'light'], ['light', 'dark'], ['dark', 'dark']]) {
     it(`renders a ${appearance} header over a ${mail} body`, async function () {
       const r = await render(appearance, mail);
@@ -61,6 +85,25 @@ describe('Social card: Appearance and Email content themes', function () {
     const r = await render('light', 'light');
     log('light/light again', r);
     expect(r.error).toBeUndefined();
+  });
+
+  // The finished picture: a tall card at 16:9 on sunset with the lockup. Logged
+  // as a JPEG so the run log carries it out for a human to look at.
+  it('composes a tall card whole at 16:9 with the lockup', async function () {
+    const r = await browser.executeAsync((body, done) => {
+      (async () => {
+        const { composeSocialImage, loadWatermark, sizes } = window.__MV_SOCIAL_COMPOSE__;
+        const message = { subject: 'Your account has been disabled', from: { name: 'Probe', address: 'probe@example.com' }, to: [{ address: 'me@example.com' }], date: new Date('2026-09-28T23:42:00Z') };
+        const content = await window.__MV_SOCIAL_CARD__({ message, bodyHtml: body.repeat(5), appearance: 'light', mail: 'light', palette: 'indigo' });
+        const watermark = await loadWatermark();
+        const out = composeSocialImage({ content, size: sizes.landscape, background: { type: 'gradient', id: 'sunset' }, padding: 64, radius: 16, shadow: true, chrome: true, theme: 'light', watermark, maxSize: { w: 1600, h: 900 } });
+        done({ contentH: content.height, w: out.width, h: out.height, watermark: !!watermark, jpeg: out.toDataURL('image/jpeg', 0.85) });
+      })().catch(e => done({ error: String(e?.message || e) }));
+    }, BODY);
+    console.log(`[socialcard-jpeg] ${r.jpeg}`);
+    log('compose', { ...r, jpeg: r.jpeg?.length });
+    expect(r.error).toBeUndefined();
+    expect(r.watermark).toBe(true);
   });
 
   it('encodes the PNG in a worker: the main thread keeps ticking, unlike toBlob', async function () {
