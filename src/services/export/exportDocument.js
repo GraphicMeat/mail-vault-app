@@ -10,7 +10,7 @@ import { stripInlineColorImportant } from '../../utils/emailIframeTemplate';
 export const EXPORT_WIDTH_PX = 820;
 export const EXPORT_SCALE = 2;
 
-const esc = (s) => String(s ?? '')
+export const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
@@ -122,21 +122,63 @@ const HEAD_DARK_CSS = `
   .mv-l { color: ${EXPORT_HEAD_DARK.muted}; }
 `;
 
+// The boxes a social card can carry under the header (sender details, links),
+// styled like the app's popovers: rounded, hairline-bordered, a coloured dot per
+// verdict. Light always; the dark header re-colours them below.
+export const PANEL_CSS = `
+  .mv-panels { padding: 14px 24px 18px; display: grid; gap: 10px; }
+  .mv-box { border: 1px solid #e3e5ea; border-radius: 12px; padding: 12px 14px; font-size: 12.5px; }
+  .mv-box-title { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; }
+  .mv-sub { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; }
+  .mv-row { display: flex; align-items: flex-start; gap: 10px; padding: 1px 0; }
+  .mv-k { width: 64px; flex: none; color: #6b7280; }
+  .mv-val { min-width: 0; overflow-wrap: anywhere; }
+  .mv-sep { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e3e5ea; }
+  .mv-muted { color: #6b7280; }
+  .mv-dot { display: inline-block; flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: #6b7280; }
+  .mv-dot.mv-ok { background: #166534; }
+  .mv-dot.mv-warn { background: #9a3412; }
+  .mv-dot.mv-bad { background: #991b1b; }
+  .mv-t-warn { color: #9a3412; }
+  .mv-t-bad { color: #991b1b; }
+  .mv-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .mv-badge { flex: none; margin-top: 1px; padding: 0 6px; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 18px; color: #6b7280; background: #eef0f3; }
+  .mv-badge.mv-warn { color: #9a3412; background: #f2d5ca; }
+  .mv-badge.mv-bad { color: #991b1b; background: #f0cdcd; }
+  .mv-link-text { overflow-wrap: anywhere; }
+`;
+const PANEL_DARK_CSS = `
+  .mv-box { border-color: ${EXPORT_HEAD_DARK.border}; }
+  .mv-k, .mv-muted { color: ${EXPORT_HEAD_DARK.muted}; }
+  .mv-sep { border-top-color: ${EXPORT_HEAD_DARK.border}; }
+  .mv-dot { background: ${EXPORT_HEAD_DARK.muted}; }
+  .mv-dot.mv-ok { background: #22c55e; }
+  .mv-dot.mv-warn { background: #fb923c; }
+  .mv-dot.mv-bad { background: #f87171; }
+  .mv-t-warn { color: #fb923c; }
+  .mv-t-bad { color: #f87171; }
+  .mv-badge { color: ${EXPORT_HEAD_DARK.muted}; background: #2a2c31; }
+  .mv-badge.mv-warn { color: #fb923c; background: #4d301e; }
+  .mv-badge.mv-bad { color: #f87171; background: #4d272d; }
+`;
+
 // `redactStyle` ('blur' | 'bar'): how a redacted body's `.mv-pii` spans paint.
 // `part` ('head' | 'body'): only the header block or only the mail body, for a
 // social card that rasterizes them apart (`theme` 'dark' then styles the header
 // dark, or readies the body for Dark Reader). `extraHead`: raw markup after the
 // stylesheet, e.g. a CSP meta and the nonced Dark Reader scripts. All three
-// default to the whole light document every other export gets.
-export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme = 'light', extraHead = '' }) {
+// default to the whole light document every other export gets. `extrasHtml`:
+// boxes under the header block (sender details, links), never in a body-only part.
+export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme = 'light', extraHead = '', extrasHtml = '' }) {
   const dark = theme === 'dark';
-  const headDarkCss = part === 'head' && dark ? HEAD_DARK_CSS : '';
+  const extras = part !== 'body' && extrasHtml ? extrasHtml : '';
+  const headDarkCss = part === 'head' && dark ? HEAD_DARK_CSS + (extras ? PANEL_DARK_CSS : '') : '';
   // Dark Reader needs an inline `!important` colour's priority gone, as in the reader.
   const body = sanitizeForExport(part === 'body' && dark ? stripInlineColorImportant(bodyHtml) : bodyHtml);
   return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${EXPORT_CSS}${headDarkCss}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style>${extraHead}</head>
+<html><head><meta charset="utf-8"><style>${EXPORT_CSS}${extras ? PANEL_CSS : ''}${headDarkCss}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style>${extraHead}</head>
 <body>
-${part === 'body' ? '' : headerCardHtml(message)}
+${part === 'body' ? '' : headerCardHtml(message)}${extras ? `\n<section class="mv-panels">${extras}</section>` : ''}
 ${part === 'head' ? '' : `<main class="mv-body">${body}</main>`}
 ${account && !part ? provenanceHtml({ account, mailbox, messages: [message], stats }) : ''}
 </body></html>`;

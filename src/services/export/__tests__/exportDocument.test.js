@@ -178,5 +178,37 @@ describe('buildMessageDocument parts', () => {
     const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'body', extraHead: '<meta name="x">' });
     expect(html).toMatch(/<\/style><meta name="x"><\/head>/);
   });
-});
 
+  describe('extrasHtml (the boxes under a card\'s header)', () => {
+    const extras = '<section class="mv-box">Sender Details &lt;x&gt;</section><section class="mv-box">Links</section>';
+
+    it('head: the boxes follow the header block, styled, before any body', () => {
+      const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'head', extrasHtml: extras });
+      expect(html).toContain(extras);
+      expect(html.indexOf('</header>')).toBeLessThan(html.indexOf('mv-panels'));
+      expect(html.indexOf('mv-panels')).toBeLessThan(html.indexOf(extras));
+      expect(html).toContain('.mv-box {');
+      expect(html).not.toContain('<main');
+    });
+
+    it('body: never carries them, nor their styles', () => {
+      const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'body', extrasHtml: extras });
+      expect(html).not.toContain('mv-box');
+      expect(html).not.toContain('mv-panels');
+      expect(html).toBe(buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'body' }));
+    });
+
+    it('without extras the document is byte-identical to before', () => {
+      expect(buildMessageDocument({ message, part: 'head', extrasHtml: '' })).toBe(buildMessageDocument({ message, part: 'head' }));
+      expect(buildMessageDocument({ message, part: 'head' })).not.toContain('mv-box');
+    });
+
+    it('head, dark: the boxes take the dark colors', () => {
+      const dark = buildMessageDocument({ message, part: 'head', theme: 'dark', extrasHtml: extras });
+      expect(dark).toContain('#34363b');
+      expect(dark).toContain('#f87171');
+      const light = buildMessageDocument({ message, part: 'head', extrasHtml: extras });
+      expect(light).not.toContain('#f87171');
+    });
+  });
+});
