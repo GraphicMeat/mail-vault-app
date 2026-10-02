@@ -4,6 +4,7 @@ import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
 import { withOAuth2Exchange } from '../services/authUtils';
+import { GOOGLE_CLIENT_THUNDERBIRD, googleClientErrorText, loadGoogleClients } from '../services/googleClient';
 import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
@@ -166,6 +167,18 @@ export function AccountModal({ onClose, onSuccess }) {
   // OAuth2 state
   const [authType, setAuthType] = useState('password'); // 'password' | 'oauth2'
   const [oauthLoading, setOauthLoading] = useState(false);
+  // Which Google app a Gmail sign-in goes through. The choice is offered only
+  // when this build includes MailVault's own app (`googleClients.mailvault`).
+  const [googleClients, setGoogleClients] = useState(null);
+  const [googleClient, setGoogleClient] = useState(GOOGLE_CLIENT_THUNDERBIRD);
+  const googleClientId = useId();
+  const isGoogleProvider = !!provider && PROVIDER_CONFIGS()[provider]?.oauth2Provider === 'google';
+  useEffect(() => {
+    if (!isGoogleProvider || googleClients) return undefined;
+    let live = true;
+    loadGoogleClients().then(clients => { if (live) setGoogleClients(clients); });
+    return () => { live = false; };
+  }, [isGoogleProvider, googleClients]);
   const [oauthConnected, setOauthConnected] = useState(false);
   const oauthAbortRef = useRef(null);
 
@@ -421,7 +434,9 @@ export function AccountModal({ onClose, onSuccess }) {
         currentProvider,
         formData.oauth2CustomClientId || undefined,
         formData.oauth2TenantId || undefined,
-        isPersonalMs
+        isPersonalMs,
+        // Only when the choice was on offer; otherwise the daemon's default.
+        currentProvider === 'google' && googleClients?.mailvault ? googleClient : undefined
       );
 
       // Step 2: Open the auth URL in the default browser
@@ -480,7 +495,7 @@ export function AccountModal({ onClose, onSuccess }) {
       if (cancelled) return; // User cancelled — don't show error
       console.error('[AccountModal] OAuth2 sign-in failed:', err);
       const providerLabel = { google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[currentProvider] || 'provider';
-      setError(err.message || `${providerLabel} sign-in failed. Please try again.`);
+      setError(googleClientErrorText(err, t, err.message || `${providerLabel} sign-in failed. Please try again.`));
     } finally {
       if (!cancelled) setOauthLoading(false);
       oauthAbortRef.current = null;
@@ -710,6 +725,26 @@ export function AccountModal({ onClose, onSuccess }) {
                         </button>
                       )}
                     </>
+                  )}
+
+                  {/* Which Google app signs in: offered only when this build has MailVault's own */}
+                  {authType === 'oauth2' && !oauthConnected && providerConfig?.oauth2Provider === 'google' && googleClients?.mailvault && (
+                    <div className="mt-2 space-y-1.5">
+                      <label htmlFor={googleClientId} className="block text-xs text-mail-text-muted">
+                        {t('googleClient.signInThrough')}
+                      </label>
+                      <select
+                        id={googleClientId}
+                        value={googleClient}
+                        onChange={e => setGoogleClient(e.target.value)}
+                        disabled={oauthLoading}
+                        className="w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-border rounded text-mail-text"
+                      >
+                        <option value="thunderbird">{t('googleClient.thunderbird')}</option>
+                        <option value="mailvault">{t('googleClient.mailvault')}</option>
+                      </select>
+                      <p className="text-xs text-mail-text-muted">{t('googleClient.explain')}</p>
+                    </div>
                   )}
 
                   {/* Advanced (Corporate) section for Microsoft OAuth2 */}

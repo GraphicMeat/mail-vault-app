@@ -62,6 +62,8 @@
   "fields.noValue",
   "focus.min",
   "focus.minutesUnit",
+  "googleClient.nameMailvault",
+  "googleClient.nameThunderbird",
   "hook.useKeyboardShortcuts.ctrl",
   "hook.useKeyboardShortcuts.meta",
   "hook.useKeyboardShortcuts.shift",

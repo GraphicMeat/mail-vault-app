@@ -9,7 +9,7 @@
 // address).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
@@ -40,8 +40,10 @@ vi.mock('../../stores/accountStore', () => ({
 
 const mockGetOAuth2AuthUrl = vi.fn();
 const mockExchangeOAuth2Code = vi.fn();
+const mockGetGoogleClients = vi.fn(async () => ({ mailvault: false, default: 'thunderbird' }));
 vi.mock('../../services/api', () => ({
   getOAuth2AuthUrl: (...a) => mockGetOAuth2AuthUrl(...a),
+  getGoogleClients: (...a) => mockGetGoogleClients(...a),
   exchangeOAuth2Code: (...a) => mockExchangeOAuth2Code(...a),
   testConnection: vi.fn(),
   resolveEmailSettings: vi.fn(),
@@ -55,11 +57,16 @@ const { AccountModal } = await import('../AccountModal');
 
 const TYPED_EMAIL = 'user@gmail.com';
 
-async function openGmailStep2() {
+// The modal asks the daemon which Google apps this build offers as soon as
+// Gmail is picked, and re-renders when the answer lands. The framer-motion mock
+// above makes a new component type per access, so a re-render replaces every
+// node in the dialog: let the answer land before holding on to an input.
+async function openGmailStep2(typed = TYPED_EMAIL) {
   render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
   fireEvent.click(screen.getByText('Gmail'));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
   const emailInput = await screen.findByLabelText('Email Address *');
-  fireEvent.change(emailInput, { target: { name: 'email', value: TYPED_EMAIL } });
+  fireEvent.change(emailInput, { target: { name: 'email', value: typed } });
   return emailInput;
 }
 
@@ -139,10 +146,7 @@ describe('AccountModal — OAuth callback finishes the add', () => {
     });
     mockAddAccount.mockResolvedValue({ id: 'acct-3', email: dottedTyped });
 
-    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
-    fireEvent.click(screen.getByText('Gmail'));
-    const emailInput = await screen.findByLabelText('Email Address *');
-    fireEvent.change(emailInput, { target: { name: 'email', value: dottedTyped } });
+    await openGmailStep2(dottedTyped);
 
     fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
 
@@ -234,5 +238,79 @@ describe('AccountModal — privacy mode', () => {
     } finally {
       usePrivacyStore.setState({ enabled: false });
     }
+  });
+});
+
+// Gmail signs in through Thunderbird's Google app by default. When this build
+// also has MailVault's own app, the user can pick it; the pick goes to the
+// daemon with the auth-URL request.
+describe('AccountModal: which Google app signs in', () => {
+  const SIGNED_IN = { accessToken: 'access-token', refreshToken: 'refresh-token', expiresAt: 1234567890, email: TYPED_EMAIL };
+
+  beforeEach(() => {
+    mockAddAccount.mockReset().mockResolvedValue({ id: 'acct-g', email: TYPED_EMAIL });
+    mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({ authUrl: 'https://accounts.google.com/o/oauth2/v2/auth?x=1', state: 'state-1' });
+    mockExchangeOAuth2Code.mockReset().mockResolvedValue(SIGNED_IN);
+    mockGetGoogleClients.mockReset().mockResolvedValue({ mailvault: true, default: 'thunderbird' });
+    vi.spyOn(window, 'open').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('offers the choice with Thunderbird selected and the explanation under it', async () => {
+    await openGmailStep2();
+    const select = await screen.findByLabelText('Sign in through');
+    expect(select.value).toBe('thunderbird');
+    expect(screen.getByRole('option', { name: "Thunderbird's Google app (default)" })).toBeTruthy();
+    expect(screen.getByRole('option', { name: "MailVault's own Google app (in Google review)" })).toBeTruthy();
+    expect(screen.getByText(/MailVault signs in to Gmail through Thunderbird's Google app for now/)).toBeTruthy();
+  });
+
+  it('passes the chosen app to the auth-URL request', async () => {
+    await openGmailStep2();
+    fireEvent.change(await screen.findByLabelText('Sign in through'), { target: { value: 'mailvault' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
+    await waitFor(() => expect(mockGetOAuth2AuthUrl).toHaveBeenCalledTimes(1));
+    const args = mockGetOAuth2AuthUrl.mock.calls[0];
+    expect(args[1]).toBe('google');
+    expect(args[5]).toBe('mailvault');
+  });
+
+  it('passes Thunderbird when the choice was left alone', async () => {
+    await openGmailStep2();
+    await screen.findByLabelText('Sign in through');
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
+    await waitFor(() => expect(mockGetOAuth2AuthUrl).toHaveBeenCalledTimes(1));
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][5]).toBe('thunderbird');
+  });
+
+  it('shows nothing and sends no choice when this build lacks MailVault\'s own app', async () => {
+    mockGetGoogleClients.mockResolvedValue({ mailvault: false, default: 'thunderbird' });
+    await openGmailStep2();
+    await waitFor(() => expect(mockGetGoogleClients).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Sign in through')).toBeNull();
+    expect(screen.queryByText(/MailVault signs in to Gmail through Thunderbird/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
+    await waitFor(() => expect(mockGetOAuth2AuthUrl).toHaveBeenCalledTimes(1));
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][5]).toBeUndefined();
+  });
+
+  it('shows nothing for Microsoft', async () => {
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Outlook / Microsoft 365'));
+    await screen.findByLabelText('Email Address *');
+    expect(screen.queryByLabelText('Sign in through')).toBeNull();
+  });
+
+  it('says why in the catalog text when the daemon refuses the choice', async () => {
+    mockGetOAuth2AuthUrl.mockRejectedValue(new Error('E_GOOGLE_OWN_CLIENT_UNAVAILABLE: This build of MailVault does not include its own Google sign-in.'));
+    await openGmailStep2();
+    fireEvent.change(await screen.findByLabelText('Sign in through'), { target: { value: 'mailvault' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
+    expect(await screen.findByText('This build of MailVault does not include its own Google sign-in.')).toBeTruthy();
+    expect(mockAddAccount).not.toHaveBeenCalled();
   });
 });

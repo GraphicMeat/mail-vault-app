@@ -234,6 +234,7 @@ export const settingSearchGroups = [
   ] },
   { id: 'accounts', section: 'connection', sectionKey: 'settings.accounts.sectionConnection', settings: [
     ['settings.accounts.password', 'password update reset authentication login reconnect oauth'],
+    ['googleClient.settingsLabel', 'google gmail sign in sign-in app client thunderbird mailvault own oauth verification switch reconnect'],
     ['settings.accounts.mailServer', 'mail server imap smtp connection hostname port'],
     ['settings.accounts.sentFolder', 'sent folder mailbox sent messages'],
   ] },

@@ -6,6 +6,13 @@ import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, ha
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes } from '../../services/api';
 import { withOAuth2Exchange } from '../../services/authUtils';
+import {
+  GOOGLE_CLIENT_MAILVAULT,
+  GOOGLE_CLIENT_THUNDERBIRD,
+  googleClientErrorText,
+  googleClientFromStamp,
+  loadGoogleClients,
+} from '../../services/googleClient';
 import { findSentMailboxPath } from '../../utils/sentFolder';
 import { isFastmailAccount } from '../AccountModal.jsx';
 import { AliasesSection } from './AliasesSection';
@@ -98,6 +105,10 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
   const [editingPassword, setEditingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
+  // What this build offers for Google sign-in, and the app picked in the
+  // switch control (null = no change from the account's current one).
+  const [googleClients, setGoogleClients] = useState(null);
+  const [googleClientPick, setGoogleClientPick] = useState(null);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(null);
   const [billingWarning, setBillingWarning] = useState(null);
   const [accountMailboxes, setAccountMailboxes] = useState([]);
@@ -133,6 +144,17 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
   useEffect(() => {
     if (ACCOUNT_SECTIONS.includes(initialSection)) setSection(initialSection);
   }, [initialSection]);
+
+  // A Google account's sign-in app: read what the build offers once, and drop
+  // an unapplied pick when another account is selected.
+  const isGoogleOAuth = selectedAccount?.authType === 'oauth2' && selectedAccount?.oauth2Provider === 'google';
+  useEffect(() => {
+    if (!isGoogleOAuth || googleClients) return undefined;
+    let live = true;
+    loadGoogleClients().then(clients => { if (live) setGoogleClients(clients); });
+    return () => { live = false; };
+  }, [isGoogleOAuth, googleClients]);
+  useEffect(() => { setGoogleClientPick(null); }, [selectedAccountId]);
 
   useEffect(() => {
     if (initialAccountId && accounts.some(account => account.id === initialAccountId)) setSelectedAccountId(initialAccountId);
@@ -303,8 +325,12 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     }
   };
 
-  // Reconnect OAuth2 account — preserves Graph transport, custom client/tenant
-  const handleOAuth2Reconnect = async () => {
+  // Reconnect OAuth2 account — preserves Graph transport, custom client/tenant.
+  // `googleClientChoice` ("thunderbird" | "mailvault") is the Google app to sign
+  // in through. Without one, the account keeps the app it has now: a Reconnect
+  // must never move an account between apps (a refresh token only works with
+  // the app that issued it, and the move changes what Google shows).
+  const handleOAuth2Reconnect = async (googleClientChoice) => {
     if (!selectedAccountId) return;
     setOauthReconnecting(true);
 
@@ -312,12 +338,19 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
       const account = accounts.find(a => a.id === selectedAccountId);
       const provider = account?.oauth2Provider || 'microsoft';
       const useGraph = account?.oauth2Transport === 'graph';
+      let googleClient;
+      if (provider === 'google') {
+        googleClient = googleClientChoice === GOOGLE_CLIENT_MAILVAULT || googleClientChoice === GOOGLE_CLIENT_THUNDERBIRD
+          ? googleClientChoice
+          : googleClientFromStamp(account?.oauth2ClientId, googleClients ?? await loadGoogleClients());
+      }
       const { authUrl, state } = await getOAuth2AuthUrl(
         account?.email,
         provider,
         account?.oauth2CustomClientId,
         account?.oauth2TenantId,
-        useGraph
+        useGraph,
+        googleClient
       );
 
       if (invoke) {
@@ -343,11 +376,13 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
       const { init } = useMailStore.getState();
       await init();
 
+      setGoogleClientPick(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('OAuth2 reconnect failed:', error);
-      alert(t('settings.accounts.couldReconnectAccountCheckPassword') + (error.message || error));
+      const failure = googleClientErrorText(error, t);
+      alert(t('settings.accounts.couldReconnectAccountCheckPassword') + (failure || error));
     } finally {
       setOauthReconnecting(false);
     }
@@ -611,7 +646,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                       </div>
                     </div>
                     <button
-                      onClick={handleOAuth2Reconnect}
+                      onClick={() => handleOAuth2Reconnect()}
                       disabled={oauthReconnecting}
                       className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
                                 text-mail-text rounded-lg transition-colors flex items-center gap-2
@@ -625,6 +660,48 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                       {oauthReconnecting ? t('settings.accounts.reconnecting') : t('settings.accounts.reconnect')}
                     </button>
                   </div>
+
+                  {/* Which Google app this account signs in through */}
+                  {isGoogleOAuth && (() => {
+                    const current = googleClientFromStamp(selectedAccount.oauth2ClientId, googleClients);
+                    const pick = googleClientPick ?? current;
+                    const ownAvailable = !!googleClients?.mailvault;
+                    const appName = key => t(key === GOOGLE_CLIENT_MAILVAULT ? 'googleClient.nameMailvault' : 'googleClient.nameThunderbird');
+                    return (
+                      <div className="pt-4 border-t border-mail-border space-y-2" data-testid="google-client-section">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-medium text-mail-text">{t('googleClient.settingsLabel')}</div>
+                            <div className="text-sm text-mail-text-muted" data-testid="google-client-current">{appName(current)}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <select
+                              aria-label={t('googleClient.settingsLabel')}
+                              value={pick}
+                              onChange={e => setGoogleClientPick(e.target.value)}
+                              disabled={oauthReconnecting}
+                              className="px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text disabled:opacity-50"
+                            >
+                              <option value={GOOGLE_CLIENT_THUNDERBIRD}>{t('googleClient.thunderbird')}</option>
+                              <option value={GOOGLE_CLIENT_MAILVAULT} disabled={!ownAvailable}>{t('googleClient.mailvault')}</option>
+                            </select>
+                            <button
+                              onClick={() => handleOAuth2Reconnect(pick)}
+                              disabled={oauthReconnecting || pick === current}
+                              className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
+                                        text-mail-text rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {t('googleClient.switch')}
+                            </button>
+                          </div>
+                        </div>
+                        {googleClients && !ownAvailable && (
+                          <p className="text-xs text-mail-text-muted">{t('googleClient.ownUnavailable')}</p>
+                        )}
+                        <p className="text-xs text-mail-text-muted">{t('googleClient.explain')}</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <>
