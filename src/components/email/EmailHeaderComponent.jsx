@@ -19,6 +19,7 @@ import { useViewportShift } from '../../hooks/useViewportShift';
 import { t, useT  } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
+import { useCaptureSenderDetails } from '../../hooks/useCaptureSenderDetails';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
 
   const popover = (
     <div ref={popoverRef}
+         data-capture-overlay=""
          className={`${position ? 'fixed' : 'absolute top-full left-0 mt-1'} z-50 bg-mail-surface border border-mail-border rounded-lg p-3 min-w-[240px] max-w-[320px]`}
          style={position || undefined}
          onClick={(e) => e.stopPropagation()}>
@@ -141,24 +143,30 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
   return position ? createPortal(popover, document.body) : popover;
 }
 
+const noop = () => {};
+
 // ── Sender Verification Badge ────────────────────────────────────────────────
 
 export function SenderVerificationBadge({ email, size = 14 }) {
   const pa = usePrivateAttr();
   const [popoverAnchor, setPopoverAnchor] = useState(null);
+  // A social capture of the app window asks this message for its popover, open
+  // inline (no anchor: it hangs under the badge, where the shot can see it).
+  const captured = useCaptureSenderDetails(email);
   const { status, tooltip } = useMemo(
     () => checkSenderVerification(email),
     [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]
   );
 
-  if (status === 'none') return null;
+  // No shield to click when there is nothing to flag, but a capture still shows the box.
+  if (status === 'none' && !captured) return null;
 
   const colorClass = status === 'verified' ? 'text-mail-success' : status === 'warning' ? 'text-mail-warning' : 'text-mail-danger';
   const Icon = status === 'verified' ? ShieldCheck : status === 'warning' ? AlertTriangle : ShieldAlert;
 
   return (
     <span className="relative inline-flex items-center flex-shrink-0">
-      <button
+      {status !== 'none' && <button
         data-testid="sender-verification" data-status={status}
         onClick={(e) => {
           e.stopPropagation();
@@ -168,8 +176,10 @@ export function SenderVerificationBadge({ email, size = 14 }) {
         title={pa(tooltip, 'text')}
       >
         <Icon size={size} />
-      </button>
-      {popoverAnchor && (
+      </button>}
+      {captured ? (
+        <AuthDetailPopover email={email} anchorRect={null} onClose={noop} />
+      ) : popoverAnchor && (
         <AuthDetailPopover email={email} anchorRect={popoverAnchor} onClose={() => setPopoverAnchor(null)} />
       )}
     </span>

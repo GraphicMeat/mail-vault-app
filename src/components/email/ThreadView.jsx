@@ -14,6 +14,7 @@ import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
 import { refuseWindowUnderPrivacy } from '../../utils/privacy/windowBlocked';
 import { usePrivacySourceBlocked, usePrivateAttr } from '../../hooks/usePrivacy';
+import { useCaptureSenderDetails } from '../../hooks/useCaptureSenderDetails';
 import { Private } from '../privacy/Private';
 import { SourceBlocked } from '../privacy/SourceBlocked';
 import { useMailFonts } from '../../hooks/useMailFonts';
@@ -355,6 +356,9 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   const selectionRef = useRef(() => '');
   const [showRaw, setShowRaw] = useState(false);
   const sourceBlocked = usePrivacySourceBlocked();
+  // A social capture opens this message's sender-details popover under its
+  // header: the item's clip must let it hang out over a short message.
+  const detailsCaptured = useCaptureSenderDetails(email);
   const [rawSource, setRawSource] = useState(null);
   const [rawError, setRawError] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
@@ -458,7 +462,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
     : undefined;
 
   return (
-    <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
+    <div className={`border-b border-mail-border ${detailsCaptured ? '' : 'overflow-hidden'} ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
       {/* Header — always visible. A click on the message opens or shuts it;
           only the sender's address replies to it. This handler is here for
           the snippet line below, which sits outside EmailSenderInfo — the

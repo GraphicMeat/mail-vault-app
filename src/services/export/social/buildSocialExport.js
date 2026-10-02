@@ -12,7 +12,7 @@ import { useMailStore } from '../../../stores/mailStore';
 import { buildRevealSet } from './revealSender';
 import { senderDetailsHtml } from './senderDetails';
 import { socialLinksHtml } from './socialLinks';
-import { resolveEmailLocation } from '../../../stores/slices/unifiedHelpers';
+import { captureTargetOf } from '../../../utils/captureTarget';
 import { trace } from '../exportTrace';
 import { captureAppWindow } from './captureAppWindow';
 import { renderSocialCard } from './renderSocialCard';
@@ -42,13 +42,6 @@ function dictionaryWithReveal(dict, message, { redact, revealSender }) {
   return reveal.size ? { ...dict, reveal } : dict;
 }
 
-// What the app window's capture needs to find the open message's header: the
-// same place the reader keys it by (account, folder, uid).
-function senderDetailsTarget(message) {
-  const location = resolveEmailLocation(message, useMailStore.getState());
-  return location ? { uid: message.uid, accountId: location.accountId, mailbox: location.mailbox } : null;
-}
-
 // The window frame (card background and title bar) follows the Appearance
 // theme, for the card and the app window alike.
 export const chromeTheme = (_content, appTheme) => (appTheme === 'dark' ? 'dark' : 'light');
@@ -74,7 +67,8 @@ export async function buildSocialContent(message, { content, redact, dict, theme
   if (content === 'app') {
     return captureAppWindow({
       redact: red, dict: d, theme, reveal: d?.reveal,
-      senderDetails: senderDetails ? senderDetailsTarget(dated) ?? undefined : undefined,
+      // The open message's header opens its own popover; named as the reader places it.
+      senderDetails: senderDetails ? captureTargetOf(dated, useMailStore.getState()) ?? undefined : undefined,
     });
   }
   const prepared = await prepareSocialMessage(dated, {
