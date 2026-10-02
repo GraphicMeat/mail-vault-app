@@ -11,6 +11,8 @@ export const SIZE_PRESETS = {
   landscape: { w: 1600, h: 900 },
   story: { w: 1080, h: 1920 },
 };
+// The corner radius of a macOS Tahoe window: the Radius slider's tick, and its default.
+export const MACOS_WINDOW_RADIUS = 26;
 const CHROME_CSS_PX = 28;
 const OUT = 2; // output pixels per CSS px, and per preset px
 

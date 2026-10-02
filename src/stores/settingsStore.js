@@ -15,6 +15,7 @@ import { applyQuickActionPreset } from '../utils/quickActionPresets';
 import { clampComposeSize } from '../utils/composeSize';
 import { ownAddresses } from '../utils/ownAddresses';
 import { addAliasToList, mergeDiscovery } from '../utils/aliasDiscovery';
+import { MACOS_WINDOW_RADIUS } from '../services/export/social/socialLayout';
 
 // Palette of visually distinct avatar colors
 // An account's identity colour, and deliberately none of the reserved words.
@@ -121,7 +122,8 @@ export const normalizeListPreviewLines = value => [0, 1, 2, 3].includes(value) ?
 // background falls back to the default preset.
 export const DEFAULT_SOCIAL_EXPORT = Object.freeze({
   content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
-  padding: 64, radius: 16, shadow: true, chrome: true,
+  padding: 64, radius: MACOS_WINDOW_RADIUS, shadow: true, chrome: true,
+  senderDetails: false, links: false, // the card's sender-details box and links list
   appTheme: null, // Appearance: 'light' | 'dark', null follows the app. The app window, and the card's frame and header
   mailTheme: null, // the card's mail body: 'light' | 'dark', null follows the Appearance
 });
@@ -132,6 +134,8 @@ export const normalizeSocialExport = (value) => {
   if (!SOCIAL_BACKGROUNDS.includes(out.background?.type)) out.background = DEFAULT_SOCIAL_EXPORT.background;
   if (out.appTheme !== 'light' && out.appTheme !== 'dark') out.appTheme = null;
   if (out.mailTheme !== 'light' && out.mailTheme !== 'dark') out.mailTheme = null;
+  out.senderDetails = out.senderDetails === true;
+  out.links = out.links === true;
   return out;
 };
 export const normalizeSearchMailboxConcurrency = value => {

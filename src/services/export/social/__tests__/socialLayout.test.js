@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layoutSocial, SIZE_PRESETS } from '../socialLayout';
+import { layoutSocial, SIZE_PRESETS, MACOS_WINDOW_RADIUS } from '../socialLayout';
 import { GRADIENT_PRESETS, SOLID_PRESETS, resolveBackground, backgroundLuminance, inkForBackground } from '../socialBackgrounds';
 
 describe('layoutSocial', () => {
@@ -71,5 +71,11 @@ describe('inkForBackground', () => {
   it('white with a soft shadow where the backdrop is unknown', () => {
     expect(inkForBackground({ type: 'transparent' })).toEqual({ color: '#ffffff', shadow: true });
     expect(inkForBackground({ type: 'image', image: {} })).toEqual({ color: '#ffffff', shadow: true });
+  });
+});
+
+describe('MACOS_WINDOW_RADIUS', () => {
+  it('is the macOS Tahoe window corner radius, within the Radius slider\'s 0..40', () => {
+    expect(MACOS_WINDOW_RADIUS).toBe(26);
   });
 });

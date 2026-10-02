@@ -56,4 +56,24 @@ describe('social export style', () => {
     setSocialExport({ mailTheme: 'blue' });
     expect(useSettingsStore.getState().socialExport.mailTheme).toBeNull();
   });
+
+  it('corners start at the macOS window radius, 26', () => {
+    expect(DEFAULT_SOCIAL_EXPORT.radius).toBe(26);
+    expect(useSettingsStore.getState().socialExport.radius).toBe(26);
+  });
+
+  it('senderDetails and links: off by default, kept as booleans, anything else is off', () => {
+    expect(DEFAULT_SOCIAL_EXPORT).toMatchObject({ senderDetails: false, links: false });
+    const merge = (socialExport) => _mergePersistedSettings({ socialExport }, useSettingsStore.getState()).socialExport;
+    expect(merge({ senderDetails: true, links: true })).toMatchObject({ senderDetails: true, links: true });
+    expect(merge({ senderDetails: false, links: false })).toMatchObject({ senderDetails: false, links: false });
+    for (const junk of ['true', 1, {}, null, undefined]) {
+      expect(merge({ senderDetails: junk, links: junk })).toMatchObject({ senderDetails: false, links: false });
+    }
+    const { setSocialExport } = useSettingsStore.getState();
+    setSocialExport({ links: true });
+    expect(useSettingsStore.getState().socialExport.links).toBe(true);
+    setSocialExport({ links: 'yes', senderDetails: true });
+    expect(useSettingsStore.getState().socialExport).toMatchObject({ links: false, senderDetails: true });
+  });
 });
