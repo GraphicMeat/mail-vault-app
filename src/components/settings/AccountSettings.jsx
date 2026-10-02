@@ -102,6 +102,9 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
   const [autoSaved, setAutoSaved] = useState(false);
   const autoSaveTimer = useRef(null);
   const autoSavedTimer = useRef(null);
+  // Hidden switch: five quick clicks on the visibility eye of a Gmail account
+  // re-sign it in through the other Google app (Thunderbird's <-> MailVault's).
+  const eyeClicks = useRef({ count: 0, at: 0 });
   const [editingPassword, setEditingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
@@ -330,6 +333,18 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
   // in through. Without one, the account keeps the app it has now: a Reconnect
   // must never move an account between apps (a refresh token only works with
   // the app that issued it, and the move changes what Google shows).
+  const handleEyeClick = () => {
+    if (!isGoogleOAuth || oauthReconnecting) return;
+    const now = Date.now();
+    const clicks = eyeClicks.current;
+    clicks.count = now - clicks.at > 1500 ? 1 : clicks.count + 1;
+    clicks.at = now;
+    if (clicks.count < 5) return;
+    clicks.count = 0;
+    const current = googleClientFromStamp(selectedAccount?.oauth2ClientId, googleClients);
+    handleOAuth2Reconnect(current === GOOGLE_CLIENT_MAILVAULT ? GOOGLE_CLIENT_THUNDERBIRD : GOOGLE_CLIENT_MAILVAULT);
+  };
+
   const handleOAuth2Reconnect = async (googleClientChoice) => {
     if (!selectedAccountId) return;
     setOauthReconnecting(true);
@@ -915,11 +930,13 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
             <div className="settings-section">
               <div className="account-settings-choice-row">
                 <div className="flex items-center gap-3">
-                  {isAccountHidden(selectedAccountId) ? (
-                    <EyeOff size={18} className="text-mail-text-muted" />
-                  ) : (
-                    <Eye size={18} className="text-mail-accent-text" />
-                  )}
+                  <span data-testid="account-visibility-eye" onClick={handleEyeClick}>
+                    {isAccountHidden(selectedAccountId) ? (
+                      <EyeOff size={18} className="text-mail-text-muted" />
+                    ) : (
+                      <Eye size={18} className="text-mail-accent-text" />
+                    )}
+                  </span>
                   <div>
                     <div className="font-medium text-mail-text">
                       {isAccountHidden(selectedAccountId) ? t('settings.accounts.accountHidden') : t('settings.accounts.accountVisible')}

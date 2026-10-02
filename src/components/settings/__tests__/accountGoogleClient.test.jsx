@@ -173,3 +173,44 @@ describe('Settings > Accounts: a plain Reconnect keeps the current Google app', 
     expect(mockSaveAccount).not.toHaveBeenCalled();
   });
 });
+
+describe('Settings > Accounts: the hidden switch on the visibility eye', () => {
+  async function clickEye(account, times) {
+    await open(account);
+    await screen.findByTestId('google-client-current');
+    fireEvent.click(screen.getByRole('tab', { name: t('settings.accounts.sectionAdvanced') }));
+    const eye = screen.getByTestId('account-visibility-eye');
+    for (let i = 0; i < times; i++) fireEvent.click(eye);
+  }
+
+  it('five clicks move a Thunderbird account to MailVault', async () => {
+    await clickEye(googleAccount({ oauth2ClientId: TB_ID }), 5);
+    const saved = await savedAccount();
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][5]).toBe('mailvault');
+    expect(saved.oauth2ClientId).toBe(OWN_ID);
+  });
+
+  it('five clicks move a MailVault account back to Thunderbird', async () => {
+    mockExchangeOAuth2Code.mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt', expiresAt: 99, clientId: TB_ID });
+    await clickEye(googleAccount({ oauth2ClientId: OWN_ID }), 5);
+    const saved = await savedAccount();
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][5]).toBe('thunderbird');
+    expect(saved.oauth2ClientId).toBe(TB_ID);
+  });
+
+  it('four clicks do nothing', async () => {
+    await clickEye(googleAccount(), 4);
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockGetOAuth2AuthUrl).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a Microsoft account', async () => {
+    useMailStore.setState({ accounts: [googleAccount({ oauth2Provider: 'microsoft' })] });
+    render(<AccountSettings accounts={[googleAccount({ oauth2Provider: 'microsoft' })]} />);
+    fireEvent.click(screen.getByRole('tab', { name: t('settings.accounts.sectionAdvanced') }));
+    const eye = screen.getByTestId('account-visibility-eye');
+    for (let i = 0; i < 5; i++) fireEvent.click(eye);
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockGetOAuth2AuthUrl).not.toHaveBeenCalled();
+  });
+});
