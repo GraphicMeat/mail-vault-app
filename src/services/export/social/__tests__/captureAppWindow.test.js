@@ -7,6 +7,8 @@ let lastClone = null;
 let lastOpts = null;
 let maskDuringCapture = null;
 let themeDuringCapture = null;
+let revealDuringCapture = null;
+let detailsDuringCapture = null;
 // Every rasterizer call: the node as it stood live, and the clone it drew.
 let calls = [];
 // jsdom has no 2d context: a stub that records the composite's draws.
@@ -18,6 +20,8 @@ vi.mock('modern-screenshot', () => ({
     maskDuringCapture = store.getState().captureMask;
     const { useThemeStore: themes } = await import('../../../../stores/themeStore');
     themeDuringCapture = themes.getState().captureTheme;
+    revealDuringCapture = store.getState().captureReveal;
+    detailsDuringCapture = store.getState().captureSenderDetails;
     const live = node.outerHTML;
     const clone = node.cloneNode(true);
     await opts.onCloneNode?.(clone);
@@ -35,7 +39,8 @@ import { NEEDLES, PEOPLE } from '../../../../test/privacyFixtures';
 import { Private } from '../../../../components/privacy/Private';
 
 afterEach(() => {
-  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; calls = [];
+  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; calls = [];
+  usePrivacyStore.setState({ captureReveal: null, captureSenderDetails: null });
   useThemeStore.setState({ theme: 'dark', captureTheme: null });
   document.documentElement.setAttribute('data-theme', 'dark');
   // The composite also sets fillStyle on it: clear only the spies.
@@ -309,5 +314,85 @@ describe('captureAppWindow', () => {
       }
       expect(useThemeStore.getState().captureTheme).toBeNull();
     }, 8000);
+  });
+
+  describe('reveal and sender details', () => {
+    const dict = () => buildNameDictionary({ names: ['Prize Desk', 'Joanna Kowalczyk'] });
+    const SPAM_ROOT = '<div id="root"><span>Prize Desk</span> <span>win@prize.example</span> <span>Joanna Kowalczyk</span> <span>joanna.k@example.org</span></div>';
+
+    it('leaves the exact revealed values readable in the clone, masks everyone else, and clears the reveal after', async () => {
+      document.body.innerHTML = SPAM_ROOT;
+      await captureAppWindow({ redact: true, dict: dict(), reveal: ['Win@Prize.example', 'prize desk'] });
+      expect(lastClone.textContent).toContain('Prize Desk');
+      expect(lastClone.textContent).toContain('win@prize.example');
+      expect(lastClone.textContent).not.toContain('Joanna');
+      expect(lastClone.textContent).not.toContain('joanna.k@example.org');
+      expect([...revealDuringCapture].sort()).toEqual(['prize desk', 'win@prize.example']);
+      expect(usePrivacyStore.getState().captureReveal).toBeNull();
+    });
+
+    it('the caller\'s dictionary is not given a reveal (the host\'s is shared)', async () => {
+      document.body.innerHTML = SPAM_ROOT;
+      const shared = dict();
+      await captureAppWindow({ redact: true, dict: shared, reveal: ['win@prize.example'] });
+      expect(shared).not.toHaveProperty('reveal');
+    });
+
+    it('reveal needs a redacted capture: without redact nothing is set', async () => {
+      document.body.innerHTML = SPAM_ROOT;
+      await captureAppWindow({ redact: false, dict: null, reveal: ['win@prize.example'] });
+      expect(revealDuringCapture).toBeNull();
+    });
+
+    it('with no reveal, the sender is masked like anyone', async () => {
+      document.body.innerHTML = SPAM_ROOT;
+      await captureAppWindow({ redact: true, dict: dict() });
+      expect(lastClone.textContent).not.toContain('win@prize.example');
+      expect(lastClone.textContent).not.toContain('Prize Desk');
+      expect(revealDuringCapture).toBeNull();
+    });
+
+    it('clears the reveal when the capture throws', async () => {
+      const { domToCanvas } = await import('modern-screenshot');
+      domToCanvas.mockRejectedValueOnce(new Error('boom'));
+      document.body.innerHTML = SPAM_ROOT;
+      await expect(captureAppWindow({ redact: true, dict: dict(), reveal: ['win@prize.example'] })).rejects.toThrow('boom');
+      expect(usePrivacyStore.getState().captureReveal).toBeNull();
+      expect(usePrivacyStore.getState().captureSenderDetails).toBeNull();
+    });
+
+    it('clears the reveal when there is no app root', async () => {
+      document.body.innerHTML = '';
+      await expect(captureAppWindow({ redact: true, dict: dict(), reveal: ['win@prize.example'] })).rejects.toThrow('no app root');
+      expect(usePrivacyStore.getState().captureReveal).toBeNull();
+    });
+
+    it('opens the message\'s sender details for the length of the capture only', async () => {
+      document.body.innerHTML = '<div id="root">a</div>';
+      const target = { uid: 7, accountId: 'acct', mailbox: 'Junk' };
+      await captureAppWindow({ redact: false, dict: null, senderDetails: target });
+      expect(detailsDuringCapture).toEqual(target);
+      expect(usePrivacyStore.getState().captureSenderDetails).toBeNull();
+      await captureAppWindow({ redact: false, dict: null });
+      expect(detailsDuringCapture).toBeNull();
+    });
+
+    it('puts a floating popover back over the frame composite', async () => {
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+      document.body.innerHTML = '<div id="root"><div data-capture-overlay="">popover</div><iframe></iframe></div>';
+      const root = document.getElementById('root');
+      const iframe = root.querySelector('iframe');
+      const frameDoc = iframe.contentDocument;
+      frameDoc.body.innerHTML = '<p>body</p>';
+      vi.spyOn(root, 'getBoundingClientRect').mockReturnValue(box(0, 0, 800, 600));
+      vi.spyOn(root.querySelector('[data-capture-overlay]'), 'getBoundingClientRect').mockReturnValue(box(100, 40, 320, 200));
+      vi.spyOn(iframe, 'getBoundingClientRect').mockReturnValue(box(0, 30, 800, 570));
+      vi.spyOn(frameDoc.body, 'getBoundingClientRect').mockReturnValue(box(8, 8, 784, 300));
+      await captureAppWindow({ redact: false, dict: null });
+      const last = ctx.drawImage.mock.calls.at(-1);
+      // From the clone as it stood before the frame was painted, at 2x, into the same place.
+      expect(last[0]).toBeInstanceOf(HTMLCanvasElement);
+      expect(last.slice(1)).toEqual([200, 80, 640, 400, 200, 80, 640, 400]);
+    });
   });
 });
