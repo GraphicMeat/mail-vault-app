@@ -24,6 +24,7 @@ const SIZES = [
   { value: 'landscape', label: '16:9' },
   { value: 'story', label: '9:16' },
 ];
+const THEMES = (t) => [{ value: 'light', label: t('settings.colors.light') }, { value: 'dark', label: t('settings.colors.dark') }];
 const CHECKERBOARD = 'repeating-conic-gradient(#d4d4d8 0% 25%, #ffffff 0% 50%) 50% / 12px 12px';
 
 // A compact one-of-a-few row: the settings SegmentedChoice is a 48px tab row.
@@ -67,12 +68,14 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * The "Social" format of the export dialog: one message as a styled PNG,
  * either a card on a background or the app window with the message open.
  *
- * The content is rendered once per (content, redact, app theme) and cached;
+ * The content is rendered once per (content, redact, themes) and cached;
  * every style change re-composes from the cache. The style is remembered in
  * settings; redaction is on every time the panel opens (and cannot be turned
- * off while privacy mode is on), and an own image is never stored. The card is
- * light; the app window is shot in the chosen Light/Dark (the app's own theme
- * until one is picked) and its frame follows that.
+ * off while privacy mode is on), and an own image is never stored. Like the
+ * app, there are two themes: Appearance (Light/Dark, the app's own theme until
+ * one is picked) paints the window frame and, on a card, the header block, and
+ * shoots the app window; Mail (card only) is the message body, following the
+ * Appearance until one is picked.
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
@@ -98,9 +101,13 @@ export function SocialExportPanel({ message, onDone }) {
   const request = useRef(0);
   const cache = useRef(new Map());
 
-  // The app window is shot in this theme, and its frame follows it.
+  // Appearance: the frame, the card's header block, the app window's shot.
+  // Mail: the card's body, the Appearance's twin until picked (the reader's
+  // `emailThemeOverride ?? theme`).
   const theme = prefs.appTheme ?? appTheme;
+  const mailTheme = prefs.mailTheme ?? theme;
   const frameTheme = chromeTheme(prefs.content, theme);
+  const isCard = prefs.content === 'card';
   const background = imageActive && ownImage ? ownImage : prefs.background;
 
   const update = (patch) => {
@@ -134,7 +141,7 @@ export function SocialExportPanel({ message, onDone }) {
   }, []);
 
   useEffect(() => {
-    const key = `${prefs.content}|${redacting}|${prefs.content === 'app' ? theme : ''}`;
+    const key = `${prefs.content}|${redacting}|${theme}|${isCard ? mailTheme : ''}`;
     const id = ++request.current;
     const hit = cache.current.get(key);
     if (hit) { setContent(hit); setLoading(false); return; }
@@ -143,21 +150,21 @@ export function SocialExportPanel({ message, onDone }) {
     setContent(null);
     setLoading(true);
     setNotice(null);
-    buildSocialContent(message, { content: prefs.content, redact: redacting, theme })
+    buildSocialContent(message, { content: prefs.content, redact: redacting, theme, ...(isCard ? { mailTheme } : {}) })
       .then((canvas) => {
         cache.current.set(key, canvas);
         if (request.current === id) setContent(canvas);
       })
       .catch(() => { if (request.current === id) { setContent(null); setNotice(t('export.dialog.messageCouldExported')); } })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [message, prefs.content, redacting, theme]);
+  }, [message, prefs.content, redacting, theme, mailTheme]);
 
   useEffect(() => {
     if (!content) return;
     const out = composeSocialImage({
       content, size: SIZE_PRESETS[prefs.size] ?? null, background,
       padding: prefs.padding, radius: prefs.radius, shadow: prefs.shadow, chrome: prefs.chrome,
-      theme: frameTheme, fit: prefs.content === 'app' ? 'contain' : 'crop', maxSize: PREVIEW_MAX, watermark,
+      theme: frameTheme, maxSize: PREVIEW_MAX, watermark,
     });
     const canvas = previewRef.current;
     if (!canvas || !out.width || !out.height) return;
@@ -178,7 +185,7 @@ export function SocialExportPanel({ message, onDone }) {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting, appTheme: theme } });
+      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting, appTheme: theme, mailTheme } });
       if (!result.ok) {
         setNotice(result.reason === 'premium' ? t('export.dialog.exportPremiumFeature') : t('export.dialog.messageCouldExported'));
         return;
@@ -223,10 +230,13 @@ export function SocialExportPanel({ message, onDone }) {
               options={[{ value: 'card', label: t('export.social.contentCard') }, { value: 'app', label: t('export.social.contentApp') }]} />
           </Field>
 
-          {prefs.content === 'app' && (
-            <Field label={t('export.social.appearance')}>
-              <Chips label={t('export.social.appearance')} value={theme} onChange={v => update({ appTheme: v })}
-                options={[{ value: 'light', label: t('settings.colors.light') }, { value: 'dark', label: t('settings.colors.dark') }]} />
+          <Field label={t('export.social.appearance')}>
+            <Chips label={t('export.social.appearance')} value={theme} onChange={v => update({ appTheme: v })} options={THEMES(t)} />
+          </Field>
+
+          {isCard && (
+            <Field label={t('export.social.mailAppearance')}>
+              <Chips label={t('export.social.mailAppearance')} value={mailTheme} onChange={v => update({ mailTheme: v })} options={THEMES(t)} />
             </Field>
           )}
 

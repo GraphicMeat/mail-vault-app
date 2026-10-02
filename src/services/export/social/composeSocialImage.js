@@ -1,5 +1,6 @@
 import { layoutSocial } from './socialLayout';
 import { resolveBackground } from './socialBackgrounds';
+import { paintWatermark } from './socialWatermark';
 
 /**
  * Paints a social image: background, an optional shadow, the card with its
@@ -10,9 +11,6 @@ import { resolveBackground } from './socialBackgrounds';
 const CARD_BG = { light: '#ffffff', dark: '#1e1f22' };
 const CHROME_BG = { light: '#ececec', dark: '#2b2b2e' };
 const LIGHTS = ['#ff5f57', '#febc2e', '#28c840'];
-const FADE_PX = 128; // 64 CSS px at 2x
-const MARK_MIN_H = 40; // 20 CSS px: the wordmark stays readable
-const MARK_INSET = 24;
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -40,32 +38,13 @@ function paintBackground(ctx, w, h, bg) {
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
 }
 
-// The maker's mark sits in the band under the card, right-aligned with it.
-// No band to sit in (no padding) puts it in the card's bottom-right corner.
-function paintWatermark(ctx, L, mark) {
-  const markW0 = mark.naturalWidth || mark.width;
-  const markH0 = mark.naturalHeight || mark.height;
-  if (!markW0 || !markH0) return;
-  const { card } = L;
-  const band = L.canvasH - (card.y + card.h);
-  const h = Math.round(Math.max(MARK_MIN_H, Math.min(band * 0.45, L.canvasW * 0.035)));
-  const w = Math.round((markW0 * h) / markH0);
-  const fits = band >= h + MARK_INSET;
-  const x = Math.max(MARK_INSET, card.x + card.w - w - (fits ? 0 : MARK_INSET));
-  const y = fits ? card.y + card.h + Math.round((band - h) / 2) : card.y + card.h - h - MARK_INSET;
-  ctx.save();
-  ctx.globalAlpha = 0.9;
-  ctx.drawImage(mark, x, y, w, h);
-  ctx.restore();
-}
-
 /**
- * `watermark` is the decoded maker's mark (loadWatermark); null leaves it off.
+ * `watermark` is the decoded maker's lockup (loadWatermark); null leaves it off.
  * `maxSize: { w, h }` paints a scaled-down copy that fits inside it (the live
  * preview); omitted, the image is full size (Save).
  */
-export function composeSocialImage({ content, size, background, padding, radius, shadow, chrome, theme = 'light', fit, maxSize, watermark = null }) {
-  const L = layoutSocial({ contentW: content.width, contentH: content.height, size, padding, chrome, fit });
+export function composeSocialImage({ content, size, background, padding, radius, shadow, chrome, theme = 'light', maxSize, watermark = null }) {
+  const L = layoutSocial({ contentW: content.width, contentH: content.height, size, padding, chrome });
   const scale = maxSize ? Math.min(1, maxSize.w / L.canvasW, maxSize.h / L.canvasH) : 1;
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(L.canvasW * scale)); canvas.height = Math.max(1, Math.round(L.canvasH * scale));
@@ -90,13 +69,7 @@ export function composeSocialImage({ content, size, background, padding, radius,
   }
   const c = L.content;
   ctx.drawImage(content, c.sx, c.sy, c.sw, c.sh, c.dx, c.dy, c.dw, c.dh);
-  if (L.cropped) {
-    // A cut-off mail fades into the card instead of ending mid-line.
-    const g = ctx.createLinearGradient(0, c.dy + c.dh - FADE_PX, 0, c.dy + c.dh);
-    g.addColorStop(0, `${CARD_BG[theme]}00`); g.addColorStop(1, CARD_BG[theme]);
-    ctx.fillStyle = g; ctx.fillRect(c.dx, c.dy + c.dh - FADE_PX, c.dw, FADE_PX);
-  }
   ctx.restore();
-  if (watermark) paintWatermark(ctx, L, watermark);
+  if (watermark) paintWatermark(ctx, L, watermark, background, scale);
   return canvas;
 }

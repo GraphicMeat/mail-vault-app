@@ -54,6 +54,12 @@ describe('mountExportFrame', () => {
     dispose();
   });
 
+  it('takes a sandbox from a caller that asks for one', async () => {
+    const { iframe, dispose } = await mountExportFrame('<!doctype html><body>hi</body>', { loadTimeoutMs: 10, sandbox: 'allow-same-origin allow-scripts' });
+    expect(iframe.getAttribute('sandbox')).toBe('allow-same-origin allow-scripts');
+    dispose();
+  });
+
   // Whether a scrollbar takes layout space differs machine to machine. Left to
   // the machine, an always-show-scrollbars Mac renders the column 15px narrower
   // than the canvas is told it is, and rasterizes the scrollbars into the PNG.
@@ -76,6 +82,19 @@ describe('renderMessageToCanvas', () => {
     await renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10 });
     expect(domToCanvas).toHaveBeenCalledTimes(1);
     expect(domToCanvas.mock.calls[0][1]).toMatchObject({ scale: 2, backgroundColor: '#ffffff' });
+  });
+
+  it('passes the part, sandbox, background and pre-capture hook of a social card through', async () => {
+    const beforeCapture = vi.fn(async () => {});
+    await renderMessageToCanvas({
+      message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10, part: 'body', theme: 'dark',
+      sandbox: 'allow-same-origin allow-scripts', backgroundColor: '#121313', beforeCapture,
+      extraHead: '<meta name="x">',
+    });
+    expect(domToCanvas.mock.calls[0][1]).toMatchObject({ backgroundColor: '#121313' });
+    expect(beforeCapture).toHaveBeenCalledTimes(1);
+    expect(beforeCapture.mock.calls[0][0].nodeType).toBe(9); // the frame's document
+    expect(document.querySelectorAll('iframe').length).toBe(0);
   });
 
   it('turns off font embedding and caps the fetch timeout', async () => {

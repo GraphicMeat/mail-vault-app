@@ -10,7 +10,7 @@
  * A probe line in Instrument Sans is put on the app, captured, and the width
  * of its ink on the canvas is compared with its live width and with the same
  * text in the system face. Reading the pixels also proves the canvas is not
- * tainted (the export calls toDataURL on it).
+ * tainted (the export calls toBlob on it).
  *
  * Every value an assertion reads is logged as one `[capfont]` JSON line.
  */

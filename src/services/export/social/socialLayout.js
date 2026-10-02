@@ -16,16 +16,16 @@ const OUT = 2; // output pixels per CSS px, and per preset px
 
 /**
  * auto: the canvas is the card plus padding, content drawn 1:1.
- * fixed size: `crop` (an email card) fills the width and cuts a tall mail to
- * its top; `contain` (an app window) fits the whole shot, centered.
+ * fixed size: the whole content is fitted inside the canvas (contain), centered,
+ * so a tall mail shrinks rather than being cut.
  */
-export function layoutSocial({ contentW, contentH, size, padding, chrome, fit }) {
+export function layoutSocial({ contentW, contentH, size, padding, chrome }) {
   const pad = padding * OUT;
   const chromeH = chrome ? CHROME_CSS_PX * OUT : 0;
   if (!size) {
     const card = { x: pad, y: pad, w: contentW, h: contentH + chromeH };
     return {
-      canvasW: contentW + pad * 2, canvasH: card.h + pad * 2, card, chromeH, cropped: false,
+      canvasW: contentW + pad * 2, canvasH: card.h + pad * 2, card, chromeH,
       content: { sx: 0, sy: 0, sw: contentW, sh: contentH, dx: pad, dy: pad + chromeH, dw: contentW, dh: contentH },
     };
   }
@@ -33,18 +33,12 @@ export function layoutSocial({ contentW, contentH, size, padding, chrome, fit })
   const canvasH = size.h * OUT;
   const availW = canvasW - pad * 2;
   const availH = canvasH - pad * 2 - chromeH;
-  let scale; let sh = contentH; let cropped = false;
-  if (fit === 'crop') {
-    scale = availW / contentW;
-    if (contentH * scale > availH) { sh = Math.floor(availH / scale); cropped = true; }
-  } else {
-    scale = Math.min(availW / contentW, availH / contentH);
-  }
+  const scale = Math.min(availW / contentW, availH / contentH);
   const dw = Math.round(contentW * scale);
-  const dh = Math.round(sh * scale);
+  const dh = Math.round(contentH * scale);
   const card = { x: Math.round((canvasW - dw) / 2), y: Math.round((canvasH - dh - chromeH) / 2), w: dw, h: dh + chromeH };
   return {
-    canvasW, canvasH, card, chromeH, cropped,
-    content: { sx: 0, sy: 0, sw: contentW, sh, dx: card.x, dy: card.y + chromeH, dw, dh },
+    canvasW, canvasH, card, chromeH,
+    content: { sx: 0, sy: 0, sw: contentW, sh: contentH, dx: card.x, dy: card.y + chromeH, dw, dh },
   };
 }

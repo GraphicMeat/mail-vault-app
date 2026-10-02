@@ -2,6 +2,7 @@ import { sanitizeForExport } from './exportSanitize';
 import { t } from '../../i18n/index.js';
 import { formatDateTime } from '../../utils/dateFormat.js';
 import { REDACT_CSS } from './exportRedact';
+import { stripInlineColorImportant } from '../../utils/emailIframeTemplate';
 
 // One width, one scale, used by the rasterizer, the packer and the HTML
 // document alike. A baked iframe height is only honest while the column that
@@ -110,13 +111,33 @@ export const EXPORT_CSS = `
   .mv-mark { margin-top: 6px; color: #9aa1ab; }
 `;
 
+// The header block of a social card, dark. Plain CSS over the light sheet:
+// no scripts. The background is the dark card's (composeSocialImage CARD_BG).
+export const EXPORT_HEAD_DARK = Object.freeze({ bg: '#1e1f22', text: '#e6e7ea', muted: '#9aa1ab', border: '#34363b' });
+const HEAD_DARK_CSS = `
+  :root { color-scheme: dark; }
+  html, body { background: ${EXPORT_HEAD_DARK.bg}; }
+  body { color: ${EXPORT_HEAD_DARK.text}; }
+  .mv-head { border-bottom-color: ${EXPORT_HEAD_DARK.border}; }
+  .mv-l { color: ${EXPORT_HEAD_DARK.muted}; }
+`;
+
 // `redactStyle` ('blur' | 'bar'): how a redacted body's `.mv-pii` spans paint.
-export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle }) {
+// `part` ('head' | 'body'): only the header block or only the mail body, for a
+// social card that rasterizes them apart (`theme` 'dark' then styles the header
+// dark, or readies the body for Dark Reader). `extraHead`: raw markup after the
+// stylesheet, e.g. a CSP meta and the nonced Dark Reader scripts. All three
+// default to the whole light document every other export gets.
+export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme = 'light', extraHead = '' }) {
+  const dark = theme === 'dark';
+  const headDarkCss = part === 'head' && dark ? HEAD_DARK_CSS : '';
+  // Dark Reader needs an inline `!important` colour's priority gone, as in the reader.
+  const body = sanitizeForExport(part === 'body' && dark ? stripInlineColorImportant(bodyHtml) : bodyHtml);
   return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${EXPORT_CSS}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style></head>
+<html><head><meta charset="utf-8"><style>${EXPORT_CSS}${headDarkCss}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style>${extraHead}</head>
 <body>
-${headerCardHtml(message)}
-<main class="mv-body">${sanitizeForExport(bodyHtml)}</main>
-${account ? provenanceHtml({ account, mailbox, messages: [message], stats }) : ''}
+${part === 'body' ? '' : headerCardHtml(message)}
+${part === 'head' ? '' : `<main class="mv-body">${body}</main>`}
+${account && !part ? provenanceHtml({ account, mailbox, messages: [message], stats }) : ''}
 </body></html>`;
 }

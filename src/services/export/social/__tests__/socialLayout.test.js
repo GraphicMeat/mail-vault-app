@@ -1,34 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import { layoutSocial, SIZE_PRESETS } from '../socialLayout';
-import { GRADIENT_PRESETS, SOLID_PRESETS, resolveBackground } from '../socialBackgrounds';
+import { GRADIENT_PRESETS, SOLID_PRESETS, resolveBackground, backgroundLuminance, inkForBackground } from '../socialBackgrounds';
 
 describe('layoutSocial', () => {
   it('auto wraps content in padding, plus chrome', () => {
-    const l = layoutSocial({ contentW: 1640, contentH: 1200, size: SIZE_PRESETS.auto, padding: 48, chrome: true, fit: 'crop' });
+    const l = layoutSocial({ contentW: 1640, contentH: 1200, size: SIZE_PRESETS.auto, padding: 48, chrome: true });
     expect(l.chromeH).toBe(56);
     expect(l.card).toEqual({ x: 96, y: 96, w: 1640, h: 1256 });
     expect([l.canvasW, l.canvasH]).toEqual([1640 + 192, 1256 + 192]);
-    expect(l.cropped).toBe(false);
   });
-  it('square crops a tall email to the top and flags it', () => {
-    const l = layoutSocial({ contentW: 1640, contentH: 6000, size: SIZE_PRESETS.square, padding: 64, chrome: false, fit: 'crop' });
-    expect([l.canvasW, l.canvasH]).toEqual([2160, 2160]);
-    expect(l.cropped).toBe(true);
+  it('a tall card is fitted whole into a fixed size, never cut, and centered', () => {
+    const l = layoutSocial({ contentW: 1640, contentH: 6000, size: SIZE_PRESETS.portrait, padding: 64, chrome: true });
+    const availH = 1350 * 2 - 128 * 2 - l.chromeH;
     expect(l.content.sy).toBe(0);
-    expect(l.card.y + l.card.h).toBeLessThanOrEqual(2160 - 128);
-    expect(l.content.dw).toBe(2160 - 256);
+    expect(l.content.sh).toBe(6000);
+    expect(l.content.dh).toBeLessThanOrEqual(availH);
+    expect(l.content.dw).toBeLessThan(1640);
+    expect(l.card.x).toBe(Math.round((l.canvasW - l.content.dw) / 2));
+    expect(l.card.y).toBe(Math.round((l.canvasH - l.content.dh - l.chromeH) / 2));
+    expect(l.card.y + l.card.h).toBeLessThanOrEqual(l.canvasH - 128);
   });
   it('contain fits a wide app shot into a story, centered', () => {
-    const l = layoutSocial({ contentW: 2880, contentH: 1800, size: SIZE_PRESETS.story, padding: 32, chrome: true, fit: 'contain' });
+    const l = layoutSocial({ contentW: 2880, contentH: 1800, size: SIZE_PRESETS.story, padding: 32, chrome: true });
     expect(l.card.x).toBe(64);
     expect(l.card.w).toBe(2160 - 128);
     expect(l.card.y).toBeGreaterThan(64); // vertically centred
-    expect(l.cropped).toBe(false);
   });
-  it('crop leaves a short email whole', () => {
-    const l = layoutSocial({ contentW: 1640, contentH: 800, size: SIZE_PRESETS.portrait, padding: 64, chrome: true, fit: 'crop' });
-    expect(l.cropped).toBe(false);
+  it('a short card is scaled to fill the width, whole', () => {
+    const l = layoutSocial({ contentW: 1640, contentH: 800, size: SIZE_PRESETS.portrait, padding: 64, chrome: true });
     expect(l.content.sh).toBe(800);
+    expect(l.content.dw).toBe(2160 - 256);
   });
 });
 
@@ -46,5 +47,29 @@ describe('social backgrounds', () => {
     expect(resolveBackground({ type: 'custom', stops: ['#111111', '#222222'] })).toMatchObject({ kind: 'linear', stops: ['#111111', '#222222'] });
     expect(resolveBackground({ type: 'transparent' })).toEqual({ kind: 'none' });
     expect(resolveBackground({ type: 'image' })).toEqual({ kind: 'none' });
+  });
+});
+
+describe('inkForBackground', () => {
+  it('measures a solid by its color and a gradient by the average of its stops', () => {
+    expect(backgroundLuminance({ type: 'solid', id: 'white' })).toBeCloseTo(1, 5);
+    expect(backgroundLuminance({ type: 'solid', id: 'black' })).toBe(0);
+    expect(backgroundLuminance({ type: 'custom', stops: ['#000000', '#ffffff'] })).toBeCloseTo(0.214, 2);
+    expect(backgroundLuminance({ type: 'solid', color: '#fff' })).toBeCloseTo(1, 5);
+  });
+  it('has nothing to measure for an image or no background', () => {
+    expect(backgroundLuminance({ type: 'transparent' })).toBeNull();
+    expect(backgroundLuminance({ type: 'image', image: {} })).toBeNull();
+  });
+  it('dark text on a light background, white on a dark one', () => {
+    expect(inkForBackground({ type: 'solid', id: 'white' })).toEqual({ color: '#1d1d1f', shadow: false });
+    expect(inkForBackground({ type: 'solid', id: 'cream' })).toEqual({ color: '#1d1d1f', shadow: false });
+    expect(inkForBackground({ type: 'solid', id: 'black' })).toEqual({ color: '#ffffff', shadow: false });
+    expect(inkForBackground({ type: 'gradient', id: 'midnight' })).toEqual({ color: '#ffffff', shadow: false });
+    expect(inkForBackground({ type: 'gradient', id: 'mint' }).color).toBe('#1d1d1f');
+  });
+  it('white with a soft shadow where the backdrop is unknown', () => {
+    expect(inkForBackground({ type: 'transparent' })).toEqual({ color: '#ffffff', shadow: true });
+    expect(inkForBackground({ type: 'image', image: {} })).toEqual({ color: '#ffffff', shadow: true });
   });
 });

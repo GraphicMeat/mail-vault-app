@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const stubCanvas = () => ({ width: 100, height: 100, toDataURL: () => 'data:image/png;base64,AAAA' });
-const renderMessageToCanvas = vi.fn(async () => stubCanvas());
+// toBlob, not toDataURL: the PNG is encoded off the main thread. Three zero bytes read as 'AAAA'.
+const stubCanvas = () => ({
+  width: 100, height: 100,
+  toBlob: (cb) => cb(new Blob([new Uint8Array([0, 0, 0])], { type: 'image/png' })),
+});
+const renderSocialCard = vi.fn(async () => stubCanvas());
 const captureAppWindow = vi.fn(async () => stubCanvas());
 const composeSocialImage = vi.fn(() => stubCanvas());
 
+vi.mock('../renderSocialCard', () => ({ renderSocialCard: (...a) => renderSocialCard(...a) }));
 vi.mock('../../renderMessageToCanvas', () => ({
-  renderMessageToCanvas: (...a) => renderMessageToCanvas(...a),
+  renderMessageToCanvas: vi.fn(async () => stubCanvas()),
   measureMessageHeight: vi.fn(async () => 100),
 }));
 vi.mock('../captureAppWindow', () => ({ captureAppWindow: (...a) => captureAppWindow(...a) }));
 vi.mock('../composeSocialImage', () => ({ composeSocialImage: (...a) => composeSocialImage(...a) }));
-const MARK = { naturalWidth: 478, naturalHeight: 84 };
+const MARK = { icon: { naturalWidth: 256, naturalHeight: 256 }, mark: { naturalWidth: 478, naturalHeight: 84 } };
 const loadWatermark = vi.fn(async () => MARK);
 vi.mock('../socialWatermark', () => ({ loadWatermark: (...a) => loadWatermark(...a) }));
 vi.mock('../../../../stores/settingsStore', () => ({
@@ -42,20 +47,21 @@ const options = {
 const noLeak = (s) => NEEDLES.forEach(n => expect(s, n).not.toContain(n));
 
 beforeEach(() => {
-  renderMessageToCanvas.mockClear(); captureAppWindow.mockClear(); composeSocialImage.mockClear();
+  renderSocialCard.mockClear(); captureAppWindow.mockClear(); composeSocialImage.mockClear();
   usePrivacyStore.setState({ enabled: false });
   useThemeStore.setState({ theme: 'dark' });
 });
 
 describe('buildSocialExport', () => {
-  it('card: renders a redacted message and body, crops, and names the file without anyone in it', async () => {
+  it('card: renders a redacted message and body, fits it whole, and names the file without anyone in it', async () => {
     const r = await buildSocialExport({ message, options });
     expect(r.ok).toBe(true);
-    const args = renderMessageToCanvas.mock.calls[0][0];
+    const args = renderSocialCard.mock.calls[0][0];
     noLeak(JSON.stringify(args.message) + args.bodyHtml);
     expect(args.redactStyle).toBe('blur');
     expect(typeof args.onCloneNode).toBe('function');
-    expect(composeSocialImage.mock.calls[0][0]).toMatchObject({ fit: 'crop', size: SIZE_PRESETS.portrait, theme: 'light' });
+    expect(composeSocialImage.mock.calls[0][0]).toMatchObject({ size: SIZE_PRESETS.portrait, theme: 'dark' });
+    expect(composeSocialImage.mock.calls[0][0]).not.toHaveProperty('fit');
     expect(composeSocialImage.mock.calls[0][0].maxSize).toBeUndefined(); // Save is full size
     noLeak(r.file.name);
     expect(r.file.name.endsWith(' - social.png')).toBe(true);
@@ -66,10 +72,10 @@ describe('buildSocialExport', () => {
   it('app: captures the window with redaction, fits it whole, frame in the app theme', async () => {
     const r = await buildSocialExport({ message, options: { ...options, content: 'app', size: 'landscape' } });
     expect(r.ok).toBe(true);
-    expect(renderMessageToCanvas).not.toHaveBeenCalled();
+    expect(renderSocialCard).not.toHaveBeenCalled();
     expect(captureAppWindow.mock.calls[0][0].redact).toBe(true);
     expect(captureAppWindow.mock.calls[0][0].dict.size).toBeGreaterThan(0);
-    expect(composeSocialImage.mock.calls[0][0]).toMatchObject({ fit: 'contain', size: SIZE_PRESETS.landscape, theme: 'dark' });
+    expect(composeSocialImage.mock.calls[0][0]).toMatchObject({ size: SIZE_PRESETS.landscape, theme: 'dark' });
     noLeak(r.file.name);
   });
 
@@ -83,18 +89,31 @@ describe('buildSocialExport', () => {
     expect(composeSocialImage.mock.calls[1][0].theme).toBe('dark');
   });
 
-  it('a card is never dark, an app shot in a light app is light', async () => {
+  it('card: the Appearance themes the frame and the header, the Mail theme the body, which follows the Appearance until picked', async () => {
+    useThemeStore.setState({ theme: 'dark', palette: 'indigo' });
     await buildSocialExport({ message, options });
-    expect(composeSocialImage.mock.calls[0][0].theme).toBe('light');
-    useThemeStore.setState({ theme: 'light' });
+    expect(renderSocialCard.mock.calls[0][0]).toMatchObject({ appearance: 'dark', mail: 'dark', palette: 'indigo' });
+    expect(composeSocialImage.mock.calls[0][0].theme).toBe('dark');
+    // Dark appearance over a light mail, like the app.
+    await buildSocialExport({ message, options: { ...options, mailTheme: 'light' } });
+    expect(renderSocialCard.mock.calls[1][0]).toMatchObject({ appearance: 'dark', mail: 'light' });
+    expect(composeSocialImage.mock.calls[1][0].theme).toBe('dark');
+    // Light appearance, dark mail.
+    await buildSocialExport({ message, options: { ...options, appTheme: 'light', mailTheme: 'dark' } });
+    expect(renderSocialCard.mock.calls[2][0]).toMatchObject({ appearance: 'light', mail: 'dark' });
+    expect(composeSocialImage.mock.calls[2][0].theme).toBe('light');
+    // An own Appearance with no Mail pick: the mail follows it, not the app.
+    await buildSocialExport({ message, options: { ...options, appTheme: 'light', mailTheme: null } });
+    expect(renderSocialCard.mock.calls[3][0]).toMatchObject({ appearance: 'light', mail: 'light' });
+    useThemeStore.setState({ theme: 'light', palette: 'graphite' });
     await buildSocialExport({ message, options: { ...options, content: 'app' } });
-    expect(composeSocialImage.mock.calls[1][0].theme).toBe('light');
+    expect(composeSocialImage.mock.calls[4][0].theme).toBe('light');
   });
 
   it('redacts while privacy mode is on, even when asked not to', async () => {
     usePrivacyStore.setState({ enabled: true });
     const r = await buildSocialExport({ message, options: { ...options, redact: false } });
-    const args = renderMessageToCanvas.mock.calls[0][0];
+    const args = renderSocialCard.mock.calls[0][0];
     noLeak(JSON.stringify(args.message) + args.bodyHtml + r.file.name);
     await buildSocialExport({ message, options: { ...options, content: 'app', redact: false } });
     expect(captureAppWindow.mock.calls[0][0].redact).toBe(true);
@@ -102,7 +121,7 @@ describe('buildSocialExport', () => {
 
   it('without redact, passes the original message through', async () => {
     const r = await buildSocialExport({ message, options: { ...options, redact: false } });
-    const args = renderMessageToCanvas.mock.calls[0][0];
+    const args = renderSocialCard.mock.calls[0][0];
     expect(args.message.from).toEqual(FIXTURE_MESSAGE.from);
     expect(args.bodyHtml).toContain('Rokas Ambrazevičius');
     expect(args.redactStyle).toBeUndefined();
@@ -110,12 +129,20 @@ describe('buildSocialExport', () => {
   });
 
   it('reports a failed render instead of throwing', async () => {
-    renderMessageToCanvas.mockRejectedValueOnce(new Error('frame'));
+    renderSocialCard.mockRejectedValueOnce(new Error('frame'));
     const r = await buildSocialExport({ message, options });
     expect(r).toMatchObject({ ok: false, reason: 'render' });
   });
 
-  it('puts the maker\'s mark on the saved image, and still saves when it cannot load', async () => {
+  it('encodes the PNG off the main thread, and reports an encode that gives nothing', async () => {
+    const toBlob = vi.fn((cb) => cb(null));
+    composeSocialImage.mockReturnValueOnce({ ...stubCanvas(), toBlob });
+    const r = await buildSocialExport({ message, options });
+    expect(toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/png');
+    expect(r).toMatchObject({ ok: false, reason: 'render' });
+  });
+
+  it('puts the maker\'s lockup on the saved image, and still saves when it cannot load', async () => {
     await buildSocialExport({ message, options });
     expect(composeSocialImage.mock.calls[0][0].watermark).toBe(MARK);
     loadWatermark.mockResolvedValueOnce(null);

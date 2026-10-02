@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react';
 
 const stubCanvas = () => ({ width: 200, height: 300 });
 const buildSocialContent = vi.fn(async () => stubCanvas());
@@ -13,12 +13,12 @@ const setSocialExport = vi.fn();
 vi.mock('../../../services/export/social/buildSocialExport', () => ({
   buildSocialContent: (...a) => buildSocialContent(...a),
   buildSocialExport: (...a) => buildSocialExport(...a),
-  chromeTheme: (content, appTheme) => (content === 'app' && appTheme === 'dark' ? 'dark' : 'light'),
+  chromeTheme: (_content, appTheme) => (appTheme === 'dark' ? 'dark' : 'light'),
 }));
 vi.mock('../../../services/export/social/composeSocialImage', () => ({
   composeSocialImage: (...a) => composeSocialImage(...a),
 }));
-const MARK = { naturalWidth: 478, naturalHeight: 84 };
+const MARK = { icon: { naturalWidth: 256, naturalHeight: 256 }, mark: { naturalWidth: 478, naturalHeight: 84 } };
 vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => MARK }));
 vi.mock('../../../services/export/exportSaver', () => ({
   saveOneFile: (...a) => saveOneFile(...a),
@@ -34,7 +34,7 @@ vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   DEFAULT_SOCIAL_EXPORT: {
     content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },
-    padding: 64, radius: 16, shadow: true, chrome: true, appTheme: null,
+    padding: 64, radius: 16, shadow: true, chrome: true, appTheme: null, mailTheme: null,
   },
   useSettingsStore: (sel) => sel(settingsState),
 }));
@@ -69,13 +69,14 @@ describe('SocialExportPanel', () => {
     renderPanel();
     expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
     await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
-    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark' });
+    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark' });
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
     // The preview composes at preview size; only Save renders full size.
-    expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, fit: 'crop', maxSize: { w: 720, h: 840 } });
+    expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, theme: 'dark', maxSize: { w: 720, h: 840 } });
+    expect(lastCompose()).not.toHaveProperty('fit');
   });
 
-  it('the preview carries the maker\'s mark once it has loaded', async () => {
+  it('the preview carries the maker\'s lockup once it has loaded', async () => {
     renderPanel();
     await waitFor(() => expect(lastCompose()?.watermark).toBe(MARK));
   });
@@ -117,12 +118,11 @@ describe('SocialExportPanel', () => {
     }
   });
 
-  it('the card is light and has no Appearance choice; the app window frame follows the app theme', async () => {
+  it('the frame follows the Appearance for the card and the app window alike', async () => {
     useThemeStore.setState({ theme: 'dark' });
     renderPanel();
-    expect(screen.queryByRole('group', { name: /appearance/i })).toBeNull();
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
-    expect(lastCompose().theme).toBe('light');
+    expect(lastCompose().theme).toBe('dark');
     fireEvent.click(screen.getByRole('button', { name: /app window/i }));
     await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'dark' }));
     await waitFor(() => expect(lastCompose().theme).toBe('dark'));
@@ -132,16 +132,53 @@ describe('SocialExportPanel', () => {
     expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'light' });
   });
 
-  it('shows Light and Dark only for the app window, preselected to the app theme', async () => {
+  it('shows Appearance for both contents, preselected to the app theme, and Mail for the card only', async () => {
     useThemeStore.setState({ theme: 'dark' });
     renderPanel();
-    expect(screen.queryByRole('button', { name: /^light$/i })).toBeNull();
+    const appearance = await screen.findByRole('group', { name: /appearance/i });
+    expect(appearance.querySelector('[aria-pressed="true"]').textContent).toBe('Dark');
+    expect(appearance.querySelectorAll('button')).toHaveLength(2);
+    const mail = screen.getByRole('group', { name: /email content/i });
+    expect(mail.querySelector('[aria-pressed="true"]').textContent).toBe('Dark'); // follows the Appearance
+    expect(mail.querySelectorAll('button')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: /app window/i }));
-    const group = await screen.findByRole('group', { name: /appearance/i });
-    expect(group.querySelector('[aria-pressed="true"]').textContent).toBe('Dark');
-    expect(group.querySelectorAll('button')).toHaveLength(2);
+    expect(screen.getByRole('group', { name: /appearance/i })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: /email content/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /email card/i }));
-    expect(screen.queryByRole('group', { name: /appearance/i })).toBeNull();
+    expect(screen.getByRole('group', { name: /email content/i })).toBeTruthy();
+  });
+
+  it('Mail follows the Appearance until picked, then stays: dark appearance over a light mail', async () => {
+    useThemeStore.setState({ theme: 'light' });
+    renderPanel();
+    await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
+    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'light', mailTheme: 'light' });
+    // Picking Dark Appearance drags the unpicked Mail along.
+    fireEvent.click(within(screen.getByRole('group', { name: /appearance/i })).getByRole('button', { name: /^dark$/i }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark' }));
+    expect(setSocialExport).toHaveBeenCalledWith({ appTheme: 'dark' });
+    // Mail Light: a picked Mail holds still.
+    fireEvent.click(within(screen.getByRole('group', { name: /email content/i })).getByRole('button', { name: /^light$/i }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'light' }));
+    expect(setSocialExport).toHaveBeenCalledWith({ mailTheme: 'light' });
+    await waitFor(() => expect(lastCompose().theme).toBe('dark')); // the frame stays on the Appearance
+    const before = buildSocialContent.mock.calls.length;
+    fireEvent.click(within(screen.getByRole('group', { name: /appearance/i })).getByRole('button', { name: /^light$/i }));
+    // Light over light was the first build: served from the cache, not built again.
+    await waitFor(() => expect(lastCompose().theme).toBe('light'));
+    expect(buildSocialContent).toHaveBeenCalledTimes(before);
+  });
+
+  it('a card is rebuilt per Appearance and Mail pair; the app window ignores Mail', async () => {
+    useThemeStore.setState({ theme: 'light' });
+    renderPanel();
+    await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(screen.getByRole('group', { name: /email content/i })).getByRole('button', { name: /^dark$/i }));
+    await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(2));
+    expect(buildSocialContent.mock.calls[1][1]).toMatchObject({ theme: 'light', mailTheme: 'dark' });
+    fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+    await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(3));
+    expect(buildSocialContent.mock.calls[2][1]).not.toHaveProperty('mailTheme');
   });
 
   it('picking Light shoots the app window again in light, and remembers it', async () => {

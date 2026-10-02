@@ -26,7 +26,7 @@ describe('social export style', () => {
     expect(merged).toEqual({ ...DEFAULT_SOCIAL_EXPORT, padding: 120 });
   });
 
-  it('drops the old card theme choice: the card is light, an app shot follows the app', () => {
+  it('drops the old `theme` key: the choices are appTheme and mailTheme', () => {
     const merged = _mergePersistedSettings({ socialExport: { theme: 'dark' } }, useSettingsStore.getState()).socialExport;
     expect(merged).not.toHaveProperty('theme');
   });
@@ -42,5 +42,18 @@ describe('social export style', () => {
     expect(useSettingsStore.getState().socialExport.appTheme).toBe('light');
     setSocialExport({ appTheme: 'blue' });
     expect(useSettingsStore.getState().socialExport.appTheme).toBeNull();
+  });
+
+  it('mailTheme: follows the Appearance by default, keeps light or dark, drops anything else', () => {
+    expect(DEFAULT_SOCIAL_EXPORT.mailTheme).toBeNull();
+    const merge = (socialExport) => _mergePersistedSettings({ socialExport }, useSettingsStore.getState()).socialExport;
+    expect(merge({ mailTheme: 'light' }).mailTheme).toBe('light');
+    expect(merge({ mailTheme: 'dark' }).mailTheme).toBe('dark');
+    for (const junk of ['sepia', 5, {}, undefined, null]) expect(merge({ mailTheme: junk }).mailTheme).toBeNull();
+    const { setSocialExport } = useSettingsStore.getState();
+    setSocialExport({ mailTheme: 'dark' });
+    expect(useSettingsStore.getState().socialExport.mailTheme).toBe('dark');
+    setSocialExport({ mailTheme: 'blue' });
+    expect(useSettingsStore.getState().socialExport.mailTheme).toBeNull();
   });
 });

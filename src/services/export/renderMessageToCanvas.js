@@ -2,10 +2,11 @@ import { domToCanvas } from 'modern-screenshot';
 import { buildMessageDocument, EXPORT_WIDTH_PX, EXPORT_SCALE } from './exportDocument';
 import { trace } from './exportTrace';
 
-// The export frame never gets allow-scripts. Quotes and signatures are
-// expanded by building the document that way, so there is nothing left for a
-// script to do — and an email's own script must not run just because we are
-// rendering it.
+// The export frame gets no allow-scripts unless the caller asks (`sandbox`).
+// Quotes and signatures are expanded by building the document that way, so
+// there is nothing left for a script to do, and an email's own script must
+// not run just because we are rendering it. The one asker is a dark social
+// card, which pins a nonce-only CSP so just Dark Reader's own tags can run.
 const SANDBOX = 'allow-same-origin';
 
 // A srcdoc frame that never fires `load` would hang an export with no way
@@ -37,9 +38,9 @@ export async function settleDocument(doc, timeoutMs = SETTLE_TIMEOUT_MS) {
   clearTimeout(timer);
 }
 
-export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOUT_MS } = {}) {
+export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOUT_MS, sandbox = SANDBOX } = {}) {
   const iframe = document.createElement('iframe');
-  iframe.setAttribute('sandbox', SANDBOX);
+  iframe.setAttribute('sandbox', sandbox);
   iframe.setAttribute('aria-hidden', 'true');
   iframe.style.cssText =
     `position:fixed;left:-10000px;top:0;width:${EXPORT_WIDTH_PX}px;height:1000px;border:0;visibility:hidden`;
@@ -110,16 +111,24 @@ function adopt(canvas) {
 
 // `onCloneNode`: handed to the rasterizer, which calls it with the cloned
 // tree before drawing (a social card's belt-and-braces redaction pass).
-export async function renderMessageToCanvas({ message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode }) {
-  const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle });
-  const frame = await mountExportFrame(html, { loadTimeoutMs });
+// `part`, `theme`, `extraHead`: see buildMessageDocument. `sandbox`: the
+// frame's sandbox tokens. `backgroundColor`: what the canvas is filled with
+// behind the document. `beforeCapture(doc)`: awaited once the frame is
+// measured, before it is rasterized (a dark card waits for Dark Reader).
+export async function renderMessageToCanvas({
+  message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode,
+  part, theme, extraHead, sandbox, backgroundColor = '#ffffff', beforeCapture,
+}) {
+  const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead });
+  const frame = await mountExportFrame(html, { loadTimeoutMs, ...(sandbox ? { sandbox } : {}) });
   try {
+    if (beforeCapture) await beforeCapture(frame.doc);
     // font:false and a short timeout are load-bearing, not tuning: the Task 0
     // probe measured 30,277 ms with the defaults versus 3,887 ms with these,
     // for byte-identical output. The export document uses system fonts only,
     // so there is nothing for font embedding to contribute.
     const options = {
-      scale: EXPORT_SCALE, backgroundColor: '#ffffff',
+      scale: EXPORT_SCALE, backgroundColor,
       width: EXPORT_WIDTH_PX, height: frame.height,
       font: false, timeout: 3000,
       ...(onCloneNode ? { onCloneNode } : {}),

@@ -131,3 +131,52 @@ describe('buildMessageDocument', () => {
     expect(html).not.toContain('prefers-color-scheme');
   });
 });
+
+// A social card rasterizes its header and its body apart, each in its own theme.
+describe('buildMessageDocument parts', () => {
+  const whole = () => buildMessageDocument({ message, bodyHtml: '<p>hi</p>' });
+
+  it('the default is unchanged by the part options being absent or neutral', () => {
+    expect(buildMessageDocument({ message, bodyHtml: '<p>hi</p>', theme: 'light', extraHead: '' })).toBe(whole());
+    expect(buildMessageDocument({ message, bodyHtml: '<p>hi</p>', theme: 'dark' })).toBe(whole());
+  });
+
+  it('head: the header block alone, no body', () => {
+    const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'head' });
+    expect(html).toContain('class="mv-head"');
+    expect(html).not.toContain('<main');
+    expect(html).not.toContain('<p>hi</p>');
+    expect(html).not.toContain('#1e1f22');
+  });
+
+  it('head, dark: plain CSS in the dark card colors, no script', () => {
+    const html = buildMessageDocument({ message, part: 'head', theme: 'dark' });
+    expect(html).toContain('color-scheme: dark');
+    for (const color of ['#1e1f22', '#e6e7ea', '#9aa1ab', '#34363b']) expect(html).toContain(color);
+    expect(html).not.toContain('<script');
+  });
+
+  it('body: the mail alone, no header', () => {
+    const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'body' });
+    expect(html).toContain('<main class="mv-body"><p>hi</p></main>');
+    expect(html).not.toContain('mv-head"');
+    expect(html).not.toContain('Brisket Sans licence');
+  });
+
+  it('body, dark: inline color priorities are dropped for Dark Reader; the sanitizer still runs', () => {
+    const body = '<p style="color:#000 !important;margin:0 !important">hi</p><script>evil()</script>';
+    const html = buildMessageDocument({ message, bodyHtml: body, part: 'body', theme: 'dark' });
+    expect(html).toContain('color:#000');
+    expect(html).not.toContain('color:#000 !important');
+    expect(html).toContain('margin:0 !important');
+    expect(html).not.toContain('evil()');
+    // Light keeps them.
+    expect(buildMessageDocument({ message, bodyHtml: body, part: 'body' })).toContain('color:#000 !important');
+  });
+
+  it('extraHead lands after the stylesheet, inside the head', () => {
+    const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', part: 'body', extraHead: '<meta name="x">' });
+    expect(html).toMatch(/<\/style><meta name="x"><\/head>/);
+  });
+});
+
