@@ -277,6 +277,9 @@ describe('the results summary', () => {
     // A lane with no total (it never reached a folder): its count stands alone.
     act(() => useSearchStore.setState({ searchSearched: { local: 10000, server: null } }));
     expect(view.getByTestId('search-source-counts').textContent).toBe('Results: 1/10,000 local, 1 server');
+    // A source with no results says nothing.
+    act(() => useSearchStore.setState({ searchResults: useSearchStore.getState().searchResults.filter(e => e.source === 'local') }));
+    expect(view.getByTestId('search-source-counts').textContent).toBe('Results: 1/10,000 local');
   });
 
   it('says how many saved emails the search read, from the index', async () => {

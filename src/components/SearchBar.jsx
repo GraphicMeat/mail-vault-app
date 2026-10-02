@@ -52,10 +52,12 @@ const isServerRow = e => e.source === 'server' || e.source === 'server-search';
 
 // "Results: 33/10,000 local, 3/2,150 server". A lane's total arrives with the
 // terminal frame; before it, or when the lane never ran, the count stands alone.
+// A source with no results is left out.
 function resultCounts(rows, searched) {
   const part = (kind, count, total) => {
+    if (count === 0) return null;
     if (total != null) return t(`search.${kind}OfTotal`, { count: formatCount(count), total: formatCount(total) });
-    return count > 0 ? t(`search.${kind}Count`, { count: formatCount(count) }) : null;
+    return t(`search.${kind}Count`, { count: formatCount(count) });
   };
   const parts = [
     part('local', rows.filter(isLocalRow).length, searched?.local),
