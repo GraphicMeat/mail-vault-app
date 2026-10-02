@@ -15,6 +15,10 @@ vi.mock('../../../services/export/exportSaver', () => ({
   saveFilesToDirectory: (...a) => saveFilesToDirectory(...a),
 }));
 
+// The Social panel reads the mail store and the spam folder; neither is under test here.
+vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => ({}) } }));
+vi.mock('../../../utils/spamFolder', () => ({ isSpamMessage: () => false }));
+
 const hasPremiumAccess = vi.fn(() => true);
 vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: (...a) => hasPremiumAccess(...a),
