@@ -15,19 +15,25 @@ const RAW_BODIES = ['html', 'text', 'textBody'];
 // in a file opened anywhere); maskText leaves only x and punctuation.
 export const barText = (s) => maskText(s).replace(/x/g, '█');
 
-function maskParty(p, mask) {
+// `reveal`: lowercased exact values a spam image may still show. Only the
+// sender's parties (from, replyTo) are ever offered to it.
+function maskParty(p, mask, reveal) {
   if (!p) return p;
-  if (typeof p === 'string') return mask(p);
-  return { ...p, name: p.name ? mask(p.name) : p.name, address: p.address ? mask(p.address) : p.address };
+  const keep = (v) => !!reveal?.has(String(v).trim().toLowerCase());
+  const mine = (v) => (keep(v) ? v : mask(v));
+  if (typeof p === 'string') return mine(p);
+  return { ...p, name: p.name ? mine(p.name) : p.name, address: p.address ? mine(p.address) : p.address };
 }
 
 // `bar`: █ runs instead of x (the HTML export's header card).
-export function redactMessageForExport(message, dict, { bar = false } = {}) {
+// `reveal`: defaults to the dictionary's own (`dict.reveal`).
+export function redactMessageForExport(message, dict, { bar = false, reveal = dict?.reveal } = {}) {
   const mask = bar ? barText : maskText;
   const out = { ...message };
   for (const f of PARTIES) {
     const v = message[f];
-    if (v != null) out[f] = Array.isArray(v) ? v.map(p => maskParty(p, mask)) : maskParty(v, mask);
+    const shown = f === 'from' || f === 'replyTo' ? reveal : null;
+    if (v != null) out[f] = Array.isArray(v) ? v.map(p => maskParty(p, mask, shown)) : maskParty(v, mask, shown);
   }
   out.subject = maskString(message.subject || '', dict, mask);
   if (message.snippet) out.snippet = maskString(message.snippet, dict, mask);

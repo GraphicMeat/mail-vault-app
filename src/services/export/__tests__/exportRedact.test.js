@@ -67,4 +67,43 @@ describe('export redaction', () => {
     expect(out).not.toContain('img.example');
     expect(out).toContain('data:image/png;base64,CCCC');
   });
+
+  describe('reveal (a spam sender stays readable)', () => {
+    const spam = {
+      ...FIXTURE_MESSAGE,
+      from: { name: 'Prize Desk', address: 'win@prize.example' },
+      replyTo: [{ name: 'Collect', address: 'collect@elsewhere.example' }],
+    };
+    const reveal = new Set(['win@prize.example', 'prize desk', 'collect@elsewhere.example']);
+
+    it('leaves the From and Reply-To values in the set alone, and masks everyone else', () => {
+      const m = redactMessageForExport(spam, dict, { reveal });
+      expect(m.from).toEqual({ name: 'Prize Desk', address: 'win@prize.example' });
+      expect(m.replyTo[0].address).toBe('collect@elsewhere.example');
+      expect(m.replyTo[0].name).toBe('xxxxxxx'); // not in the set
+      noLeak(JSON.stringify(m.to) + JSON.stringify(m.cc));
+      expect(m.to[0].address).toBe('xxxxx@xxxxxxx.xx');
+    });
+
+    it('is exact: a different address or only the name in the set reveals only that', () => {
+      const m = redactMessageForExport(spam, dict, { reveal: new Set(['prize desk', 'win@prize.example.org']) });
+      expect(m.from.name).toBe('Prize Desk');
+      expect(m.from.address).toBe('xxx@xxxxx.xxxxxxx');
+    });
+
+    it('never reveals a recipient, even one whose value is in the set', () => {
+      const m = redactMessageForExport({ ...spam, to: [{ name: 'Rokas Ambrazevičius', address: 'win@prize.example' }] }, dict, { reveal });
+      expect(m.to[0].address).toBe('xxx@xxxxx.xxxxxxx');
+    });
+
+    it('takes the set from the dictionary when none is passed, and masks without one', () => {
+      expect(redactMessageForExport(spam, { ...dict, reveal }).from.address).toBe('win@prize.example');
+      expect(redactMessageForExport(spam, dict).from.address).toBe('xxx@xxxxx.xxxxxxx');
+    });
+
+    it('a subject that names the revealed address shows it, the contact\'s name still masked', () => {
+      const m = redactMessageForExport({ ...spam, subject: 'Re: win@prize.example for Joanna Kowalczyk' }, { ...dict, reveal });
+      expect(m.subject).toBe('Re: win@prize.example for xxxxxx xxxxxxxxx');
+    });
+  });
 });
