@@ -175,11 +175,19 @@ describe('buildSocialExport', () => {
       expect(r.file.name).not.toContain('Rokas');
     });
 
+    // What the header's safety-net pass leaves of the sender's name: no exception without a reveal.
+    const headPass = (args) => {
+      const head = document.createElement('div');
+      head.innerHTML = '<p>Prize Desk</p>';
+      args.onCloneHead(head);
+      return head.textContent;
+    };
+
     it('without revealSender the sender is masked like anyone and nothing special is passed', async () => {
       const r = await buildSocialExport({ message: spam, options });
       const args = renderSocialCard.mock.calls[0][0];
       expect(JSON.stringify(args.message)).not.toMatch(/win@prize|Prize Desk|collect@elsewhere/);
-      expect(args.onCloneHead).toBeUndefined();
+      expect(headPass(args)).toBe('xxxxx xxxx');
       expect(r.file.name).not.toContain('Prize');
     });
 
@@ -190,7 +198,7 @@ describe('buildSocialExport', () => {
       await buildSocialExport({ message: { ...spam, replyTo: undefined }, options: { ...options, revealSender: true } });
       const args = renderSocialCard.mock.calls[1][0];
       expect(args.message.from.address).toBe('xxx@xxxxx.xxxxxxx');
-      expect(args.onCloneHead).toBeUndefined();
+      expect(headPass(args)).toBe('xxxxx xxxx');
     });
 
     it('privacy mode on: still reveals the sender when asked, still redacts everyone else', async () => {
