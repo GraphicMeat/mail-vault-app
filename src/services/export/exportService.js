@@ -15,6 +15,8 @@ import { trace } from './exportTrace';
 import { plainTextBodyHtml } from '../../utils/mailto';
 import { send } from '../transport';
 import { redactMessageForExport, redactBodyForExport, redactLabel, barText } from './exportRedact';
+import { senderDetailsModel, maskSenderDetails } from './social/senderDetails';
+import { collectSocialLinks } from './social/socialLinks';
 import { buildNameDictionary, unionDictionaries, maskText } from '../../utils/privacy/piiDetector';
 import { collectPrivacyNames } from '../../utils/privacy/privacyDictionary';
 
@@ -77,14 +79,20 @@ const utf8ToBase64 = (text) => {
   return btoa(binary);
 };
 
-// The body a message contributes to an export: CID images resolved, executable
-// content stripped, remote content mirrored when the user asked for it.
-async function prepareBody(message, mirror, fetchAsset, totals) {
+// The body as the reader has it, before the export sanitizer takes the
+// executable parts (and with them every javascript: link) out.
+function rawBodyHtml(message) {
   // The same fallback the reader makes: a message with no HTML part still has
   // its text, and reading `html` alone exported it as an empty card.
   const source = message.html || plainTextBodyHtml(message.text || message.textBody);
   // No Google Fonts stylesheet: the exported page would fetch it on opening.
-  const raw = stripGoogleFontImports(getEmailBodyContent(replaceCidUrls(source, message.attachments)));
+  return stripGoogleFontImports(getEmailBodyContent(replaceCidUrls(source, message.attachments)));
+}
+
+// The body a message contributes to an export: CID images resolved, executable
+// content stripped, remote content mirrored when the user asked for it.
+async function prepareBody(message, mirror, fetchAsset, totals) {
+  const raw = rawBodyHtml(message);
   const safe = sanitizeForExport(raw);
   if (!mirror) return safe;
   const { html, stats } = await mirrorRemoteAssets(safe, { fetchAsset, caps: DEFAULT_CAPS });
@@ -161,20 +169,35 @@ const stemOf = (fileName) => fileName.replace(/\.[^.]+$/, '');
  * One message made ready for a social card: the same hydrate → prepareBody →
  * redact steps buildExport runs, for a canvas instead of files.
  * `redact`: null, or `{ dict, format }`; the message's own parties join the
- * dictionary, as in buildExport.
+ * dictionary, as in buildExport. `details` and `links` ask for the card's
+ * sender-details model and links list, both worked out from the unredacted
+ * message and body (the verdicts need the real text; redaction strips every
+ * href) and masked afterwards when redacting.
  */
-export async function prepareSocialMessage(message, { mirror = true, redact = null, fetchAsset = fetchAssetViaTauri } = {}) {
+export async function prepareSocialMessage(message, { mirror = true, redact = null, fetchAsset = fetchAssetViaTauri, details = false, links = false } = {}) {
   const dated = message.date instanceof Date ? message : { ...message, date: asDate(message.date) };
   const location = resolveEmailLocation(dated, useMailStore.getState());
   const full = await hydrateInlineImages(await hydrate(dated), location?.accountId, location?.mailbox);
   const accountEmail = accountEmailOf(dated, useMailStore.getState());
   const totals = { mirrored: 0, failed: 0, pixelsRemoved: 0, bytes: 0 };
   const body = await prepareBody(full, mirror, url => fetchAsset(url, accountEmail), totals);
-  if (!redact) return { message: full, body };
+  // The reader's header fields: a body read may not carry what the row did.
+  const sender = {
+    ...full,
+    from: full.from ?? dated.from,
+    replyTo: full.replyTo ?? dated.replyTo,
+    returnPath: full.returnPath ?? dated.returnPath,
+    authenticationResults: full.authenticationResults ?? dated.authenticationResults,
+  };
+  const model = details ? senderDetailsModel(sender) : null;
+  const rawBody = links ? rawBodyHtml(full) : '';
+  if (!redact) return { message: full, body, details: model, links: links ? collectSocialLinks(rawBody) : null };
   const dict = unionDictionaries(redact.dict, buildNameDictionary({ names: collectPrivacyNames({ emails: [full] }) }));
   return {
     message: redactMessageForExport(full, dict),
     body: redactBodyForExport(body, dict, { format: redact.format || 'image' }),
+    details: model && maskSenderDetails(model, dict),
+    links: links ? collectSocialLinks(rawBody, { dict, redact: true }) : null,
   };
 }
 
