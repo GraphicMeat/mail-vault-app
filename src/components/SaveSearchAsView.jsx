@@ -44,7 +44,7 @@ export function SaveSearchAsView() {
     return <button type="button" className="sidebar-view-save" data-testid="save-search-as-view"
       onClick={() => setOpen(true)} title={t('views.saveSearch')}>
       <Bookmark size={12} aria-hidden="true" />
-      {t('views.saveSearch')}
+      {t('views.saveSearchShort')}
     </button>;
   }
 

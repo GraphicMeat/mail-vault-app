@@ -215,10 +215,22 @@ export const useSearchStore = create((set, get) => ({
       accepted = true;
       const terminal = !!frame.terminal;
       if (terminal && state.isSearching && state.searchQuery.trim()) historyQuery = state.searchQuery.trim();
+      // A lane's count and time arrive when that lane finishes: the vault's on
+      // its own frame ahead of the server, the server's on the terminal one.
+      const hasLaneStats = frame.localMs != null || frame.serverMs != null
+        || frame.localSearched != null || frame.serverSearched != null;
+      const mergeLane = (prev, local, server) => ({
+        local: local ?? prev?.local ?? null,
+        server: server ?? prev?.server ?? null,
+      });
       return {
         ...searchRows.addFrameRows(state, frameRows, replaceAccountId),
         lastSequence: frame.sequence,
-        searchProgress: terminal ? null : { done: frame.completed ?? 0, total: frame.total ?? 0 },
+        // The vault lane's stats frame carries no folder counts; it must not
+        // reset the server's "folder N of M" to 0 of 0.
+        searchProgress: terminal ? null
+          : hasLaneStats && !frameRows.length ? state.searchProgress
+            : { done: frame.completed ?? 0, total: frame.total ?? 0 },
         searchIndexCoverage: frame.coverage ?? state.searchIndexCoverage,
         searchFallback: frame.fallbackReason ?? state.searchFallback,
         searchError: frame.errorKey || state.searchError,
@@ -226,11 +238,11 @@ export const useSearchStore = create((set, get) => ({
         searchDurationMs: terminal && state.searchStartedAt != null
           ? Math.max(0, Date.now() - state.searchStartedAt)
           : state.searchDurationMs,
-        searchSearched: terminal && (frame.localSearched != null || frame.serverSearched != null)
-          ? { local: frame.localSearched ?? null, server: frame.serverSearched ?? null }
+        searchSearched: frame.localSearched != null || frame.serverSearched != null
+          ? mergeLane(state.searchSearched, frame.localSearched, frame.serverSearched)
           : state.searchSearched,
-        searchLaneMs: terminal && (frame.localMs != null || frame.serverMs != null)
-          ? { local: frame.localMs ?? null, server: frame.serverMs ?? null }
+        searchLaneMs: frame.localMs != null || frame.serverMs != null
+          ? mergeLane(state.searchLaneMs, frame.localMs, frame.serverMs)
           : state.searchLaneMs,
       };
     });

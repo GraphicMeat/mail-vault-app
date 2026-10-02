@@ -52,34 +52,30 @@ const formatDuration = ms => (ms < 1000
     s: (ms / 1000).toLocaleString(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   }));
 
-// "Time: 120 ms local, 7.36 s server", each lane timed by the daemon; a lane
-// that did not run is left out. Without lane times, the whole search's.
-function searchTimes(laneMs, totalMs) {
-  const parts = [
-    laneMs?.local != null && t('search.localTime', { time: formatDuration(laneMs.local) }),
-    laneMs?.server != null && t('search.serverTime', { time: formatDuration(laneMs.server) }),
-  ].filter(Boolean);
-  return `${t('search.timeLabel')} ${parts.length ? parts.join(', ') : formatDuration(totalMs)}`;
-}
-
 const isLocalRow = e => e.source === 'local' || e.source === 'local-only';
 const isServerRow = e => e.source === 'server' || e.source === 'server-search';
 
-// "Results: 33/10,000 local, 3/2,150 server". A lane's total arrives with the
-// terminal frame; before it, or when the lane never ran, the count stands alone.
-// A source with no results is left out.
-function resultCounts(rows, searched) {
-  const part = (kind, count, total) => {
-    if (count === 0) return null;
-    if (total != null) return t(`search.${kind}OfTotal`, { count: formatCount(count), total: formatCount(total) });
-    return t(`search.${kind}Count`, { count: formatCount(count) });
+// One group per lane, its count, what it read and how long it took together:
+// "12/8,922 · 294 ms" for the vault, "6/7,179 · 8.52 s" for the server. A lane
+// that did not run is left out; with no total its count stands alone; with no
+// results it says only how long it looked.
+function laneSummaries(rows, searched, laneMs) {
+  const lane = (id, count, total, ms) => {
+    const parts = [];
+    if (count > 0) parts.push(total != null ? `${formatCount(count)}/${formatCount(total)}` : formatCount(count));
+    if (ms != null) parts.push(formatDuration(ms));
+    return parts.length ? { id, text: parts.join(' · ') } : null;
   };
-  const parts = [
-    part('local', rows.filter(isLocalRow).length, searched?.local),
-    part('server', rows.filter(isServerRow).length, searched?.server),
+  return [
+    lane('local', rows.filter(isLocalRow).length, searched?.local, laneMs?.local),
+    lane('server', rows.filter(isServerRow).length, searched?.server, laneMs?.server),
   ].filter(Boolean);
-  return parts.length ? `${t('search.resultsLabel')} ${parts.join(', ')}` : null;
 }
+
+const LANE_META = {
+  local: { labelKey: 'search.location.vault', icon: HardDrive },
+  server: { labelKey: 'search.location.server', icon: Cloud },
+};
 
 export function SearchBar({ autoFocus = false }) {
   const t = useT();
@@ -280,6 +276,8 @@ export function SearchBar({ autoFocus = false }) {
   const pickedFolder = scopedToBranch
     ? String(searchFilters.folder).slice(SUBTREE_PREFIX.length)
     : searchFilters.folder;
+  const lanes = laneSummaries(searchResults, searchSearched, searchLaneMs);
+  const serverPending = isSearching && searchFilters.location !== 'local' && searchLaneMs?.server == null;
   // Nothing to include, nothing to offer. 'all' is already every folder, and a
   // folder with no folders under it — INBOX on any server, now that INBOX is
   // never a branch root — could only be ticked into a no-op.
@@ -747,7 +745,9 @@ export function SearchBar({ autoFocus = false }) {
       {/* Search results indicator */}
       {searchActive && !activeViewId && (
         <div className="mt-2 text-xs text-mail-text-muted">
-          {isSearching ? (
+          {/* The vault answers long before the server: once its numbers are in,
+              the summary shows and the server lane spins until it lands. */}
+          {isSearching && searchLaneMs?.local == null ? (
             <span className="flex items-center gap-2">
               <motion.div
                 animate={{ rotate: 360 }}
@@ -762,7 +762,7 @@ export function SearchBar({ autoFocus = false }) {
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span data-testid="search-summary">
+                <span className="min-w-0" data-testid="search-summary">
                   <T k="search.foundResults" vars={{ count: searchResults.length }}
                      parts={[(s) => <span className="font-medium text-mail-text">{s}</span>]} />
                   {!scopedToBranch && searchFilters.folder === 'current' && (unifiedInbox
@@ -775,21 +775,40 @@ export function SearchBar({ autoFocus = false }) {
                     folder: pickedFolder === 'current' ? currentFolderName : decodeImapUtf7(pickedFolder),
                   })}
                   {/* The index counts every message in the folders searched; a
-                      half-built one counts only what it has, so it says nothing. */}
-                  {searchIndexCoverage?.complete && searchIndexCoverage.total > 0 && t('search.fromTotal', { total: formatCount(searchIndexCoverage.total) })}
+                      half-built one counts only what it has, so it says nothing.
+                      The vault lane's own total says it already. */}
+                  {searchSearched?.local == null && searchIndexCoverage?.complete && searchIndexCoverage.total > 0
+                    && t('search.fromTotal', { total: formatCount(searchIndexCoverage.total) })}
                 </span>
-                {searchDurationMs != null && (
-                  <span className="tabular-nums" data-testid="search-duration">
-                    {searchTimes(searchLaneMs, searchDurationMs)}
-                  </span>
-                )}
-                {searchResults.length > 0 && (
-                  <span className="ml-auto tabular-nums" data-testid="search-source-counts">
-                    {resultCounts(searchResults, searchSearched)}
-                  </span>
-                )}
+                {searchResults.length > 0 && <span className="ml-auto shrink-0"><SaveSearchAsView /></span>}
               </div>
-              {searchResults.length > 0 && <div className="mt-1"><SaveSearchAsView /></div>}
+              {(lanes.length > 0 || serverPending || searchDurationMs != null) && (
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-0.5 tabular-nums" data-testid="search-lanes">
+                  {lanes.map(({ id, text }) => {
+                    const { labelKey, icon: Icon } = LANE_META[id];
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1" data-testid={`search-lane-${id}`}>
+                        <Icon size={11} aria-hidden="true" />
+                        <span className="text-mail-text">{t(labelKey)}</span> {text}
+                      </span>
+                    );
+                  })}
+                  {serverPending && (
+                    <span className="inline-flex items-center gap-1" data-testid="search-lane-server-pending">
+                      <Cloud size={11} aria-hidden="true" />
+                      <span className="text-mail-text">{t('search.location.server')}</span>
+                      <motion.span className="inline-flex" animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                        <Search size={11} aria-hidden="true" />
+                      </motion.span>
+                    </span>
+                  )}
+                  {/* No lane times on the frame: the whole search's. */}
+                  {searchLaneMs?.local == null && searchLaneMs?.server == null && !serverPending && searchDurationMs != null && (
+                    <span data-testid="search-duration">{formatDuration(searchDurationMs)}</span>
+                  )}
+                </div>
+              )}
               {/* The index caps its rows; a silent cap reads as "that's all there is". */}
               {searchIndexCoverage?.matched > searchIndexCoverage?.shown && (
                 <div className="text-xs text-mail-text-muted" data-testid="search-index-capped">

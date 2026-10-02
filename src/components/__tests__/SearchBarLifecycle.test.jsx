@@ -250,7 +250,7 @@ describe('the results summary', () => {
     expect(summary).toContain('Found 1 results in Inbox across all accounts');
     expect(summary).not.toContain('UNIFIED');
     // No lane times on the frame: the whole search's, under a second in ms.
-    expect(view.getByTestId('search-duration').textContent).toBe('Time: 234 ms');
+    expect(view.getByTestId('search-duration').textContent).toBe('234 ms');
     clock.mockRestore();
   });
 
@@ -263,10 +263,14 @@ describe('the results summary', () => {
       coverage: null, failures: [], terminal: 'complete', errorKey: null,
       localMs: 120, serverMs: 7355,
     }));
-    expect(view.getByTestId('search-duration').textContent).toBe('Time: 120 ms local, 7.36 s server');
-    // A lane that did not run is left out.
+    // No vault rows: the vault lane says only how long it looked.
+    expect(view.getByTestId('search-lane-local').textContent).toBe('Vault 120 ms');
+    expect(view.getByTestId('search-lane-server').textContent).toBe('Server 1 · 7.36 s');
     act(() => useSearchStore.setState({ searchLaneMs: { local: 1500, server: null } }));
-    expect(view.getByTestId('search-duration').textContent).toBe('Time: 1.50 s local');
+    expect(view.getByTestId('search-lane-local').textContent).toBe('Vault 1.50 s');
+    // A lane that did not run and found nothing is left out.
+    act(() => useSearchStore.setState({ searchLaneMs: { local: null, server: 900 }, searchResults: [] }));
+    expect(view.queryByTestId('search-lane-local')).toBeNull();
   });
 
   it('counts each source against how many messages that lane read', async () => {
@@ -284,14 +288,14 @@ describe('the results summary', () => {
       coverage: null, failures: [], terminal: 'complete', errorKey: null,
       localSearched: 10000, serverSearched: 2150,
     }));
-    expect(view.getByTestId('search-source-counts').textContent)
-      .toBe('Results: 1/10,000 local, 1/2,150 server');
+    expect(view.getByTestId('search-lane-local').textContent).toBe('Vault 1/10,000');
+    expect(view.getByTestId('search-lane-server').textContent).toBe('Server 1/2,150');
     // A lane with no total (it never reached a folder): its count stands alone.
     act(() => useSearchStore.setState({ searchSearched: { local: 10000, server: null } }));
-    expect(view.getByTestId('search-source-counts').textContent).toBe('Results: 1/10,000 local, 1 server');
-    // A source with no results says nothing.
+    expect(view.getByTestId('search-lane-server').textContent).toBe('Server 1');
+    // A source with no results and no time says nothing.
     act(() => useSearchStore.setState({ searchResults: useSearchStore.getState().searchResults.filter(e => e.source === 'local') }));
-    expect(view.getByTestId('search-source-counts').textContent).toBe('Results: 1/10,000 local');
+    expect(view.queryByTestId('search-lane-server')).toBeNull();
   });
 
   it('says how many saved emails the search read, from the index', async () => {
@@ -314,6 +318,40 @@ describe('the results summary', () => {
     const view = render(<SearchBar />);
     await act(async () => { await startCurrent(); });
     expect(view.queryByTestId('search-duration')).toBeNull();
+    expect(view.queryByTestId('search-lanes')).toBeNull();
+  });
+
+  it('shows the vault lane as soon as it lands, with the server still spinning', async () => {
+    const view = render(<SearchBar />);
+    await act(async () => { await startCurrent(); });
+    const id = harness.runs[0].request.searchId;
+    const local = { ...row(1, 'hit', 'a', 'INBOX'), source: 'local' };
+    act(() => harness.runs[0].onProgress({
+      searchId: id, sequence: 1, lane: 'local',
+      rows: [local], completed: 1, total: 3, localMode: null, fallbackReason: null,
+      coverage: null, failures: [], terminal: null, errorKey: null,
+    }));
+    act(() => harness.runs[0].onProgress({
+      searchId: id, sequence: 2, lane: 'local',
+      rows: [], completed: 0, total: 0, localMode: null, fallbackReason: null,
+      coverage: null, failures: [], terminal: null, errorKey: null,
+      localSearched: 8922, localMs: 294,
+    }));
+    // The vault's stats frame must not reset the server's folder progress.
+    expect(useSearchStore.getState().searchProgress).toEqual({ done: 1, total: 3 });
+    expect(view.getByTestId('search-lane-local').textContent).toBe('Vault 1/8,922 · 294 ms');
+    expect(view.getByTestId('search-lane-server-pending')).toBeTruthy();
+    expect(view.getByTestId('save-search-as-view')).toBeTruthy();
+
+    act(() => harness.runs[0].onProgress({
+      searchId: id, sequence: 3, lane: null,
+      rows: [{ ...row(2, 'hit', 'a', 'INBOX'), source: 'server' }], completed: 3, total: 3,
+      localMode: null, fallbackReason: null, coverage: null, failures: [], terminal: 'complete', errorKey: null,
+      localSearched: 8922, serverSearched: 7179, localMs: 294, serverMs: 8520,
+    }));
+    expect(view.queryByTestId('search-lane-server-pending')).toBeNull();
+    expect(view.getByTestId('search-lane-local').textContent).toBe('Vault 1/8,922 · 294 ms');
+    expect(view.getByTestId('search-lane-server').textContent).toBe('Server 1/7,179 · 8.52 s');
   });
 });
 

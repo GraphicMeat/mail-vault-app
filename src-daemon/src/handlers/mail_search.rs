@@ -364,12 +364,25 @@ async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: Se
         })
     });
 
+    let local_frame_state = Arc::clone(&state);
+    let local_frame_run = Arc::clone(&run);
+    let local_frame_id = request.search_id.clone();
     let local_future = async move {
         let report = match local_task {
             Some(task) => task.await.unwrap_or_default(),
             None => SearchReport::default(),
         };
-        (report, elapsed_ms(started))
+        let local_ms = elapsed_ms(started);
+        // The vault answers in milliseconds and the server can take seconds:
+        // its count and time go out now, not with the terminal frame.
+        if report.total_sources > 0 {
+            let mut frame = progress(&local_frame_id);
+            frame.lane = Some(SearchLane::Local);
+            frame.local_searched = Some(report.searched);
+            frame.local_ms = Some(local_ms);
+            emit_progress(&local_frame_state, &local_frame_run, frame);
+        }
+        (report, local_ms)
     };
     let server_state = Arc::clone(&state);
     let server_run = Arc::clone(&run);
@@ -1615,6 +1628,13 @@ mod tests {
         assert!(terminal["serverMs"].is_null(), "{frames:?}");
         let rows: usize = frames.iter().map(|f| f["rows"].as_array().map_or(0, Vec::len)).sum();
         assert_eq!(rows, 1, "{frames:?}");
+        // The vault lane's own count and time come ahead of the terminal frame.
+        let lane_done = frames
+            .iter()
+            .find(|f| f["terminal"].is_null() && f["localMs"].is_u64())
+            .expect("a non-terminal frame with the vault lane's time");
+        assert_eq!(lane_done["lane"], "local", "{frames:?}");
+        assert_eq!(lane_done["localSearched"], 3, "{frames:?}");
     }
 
     #[tokio::test]
