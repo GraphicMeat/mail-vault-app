@@ -111,15 +111,15 @@ function adopt(canvas) {
 
 // `onCloneNode`: handed to the rasterizer, which calls it with the cloned
 // tree before drawing (a social card's belt-and-braces redaction pass).
-// `part`, `theme`, `extraHead`: see buildMessageDocument. `sandbox`: the
+// `part`, `theme`, `extraHead`, `extrasHtml`: see buildMessageDocument. `sandbox`: the
 // frame's sandbox tokens. `backgroundColor`: what the canvas is filled with
 // behind the document. `beforeCapture(doc)`: awaited once the frame is
 // measured, before it is rasterized (a dark card waits for Dark Reader).
 export async function renderMessageToCanvas({
   message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode,
-  part, theme, extraHead, sandbox, backgroundColor = '#ffffff', beforeCapture,
+  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture,
 }) {
-  const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead });
+  const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml });
   const frame = await mountExportFrame(html, { loadTimeoutMs, ...(sandbox ? { sandbox } : {}) });
   try {
     if (beforeCapture) await beforeCapture(frame.doc);

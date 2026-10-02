@@ -87,6 +87,26 @@ describe('renderSocialCard', () => {
   });
 });
 
+describe('renderSocialCard header extras and redaction', () => {
+  it('hands the boxes under the header to the header half only', async () => {
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', appearance: 'light', mail: 'light', extrasHtml: '<section>box</section>' });
+    expect(callFor('head').extrasHtml).toBe('<section>box</section>');
+    expect(callFor('body').extrasHtml).toBeUndefined();
+  });
+
+  it('onCloneHead replaces onCloneNode for the header alone; the body keeps onCloneNode', async () => {
+    const onCloneHead = () => {};
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', redactStyle: 'blur', onCloneNode, onCloneHead });
+    expect(callFor('head').onCloneNode).toBe(onCloneHead);
+    expect(callFor('body').onCloneNode).toBe(onCloneNode);
+  });
+
+  it('without onCloneHead the header redacts with onCloneNode, as before', async () => {
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', redactStyle: 'blur', onCloneNode });
+    expect(callFor('head').onCloneNode).toBe(onCloneNode);
+  });
+});
+
 describe('waitForDarkReader', () => {
   const frames = () => { const doc = document.implementation.createHTMLDocument('x'); return doc; };
 

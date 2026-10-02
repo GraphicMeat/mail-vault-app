@@ -45,13 +45,15 @@ function stack(head, body, headBg) {
  * One email as a card canvas: the header block in `appearance` ('light' |
  * 'dark', plain CSS) stacked over the body in `mail` ('light' | 'dark', Dark
  * Reader). `redactStyle` and `onCloneNode` go to both halves: the header holds
- * the names and addresses. A dark body mounts its frame with scripts, under a
+ * the names and addresses. `onCloneHead` replaces `onCloneNode` for the header
+ * alone (a spam sender's revealed name is kept there, never in the body), and
+ * `extrasHtml` is the boxes under the header (sender details, links). A dark body mounts its frame with scripts, under a
  * CSP that admits only the nonced Dark Reader tags, so the mail's own scripts
  * (already stripped by the sanitizer) could not run anyway.
  */
-export async function renderSocialCard({ message, bodyHtml, appearance = 'light', mail = 'light', palette, redactStyle, onCloneNode }) {
+export async function renderSocialCard({ message, bodyHtml, appearance = 'light', mail = 'light', palette, redactStyle, onCloneNode, onCloneHead, extrasHtml }) {
   const head = await renderMessageToCanvas({
-    message, part: 'head', theme: appearance, redactStyle, onCloneNode,
+    message, part: 'head', theme: appearance, redactStyle, onCloneNode: onCloneHead ?? onCloneNode, extrasHtml,
     backgroundColor: appearance === 'dark' ? EXPORT_HEAD_DARK.bg : '#ffffff',
   });
   let body;
