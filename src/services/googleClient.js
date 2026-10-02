@@ -6,6 +6,11 @@
 export const GOOGLE_CLIENT_THUNDERBIRD = 'thunderbird';
 export const GOOGLE_CLIENT_MAILVAULT = 'mailvault';
 
+// Thunderbird's public client id (src-core oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID),
+// so a stamp still reads right when the daemon's list could not be loaded: a
+// Thunderbird account must never read as MailVault's and be moved on Reconnect.
+const THUNDERBIRD_CLIENT_ID = '406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com';
+
 /** The daemon's refusal code (src-core oauth2::OWN_GOOGLE_CLIENT_UNAVAILABLE). */
 export const E_GOOGLE_OWN_CLIENT_UNAVAILABLE = 'E_GOOGLE_OWN_CLIENT_UNAVAILABLE';
 const OWN_UNAVAILABLE_KEY = 'googleClient.ownUnavailable';
@@ -19,7 +24,7 @@ const OWN_UNAVAILABLE_KEY = 'googleClient.ownUnavailable';
 export function googleClientFromStamp(stamp, clients) {
   const id = typeof stamp === 'string' ? stamp.trim() : '';
   if (!id) return GOOGLE_CLIENT_THUNDERBIRD;
-  if (clients?.thunderbirdClientId && id === clients.thunderbirdClientId) return GOOGLE_CLIENT_THUNDERBIRD;
+  if (id === (clients?.thunderbirdClientId || THUNDERBIRD_CLIENT_ID)) return GOOGLE_CLIENT_THUNDERBIRD;
   return GOOGLE_CLIENT_MAILVAULT;
 }
 
