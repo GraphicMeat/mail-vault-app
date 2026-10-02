@@ -236,10 +236,11 @@ describe('buildSocialExport', () => {
       expect(extrasHtml).toContain('http://claim.example/c/rokas%40example.lt');
     });
 
-    it('app window: passes the reveal and the open message to the capture, and never the links', async () => {
+    it('app window: passes the reveal (addresses only) and the open message to the capture, and never the links', async () => {
       await buildSocialExport({ message: spam, options: { ...options, content: 'app', revealSender: true, senderDetails: true, links: true } });
       const args = captureAppWindow.mock.calls[0][0];
-      expect([...args.reveal].sort()).toEqual(['collect@elsewhere.example', 'prize desk', 'win@prize.example']);
+      // No name: in the live UI it would unmask every row naming it, a real contact's too.
+      expect([...args.reveal].sort()).toEqual(['collect@elsewhere.example', 'win@prize.example']);
       expect(args.dict.reveal).toBe(args.reveal);
       expect(args.senderDetails).toEqual({ uid: 9, accountId: 'acct-1', mailbox: 'INBOX' });
       expect(renderSocialCard).not.toHaveBeenCalled();

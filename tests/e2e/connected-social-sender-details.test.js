@@ -142,7 +142,7 @@ describe('Social export: spam sender, sender details and links', function () {
     await browser.pause(1000);
   }
 
-  it('(b) the app window shot opens the real popover, the sender readable and the recipient masked', async function () {
+  it('(b) the app window shot opens the real popover, the sender address readable and the recipient masked', async function () {
     await openFixture();
     const r = await browser.executeAsync((target, reveal, done) => {
       (async () => {
@@ -199,16 +199,17 @@ describe('Social export: spam sender, sender details and links', function () {
           after: { popover: !!document.querySelector('[data-capture-overlay]') },
         });
       })().catch(e => done({ error: String(e?.message || e) }));
-    }, { uid: SENDER_UID, mailbox: 'INBOX' }, [SENDER_ADDRESS, SENDER_NAME.toLowerCase()]);
+    }, { uid: SENDER_UID, mailbox: 'INBOX' }, [SENDER_ADDRESS]);
     log('capture', { ...r, text: undefined, textLength: r.text?.length });
     expect(r.error).toBeUndefined();
 
     // The real popover is in the shot: its title and the authentication it reports.
     expect(r.text).toContain('Sender Details');
     expect(r.text).toContain('Authentication');
-    // The sender is readable (header and popover), exactly as revealed.
+    // The sender's address is readable (header and popover), exactly as revealed;
+    // the app window shot reveals addresses only, so the display name stays masked.
     expect(r.text).toContain(SENDER_ADDRESS);
-    expect(r.text).toContain(SENDER_NAME);
+    expect(r.text).not.toContain(SENDER_NAME);
     // The recipient is not: masked wherever it was on screen.
     expect(r.text).not.toContain(RECIPIENT);
     expect(r.text).toMatch(/x{4}@x{4}\.x{4}/);

@@ -1,7 +1,7 @@
 import { hasPremiumAccess, useSettingsStore } from '../../../stores/settingsStore';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useThemeStore } from '../../../stores/themeStore';
-import { ensurePrivacyDictionary, collectPrivacyNames, getPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
+import { ensurePrivacyDictionary, collectPrivacyNames } from '../../../utils/privacy/privacyDictionary';
 import { buildNameDictionary, unionDictionaries } from '../../../utils/privacy/piiDetector';
 import { redactTree } from '../../../utils/privacy/redactDom';
 import { prepareSocialMessage } from '../exportService';
@@ -9,7 +9,7 @@ import { redactMessageForExport } from '../exportRedact';
 import { addressLine } from '../exportDocument';
 import { singleName } from '../exportNaming';
 import { useMailStore } from '../../../stores/mailStore';
-import { buildRevealSet } from './revealSender';
+import { buildRevealSet, revealAddressesOnly } from './revealSender';
 import { senderDetailsHtml } from './senderDetails';
 import { socialLinksHtml } from './socialLinks';
 import { captureTargetOf } from '../../../utils/captureTarget';
@@ -38,8 +38,6 @@ function dictionaryWithReveal(dict, message, { redact, revealSender }) {
   const settings = useSettingsStore.getState();
   const reveal = buildRevealSet(message, {
     accounts: mail.accounts, sendAsAddresses: settings.sendAsAddresses, aliases: settings.aliases, displayNames: settings.displayNames,
-    // The host's own dictionary, not `dict` (which already holds this message's parties).
-    hostDict: getPrivacyDictionary(),
   });
   return reveal.size ? { ...dict, reveal } : dict;
 }
@@ -67,8 +65,11 @@ export async function buildSocialContent(message, { content, redact, dict, theme
   const red = mustRedact(redact);
   const d = red ? dictionaryWithReveal(dict ?? await socialDictionary(dated), dated, { redact: red, revealSender }) : null;
   if (content === 'app') {
+    // Addresses only: a name revealed in the live UI unmasks every row that names
+    // it, and a spoofed display name can be a real contact's.
+    const reveal = revealAddressesOnly(d?.reveal);
     return captureAppWindow({
-      redact: red, dict: d, theme, reveal: d?.reveal,
+      redact: red, dict: d && d.reveal ? { ...d, reveal } : d, theme, reveal,
       // The open message's header opens its own popover; named as the reader places it.
       senderDetails: senderDetails ? captureTargetOf(dated, useMailStore.getState()) ?? undefined : undefined,
     });

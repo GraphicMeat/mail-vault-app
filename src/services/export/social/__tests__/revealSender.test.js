@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildRevealSet } from '../revealSender';
-import { buildNameDictionary } from '../../../../utils/privacy/piiDetector';
+import { buildRevealSet, revealAddressesOnly } from '../revealSender';
 
 const spam = {
   from: { name: 'Prize Desk', address: 'Win@Prize.Example ' },
@@ -84,13 +83,11 @@ describe('buildRevealSet', () => {
       expect(set(withName('Hello owen', { cc: [{ address: 'owen@own.example' }] }))).toEqual(addressOnly);
     });
 
-    it('a full name the host dictionary knows stays masked; an unknown name is revealed', () => {
-      const hostDict = buildNameDictionary({ names: ['Joanna Kowalczyk'] });
-      expect(set(withName('Joanna Kowalczyk'), { ...own, hostDict })).toEqual(addressOnly);
-      expect(set(withName('joanna kowalczyk'), { ...own, hostDict })).toEqual(addressOnly);
-      expect(set(withName('Prize Desk'), { ...own, hostDict })).toEqual(['prize desk', 'win@prize.example']);
-      // A name that only shares a token with a contact is not that contact's full name.
-      expect(set(withName('Joanna Prize Desk'), { ...own, hostDict })).toEqual(['joanna prize desk', 'win@prize.example']);
+    it('a spoofed contact name is revealed for the card; the app window shot keeps addresses only', () => {
+      const reveal = buildRevealSet(withName('Joanna Kowalczyk'), own);
+      expect([...reveal].sort()).toEqual(['joanna kowalczyk', 'win@prize.example']);
+      expect([...revealAddressesOnly(reveal)]).toEqual(['win@prize.example']);
+      expect(revealAddressesOnly(null)).toBe(null);
     });
 
     it('a plain brand name is still revealed beside the address', () => {

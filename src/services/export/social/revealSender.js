@@ -26,14 +26,17 @@ function partyParts(p) {
  * The display name is the spammer's to choose, so it is revealed only when it
  * names nobody: no address, phone or postal address in it, none of the user's
  * or the recipients' names (whole, in part, or as an address's local part: "Own
- * Name via DocuSign", "Own, your parcel"), and not a full name the host
- * dictionary knows (a spoofed contact would unmask that contact's real rows).
+ * Name via DocuSign", "Own, your parcel"). A spoofed contact's name is still
+ * revealed: on a card it is only what this spam claims. The app window shot
+ * reveals addresses only (`revealAddressesOnly`), where a name would unmask that
+ * contact's real rows too. The host dictionary cannot tell them apart: it holds
+ * every loaded sender, the spammer included.
  *
  * `message`: the dated message; `accounts`, `sendAsAddresses`, `aliases`: every
  * account the app holds and its own addresses (login, default From, aliases),
- * not only the one on screen. `hostDict`: the host's privacy dictionary.
+ * not only the one on screen.
  */
-export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, aliases = {}, displayNames = {}, hostDict = null } = {}) {
+export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, aliases = {}, displayNames = {} } = {}) {
   const own = new Set();
   const ownNames = new Set();
   for (const account of accounts || []) {
@@ -58,9 +61,7 @@ export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, a
   const probes = (name) => [name, name.replace(/(^|[^\p{L}])(\p{L})/gu, (_, sep, c) => sep + c.toUpperCase())];
   const safeName = (name) => {
     if (findPii(name, EMPTY_DICTIONARY).length) return false;
-    if (probes(name).some(p => findPii(p, mine).length)) return false;
-    return !(hostDict?.size && probes(name).some(p => findPii(p, hostDict)
-      .some(span => span.kind === 'name' && p.slice(span.start, span.end).trim().length === p.trim().length)));
+    return !probes(name).some(p => findPii(p, mine).length);
   };
 
   const reveal = new Set();
@@ -77,3 +78,6 @@ export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, a
   }
   return reveal;
 }
+
+/** The addresses of a reveal set, without the name: what the app window shot may show. */
+export const revealAddressesOnly = (reveal) => (reveal?.size ? new Set([...reveal].filter(v => v.includes('@'))) : reveal);
