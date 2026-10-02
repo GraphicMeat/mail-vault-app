@@ -22,6 +22,7 @@ const { buildMessageDocument } = await import('../../services/export/exportDocum
 const { senderDetailsHtml } = await import('../../services/export/social/senderDetails');
 const { socialLinksHtml } = await import('../../services/export/social/socialLinks');
 const { buildNameDictionary } = await import('../../utils/privacy/piiDetector');
+const { buildRevealSet } = await import('../../services/export/social/revealSender');
 const { PEOPLE, FIXTURE_MESSAGE, NEEDLES } = await import('../../test/privacyFixtures');
 
 const [JOANNA, ROKAS, OWEN] = PEOPLE.names;
@@ -65,13 +66,31 @@ describe('privacy leak guard: social card header boxes', () => {
     }
   });
 
-  it('redacted, reveal on: only the sender\'s exact values show, everyone else stays masked', async () => {
-    const reveal = new Set([JOANNA_MAIL, OWEN_MAIL.toLowerCase()]);
-    const { html, extrasHtml } = await cardHeadHtml(impersonation, { dict: { ...dict, reveal }, format: 'image' });
-    expect(extrasHtml).toContain(JOANNA_MAIL);
-    noLeak(html, NEEDLES.filter(n => !reveal.has(n) && !JOANNA_MAIL.includes(n) && !OWEN_MAIL.includes(n)));
-    // Rokas (the recipient, not in the set) never shows, in the Reply-To or the links.
-    for (const n of [ROKAS, ROKAS_MAIL, 'Ambrazevičius']) expect(html).not.toContain(n);
+  // The reveal is derived the way the app derives it, from the user's accounts.
+  const accounts = [{ id: 'own', email: ROKAS_MAIL, name: ROKAS }];
+
+  it('redacted, reveal on: only the sender\'s address shows, never a name or address of the user in the display name', async () => {
+    const SPAM_ADDRESS = 'spam@spam.example';
+    const spoofs = [
+      { ...impersonation, from: { name: OWEN_MAIL, address: JOANNA_MAIL } }, // another person's address as the name
+      { ...plain, from: { name: ROKAS_MAIL, address: SPAM_ADDRESS } }, // the account address as the name
+      { ...plain, from: { name: `${ROKAS} via DocuSign`, address: SPAM_ADDRESS } }, // the user's name inside it
+      { ...plain, from: { name: 'Rokas, your parcel', address: SPAM_ADDRESS } },
+      { ...plain, from: { name: PEOPLE.phones[0], address: SPAM_ADDRESS } },
+    ].map(m => ({ ...m, replyTo: undefined, to: [{ name: ROKAS, address: ROKAS_MAIL }] }));
+    for (const message of spoofs) {
+      const reveal = buildRevealSet(message, { accounts });
+      // Only the sender's address: the name field never makes it in.
+      expect([...reveal]).toEqual([message.from.address.toLowerCase()]);
+      const { html, extrasHtml } = await cardHeadHtml(message, { dict: { ...dict, reveal }, format: 'image' });
+      // The sender's address is named, in the header and the box.
+      expect(extrasHtml).toContain(message.from.address);
+      expect(html).toContain(message.from.address);
+      // Nobody else is, and above all not the user, through the name field.
+      const others = NEEDLES.filter(n => !message.from.address.includes(n));
+      noLeak(html, others);
+      for (const n of [ROKAS, ROKAS_MAIL, 'Rokas', 'Ambrazevičius', 'rokas', ...PEOPLE.phones]) expect(html, n).not.toContain(n);
+    }
   });
 
   it('unredacted, the same message does show its people (the guard can fail)', async () => {

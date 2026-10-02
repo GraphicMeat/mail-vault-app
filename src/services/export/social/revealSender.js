@@ -1,5 +1,6 @@
 import { ownAddresses } from '../../../utils/ownAddresses';
 import { normalizeEmailIdentity } from '../../../utils/emailIdentity';
+import { findPii, buildNameDictionary, EMPTY_DICTIONARY } from '../../../utils/privacy/piiDetector';
 
 /**
  * What a redacted social image may still show of a spam message: the sender's
@@ -22,11 +23,17 @@ function partyParts(p) {
 }
 
 /**
+ * The display name is the spammer's to choose, so it is revealed only when it
+ * names nobody: no address, phone or postal address in it, none of the user's
+ * or the recipients' names (whole, in part, or as an address's local part: "Own
+ * Name via DocuSign", "Own, your parcel"), and not a full name the host
+ * dictionary knows (a spoofed contact would unmask that contact's real rows).
+ *
  * `message`: the dated message; `accounts`, `sendAsAddresses`, `aliases`: every
  * account the app holds and its own addresses (login, default From, aliases),
- * not only the one on screen.
+ * not only the one on screen. `hostDict`: the host's privacy dictionary.
  */
-export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, aliases = {}, displayNames = {} } = {}) {
+export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, aliases = {}, displayNames = {}, hostDict = null } = {}) {
   const own = new Set();
   const ownNames = new Set();
   for (const account of accounts || []) {
@@ -41,13 +48,28 @@ export function buildRevealSet(message, { accounts = [], sendAsAddresses = {}, a
   const isOwnAddress = (a) => !!a && (own.has(normalizeEmailIdentity(a)) || recipients.some(r => r.address && normalizeEmailIdentity(r.address) === normalizeEmailIdentity(a)));
   const recipientNames = new Set(recipients.map(r => r.name).filter(Boolean));
 
+  // Names whose appearance in a display name makes it the user's or a recipient's: theirs,
+  // and the local parts of their addresses ("rokas.ambrazevicius@...").
+  const localPart = (a) => String(a).split('@')[0];
+  const mine = buildNameDictionary({
+    names: [...ownNames, ...recipientNames, ...[...own, ...recipients.map(r => r.address)].filter(Boolean).map(localPart)],
+  });
+  // The detector wants capitals on names and the From name arrives lowercased: look at both.
+  const probes = (name) => [name, name.replace(/(^|[^\p{L}])(\p{L})/gu, (_, sep, c) => sep + c.toUpperCase())];
+  const safeName = (name) => {
+    if (findPii(name, EMPTY_DICTIONARY).length) return false;
+    if (probes(name).some(p => findPii(p, mine).length)) return false;
+    return !(hostDict?.size && probes(name).some(p => findPii(p, hostDict)
+      .some(span => span.kind === 'name' && p.slice(span.start, span.end).trim().length === p.trim().length)));
+  };
+
   const reveal = new Set();
   const from = partyParts(message?.from);
   // A From that is you or someone it was sent to is not a spammer to name.
   if (from.address && !isOwnAddress(from.address)) {
     reveal.add(from.address);
-    // A spoofed name is often the victim's own: that stays masked.
-    if (from.name && !ownNames.has(from.name) && !recipientNames.has(from.name)) reveal.add(from.name);
+    // A spoofed name is often the victim's own, or carries it: that stays masked.
+    if (from.name && safeName(from.name)) reveal.add(from.name);
   }
   for (const p of listOf(message?.replyTo)) {
     const { address } = partyParts(p);

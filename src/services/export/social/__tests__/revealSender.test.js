@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildRevealSet } from '../revealSender';
+import { buildNameDictionary } from '../../../../utils/privacy/piiDetector';
 
 const spam = {
   from: { name: 'Prize Desk', address: 'Win@Prize.Example ' },
@@ -56,5 +57,45 @@ describe('buildRevealSet', () => {
   it('with no accounts known, only the recipients are excluded', () => {
     expect(set(spam, {})).toEqual(['collect@elsewhere.example', 'prize desk', 'win@prize.example']);
     expect(set({ ...spam, from: { address: 'rokas@example.lt' } }, {})).toEqual(['collect@elsewhere.example']); // the recipient From is still excluded
+  });
+
+  describe('the display name is revealed only when it names nobody', () => {
+    const base = { to: [{ name: 'Rokas Ambrazevičius', address: 'rokas@example.lt' }], replyTo: undefined };
+    const withName = (name, extra = {}) => ({ ...base, from: { name, address: 'win@prize.example' }, ...extra });
+    // The From address is still named when it is not the user's.
+    const addressOnly = ['win@prize.example'];
+
+    it('a name that is the user\'s own address, a recipient\'s address or a phone stays masked', () => {
+      expect(set(withName('rokas@example.lt'))).toEqual(addressOnly);
+      expect(set(withName('Rokas.Alias@example.lt'))).toEqual(addressOnly);
+      expect(set(withName('owen@own.example', { cc: [{ address: 'owen@own.example' }] }))).toEqual(addressOnly);
+      expect(set(withName('+370 612 34567'))).toEqual(addressOnly);
+      expect(set(withName('Call 612 34567 now'))).toEqual(addressOnly);
+    });
+
+    it('a name that carries the user\'s or a recipient\'s name stays masked, whatever else it says', () => {
+      for (const name of ['Rokas Ambrazevičius via DocuSign', 'Rokas, your parcel', 'ROKAS - action needed', 'Ambrazevičius Rokas', 'rokas, your parcel']) {
+        expect(set(withName(name)), name).toEqual(addressOnly);
+      }
+      // The local part of an address of yours counts as your name.
+      expect(set(withName('Rokas.Alias Support'))).toEqual(addressOnly);
+      // And so do the recipients' (to or cc), by name and by address local part.
+      expect(set(withName('Owen Ashcombe offers', { cc: [{ name: 'Owen Ashcombe', address: 'owen@own.example' }] }))).toEqual(addressOnly);
+      expect(set(withName('Hello owen', { cc: [{ address: 'owen@own.example' }] }))).toEqual(addressOnly);
+    });
+
+    it('a full name the host dictionary knows stays masked; an unknown name is revealed', () => {
+      const hostDict = buildNameDictionary({ names: ['Joanna Kowalczyk'] });
+      expect(set(withName('Joanna Kowalczyk'), { ...own, hostDict })).toEqual(addressOnly);
+      expect(set(withName('joanna kowalczyk'), { ...own, hostDict })).toEqual(addressOnly);
+      expect(set(withName('Prize Desk'), { ...own, hostDict })).toEqual(['prize desk', 'win@prize.example']);
+      // A name that only shares a token with a contact is not that contact's full name.
+      expect(set(withName('Joanna Prize Desk'), { ...own, hostDict })).toEqual(['joanna prize desk', 'win@prize.example']);
+    });
+
+    it('a plain brand name is still revealed beside the address', () => {
+      expect(set(withName('Prize Desk'))).toEqual(['prize desk', 'win@prize.example']);
+      expect(set(withName('DocuSign via Parcel Service'))).toEqual(['docusign via parcel service', 'win@prize.example']);
+    });
   });
 });

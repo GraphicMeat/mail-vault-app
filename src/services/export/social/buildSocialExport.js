@@ -1,7 +1,7 @@
 import { hasPremiumAccess, useSettingsStore } from '../../../stores/settingsStore';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useThemeStore } from '../../../stores/themeStore';
-import { ensurePrivacyDictionary, collectPrivacyNames } from '../../../utils/privacy/privacyDictionary';
+import { ensurePrivacyDictionary, collectPrivacyNames, getPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
 import { buildNameDictionary, unionDictionaries } from '../../../utils/privacy/piiDetector';
 import { redactTree } from '../../../utils/privacy/redactDom';
 import { prepareSocialMessage } from '../exportService';
@@ -38,6 +38,8 @@ function dictionaryWithReveal(dict, message, { redact, revealSender }) {
   const settings = useSettingsStore.getState();
   const reveal = buildRevealSet(message, {
     accounts: mail.accounts, sendAsAddresses: settings.sendAsAddresses, aliases: settings.aliases, displayNames: settings.displayNames,
+    // The host's own dictionary, not `dict` (which already holds this message's parties).
+    hostDict: getPrivacyDictionary(),
   });
   return reveal.size ? { ...dict, reveal } : dict;
 }
