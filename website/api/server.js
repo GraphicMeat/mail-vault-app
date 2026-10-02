@@ -411,9 +411,20 @@ const sendLink = createSendLink({
   validEmail: (address) => isValidEmail(address) && !tooLong(address, LIMITS.email),
 });
 
+// Keyed on the visitor, not on the proxy in front. Caddy passes on Cloudflare's
+// address (it does not trust Cloudflare as a proxy), so req.ip is a Cloudflare
+// edge shared by many visitors, and 5 an hour per edge would lock real people
+// out. Caddy only accepts Cloudflare origin-pull TLS clients, and Cloudflare
+// overwrites CF-Connecting-IP on every request, so that header is the visitor.
+const visitorIP = (req) => {
+  const cf = req.headers['cf-connecting-ip'];
+  return typeof cf === 'string' && cf.trim() ? cf.trim() : getClientIP(req);
+};
+
 const sendLinkLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
+  keyGenerator: visitorIP,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => (isFormPost(req)

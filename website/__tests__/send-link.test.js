@@ -239,3 +239,12 @@ describe('send-link API wiring', () => {
     expect(welcome).not.toContain('\u2014');
   });
 });
+
+describe('send-link per-visitor limit', () => {
+  const server = readFileSync(resolve('website/api/server.js'), 'utf8');
+  it('keys on the visitor behind Cloudflare, not on the shared edge address', () => {
+    const limiter = server.match(/const sendLinkLimiter = rateLimit\(\{[\s\S]*?\n\}\);/)[0];
+    expect(limiter).toContain('keyGenerator: visitorIP');
+    expect(server).toMatch(/const visitorIP = [\s\S]*?cf-connecting-ip/);
+  });
+});
