@@ -15,6 +15,39 @@
 .mv-site section, .mv-site [id] { scroll-margin-top:124px; }
 .mv-wrap { max-width:1200px; margin-inline:auto; padding-inline:36px; }
 .mv-header { position:sticky; top:0; z-index:20; background:var(--mv-bg); border-bottom:1px solid var(--mv-line); }
+/* Compact Product Hunt launch-day bar with a pixel kitten mascot. */
+.mv-ph-banner { display:flex; align-items:center; justify-content:center; gap:12px; min-height:52px; padding:6px 16px; background:#ff6133; color:#241007; border-bottom:1px solid #e65025; font-size:.875rem; line-height:1.35; text-decoration:none; }
+.mv-ph-banner img { display:block; flex-shrink:0; width:40px; height:40px; object-fit:contain; image-rendering:pixelated; }
+.mv-ph-text { font-weight:550; }
+.mv-ph-action { flex-shrink:0; padding:6px 12px; border-radius:5px; background:#241007; color:#fff; font-size:.8rem; font-weight:650; white-space:nowrap; }
+.mv-ph-banner:hover .mv-ph-action { background:#452014; }
+.mv-site .mv-ph-banner:focus-visible { outline:3px solid #fff; outline-offset:-3px; }
+/* Always moving: the kitten hops, a shine sweeps the bar, the button pulses. MailVault stays still. */
+.mv-ph-banner { position:relative; overflow:hidden; isolation:isolate; }
+.mv-ph-banner::after { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(100deg,transparent 35%,rgba(255,255,255,.38) 50%,transparent 65%); background-size:250% 100%; animation:mv-ph-shine 2.6s linear infinite; pointer-events:none; }
+.mv-ph-banner img { animation:mv-ph-hop 1.3s steps(4,end) infinite; transform-origin:50% 100%; }
+.mv-ph-moving-text { display:inline-block; white-space:pre-wrap; animation:mv-ph-text-float 2.6s ease-in-out infinite; }
+.mv-ph-name { animation:none; }
+.mv-ph-action { animation:mv-ph-pulse 1.3s ease-in-out infinite; }
+@keyframes mv-ph-shine { from { background-position:150% 0; } to { background-position:-100% 0; } }
+@keyframes mv-ph-hop { 0%,100% { transform:translateY(0) rotate(0); } 25% { transform:translateY(-4px) rotate(-6deg); } 50% { transform:translateY(0) rotate(0); } 75% { transform:translateY(-4px) rotate(6deg); } }
+@keyframes mv-ph-text-float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-1.5px); } }
+@keyframes mv-ph-pulse { 0%,100% { transform:scale(1); box-shadow:0 0 0 0 rgba(36,16,7,.45); } 50% { transform:scale(1.06); box-shadow:0 0 0 6px rgba(36,16,7,0); } }
+/* Launch-day overlay: the retro kitten card, once per visitor. */
+.mv-ph-overlay { width:min(880px,94vw); max-width:none; padding:0; border:3px solid #fff; border-radius:21px; background:#000; overflow:visible; box-shadow:0 0 0 6px rgba(255,97,51,.55),0 0 48px 8px rgba(255,97,51,.45),0 24px 60px rgba(0,0,0,.6); }
+.mv-ph-overlay::backdrop { background:rgba(10,8,6,.72); backdrop-filter:blur(3px); }
+.mv-ph-overlay[open] { animation:mv-ph-pop .45s cubic-bezier(.2,1.4,.4,1) both; }
+.mv-ph-overlay[open]::backdrop { animation:mv-ph-fade .3s ease-out both; }
+.mv-ph-card { display:block; border-radius:18px; overflow:hidden; }
+.mv-ph-card img { display:block; width:100%; height:auto; transition:transform .25s; }
+.mv-ph-card:hover img { transform:scale(1.015); }
+.mv-ph-close { position:absolute; top:-14px; right:-14px; z-index:1; width:40px; height:40px; display:grid; place-items:center; border:2px solid #fff; border-radius:999px; background:#ff6133; color:#fff; font-size:1.5rem; line-height:1; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.35); }
+.mv-ph-close:hover { background:#e65025; }
+@keyframes mv-ph-pop { from { opacity:0; transform:scale(.85) translateY(12px); } to { opacity:1; transform:none; } }
+@keyframes mv-ph-fade { from { opacity:0; } to { opacity:1; } }
+@media (max-width:480px) { .mv-ph-close { top:-12px; right:-6px; } }
+@media (prefers-reduced-motion:reduce) { .mv-ph-banner img, .mv-ph-moving-text, .mv-ph-action, .mv-ph-banner::after, .mv-ph-overlay[open], .mv-ph-overlay[open]::backdrop { animation:none; } }
+@media (max-width:480px) { .mv-ph-banner { gap:8px; padding:6px 10px; font-size:.75rem; } .mv-ph-banner img { width:32px; height:32px; } .mv-ph-action { padding:6px 8px; font-size:.72rem; } }
 .mv-nav { position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:80px; }
 .mv-brand { display:inline-flex; align-items:center; gap:10px; font-size:1.2rem; font-weight:700; letter-spacing:-.035em; flex-shrink:0; }
 .mv-brand img { border-radius:8px; }
