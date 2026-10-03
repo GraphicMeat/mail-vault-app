@@ -72,7 +72,7 @@
   </style>
   <!-- Meatlytics tracker: same tag and ?v= as the sibling pages (website/faq.html), or seo/acquisition tests fail -->
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
-<link rel="stylesheet" href="/assets/english-site.css?v=20261004-ph">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
@@ -127,11 +127,231 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.18.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.18.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">October 3, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search says how long the vault and the server each took, in a form no locale misreads.</strong> The line under the search box showed one total, and switched to milliseconds as a grouped number, so in a language that groups with a dot "7.355 ms" read as seven milliseconds instead of seven seconds. It now gives the vault and the server a group each, with what each found, how many messages it read and how long it took, such as "Vault 12/8,922 · 294 ms" and "Server 6/7,179 · 8.52 s": milliseconds under a second, seconds from one up. The vault's numbers show as soon as it finishes, while the server is still searching, and Save view sits at the end of the results line.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Tags, custom fields and views no longer fail to save with "database is locked".</strong> The app and its background service share one settings database, and a change that first looked something up (creating a tag, assigning one, saving a field or view) was refused at once whenever the other side was writing at that moment. It now waits its turn, for up to five seconds.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Auto Tags no longer says "Could not decide" when Apple Intelligence answers briefly.</strong> A reply such as "yes 0.9", "YES" or "NO" followed by a confidence line was refused because it left out the <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">MATCH:</code> label. Those short answers are now read, a bare yes with no confidence counts as a full-confidence match, and a reply that cannot be read as a clear yes or no is still refused.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Signatures made with a signature generator keep their layout.</strong> In Settings, a signature pasted into Code view lost its tables and inline styles (a coloured border, spacing, a button-style link) and arrived as plain paragraphs. Such a signature is now kept whole: it shows in compose as it will look, is selected and deleted as one piece, and goes out exactly as written. Scripts, forms, event handlers, unsafe links and styles that load something are still removed. (<a href="https://github.com/GraphicMeat/mail-vault-app/issues/19" target="_blank" rel="noopener" class="text-primary-500 hover:underline">#19</a>)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Forwarding a message with attachments sends again.</strong> Forwarding a message you had opened, from your vault or the server, failed with "Could not prepare the outgoing email: Missing or invalid email", and its draft was never saved, because the forwarded attachments were copied without their files. The files are now read from the original message when you forward it, and if one cannot be read the error names it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The dock badge counts the same unread mail as the sidebar.</strong> The dock badge also counted the last unread number of accounts no longer in the sidebar, so it could show more than the account rows added up to. It now adds up exactly the accounts the sidebar lists.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Bulk Email Operations work on messages from more than one folder.</strong> In All Inboxes, in a folder shown with its subfolders, or with a Sent copy, a search result or another account's message ticked by hand, Archive, Delete from Server, Archive & Delete and Archive, Back up & Delete failed as a whole, or in All Inboxes asked for a folder that does not exist. Picking a date range in a folder shown with its subfolders also read the top folder alone, leaving out subfolder messages that share a number with one in it. Each message is now handled in its own account and folder. A message whose folder cannot be told, or that sits in a folder kept only on this computer, is skipped and counted in the result instead of stopping the rest of the run.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message you undid a delete on is listed when you come back to its folder.</strong> After Undo, leaving the folder and opening it again could leave the restored message off the list even though it was back on the server, until a full refresh. The list now rebuilds its threads whenever a message in it is replaced by another, which is what Undo does to give the message its new number, and Undo drops the copy of the folder the app remembered from before the delete.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Opening a message no longer waits for the mail server's answer to the read mark, and an Outlook account offline no longer shows an error for it.</strong> The message body appeared only after the mark had been journalled and sent; it now appears as soon as the list has changed, and the mark finishes in the background. On an Outlook account that could not be reached, opening a message put "Could not update the flag on the server" in the error banner for a read mark you never asked for; it is now only logged.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message you open while a folder cannot be reached no longer turns bold again.</strong> When the password lookup, the offline check or the load itself failed a moment after you opened a message, the list went back to the state from before you opened it, and the unread count moved by one. A folder with subfolders did the same while it was still filling in.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message you just opened no longer turns bold again after a folder loads.</strong> Opening a message while its folder (or All inboxes) was still loading marked it read, and when the load finished it put the old unread state back, in the list and in the copy saved on disk. Flags you change while a load runs are now kept.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Deleting or losing an Inbox message no longer hides an unrelated one.</strong> In the Inbox list, a message from your Sent folder that shared the deleted message's internal number disappeared with it, and opening a message in All inboxes could put the attachment mark on another account's message. Each message is now matched only by the account and folder it is in.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Undo after marking search results read now restores only what changed, and undoing a move of search results works on every server.</strong> Marking ten search results read when three were already read, then undoing, marked all ten unread; undoing a move of search results could fail on a mail server that does not report where the moved messages went. Search results now count like the messages in the list.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message you open from search now stays read.</strong> While a search was still running, opening a result marked it read, and the next batch of results could turn it bold again. The read mark now holds for the rest of the search.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quick actions changed for All views reach every view.</strong> A view customized in Settings > Appearance > Quick actions with Scope on Current view kept a full copy of every setting, so later changes to All views, and new actions such as Snooze and Unsubscribe, never reached it: one inbox could keep showing a menu in the reader while every other view showed buttons. A view now keeps only what you set differently for it and follows All views for everything else; views customized before are converted on update, keeping their own choices. Settings says when the view you are on differs from All views, with a Use All views button to drop the difference, and a Settings window of its own now follows the folder you move to in the main window.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quick actions offer the same choices in the message list, on the selection bar and in the reader.</strong> A saved "Move to" a folder that only groups other folders and cannot hold messages is now unavailable everywhere, not just on the selection bar. Ticking an archived message from another account or folder, or in All Inboxes, now offers Unarchive on the selection bar instead of Archive. Unsubscribe on the selection bar, which did nothing when clicked, is now greyed out, since it works one message at a time. Star and Unstar on the selection bar wait until every ticked message is loaded, as Mark read already did, and Delete everywhere there is offered only when a copy exists beyond the server (in your vault or on your backup drive), as in the message list. In a folder you imported to keep only on this computer, Archive is no longer offered in the list or on the selection bar, matching the reader: that mail is already in your vault. The Bulk Email Operations window now counts those hand-ticked archived messages as in your vault too, and its Unarchive removes their vault copies instead of skipping them. In Server view, a message already in your vault now offers Unarchive instead of Archive in the message list, on the selection bar and in the reader. Its status icon and the reader's storage line say it is in your vault, and its row plays the brief highlight when you archive it. A delete confirmation in the reader no longer says a message from another folder is kept in your vault when it is not.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The snap no longer stalls on desktops with automatic login.</strong> A desktop that signs in without a password keeps its keyring under the name "Default keyring" instead of "login", and the Secret portal never answered for it, so MailVault waited for ever and could not read or save an account. It now waits four seconds at most, then uses the system keyring as it does on a desktop without the portal, and says to run <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">sudo snap connect mailvault:password-manager-service</code> when that is not allowed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message marked read or unread on another device now changes everywhere it is shown.</strong> The list turned bold or plain, but the open message, its conversation, and a search result kept the old state, and the open message still offered the wrong Mark read or Mark unread button. All of them now follow.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message you open is now marked read the same way as one you mark by hand.</strong> Opening one marked it on the mail server first and the list only afterwards, so the row stayed bold until the server answered; if the server refused or you were offline, it stayed bold and the change was never retried. The row now turns read at once, and a change the server could not take is kept and sent when it can.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message you marked read in All inboxes stays read when you switch folders and come back.</strong> Switching from one All inboxes folder to another and back painted the list from a copy kept from before, so the message turned bold again, and a refresh could do the same from the copy kept for switching accounts. Leaving a folder and returning to it after marking one of its messages from All inboxes or a search result could show it bold as well. Every such copy now takes the change.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The unread count on an account no longer jumps to a wrong number, and the dock badge follows it.</strong> Marking a Sent or Archive message read in All inboxes, or a message in a folder branch, replaced that account's Inbox count with the number of unread messages in the folder on screen, and in a large Inbox the list's partial window did the same. Marking read, moving or removing a message now changes the count by one, and the dock badge, which used to wait for the next refresh, changes with it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Deleting a message in a folder branch no longer hides another folder's message.</strong> Viewing a folder together with its subfolders, deleting message number 34 of the parent folder also hid the subfolder's message 34 until the next reload, and a message deleted inside a subfolder could come back in the list for a moment.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>One account's saved message no longer marks another account's as saved.</strong> In All inboxes or a folder with subfolders, archiving a message in one account or folder put the vault mark on the message with the same internal number in every other account or folder, hid a "deleted on the server" message that should stay hidden, and could show another account's vault copy in the list. The vault marks are now kept per account and folder.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Bulk Operations no longer includes messages the list does not show.</strong> Choosing All in Bulk Operations also took in messages an Auto Tags "hide from Inbox" rule keeps out of the Inbox and messages held by a local snooze, so a bulk archive or delete could act on mail you could not see. It now uses the same rules as the list. A folder with subfolders also no longer hides a subfolder's message because the parent folder's message with the same number carries a hidden tag.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A vault copy can no longer take another account's details or status.</strong> When two accounts (or two folders) held a message with the same internal number, archiving one in bulk could record the other's subject and sender in the vault, the server-wide check behind "your only copy" could look for the wrong message and mark yours as deleted by someone else, the open message could show another account's copy status, and deleting an Inbox message could be treated as removing a staged Sent copy instead. Each now follows the message's own account and folder.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search results in All Inboxes name the folder searched.</strong> The line under the search box said "Found 221 results in UNIFIED"; it now says "in Inbox across all accounts" (or Sent, Drafts and so on).</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search no longer says the index is still being built after it has finished.</strong> A search in All Inboxes, or in any folder an account had never saved a message to (an empty Drafts, a Sent folder one account does not have), kept showing "Indexed results are still being built" for ever, because the index never lists a folder that holds no mail. Such a folder now counts as searched and empty, and the notice shows only while folders with mail are still waiting for the index.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>JetBrains Mono draws its extended Cyrillic letters.</strong> Letters such as those of Abkhaz or Chuvash fell back to another typeface in JetBrains Mono, because their font file was the one small enough to be packed into the app's stylesheet, where the app's security policy refused to load it. Every font now ships as its own file.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Social image preview zooms, and opens in a window of its own.</strong> Under the preview, Fit shows the whole image, 100% shows its actual pixels, and minus and plus step between, scrolling the preview when it is larger than the box. Open in window moves the export to its own resizable window, where the preview takes all the room the window gives it; Back to app returns it to the Export dialog with the same choices. Redaction and privacy mode apply in the window exactly as in the dialog.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Privacy Policy in Settings.</strong> Settings > Help links to MailVault's privacy policy, which now spells out how Gmail data is handled: it stays on your computer, is never sold or used for ads or AI training, and is deleted when you remove the account.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The menu bar icon lists your accounts with their unread counts, and opens Compose.</strong> Click the MailVault icon in the menu bar (the tray icon on Windows and Linux) for Compose at the top and every account in sidebar order with its unread count; choosing an account brings MailVault forward on its Inbox. On macOS a click on the icon now opens this menu; Show MailVault is in it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Privacy mode (Premium).</strong> One click in the sidebar masks names, email addresses, phone numbers and postal addresses across the message list, reader, threads, chat view, sidebar, attachment names and notifications, so you can record your screen or read mail in public. Hold Option (Alt) to peek; shortcut Cmd/Ctrl+Shift+P. Avatars and text inside images are not masked. The raw source view and Open in window are blocked while it is on.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Export can redact sensitive info.</strong> The new "Redact sensitive info" option masks names, email addresses, phone numbers and addresses in exported images and HTML (blur or black bar); links and remote images are stripped from redacted exports. Attachments are renamed but their contents are not redacted, so they start switched off. With privacy mode on, export starts with redaction on.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Share a message as a styled image (Premium).</strong> Export has a new Social format for one message: the email as a card, or the whole app window with it open, on a gradient, a solid color, your own two colors, your own picture or a transparent background, sized for posting (Auto, 1:1, 4:5, 16:9 or 9:16) with padding, rounded corners, a shadow and a window frame. A live preview follows every change, and Save PNG writes the image at twice the size. Sensitive info is redacted by default every time, and always while privacy mode is on. The whole email always fits the image, shrunk rather than cut off. Like the app, there are two themes: Appearance (Light or Dark, the app's own theme until you pick one) styles the window frame, the card's header and the app window, and a card's Email content can be Light or Dark on its own, so a dark header over a light email works too. The style you pick is remembered, your own picture is not. Every image carries a small lockup in its bottom-right corner: the MailVault icon, "made with a heart by" and the Graphic Meat logo, in lettering that reads on any background. To name a spammer, Show sender keeps a spam message's sender readable (on by default in the spam folder) while everyone else stays redacted; Sender details adds the sender check from the reader (authentication results, Reply-To mismatch) to the image, and a card's Links lists where the message's links really go, worst first, with only the site shown when redacted. Corners start at the macOS window radius, and a tick under the slider snaps back to it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Hide the menu bar on Linux.</strong> Settings > Appearance > Layout > Menu bar hides the File and Logs strip under the title bar, in every MailVault window. From the next launch the bar is not built at all, so it never flashes in. Check for Updates is now also in the tray menu on Linux, so it stays at hand with the bar hidden; Settings, bug reports and logs already are.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The search bar builds a search out of tags, and suggests what to search for.</strong> Each word, operator and recent search you add becomes a tag, like the recent-search tags under the box. Press Enter to add what you typed as a tag; adding, removing or changing a tag runs the search at once, with no second Enter. Click a tag's x to remove it, or its text to change it in place. Backspace or the left arrow in an empty box moves to the last tag. Type / at the start of a word to pick an operator such as from:, has:attachment or before:, then type its value. While you type, senders and words from your saved mail are suggested under your recent searches; they come from the search index, and while it is busy or off the box simply shows none.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search says how long it took and how much mail it read.</strong> The line under the search box now shows the time the last search took, in seconds (click it for milliseconds), and how many saved emails it read, as in "Found 221 results in Inbox across all accounts from 48,000 emails". Next to it, each source is counted against the mail it searched: "Results: 33/10,000 local, 3/2,150 server". The items on that line now sit on one baseline.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Edit a signature as HTML.</strong> The signature editor, for an account and for an alias with its own signature, has a Rendered / Code switch. Code shows the signature's HTML, one block per line, to read or edit by hand; switching back shows the result. Whatever you type is read through the same filter as the rendered editor, so scripts, styles and markup the editor does not support are removed, pictures and links are kept, and HTML that is broken is repaired rather than lost.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>More fonts from Google Fonts, for the app and for signatures.</strong> Settings > Appearance > Text has More fonts (Google Fonts): about 130 families to search and browse by category, with no connection needed to look. The font you choose is downloaded once, font files only and no personal data, kept on this computer, and shown in Network Activity as Fonts; downloaded fonts are listed beside the built-in ones and can be removed again. Offline, the choice says so with a Retry, also under More fonts after the list is closed, and text keeps its current font until the download finishes. The signature editor has a font control with common fonts, the app's fonts, downloaded ones and More fonts, for the selected text or the whole signature. Most mail programs cannot load such a font, so the signature names a similar common font after it, which is what recipients without it see; no font file is attached to or linked from a message.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Received mail shows the Google Font it was written in.</strong> A message set in one of the Google Fonts MailVault offers now draws in that font instead of a stand-in. MailVault downloads the font once, like one you pick in Settings, so it appears in Network Activity and in your list of downloaded fonts; with tracker blocking on, a message never downloads one, but still uses a font you already have. A message can no longer fetch fonts from Google by itself.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Links from the app to mailvaultapp.com say where they came from.</strong> Upgrade, Premium, FAQ, help and website links opened from MailVault now carry <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">utm_source=app</code> and the place they were opened from, so the site can tell visits from the app apart. Nothing about you or your mail is added.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A forward keeps the fonts of the message it forwards.</strong> The forwarded original sits in the editor, which used to drop the font set on its text; it now keeps the font name, and nothing else of that styling.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The update window shows it is loading the release notes.</strong> While MailVault reads what changed from GitHub, the notes box now shows a few shimmering lines (still, with Reduce motion on) instead of staying empty or jumping in late; notes the update feed already carries stay on screen above it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Gmail messages only go to on-device AI.</strong> Mail from a Google account is only ever handed to Apple Intelligence, the downloaded model or an Ollama server on this computer; if your AI provider is a cloud endpoint, Gmail mail uses an on-device provider instead, or the AI action is unavailable when none is set up.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Choose which Google app signs you in to Gmail.</strong> Gmail sign-in still goes through Thunderbird's Google app by default. A new option in Settings > Accounts, and a choice when you add a Gmail account, let you sign in through MailVault's own Google app instead. Google is still reviewing it, and it becomes the default once approved. Switching asks you to sign in to Google again, and a plain Reconnect keeps the app the account already uses. Gmail accounts you already added keep the app they signed in with.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.17.1">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.17.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">September 30, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
@@ -5603,6 +5823,6 @@
 
   <!-- ?v=N is the Cloudflare cache bust; keep it in step with website/index.html -->
   <script defer src="/version-gate.js?v=5"></script>
-<script defer src="/assets/english-site.js?v=20261004-ph"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-10-03
+
 ### Fixed
 - **Search says how long the vault and the server each took, in a form no locale misreads.** The line under the search box showed one total, and switched to milliseconds as a grouped number, so in a language that groups with a dot "7.355 ms" read as seven milliseconds instead of seven seconds. It now gives the vault and the server a group each, with what each found, how many messages it read and how long it took, such as "Vault 12/8,922 · 294 ms" and "Server 6/7,179 · 8.52 s": milliseconds under a second, seconds from one up. The vault's numbers show as soon as it finishes, while the server is still searching, and Save view sits at the end of the results line.
 - **Tags, custom fields and views no longer fail to save with "database is locked".** The app and its background service share one settings database, and a change that first looked something up (creating a tag, assigning one, saving a field or view) was refused at once whenever the other side was writing at that moment. It now waits its turn, for up to five seconds.
