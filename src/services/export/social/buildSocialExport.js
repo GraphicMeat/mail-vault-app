@@ -115,6 +115,49 @@ export async function buildSocialContent(message, { content, redact, dict, theme
   });
 }
 
+// The full-size image from a content canvas and the panel's style.
+const composeFull = (content, options, theme, watermark) => composeSocialImage({
+  content,
+  size: SIZE_PRESETS[options.size] ?? null,
+  background: options.background,
+  padding: options.padding,
+  radius: options.radius,
+  shadow: options.shadow,
+  chrome: options.chrome,
+  theme: chromeTheme(options.content, theme),
+  watermark,
+});
+
+const socialName = (message) => singleName(message, 'png').replace(/\.png$/, ' - social.png');
+
+/**
+ * The file name Save offers, masked like the image. Built where the content is
+ * (the main window), for a detached panel that saves on its own.
+ */
+export async function socialFileName(message, { redact, revealSender } = {}) {
+  const dated = { ...message, date: asDate(message.date) };
+  const red = mustRedact(redact);
+  if (!red) return socialName(dated);
+  const dict = dictionaryWithReveal(await socialDictionary(dated), dated, { redact: red, revealSender });
+  return socialName(redactMessageForExport(dated, dict));
+}
+
+/**
+ * Save in a detached panel: the content arrived from the main window already
+ * rendered (and redacted there), so only the style is applied here, an own
+ * image background included. Same shape as buildSocialExport's result.
+ */
+export async function composeSocialFile({ content, options, name }) {
+  if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) return { ok: false, reason: 'premium' };
+  try {
+    const theme = options.appTheme ?? useThemeStore.getState().theme;
+    const canvas = composeFull(content, options, theme, await loadWatermark());
+    return { ok: true, file: { name, base64: await canvasToPngBase64(canvas) }, canvas };
+  } catch (err) {
+    return { ok: false, reason: 'render', error: String(err?.message || err) };
+  }
+}
+
 /**
  * `options = { content: 'card'|'app', size: keyof SIZE_PRESETS, background,
  * padding, radius, shadow, chrome, redact, appTheme, mailTheme, revealSender,
@@ -139,20 +182,9 @@ export async function buildSocialExport({ message, options }) {
     lap('social-content');
     const watermark = await loadWatermark();
     t = performance.now();
-    const canvas = composeSocialImage({
-      content,
-      size: SIZE_PRESETS[options.size] ?? null,
-      background: options.background,
-      padding: options.padding,
-      radius: options.radius,
-      shadow: options.shadow,
-      chrome: options.chrome,
-      theme: chromeTheme(options.content, theme),
-      watermark,
-    });
+    const canvas = composeFull(content, options, theme, watermark);
     lap('social-compose');
-    const named = redact ? redactMessageForExport(dated, dict) : dated;
-    const name = singleName(named, 'png').replace(/\.png$/, ' - social.png');
+    const name = socialName(redact ? redactMessageForExport(dated, dict) : dated);
     return { ok: true, file: { name, base64: await canvasToPngBase64(canvas) }, canvas };
   } catch (err) {
     return { ok: false, reason: 'render', error: String(err?.message || err) };

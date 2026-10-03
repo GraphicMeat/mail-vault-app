@@ -5,6 +5,8 @@
 // Uses Tauri invoke to read/write JSON files in the app data directory.
 // Falls back to in-memory storage if Tauri is not available (dev browser).
 
+import { isChildWindow } from '../utils/privacy/isChildWindow';
+
 const invoke = typeof window !== 'undefined' ? window.__TAURI__?.core?.invoke : undefined;
 
 // In-memory cache — always holds the current state.
@@ -64,8 +66,7 @@ let saveTimer = null;
 // The detached compose bundle imports the same persisted stores, but its
 // snapshot is intentionally partial. Decide before Zustand can hydrate so it
 // can never overwrite the main window's settings file during child startup.
-let writesEnabled = typeof window === 'undefined'
-  || !['compose', 'original', 'settings'].some(key => new URLSearchParams(window.location?.search || '').has(key));
+let writesEnabled = !isChildWindow();
 function debouncedSave() {
   if (!writesEnabled) return;
   if (saveTimer) clearTimeout(saveTimer);

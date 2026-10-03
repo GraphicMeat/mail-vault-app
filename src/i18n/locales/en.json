@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "Record your screen or read mail in public without showing who you write to.",
   "privacy.notificationTitle": "New message",
   "privacy.sourceBlocked": "Turn off privacy mode to view the message source.",
-  "privacy.windowBlocked": "Turn off privacy mode to open this message in its own window."
+  "privacy.windowBlocked": "Turn off privacy mode to open this message in its own window.",
+  "export.social.zoom": "Zoom",
+  "export.social.zoomOut": "Zoom out",
+  "export.social.zoomIn": "Zoom in",
+  "export.social.zoomFit": "Fit",
+  "export.social.zoomActual": "100%",
+  "export.social.zoomActualAria": "Actual pixels",
+  "export.social.popOut": "Open in window",
+  "export.social.popIn": "Back to app",
+  "export.social.openInApp": "To shoot the app window, open this message in MailVault again."
 }

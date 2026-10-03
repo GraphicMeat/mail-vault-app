@@ -12,15 +12,18 @@ import './styles/index.css';
 const isComposeWindow = new URLSearchParams(window.location.search).has('compose');
 const isOriginalWindow = new URLSearchParams(window.location.search).has('original');
 const isSettingsWindow = new URLSearchParams(window.location.search).has('settings');
+const isSocialWindow = new URLSearchParams(window.location.search).has('social');
 if (isSettingsWindow) document.body.dataset.auxiliaryWindow = 'settings';
 const App = React.lazy(() => import('./App'));
 const ComposeWindow = React.lazy(() => import('./components/ComposeWindow').then(m => ({ default: m.ComposeWindow })));
 const OriginalMessageWindow = React.lazy(() => import('./components/OriginalMessageWindow').then(m => ({ default: m.OriginalMessageWindow })));
 const SettingsWindow = React.lazy(() => import('./components/SettingsWindow').then(m => ({ default: m.SettingsWindow })));
+const SocialExportWindow = React.lazy(() => import('./components/export/SocialExportWindow').then(m => ({ default: m.SocialExportWindow })));
+const isAuxiliaryWindow = isComposeWindow || isOriginalWindow || isSettingsWindow || isSocialWindow;
 
 // Listen to the webview's path-monitor events. Cheap, and the only signal that
 // arrives the instant the Wi-Fi drops rather than on the next 30s heartbeat.
-if (!isComposeWindow && !isOriginalWindow && !isSettingsWindow) wireConnectivityEvents();
+if (!isAuxiliaryWindow) wireConnectivityEvents();
 
 // Font and text size, in every window: each hydrates the same settings file,
 // and the owner relays later changes (settings window, detached compose).
@@ -250,8 +253,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           matching @media block in styles/index.css. */}
       <MotionConfig reducedMotion="user">
         <SplashDismisser>
-          {!isComposeWindow && !isOriginalWindow && !isSettingsWindow && <ProductHuntLaunch />}
-          <React.Suspense fallback={null}>{isComposeWindow ? <ComposeWindow /> : isOriginalWindow ? <OriginalMessageWindow /> : isSettingsWindow ? <SettingsWindow /> : <App />}</React.Suspense>
+          {!isAuxiliaryWindow && <ProductHuntLaunch />}
+          <React.Suspense fallback={null}>{isComposeWindow ? <ComposeWindow /> : isOriginalWindow ? <OriginalMessageWindow />
+            : isSettingsWindow ? <SettingsWindow /> : isSocialWindow ? <SocialExportWindow /> : <App />}</React.Suspense>
         </SplashDismisser>
       </MotionConfig>
     </ErrorBoundary>

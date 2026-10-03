@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "Grave sua tela ou leia e-mails em público sem mostrar para quem você escreve.",
   "privacy.notificationTitle": "Nova mensagem",
   "privacy.sourceBlocked": "Desative o modo privacidade para ver o código-fonte da mensagem.",
-  "privacy.windowBlocked": "Desative o modo privacidade para abrir esta mensagem em uma janela própria."
+  "privacy.windowBlocked": "Desative o modo privacidade para abrir esta mensagem em uma janela própria.",
+  "export.social.zoom": "Zoom",
+  "export.social.zoomOut": "Diminuir zoom",
+  "export.social.zoomIn": "Aumentar zoom",
+  "export.social.zoomFit": "Ajustar",
+  "export.social.zoomActual": "100%",
+  "export.social.zoomActualAria": "Pixels reais",
+  "export.social.popOut": "Abrir em janela",
+  "export.social.popIn": "Voltar ao app",
+  "export.social.openInApp": "Para capturar a janela do app, abra esta mensagem no MailVault novamente."
 }

@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "画面を録画したり、人前でメールを読んだりしても、誰に宛てて書いているかを見せずに済みます。",
   "privacy.notificationTitle": "新着メッセージ",
   "privacy.sourceBlocked": "メッセージのソースを表示するには、プライバシーモードをオフにしてください。",
-  "privacy.windowBlocked": "このメッセージを別ウィンドウで開くには、プライバシーモードをオフにしてください。"
+  "privacy.windowBlocked": "このメッセージを別ウィンドウで開くには、プライバシーモードをオフにしてください。",
+  "export.social.zoom": "ズーム",
+  "export.social.zoomOut": "縮小",
+  "export.social.zoomIn": "拡大",
+  "export.social.zoomFit": "全体表示",
+  "export.social.zoomActual": "100%",
+  "export.social.zoomActualAria": "実際のピクセル",
+  "export.social.popOut": "ウインドウで開く",
+  "export.social.popIn": "アプリに戻す",
+  "export.social.openInApp": "アプリのウインドウを撮影するには、このメッセージをMailVaultでもう一度開いてください。"
 }

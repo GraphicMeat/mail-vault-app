@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "Graba tu pantalla o lee el correo en público sin mostrar a quién escribes.",
   "privacy.notificationTitle": "Mensaje nuevo",
   "privacy.sourceBlocked": "Desactiva el modo privacidad para ver el código fuente del mensaje.",
-  "privacy.windowBlocked": "Desactiva el modo privacidad para abrir este mensaje en su propia ventana."
+  "privacy.windowBlocked": "Desactiva el modo privacidad para abrir este mensaje en su propia ventana.",
+  "export.social.zoom": "Zoom",
+  "export.social.zoomOut": "Alejar",
+  "export.social.zoomIn": "Acercar",
+  "export.social.zoomFit": "Ajustar",
+  "export.social.zoomActual": "100 %",
+  "export.social.zoomActualAria": "Píxeles reales",
+  "export.social.popOut": "Abrir en ventana",
+  "export.social.popIn": "Volver a la app",
+  "export.social.openInApp": "Para capturar la ventana de la app, vuelve a abrir este mensaje en MailVault."
 }

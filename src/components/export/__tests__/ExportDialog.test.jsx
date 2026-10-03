@@ -18,11 +18,19 @@ vi.mock('../../../services/export/exportSaver', () => ({
 // The Social panel reads the mail store and the spam folder; neither is under test here.
 vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => ({}) } }));
 vi.mock('../../../utils/spamFolder', () => ({ isSpamMessage: () => false }));
+vi.mock('../../../services/export/social/buildSocialExport', () => ({
+  buildSocialContent: async () => ({ width: 200, height: 300 }),
+  buildSocialExport: async () => ({ ok: false, reason: 'render' }),
+  chromeTheme: () => 'light',
+}));
+vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => null }));
+vi.mock('../../../services/export/social/composeSocialImage', () => ({ composeSocialImage: () => ({ width: 10, height: 10 }) }));
 
 const hasPremiumAccess = vi.fn(() => true);
 vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: (...a) => hasPremiumAccess(...a),
-  useSettingsStore: (sel) => sel({ billingProfile: { hasSubscription: true } }),
+  DEFAULT_SOCIAL_EXPORT: { content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' }, padding: 64, radius: 16, shadow: true, chrome: true },
+  useSettingsStore: (sel) => sel({ billingProfile: { hasSubscription: true }, socialExport: {}, setSocialExport: () => {} }),
 }));
 
 import { ExportDialog } from '../ExportDialog';
@@ -79,6 +87,15 @@ describe('ExportDialog', () => {
     render(<ExportDialog {...props} messages={messages} />);
     expect(screen.getByRole('radio', { name: /^social$/i }).disabled).toBe(true);
     expect(screen.getByText(/select one message for a social image/i)).toBeTruthy();
+  });
+
+  it('opens on Social with the choices a detached window handed back, and offers the window', async () => {
+    const onPopOut = vi.fn();
+    render(<ExportDialog {...props} messages={[messages[0]]} social={{ redact: false, revealSender: false }} onPopOut={onPopOut} />);
+    expect(screen.getByRole('radio', { name: /^social$/i }).checked).toBe(true);
+    expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /open in window/i }));
+    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ redact: false }));
   });
 
   it('has the mirror toggle on by default and says what it does', () => {

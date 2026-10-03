@@ -36,7 +36,9 @@ function Choice({ name, value, checked, onChange, icon: Icon, label, hint, disab
   );
 }
 
-export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgrade, onShowSamples }) {
+// `social`: the Social panel's choices coming back from its own window; the
+// dialog opens on Social with them. `onPopOut(choices)` moves the panel there.
+export function ExportDialog({ open, messages, account, mailbox, social, onClose, onUpgrade, onShowSamples, onPopOut }) {
   const t = useT();
   // The capture can flip the page theme under the dialog (a Light/Dark app shot):
   // pinning the real theme on the panel re-declares its variables for its subtree.
@@ -71,9 +73,10 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
     if (!open) return;
     setNotice(null);
     setBusy(false);
+    if (social) setFormat('social');
     // Someone recording with privacy mode on means a shareable export too.
     if (usePrivacyStore.getState().enabled) turnRedact(true);
-  }, [open]);
+  }, [open, social]);
 
   const isThread = messages.length > 1;
   // The dialog outlives a close: Social picked for one message must not stick
@@ -166,7 +169,8 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
           </div>
 
           {isSocial ? (
-            <SocialExportPanel message={messages[0]} account={account} mailbox={mailbox} onDone={onClose} />
+            <SocialExportPanel message={messages[0]} account={account} mailbox={mailbox} onDone={onClose}
+              initial={social} onPopOut={onPopOut} />
           ) : (<>
             {showLayout && (
               <div className="grid grid-cols-2 gap-2">

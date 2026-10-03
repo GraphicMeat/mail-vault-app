@@ -9,7 +9,8 @@ import { useSettingsStore, hasPremiumAccess } from './settingsStore';
 // row belongs to the account it came from, not to whichever account is active.
 // Four surfaces each deriving that themselves is four chances to stamp the
 // wrong address into an exported file's footer.
-function describeTarget({ messages, account, mailbox }) {
+// `social` (optional): the Social panel's choices, handed back by its detached window.
+function describeTarget({ messages, account, mailbox, social }) {
   const { accounts = [], activeAccountId, activeMailbox } = useMailStore.getState();
   const first = messages?.[0] || {};
   const accountId = first._accountId || activeAccountId;
@@ -18,6 +19,7 @@ function describeTarget({ messages, account, mailbox }) {
     messages,
     account: account || found?.email || accountId || 'Unknown account',
     mailbox: mailbox || first._mailbox || activeMailbox || 'INBOX',
+    ...(social ? { social } : {}),
   };
 }
 

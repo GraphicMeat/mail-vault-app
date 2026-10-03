@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "录制屏幕或在公共场所阅读邮件时，不会暴露你在给谁写信。",
   "privacy.notificationTitle": "新消息",
   "privacy.sourceBlocked": "请先关闭隐私模式，再查看邮件源码。",
-  "privacy.windowBlocked": "请先关闭隐私模式，再在单独窗口中打开此邮件。"
+  "privacy.windowBlocked": "请先关闭隐私模式，再在单独窗口中打开此邮件。",
+  "export.social.zoom": "缩放",
+  "export.social.zoomOut": "缩小",
+  "export.social.zoomIn": "放大",
+  "export.social.zoomFit": "适合",
+  "export.social.zoomActual": "100%",
+  "export.social.zoomActualAria": "实际像素",
+  "export.social.popOut": "在窗口中打开",
+  "export.social.popIn": "返回应用",
+  "export.social.openInApp": "要截取应用窗口，请在 MailVault 中重新打开此邮件。"
 }

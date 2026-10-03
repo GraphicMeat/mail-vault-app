@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader, ImagePlus } from 'lucide-react';
+import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
 import { useSettingsStore, DEFAULT_SOCIAL_EXPORT } from '../../stores/settingsStore';
 import { buildSocialContent, buildSocialExport, chromeTheme } from '../../services/export/social/buildSocialExport';
 import { composeSocialImage } from '../../services/export/social/composeSocialImage';
-import { SIZE_PRESETS, MACOS_WINDOW_RADIUS, rangeMarkLeft } from '../../services/export/social/socialLayout';
+import { SIZE_PRESETS, MACOS_WINDOW_RADIUS, rangeMarkLeft, layoutSocial } from '../../services/export/social/socialLayout';
 import { loadWatermark } from '../../services/export/social/socialWatermark';
 import { GRADIENT_PRESETS, SOLID_PRESETS, DEFAULT_CUSTOM_STOPS, cssGradient } from '../../services/export/social/socialBackgrounds';
 import { saveOneFile } from '../../services/export/exportSaver';
@@ -15,11 +15,16 @@ import { useThemeStore } from '../../stores/themeStore';
 import { useMailStore } from '../../stores/mailStore';
 import { isSpamMessage } from '../../utils/spamFolder';
 
+// The preview box before it is measured (and in the dialog, its height).
 const PREVIEW_W = 360;
 const PREVIEW_H = 420;
-// The preview composes at its own size (2x for a sharp canvas), not the
-// full-size image: a 2160x3840 story per slider step is wasted work.
-const PREVIEW_MAX = { w: PREVIEW_W * 2, h: PREVIEW_H * 2 };
+// Zoom is image pixels per screen pixel: 1 is the PNG's actual pixels.
+const ZOOM_STEPS = [0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.5, 2, 3, 4];
+// A step that moves visibly: from a fit of 32%, + goes to 50%, not 33%.
+const nextZoom = (current, dir) => (dir > 0
+  ? ZOOM_STEPS.find(z => z > current * 1.1) ?? ZOOM_STEPS.at(-1)
+  : ZOOM_STEPS.findLast(z => z < current / 1.1) ?? ZOOM_STEPS[0]);
+const dpr = () => (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 const SIZES = [
   { value: 'square', label: '1:1' },
   { value: 'portrait', label: '4:5' },
@@ -64,6 +69,34 @@ function Field({ label, children }) {
   );
 }
 
+// The full image's size in pixels, without composing it.
+const fullSize = (content, prefs) => {
+  const L = layoutSocial({ contentW: content.width, contentH: content.height, size: SIZE_PRESETS[prefs.size] ?? null, padding: prefs.padding, chrome: prefs.chrome });
+  return { w: L.canvasW, h: L.canvasH };
+};
+
+// The preview box's inner size, followed as the dialog or the window resizes.
+function useBoxSize(ref) {
+  const [size, setSize] = useState({ w: PREVIEW_W, h: PREVIEW_H });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver !== 'function') return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setSize({ w: width, h: height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
+
+// In the app the panel renders and saves here; a detached window hands both to its owner.
+const localSource = (message) => ({
+  buildContent: (options) => buildSocialContent(message, options),
+  save: (options) => buildSocialExport({ message, options }),
+});
+
 const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' && a.type !== 'solid' ? true : a.id === b.id);
 
 /**
@@ -78,18 +111,28 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * one is picked) paints the window frame and, on a card, the header block, and
  * shoots the app window; Mail (card only) is the message body, following the
  * Appearance until one is picked.
+ *
+ * The preview zooms (Fit, actual pixels, steps between). `onPopOut` offers the
+ * panel in a window of its own (SocialExportWindow), handing over the per-open
+ * choices; there `detached` fills the window, `source` asks the main window to
+ * render and `onPopIn` brings it back. `initial` carries those choices across.
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
-export function SocialExportPanel({ message, onDone }) {
+export function SocialExportPanel({ message, onDone, source, detached = false, initial, onPrefsChange, onPopOut, onPopIn }) {
   const t = useT();
   const saved = useSettingsStore(s => s.socialExport);
   const setSocialExport = useSettingsStore(s => s.setSocialExport);
+  const persistPrefs = onPrefsChange ?? setSocialExport;
+  const src = useMemo(() => source ?? localSource(message), [source, message]);
   // Seeded once: the panel owns its style while open and writes through.
-  const [prefs, setPrefs] = useState(() => ({ ...DEFAULT_SOCIAL_EXPORT, ...saved }));
-  const [redact, setRedact] = useState(true);
+  const [prefs, setPrefs] = useState(() => ({ ...DEFAULT_SOCIAL_EXPORT, ...saved, ...initial?.prefs }));
+  const [redact, setRedact] = useState(() => initial?.redact ?? true);
   // Per open, like redact: a spam message names its sender, anything else does not.
-  const [revealSender, setRevealSender] = useState(() => isSpamMessage(message, useMailStore.getState()));
+  const [revealSender, setRevealSender] = useState(() => initial?.revealSender ?? isSpamMessage(message, useMailStore.getState()));
+  const [zoom, setZoom] = useState('fit');
+  const boxRef = useRef(null);
+  const box = useBoxSize(boxRef);
   // Privacy mode on: a social image never shows anyone, whatever the checkbox said.
   const privacyOn = usePrivacyStore(s => s.enabled);
   const redacting = redact || privacyOn;
@@ -116,7 +159,7 @@ export function SocialExportPanel({ message, onDone }) {
 
   const update = (patch) => {
     setPrefs(p => ({ ...p, ...patch }));
-    setSocialExport?.(patch);
+    persistPrefs?.(patch);
   };
   const pickBackground = (bg) => { setImageActive(false); update({ background: bg }); };
 
@@ -160,7 +203,7 @@ export function SocialExportPanel({ message, onDone }) {
     setContent(null);
     setLoading(true);
     setNotice(null);
-    buildSocialContent(message, {
+    src.buildContent({
       content: prefs.content, redact: redacting, theme,
       ...(isCard ? { mailTheme } : {}),
       ...(reveal ? { revealSender: true } : {}),
@@ -171,37 +214,50 @@ export function SocialExportPanel({ message, onDone }) {
         cache.current.set(key, canvas);
         if (request.current === id) setContent(canvas);
       })
-      .catch(() => { if (request.current === id) { setContent(null); setNotice(t('export.dialog.messageCouldExported')); } })
+      .catch((err) => {
+        if (request.current !== id) return;
+        setContent(null);
+        setNotice(err?.code === 'not-open' ? t('export.social.openInApp') : t('export.dialog.messageCouldExported'));
+      })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [message, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks]);
+  }, [src, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks]);
 
+  // Fit never enlarges past actual pixels: a small image would only blur.
+  const full = content ? fullSize(content, prefs) : null;
+  const fitZoom = full ? Math.min(1, (box.w / full.w) * dpr(), (box.h / full.h) * dpr()) : 1;
+  const zoomLevel = zoom === 'fit' ? fitZoom : zoom;
+
+  // The preview composes at the size it is shown (screen pixels), never the
+  // full image unless zoomed to it: a 2160x3840 story per slider step is waste.
   useEffect(() => {
-    if (!content) return;
+    if (!content || !full) return;
+    const ratio = dpr();
+    // Down, not to nearest: a fitted canvas 1px over the box shows a scrollbar,
+    // which shrinks the box, which re-fits, which hides it again.
+    const cssW = Math.max(1, Math.floor((full.w * zoomLevel) / ratio + 1e-6));
+    const cssH = Math.max(1, Math.floor((full.h * zoomLevel) / ratio + 1e-6));
     const out = composeSocialImage({
       content, size: SIZE_PRESETS[prefs.size] ?? null, background,
       padding: prefs.padding, radius: prefs.radius, shadow: prefs.shadow, chrome: prefs.chrome,
-      theme: frameTheme, maxSize: PREVIEW_MAX, watermark,
+      theme: frameTheme, maxSize: { w: cssW * ratio, h: cssH * ratio }, watermark,
     });
     const canvas = previewRef.current;
     if (!canvas || !out.width || !out.height) return;
-    const scale = Math.min(PREVIEW_W / out.width, PREVIEW_H / out.height);
-    const w = Math.max(1, Math.round(out.width * scale));
-    const h = Math.max(1, Math.round(out.height * scale));
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    canvas.width = w * 2;
-    canvas.height = h * 2;
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    canvas.width = out.width;
+    canvas.height = out.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(out, 0, 0, canvas.width, canvas.height);
-  }, [content, prefs.size, prefs.padding, prefs.radius, prefs.shadow, prefs.chrome, prefs.content, background, frameTheme, watermark]);
+  }, [content, full?.w, full?.h, zoomLevel, prefs.size, prefs.padding, prefs.radius, prefs.shadow, prefs.chrome, prefs.content, background, frameTheme, watermark]);
 
   const save = async () => {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await buildSocialExport({ message, options: { ...prefs, background, redact: redacting, appTheme: theme, mailTheme, revealSender: reveal } });
+      const result = await src.save({ ...prefs, background, redact: redacting, appTheme: theme, mailTheme, revealSender: reveal }, content);
       if (!result.ok) {
         setNotice(result.reason === 'premium' ? t('export.dialog.exportPremiumFeature') : t('export.dialog.messageCouldExported'));
         return;
@@ -231,17 +287,46 @@ export function SocialExportPanel({ message, onDone }) {
     sky: t('export.social.swatch.sky'), blush: t('export.social.swatch.blush'),
   }), [t]);
 
+  const zoomButton = 'h-7 min-w-7 px-1.5 rounded-md border border-mail-border text-xs text-mail-text-muted hover:text-mail-text hover:border-mail-accent/50 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed';
+  const preview = (
+    <div className={`flex flex-col gap-2 min-w-0 ${detached ? 'flex-1 min-h-0' : ''}`}>
+      {/* margin:auto, not flex centering: a centered box clips the top and left of a zoomed preview. */}
+      <div ref={boxRef} className={`flex overflow-auto rounded-xl bg-mail-bg border border-mail-border p-2
+        ${detached ? 'flex-1 min-h-0' : 'h-[436px]'}`}>
+        {loading && !content ? <Loader size={18} className="m-auto animate-spin text-mail-text-muted" /> : (
+          <canvas ref={previewRef} role="img" aria-label={t('export.social.preview')}
+            className="m-auto shrink-0 rounded-md" style={background.type === 'transparent' ? { background: CHECKERBOARD } : undefined} />
+        )}
+      </div>
+      <div role="group" aria-label={t('export.social.zoom')} className="flex items-center gap-1.5">
+        <button type="button" className={zoomButton} aria-label={t('export.social.zoomOut')} title={t('export.social.zoomOut')}
+          disabled={!content || zoomLevel <= ZOOM_STEPS[0] + 0.001} onClick={() => setZoom(nextZoom(zoomLevel, -1))}>
+          <Minus size={14} aria-hidden="true" />
+        </button>
+        <span className="w-11 text-center text-xs tabular-nums text-mail-text-muted" role="status">{Math.round(zoomLevel * 100)}%</span>
+        <button type="button" className={zoomButton} aria-label={t('export.social.zoomIn')} title={t('export.social.zoomIn')}
+          disabled={!content || zoomLevel >= ZOOM_STEPS.at(-1) - 0.001} onClick={() => setZoom(nextZoom(zoomLevel, 1))}>
+          <Plus size={14} aria-hidden="true" />
+        </button>
+        <button type="button" className={zoomButton} aria-pressed={zoom === 'fit'} disabled={!content} onClick={() => setZoom('fit')}>
+          {t('export.social.zoomFit')}
+        </button>
+        <button type="button" className={zoomButton} aria-pressed={zoom === 1} aria-label={t('export.social.zoomActualAria')}
+          disabled={!content} onClick={() => setZoom(1)}>
+          {t('export.social.zoomActual')}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] gap-5">
-        <div className="flex items-center justify-center min-h-[200px] rounded-xl bg-mail-bg border border-mail-border p-2">
-          {loading && !content ? <Loader size={18} className="animate-spin text-mail-text-muted" /> : (
-            <canvas ref={previewRef} role="img" aria-label={t('export.social.preview')}
-              className="max-w-full rounded-md" style={background.type === 'transparent' ? { background: CHECKERBOARD } : undefined} />
-          )}
-        </div>
+      <div className={detached
+        ? 'flex-1 min-h-0 flex gap-5'
+        : 'grid grid-cols-1 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] gap-5'}>
+        {preview}
 
-        <div className="space-y-3 min-w-0">
+        <div className={`space-y-3 min-w-0 ${detached ? 'w-80 shrink-0 overflow-y-auto pr-1' : ''}`}>
           <Field label={t('export.social.content')}>
             <Chips label={t('export.social.content')} value={prefs.content} onChange={v => update({ content: v })}
               options={[{ value: 'card', label: t('export.social.contentCard') }, { value: 'app', label: t('export.social.contentApp') }]} />
@@ -363,8 +448,20 @@ export function SocialExportPanel({ message, onDone }) {
 
       {notice && <p className="text-xs text-mail-danger">{notice}</p>}
 
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onDone} disabled={busy}>{t('common.cancel')}</Button>
+      <div className="flex items-center justify-end gap-2">
+        {onPopOut && (
+          <Button variant="ghost" size="sm" className="mr-auto" disabled={busy}
+            onClick={() => onPopOut({ redact, revealSender, prefs })}>
+            <ExternalLink size={14} aria-hidden="true" />{t('export.social.popOut')}
+          </Button>
+        )}
+        {onPopIn && (
+          <Button variant="ghost" size="sm" className="mr-auto" disabled={busy}
+            onClick={() => onPopIn({ redact, revealSender, prefs })}>
+            <PictureInPicture2 size={14} aria-hidden="true" />{t('export.social.popIn')}
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" onClick={onDone} disabled={busy}>{detached ? t('common.close') : t('common.cancel')}</Button>
         <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content}>
           {busy && <Loader size={14} className="animate-spin" />}{t('export.social.save')}
         </Button>

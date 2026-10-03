@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "화면을 녹화하거나 공공장소에서 메일을 읽어도 누구에게 쓰는지 드러나지 않습니다.",
   "privacy.notificationTitle": "새 메시지",
   "privacy.sourceBlocked": "메시지 소스를 보려면 개인정보 보호 모드를 끄세요.",
-  "privacy.windowBlocked": "이 메시지를 별도 창에서 열려면 개인정보 보호 모드를 끄세요."
+  "privacy.windowBlocked": "이 메시지를 별도 창에서 열려면 개인정보 보호 모드를 끄세요.",
+  "export.social.zoom": "확대/축소",
+  "export.social.zoomOut": "축소",
+  "export.social.zoomIn": "확대",
+  "export.social.zoomFit": "맞춤",
+  "export.social.zoomActual": "100%",
+  "export.social.zoomActualAria": "실제 픽셀",
+  "export.social.popOut": "새 창에서 열기",
+  "export.social.popIn": "앱으로 돌아가기",
+  "export.social.openInApp": "앱 창을 캡처하려면 MailVault에서 이 메시지를 다시 여세요."
 }

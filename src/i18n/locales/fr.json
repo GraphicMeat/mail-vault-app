@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "Enregistrez votre écran ou lisez vos e-mails en public sans montrer à qui vous écrivez.",
   "privacy.notificationTitle": "Nouveau message",
   "privacy.sourceBlocked": "Désactivez le mode confidentialité pour afficher la source du message.",
-  "privacy.windowBlocked": "Désactivez le mode confidentialité pour ouvrir ce message dans sa propre fenêtre."
+  "privacy.windowBlocked": "Désactivez le mode confidentialité pour ouvrir ce message dans sa propre fenêtre.",
+  "export.social.zoom": "Zoom",
+  "export.social.zoomOut": "Zoom arrière",
+  "export.social.zoomIn": "Zoom avant",
+  "export.social.zoomFit": "Ajuster",
+  "export.social.zoomActual": "100 %",
+  "export.social.zoomActualAria": "Pixels réels",
+  "export.social.popOut": "Ouvrir dans une fenêtre",
+  "export.social.popIn": "Revenir à l’app",
+  "export.social.openInApp": "Pour capturer la fenêtre de l’app, rouvrez ce message dans MailVault."
 }

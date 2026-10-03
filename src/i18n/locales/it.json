@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "Registra lo schermo o leggi la posta in pubblico senza mostrare a chi scrivi.",
   "privacy.notificationTitle": "Nuovo messaggio",
   "privacy.sourceBlocked": "Disattiva la modalità privacy per vedere il sorgente del messaggio.",
-  "privacy.windowBlocked": "Disattiva la modalità privacy per aprire questo messaggio in una finestra separata."
+  "privacy.windowBlocked": "Disattiva la modalità privacy per aprire questo messaggio in una finestra separata.",
+  "export.social.zoom": "Zoom",
+  "export.social.zoomOut": "Riduci",
+  "export.social.zoomIn": "Ingrandisci",
+  "export.social.zoomFit": "Adatta",
+  "export.social.zoomActual": "100%",
+  "export.social.zoomActualAria": "Pixel reali",
+  "export.social.popOut": "Apri in una finestra",
+  "export.social.popIn": "Torna all’app",
+  "export.social.openInApp": "Per catturare la finestra dell’app, riapri questo messaggio in MailVault."
 }

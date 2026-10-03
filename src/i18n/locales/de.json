@@ -3637,5 +3637,14 @@
   "privacy.upsellBody": "Nimm deinen Bildschirm auf oder lies Mails in der Öffentlichkeit, ohne zu zeigen, wem du schreibst.",
   "privacy.notificationTitle": "Neue Nachricht",
   "privacy.sourceBlocked": "Schalte den Datenschutzmodus aus, um den Quelltext der Nachricht anzuzeigen.",
-  "privacy.windowBlocked": "Schalte den Datenschutzmodus aus, um diese Nachricht in einem eigenen Fenster zu öffnen."
+  "privacy.windowBlocked": "Schalte den Datenschutzmodus aus, um diese Nachricht in einem eigenen Fenster zu öffnen.",
+  "export.social.zoom": "Zoom",
+  "export.social.zoomOut": "Verkleinern",
+  "export.social.zoomIn": "Vergrößern",
+  "export.social.zoomFit": "Einpassen",
+  "export.social.zoomActual": "100 %",
+  "export.social.zoomActualAria": "Originalpixel",
+  "export.social.popOut": "In Fenster öffnen",
+  "export.social.popIn": "Zurück zur App",
+  "export.social.openInApp": "Öffne diese Nachricht wieder in MailVault, um das App-Fenster aufzunehmen."
 }

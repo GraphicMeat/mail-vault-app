@@ -76,8 +76,9 @@ describe('SocialExportPanel', () => {
     await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
     expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark' });
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
-    // The preview composes at preview size; only Save renders full size.
-    expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, theme: 'dark', maxSize: { w: 720, h: 840 } });
+    // The preview composes at the size it is shown (a 2160px square fitted
+    // into the 360x420 box); only Save renders full size.
+    expect(lastCompose()).toMatchObject({ size: SIZE_PRESETS.square, theme: 'dark', maxSize: { w: 360, h: 360 } });
     expect(lastCompose()).not.toHaveProperty('fit');
   });
 
@@ -375,6 +376,67 @@ describe('SocialExportPanel', () => {
       expect(rangeMarkLeft(26, 0, 40)).toBe('calc(8px + 0.65 * (100% - 16px))');
       expect(rangeMarkLeft(0, 0, 40)).toBe('calc(8px + 0 * (100% - 16px))');
       expect(rangeMarkLeft(40, 0, 40)).toBe('calc(8px + 1 * (100% - 16px))');
+    });
+  });
+
+  describe('zoom', () => {
+    it('fits by default, shows actual pixels at 100%, and steps between', async () => {
+      renderPanel();
+      await waitFor(() => expect(lastCompose().maxSize).toEqual({ w: 360, h: 360 }));
+      expect(screen.getByRole('status').textContent).toBe('17%');
+      expect(screen.getByRole('button', { name: 'Fit' }).getAttribute('aria-pressed')).toBe('true');
+
+      fireEvent.click(screen.getByRole('button', { name: /actual pixels/i }));
+      await waitFor(() => expect(lastCompose().maxSize).toEqual({ w: 2160, h: 2160 }));
+      expect(screen.getByRole('status').textContent).toBe('100%');
+      expect(screen.getByRole('img', { name: 'Preview' }).style.width).toBe('2160px');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+      await waitFor(() => expect(lastCompose().maxSize).toEqual({ w: 1620, h: 1620 }));
+      fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+      await waitFor(() => expect(screen.getByRole('status').textContent).toBe('150%'));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Fit' }));
+      await waitFor(() => expect(lastCompose().maxSize).toEqual({ w: 360, h: 360 }));
+    });
+  });
+
+  describe('in a window of its own', () => {
+    it('hands its choices over when popped out', async () => {
+      const onPopOut = vi.fn();
+      renderPanel({ onPopOut });
+      fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+      fireEvent.click(screen.getByRole('button', { name: /open in window/i }));
+      expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ redact: false, revealSender: false, prefs: expect.objectContaining({ size: 'square' }) }));
+    });
+
+    it('starts from the choices it was handed, renders and saves through its source', async () => {
+      const content = stubCanvas();
+      const source = { buildContent: vi.fn(async () => content), save: vi.fn(async () => ({ ok: true, file: { name: 'y - social.png', base64: 'BBBB' } })) };
+      const onPrefsChange = vi.fn();
+      const onPopIn = vi.fn();
+      render(<SocialExportPanel detached source={source} onPrefsChange={onPrefsChange} onPopIn={onPopIn} onDone={() => {}}
+        initial={{ redact: false, revealSender: true, prefs: { size: 'story' } }} />);
+      await waitFor(() => expect(source.buildContent).toHaveBeenCalled());
+      expect(buildSocialContent).not.toHaveBeenCalled();
+      expect(source.buildContent.mock.calls[0][0]).toMatchObject({ content: 'card', redact: false });
+      expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(false);
+
+      fireEvent.click(screen.getByRole('button', { name: '1:1' }));
+      expect(onPrefsChange).toHaveBeenCalledWith({ size: 'square' });
+      expect(setSocialExport).not.toHaveBeenCalled();
+
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(saveOneFile).toHaveBeenCalledWith({ name: 'y - social.png', base64: 'BBBB' }, expect.any(String)));
+      expect(source.save).toHaveBeenCalledWith(expect.objectContaining({ size: 'square', redact: false }), content);
+      expect(buildSocialExport).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: /back to app/i }));
+      expect(onPopIn).toHaveBeenCalledWith(expect.objectContaining({ redact: false, revealSender: true }));
+      expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
     });
   });
 });
