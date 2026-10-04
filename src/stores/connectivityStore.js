@@ -22,6 +22,8 @@ import { daemonCall } from '../services/daemonClient';
 
 /** E2E mock connectivity object pins the verdict; see `installNetMock`. */
 let _forced = null;
+/** The probe in flight, shared by every caller that arrives during it. */
+let _inflight = null;
 
 function readNavigator() {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
@@ -37,15 +39,19 @@ export const useConnectivityStore = create((set, get) => ({
   /**
    * Adopt a verdict. `force` is the e2e mock; while it is pinned, real
    * verdicts (heartbeat, probe) are ignored so a test can't be raced by one.
+   * `dialled` marks a verdict from a probe that actually reached the network.
    */
-  setOnline(online, { force = false } = {}) {
+  setOnline(online, { force = false, dialled = false } = {}) {
     if (force) _forced = online === true;
     else if (_forced !== null) return;
     // The daemon's gate starts optimistic and only probes after one of its own
     // syncs fails, so a heartbeat `true` from an idle daemon is a default, not
     // a verdict. The OS path monitor saying "no link" outranks it: nothing
     // routes off a machine with no link, whatever the gate believes.
-    else if (online && !readNavigator()) return;
+    // A dialled `true` is not outranked: an answer came back, so the monitor
+    // is the one that is wrong. A confined snap without `network-status` has
+    // its portal monitor refused and reads offline for the whole session.
+    else if (online && !dialled && !readNavigator()) return;
     const next = force ? _forced : online === true;
     if (get().online !== next) {
       console.log(`[connectivity] ${next ? 'online' : 'OFFLINE'}`);
@@ -60,25 +66,32 @@ export const useConnectivityStore = create((set, get) => ({
    * answers a bare bool — `{online:false}` is truthy, so both are narrowed to
    * `=== true` rather than used raw.
    */
-  async probe() {
-    if (_forced !== null) return _forced;
-    if (get().checking) return get().online;
+  probe() {
+    if (_forced !== null) return Promise.resolve(_forced);
+    // A caller arriving mid-probe gets that probe's answer. Handing it the
+    // flag instead gave it the pre-probe value (`false` in the snap), which
+    // loadEmails took as "no internet" and stopped.
+    if (_inflight) return _inflight;
     set({ checking: true });
-    try {
+    _inflight = (async () => {
       let online;
+      let dialled = true;
       try {
         const status = await daemonCall('net.probe');
         online = status?.online === true;
       } catch {
         // No daemon (or it refused) — ask the app process directly.
         const invoke = typeof window !== 'undefined' && window.__TAURI__?.core?.invoke;
+        dialled = !!invoke;
         online = invoke ? (await invoke('check_network_connectivity')) === true : readNavigator();
       }
-      get().setOnline(online);
+      get().setOnline(online, { dialled });
       return online;
-    } finally {
+    })().finally(() => {
+      _inflight = null;
       set({ checking: false });
-    }
+    });
+    return _inflight;
   },
 }));
 
@@ -91,6 +104,10 @@ export function wireConnectivityEvents(target = typeof window !== 'undefined' ? 
   // `false` is trustworthy on its own; `true` only earns a probe.
   target.addEventListener('offline', () => store.setOnline(false));
   target.addEventListener('online', () => { store.probe(); });
+  // `offline` is an edge, so a monitor that starts offline and never changes
+  // (the refused snap portal) fires nothing. Check it once instead of waiting
+  // for an account activation to probe.
+  if (!readNavigator()) store.probe();
 }
 
 /**
@@ -112,6 +129,7 @@ export function installNetMock(target) {
 /** Test seam — resets module state between specs. */
 export function __resetConnectivityForTests() {
   _forced = null;
+  _inflight = null;
   _wired = false;
   useConnectivityStore.setState({ online: true, checking: false, lastVerdictAt: 0 });
 }

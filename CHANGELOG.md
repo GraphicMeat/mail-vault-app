@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **The snap no longer says "No internet connection" on a working connection.** On Linux the Snap package could not ask the desktop whether the network was up, so the window believed it was offline from launch: the banner stayed up through Check again, a folder could open showing only what was saved on this computer, and read marks, moves and deletes made in the meantime waited to be sent. The snap now asks the desktop with the network status permission it needed, and on any build a check that reaches the internet clears the banner even when the desktop still reports no network. ([#16](https://github.com/GraphicMeat/mail-vault-app/issues/16))
+
 ## [2.18.0] - 2026-10-03
 
 ### Fixed

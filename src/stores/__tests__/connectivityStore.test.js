@@ -82,6 +82,7 @@ describe('connectivity store', () => {
     mockDaemonCall.mockResolvedValue({ online: false });
     win.emit('online');
     await vi.waitFor(() => expect(mockDaemonCall).toHaveBeenCalledWith('net.probe'));
+    await vi.waitFor(() => expect(useConnectivityStore.getState().checking).toBe(false));
     expect(useConnectivityStore.getState().online).toBe(false);
 
     mockDaemonCall.mockResolvedValue({ online: true });
@@ -107,6 +108,56 @@ describe('connectivity store', () => {
     navigator.onLine = true;
     useConnectivityStore.getState().setOnline(true);
     expect(useConnectivityStore.getState().online).toBe(true);
+  });
+
+  // A confined snap without `network-status` gets NotAllowed from the portal's
+  // NetworkMonitor, so GLib leaves `navigator.onLine` false for the whole
+  // session and no `online` event ever fires (issue #16). A probe that dialled
+  // out and got an answer is proof; the stuck monitor must not veto it.
+  it('lets a successful probe override an OS monitor stuck on offline', async () => {
+    navigator.onLine = false;
+    useConnectivityStore.setState({ online: false });
+    mockDaemonCall.mockResolvedValue({ online: true });
+
+    expect(await useConnectivityStore.getState().probe()).toBe(true);
+    expect(useConnectivityStore.getState().online).toBe(true);
+
+    // The idle-daemon heartbeat that follows says the same; nothing flips.
+    useConnectivityStore.getState().setOnline(true);
+    expect(useConnectivityStore.getState().online).toBe(true);
+  });
+
+  it('probes at wire time when the OS monitor already says offline', async () => {
+    navigator.onLine = false;
+    useConnectivityStore.setState({ online: false });
+    mockDaemonCall.mockResolvedValue({ online: true });
+
+    wireConnectivityEvents(fakeWindow());
+
+    await vi.waitFor(() => expect(useConnectivityStore.getState().online).toBe(true));
+  });
+
+  it('does not probe at wire time when the OS monitor says online', () => {
+    wireConnectivityEvents(fakeWindow());
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+
+  // Account activation and loadEmails both probe at startup. A caller that
+  // lands while the first probe is in flight must get that probe's answer,
+  // not the store's starting value: in the snap that was `false`, and
+  // loadEmails bailed with "No internet connection. Showing cached".
+  it('gives a concurrent caller the in-flight verdict, not the stale flag', async () => {
+    navigator.onLine = false;
+    useConnectivityStore.setState({ online: false });
+    let release;
+    mockDaemonCall.mockReturnValue(new Promise(r => { release = () => r({ online: true }); }));
+
+    const first = useConnectivityStore.getState().probe();
+    const second = useConnectivityStore.getState().probe();
+    release();
+
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
   });
 
   it('collapses concurrent probes into one', async () => {

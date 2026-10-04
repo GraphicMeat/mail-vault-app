@@ -25,6 +25,10 @@ apps:
     plugs:
       - network
       - network-bind
+      # Without it the portal refuses NetworkMonitor ("not available inside
+      # the sandbox"), GLib reports no network, and the webview's
+      # navigator.onLine stays false for the whole session (issue #16).
+      - network-status
       - desktop
       - desktop-legacy
       - wayland
