@@ -86,3 +86,6 @@ __pycache__/
 
 # impeccable skill critique reports — session output, never repo content
 .impeccable/critique/
+
+# Linux screenshot run output (scripts/screenshots/run-linux.sh)
+/snap-screenshots/

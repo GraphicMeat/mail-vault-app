@@ -32,6 +32,8 @@ const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
  */
 export const THEME_SUFFIX = process.env.SHOTS_THEME === 'light' ? '-light' : '';
 
+const IS_LINUX = process.platform === 'linux';
+
 export const OUT_DIR = process.env.SHOTS_OUT
   || resolve(HERE, '../../website/screenshots', LOCALE_DIR === 'en' ? '' : LOCALE_DIR);
 
@@ -65,16 +67,24 @@ function appPid() {
     // window, and every locale skips with "no capturable window owned by
     // MailVault; candidates:" and an empty list. Keep only a process whose
     // argv[0] IS the binary.
-    for (const pid of pids) {
-      const argv0 = execFileSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf-8' })
-        .trim().split(' ')[0];
-      if (argv0 === binary) return pid;
+    const apps = pids.filter((pid) => execFileSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf-8' })
+      .trim().split(' ')[0] === binary);
+    // tauri-wd gives an app 30s to report its plugin port, then fails the
+    // session WITHOUT killing it, and wdio's retry launches another. On Linux
+    // a slow start did exactly that: four apps on one display, and the first
+    // one — never driven — was photographed for every shot.
+    if (IS_LINUX && apps.length > 1) {
+      throw new MultipleAppsError(`${apps.length} instances of ${binary} are running (${apps.join(', ')}): `
+        + 'a session retry left the earlier ones behind, and the one being driven cannot be told apart');
     }
-    return null;
-  } catch {
+    return apps[0] ?? null;
+  } catch (e) {
+    if (e instanceof MultipleAppsError) throw e;
     return null; // not up yet — windowId retries, and fails loudly if it never is
   }
 }
+
+class MultipleAppsError extends Error {}
 
 /**
  * CGWindowID of the app's main window. Retried: a window being moved, resized
@@ -115,10 +125,55 @@ export function windowId(appName = 'MailVault', attempts = 4) {
  */
 let previousBytes = 0;
 
+/**
+ * X11 id of the app's top-level window, found by the pid capture pins to.
+ * `--onlyvisible` drops GTK's hidden helper windows; the largest of what is
+ * left is the main window, the same rule windowid.swift applies on macOS.
+ */
+function x11WindowId(attempts = 10) {
+  for (let i = 0; i < attempts; i++) {
+    const pid = appPid();
+    if (pid) {
+      let ids = [];
+      try {
+        ids = execFileSync('xdotool', ['search', '--onlyvisible', '--pid', pid], { encoding: 'utf-8' })
+          .trim().split('\n').filter(Boolean);
+      } catch { /* none mapped yet */ }
+      const sized = ids.map((id) => {
+        const geo = execFileSync('xdotool', ['getwindowgeometry', '--shell', id], { encoding: 'utf-8' });
+        const w = Number(geo.match(/WIDTH=(\d+)/)?.[1]);
+        const h = Number(geo.match(/HEIGHT=(\d+)/)?.[1]);
+        return { id, area: w * h };
+      }).sort((a, b) => b.area - a.area);
+      if (sized[0]?.area) return sized[0].id;
+    }
+    execFileSync('sleep', ['0.5']);
+  }
+  throw new Error(`no visible X11 window owned by ${process.env.SHOTS_APP_BINARY}`);
+}
+
+/**
+ * Linux capture: the app window itself. The app runs with GTK_CSD=1
+ * (run-linux.sh), so the Yaru titlebar GTK draws is part of that window, the
+ * same titlebar an Ubuntu (Wayland) session shows. No compositor runs under
+ * Xvfb, so GTK's shadow margin around the window and the area outside its
+ * rounded top corners come out pure black: flood-fill that from the four
+ * corners to transparent, then trim it off.
+ */
+function captureLinux(out) {
+  execFileSync('import', ['-silent', '-window', x11WindowId(), out]);
+  const { width, height } = pngSize(out);
+  const [r, b] = [width - 1, height - 1];
+  execFileSync('convert', [out, '-alpha', 'set', '-fill', 'none', '-fuzz', '0%',
+    ...[[0, 0], [r, 0], [0, b], [r, b]].flatMap(([x, y]) => ['-draw', `color ${x},${y} floodfill`]),
+    '-trim', '+repage', out]);
+}
+
 export function capture(name, { appName = 'MailVault' } = {}) {
   const out = join(OUT_DIR, `${name}${THEME_SUFFIX}.png`);
   mkdirSync(dirname(out), { recursive: true });
-  execFileSync('screencapture', ['-x', '-o', '-t', 'png', '-l', windowId(appName), out]);
+  if (IS_LINUX) captureLinux(out);
+  else execFileSync('screencapture', ['-x', '-o', '-t', 'png', '-l', windowId(appName), out]);
   const bytes = statSync(out).size;
   if (bytes === previousBytes) {
     throw new Error(`blank capture: ${name} is byte-identical to the previous shot (${bytes} B) — `
@@ -132,6 +187,11 @@ export function capture(name, { appName = 'MailVault' } = {}) {
 
 /** Pixel dimensions of a PNG on disk, via `sips` — no new dependency. */
 export function pngSize(path) {
+  if (IS_LINUX) {
+    const [width, height] = execFileSync('identify', ['-format', '%w %h', path], { encoding: 'utf-8' })
+      .trim().split(' ').map(Number);
+    return { width, height };
+  }
   const out = execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', path], { encoding: 'utf-8' });
   const width = Number(out.match(/pixelWidth:\s*(\d+)/)?.[1]);
   const height = Number(out.match(/pixelHeight:\s*(\d+)/)?.[1]);
@@ -189,6 +249,10 @@ export function detailCropBox(rect, viewport, image, padding = 0) {
  * default centred crop, and `--out` leaves the source file untouched.
  */
 export function cropDetail(srcPng, outPng, box) {
+  if (IS_LINUX) {
+    execFileSync('convert', [srcPng, '-crop', `${box.width}x${box.height}+${box.x}+${box.y}`, '+repage', outPng]);
+    return;
+  }
   execFileSync('sips', [
     '--cropToHeightWidth', String(box.height), String(box.width),
     '--cropOffset', String(box.y), String(box.x),
