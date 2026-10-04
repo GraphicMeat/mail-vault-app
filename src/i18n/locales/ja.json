@@ -3646,5 +3646,6 @@
   "export.social.popOut": "ウインドウで開く",
   "export.social.popIn": "アプリに戻す",
   "export.social.openInApp": "アプリのウインドウを撮影するには、このメッセージをMailVaultでもう一度開いてください。",
-  "export.social.width": "メールの幅"
+  "export.social.width": "メールの幅",
+  "export.dialog.previewUnavailable": "プレビューを表示できません"
 }

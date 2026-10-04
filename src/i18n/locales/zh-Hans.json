@@ -3646,5 +3646,6 @@
   "export.social.popOut": "在窗口中打开",
   "export.social.popIn": "返回应用",
   "export.social.openInApp": "要截取应用窗口，请在 MailVault 中重新打开此邮件。",
-  "export.social.width": "邮件宽度"
+  "export.social.width": "邮件宽度",
+  "export.dialog.previewUnavailable": "无法预览"
 }

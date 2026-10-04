@@ -3646,5 +3646,6 @@
   "export.social.popOut": "Apri in una finestra",
   "export.social.popIn": "Torna all’app",
   "export.social.openInApp": "Per catturare la finestra dell’app, riapri questo messaggio in MailVault.",
-  "export.social.width": "Larghezza dell’email"
+  "export.social.width": "Larghezza dell’email",
+  "export.dialog.previewUnavailable": "Anteprima non disponibile"
 }

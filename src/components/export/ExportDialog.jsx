@@ -15,6 +15,7 @@ import { usePrivacyStore } from '../../stores/privacyStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { ensurePrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 import { SocialExportPanel } from './SocialExportPanel';
+import { ExportPreview, useExportPreview } from './ExportPreview';
 
 // The label reads "Image" over a hint, but the accessible name is just the
 // choice: "One tall image" and "Separate images" both contain the word image,
@@ -90,6 +91,17 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
   const isSocial = activeFormat === 'social';
   const showLayout = activeFormat === 'image' && isThread;
   const offerWindow = isPremium && isSocial && !!onPopOut;
+  const showPreview = isPremium && !isSocial;
+  // Privacy mode on (someone may be recording): the preview is masked whatever the checkbox says.
+  const privacyOn = usePrivacyStore(s => s.enabled);
+  // Turned on mid-dialog: the export follows, as it does when the dialog opens with it on.
+  useEffect(() => {
+    if (open && privacyOn) turnRedact(true);
+  }, [privacyOn]);
+  const preview = useExportPreview({
+    enabled: open && showPreview, messages, format: activeFormat, layout: showLayout ? layout : 'single',
+    mirror, redact: redact || privacyOn, redactStyle, width, account, mailbox,
+  });
 
   const run = async () => {
     setBusy(true);
@@ -151,7 +163,7 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
   };
 
   return (
-    <Dialog open={open} onClose={onClose} dismissable={!busy} z={Z.dialog} portal size={isSocial ? 'xl' : 'md'}
+    <Dialog open={open} onClose={onClose} dismissable={!busy} z={Z.dialog} portal size={isSocial || showPreview ? 'xl' : 'md'}
       title={isThread ? t('export.dialog.exportMessagesTitle', { count: messages.length }) : t('export.dialog.exportMessageTitle')}
       headerActions={offerWindow ? <span ref={setPopOutSlot} className="contents" /> : null}
       panelBg="bg-mail-surface" data-capture-exclude="" data-theme={liveTheme} data-palette={palette}>
@@ -182,63 +194,68 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
             <SocialExportPanel message={messages[0]} account={account} mailbox={mailbox} onDone={onClose}
               initial={social} onPopOut={onPopOut} headerSlot={offerWindow ? popOutSlot : undefined} />
           ) : (<>
-            {showLayout && (
-              <div className="grid grid-cols-2 gap-2">
-                <Choice name="mv-export-layout" value="single" checked={layout === 'single'} onChange={setLayout}
-                  label={t('export.dialog.layoutSingleLabel')} hint={t('export.dialog.layoutSingleHint')} />
-                <Choice name="mv-export-layout" value="separate" checked={layout === 'separate'} onChange={setLayout}
-                  label={t('export.dialog.layoutSeparateLabel')} hint={t('export.dialog.layoutSeparateHint')} />
+            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] gap-5">
+              <ExportPreview preview={preview} />
+              <div className="space-y-4 min-w-0">
+                {showLayout && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Choice name="mv-export-layout" value="single" checked={layout === 'single'} onChange={setLayout}
+                      label={t('export.dialog.layoutSingleLabel')} hint={t('export.dialog.layoutSingleHint')} />
+                    <Choice name="mv-export-layout" value="separate" checked={layout === 'separate'} onChange={setLayout}
+                      label={t('export.dialog.layoutSeparateLabel')} hint={t('export.dialog.layoutSeparateHint')} />
+                  </div>
+                )}
+
+                {activeFormat === 'image' && (
+                  <label className="block space-y-1">
+                    <span className="flex justify-between text-xs font-medium text-mail-text-muted">
+                      <span>{t('export.social.width')}</span><span>{`${width}px`}</span>
+                    </span>
+                    <input type="range" min={EMAIL_WIDTH.min} max={EMAIL_WIDTH.max} step={EMAIL_WIDTH.step} value={width} className="w-full"
+                      aria-label={t('export.social.width')} onChange={e => setWidth(Number(e.target.value))} />
+                  </label>
+                )}
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={mirror} onChange={e => setMirror(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    <span className="block text-sm text-mail-text">{t('export.dialog.mirrorRemoteContent')}</span>
+                    <span className="block text-xs text-mail-text-muted">
+                      {t('export.dialog.fetchesImagesSendersServersSo')}
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={attachments} onChange={e => setAttachments(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    <span className="block text-sm text-mail-text">{t('export.dialog.includeAttachments')}</span>
+                    <span className="block text-xs text-mail-text-muted">
+                      {t('export.dialog.includeAttachmentsHint')}
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={redact} onChange={e => turnRedact(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    <span className="block text-sm text-mail-text">{t('export.dialog.redactLabel')}</span>
+                    <span className="block text-xs text-mail-text-muted">
+                      {t('export.dialog.redactHint')}
+                    </span>
+                  </span>
+                </label>
+
+                {redact && activeFormat === 'image' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Choice name="mv-export-redact-style" value="blur" checked={redactStyle === 'blur'} onChange={setRedactStyle}
+                      label={t('export.dialog.redactStyleBlur')} />
+                    <Choice name="mv-export-redact-style" value="bar" checked={redactStyle === 'bar'} onChange={setRedactStyle}
+                      label={t('export.dialog.redactStyleBar')} />
+                  </div>
+                )}
               </div>
-            )}
-
-            {activeFormat === 'image' && (
-              <label className="block space-y-1">
-                <span className="flex justify-between text-xs font-medium text-mail-text-muted">
-                  <span>{t('export.social.width')}</span><span>{`${width}px`}</span>
-                </span>
-                <input type="range" min={EMAIL_WIDTH.min} max={EMAIL_WIDTH.max} step={EMAIL_WIDTH.step} value={width} className="w-full"
-                  aria-label={t('export.social.width')} onChange={e => setWidth(Number(e.target.value))} />
-              </label>
-            )}
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" checked={mirror} onChange={e => setMirror(e.target.checked)} className="mt-0.5" />
-              <span>
-                <span className="block text-sm text-mail-text">{t('export.dialog.mirrorRemoteContent')}</span>
-                <span className="block text-xs text-mail-text-muted">
-                  {t('export.dialog.fetchesImagesSendersServersSo')}
-                </span>
-              </span>
-            </label>
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" checked={attachments} onChange={e => setAttachments(e.target.checked)} className="mt-0.5" />
-              <span>
-                <span className="block text-sm text-mail-text">{t('export.dialog.includeAttachments')}</span>
-                <span className="block text-xs text-mail-text-muted">
-                  {t('export.dialog.includeAttachmentsHint')}
-                </span>
-              </span>
-            </label>
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" checked={redact} onChange={e => turnRedact(e.target.checked)} className="mt-0.5" />
-              <span>
-                <span className="block text-sm text-mail-text">{t('export.dialog.redactLabel')}</span>
-                <span className="block text-xs text-mail-text-muted">
-                  {t('export.dialog.redactHint')}
-                </span>
-              </span>
-            </label>
-
-            {redact && activeFormat === 'image' && (
-              <div className="grid grid-cols-2 gap-2">
-                <Choice name="mv-export-redact-style" value="blur" checked={redactStyle === 'blur'} onChange={setRedactStyle}
-                  label={t('export.dialog.redactStyleBlur')} />
-                <Choice name="mv-export-redact-style" value="bar" checked={redactStyle === 'bar'} onChange={setRedactStyle}
-                  label={t('export.dialog.redactStyleBar')} />
-              </div>
-            )}
+            </div>
 
             {notice && <p className="text-xs text-mail-danger">{notice}</p>}
 

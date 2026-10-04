@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within, act } from '@testing-library/react';
 
 const buildExport = vi.fn();
 const saveOneFile = vi.fn(async () => '/tmp/out.png');
@@ -64,6 +64,15 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); unHost?.(); });
 
+// The preview builds through buildExport too (debounced, attachments off), so
+// a Save is read as the first call made after the Export click.
+async function clickExport() {
+  const before = buildExport.mock.calls.length;
+  fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+  await waitFor(() => expect(buildExport.mock.calls.length).toBeGreaterThan(before));
+  return buildExport.mock.calls[before][0];
+}
+
 describe('ExportDialog', () => {
   it('offers both formats', () => {
     render(<ExportDialog {...props} messages={messages} />);
@@ -113,9 +122,7 @@ describe('ExportDialog', () => {
     render(<ExportDialog {...props} messages={messages} />);
     fireEvent.click(screen.getByRole('radio', { name: /separate images/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /mirror remote content/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
-    await waitFor(() => expect(buildExport).toHaveBeenCalled());
-    expect(buildExport.mock.calls[0][0]).toMatchObject({ format: 'image', layout: 'separate', mirror: false });
+    expect(await clickExport()).toMatchObject({ format: 'image', layout: 'separate', mirror: false });
   });
 
   it('offers an Email width for a PNG and passes it to the builder; HTML keeps the export column', async () => {
@@ -124,9 +131,7 @@ describe('ExportDialog', () => {
     expect([slider.min, slider.max, slider.step, slider.value]).toEqual(['480', '1600', '20', '820']);
     fireEvent.change(slider, { target: { value: '1200' } });
     expect(screen.getByText('1200px')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
-    await waitFor(() => expect(buildExport).toHaveBeenCalled());
-    expect(buildExport.mock.calls[0][0]).toMatchObject({ format: 'image', width: 1200 });
+    expect(await clickExport()).toMatchObject({ format: 'image', width: 1200 });
     fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
     expect(screen.queryByRole('slider', { name: 'Email width' })).toBeNull();
   });
@@ -157,9 +162,7 @@ describe('ExportDialog', () => {
   it('passes the attachment choice through to the builder', async () => {
     render(<ExportDialog {...props} messages={messages} />);
     fireEvent.click(screen.getByRole('checkbox', { name: /include attachments/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
-    await waitFor(() => expect(buildExport).toHaveBeenCalled());
-    expect(buildExport.mock.calls[0][0]).toMatchObject({ attachments: false });
+    expect(await clickExport()).toMatchObject({ attachments: false });
   });
 
   it('hands the attachments to the save dialog beside the one file', async () => {
@@ -237,10 +240,9 @@ describe('ExportDialog', () => {
     expect(screen.queryByRole('radio', { name: /black bar/i })).toBeNull();
     fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
     expect(screen.getByRole('radio', { name: /^blur$/i }).checked).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
-    await waitFor(() => expect(buildExport).toHaveBeenCalled());
+    const saved = await clickExport();
     un();
-    expect(buildExport.mock.calls[0][0].redact).toEqual({ style: 'blur', dict: getPrivacyDictionary() });
+    expect(saved.redact).toEqual({ style: 'blur', dict: getPrivacyDictionary() });
     // Up while the dictionary was fetched, down once it was in hand.
     expect(wanted).toContain(true);
     expect(wanted.at(-1)).toBe(false);
@@ -252,9 +254,7 @@ describe('ExportDialog', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
     fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
     expect(screen.queryByRole('radio', { name: /^blur$/i })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
-    await waitFor(() => expect(buildExport).toHaveBeenCalled());
-    expect(buildExport.mock.calls[0][0].redact.style).toBe('bar');
+    expect((await clickExport()).redact.style).toBe('bar');
   });
 
   it('turns attachments off when redaction goes on, and keeps a re-enabled choice', () => {
@@ -273,16 +273,12 @@ describe('ExportDialog', () => {
     render(<ExportDialog {...props} messages={messages} />);
     expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
     expect(screen.getByRole('checkbox', { name: /include attachments/i }).checked).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
-    await waitFor(() => expect(buildExport).toHaveBeenCalled());
-    expect(buildExport.mock.calls[0][0]).toMatchObject({ attachments: false, redact: { style: 'blur' } });
+    expect(await clickExport()).toMatchObject({ attachments: false, redact: { style: 'blur' } });
   });
 
   it('exports unredacted by default', async () => {
     render(<ExportDialog {...props} messages={messages} />);
-    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
-    await waitFor(() => expect(buildExport).toHaveBeenCalled());
-    expect(buildExport.mock.calls[0][0].redact).toBeNull();
+    expect((await clickExport()).redact).toBeNull();
   });
 
   it('surfaces an outright failure', async () => {
@@ -308,5 +304,104 @@ describe('reopening the dialog', () => {
 
     expect(screen.queryByText(/could not be exported/i)).toBeNull();
     expect(screen.getByRole('button', { name: /^export$/i })).toBeTruthy();
+  });
+});
+
+describe('the PNG and HTML preview', () => {
+  const utf8Base64 = (text) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+  const deferred = () => {
+    let resolve;
+    const promise = new Promise((r) => { resolve = r; });
+    return { promise, resolve };
+  };
+  const previewCalls = () => buildExport.mock.calls.map(c => c[0]);
+
+  it('builds the PNG without attachments and without an Export click, and shows each file', async () => {
+    buildExport.mockResolvedValue({ ok: true, files: [{ name: 'a.png', base64: 'AAAA' }, { name: 'b.png', base64: 'BBBB' }], failures: [], stats: {} });
+    render(<ExportDialog {...props} messages={messages} />);
+    const images = await screen.findAllByRole('img', { name: 'Preview' });
+    expect(images.map(i => i.getAttribute('src'))).toEqual(['data:image/png;base64,AAAA', 'data:image/png;base64,BBBB']);
+    expect(buildExport).toHaveBeenCalledTimes(1);
+    expect(previewCalls()[0]).toMatchObject({ format: 'image', attachments: false, redact: null, width: 820 });
+    expect(saveOneFile).not.toHaveBeenCalled();
+  });
+
+  it('shows the HTML file in a frame that runs no scripts', async () => {
+    buildExport.mockResolvedValue({ ok: true, files: [{ name: 'a.html', base64: utf8Base64('<p>Grüße</p>') }], failures: [], stats: {} });
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
+    const frame = await screen.findByTitle('Preview');
+    expect(frame.tagName).toBe('IFRAME');
+    expect(frame.getAttribute('sandbox')).toBe('');
+    expect(frame.getAttribute('srcdoc')).toBe('<p>Grüße</p>');
+    expect(previewCalls().at(-1)).toMatchObject({ format: 'html', attachments: false });
+    expect(previewCalls().at(-1)).not.toHaveProperty('width');
+  });
+
+  it('takes the unredacted preview down the moment redaction goes on', async () => {
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    await screen.findByRole('img', { name: 'Preview' });
+    buildExport.mockImplementation(() => new Promise(() => {}));
+    fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+    expect(screen.queryByRole('img', { name: 'Preview' })).toBeNull();
+    await waitFor(() => expect(previewCalls().at(-1).redact).toEqual(expect.objectContaining({ style: 'blur' })));
+  });
+
+  it('masks the preview while privacy mode is on, whatever the checkbox says', async () => {
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    await screen.findByRole('img', { name: 'Preview' });
+    buildExport.mockImplementation(() => new Promise(() => {}));
+    act(() => usePrivacyStore.setState({ enabled: true }));
+    expect(screen.queryByRole('img', { name: 'Preview' })).toBeNull();
+    await waitFor(() => expect(previewCalls().at(-1).redact).toEqual(expect.objectContaining({ style: 'blur' })));
+    // The export follows, so the file matches the preview.
+    expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
+  });
+
+  it('says so quietly in the box when the preview fails, never in the Save notice', async () => {
+    buildExport.mockResolvedValue({ ok: false, reason: 'render', files: [], failures: [] });
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    expect(await screen.findByText('Preview unavailable')).toBeTruthy();
+    expect(screen.queryByText(/could not be exported/i)).toBeNull();
+  });
+
+  it('runs one build at a time and then only the latest options', async () => {
+    const first = deferred();
+    buildExport.mockImplementationOnce(() => first.promise);
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    await waitFor(() => expect(buildExport).toHaveBeenCalledTimes(1));
+    const slider = screen.getByRole('slider', { name: 'Email width' });
+    fireEvent.change(slider, { target: { value: '1000' } });
+    await new Promise(r => setTimeout(r, 350));
+    fireEvent.change(slider, { target: { value: '1200' } });
+    await new Promise(r => setTimeout(r, 350));
+    expect(buildExport).toHaveBeenCalledTimes(1); // still the first one in flight
+    first.resolve({ ok: true, files: [{ name: 'old.png', base64: 'OLD' }], failures: [], stats: {} });
+    await waitFor(() => expect(buildExport).toHaveBeenCalledTimes(2));
+    expect(previewCalls()[1].width).toBe(1200);
+    const image = await screen.findByRole('img', { name: 'Preview' });
+    expect(image.getAttribute('src')).toBe('data:image/png;base64,A');
+    expect(previewCalls().map(c => c.width)).not.toContain(1000);
+  });
+
+  it('serves options it built before from its cache', async () => {
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    await screen.findByRole('img', { name: 'Preview' });
+    fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
+    await waitFor(() => expect(buildExport).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('radio', { name: /^image$/i }));
+    expect(await screen.findByRole('img', { name: 'Preview' })).toBeTruthy();
+    await new Promise(r => setTimeout(r, 350));
+    expect(buildExport).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds nothing while closed, for a free user, or on Social', async () => {
+    const { rerender } = render(<ExportDialog {...props} open={false} messages={[messages[0]]} />);
+    hasPremiumAccess.mockReturnValue(false);
+    rerender(<ExportDialog {...props} messages={[messages[0]]} />);
+    hasPremiumAccess.mockReturnValue(true);
+    rerender(<ExportDialog {...props} messages={[messages[0]]} social={{ redact: true }} />);
+    await new Promise(r => setTimeout(r, 400));
+    expect(buildExport).not.toHaveBeenCalled();
   });
 });
