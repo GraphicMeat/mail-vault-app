@@ -7,6 +7,7 @@ import { hasPremiumAccess, useSettingsStore } from '../../stores/settingsStore';
 import { buildExport } from '../../services/export/exportService';
 import { saveOneFile, saveFilesToDirectory } from '../../services/export/exportSaver';
 import { sidecarName } from '../../services/export/exportNaming';
+import { EMAIL_WIDTH } from '../../services/export/social/socialLayout';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { t, useT  } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
@@ -54,6 +55,8 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
   const [attachments, setAttachments] = useState(true);
   const [redact, setRedact] = useState(false);
   const [redactStyle, setRedactStyle] = useState('blur');
+  // The PNG's email column, CSS px. Per dialog, like the other choices.
+  const [width, setWidth] = useState(EMAIL_WIDTH.default);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   // Where the Social panel puts its Open in window button: the dialog's header.
@@ -99,7 +102,10 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
         // HTML always gets bars: a blur needs a stylesheet the file cannot promise.
         redactOpts = { style: activeFormat === 'html' ? 'bar' : redactStyle, dict: await ensurePrivacyDictionary() };
       }
-      const result = await buildExport({ messages, format: activeFormat, layout, mirror, attachments, account, mailbox, redact: redactOpts });
+      const result = await buildExport({
+        messages, format: activeFormat, layout, mirror, attachments, account, mailbox, redact: redactOpts,
+        ...(activeFormat === 'image' ? { width } : {}),
+      });
       if (!result.ok) {
         setNotice(result.reason === 'premium'
           ? t('export.dialog.exportPremiumFeature')
@@ -183,6 +189,16 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
                 <Choice name="mv-export-layout" value="separate" checked={layout === 'separate'} onChange={setLayout}
                   label={t('export.dialog.layoutSeparateLabel')} hint={t('export.dialog.layoutSeparateHint')} />
               </div>
+            )}
+
+            {activeFormat === 'image' && (
+              <label className="block space-y-1">
+                <span className="flex justify-between text-xs font-medium text-mail-text-muted">
+                  <span>{t('export.social.width')}</span><span>{`${width}px`}</span>
+                </span>
+                <input type="range" min={EMAIL_WIDTH.min} max={EMAIL_WIDTH.max} step={EMAIL_WIDTH.step} value={width} className="w-full"
+                  aria-label={t('export.social.width')} onChange={e => setWidth(Number(e.target.value))} />
+              </label>
             )}
 
             <label className="flex items-start gap-2 cursor-pointer">

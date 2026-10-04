@@ -47,6 +47,12 @@ describe('mountExportFrame', () => {
     dispose();
   });
 
+  it('mounts at a width it is given', async () => {
+    const { iframe, dispose } = await mountExportFrame('<!doctype html><body>hi</body>', { loadTimeoutMs: 10, width: 1200 });
+    expect(iframe.style.width).toBe('1200px');
+    dispose();
+  });
+
   it('never grants the export frame scripts', async () => {
     const { iframe, dispose } = await mountExportFrame('<!doctype html><body>hi</body>', { loadTimeoutMs: 10 });
     expect(iframe.getAttribute('sandbox')).toBe('allow-same-origin');
@@ -95,6 +101,21 @@ describe('renderMessageToCanvas', () => {
     expect(beforeCapture).toHaveBeenCalledTimes(1);
     expect(beforeCapture.mock.calls[0][0].nodeType).toBe(9); // the frame's document
     expect(document.querySelectorAll('iframe').length).toBe(0);
+  });
+
+  it('rasterizes at the export width by default, and at a given width in the document, the frame and the canvas', async () => {
+    await renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10 });
+    expect(domToCanvas.mock.calls[0][1].width).toBe(820);
+    let frame = null;
+    domToCanvas.mockImplementationOnce(async () => {
+      const iframe = [...document.querySelectorAll('iframe')].at(-1);
+      frame = { width: iframe.style.width, html: iframe.getAttribute('srcdoc') };
+      return { width: 2400, height: 2000 };
+    });
+    await renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10, width: 1200 });
+    expect(domToCanvas.mock.calls[1][1].width).toBe(1200);
+    expect(frame.width).toBe('1200px');
+    expect(frame.html).toContain('max-width: 1200px');
   });
 
   it('turns off font embedding and caps the fetch timeout', async () => {

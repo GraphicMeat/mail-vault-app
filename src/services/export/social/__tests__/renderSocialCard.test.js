@@ -34,6 +34,14 @@ describe('renderSocialCard', () => {
     expect(fillRect).toHaveBeenCalledWith(0, 0, 1640, 200);
   });
 
+  it('renders the header and the body at the same given width, light or dark mail', async () => {
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', appearance: 'light', mail: 'light', width: 1200 });
+    expect([callFor('head').width, callFor('body').width]).toEqual([1200, 1200]);
+    renderMessageToCanvas.mockClear();
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', appearance: 'dark', mail: 'dark', width: 640 });
+    expect([callFor('head').width, callFor('body').width]).toEqual([640, 640]);
+  });
+
   it('light mail: a plain frame, no scripts, no Dark Reader', async () => {
     await renderSocialCard({ message, bodyHtml: '<p>x</p>', appearance: 'light', mail: 'light' });
     const body = callFor('body');

@@ -111,6 +111,12 @@ describe('buildMessageDocument', () => {
     expect(html).toContain('<p>hi</p>');
   });
 
+  it('widens the column to a given width, and is unchanged without one', () => {
+    const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>', width: 1200 });
+    expect(html).toContain('body { max-width: 1200px; }');
+    expect(buildMessageDocument({ message, bodyHtml: '<p>hi</p>' })).not.toContain('1200px');
+  });
+
   it('carries no script of its own', () => {
     const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>' });
     expect(html).not.toContain('<script');

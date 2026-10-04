@@ -3646,5 +3646,6 @@
   "export.social.zoomActualAria": "Actual pixels",
   "export.social.popOut": "Open in window",
   "export.social.popIn": "Back to app",
-  "export.social.openInApp": "To shoot the app window, open this message in MailVault again."
+  "export.social.openInApp": "To shoot the app window, open this message in MailVault again.",
+  "export.social.width": "Email width"
 }

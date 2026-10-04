@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { layoutSocial, SIZE_PRESETS, MACOS_WINDOW_RADIUS } from '../socialLayout';
+import { layoutSocial, SIZE_PRESETS, MACOS_WINDOW_RADIUS, EMAIL_WIDTH } from '../socialLayout';
+import { EXPORT_WIDTH_PX } from '../../exportDocument';
 import { GRADIENT_PRESETS, SOLID_PRESETS, resolveBackground, backgroundLuminance, inkForBackground } from '../socialBackgrounds';
 
 describe('layoutSocial', () => {
@@ -77,5 +78,11 @@ describe('inkForBackground', () => {
 describe('MACOS_WINDOW_RADIUS', () => {
   it('is the macOS window corner radius, within the Radius slider\'s 0..40', () => {
     expect(MACOS_WINDOW_RADIUS).toBe(12);
+  });
+});
+
+describe('EMAIL_WIDTH', () => {
+  it('defaults to the export column and spans 480 to 1600 in steps of 20', () => {
+    expect(EMAIL_WIDTH).toEqual({ min: 480, max: 1600, step: 20, default: EXPORT_WIDTH_PX });
   });
 });

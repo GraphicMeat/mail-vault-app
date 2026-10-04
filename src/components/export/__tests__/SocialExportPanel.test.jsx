@@ -74,7 +74,7 @@ describe('SocialExportPanel', () => {
     renderPanel();
     expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
     await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
-    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark' });
+    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark', width: 820 });
     await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
     // The preview composes at the size it is shown (a 2160px square fitted
     // into the 360x420 box); only Save renders full size.
@@ -158,14 +158,14 @@ describe('SocialExportPanel', () => {
     useThemeStore.setState({ theme: 'light' });
     renderPanel();
     await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
-    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'light', mailTheme: 'light' });
+    expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'light', mailTheme: 'light', width: 820 });
     // Picking Dark Appearance drags the unpicked Mail along.
     fireEvent.click(within(screen.getByRole('group', { name: /appearance/i })).getByRole('button', { name: /^dark$/i }));
-    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark' }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark', width: 820 }));
     expect(setSocialExport).toHaveBeenCalledWith({ appTheme: 'dark' });
     // Mail Light: a picked Mail holds still.
     fireEvent.click(within(screen.getByRole('group', { name: /email content/i })).getByRole('button', { name: /^light$/i }));
-    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'light' }));
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'light', width: 820 }));
     expect(setSocialExport).toHaveBeenCalledWith({ mailTheme: 'light' });
     await waitFor(() => expect(lastCompose().theme).toBe('dark')); // the frame stays on the Appearance
     const before = buildSocialContent.mock.calls.length;
@@ -260,7 +260,7 @@ describe('SocialExportPanel', () => {
       expect(toggle('Show sender').getAttribute('aria-checked')).toBe('true');
       expect(screen.getByText(/keeps the spam sender's address visible/i)).toBeTruthy();
       await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
-      expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark', revealSender: true });
+      expect(buildSocialContent.mock.calls[0][1]).toEqual({ content: 'card', redact: true, theme: 'dark', mailTheme: 'dark', width: 820, revealSender: true });
       cleanup();
       isSpam.mockReturnValue(false);
       buildSocialContent.mockClear();
@@ -376,6 +376,60 @@ describe('SocialExportPanel', () => {
       expect(rangeMarkLeft(12, 0, 40)).toBe('calc(8px + 0.3 * (100% - 16px))');
       expect(rangeMarkLeft(0, 0, 40)).toBe('calc(8px + 0 * (100% - 16px))');
       expect(rangeMarkLeft(40, 0, 40)).toBe('calc(8px + 1 * (100% - 16px))');
+    });
+  });
+
+  describe('Email width', () => {
+    const slider = () => screen.getByRole('slider', { name: 'Email width' });
+
+    it('is a card-only slider, 480 to 1600 in steps of 20, at the export column by default', async () => {
+      renderPanel();
+      expect([slider().min, slider().max, slider().step, slider().value]).toEqual(['480', '1600', '20', '820']);
+      expect(screen.getByText('820px')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      expect(screen.queryByRole('slider', { name: 'Email width' })).toBeNull();
+    });
+
+    it('moves at once, remembers the width, and renders the card once the slider rests', async () => {
+      renderPanel();
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(1));
+      fireEvent.change(slider(), { target: { value: '1000' } });
+      fireEvent.change(slider(), { target: { value: '1200' } });
+      expect(slider().value).toBe('1200');
+      expect(screen.getByText('1200px')).toBeTruthy();
+      expect(setSocialExport).toHaveBeenLastCalledWith({ width: 1200 });
+      // Save waits for the render at the new width.
+      expect(screen.getByRole('button', { name: /save png/i }).disabled).toBe(true);
+      expect(buildSocialContent).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(2));
+      expect(buildSocialContent.mock.calls[1][1]).toMatchObject({ content: 'card', width: 1200 });
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options).toMatchObject({ width: 1200 });
+    });
+
+    it('a width rendered before comes from the cache', async () => {
+      renderPanel();
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(1));
+      fireEvent.change(slider(), { target: { value: '1200' } });
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(2));
+      fireEvent.change(slider(), { target: { value: '820' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: /save png/i }).disabled).toBe(false));
+      expect(buildSocialContent).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps only the last few renders: an old width is rendered again', async () => {
+      renderPanel();
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(1));
+      for (const [i, w] of ['900', '1000', '1100', '1200'].entries()) {
+        fireEvent.change(slider(), { target: { value: w } });
+        await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(i + 2));
+      }
+      fireEvent.change(slider(), { target: { value: '820' } });
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(6));
+      expect(buildSocialContent.mock.calls[5][1]).toMatchObject({ width: 820 });
     });
   });
 

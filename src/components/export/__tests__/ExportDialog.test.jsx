@@ -118,6 +118,19 @@ describe('ExportDialog', () => {
     expect(buildExport.mock.calls[0][0]).toMatchObject({ format: 'image', layout: 'separate', mirror: false });
   });
 
+  it('offers an Email width for a PNG and passes it to the builder; HTML keeps the export column', async () => {
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    const slider = screen.getByRole('slider', { name: 'Email width' });
+    expect([slider.min, slider.max, slider.step, slider.value]).toEqual(['480', '1600', '20', '820']);
+    fireEvent.change(slider, { target: { value: '1200' } });
+    expect(screen.getByText('1200px')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(buildExport).toHaveBeenCalled());
+    expect(buildExport.mock.calls[0][0]).toMatchObject({ format: 'image', width: 1200 });
+    fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
+    expect(screen.queryByRole('slider', { name: 'Email width' })).toBeNull();
+  });
+
   it('saves one file through the save dialog', async () => {
     render(<ExportDialog {...props} messages={[messages[0]]} />);
     fireEvent.click(screen.getByRole('button', { name: /^export$/i }));

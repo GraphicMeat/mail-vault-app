@@ -19,6 +19,13 @@ export const MACOS_WINDOW_RADIUS = 12;
 // the far end, not the full width.
 export const rangeMarkLeft = (value, min, max, thumbPx = 16) =>
   `calc(${thumbPx / 2}px + ${(value - min) / (max - min)} * (100% - ${thumbPx}px))`;
+// The Email width slider (social card and PNG export), in CSS px. The default
+// is the export column, EXPORT_WIDTH_PX: not imported, so the settings store can
+// read this file without pulling in the export document.
+export const EMAIL_WIDTH = Object.freeze({ min: 480, max: 1600, step: 20, default: 820 });
+export const normalizeEmailWidth = (value) => (typeof value === 'number' && Number.isFinite(value)
+  ? Math.min(EMAIL_WIDTH.max, Math.max(EMAIL_WIDTH.min, Math.round(value)))
+  : EMAIL_WIDTH.default);
 const CHROME_CSS_PX = 28;
 const OUT = 2; // output pixels per CSS px, and per preset px
 

@@ -38,12 +38,13 @@ export async function settleDocument(doc, timeoutMs = SETTLE_TIMEOUT_MS) {
   clearTimeout(timer);
 }
 
-export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOUT_MS, sandbox = SANDBOX } = {}) {
+// `width`: the frame's CSS width, the document's column (buildMessageDocument).
+export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOUT_MS, sandbox = SANDBOX, width = EXPORT_WIDTH_PX } = {}) {
   const iframe = document.createElement('iframe');
   iframe.setAttribute('sandbox', sandbox);
   iframe.setAttribute('aria-hidden', 'true');
   iframe.style.cssText =
-    `position:fixed;left:-10000px;top:0;width:${EXPORT_WIDTH_PX}px;height:1000px;border:0;visibility:hidden`;
+    `position:fixed;left:-10000px;top:0;width:${width}px;height:1000px;border:0;visibility:hidden`;
   document.body.appendChild(iframe);
 
   const dispose = () => iframe.remove();
@@ -115,12 +116,18 @@ function adopt(canvas) {
 // frame's sandbox tokens. `backgroundColor`: what the canvas is filled with
 // behind the document. `beforeCapture(doc)`: awaited once the frame is
 // measured, before it is rasterized (a dark card waits for Dark Reader).
+// `width`: the column in CSS px (default EXPORT_WIDTH_PX), for the document,
+// the frame and the canvas alike.
 export async function renderMessageToCanvas({
   message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode,
-  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture,
+  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture, width,
 }) {
-  const html = buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml });
-  const frame = await mountExportFrame(html, { loadTimeoutMs, ...(sandbox ? { sandbox } : {}) });
+  const columnWidth = Number.isFinite(width) && width > 0 ? Math.round(width) : EXPORT_WIDTH_PX;
+  const html = buildMessageDocument({
+    message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml,
+    ...(columnWidth !== EXPORT_WIDTH_PX ? { width: columnWidth } : {}),
+  });
+  const frame = await mountExportFrame(html, { loadTimeoutMs, width: columnWidth, ...(sandbox ? { sandbox } : {}) });
   try {
     if (beforeCapture) await beforeCapture(frame.doc);
     // font:false and a short timeout are load-bearing, not tuning: the Task 0
@@ -129,7 +136,7 @@ export async function renderMessageToCanvas({
     // so there is nothing for font embedding to contribute.
     const options = {
       scale: EXPORT_SCALE, backgroundColor,
-      width: EXPORT_WIDTH_PX, height: frame.height,
+      width: columnWidth, height: frame.height,
       font: false, timeout: 3000,
       ...(onCloneNode ? { onCloneNode } : {}),
     };

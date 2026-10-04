@@ -72,9 +72,9 @@ const mustRedact = (redact) => !!redact || usePrivacyStore.getState().enabled;
  * absent. `revealSender` (redacted only) leaves a spam sender's exact name and
  * addresses readable; `senderDetails` adds the sender-details box (the open
  * message's real popover, in the app window); `links` adds the links list
- * (card only).
+ * (card only). `width` is the card's email column in CSS px (card only).
  */
-export async function buildSocialContent(message, { content, redact, dict, theme, mailTheme, revealSender, senderDetails, links } = {}) {
+export async function buildSocialContent(message, { content, redact, dict, theme, mailTheme, revealSender, senderDetails, links, width } = {}) {
   const dated = { ...message, date: asDate(message.date) };
   const red = mustRedact(redact);
   const d = red ? dictionaryWithReveal(dict ?? await socialDictionary(dated), dated, { redact: red, revealSender }) : null;
@@ -108,6 +108,7 @@ export async function buildSocialContent(message, { content, redact, dict, theme
     palette: useThemeStore.getState().palette,
     redactStyle: red ? 'blur' : undefined,
     extrasHtml: extrasHtml || undefined,
+    width,
     onCloneNode: red ? (clone) => { redactTree(clone, d); } : undefined,
     onCloneHead: red
       ? (clone) => redactOutsideBoxes(clone, d, keep ? { keep: (text) => keep.has(String(text).trim().toLowerCase()) } : {})
@@ -161,7 +162,7 @@ export async function composeSocialFile({ content, options, name }) {
 /**
  * `options = { content: 'card'|'app', size: keyof SIZE_PRESETS, background,
  * padding, radius, shadow, chrome, redact, appTheme, mailTheme, revealSender,
- * senderDetails, links }`.
+ * senderDetails, links, width }`.
  * `appTheme` ('light' | 'dark', null follows the app) is the Appearance: the
  * app window's theme and the card's frame and header. `mailTheme` is the card's
  * mail body, null follows the Appearance.
@@ -178,6 +179,7 @@ export async function buildSocialExport({ message, options }) {
     const content = await buildSocialContent(dated, {
       content: options.content, redact, dict, theme, mailTheme: options.mailTheme ?? theme,
       revealSender: options.revealSender, senderDetails: options.senderDetails, links: options.links,
+      width: options.width,
     });
     lap('social-content');
     const watermark = await loadWatermark();

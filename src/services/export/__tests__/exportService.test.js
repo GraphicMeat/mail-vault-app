@@ -82,6 +82,11 @@ describe('image export', () => {
     expect(out.files[1].name).toMatch(/^02 - /);
   });
 
+  it('renders every message at the Email width it is given', async () => {
+    await buildExport({ messages: thread, format: 'image', layout: 'separate', ...base, width: 1200 });
+    expect(renderMessageToCanvas.mock.calls.map(c => c[0].width)).toEqual([1200, 1200]);
+  });
+
   it('stitches a thread into one file in single layout', async () => {
     const out = await buildExport({ messages: thread, format: 'image', layout: 'single', ...base });
     expect(out.files).toHaveLength(1);

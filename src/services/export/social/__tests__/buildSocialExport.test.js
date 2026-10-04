@@ -71,6 +71,11 @@ describe('buildSocialExport', () => {
     expect(usePrivacyStore.getState().dictWanted).toBe(false);
   });
 
+  it('card: renders at the Email width it is given, the width the preview showed', async () => {
+    await buildSocialExport({ message, options: { ...options, width: 1200 } });
+    expect(renderSocialCard.mock.calls[0][0].width).toBe(1200);
+  });
+
   it('app: captures the window with redaction, fits it whole, frame in the app theme', async () => {
     const r = await buildSocialExport({ message, options: { ...options, content: 'app', size: 'landscape' } });
     expect(r.ok).toBe(true);

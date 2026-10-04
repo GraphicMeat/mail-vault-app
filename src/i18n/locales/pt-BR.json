@@ -3646,5 +3646,6 @@
   "export.social.zoomActualAria": "Pixels reais",
   "export.social.popOut": "Abrir em janela",
   "export.social.popIn": "Voltar ao app",
-  "export.social.openInApp": "Para capturar a janela do app, abra esta mensagem no MailVault novamente."
+  "export.social.openInApp": "Para capturar a janela do app, abra esta mensagem no MailVault novamente.",
+  "export.social.width": "Largura do e-mail"
 }

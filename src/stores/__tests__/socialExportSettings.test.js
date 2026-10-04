@@ -67,6 +67,17 @@ describe('social export style', () => {
     expect(merged.radius).toBe(26);
   });
 
+  it('width: the export column by default, clamped to the slider, anything not a number is the default', () => {
+    expect(DEFAULT_SOCIAL_EXPORT.width).toBe(820);
+    const merge = (width) => _mergePersistedSettings({ socialExport: { width } }, useSettingsStore.getState()).socialExport.width;
+    expect(merge(1200)).toBe(1200);
+    expect(merge(100)).toBe(480);
+    expect(merge(5000)).toBe(1600);
+    expect(merge('1200')).toBe(820);
+    expect(merge(Number.NaN)).toBe(820);
+    expect(merge(undefined)).toBe(820);
+  });
+
   it('senderDetails and links: off by default, kept as booleans, anything else is off', () => {
     expect(DEFAULT_SOCIAL_EXPORT).toMatchObject({ senderDetails: false, links: false });
     const merge = (socialExport) => _mergePersistedSettings({ socialExport }, useSettingsStore.getState()).socialExport;

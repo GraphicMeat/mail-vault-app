@@ -7,7 +7,7 @@ import { useT } from '../../i18n/index.js';
 import { useSettingsStore, DEFAULT_SOCIAL_EXPORT } from '../../stores/settingsStore';
 import { buildSocialContent, buildSocialExport, chromeTheme } from '../../services/export/social/buildSocialExport';
 import { composeSocialImage } from '../../services/export/social/composeSocialImage';
-import { SIZE_PRESETS, MACOS_WINDOW_RADIUS, rangeMarkLeft, layoutSocial } from '../../services/export/social/socialLayout';
+import { SIZE_PRESETS, MACOS_WINDOW_RADIUS, EMAIL_WIDTH, rangeMarkLeft, layoutSocial } from '../../services/export/social/socialLayout';
 import { loadWatermark } from '../../services/export/social/socialWatermark';
 import { GRADIENT_PRESETS, SOLID_PRESETS, DEFAULT_CUSTOM_STOPS, cssGradient } from '../../services/export/social/socialBackgrounds';
 import { saveOneFile } from '../../services/export/exportSaver';
@@ -33,6 +33,16 @@ const SIZES = [
   { value: 'story', label: '9:16' },
 ];
 const RADIUS_MAX = 40;
+// The Email width slider moves at once; the card re-renders once it rests.
+const WIDTH_SETTLE_MS = 300;
+// Rendered contents kept for re-composing. Each is a 2x canvas of the whole
+// mail, and WebKit blanks canvases once their total passes its memory cap.
+const CONTENT_CACHE_MAX = 4;
+const remember = (map, key, value) => {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > CONTENT_CACHE_MAX) map.delete(map.keys().next().value);
+};
 const CHECKERBOARD = 'repeating-conic-gradient(#d4d4d8 0% 25%, #ffffff 0% 50%) 50% / 12px 12px';
 
 // A compact one-of-a-few row: the settings SegmentedChoice is a 48px tab row.
@@ -160,6 +170,15 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const mailTheme = prefs.mailTheme ?? theme;
   const frameTheme = chromeTheme(prefs.content, theme);
   const isCard = prefs.content === 'card';
+  const width = prefs.width ?? EMAIL_WIDTH.default;
+  // The width the card is rendered (and saved) at, behind the slider.
+  const [renderWidth, setRenderWidth] = useState(width);
+  useEffect(() => {
+    if (width === renderWidth) return undefined;
+    const timer = setTimeout(() => setRenderWidth(width), WIDTH_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [width]);
+  const cardWidth = isCard ? renderWidth : null;
   const background = imageActive && ownImage ? ownImage : prefs.background;
 
   const update = (patch) => {
@@ -198,10 +217,10 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const withLinks = isCard && prefs.links === true;
 
   useEffect(() => {
-    const key = `${prefs.content}|${redacting}|${theme}|${isCard ? mailTheme : ''}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}`;
+    const key = `${prefs.content}|${redacting}|${theme}|${isCard ? mailTheme : ''}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}|w${cardWidth ?? ''}`;
     const id = ++request.current;
     const hit = cache.current.get(key);
-    if (hit) { setContent(hit); setLoading(false); return; }
+    if (hit) { remember(cache.current, key, hit); setContent(hit); setLoading(false); return; }
     // The old content goes now: an unredacted canvas must not stay painted
     // while the redacted one builds (privacy mode turned on mid-preview), nor
     // one that shows a sender after Show sender was turned off.
@@ -210,13 +229,13 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     setNotice(null);
     src.buildContent({
       content: prefs.content, redact: redacting, theme,
-      ...(isCard ? { mailTheme } : {}),
+      ...(isCard ? { mailTheme, width: cardWidth } : {}),
       ...(reveal ? { revealSender: true } : {}),
       ...(details ? { senderDetails: true } : {}),
       ...(withLinks ? { links: true } : {}),
     })
       .then((canvas) => {
-        cache.current.set(key, canvas);
+        remember(cache.current, key, canvas);
         if (request.current === id) setContent(canvas);
       })
       .catch((err) => {
@@ -225,7 +244,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
         setNotice(err?.code === 'not-open' ? t('export.social.openInApp') : t('export.dialog.messageCouldExported'));
       })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [src, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks]);
+  }, [src, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks, cardWidth]);
 
   // Fit never enlarges past actual pixels: a small image would only blur.
   const full = content ? fullSize(content, prefs) : null;
@@ -262,7 +281,8 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     setBusy(true);
     setNotice(null);
     try {
-      const result = await src.save({ ...prefs, background, redact: redacting, appTheme: theme, mailTheme, revealSender: reveal }, content);
+      // The width the preview was rendered at, not one the slider is still settling on.
+      const result = await src.save({ ...prefs, width: renderWidth, background, redact: redacting, appTheme: theme, mailTheme, revealSender: reveal }, content);
       if (!result.ok) {
         setNotice(result.reason === 'premium' ? t('export.dialog.exportPremiumFeature') : t('export.dialog.messageCouldExported'));
         return;
@@ -396,6 +416,16 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
             )}
           </Field>
 
+          {isCard && (
+            <label className="block space-y-1">
+              <span className="flex justify-between text-xs font-medium text-mail-text-muted">
+                <span>{t('export.social.width')}</span><span>{`${width}px`}</span>
+              </span>
+              <input type="range" min={EMAIL_WIDTH.min} max={EMAIL_WIDTH.max} step={EMAIL_WIDTH.step} value={width} className="w-full"
+                aria-label={t('export.social.width')} onChange={e => update({ width: Number(e.target.value) })} />
+            </label>
+          )}
+
           <label className="block space-y-1">
             <span className="flex justify-between text-xs font-medium text-mail-text-muted">
               <span>{t('export.social.padding')}</span><span>{prefs.padding}</span>
@@ -466,7 +496,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
       <div className="flex items-center justify-end gap-2">
         {headerSlot === undefined && windowButton}
         <Button variant="ghost" size="sm" onClick={onDone} disabled={busy}>{detached ? t('common.close') : t('common.cancel')}</Button>
-        <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content}>
+        <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content || (isCard && width !== renderWidth)}>
           {busy && <Loader size={14} className="animate-spin" />}{t('export.social.save')}
         </Button>
       </div>

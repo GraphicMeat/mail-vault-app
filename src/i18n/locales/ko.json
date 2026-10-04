@@ -3646,5 +3646,6 @@
   "export.social.zoomActualAria": "실제 픽셀",
   "export.social.popOut": "새 창에서 열기",
   "export.social.popIn": "앱으로 돌아가기",
-  "export.social.openInApp": "앱 창을 캡처하려면 MailVault에서 이 메시지를 다시 여세요."
+  "export.social.openInApp": "앱 창을 캡처하려면 MailVault에서 이 메시지를 다시 여세요.",
+  "export.social.width": "이메일 너비"
 }

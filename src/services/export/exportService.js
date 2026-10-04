@@ -203,12 +203,13 @@ export async function prepareSocialMessage(message, { mirror = true, redact = nu
 
 // `redact`: null, or `{ style: 'blur' | 'bar', dict }` for a private export.
 // Everything that reaches a file (names, headers, body, footer, attachment
-// names) is masked; `stats` is unchanged.
+// names) is masked; `stats` is unchanged. `width`: the PNG's email column in
+// CSS px (the Email width slider); an HTML file keeps the export column.
 export async function buildExport({
   messages, format, layout = 'single', mirror = true, account, mailbox,
   gate, fetchAsset = fetchAssetViaTauri,
   attachments = false, readAttachment = readAttachmentViaTauri,
-  redact = null,
+  redact = null, width,
 }) {
   if (gate !== SAMPLE) {
     const { billingProfile } = useSettingsStore.getState();
@@ -306,7 +307,7 @@ export async function buildExport({
       trace('render', { uid: item.message.uid });
       canvases.push(await renderMessageToCanvas({
         message: item.message, bodyHtml: item.body, account: docAccount, mailbox: docMailbox, stats,
-        redactStyle: redact?.style,
+        redactStyle: redact?.style, width,
       }));
       rendered.push(item);
       trace('rendered', { uid: item.message.uid });

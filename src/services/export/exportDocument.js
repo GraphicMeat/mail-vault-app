@@ -169,14 +169,17 @@ const PANEL_DARK_CSS = `
 // stylesheet, e.g. a CSP meta and the nonced Dark Reader scripts. All three
 // default to the whole light document every other export gets. `extrasHtml`:
 // boxes under the header block (sender details, links), never in a body-only part.
-export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme = 'light', extraHead = '', extrasHtml = '' }) {
+// `width`: the column in CSS px when it is not EXPORT_WIDTH_PX (the Email width
+// slider); the rasterizer's frame and canvas take the same width.
+export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme = 'light', extraHead = '', extrasHtml = '', width }) {
   const dark = theme === 'dark';
   const extras = part !== 'body' && extrasHtml ? extrasHtml : '';
   const headDarkCss = part === 'head' && dark ? HEAD_DARK_CSS + (extras ? PANEL_DARK_CSS : '') : '';
   // Dark Reader needs an inline `!important` colour's priority gone, as in the reader.
   const body = sanitizeForExport(part === 'body' && dark ? stripInlineColorImportant(bodyHtml) : bodyHtml);
+  const widthCss = Number.isFinite(width) && width > 0 ? `body { max-width: ${Math.round(width)}px; }` : '';
   return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${EXPORT_CSS}${extras ? PANEL_CSS : ''}${headDarkCss}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style>${extraHead}</head>
+<html><head><meta charset="utf-8"><style>${EXPORT_CSS}${widthCss}${extras ? PANEL_CSS : ''}${headDarkCss}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style>${extraHead}</head>
 <body>
 ${part === 'body' ? '' : headerCardHtml(message)}${extras ? `\n<section class="mv-panels">${extras}</section>` : ''}
 ${part === 'head' ? '' : `<main class="mv-body">${body}</main>`}
