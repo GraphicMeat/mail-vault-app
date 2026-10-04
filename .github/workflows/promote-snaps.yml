@@ -64,6 +64,7 @@ jobs:
             echo "::error::SNAPCRAFT_STORE_CREDENTIALS not set"
             exit 1
           fi
+          snapcraft whoami
           for snap in snaps/*.snap; do
             echo "Publishing $(basename "$snap") to ${CHANNEL} channel..."
             snapcraft upload "$snap" --release="${CHANNEL}"

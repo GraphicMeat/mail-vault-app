@@ -32,10 +32,15 @@ jobs:
       - name: Install snapcraft
         run: sudo snap install snapcraft --classic
 
+      # One store credential for every channel, shared with promote-snaps.yml.
+      # Two secrets broke each other: re-exporting one left the other invalid.
       - name: Publish to edge
         env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS_EDGE }}
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
+          # Shows the credential's channels and expiry, and fails here with
+          # the store's reason instead of halfway through an upload.
+          snapcraft whoami
           for snap in snaps/*.snap; do
             snapcraft upload "$snap" --release=edge
           done
