@@ -4009,12 +4009,15 @@ fn main() {
 
             // The black template glyph suits the macOS menu bar only; on a dark
             // Windows taskbar or GNOME top bar it all but disappears. Everything
-            // else gets the app icon (on Windows the first, 32px entry of icon.ico).
+            // else gets the app icon cropped to its artwork: the bundle icon keeps
+            // the macOS margin (art fills 78% of the square), which drew it
+            // visibly smaller than its tray neighbours (issue #16).
             #[cfg(target_os = "macos")]
             let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
                 .expect("Failed to load tray icon");
             #[cfg(not(target_os = "macos"))]
-            let tray_icon_image = app.default_window_icon().cloned().expect("bundle has an icon");
+            let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon-color.png"))
+                .expect("Failed to load tray icon");
 
             TrayIconBuilder::new()
                 .icon(tray_icon_image)

@@ -4,6 +4,7 @@
 
 ### Fixed
 - **The snap no longer says "No internet connection" on a working connection.** On Linux the Snap package could not ask the desktop whether the network was up, so the window believed it was offline from launch: the banner stayed up through Check again, a folder could open showing only what was saved on this computer, and read marks, moves and deletes made in the meantime waited to be sent. The snap now asks the desktop with the network status permission it needed, and on any build a check that reaches the internet clears the banner even when the desktop still reports no network. ([#16](https://github.com/GraphicMeat/mail-vault-app/issues/16))
+- **The tray icon on Linux and Windows is as large as its neighbours.** It used the app icon with the transparent margin a macOS icon keeps around its artwork, so it drew about a fifth smaller than the other icons in the GNOME top bar. The tray now uses the artwork alone. ([#16](https://github.com/GraphicMeat/mail-vault-app/issues/16))
 
 ## [2.18.0] - 2026-10-03
 
