@@ -549,6 +549,14 @@ describe('recent searches', () => {
     addSearchToHistory('  FROM:x Has:Attachment  ');
     expect(useSettingsStore.getState().searchHistory).toEqual(['FROM:x Has:Attachment', 'invoice']);
   });
+  it('starts unfolded and folds on toggle', () => {
+    useSettingsStore.setState({ recentSearchesCollapsed: false });
+    expect(useSettingsStore.getState().recentSearchesCollapsed).toBe(false);
+    useSettingsStore.getState().toggleRecentSearches();
+    expect(useSettingsStore.getState().recentSearchesCollapsed).toBe(true);
+    useSettingsStore.getState().toggleRecentSearches();
+    expect(useSettingsStore.getState().recentSearchesCollapsed).toBe(false);
+  });
 });
 
 describe('search operators hint', () => {

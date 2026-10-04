@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Clock, Search, User, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Search, User, X } from 'lucide-react';
 import { useT } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr, usePrivacyActive } from '../hooks/usePrivacy';
@@ -61,12 +61,14 @@ const CHIP = 'flex items-center gap-1 px-2 py-0.5 bg-mail-surface border border-
  *   Backspace/Delete removes it and the arrows move along the row.
  * - `/` at the start of a word lists the operators; picking one inserts it,
  *   waiting for its value when it takes one.
- * - While typing, the recent searches and then the index's `suggestions`
- *   are listed under the box.
+ * - While typing, the recent searches holding the typed text and then the
+ *   index's `suggestions` are listed under the box. The recent searches
+ *   fold from their heading; folded, the keys skip them too.
  */
 export function SearchTagInput({
   tags, onTagsChange, draft, onDraftChange, onSubmit, inputRef, autoFocus, label, placeholder,
-  recent = [], onPickRecent, onRemoveRecent, onClearRecent, suggestions = [], header = null,
+  recent = [], onPickRecent, onRemoveRecent, onClearRecent, recentFolded = false, onToggleRecent,
+  suggestions = [], header = null,
   onFocus, leading, trailing,
 }) {
   const t = useT();
@@ -86,13 +88,15 @@ export function SearchTagInput({
 
   const slash = slashQuery(draft);
   const menuOpen = !!slash && dismissedSlash !== draft;
+  const needle = draft.trim().toLowerCase();
+  const matchingRecent = needle ? recent.filter(query => query.toLowerCase().includes(needle)) : recent;
   const options = menuOpen
     ? operatorMenu(slash.filter).map(op => ({ type: 'operator', key: `op:${op.id}`, op }))
     : [
-      ...recent.map(query => ({ type: 'recent', key: `recent:${query}`, query })),
+      ...(recentFolded ? [] : matchingRecent).map(query => ({ type: 'recent', key: `recent:${query}`, query })),
       ...suggestions.map(suggestion => ({ type: 'suggestion', key: suggestion.key, suggestion })),
     ];
-  const listed = open && !editing && (menuOpen ? options.length > 0 : options.length > 0 || !!header);
+  const listed = open && !editing && (menuOpen ? options.length > 0 : options.length > 0 || matchingRecent.length > 0 || !!header);
   // The operator list always has one highlighted, as a menu does; the
   // typeahead only once an arrow key moves there, so Enter commits the text.
   const current = active >= 0 && active < options.length ? active : (menuOpen && options.length ? 0 : -1);
@@ -372,13 +376,25 @@ export function SearchTagInput({
             <>
               {header}
               <div id={listId} role="listbox" aria-label={label}>
-                {recent.length > 0 && (
+                {matchingRecent.length > 0 && (
                   <div role="group" aria-label={t('search.recentSearches')}>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-xs font-medium text-mail-text-muted flex items-center gap-1">
-                        <Clock size={12} />
-                        {t('search.recentSearches')}
-                      </h4>
+                    <div className={`flex items-center justify-between ${recentFolded ? '' : 'mb-2'}`}>
+                      {/* The heading itself folds the list, as the sidebar's Views do. */}
+                      <button
+                        type="button"
+                        data-testid="search-recent-fold"
+                        aria-expanded={!recentFolded}
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => {
+                          setActive(-1);
+                          onToggleRecent?.();
+                        }}
+                        className="flex items-center gap-1 text-xs font-medium text-mail-text-muted hover:text-mail-text transition-colors"
+                      >
+                        {recentFolded ? <ChevronRight size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
+                        <Clock size={12} aria-hidden="true" />
+                        <span>{t('search.recentSearches')}</span>
+                      </button>
                       <button
                         type="button"
                         onMouseDown={event => event.preventDefault()}
@@ -388,7 +404,7 @@ export function SearchTagInput({
                         {t('search.clearAll')}
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    {!recentFolded && <div className="flex flex-wrap gap-2">
                       {options.map((option, index) => option.type === 'recent' && (
                         <div
                           key={option.key}
@@ -416,11 +432,11 @@ export function SearchTagInput({
                           </button>
                         </div>
                       ))}
-                    </div>
+                    </div>}
                   </div>
                 )}
                 {suggestions.length > 0 && (
-                  <div role="group" aria-label={t('search.suggestions')} className={recent.length ? 'mt-3' : ''}>
+                  <div role="group" aria-label={t('search.suggestions')} className={matchingRecent.length ? 'mt-3' : ''}>
                     <h4 className="text-xs font-medium text-mail-text-muted mb-1 flex items-center gap-1">
                       <Search size={12} />
                       {t('search.suggestions')}

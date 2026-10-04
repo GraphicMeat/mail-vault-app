@@ -361,19 +361,88 @@ describe('the / operator list', () => {
   });
 });
 
+describe('recent searches', () => {
+  const recents = () => screen.queryAllByTestId('search-recent').map(node => node.textContent);
+
+  it('lists every recent search while nothing is typed', () => {
+    harness.settingsState.searchHistory = ['invoice march', 'from:ann'];
+    render(<SearchBar />);
+    fireEvent.focus(input());
+    expect(recents()).toEqual(['invoice march', 'from:ann']);
+  });
+
+  it('keeps only the recent searches that hold the typed text, ignoring case', () => {
+    harness.settingsState.searchHistory = ['Invoice march', 'from:ann', 'old invoices'];
+    render(<SearchBar />);
+    fireEvent.focus(input());
+    type('INV');
+    expect(recents()).toEqual(['Invoice march', 'old invoices']);
+  });
+
+  it('shows only the suggestions when no recent search matches', async () => {
+    harness.settingsState.searchHistory = ['old query'];
+    harness.suggest.mockResolvedValue([{ key: 'term:invoice', kind: 'term', tags: ['invoice'], label: 'invoice', detail: '', count: 5 }]);
+    render(<SearchBar />);
+    fireEvent.focus(input());
+    type('inv');
+    await screen.findByText('invoice');
+    expect(recents()).toEqual([]);
+    expect(screen.queryByRole('group', { name: 'Recent searches' })).toBeNull();
+    press('ArrowDown');
+    press('Enter');
+    expect(tagTexts()).toEqual(['invoice']);
+  });
+
+  it('folds from its heading, and a folded list hides its searches from the keys too', async () => {
+    harness.settingsState.searchHistory = ['invoices 2025'];
+    harness.settingsState.recentSearchesCollapsed = true;
+    harness.settingsState.toggleRecentSearches = vi.fn();
+    harness.suggest.mockResolvedValue([{ key: 'term:invoice', kind: 'term', tags: ['invoice'], label: 'invoice', detail: '', count: 5 }]);
+    render(<SearchBar />);
+    fireEvent.focus(input());
+    type('inv');
+    await screen.findByText('invoice');
+    expect(recents()).toEqual([]);
+    const fold = screen.getByTestId('search-recent-fold');
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(fold);
+    expect(harness.settingsState.toggleRecentSearches).toHaveBeenCalled();
+    press('ArrowDown');
+    press('Enter');
+    expect(tagTexts()).toEqual(['invoice']);
+  });
+
+  it('keeps a folded heading in reach with nothing else to list', () => {
+    harness.settingsState.searchHistory = ['invoices 2025'];
+    harness.settingsState.recentSearchesCollapsed = true;
+    render(<SearchBar />);
+    fireEvent.focus(input());
+    expect(screen.getByTestId('search-recent-fold')).not.toBeNull();
+    expect(recents()).toEqual([]);
+  });
+
+  it('shows an unfolded list expanded', () => {
+    harness.settingsState.searchHistory = ['invoices 2025'];
+    render(<SearchBar />);
+    fireEvent.focus(input());
+    expect(screen.getByTestId('search-recent-fold').getAttribute('aria-expanded')).toBe('true');
+    expect(recents()).toEqual(['invoices 2025']);
+  });
+});
+
 describe('suggestions from the index', () => {
   const ann = { key: 'sender:ann@x.test', kind: 'sender', tags: ['from:ann@x.test'], label: 'Ann', detail: 'ann@x.test', count: 2 };
   const invoice = { key: 'term:invoice', kind: 'term', tags: ['invoice'], label: 'invoice', detail: '', count: 5 };
 
   it('lists them under the recent searches and commits a picked one as a tag', async () => {
-    harness.settingsState.searchHistory = ['old query'];
+    harness.settingsState.searchHistory = ['plan with ann'];
     harness.suggest.mockResolvedValue([ann, invoice]);
     render(<SearchBar />);
     fireEvent.focus(input());
     type('an');
     const option = await screen.findByText('Ann');
     expect(harness.suggest).toHaveBeenCalledWith(expect.objectContaining({ prefix: 'an', accounts: ['a'] }));
-    const recent = screen.getByText('old query');
+    const recent = screen.getByText('plan with ann');
     expect(recent.compareDocumentPosition(option) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(option);
@@ -382,7 +451,7 @@ describe('suggestions from the index', () => {
   });
 
   it('reaches a suggestion with the arrow keys, past the recent searches', async () => {
-    harness.settingsState.searchHistory = ['old query'];
+    harness.settingsState.searchHistory = ['invoices 2025'];
     harness.suggest.mockResolvedValue([invoice]);
     render(<SearchBar />);
     fireEvent.focus(input());

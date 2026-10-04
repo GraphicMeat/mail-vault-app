@@ -601,6 +601,7 @@ export const useSettingsStore = create(
       textScale: 1, // one of TEXT_SCALES — native webview zoom of the whole UI
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       viewsSectionCollapsed: false, // Whether the sidebar's Views section is folded away
+      recentSearchesCollapsed: false, // Whether the search box's recent searches are folded away
       sidebarAccountsRatio: 0.4, // Maximum account share of the navigation area (0.1 - 0.85)
       sidebarStyle: 'list', // 'list' | 'tagcloud' — folder rows or wrapped bubble tags
       sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' — account and folder arrangement
@@ -1386,6 +1387,7 @@ export const useSettingsStore = create(
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
       setTimeFormat: (value) => set({ timeFormat: value }),
       toggleViewsSection: () => set(state => ({ viewsSectionCollapsed: !state.viewsSectionCollapsed })),
+      toggleRecentSearches: () => set(state => ({ recentSearchesCollapsed: !state.recentSearchesCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.1, Math.min(0.85, ratio)) }),
@@ -1657,6 +1659,7 @@ export const useSettingsStore = create(
           textScale: 1,
           sidebarCollapsed: false,
           viewsSectionCollapsed: false,
+          recentSearchesCollapsed: false,
           sidebarStyle: 'list',
           sidebarLayout: 'stacked',
           sidebarDensity: 'comfortable',

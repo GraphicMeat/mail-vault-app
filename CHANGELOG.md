@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **Recent searches narrow as you type, and fold away.** Under the search box, the recent searches now show only the ones holding the text you are typing; when none do, only the suggestions are listed. Click the Recent searches heading to fold the list, and again to bring it back; the app remembers which way you left it.
+
 ### Fixed
 - **Text on Linux keeps its word spaces.** With the default Instrument Sans font, the Linux app (Snap included) drew small text with spaces missing and letters pulled apart, so "Its contents" read "Itscontents" and "message" read "me ssage", at 12 and 14 pixels, the size of most of the app's text. The app now bundles the font's four regular weights instead of its variable version, which Linux's web engine laid out wrongly. The few labels set between semibold and bold now draw in bold.
 

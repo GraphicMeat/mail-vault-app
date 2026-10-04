@@ -109,6 +109,8 @@ export function SearchBar({ autoFocus = false }) {
   const isPremium = hasPremiumAccess(billingProfile);
   const operatorsHintSeen = useSettingsStore(s => s.searchOperatorsHintSeen);
   const markOperatorsHintSeen = useSettingsStore(s => s.markSearchOperatorsHintSeen);
+  const recentFolded = useSettingsStore(s => s.recentSearchesCollapsed);
+  const toggleRecentSearches = useSettingsStore(s => s.toggleRecentSearches);
 
   const {
     searchHistory,
@@ -393,6 +395,8 @@ export function SearchBar({ autoFocus = false }) {
           onPickRecent={handleHistorySelect}
           onRemoveRecent={removeSearchFromHistory}
           onClearRecent={clearSearchHistory}
+          recentFolded={recentFolded}
+          onToggleRecent={toggleRecentSearches}
           suggestions={suggestions}
           header={popularFilters.length > 0 ? popularFiltersSection : null}
           onFocus={() => {
