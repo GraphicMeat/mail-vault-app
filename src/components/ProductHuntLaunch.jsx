@@ -27,10 +27,14 @@ const OPENED_KEY = 'mv.productHuntLaunch.opened';
 const wasOpened = () => { try { return localStorage.getItem(OPENED_KEY) === '1'; } catch { return false; } };
 const rememberOpened = () => { try { localStorage.setItem(OPENED_KEY, '1'); } catch { /* hidden for this run only */ } };
 
-// Dev-only: `?phPreview` shows the page outside the launch window. VITE_E2E
-// builds never show it, or a suite run on launch day would sit behind it.
+// Dev-only: `?phPreview` shows the page outside the launch window. E2E runs
+// never show it, or a suite run on launch day would sit behind it. CI's
+// ui-headless suite builds without VITE_E2E, so the WebDriver bridge counts
+// too: `window.__WEBDRIVER__` is defined by tauri-plugin-webdriver-automation's
+// init.js, compiled in only by the `webdriver` feature, which never ships.
 const previewForced = () => import.meta.env.DEV && new URLSearchParams(window.location.search).has('phPreview');
-const suppressed = () => import.meta.env.VITE_E2E === '1';
+const suppressed = () => import.meta.env.VITE_E2E === '1'
+  || (typeof window !== 'undefined' && '__WEBDRIVER__' in window);
 const shouldShow = (now, onboarded, completedAt) =>
   !suppressed() && (previewForced() || (onboarded && launchLive(now, completedAt)));
 

@@ -104,6 +104,20 @@ describe('ProductHuntLaunch', () => {
     expect(screen.getByTestId('product-hunt-launch')).toBeTruthy();
   });
 
+  it('never shows in a WebDriver build, even without VITE_E2E', () => {
+    // CI's ui-headless suite builds the frontend without VITE_E2E; on launch
+    // day the page made #root inert and every spec that opened Settings failed.
+    vi.setSystemTime(LAUNCH_START + 1000);
+    window.__WEBDRIVER__ = {};
+    try {
+      render(<ProductHuntLaunch />);
+      expect(screen.queryByTestId('product-hunt-launch')).toBeNull();
+      expect(document.getElementById('root').hasAttribute('inert')).toBe(false);
+    } finally {
+      delete window.__WEBDRIVER__;
+    }
+  });
+
   it('says when the page ends in local time and how long is left', () => {
     vi.setSystemTime(LAUNCH_END - (5 * 60 + 30) * 60 * 1000 + 20_000);
     render(<ProductHuntLaunch />);
