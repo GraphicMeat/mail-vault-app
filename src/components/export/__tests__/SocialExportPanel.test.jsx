@@ -359,7 +359,7 @@ describe('SocialExportPanel', () => {
       expect(buildSocialContent).toHaveBeenCalledTimes(2); // links off again: the first render, cached
     });
 
-    it('the Radius slider spans 0 to 40 and a macOS tick under it sets the macOS window radius, 26', async () => {
+    it('the Radius slider spans 0 to 40 and a macOS tick under it sets the macOS window radius, 12', async () => {
       renderPanel();
       const slider = screen.getByRole('slider', { name: 'Corners' });
       expect([slider.min, slider.max]).toEqual(['0', '40']);
@@ -367,13 +367,13 @@ describe('SocialExportPanel', () => {
       const tick = screen.getByRole('button', { name: /macos window corner radius/i });
       expect(tick.textContent).toBe('macOS');
       fireEvent.click(tick);
-      expect(setSocialExport).toHaveBeenCalledWith({ radius: 26 });
-      await waitFor(() => expect(lastCompose().radius).toBe(26));
-      expect(screen.getByRole('slider', { name: 'Corners' }).value).toBe('26');
+      expect(setSocialExport).toHaveBeenCalledWith({ radius: 12 });
+      await waitFor(() => expect(lastCompose().radius).toBe(12));
+      expect(screen.getByRole('slider', { name: 'Corners' }).value).toBe('12');
     });
 
-    it('the tick sits where the thumb centre is at 26 of 0..40 (16px thumb)', () => {
-      expect(rangeMarkLeft(26, 0, 40)).toBe('calc(8px + 0.65 * (100% - 16px))');
+    it('the tick sits where the thumb centre is at 12 of 0..40 (16px thumb)', () => {
+      expect(rangeMarkLeft(12, 0, 40)).toBe('calc(8px + 0.3 * (100% - 16px))');
       expect(rangeMarkLeft(0, 0, 40)).toBe('calc(8px + 0 * (100% - 16px))');
       expect(rangeMarkLeft(40, 0, 40)).toBe('calc(8px + 1 * (100% - 16px))');
     });

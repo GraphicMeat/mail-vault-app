@@ -57,9 +57,14 @@ describe('social export style', () => {
     expect(useSettingsStore.getState().socialExport.mailTheme).toBeNull();
   });
 
-  it('corners start at the macOS window radius, 26', () => {
-    expect(DEFAULT_SOCIAL_EXPORT.radius).toBe(26);
-    expect(useSettingsStore.getState().socialExport.radius).toBe(26);
+  it('corners start at the macOS window radius, 12', () => {
+    expect(DEFAULT_SOCIAL_EXPORT.radius).toBe(12);
+    expect(useSettingsStore.getState().socialExport.radius).toBe(12);
+  });
+
+  it('keeps a saved radius as the user\'s choice (no migration of an old 26)', () => {
+    const merged = _mergePersistedSettings({ socialExport: { radius: 26 } }, useSettingsStore.getState()).socialExport;
+    expect(merged.radius).toBe(26);
   });
 
   it('senderDetails and links: off by default, kept as booleans, anything else is off', () => {

@@ -75,7 +75,7 @@ describe('inkForBackground', () => {
 });
 
 describe('MACOS_WINDOW_RADIUS', () => {
-  it('is the macOS Tahoe window corner radius, within the Radius slider\'s 0..40', () => {
-    expect(MACOS_WINDOW_RADIUS).toBe(26);
+  it('is the macOS window corner radius, within the Radius slider\'s 0..40', () => {
+    expect(MACOS_WINDOW_RADIUS).toBe(12);
   });
 });

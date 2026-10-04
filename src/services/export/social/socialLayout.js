@@ -11,8 +11,9 @@ export const SIZE_PRESETS = {
   landscape: { w: 1600, h: 900 },
   story: { w: 1080, h: 1920 },
 };
-// The corner radius of a macOS Tahoe window: the Radius slider's tick, and its default.
-export const MACOS_WINDOW_RADIUS = 26;
+// The macOS window corner radius: the Radius slider's tick, and its default.
+// A saved radius is the user's choice and is not migrated.
+export const MACOS_WINDOW_RADIUS = 12;
 // Where a value sits along a range input, as a CSS `left` for a mark drawn over
 // it: the thumb's centre travels from half a thumb in to half a thumb short of
 // the far end, not the full width.
