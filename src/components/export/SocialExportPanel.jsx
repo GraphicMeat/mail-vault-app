@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
@@ -116,10 +117,14 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * panel in a window of its own (SocialExportWindow), handing over the per-open
  * choices; there `detached` fills the window, `source` asks the main window to
  * render and `onPopIn` brings it back. `initial` carries those choices across.
+ * `headerSlot` is an element at the top right of the dialog or the window that
+ * the Open in window / Back to app button is portaled into (it reads the
+ * panel's own choices and busy state); null while that element mounts, and
+ * left out, the button sits in the footer.
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
-export function SocialExportPanel({ message, onDone, source, detached = false, initial, onPrefsChange, onPopOut, onPopIn }) {
+export function SocialExportPanel({ message, onDone, source, detached = false, initial, onPrefsChange, onPopOut, onPopIn, headerSlot }) {
   const t = useT();
   const saved = useSettingsStore(s => s.socialExport);
   const setSocialExport = useSettingsStore(s => s.setSocialExport);
@@ -319,8 +324,18 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     </div>
   );
 
+  const handOff = onPopOut ?? onPopIn;
+  const windowButton = handOff && (
+    <Button variant="ghost" size="sm" className={headerSlot ? '' : 'mr-auto'} disabled={busy}
+      onClick={() => handOff({ redact, revealSender, prefs })}>
+      {onPopOut ? <ExternalLink size={14} aria-hidden="true" /> : <PictureInPicture2 size={14} aria-hidden="true" />}
+      {onPopOut ? t('export.social.popOut') : t('export.social.popIn')}
+    </Button>
+  );
+
   return (
     <>
+      {headerSlot && windowButton && createPortal(windowButton, headerSlot)}
       <div className={detached
         ? 'flex-1 min-h-0 flex gap-5'
         : 'grid grid-cols-1 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] gap-5'}>
@@ -449,18 +464,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
       {notice && <p className="text-xs text-mail-danger">{notice}</p>}
 
       <div className="flex items-center justify-end gap-2">
-        {onPopOut && (
-          <Button variant="ghost" size="sm" className="mr-auto" disabled={busy}
-            onClick={() => onPopOut({ redact, revealSender, prefs })}>
-            <ExternalLink size={14} aria-hidden="true" />{t('export.social.popOut')}
-          </Button>
-        )}
-        {onPopIn && (
-          <Button variant="ghost" size="sm" className="mr-auto" disabled={busy}
-            onClick={() => onPopIn({ redact, revealSender, prefs })}>
-            <PictureInPicture2 size={14} aria-hidden="true" />{t('export.social.popIn')}
-          </Button>
-        )}
+        {headerSlot === undefined && windowButton}
         <Button variant="ghost" size="sm" onClick={onDone} disabled={busy}>{detached ? t('common.close') : t('common.cancel')}</Button>
         <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content}>
           {busy && <Loader size={14} className="animate-spin" />}{t('export.social.save')}

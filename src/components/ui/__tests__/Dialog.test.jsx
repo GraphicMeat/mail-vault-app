@@ -98,3 +98,20 @@ it('restores focus and modal keyboard handling across repeated cycles and a nest
   fireEvent.keyDown(review, { key: 'Escape' });
   expect(onClose).toHaveBeenCalledTimes(1);
 });
+
+it('puts header actions just left of the close button, in one row with it', () => {
+  const onClose = vi.fn();
+  render(<Dialog open title="Export" onClose={onClose} headerActions={<button type="button">Pop out</button>}><p>Body</p></Dialog>);
+  const action = screen.getByRole('button', { name: 'Pop out' });
+  const close = screen.getByRole('button', { name: 'Close' });
+  expect(action.parentElement).toBe(close.parentElement);
+  expect(action.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.click(close);
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('dialog', { name: 'Export' })).toBeTruthy();
+});
+
+it('keeps the absolute close button when there are no header actions', () => {
+  render(<Dialog open title="Export" onClose={() => {}}><p>Body</p></Dialog>);
+  expect(screen.getByRole('button', { name: 'Close' }).className).toContain('absolute');
+});

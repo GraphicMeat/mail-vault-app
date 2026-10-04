@@ -411,6 +411,23 @@ describe('SocialExportPanel', () => {
       expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ redact: false, revealSender: false, prefs: expect.objectContaining({ size: 'square' }) }));
     });
 
+    it('puts the window button in the header slot it is given, not the footer', async () => {
+      const slot = document.createElement('div');
+      document.body.appendChild(slot);
+      const onPopOut = vi.fn();
+      renderPanel({ onPopOut, headerSlot: slot });
+      const button = within(slot).getByRole('button', { name: /open in window/i });
+      expect(screen.getAllByRole('button', { name: /open in window/i })).toHaveLength(1);
+      fireEvent.click(button);
+      expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ redact: true }));
+      slot.remove();
+    });
+
+    it('shows no window button while its header slot is still mounting', () => {
+      renderPanel({ onPopOut: vi.fn(), headerSlot: null });
+      expect(screen.queryByRole('button', { name: /open in window/i })).toBeNull();
+    });
+
     it('starts from the choices it was handed, renders and saves through its source', async () => {
       const content = stubCanvas();
       const source = { buildContent: vi.fn(async () => content), save: vi.fn(async () => ({ ok: true, file: { name: 'y - social.png', base64: 'BBBB' } })) };

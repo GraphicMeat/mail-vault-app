@@ -56,6 +56,8 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
   const [redactStyle, setRedactStyle] = useState('blur');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  // Where the Social panel puts its Open in window button: the dialog's header.
+  const [popOutSlot, setPopOutSlot] = useState(null);
 
   // The dialog is mounted once in App and only toggles `open`, so its state
   // outlives a close. Format, layout and mirror staying put is the useful half
@@ -84,6 +86,7 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
   const activeFormat = isThread && format === 'social' ? 'image' : format;
   const isSocial = activeFormat === 'social';
   const showLayout = activeFormat === 'image' && isThread;
+  const offerWindow = isPremium && isSocial && !!onPopOut;
 
   const run = async () => {
     setBusy(true);
@@ -144,6 +147,7 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
   return (
     <Dialog open={open} onClose={onClose} dismissable={!busy} z={Z.dialog} portal size={isSocial ? 'xl' : 'md'}
       title={isThread ? t('export.dialog.exportMessagesTitle', { count: messages.length }) : t('export.dialog.exportMessageTitle')}
+      headerActions={offerWindow ? <span ref={setPopOutSlot} className="contents" /> : null}
       panelBg="bg-mail-surface" data-capture-exclude="" data-theme={liveTheme} data-palette={palette}>
       {!isPremium ? (
         <>
@@ -170,7 +174,7 @@ export function ExportDialog({ open, messages, account, mailbox, social, onClose
 
           {isSocial ? (
             <SocialExportPanel message={messages[0]} account={account} mailbox={mailbox} onDone={onClose}
-              initial={social} onPopOut={onPopOut} />
+              initial={social} onPopOut={onPopOut} headerSlot={offerWindow ? popOutSlot : undefined} />
           ) : (<>
             {showLayout && (
               <div className="grid grid-cols-2 gap-2">

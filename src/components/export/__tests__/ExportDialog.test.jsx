@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 
 const buildExport = vi.fn();
 const saveOneFile = vi.fn(async () => '/tmp/out.png');
@@ -94,7 +94,11 @@ describe('ExportDialog', () => {
     render(<ExportDialog {...props} messages={[messages[0]]} social={{ redact: false, revealSender: false }} onPopOut={onPopOut} />);
     expect(screen.getByRole('radio', { name: /^social$/i }).checked).toBe(true);
     expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: /open in window/i }));
+    const popOut = screen.getByRole('button', { name: /open in window/i });
+    // In the header, beside the X, not in the panel's footer.
+    expect(within(popOut.closest('div')).getByRole('button', { name: 'Close' })).toBeTruthy();
+    expect(within(popOut.closest('div')).queryByRole('button', { name: /save png/i })).toBeNull();
+    fireEvent.click(popOut);
     expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ redact: false }));
   });
 

@@ -4,6 +4,7 @@
 
 ### Changed
 - **Social images start with the corners of a macOS window.** The Corners slider's default and its macOS mark are now 12, the corner radius of a macOS window, instead of 26. A radius you picked before stays as you set it.
+- **Open in window and Back to app sit at the top right.** In the export dialog, Open in window for a social image is now beside the close button, and the social image window has a title with Back to app at its top right, leaving Close and Save at the bottom.
 
 ### Fixed
 - **The snap no longer says "No internet connection" on a working connection.** On Linux the Snap package could not ask the desktop whether the network was up, so the window believed it was offline from launch: the banner stayed up through Check again, a folder could open showing only what was saved on this computer, and read marks, moves and deletes made in the meantime waited to be sent. The snap now asks the desktop with the network status permission it needed, and on any build a check that reaches the internet clears the banner even when the desktop still reports no network. ([#16](https://github.com/GraphicMeat/mail-vault-app/issues/16))

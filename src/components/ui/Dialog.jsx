@@ -27,6 +27,8 @@ import { useT } from '../../i18n';
  * @param {string}   [title]            renders the header and the close button
  * @param {React.ReactNode} [description] sets `aria-describedby`
  * @param {React.ReactNode} [icon]      leading element in the header
+ * @param {React.ReactNode} [headerActions] controls at the top right, just
+ *                                     left of the X (needs `title`)
  * @param {React.ReactNode} [footer]    action row, laid out by the caller
  * @param {'sm'|'md'|'lg'|'xl'|'full'} [size='md']
  * @param {'dialog'|'alertdialog'} [role='dialog']
@@ -63,6 +65,7 @@ export function Dialog({
   title,
   description,
   icon,
+  headerActions,
   footer,
   size = 'md',
   role = 'dialog',
@@ -127,7 +130,29 @@ export function Dialog({
           onClick={e => e.stopPropagation()}
           {...rest}
         >
-          {title && (
+          {title && headerActions && (
+            /* Actions and the X share one flex row with the title, so a long
+               label or title wraps instead of running under the other. The
+               negative margins put the X where the absolute one sits. */
+            <div className="flex items-center gap-3 mb-4">
+              {icon}
+              <h3 id={titleId} className="flex-1 min-w-0 text-lg font-semibold text-mail-text">{title}</h3>
+              <div className="flex items-center gap-1 shrink-0 -my-2 -mr-2">
+                {headerActions}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={!dismissable}
+                  aria-label={closeLabel || t('common.close')}
+                  className="p-2 rounded-lg text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {title && !headerActions && (
             <>
               <button
                 type="button"

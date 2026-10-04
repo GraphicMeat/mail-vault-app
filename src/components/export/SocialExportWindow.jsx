@@ -35,6 +35,8 @@ export function SocialExportWindow() {
   const t = useT();
   const [initial, setInitial] = useState(null);
   const [error, setError] = useState('');
+  // The header's right end, where the panel puts Back to app.
+  const [popInSlot, setPopInSlot] = useState(null);
   const pending = useRef(new Map());
   const names = useRef(new WeakMap()); // content bitmap -> the file name main offered
 
@@ -96,8 +98,11 @@ export function SocialExportWindow() {
   const close = () => { void getCurrentWebviewWindow().destroy(); };
   return (
     <main className="h-screen flex flex-col gap-4 p-5 bg-mail-surface text-mail-text">
-      <h1 className="sr-only">{t('export.social.formatLabel')}</h1>
-      <SocialExportPanel detached source={source} initial={initial} onDone={close}
+      <header className="flex items-center justify-between gap-3 shrink-0">
+        <h1 className="text-lg font-semibold text-mail-text">{t('export.social.formatLabel')}</h1>
+        <div ref={setPopInSlot} className="flex items-center gap-1" />
+      </header>
+      <SocialExportPanel detached source={source} initial={initial} onDone={close} headerSlot={popInSlot}
         onPrefsChange={patch => { void emit('social-window-prefs', { token, patch }); }}
         onPopIn={choices => { void emit('social-window-dock', { token, initial: choices }); }} />
     </main>
