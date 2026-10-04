@@ -15,6 +15,9 @@ export const useThemeStore = create(
       // persisted and kept apart from `theme` so nothing that follows the real
       // theme (other windows, settings) sees it.
       captureTheme: null,
+      // Transient mail (message content) theme for a capture, over the reader's
+      // own choice; never persisted, like captureTheme.
+      captureMailTheme: null,
 
       toggleTheme: () => {
         const newTheme = get().theme === 'dark' ? 'light' : 'dark';
@@ -32,6 +35,10 @@ export const useThemeStore = create(
         const next = theme === 'light' || theme === 'dark' ? theme : null;
         set({ captureTheme: next });
         document.documentElement.setAttribute('data-theme', next ?? get().theme);
+      },
+
+      setCaptureMailTheme: (theme) => {
+        set({ captureMailTheme: theme === 'light' || theme === 'dark' ? theme : null });
       },
 
       setPalette: (palette) => {

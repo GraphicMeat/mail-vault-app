@@ -68,8 +68,8 @@ const mustRedact = (redact) => !!redact || usePrivacyStore.getState().enabled;
  * The panel caches it per (content, redact, themes, reveal, details, links) and
  * re-composes on style changes. `dict` skips a second dictionary wait when the
  * caller has one. `theme` is the Appearance (the app window's theme, the card's
- * header block); `mailTheme` is the card's mail body, following `theme` when
- * absent. `revealSender` (redacted only) leaves a spam sender's exact name and
+ * header block); `mailTheme` is the mail body (the card's, or the reader's in
+ * the app window), following `theme` on a card when absent. `revealSender` (redacted only) leaves a spam sender's exact name and
  * addresses readable; `senderDetails` adds the sender-details box (the open
  * message's real popover, in the app window); `links` adds the links list
  * (card only). `width` is the card's email column in CSS px (card only).
@@ -83,7 +83,7 @@ export async function buildSocialContent(message, { content, redact, dict, theme
     // it, and a spoofed display name can be a real contact's.
     const reveal = revealAddressesOnly(d?.reveal);
     return captureAppWindow({
-      redact: red, dict: d && d.reveal ? { ...d, reveal } : d, theme, reveal,
+      redact: red, dict: d && d.reveal ? { ...d, reveal } : d, theme, mailTheme, reveal,
       // The open message's header opens its own popover; named as the reader places it.
       senderDetails: senderDetails ? captureTargetOf(dated, useMailStore.getState()) ?? undefined : undefined,
     });
@@ -164,8 +164,8 @@ export async function composeSocialFile({ content, options, name }) {
  * padding, radius, shadow, chrome, redact, appTheme, mailTheme, revealSender,
  * senderDetails, links, width }`.
  * `appTheme` ('light' | 'dark', null follows the app) is the Appearance: the
- * app window's theme and the card's frame and header. `mailTheme` is the card's
- * mail body, null follows the Appearance.
+ * app window's theme and the card's frame and header. `mailTheme` is the mail
+ * body, the card's or the reader's in the app window; null follows the Appearance.
  */
 export async function buildSocialExport({ message, options }) {
   if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) return { ok: false, reason: 'premium' };

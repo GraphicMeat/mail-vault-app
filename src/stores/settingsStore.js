@@ -125,7 +125,7 @@ export const DEFAULT_SOCIAL_EXPORT = Object.freeze({
   padding: 64, radius: MACOS_WINDOW_RADIUS, shadow: true, chrome: true,
   senderDetails: false, links: false, // the card's sender-details box and links list
   appTheme: null, // Appearance: 'light' | 'dark', null follows the app. The app window, and the card's frame and header
-  mailTheme: null, // the card's mail body: 'light' | 'dark', null follows the Appearance
+  mailTheme: null, // the mail body (card, or the app window's reader): 'light' | 'dark', null follows the Appearance
   width: EMAIL_WIDTH.default, // the card's email column, CSS px
 });
 const SOCIAL_BACKGROUNDS = ['gradient', 'solid', 'custom', 'transparent'];

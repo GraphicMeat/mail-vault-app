@@ -19,8 +19,10 @@ import { fetchAssetViaTauri } from '../exportService';
  * With `theme` ('light' | 'dark') different from the app's, the app is flipped
  * to it for the length of the capture (themeStore's transient captureTheme:
  * the reader frames rebuild in that theme, the CSS variables follow
- * data-theme) and flipped back after. Captures run one at a time, so two
- * overlapping calls never fight over the theme or the mask.
+ * data-theme) and flipped back after. `mailTheme` ('light' | 'dark') does the
+ * same for the message content alone (captureMailTheme, over the reader's own
+ * choice). Captures run one at a time, so two overlapping calls never fight
+ * over the theme or the mask.
  *
  * With `reveal` (lowercased exact values: a spam sender's name and addresses),
  * those values stay readable while everything else is masked: captureReveal
@@ -214,8 +216,9 @@ let masking = 0;
 // Captures run strictly one after the other.
 let queue = Promise.resolve();
 
-async function capture({ redact, dict, theme, reveal, senderDetails }) {
+async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails }) {
   let flipped = false;
+  let mailSet = false;
   const privacy = usePrivacyStore.getState();
   try {
     const root = document.getElementById('root');
@@ -233,11 +236,16 @@ async function capture({ redact, dict, theme, reveal, senderDetails }) {
     // One frame for React to render masked, one for the frames' pass to land.
     if (redact || senderDetails) await nextPaint();
     const themes = useThemeStore.getState();
-    if ((theme === 'light' || theme === 'dark') && theme !== themes.theme && theme !== themes.captureTheme) {
+    const flipApp = (theme === 'light' || theme === 'dark') && theme !== themes.theme && theme !== themes.captureTheme;
+    // Set whenever asked: whether the reader already shows it is the reader's
+    // business, and a frame that does not rebuild costs only the paint wait.
+    const setMail = (mailTheme === 'light' || mailTheme === 'dark') && mailTheme !== themes.captureMailTheme;
+    if (flipApp || setMail) {
       // The mask is already up: nothing unmasked paints in the other theme.
+      // One wait for both: the frames rebuild once per render either way.
       const before = snapshotFrames(root);
-      flipped = true;
-      themes.setCaptureTheme(theme);
+      if (flipApp) { flipped = true; themes.setCaptureTheme(theme); }
+      if (setMail) { mailSet = true; themes.setCaptureMailTheme(mailTheme); }
       await nextPaint();
       await waitForFrames(root, before, redact);
     }
@@ -255,13 +263,14 @@ async function capture({ redact, dict, theme, reveal, senderDetails }) {
     privacy.setCaptureReveal(null);
     privacy.setCaptureSenderDetails(null);
     if (flipped) useThemeStore.getState().setCaptureTheme(null);
+    if (mailSet) useThemeStore.getState().setCaptureMailTheme(null);
     if (redact && --masking === 0) usePrivacyStore.getState().setCaptureMask(false);
   }
 }
 
-export function captureAppWindow({ redact, dict, theme, reveal, senderDetails } = {}) {
+export function captureAppWindow({ redact, dict, theme, mailTheme, reveal, senderDetails } = {}) {
   if (redact) masking += 1;
-  const run = queue.then(() => capture({ redact, dict, theme, reveal: reveal ? new Set([...reveal].map(v => String(v).trim().toLowerCase())) : null, senderDetails }));
+  const run = queue.then(() => capture({ redact, dict, theme, mailTheme, reveal: reveal ? new Set([...reveal].map(v => String(v).trim().toLowerCase())) : null, senderDetails }));
   queue = run.catch(() => {});
   return run;
 }

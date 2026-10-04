@@ -7,6 +7,7 @@ let lastClone = null;
 let lastOpts = null;
 let maskDuringCapture = null;
 let themeDuringCapture = null;
+let mailThemeDuringCapture = null;
 let revealDuringCapture = null;
 let detailsDuringCapture = null;
 // Every rasterizer call: the node as it stood live, and the clone it drew.
@@ -20,6 +21,7 @@ vi.mock('modern-screenshot', () => ({
     maskDuringCapture = store.getState().captureMask;
     const { useThemeStore: themes } = await import('../../../../stores/themeStore');
     themeDuringCapture = themes.getState().captureTheme;
+    mailThemeDuringCapture = themes.getState().captureMailTheme;
     revealDuringCapture = store.getState().captureReveal;
     detailsDuringCapture = store.getState().captureSenderDetails;
     const live = node.outerHTML;
@@ -39,9 +41,9 @@ import { NEEDLES, PEOPLE } from '../../../../test/privacyFixtures';
 import { Private } from '../../../../components/privacy/Private';
 
 afterEach(() => {
-  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; calls = [];
+  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; mailThemeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; calls = [];
   usePrivacyStore.setState({ captureReveal: null, captureSenderDetails: null });
-  useThemeStore.setState({ theme: 'dark', captureTheme: null });
+  useThemeStore.setState({ theme: 'dark', captureTheme: null, captureMailTheme: null });
   document.documentElement.setAttribute('data-theme', 'dark');
   // The composite also sets fillStyle on it: clear only the spies.
   Object.values(ctx).forEach(f => f?.mockClear?.());
@@ -314,6 +316,68 @@ describe('captureAppWindow', () => {
       }
       expect(useThemeStore.getState().captureTheme).toBeNull();
     }, 8000);
+  });
+
+  describe('mail theme override', () => {
+    it('shoots the reader in the asked mail theme, then clears it, the app theme untouched', async () => {
+      document.body.innerHTML = '<div id="root">a</div>';
+      await captureAppWindow({ redact: false, dict: null, mailTheme: 'light' });
+      expect(mailThemeDuringCapture).toBe('light');
+      expect(themeDuringCapture).toBeNull();
+      expect(useThemeStore.getState().captureMailTheme).toBeNull();
+    });
+
+    it('clears it when the capture throws', async () => {
+      const { domToCanvas } = await import('modern-screenshot');
+      domToCanvas.mockRejectedValueOnce(new Error('boom'));
+      document.body.innerHTML = '<div id="root">a</div>';
+      await expect(captureAppWindow({ redact: false, dict: null, mailTheme: 'dark' })).rejects.toThrow('boom');
+      expect(useThemeStore.getState().captureMailTheme).toBeNull();
+    });
+
+    it('does not touch it when none is asked', async () => {
+      document.body.innerHTML = '<div id="root">a</div>';
+      const spy = vi.spyOn(useThemeStore.getState(), 'setCaptureMailTheme');
+      await captureAppWindow({ redact: false, dict: null });
+      await captureAppWindow({ redact: false, dict: null, mailTheme: 'sepia' });
+      expect(spy).not.toHaveBeenCalled();
+      expect(mailThemeDuringCapture).toBeNull();
+    });
+
+    it('waits once for a frame that reloads on the app and mail flip together', async () => {
+      document.body.innerHTML = '<div id="root">a<iframe></iframe></div>';
+      const iframe = document.querySelector('iframe');
+      iframe.setAttribute('srcdoc', '<p>dark</p>');
+      let current = { readyState: 'complete', body: {}, getElementById: () => null };
+      Object.defineProperty(iframe, 'contentDocument', { get: () => current });
+      let ready = false;
+      let rebuilds = 0;
+      const unsubscribe = useThemeStore.subscribe((s, prev) => {
+        if (s.captureMailTheme !== 'dark' || prev.captureMailTheme === 'dark') return;
+        rebuilds += 1;
+        iframe.setAttribute('srcdoc', '<p>light app, dark mail</p>');
+        current = { readyState: 'loading', body: null, getElementById: () => null };
+        setTimeout(() => { current = { readyState: 'complete', body: {}, getElementById: () => null }; ready = true; }, 150);
+      });
+      const { domToCanvas } = await import('modern-screenshot');
+      let readyAtDraw = null;
+      domToCanvas.mockImplementationOnce(async () => {
+        readyAtDraw = ready;
+        themeDuringCapture = useThemeStore.getState().captureTheme;
+        mailThemeDuringCapture = useThemeStore.getState().captureMailTheme;
+        return fakeCanvas();
+      });
+      try {
+        await captureAppWindow({ redact: false, dict: null, theme: 'light', mailTheme: 'dark' });
+      } finally {
+        unsubscribe();
+      }
+      expect(readyAtDraw).toBe(true);
+      expect(rebuilds).toBe(1);
+      expect([themeDuringCapture, mailThemeDuringCapture]).toEqual(['light', 'dark']);
+      expect(useThemeStore.getState().captureTheme).toBeNull();
+      expect(useThemeStore.getState().captureMailTheme).toBeNull();
+    });
   });
 
   describe('reveal and sender details', () => {

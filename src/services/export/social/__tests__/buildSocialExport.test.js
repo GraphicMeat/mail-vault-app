@@ -86,6 +86,14 @@ describe('buildSocialExport', () => {
     noLeak(r.file.name);
   });
 
+  it('app: the reader is shot in the Mail theme, which follows the Appearance until picked', async () => {
+    useThemeStore.setState({ theme: 'dark' });
+    await buildSocialExport({ message, options: { ...options, content: 'app' } });
+    expect(captureAppWindow.mock.calls[0][0].mailTheme).toBe('dark');
+    await buildSocialExport({ message, options: { ...options, content: 'app', mailTheme: 'light' } });
+    expect(captureAppWindow.mock.calls[1][0]).toMatchObject({ theme: 'dark', mailTheme: 'light' });
+  });
+
   it('an own appTheme beats the app theme: the capture and the frame both use it', async () => {
     useThemeStore.setState({ theme: 'dark' });
     await buildSocialExport({ message, options: { ...options, content: 'app', appTheme: 'light' } });

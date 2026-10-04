@@ -116,6 +116,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const privacyOn = usePrivacyFrameGate();
   const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
+  // The social export's app shot can ask for a mail theme over the reader's own.
+  const captureMailTheme = useThemeStore(s => s.captureMailTheme);
   // Default email theme: user preference ('light'|'dark') or follow app theme.
   const theme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
@@ -184,7 +186,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     return () => registerActiveReply(null);
   }, [selectedThread, selectedEmail, onComposeReply]);
 
-  const effectiveEmailTheme = emailThemeOverride ?? theme;
+  const effectiveEmailTheme = captureMailTheme ?? emailThemeOverride ?? theme;
   const emailDarkMode = effectiveEmailTheme === 'dark';
   const emailColors = getEmailColors(effectiveEmailTheme, palette);
 

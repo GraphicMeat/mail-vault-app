@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2 } from 'lucide-react';
+import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2, Sun, Moon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
@@ -58,6 +58,21 @@ function Chips({ label, options, value, onChange }) {
         </button>
       ))}
     </div>
+  );
+}
+
+// The reader's sun/moon (OriginalThemeToggle's a11y: a stable "Dark" name,
+// aria-pressed, a title saying what a click switches to), on a surface of its
+// own so it reads over any picture.
+function MailThemeToggle({ dark, onToggle }) {
+  const t = useT();
+  const Icon = dark ? Sun : Moon;
+  return (
+    <button type="button" data-testid="social-mail-theme" aria-pressed={dark} aria-label={t('emailActionBar.dark')}
+      title={dark ? t('emailActionBar.light') : t('emailActionBar.dark')} onClick={onToggle}
+      className="rounded-md border border-mail-border bg-mail-surface p-1.5 text-mail-text-muted transition-colors hover:bg-mail-surface-hover hover:text-mail-text">
+      <Icon size={14} aria-hidden="true" />
+    </button>
   );
 }
 
@@ -120,8 +135,9 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * off while privacy mode is on), and an own image is never stored. Like the
  * app, there are two themes: Appearance (Light/Dark, the app's own theme until
  * one is picked) paints the window frame and, on a card, the header block, and
- * shoots the app window; Mail (card only) is the message body, following the
- * Appearance until one is picked.
+ * shoots the app window; Mail is the message body (the card's, or the reader's
+ * in the app window), following the Appearance until the sun/moon on the
+ * preview picks one.
  *
  * The preview zooms (Fit, actual pixels, steps between). `onPopOut` offers the
  * panel in a window of its own (SocialExportWindow), handing over the per-open
@@ -164,8 +180,8 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const cache = useRef(new Map());
 
   // Appearance: the frame, the card's header block, the app window's shot.
-  // Mail: the card's body, the Appearance's twin until picked (the reader's
-  // `emailThemeOverride ?? theme`).
+  // Mail: the message body on the card and in the app window's reader, the
+  // Appearance's twin until picked (the reader's `emailThemeOverride ?? theme`).
   const theme = prefs.appTheme ?? appTheme;
   const mailTheme = prefs.mailTheme ?? theme;
   const frameTheme = chromeTheme(prefs.content, theme);
@@ -217,7 +233,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const withLinks = isCard && prefs.links === true;
 
   useEffect(() => {
-    const key = `${prefs.content}|${redacting}|${theme}|${isCard ? mailTheme : ''}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}|w${cardWidth ?? ''}`;
+    const key = `${prefs.content}|${redacting}|${theme}|${mailTheme}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}|w${cardWidth ?? ''}`;
     const id = ++request.current;
     const hit = cache.current.get(key);
     if (hit) { remember(cache.current, key, hit); setContent(hit); setLoading(false); return; }
@@ -228,8 +244,8 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     setLoading(true);
     setNotice(null);
     src.buildContent({
-      content: prefs.content, redact: redacting, theme,
-      ...(isCard ? { mailTheme, width: cardWidth } : {}),
+      content: prefs.content, redact: redacting, theme, mailTheme,
+      ...(isCard ? { width: cardWidth } : {}),
       ...(reveal ? { revealSender: true } : {}),
       ...(details ? { senderDetails: true } : {}),
       ...(withLinks ? { links: true } : {}),
@@ -315,13 +331,19 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const zoomButton = 'h-7 min-w-7 px-1.5 rounded-md border border-mail-border text-xs text-mail-text-muted hover:text-mail-text hover:border-mail-accent/50 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed';
   const preview = (
     <div className={`flex flex-col gap-2 min-w-0 ${detached ? 'flex-1 min-h-0' : ''}`}>
-      {/* margin:auto, not flex centering: a centered box clips the top and left of a zoomed preview. */}
-      <div ref={boxRef} className={`flex overflow-auto rounded-xl bg-mail-bg border border-mail-border p-2
-        ${detached ? 'flex-1 min-h-0' : 'h-[436px]'}`}>
-        {loading && !content ? <Loader size={18} className="m-auto animate-spin text-mail-text-muted" /> : (
-          <canvas ref={previewRef} role="img" aria-label={t('export.social.preview')}
-            className="m-auto shrink-0 rounded-md" style={background.type === 'transparent' ? { background: CHECKERBOARD } : undefined} />
-        )}
+      {/* The sun/moon sits outside the scrolling box, so it stays put while a zoomed preview scrolls. */}
+      <div className={`relative ${detached ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
+        {/* margin:auto, not flex centering: a centered box clips the top and left of a zoomed preview. */}
+        <div ref={boxRef} className={`flex overflow-auto rounded-xl bg-mail-bg border border-mail-border p-2
+          ${detached ? 'flex-1 min-h-0' : 'h-[436px]'}`}>
+          {loading && !content ? <Loader size={18} className="m-auto animate-spin text-mail-text-muted" /> : (
+            <canvas ref={previewRef} role="img" aria-label={t('export.social.preview')}
+              className="m-auto shrink-0 rounded-md" style={background.type === 'transparent' ? { background: CHECKERBOARD } : undefined} />
+          )}
+        </div>
+        <div className="absolute top-2 right-2">
+          <MailThemeToggle dark={mailTheme === 'dark'} onToggle={() => update({ mailTheme: mailTheme === 'dark' ? 'light' : 'dark' })} />
+        </div>
       </div>
       <div role="group" aria-label={t('export.social.zoom')} className="flex items-center gap-1.5">
         <button type="button" className={zoomButton} aria-label={t('export.social.zoomOut')} title={t('export.social.zoomOut')}
@@ -370,12 +392,6 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
           <Field label={t('export.social.appearance')}>
             <Chips label={t('export.social.appearance')} value={theme} onChange={v => update({ appTheme: v })} options={themeOptions} />
           </Field>
-
-          {isCard && (
-            <Field label={t('export.social.mailAppearance')}>
-              <Chips label={t('export.social.mailAppearance')} value={mailTheme} onChange={v => update({ mailTheme: v })} options={themeOptions} />
-            </Field>
-          )}
 
           <Field label={t('export.social.size')}>
             <Chips label={t('export.social.size')} value={prefs.size} onChange={v => update({ size: v })} options={sizeOptions} />

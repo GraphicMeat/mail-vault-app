@@ -5,7 +5,7 @@ import { useThemeStore, selectTheme } from '../themeStore';
 const attr = () => document.documentElement.getAttribute('data-theme');
 
 beforeEach(() => {
-  useThemeStore.setState({ theme: 'dark', captureTheme: null });
+  useThemeStore.setState({ theme: 'dark', captureTheme: null, captureMailTheme: null });
   document.documentElement.setAttribute('data-theme', 'dark');
 });
 
@@ -49,7 +49,19 @@ describe('themeStore capture override', () => {
 
   it('never persists the override', () => {
     const { partialize } = useThemeStore.persist.getOptions();
-    expect(partialize({ theme: 'light', palette: 'indigo', captureTheme: 'dark', toggleTheme() {} }))
+    expect(partialize({ theme: 'light', palette: 'indigo', captureTheme: 'dark', captureMailTheme: 'light', toggleTheme() {} }))
       .toEqual({ theme: 'light', palette: 'indigo' });
+  });
+
+  it('setCaptureMailTheme takes light or dark, anything else clears it, and leaves the app theme alone', () => {
+    useThemeStore.getState().setCaptureMailTheme('light');
+    expect(useThemeStore.getState().captureMailTheme).toBe('light');
+    expect(attr()).toBe('dark');
+    expect(selectTheme(useThemeStore.getState())).toBe('dark');
+    useThemeStore.getState().setCaptureMailTheme('sepia');
+    expect(useThemeStore.getState().captureMailTheme).toBeNull();
+    useThemeStore.getState().setCaptureMailTheme('dark');
+    useThemeStore.getState().setCaptureMailTheme(null);
+    expect(useThemeStore.getState().captureMailTheme).toBeNull();
   });
 });

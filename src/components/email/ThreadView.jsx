@@ -369,12 +369,14 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
+  // The social export's app shot can ask for a mail theme over the reader's own.
+  const captureMailTheme = useThemeStore(s => s.captureMailTheme);
   // Default: user preference ('light'|'dark') or follow app theme.
   // A host that owns the theme (the compose pane's toggle) passes it in.
   const defaultEmailTheme = typeof emailThemeDark === 'boolean'
     ? (emailThemeDark ? 'dark' : 'light')
     : emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
-  const effectiveTheme = emailThemeOverride ?? defaultEmailTheme;
+  const effectiveTheme = captureMailTheme ?? emailThemeOverride ?? defaultEmailTheme;
   const emailDarkMode = effectiveTheme === 'dark';
   const key = emailKey(email);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
