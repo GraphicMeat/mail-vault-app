@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Changed
-- **Social images start with the corners of a macOS window.** The Corners slider's default and its macOS mark are now 12, the corner radius of a macOS window, instead of 26. A radius you picked before stays as you set it.
+- **Social images start with the corners of a macOS window.** The Corners slider's default and its macOS mark are now 12, the corner radius of a macOS window, instead of 26. A saved style on the old 26 moves to 12; any other radius you picked stays as you set it.
 - **Open in window and Back to app sit at the top right.** In the export dialog, Open in window for a social image is now beside the close button, and the social image window has a title with Back to app at its top right, leaving Close and Save at the bottom.
 - **Pick how wide the email is in a social card or a PNG export.** A new Email width slider, from 480 to 1600 pixels, sets the column the message is laid out in, so a wide newsletter no longer has to squeeze into 820 pixels. The social card remembers it; the preview updates once you stop dragging, and Save uses the width the preview shows. HTML exports keep their usual width.
 - **A sun and moon button on the social image preview switches the email between light and dark.** It works like the one in the reader and replaces the Email content buttons. It now also applies to the app window shot, so the message in a shot of the app can be light while the app is dark, or the other way round, without changing the reader.

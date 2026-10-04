@@ -4,7 +4,7 @@ vi.mock('../safeStorage', () => ({
   safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
 }));
 
-const { useSettingsStore, _mergePersistedSettings, DEFAULT_SOCIAL_EXPORT } = await import('../settingsStore');
+const { useSettingsStore, _mergePersistedSettings, DEFAULT_SOCIAL_EXPORT, migrateSettings } = await import('../settingsStore');
 
 describe('social export style', () => {
   it('starts on the defaults', () => {
@@ -91,5 +91,17 @@ describe('social export style', () => {
     expect(useSettingsStore.getState().socialExport.links).toBe(true);
     setSocialExport({ links: 'yes', senderDetails: true });
     expect(useSettingsStore.getState().socialExport).toMatchObject({ links: false, senderDetails: true });
+  });
+});
+
+describe('social export radius migration (v15 -> v16)', () => {
+  it('moves the old macOS default of 26 to 12', () => {
+    expect(migrateSettings({ socialExport: { radius: 26, padding: 40 } }, 15).socialExport).toEqual({ radius: 12, padding: 40 });
+  });
+
+  it('leaves any other radius, and settings already on v16', () => {
+    expect(migrateSettings({ socialExport: { radius: 18 } }, 15).socialExport.radius).toBe(18);
+    expect(migrateSettings({ socialExport: { radius: 26 } }, 16).socialExport.radius).toBe(26);
+    expect(migrateSettings({}, 15).socialExport).toBeUndefined();
   });
 });

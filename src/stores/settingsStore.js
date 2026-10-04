@@ -365,6 +365,10 @@ export function migrateSettings(persisted, version) {
   // it sets differently from All views (see quickActionOverridesAsDiffs); a
   // list of its own stays its own.
   if (version < 15 && next.quickActions) next = { ...next, quickActions: quickActionOverridesAsDiffs(next.quickActions) };
+  // v15 -> v16: the social image's macOS corner radius was 26, the default and
+  // the slider's mark; every saved style holds it whether picked or not. It is
+  // 12 now, and a 26 saved before then was that default.
+  if (version < 16 && next.socialExport?.radius === 26) next = { ...next, socialExport: { ...next.socialExport, radius: MACOS_WINDOW_RADIUS } };
   return next;
 }
 
@@ -1703,7 +1707,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 15,
+      version: 16,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its
