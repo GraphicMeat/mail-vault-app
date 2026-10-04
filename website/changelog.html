@@ -127,11 +127,68 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.18.1">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.18.1</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">October 4, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Social images start with the corners of a macOS window.</strong> The Corners slider's default and its macOS mark are now 12, the corner radius of a macOS window, instead of 26. A saved style on the old 26 moves to 12; any other radius you picked stays as you set it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Open in window and Back to app sit at the top right.</strong> In the export dialog, Open in window for a social image is now beside the close button, and the social image window has a title with Back to app at its top right, leaving Close and Save at the bottom.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pick how wide the email is in a social card or a PNG export.</strong> A new Email width slider, from 480 to 1600 pixels, sets the column the message is laid out in, so a wide newsletter no longer has to squeeze into 820 pixels. The social card remembers it; the preview updates once you stop dragging, and Save uses the width the preview shows. HTML exports keep their usual width.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A sun and moon button on the social image preview switches the email between light and dark.</strong> It works like the one in the reader and replaces the Email content buttons. It now also applies to the app window shot, so the message in a shot of the app can be light while the app is dark, or the other way round, without changing the reader.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The export dialog previews Image and HTML exports.</strong> Like a social image, an Image or HTML export now shows a preview beside its options, for one message or a whole thread, and updates as you change them. Attachments are left out of the preview, and turning on Redact sensitive info, or privacy mode, takes the unredacted preview away at once.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The snap no longer says "No internet connection" on a working connection.</strong> On Linux the Snap package could not ask the desktop whether the network was up, so the window believed it was offline from launch: the banner stayed up through Check again, a folder could open showing only what was saved on this computer, and read marks, moves and deletes made in the meantime waited to be sent. The snap now asks the desktop with the network status permission it needed, and on any build a check that reaches the internet clears the banner even when the desktop still reports no network. (<a href="https://github.com/GraphicMeat/mail-vault-app/issues/16" target="_blank" rel="noopener" class="text-primary-500 hover:underline">#16</a>)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The tray icon on Linux and Windows is as large as its neighbours.</strong> It used the app icon with the transparent margin a macOS icon keeps around its artwork, so it drew about a fifth smaller than the other icons in the GNOME top bar. The tray now uses the artwork alone. (<a href="https://github.com/GraphicMeat/mail-vault-app/issues/16" target="_blank" rel="noopener" class="text-primary-500 hover:underline">#16</a>)</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.18.0">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.18.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">October 3, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

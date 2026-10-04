@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.18.1] - 2026-10-04
+
 ### Changed
 - **Social images start with the corners of a macOS window.** The Corners slider's default and its macOS mark are now 12, the corner radius of a macOS window, instead of 26. A saved style on the old 26 moves to 12; any other radius you picked stays as you set it.
 - **Open in window and Back to app sit at the top right.** In the export dialog, Open in window for a social image is now beside the close button, and the social image window has a title with Back to app at its top right, leaving Close and Save at the bottom.
