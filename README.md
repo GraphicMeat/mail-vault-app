@@ -143,6 +143,7 @@ Pick a year or a custom range, then archive, delete, or archive-and-delete thous
 - **Redacted export** - the "Redact sensitive info" option in Export blurs or blacks out the same details in exported images and HTML, and strips links and remote images from the HTML.
 - **Credentials in the OS store** - macOS Keychain, Windows Credential Manager, Linux Secret Service. Never in a config file.
 - **Sandboxed on macOS**, no cloud service, no tracking, no telemetry.
+- **Found a vulnerability?** Report it privately as described in [SECURITY.md](SECURITY.md), not in a public issue.
 - **Network Activity** - Settings > Privacy & security lists the connections MailVault and its background helper make, newest first: mail sync and sending, sign-ins, DNS lookups, backups and more, with host, purpose, account, and data sent and received, plus a world map of the countries those connections went to (placed offline with DB-IP's free country database). It does not list web content inside emails, requests the app window makes itself, or app update downloads (and, on macOS, the update check). The history is saved on your computer only, kept for 24 hours, 7 days (the default), 2 weeks or a month, then deleted.
 
 ### Multi-account
