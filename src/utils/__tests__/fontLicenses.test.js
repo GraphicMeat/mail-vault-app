@@ -32,4 +32,14 @@ describe('bundled fonts', () => {
     expect(unbundled).toEqual([]);
     expect(APP_FONTS.filter(font => font.mono).map(font => font.id)).toEqual(['jetbrains-mono', 'fira-code', 'ibm-plex-mono']);
   });
+
+  // The variable Instrument Sans breaks word spacing under WebKitGTK at the
+  // app's body size (fonts.css says why); its static weights do not.
+  it('Instrument Sans is bundled as static weights, not the variable font', () => {
+    const weights = [...css.matchAll(/@font-face\s*{([^}]*)}/g)]
+      .map(([, body]) => body)
+      .filter(body => body.includes("'Instrument Sans'"))
+      .map(body => body.match(/font-weight:\s*([^;]+);/)[1].trim());
+    expect(weights.sort()).toEqual(['400', '400', '500', '500', '600', '600', '700', '700']);
+  });
 });
