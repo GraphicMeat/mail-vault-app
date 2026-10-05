@@ -13,13 +13,15 @@ const isComposeWindow = new URLSearchParams(window.location.search).has('compose
 const isOriginalWindow = new URLSearchParams(window.location.search).has('original');
 const isSettingsWindow = new URLSearchParams(window.location.search).has('settings');
 const isSocialWindow = new URLSearchParams(window.location.search).has('social');
+const isExportWindow = new URLSearchParams(window.location.search).has('export');
 if (isSettingsWindow) document.body.dataset.auxiliaryWindow = 'settings';
 const App = React.lazy(() => import('./App'));
 const ComposeWindow = React.lazy(() => import('./components/ComposeWindow').then(m => ({ default: m.ComposeWindow })));
 const OriginalMessageWindow = React.lazy(() => import('./components/OriginalMessageWindow').then(m => ({ default: m.OriginalMessageWindow })));
 const SettingsWindow = React.lazy(() => import('./components/SettingsWindow').then(m => ({ default: m.SettingsWindow })));
 const SocialExportWindow = React.lazy(() => import('./components/export/SocialExportWindow').then(m => ({ default: m.SocialExportWindow })));
-const isAuxiliaryWindow = isComposeWindow || isOriginalWindow || isSettingsWindow || isSocialWindow;
+const ExportWindow = React.lazy(() => import('./components/export/ExportWindow').then(m => ({ default: m.ExportWindow })));
+const isAuxiliaryWindow = isComposeWindow || isOriginalWindow || isSettingsWindow || isSocialWindow || isExportWindow;
 
 // Listen to the webview's path-monitor events. Cheap, and the only signal that
 // arrives the instant the Wi-Fi drops rather than on the next 30s heartbeat.
@@ -253,7 +255,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <MotionConfig reducedMotion="user">
         <SplashDismisser>
           <React.Suspense fallback={null}>{isComposeWindow ? <ComposeWindow /> : isOriginalWindow ? <OriginalMessageWindow />
-            : isSettingsWindow ? <SettingsWindow /> : isSocialWindow ? <SocialExportWindow /> : <App />}</React.Suspense>
+            : isSettingsWindow ? <SettingsWindow /> : isSocialWindow ? <SocialExportWindow />
+            : isExportWindow ? <ExportWindow /> : <App />}</React.Suspense>
         </SplashDismisser>
       </MotionConfig>
     </ErrorBoundary>

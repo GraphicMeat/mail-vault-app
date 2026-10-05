@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- **Export message fills the window, and Image and HTML open in a window of their own.** The export dialog now follows the size of the app window with 32px around it, so the preview and the options have room instead of sitting in a narrow column. The Image and HTML exports get the same Open in window button Social has, with Back to app to return to the dialog with your choices.
 - **Recent searches narrow as you type, and fold away.** Under the search box, the recent searches now show only the ones holding the text you are typing; when none do, only the suggestions are listed. Click the Recent searches heading to fold the list, and again to bring it back; the app remembers which way you left it.
 
 ### Removed

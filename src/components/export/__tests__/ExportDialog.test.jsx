@@ -307,6 +307,80 @@ describe('reopening the dialog', () => {
   });
 });
 
+describe('the dialog size', () => {
+  it('fills the window with 32px around it', () => {
+    render(<ExportDialog {...props} messages={messages} />);
+    const panel = screen.getByRole('dialog');
+    expect(panel.parentElement.className).toMatch(/\bp-8\b/);
+    expect(panel.className).toMatch(/(^|\s)w-full(\s|$)/);
+    expect(panel.className).toMatch(/(^|\s)h-full(\s|$)/);
+    expect(panel.className).not.toMatch(/max-w-/);
+  });
+
+  it('fills it on Social too, so switching format never resizes it', () => {
+    render(<ExportDialog {...props} messages={[messages[0]]} social={{}} />);
+    expect(screen.getByRole('dialog').className).toMatch(/(^|\s)h-full(\s|$)/);
+  });
+
+  it('keeps the upgrade prompt a small dialog', () => {
+    hasPremiumAccess.mockReturnValue(false);
+    render(<ExportDialog {...props} messages={messages} />);
+    const panel = screen.getByRole('dialog');
+    expect(panel.parentElement.className).not.toMatch(/\bp-8\b/);
+    expect(panel.className).not.toMatch(/(^|\s)h-full(\s|$)/);
+  });
+});
+
+describe('opening the Image and HTML export in a window', () => {
+  const openInWindow = () => screen.getByRole('button', { name: /open in window/i });
+
+  it('offers the window in the header for an image, with the choices handed over', () => {
+    const onPopOut = vi.fn();
+    render(<ExportDialog {...props} messages={[messages[0]]} onPopOut={onPopOut} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /mirror remote content/i }));
+    fireEvent.change(screen.getByRole('slider', { name: 'Email width' }), { target: { value: '1200' } });
+    // Beside the X, not in the footer next to Export.
+    expect(within(openInWindow().closest('div')).getByRole('button', { name: 'Close' })).toBeTruthy();
+    fireEvent.click(openInWindow());
+    expect(onPopOut).toHaveBeenCalledWith({
+      format: 'image', layout: 'single', mirror: false, attachments: true, redact: false, redactStyle: 'blur', width: 1200,
+    });
+  });
+
+  it('offers it for HTML and for a thread', () => {
+    const onPopOut = vi.fn();
+    render(<ExportDialog {...props} messages={messages} onPopOut={onPopOut} />);
+    fireEvent.click(screen.getByRole('radio', { name: /separate images/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
+    fireEvent.click(openInWindow());
+    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ format: 'html', layout: 'separate' }));
+  });
+
+  it('tells the window which format Social is, beside its own choices', () => {
+    const onPopOut = vi.fn();
+    render(<ExportDialog {...props} messages={[messages[0]]} social={{ redact: false }} onPopOut={onPopOut} />);
+    fireEvent.click(openInWindow());
+    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ format: 'social', redact: false }));
+  });
+
+  it('offers no window where nothing can open one, or to a free user', () => {
+    const { rerender } = render(<ExportDialog {...props} messages={messages} />);
+    expect(screen.queryByRole('button', { name: /open in window/i })).toBeNull();
+    hasPremiumAccess.mockReturnValue(false);
+    rerender(<ExportDialog {...props} messages={messages} onPopOut={() => {}} />);
+    expect(screen.queryByRole('button', { name: /open in window/i })).toBeNull();
+  });
+
+  it('opens on the format and choices the window handed back', () => {
+    const files = { format: 'html', layout: 'separate', mirror: false, attachments: false, redact: true, redactStyle: 'bar', width: 1000 };
+    render(<ExportDialog {...props} messages={messages} files={files} />);
+    expect(screen.getByRole('radio', { name: /^html$/i }).checked).toBe(true);
+    expect(screen.getByRole('checkbox', { name: /mirror remote content/i }).checked).toBe(false);
+    expect(screen.getByRole('checkbox', { name: /include attachments/i }).checked).toBe(false);
+    expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
+  });
+});
+
 describe('the PNG and HTML preview', () => {
   const utf8Base64 = (text) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
   const deferred = () => {

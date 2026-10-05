@@ -150,7 +150,9 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
-export function SocialExportPanel({ message, onDone, source, detached = false, initial, onPrefsChange, onPopOut, onPopIn, headerSlot }) {
+export function SocialExportPanel({ message, onDone, source, detached = false, initial, onPrefsChange, onPopOut, onPopIn, headerSlot, fill = false }) {
+  // Detached or in a dialog that fills the window: the preview takes the room.
+  const filled = detached || fill;
   const t = useT();
   const saved = useSettingsStore(s => s.socialExport);
   const setSocialExport = useSettingsStore(s => s.setSocialExport);
@@ -330,12 +332,12 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
 
   const zoomButton = 'h-7 min-w-7 px-1.5 rounded-md border border-mail-border text-xs text-mail-text-muted hover:text-mail-text hover:border-mail-accent/50 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed';
   const preview = (
-    <div className={`flex flex-col gap-2 min-w-0 ${detached ? 'flex-1 min-h-0' : ''}`}>
+    <div className={`flex flex-col gap-2 min-w-0 ${filled ? 'flex-1 min-h-0' : ''}`}>
       {/* The sun/moon sits outside the scrolling box, so it stays put while a zoomed preview scrolls. */}
-      <div className={`relative ${detached ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
+      <div className={`relative ${filled ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
         {/* margin:auto, not flex centering: a centered box clips the top and left of a zoomed preview. */}
         <div ref={boxRef} className={`flex overflow-auto rounded-xl bg-mail-bg border border-mail-border p-2
-          ${detached ? 'flex-1 min-h-0' : 'h-[436px]'}`}>
+          ${filled ? 'flex-1 min-h-0' : 'h-[436px]'}`}>
           {loading && !content ? <Loader size={18} className="m-auto animate-spin text-mail-text-muted" /> : (
             <canvas ref={previewRef} role="img" aria-label={t('export.social.preview')}
               className="m-auto shrink-0 rounded-md" style={background.type === 'transparent' ? { background: CHECKERBOARD } : undefined} />
@@ -378,12 +380,12 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   return (
     <>
       {headerSlot && windowButton && createPortal(windowButton, headerSlot)}
-      <div className={detached
-        ? 'flex-1 min-h-0 flex gap-5'
+      <div className={filled
+        ? 'flex-1 min-h-80 flex gap-5'
         : 'grid grid-cols-1 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] gap-5'}>
         {preview}
 
-        <div className={`space-y-3 min-w-0 ${detached ? 'w-80 shrink-0 overflow-y-auto pr-1' : ''}`}>
+        <div className={`space-y-3 min-w-0 ${filled ? 'w-80 shrink-0 overflow-y-auto pr-1' : ''}`}>
           <Field label={t('export.social.content')}>
             <Chips label={t('export.social.content')} value={prefs.content} onChange={v => update({ content: v })}
               options={[{ value: 'card', label: t('export.social.contentCard') }, { value: 'app', label: t('export.social.contentApp') }]} />

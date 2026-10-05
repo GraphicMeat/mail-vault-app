@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
-import { buildExport } from '../../services/export/exportService';
-import { ensurePrivacyDictionary } from '../../utils/privacy/privacyDictionary';
+import { buildLocal } from '../../services/export/exportSource';
 
 // Options settle before a build: a dragged slider is one build, not twenty.
 const PREVIEW_SETTLE_MS = 300;
@@ -31,14 +30,14 @@ function toShown(format, files) {
 }
 
 /**
- * The PNG/HTML preview of the export dialog: buildExport over the current
- * options without attachments, debounced, one build at a time with the latest
+ * The PNG/HTML preview of the export dialog: `build` (here, or the main window
+ * for an export window) over the current options without attachments, debounced, one build at a time with the latest
  * options winning (a build finishing for older options is cached, never shown).
  * Previews are cached per option set and dropped on close or a different
  * message set. A redacted request never leaves an unredacted preview painted:
  * the check is made at render, not only when the options change.
  */
-export function useExportPreview({ enabled, messages, format, layout, mirror, redact, redactStyle, width, account, mailbox }) {
+export function useExportPreview({ enabled, messages, format, layout, mirror, redact, redactStyle, width, account, mailbox, build = buildLocal }) {
   const ids = messagesKey(messages);
   const style = format === 'html' ? 'bar' : redactStyle;
   const key = enabled
@@ -63,11 +62,9 @@ export function useExportPreview({ enabled, messages, format, layout, mirror, re
   const start = (req) => {
     flight.current.running = true;
     const run = async () => {
-      // Not captureMask, as in the export itself: the live UI stays unmasked.
-      const redactOpts = req.redact ? { style: req.style, dict: await ensurePrivacyDictionary() } : null;
-      const result = await buildExport({
+      const result = await build({
         messages: req.messages, format: req.format, layout: req.layout, mirror: req.mirror,
-        account: req.account, mailbox: req.mailbox, attachments: false, redact: redactOpts,
+        account: req.account, mailbox: req.mailbox, attachments: false, redact: req.redact ? { style: req.style } : null,
         ...(req.format === 'image' ? { width: req.width } : {}),
       });
       if (!result?.ok || !result.files?.length) throw new Error(result?.reason || 'empty');
@@ -125,8 +122,8 @@ export function ExportPreview({ preview }) {
   const t = useT();
   const { shown, failed, pending } = preview;
   return (
-    <div className="relative min-w-0">
-      <div aria-busy={pending} className="flex flex-col gap-2 overflow-auto rounded-xl bg-mail-bg border border-mail-border p-2 h-[436px]">
+    <div className="relative min-w-0 flex-1 min-h-0 flex flex-col">
+      <div aria-busy={pending} className="flex flex-col gap-2 overflow-auto rounded-xl bg-mail-bg border border-mail-border p-2 flex-1 min-h-0">
         {shown?.html != null && (
           <iframe sandbox="" srcDoc={shown.html} title={t('export.social.preview')}
             className="w-full flex-1 min-h-0 rounded-md border-0 bg-white" />

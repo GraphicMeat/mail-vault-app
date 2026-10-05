@@ -100,4 +100,10 @@ describe('open and close', () => {
     useExportStore.getState().closeSamples();
     expect(useExportStore.getState().showSamples).toBe(false);
   });
+
+  it('carries the choices a detached export window handed back', () => {
+    const files = { format: 'html', mirror: false };
+    useExportStore.getState().openExport({ messages: [msg()], files });
+    expect(useExportStore.getState().target.files).toBe(files);
+  });
 });

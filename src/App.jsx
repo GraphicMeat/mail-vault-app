@@ -75,6 +75,7 @@ import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAfterSettingsClose, useSettingsWindow } from './hooks/useSettingsWindow';
 import { useSocialExportWindow } from './hooks/useSocialExportWindow';
+import { useExportWindow } from './hooks/useExportWindow';
 import { currentQuickActionScopeSnapshot, watchQuickActionScope } from './hooks/useQuickActionConfiguration';
 import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -583,19 +584,27 @@ function App() {
   const closeExport = useExportStore(s => s.closeExport);
   const openSamples = useExportStore(s => s.openSamples);
   const closeSamples = useExportStore(s => s.closeSamples);
-  // Social export in a window of its own, and back into the dialog.
+  // The export in a window of its own, and back into the dialog.
   // Not window.__TAURI__: the website demo fakes that one, and has no windows.
   const isTauri = Boolean(window.__TAURI_INTERNALS__);
   const { popOut: popOutSocial } = useSocialExportWindow({
     onDock: ({ message, account, mailbox, initial }) => useExportStore.getState()
       .openExport({ messages: [message], account, mailbox, social: initial || {} }),
   });
-  const handleSocialPopOut = useCallback(async (initial) => {
+  const { popOut: popOutFiles } = useExportWindow({
+    onDock: ({ messages, account, mailbox, initial }) => useExportStore.getState()
+      .openExport({ messages, account, mailbox, files: initial }),
+  });
+  // `choices.format` is the format the dialog had open.
+  const handleExportPopOut = useCallback(async ({ format, ...choices }) => {
     const target = useExportStore.getState().target;
-    const message = target?.messages?.[0];
-    if (!message) return;
-    if (await popOutSocial({ message, account: target.account, mailbox: target.mailbox, initial })) closeExport();
-  }, [popOutSocial, closeExport]);
+    if (!target?.messages?.length) return;
+    const { messages, account, mailbox } = target;
+    const opened = format === 'social'
+      ? await popOutSocial({ message: messages[0], account, mailbox, initial: choices })
+      : await popOutFiles({ messages, account, mailbox, initial: { format, ...choices } });
+    if (opened) closeExport();
+  }, [popOutSocial, popOutFiles, closeExport]);
 
   const {
     isOpen: showSettings,
@@ -1717,8 +1726,9 @@ function App() {
         account={exportTarget?.account}
         mailbox={exportTarget?.mailbox}
         social={exportTarget?.social}
+        files={exportTarget?.files}
         onClose={closeExport}
-        onPopOut={isTauri ? handleSocialPopOut : undefined}
+        onPopOut={isTauri ? handleExportPopOut : undefined}
         onUpgrade={() => { closeExport(); openSettings({ tab: 'billing' }); }}
         onShowSamples={() => { closeExport(); openSamples(); }}
       />
