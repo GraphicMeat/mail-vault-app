@@ -161,7 +161,8 @@
 .hm .mv-feedback-quotes figcaption { grid-template-columns:28px 1fr; gap:0 10px; padding-top:12px; font-size:.74rem; line-height:1.45; }
 .hm .mv-feedback-quotes .mv-person-mark { width:28px; height:28px; font-size:.85rem; }
 .hm .mv-feedback-quotes figcaption strong { font-size:.88rem; }
-.hm .mv-feedback-quotes figcaption a { font-size:.74rem; }
+.hm .mv-feedback-quotes figcaption a { font-size:.74rem; color:var(--mv-accent); }
+.hm .mv-feedback-quotes figcaption a:hover { color:var(--mv-accent-hover,var(--mv-accent)); text-decoration:underline; }
 .hm .hm-after-list { margin:20px 0 0; }
 .hm-table td a { color:inherit; text-decoration:underline; text-decoration-color:color-mix(in oklab,currentColor 35%,transparent); text-underline-offset:2px; }
 .hm-stats { list-style:none; padding:0; margin:28px auto 0; max-width:900px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
