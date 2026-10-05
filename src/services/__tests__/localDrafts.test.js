@@ -289,6 +289,54 @@ describe('draftToInitialData', () => {
   });
 });
 
+// A draft is written as it would be sent: body, then the original
+// (replyWireHtml). Read back, the original goes beside the body again, never
+// into the editor, which keeps only what its schema knows.
+const { replyWireHtml } = await import('../../utils/replyQuote');
+describe('a reply or forward read back from the vault', () => {
+  const header = '<p><strong>Original Message</strong><br>Subject: Digest</p>';
+  const original = '<style>.x{color:red}</style><table><tr><td>Read <img src="cid:logo@example.test"></td></tr></table>';
+  const logo = { filename: 'logo.png', contentType: 'image/png', size: 4, contentId: '<logo@example.test>', content: 'AAAA' };
+  const draft = (html, attachments = []) => draftToInitialData({
+    accountId: 'acct-1', mailbox: 'Drafts', uid: 42, entry: { source: 'local_draft' },
+    eml: { subject: 'Fwd: Digest', to: [], cc: [], bcc: [], html, attachments },
+  });
+
+  it('puts a forward\'s original back beside the body', () => {
+    const data = draft(replyWireHtml('<p>FYI</p>', header + original, true), [logo]);
+    expect(data.body).toBe('<p>FYI</p>');
+    expect(data._quotedHtml).toBe(header + original);
+    expect(data._contextHtml).toBe(header + original);
+    expect(data._forward).toBe(true);
+    // The picture the original shows stays tied to its cid: reference.
+    expect(data.attachments).toEqual([expect.objectContaining({ filename: 'logo.png', cid: 'logo@example.test' })]);
+  });
+
+  it('puts a reply\'s quote back beside the body', () => {
+    const data = draft(replyWireHtml('<p>Thanks</p>', header + original));
+    expect(data.body).toBe('<p>Thanks</p>');
+    expect(data._quotedHtml).toBe(header + original);
+    expect(data._forward).toBe(false);
+  });
+
+  it('leaves a new message whole', () => {
+    const data = draft('<p>one</p><hr><p>two</p>');
+    expect(data.body).toBe('<p>one</p><hr><p>two</p>');
+    expect(data._quotedHtml).toBe('');
+  });
+
+  it('puts a scheduled forward\'s original back beside the body', () => {
+    const data = scheduledEmlToInitialData({
+      row: { id: 'row-1', accountId: 'acct-1', mailbox: 'Scheduled', uid: 7, envelope: '{}', localTime: '2026-10-01T09:00', tz: 'UTC' },
+      eml: { subject: 'Fwd: Digest', to: [], cc: [], bcc: [], html: replyWireHtml('<p>FYI</p>', header + original, true), attachments: [logo] },
+    });
+    expect(data.body).toBe('<p>FYI</p>');
+    expect(data._quotedHtml).toBe(header + original);
+    expect(data._forward).toBe(true);
+    expect(data.attachments).toEqual([expect.objectContaining({ filename: 'logo.png', cid: 'logo@example.test', isFromOriginal: true })]);
+  });
+});
+
 describe('scheduledEmlToInitialData', () => {
   // What buildOutgoingPayload froze: a picture pasted into the body went out
   // as a cid: part, a file the user attached as an ordinary attachment.

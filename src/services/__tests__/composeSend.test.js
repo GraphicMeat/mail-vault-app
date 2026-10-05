@@ -131,7 +131,7 @@ describe('buildOutgoingPayload', () => {
       snapshot: { ...snapshot, _quotedHtml: `${header}<p>Prior message</p>` }, account, settings: {},
     });
 
-    expect(built.outgoingPayload.html.endsWith(`<hr>${header}<blockquote><p>Prior message</p></blockquote>`)).toBe(true);
+    expect(built.outgoingPayload.html.endsWith(`<hr data-mailvault-quote="reply">${header}<blockquote><p>Prior message</p></blockquote>`)).toBe(true);
   });
 
   // A forward copies the original's attachment list, and the light fetch that

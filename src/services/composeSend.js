@@ -73,6 +73,7 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
       content: att.content,
       encoding: 'base64',
       contentType: att.contentType,
+      cid: att.cid,
     })),
     ...inline.attachments.map(att => ({
       filename: att.filename,
@@ -85,7 +86,7 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
   const quotedHtml = snapshot._quotedHtml || '';
   const composed = inlineComposeSpacing(inline.html);
   const { replyWireHtml } = await import('../utils/replyQuote');
-  const fullHtml = replyWireHtml(composed, quotedHtml);
+  const fullHtml = replyWireHtml(composed, quotedHtml, snapshot._forward);
   const fullText = quotedHtml
     ? `${htmlToText(snapshot.body)}\n\n-------- Original Message --------\n${htmlToText(quotedHtml)}`
     : htmlToText(snapshot.body);

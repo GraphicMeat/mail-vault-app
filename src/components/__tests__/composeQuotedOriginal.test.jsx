@@ -818,7 +818,7 @@ describe('the quoted original in a reply', () => {
 
     // The attribution sits above the blockquote, so a reader that folds the
     // quote still shows who wrote it.
-    expect(sent.html.startsWith('<hr><p><strong>Original Message</strong><br>From: Them &lt;them@example.test&gt;<br>Date: ')).toBe(true);
+    expect(sent.html.startsWith('<hr data-mailvault-quote="reply"><p><strong>Original Message</strong><br>From: Them &lt;them@example.test&gt;<br>Date: ')).toBe(true);
     expect(sent.html.endsWith(`<br>Subject: Quote request<br>To: me@example.test</p><blockquote>${original.html}</blockquote>`)).toBe(true);
   });
 });
@@ -945,5 +945,60 @@ describe('the original beside a reply', () => {
       _contextHtml: '<p>Original</p>', _showContext: true, _originalDark: true, _baseline: null,
     }} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
     expect((await pane()).getAttribute('data-dark')).toBe('true');
+  });
+});
+
+// A forward used to put the original into the editor, and TipTap keeps only
+// what its schema knows: tables, inline styles and <style> blocks were gone
+// before Send. The original now stays out of the editor, like a reply's, and
+// goes out as it arrived.
+describe('a forwarded HTML email', () => {
+  const newsletter = {
+    ...original,
+    subject: 'Weekly digest',
+    html: '<style>.cta{color:#c00}</style><table style="background:#f4f4f4"><tr><td class="cta">Read <img src="cid:logo@example.test"></td></tr></table>',
+    attachments: [{ filename: 'logo.png', contentType: 'image/png', size: 4, content: 'AAAA', contentId: '<logo@example.test>' }],
+  };
+
+  async function forward(message) {
+    render(<ComposeModal mode="forward" replyTo={message} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'friend@example.test' } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
+    return buildOutgoingMime.mock.calls[0][1];
+  }
+
+  it('keeps the original out of the editor and sends it as it arrived', async () => {
+    const sent = await forward(newsletter);
+    expect(screen.getByTestId('editor-stub').getAttribute('data-content')).not.toContain('<table');
+    expect(sent.html).toContain(newsletter.html);
+    expect(sent.html).toContain('Weekly digest');
+    // A forward is the message itself, not a quote a reader folds away.
+    expect(sent.html).not.toContain('<blockquote>');
+  });
+
+  // With the original out of the body, a hidden panel would leave a forward
+  // looking empty: it opens beside every forward.
+  it('shows the original beside a forward even with the panel hidden for replies', async () => {
+    settings.composeContextVisible = false;
+    render(<ComposeModal mode="forward" replyTo={newsletter} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    expect(await screen.findByTestId('compose-quoted')).not.toBeNull();
+  });
+
+  it('keeps an inline picture tied to its cid: reference', async () => {
+    const sent = await forward(newsletter);
+    expect(sent.attachments).toEqual([expect.objectContaining({ filename: 'logo.png', cid: 'logo@example.test' })]);
+  });
+
+  it('still sends the original as a forward once the window is restored', async () => {
+    render(<ComposeModal mode="forward" initialData={{
+      to: 'friend@example.test', subject: 'Fwd: Weekly digest', body: '<p>FYI</p>',
+      _quotedHtml: '<p><strong>Original Message</strong></p>' + newsletter.html, _forward: true, _baseline: null,
+    }} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    fireEvent.click(await screen.findByTestId('compose-send'));
+    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
+    const sent = buildOutgoingMime.mock.calls[0][1];
+    expect(sent.html).toContain(newsletter.html);
+    expect(sent.html).not.toContain('<blockquote>');
   });
 });

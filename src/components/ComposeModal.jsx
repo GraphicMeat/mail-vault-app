@@ -210,6 +210,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [quotedHtml, setQuotedHtml] = useState('');
+  // A restored window keeps what it was: its snapshot says so.
+  const isForward = mode === 'forward' || !!initialData?._forward;
   const [contextHtml, setContextHtml] = useState('');
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
   // Context width as a ratio of the layout; null = 400px. A draft's own wins.
@@ -506,17 +508,16 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     const { quotedHeaderHtml, fullQuotedBodyHtml, quotedHtml: replyQuotedHtml, contextHtml: fullContextHtml } =
       buildQuoteBlocks(replyTo, t('compose.originalMessage'));
 
-    // Replies keep the original behind the collapsible toggle. A forward puts
-    // it inline in the body, so storing it here as well would render the
-    // toggle AND append the original a second time at send.
-    if (mode !== 'forward') {
-      setQuotedHtml(replyQuotedHtml);
-    }
-    // A forward already carries its original in the outgoing body, but people
-    // still need the complete source/thread while editing. Keep that reading
-    // panel independent so it never duplicates the forwarded wire content.
+    // The original never goes through the editor: TipTap keeps only what its
+    // schema knows, so a forwarded table, inline style or <style> block was
+    // gone before Send. It rides beside the body and is appended at send
+    // (replyWireHtml). A forward carries the whole original, never a selection.
+    // ponytail: the forwarded original is not editable; an editor that keeps
+    // arbitrary HTML is the upgrade if people ask to trim it.
+    setQuotedHtml(mode === 'forward' ? quotedHeaderHtml + fullQuotedBodyHtml : replyQuotedHtml);
     setContextHtml(fullContextHtml);
-    setShowContext(composeContextVisible);
+    // The panel is the only place a forward's original shows while editing.
+    setShowContext(mode === 'forward' || composeContextVisible);
 
     const replyBody = templateBody == null
       ? signatureHtml
@@ -547,7 +548,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         cc: '',
         bcc: '',
         subject: originalSubject.startsWith('Fwd:') ? originalSubject : t('compose.fwd', { originalSubject }),
-        body: signatureHtml + quotedHeaderHtml + fullQuotedBodyHtml,
+        body: signatureHtml,
         inReplyTo: '',
         references: ''
       });
@@ -559,15 +560,21 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         // Located the way the body resolver found the original: a row in a
         // single-account folder carries no `_accountId` or `_mailbox`.
         const loc = resolveEmailLocation(replyTo, useMailStore.getState());
-        const forwarded = replyTo.attachments.map((att, i) => ({
-          filename: att.filename,
-          contentType: att.contentType,
-          size: att.size,
-          content: att.content,
-          isFromOriginal: true,
-          ...(!att.content && loc && replyTo.uid != null
-            ? { _source: { ...loc, uid: replyTo.uid, attachmentIndex: att._originalIndex ?? i } } : {}),
-        }));
+        // A picture the original's HTML shows by cid: keeps that Content-ID,
+        // or it arrives as a broken image beside a loose attachment.
+        const forwarded = replyTo.attachments.map((att, i) => {
+          const cid = att.contentId?.replace(/^<|>$/g, '');
+          return {
+            filename: att.filename,
+            contentType: att.contentType,
+            size: att.size,
+            content: att.content,
+            isFromOriginal: true,
+            ...(cid && replyTo.html?.includes(`cid:${cid}`) && { cid }),
+            ...(!att.content && loc && replyTo.uid != null
+              ? { _source: { ...loc, uid: replyTo.uid, attachmentIndex: att._originalIndex ?? i } } : {}),
+          };
+        });
         setAttachments(forwarded);
         withAttachmentBytes(forwarded).then(full => {
           if (full !== forwarded) setAttachments(prev => prev.map(att => full[forwarded.indexOf(att)] || att));
@@ -907,6 +914,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       references: formData.references,
       attachments: [...attachments],
       _quotedHtml: quotedHtml,
+      _forward: isForward,
       _contextHtml: contextHtml,
       _showContext: showContext,
       _contextSplit: contextSplit,
@@ -930,7 +938,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         _editScheduledRow: initialData._editScheduledRow,
       }),
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft]);
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft, isForward]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
@@ -975,6 +983,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         content: att.content,
         encoding: 'base64',
         contentType: att.contentType,
+        cid: att.cid,
         _source: att._source,
       }));
       const signature = JSON.stringify([
@@ -996,7 +1005,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
       // Inline pictures keep their data: URIs here — a draft is read back by
       // this app, and cid: parts would only pay off on the wire.
-      const html = replyWireHtml(formData.body, quotedHtml);
+      const html = replyWireHtml(formData.body, quotedHtml, isForward);
       const text = htmlToText(formData.body);
       const payload = {
         to: formData.to,
@@ -1045,7 +1054,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       });
     }, 300);
     return () => clearTimeout(timer);
-  }, [formData, attachments, quotedHtml, hasUserContent, sending, selectedAccountId, composeFrom, publishSnapshot]);
+  }, [formData, attachments, quotedHtml, isForward, hasUserContent, sending, selectedAccountId, composeFrom, publishSnapshot]);
 
   /** Drop the vault draft this window owns — the message is being thrown away. */
   const discardDraft = useCallback(() => {

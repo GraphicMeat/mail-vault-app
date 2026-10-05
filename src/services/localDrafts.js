@@ -19,6 +19,7 @@ import { _resolveMailboxPath, sameMessage, vaultKey } from '../stores/slices/uni
 import { addArchivedGroupUid } from '../stores/slices/messageListSlice';
 import { send } from './transport';
 import { getRealAttachments, replaceCidUrls } from './attachmentUtils';
+import { splitWireHtml } from '../utils/quoteWire';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
 
@@ -152,21 +153,42 @@ const _addressList = (list) => (list || []).map(a => a?.address).filter(Boolean)
 
 const _escapeHtml = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+// A reply's or forward's original goes back beside the body, never into the
+// editor (it would drop tables and styles), and a picture it shows by cid:
+// keeps that Content-ID so it still arrives in place.
+function _withOriginal(html, attachments) {
+  const { body, quotedHtml, forward } = splitWireHtml(html);
+  const cidIn = att => {
+    const cid = att.contentId?.replace(/^<|>$/g, '');
+    return cid && quotedHtml.includes(`cid:${cid}`) ? { cid } : {};
+  };
+  return {
+    body,
+    cidIn,
+    original: {
+      _quotedHtml: quotedHtml,
+      _forward: forward,
+      ...(quotedHtml && { _contextHtml: quotedHtml }),
+      ...(forward && { _showContext: true }),
+    },
+  };
+}
+
 /**
  * Compose `initialData` for a draft read back out of the vault.
  *
  * `entry` is the raw local-index row, `eml` the parsed .eml — the two halves of
  * one draft, because neither alone holds all of it.
  *
- * A reply's quote was folded into the body when the draft was written and
- * comes back as part of it. Nothing is lost; it is simply no longer behind the
- * collapsible toggle, and the send path will not append it a second time.
+ * A reply's quote or a forward's original was written after the body
+ * (replyWireHtml) and is split off again here (_withOriginal).
  */
 export function draftToInitialData({ accountId, mailbox, uid, entry, eml }) {
   // Every draft this app writes is multipart with an HTML part, so the text
   // branch is a floor, not a path: it exists so a draft whose HTML part is
   // somehow unreadable reopens with the user's words in it rather than blank.
-  const body = eml.html || (eml.text ? _escapeHtml(eml.text).replace(/\r?\n/g, '<br>') : '');
+  const { body: html, cidIn, original } = _withOriginal(eml.html, eml.attachments);
+  const body = html || (eml.text ? _escapeHtml(eml.text).replace(/\r?\n/g, '<br>') : '');
   return {
     to: _addressList(eml.to),
     cc: _addressList(eml.cc),
@@ -177,13 +199,16 @@ export function draftToInitialData({ accountId, mailbox, uid, entry, eml }) {
     references: entry?.references || '',
     // ponytail: inline pictures are data: URIs inside `body` for a local draft
     // (saveLocalDraft never converts them to cid: parts), so everything the
-    // parse calls an attachment here is a file the user actually attached.
+    // parse calls an attachment here is a file the user attached, or one a
+    // forward carries (with its cid when the original shows it).
     attachments: (eml.attachments || []).map(att => ({
       filename: att.filename,
       contentType: att.contentType,
       size: att.size,
       content: att.content,
+      ...cidIn(att),
     })),
+    ...original,
     _accountId: accountId,
     _fromAddress: entry?.from?.address || eml.from?.address || '',
     // What makes this the same draft: the window adopts the uid and mailbox it
@@ -224,7 +249,8 @@ export function scheduledEmlToInitialData({ row, eml }) {
   // The frozen message went through buildOutgoingPayload, which turned every
   // picture in the body into a cid: part. In the editor they are data: URIs
   // again, and they are not files the user attached.
-  const html = eml.html || '';
+  // Only the body's: the original keeps its cid: parts, which go out again.
+  const { body: html, cidIn, original } = _withOriginal(eml.html || '', eml.attachments);
   const body = html
     ? replaceCidUrls(html, eml.attachments)
     : (eml.text ? _escapeHtml(eml.text).replace(/\r?\n/g, '<br>') : '');
@@ -247,7 +273,9 @@ export function scheduledEmlToInitialData({ row, eml }) {
       size: att.size,
       content: att.content,
       isFromOriginal: true,
+      ...cidIn(att),
     })),
+    ...original,
     _baseline: { to, subject, body },
     _accountId: row.accountId,
     _fromAddress: envelope.from || eml.from?.address || '',

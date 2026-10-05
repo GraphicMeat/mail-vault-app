@@ -191,13 +191,15 @@ describe('the signature follows the address a message leaves from', () => {
     expect(await bodyText()).not.toContain('Best, Me');
   });
 
-  it('puts the swapped signature above the original in a forward', async () => {
+  // The original rides outside the editor (composeQuotedOriginal.test.jsx),
+  // so the body a forward's signature swaps in holds only the signature.
+  it('swaps the signature in a forward, with the original kept out of the body', async () => {
     render(<ComposeModal mode="forward" replyTo={forward} {...baseProps} />);
     await waitFor(async () => expect(await bodyText()).toContain('Best, Me'));
     await pickFrom('desk@example.test');
     await waitFor(async () => expect(await bodyText()).toContain('Desk team'));
     const text = await bodyText();
     expect(text).not.toContain('Best, Me');
-    expect(text.indexOf('Desk team')).toBeLessThan(text.indexOf('Original words'));
+    expect(text).not.toContain('Original words');
   });
 });

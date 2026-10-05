@@ -6,6 +6,7 @@
 - **Recent searches narrow as you type, and fold away.** Under the search box, the recent searches now show only the ones holding the text you are typing; when none do, only the suggestions are listed. Click the Recent searches heading to fold the list, and again to bring it back; the app remembers which way you left it.
 
 ### Fixed
+- **A forwarded HTML email arrives looking like the original.** Forward used to put the original into the editor, which dropped its tables, colours and styles, so a newsletter or receipt went out as plain stacked paragraphs, and its inline pictures arrived broken beside loose attachments. The original now stays out of the editor, opens in the panel beside it, and goes out exactly as it arrived, with its inline pictures in place. You write your note above it; the forwarded message itself is no longer editable. A reply or forward reopened from Drafts, or a scheduled one opened for editing, keeps its original beside your text the same way, instead of pouring it into the editor where its formatting was lost.
 - **Text on Linux keeps its word spaces.** With the default Instrument Sans font, the Linux app (Snap included) drew small text with spaces missing and letters pulled apart, so "Its contents" read "Itscontents" and "message" read "me ssage", at 12 and 14 pixels, the size of most of the app's text. The app now bundles the font's four regular weights instead of its variable version, which Linux's web engine laid out wrongly. The few labels set between semibold and bold now draw in bold.
 
 ## [2.18.1] - 2026-10-04
