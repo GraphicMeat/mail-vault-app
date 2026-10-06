@@ -507,15 +507,41 @@ if [ "$NOTARIZE" = true ]; then
     echo "   This may take several minutes..."
 
     if [ "$NOTARIZE_METHOD" = "direct" ]; then
-        xcrun notarytool submit "$SIGNED_DMG" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
+        NOTARY_AUTH=(--apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID")
     else
-        xcrun notarytool submit "$SIGNED_DMG" \
-            --keychain-profile "$NOTARYTOOL_PROFILE" \
-            --wait
+        NOTARY_AUTH=(--keychain-profile "$NOTARYTOOL_PROFILE")
+    fi
+
+    # Submit once, then poll the submission in fresh processes. `submit --wait`
+    # dies on its first network error: twice a slow review outlasted the CI
+    # runner's route to Apple and threw the build away 27 min in.
+    SUBMIT_JSON=$(xcrun notarytool submit "$SIGNED_DMG" "${NOTARY_AUTH[@]}" --output-format json)
+    SUBMISSION_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$SUBMIT_JSON")
+    echo "   Submission ID: $SUBMISSION_ID"
+
+    NOTARIZE_TIMEOUT_MIN="${NOTARIZE_TIMEOUT_MIN:-45}"
+    DEADLINE=$(( $(date +%s) + NOTARIZE_TIMEOUT_MIN * 60 ))
+    NOTARY_ERR=$(mktemp)
+    STATUS="In Progress"
+    while [ "$STATUS" = "In Progress" ]; do
+        if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+            echo -e "${RED}❌ Notarization still In Progress after ${NOTARIZE_TIMEOUT_MIN} min (submission $SUBMISSION_ID)${NC}"
+            exit 1
+        fi
+        sleep 30
+        if INFO=$(xcrun notarytool info "$SUBMISSION_ID" "${NOTARY_AUTH[@]}" --output-format json 2>"$NOTARY_ERR"); then
+            STATUS=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$INFO")
+            echo "   $(date -u +%H:%M:%S) status: $STATUS"
+        else
+            echo "   $(date -u +%H:%M:%S) status check failed, retrying: $(tail -1 "$NOTARY_ERR")"
+        fi
+    done
+    rm -f "$NOTARY_ERR"
+
+    if [ "$STATUS" != "Accepted" ]; then
+        echo -e "${RED}❌ Notarization ended with status: $STATUS${NC}"
+        xcrun notarytool log "$SUBMISSION_ID" "${NOTARY_AUTH[@]}" || true
+        exit 1
     fi
 
     # Staple the notarization ticket
