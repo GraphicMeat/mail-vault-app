@@ -60,6 +60,13 @@ impl ImapConfig {
         self.auth_type.as_deref() == Some("oauth2")
     }
 
+    /// An Outlook.com account signed in with Microsoft: its token carries
+    /// Graph scopes only, so mail goes through Microsoft Graph, never IMAP or
+    /// SMTP (the app's `oauth2Transport === 'graph'`).
+    pub fn uses_graph(&self) -> bool {
+        self.oauth2_transport.as_deref() == Some("graph")
+    }
+
     /// The outgoing identity: the send-as override when set, else the login
     /// address. Every From/Message-ID consumer goes through here so no caller
     /// can accidentally reach for the login address instead.

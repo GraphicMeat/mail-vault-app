@@ -8,6 +8,7 @@ use serde::Deserialize;
 use std::time::Duration;
 use tracing::{info, warn};
 
+use crate::graph::{GraphClient, SendMailError};
 use crate::imap::ImapConfig;
 use crate::net_activity::{NetEvent, Pending, Protocol};
 
@@ -64,6 +65,9 @@ fn safe_message_id(id: &str) -> bool {
 pub struct SendResult {
     pub message_id: String,
     pub raw_rfc2822: Vec<u8>,
+    /// The server filed its own Sent copy (Microsoft Graph does): there is
+    /// nothing to APPEND, and no IMAP to APPEND over.
+    pub server_saved_sent: bool,
 }
 
 /// Built but not-yet-sent MIME — lets callers stage the raw bytes in Drafts
@@ -456,6 +460,150 @@ fn friendly_smtp_error(host: &str, port: u16, from_addr: &str, err_str: &str) ->
     }
 }
 
+/// What the Graph send says when only a new sign-in can help. Also the marker
+/// `is_terminal_send_error` reads, so the two never drift.
+const GRAPH_SIGN_IN_AGAIN: &str = "Sign in to this account again under Settings, Accounts, then try again.";
+
+/// The size refusal's marker, likewise.
+const GRAPH_SIZE_LIMIT: &str = "the limit is 4 MB";
+
+/// Map a Graph `sendMail` failure to what the user reads. Never the SMTP
+/// "Authentication failed for smtp.office365.com" wording: no SMTP server was
+/// involved. `from_addr` is the identity sent as, `login` the account.
+fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) -> String {
+    match err {
+        SendMailError::TooLarge { encoded_bytes } => format!(
+            "This message is too large to send through Microsoft: {:.1} MB once encoded, and {}. Remove some attachments and try again.",
+            *encoded_bytes as f64 / (1024.0 * 1024.0),
+            GRAPH_SIZE_LIMIT
+        ),
+        // "timed out" on purpose: like an SMTP timeout, it asks the
+        // connectivity gate whether the network is down.
+        SendMailError::Transport { timed_out: true, .. } => {
+            "Microsoft did not answer the send in time (timed out). Check Sent before trying again: the message may have gone out."
+                .to_string()
+        }
+        SendMailError::Transport { detail, .. } => format!("Could not reach Microsoft to send the message: {}", detail),
+        SendMailError::Refused { status, code, message, retry_after } => {
+            let said = format!("{} {}", code.as_deref().unwrap_or(""), message.as_deref().unwrap_or("")).to_lowercase();
+            // Ordered before the 403 branch: Graph refuses a sender with 403 too.
+            if said.contains("sendasdenied") {
+                format!(
+                    "Microsoft refused to send as {}. The address must be one this account is allowed to send from.",
+                    from_addr
+                )
+            } else if matches!(status, 401 | 403) {
+                format!("Microsoft did not accept the sign-in for {} when sending. {}", login, GRAPH_SIGN_IN_AGAIN)
+            } else if *status == 413 {
+                format!("This message is too large to send through Microsoft: {}. Remove some attachments and try again.", GRAPH_SIZE_LIMIT)
+            } else if *status == 429 {
+                match retry_after {
+                    Some(secs) => format!(
+                        "Microsoft is limiting how much this account can send right now (HTTP 429). Try again in {} seconds.",
+                        secs
+                    ),
+                    None => "Microsoft is limiting how much this account can send right now (HTTP 429). Try again in a few minutes."
+                        .to_string(),
+                }
+            } else if *status >= 500 {
+                format!("Microsoft could not send the message right now (HTTP {}). Try again in a moment.", status)
+            } else {
+                let detail = [code.as_deref(), message.as_deref()].into_iter().flatten().collect::<Vec<_>>().join(": ");
+                if detail.is_empty() {
+                    format!("Microsoft did not accept the message (HTTP {}).", status)
+                } else {
+                    format!("Microsoft did not accept the message (HTTP {}: {}).", status, detail)
+                }
+            }
+        }
+    }
+}
+
+/// A send failure no retry can fix: a login the server refused, a sender it
+/// will not send as, a message over Graph's size limit. Everything else (a
+/// timeout, a throttle, a server fault) is worth another try. Scheduled
+/// Send's retry ladder reads this.
+pub fn is_terminal_send_error(msg: &str) -> bool {
+    msg.contains("Authentication failed for")
+        || msg.contains("refused to send as")
+        || msg.contains(GRAPH_SIGN_IN_AGAIN)
+        || msg.contains(GRAPH_SIZE_LIMIT)
+}
+
+/// `raw` with a `Bcc:` header naming `bcc`, unless it already has one (then it
+/// is the message's own and is left alone) or there is no one to name.
+///
+/// Graph has no envelope: it reads recipients off the headers, so a Bcc kept
+/// out of the bytes (lettre's default, and what a frozen scheduled message
+/// holds) is a recipient who gets nothing. The header is lettre's own
+/// encoding (RFC 2047 names, folded lines), placed at the end of the header
+/// block.
+fn with_bcc_header(raw: Vec<u8>, bcc: &[Mailbox]) -> Vec<u8> {
+    if bcc.is_empty() {
+        return raw;
+    }
+    let (block_end, crlf) = match raw.windows(4).position(|w| w == b"\r\n\r\n") {
+        Some(i) => (Some(i + 2), true),
+        None => match raw.windows(2).position(|w| w == b"\n\n") {
+            Some(i) => (Some(i + 1), false),
+            None => (None, true),
+        },
+    };
+    let block = &raw[..block_end.unwrap_or(0)];
+    let has_bcc = block
+        .split(|b| *b == b'\n')
+        .any(|line| line.len() >= 4 && line[..4].eq_ignore_ascii_case(b"bcc:"));
+    if has_bcc {
+        return raw;
+    }
+    let mut headers = lettre::message::header::Headers::new();
+    headers.set(lettre::message::header::Bcc::from(bcc.iter().cloned().collect::<lettre::message::Mailboxes>()));
+    let mut line = headers.to_string();
+    if !crlf {
+        line = line.replace("\r\n", "\n");
+    }
+    let at = block_end.unwrap_or(0);
+    let mut out = Vec::with_capacity(raw.len() + line.len());
+    out.extend_from_slice(&raw[..at]);
+    out.extend_from_slice(line.as_bytes());
+    out.extend_from_slice(&raw[at..]);
+    out
+}
+
+/// The Message-ID header's value as written (brackets kept), if any.
+fn message_id_of(raw: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    text.lines()
+        .take_while(|l| !l.is_empty())
+        .find(|l| l.to_ascii_lowercase().starts_with("message-id:"))
+        .map(|l| l.splitn(2, ':').nth(1).unwrap_or("").trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+/// Send through Microsoft Graph instead of SMTP. An Outlook.com account signed
+/// in with Microsoft holds a Graph token that SMTP refuses (discussion #22),
+/// so `send_built` and `send_raw` both branch here for it, before anything
+/// asks for an SMTP host it does not need.
+async fn send_via_graph(account: &ImapConfig, raw: Vec<u8>, bcc: &[Mailbox]) -> Result<SendResult, String> {
+    let raw = with_bcc_header(raw, bcc);
+    let Some(token) = account.access_token.as_deref().filter(|t| !t.is_empty()) else {
+        return Err(format!("There is no Microsoft sign-in for {} to send with. {}", account.email, GRAPH_SIGN_IN_AGAIN));
+    };
+    // The SMTP path's budget: a minute, plus a second per 50 KB, capped.
+    let timeout = Duration::from_secs(60 + (raw.len() / 50_000) as u64).min(Duration::from_secs(600));
+    info!("[smtp] Sending {} bytes via Microsoft Graph (sendMail)", raw.len());
+
+    let client = GraphClient::for_purpose(token, "send").for_account(&account.email);
+    client
+        .send_mime(&raw, timeout)
+        .await
+        .map_err(|e| friendly_graph_send_error(&account.email, account.from_address(), &e))?;
+
+    let message_id = message_id_of(&raw).unwrap_or_default();
+    info!("Email sent via Microsoft Graph: {}", message_id);
+    Ok(SendResult { message_id, raw_rfc2822: raw, server_saved_sent: true })
+}
+
 /// Build the lettre async SMTP transport (TLS mode by flag/port + credentials).
 /// Shared by send and the connectivity test so the two never drift.
 fn build_transport(
@@ -578,7 +726,8 @@ fn test_outcome<E: std::fmt::Display>(
     }
 }
 
-/// Send a pre-built MIME message via SMTP. Returns the server response line as
+/// Send a pre-built MIME message via SMTP, or via Microsoft Graph for a Graph
+/// account (`send_via_graph`). Returns the server response line as
 /// `message_id` (existing behavior preserved) and echoes the raw bytes so the
 /// caller can APPEND to Sent post-success.
 pub async fn send_built(
@@ -586,6 +735,12 @@ pub async fn send_built(
     email: &OutgoingEmail,
     built: BuiltMime,
 ) -> Result<SendResult, String> {
+    if account.uses_graph() {
+        // The Bcc `build_mime` put on the envelope, which lettre left out of
+        // the bytes. A list that does not parse it dropped, and so does this.
+        let bcc = email.bcc.as_deref().and_then(|b| parse_address_list(b).ok()).unwrap_or_default();
+        return send_via_graph(account, built.raw_rfc2822, &bcc).await;
+    }
     let smtp_host = account
         .smtp_host
         .as_deref()
@@ -623,7 +778,7 @@ pub async fn send_built(
         .join("");
 
     info!("Email sent via SMTP: {}", message_id);
-    Ok(SendResult { message_id, raw_rfc2822 })
+    Ok(SendResult { message_id, raw_rfc2822, server_saved_sent: false })
 }
 
 /// Convenience: build + send in one call. Preserved for callers that don't
@@ -661,8 +816,35 @@ pub struct FrozenEnvelope {
 /// and a `Message` object does not survive a restart. `send_raw` goes
 /// straight to `AsyncTransport::send_raw(envelope, bytes)` instead, so the
 /// envelope has to travel with the frozen bytes (`FrozenEnvelope`, stored
-/// alongside them) rather than being read back off a `Message`.
+/// alongside them) rather than being read back off a `Message`. A Graph
+/// account sends the same bytes through `send_via_graph`, the envelope's Bcc
+/// written into them.
 pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc2822: Vec<u8>) -> Result<SendResult, String> {
+    let from: lettre::Address = envelope
+        .from
+        .parse()
+        .map_err(|e| format!("Invalid from address '{}': {}", envelope.from, e))?;
+    let parse_group = |group: &str| -> Result<Vec<Mailbox>, String> {
+        if group.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        parse_address_list(group).map_err(|e| format!("Invalid recipient address: {}", e))
+    };
+    let bcc = parse_group(&envelope.bcc)?;
+    let mut to: Vec<lettre::Address> = Vec::new();
+    for group in [&envelope.to, &envelope.cc] {
+        to.extend(parse_group(group)?.into_iter().map(|mb| mb.email));
+    }
+    to.extend(bcc.iter().map(|mb| mb.email.clone()));
+    if to.is_empty() {
+        return Err("Invalid to address: no recipients".to_string());
+    }
+    if account.uses_graph() {
+        // The frozen bytes were built without the Bcc header; it lives in the
+        // envelope, and Graph only reads headers.
+        return send_via_graph(account, raw_rfc2822, &bcc).await;
+    }
+
     let smtp_host = account
         .smtp_host
         .as_deref()
@@ -671,22 +853,6 @@ pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc28
     let io_timeout = Duration::from_secs(60 + (raw_rfc2822.len() / 50_000) as u64).min(Duration::from_secs(600));
     let transport = build_transport(account, io_timeout)?;
 
-    let from: lettre::Address = envelope
-        .from
-        .parse()
-        .map_err(|e| format!("Invalid from address '{}': {}", envelope.from, e))?;
-    let mut to: Vec<lettre::Address> = Vec::new();
-    for group in [&envelope.to, &envelope.cc, &envelope.bcc] {
-        if group.trim().is_empty() {
-            continue;
-        }
-        for mb in parse_address_list(group).map_err(|e| format!("Invalid recipient address: {}", e))? {
-            to.push(mb.email);
-        }
-    }
-    if to.is_empty() {
-        return Err("Invalid to address: no recipients".to_string());
-    }
     let lettre_envelope =
         lettre::address::Envelope::new(Some(from), to).map_err(|e| format!("Failed to build envelope: {}", e))?;
 
@@ -707,7 +873,7 @@ pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc28
 
     let message_id = response.message().collect::<Vec<_>>().join("");
     info!("Frozen email sent via SMTP: {}", message_id);
-    Ok(SendResult { message_id, raw_rfc2822 })
+    Ok(SendResult { message_id, raw_rfc2822, server_saved_sent: false })
 }
 
 #[cfg(test)]
@@ -1059,6 +1225,98 @@ mod tests {
         }
     }
 
+    // ── Microsoft Graph send ─────────────────────────────────────────────
+
+    fn refused(status: u16, code: Option<&str>, retry_after: Option<u64>) -> SendMailError {
+        SendMailError::Refused { status, code: code.map(String::from), message: Some("refused".into()), retry_after }
+    }
+
+    /// Each Graph refusal in the user's terms, and whether Scheduled Send may
+    /// try it again: sign-in, sender and size end the row, throttling, server
+    /// faults and a timeout do not. None of it is the SMTP wording.
+    #[test]
+    fn graph_send_errors_are_worded_and_classified() {
+        let word = |e: &SendMailError| friendly_graph_send_error("me@outlook.com", "alias@outlook.com", e);
+        let cases = [
+            (refused(401, Some("InvalidAuthenticationToken"), None), "Sign in to this account again", true),
+            (refused(403, Some("ErrorAccessDenied"), None), "Sign in to this account again", true),
+            (refused(403, Some("ErrorSendAsDenied"), None), "refused to send as alias@outlook.com", true),
+            (refused(400, Some("ErrorSendAsDenied"), None), "refused to send as alias@outlook.com", true),
+            (refused(413, None, None), "the limit is 4 MB", true),
+            (SendMailError::TooLarge { encoded_bytes: 5 * 1024 * 1024 }, "5.0 MB once encoded, and the limit is 4 MB", true),
+            (refused(429, Some("ApplicationThrottled"), Some(7)), "Try again in 7 seconds", false),
+            (refused(429, None, None), "HTTP 429", false),
+            (refused(500, Some("InternalServerError"), None), "HTTP 500", false),
+            (refused(503, None, None), "HTTP 503", false),
+            (refused(400, Some("ErrorInvalidRecipients"), None), "HTTP 400: ErrorInvalidRecipients: refused", false),
+            (SendMailError::Transport { timed_out: true, detail: "x".into() }, "timed out", false),
+            (SendMailError::Transport { timed_out: false, detail: "tcp connect error".into() }, "tcp connect error", false),
+        ];
+        for (err, want, terminal) in cases {
+            let msg = word(&err);
+            assert!(msg.contains(want), "{err:?} -> {msg}");
+            assert_eq!(is_terminal_send_error(&msg), terminal, "{err:?} -> {msg}");
+            assert!(!msg.contains("Authentication failed for"), "{msg}");
+            assert!(!msg.contains('\u{2014}'), "no em dash in a new message: {msg}");
+        }
+        // The SMTP wordings keep their classification.
+        assert!(is_terminal_send_error(&friendly_smtp_error("smtp.x.com", 587, "me@x.com", "535 Authentication failed")));
+        assert!(is_terminal_send_error(&friendly_smtp_error("smtp.x.com", 587, "me@x.com", "SendAsDenied")));
+        assert!(!is_terminal_send_error(&friendly_smtp_error("smtp.x.com", 587, "me@x.com", "operation timed out")));
+    }
+
+    /// A sign-in or throttle message must not read as the network being down
+    /// (that would park the row as offline instead of classifying it).
+    #[test]
+    fn graph_refusal_wording_does_not_look_like_a_network_outage() {
+        for err in [refused(401, None, None), refused(403, Some("ErrorSendAsDenied"), None), refused(429, None, Some(3)), refused(500, None, None)] {
+            let msg = friendly_graph_send_error("me@outlook.com", "me@outlook.com", &err);
+            assert!(!crate::net::looks_like_network_down(&msg), "{msg}");
+        }
+    }
+
+    fn mailbox(s: &str) -> Mailbox {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn bcc_header_is_added_at_the_end_of_the_header_block() {
+        let raw = b"From: a@x.com\r\nTo: b@x.com\r\nSubject: s\r\n\r\nbody\r\n".to_vec();
+        let out = String::from_utf8(with_bcc_header(raw, &[mailbox("c@x.com"), mailbox("D <d@x.com>")])).unwrap();
+        assert_eq!(out, "From: a@x.com\r\nTo: b@x.com\r\nSubject: s\r\nBcc: c@x.com, D <d@x.com>\r\n\r\nbody\r\n");
+    }
+
+    #[test]
+    fn bcc_header_follows_a_bare_lf_message() {
+        let raw = b"From: a@x.com\nTo: b@x.com\n\nbody\n".to_vec();
+        let out = String::from_utf8(with_bcc_header(raw, &[mailbox("c@x.com")])).unwrap();
+        assert_eq!(out, "From: a@x.com\nTo: b@x.com\nBcc: c@x.com\n\nbody\n");
+    }
+
+    #[test]
+    fn bcc_header_is_never_doubled_and_never_empty() {
+        let has = b"From: a@x.com\r\nBCC: kept@x.com\r\n\r\nbody".to_vec();
+        assert_eq!(with_bcc_header(has.clone(), &[mailbox("c@x.com")]), has, "an existing Bcc (any case) is the message's own");
+        let none = b"From: a@x.com\r\n\r\nbody".to_vec();
+        assert_eq!(with_bcc_header(none.clone(), &[]), none, "no Bcc recipients, no header");
+        // A "bcc:" inside the body is not a header.
+        let body_only = b"From: a@x.com\r\n\r\nbcc: not-a-header@x.com".to_vec();
+        let out = String::from_utf8(with_bcc_header(body_only, &[mailbox("c@x.com")])).unwrap();
+        assert!(out.starts_with("From: a@x.com\r\nBcc: c@x.com\r\n\r\n"), "{out}");
+    }
+
+    /// The SMTP path is untouched by the Graph branch: a non-Graph account
+    /// without an SMTP host still fails on that, not by going to Graph.
+    #[tokio::test]
+    async fn a_non_graph_account_never_takes_the_graph_path() {
+        let mut cfg = account("me@x.com", None);
+        cfg.smtp_host = None;
+        let built = build_mime(&cfg, &outgoing()).unwrap();
+        let err = send_built(&cfg, &outgoing(), built).await.err().expect("no SMTP host");
+        assert_eq!(err, "SMTP host not configured");
+        assert!(!cfg.uses_graph());
+    }
+
     // ── inline images (cid:) ─────────────────────────────────────────────
 
     fn attachment(filename: &str, content_type: &str, cid: Option<&str>) -> OutgoingAttachment {
@@ -1282,6 +1540,34 @@ mod tests {
             assert!(raw.contains("Message-ID: <staged.7@mock.test>\r\n"), "{raw}");
             // And the bytes handed back for the Sent APPEND are those same bytes.
             assert_eq!(result.raw_rfc2822, sent[0]);
+        }
+
+        /// SMTP carries Bcc on the envelope only. The Graph path puts a Bcc
+        /// header into the MIME (Graph has no envelope); none of that may leak
+        /// into what an SMTP server is handed, or every recipient sees it.
+        #[tokio::test]
+        async fn the_smtp_path_keeps_bcc_off_the_message_and_on_the_envelope() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new());
+            let cfg = config_for(&server);
+            let mut email = outgoing();
+            email.to = "partner@example.com".to_string();
+            email.bcc = Some("Hidden Person <hidden@example.com>".to_string());
+
+            let built = build_mime(&cfg, &email).expect("build_mime");
+            let result = send_built(&cfg, &email, built).await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+            result.expect("send against the mock SMTP server");
+
+            let sent = server.sent_messages();
+            assert_eq!(sent.len(), 1);
+            let raw = String::from_utf8_lossy(&sent[0]).to_string();
+            let headers = raw.split("\r\n\r\n").next().unwrap_or("").to_lowercase();
+            assert!(!headers.contains("\nbcc:") && !headers.starts_with("bcc:"), "{raw}");
+            assert!(!raw.contains("hidden@example.com"), "{raw}");
+            let log = server.smtp_commands();
+            assert!(log.iter().any(|l| l.starts_with("RCPT TO:<hidden@example.com>")), "{log:?}");
         }
 
         #[tokio::test]

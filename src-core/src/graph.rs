@@ -480,6 +480,37 @@ pub fn assign_storage_keys(folders: &mut [GraphMailFolder]) {
     }
 }
 
+/// Graph refuses a request body over 4 MB. A `sendMail` MIME body goes
+/// base64-encoded, so this caps the encoded bytes (about 3 MB of message).
+pub const SEND_MAIL_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+
+/// Why `GraphClient::send_mime` did not send. The words the user reads are
+/// `smtp`'s to choose: this says only what happened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SendMailError {
+    /// Over `SEND_MAIL_LIMIT_BYTES` once encoded: refused before any request.
+    TooLarge { encoded_bytes: usize },
+    /// The request got no answer (connect, TLS, timeout). `detail` is the
+    /// error with its causes, the URL left out.
+    Transport { timed_out: bool, detail: String },
+    /// Graph answered, and not with a 2xx. `code` and `message` are the error
+    /// body's `error.code` / `error.message` when it had them.
+    Refused { status: u16, code: Option<String>, message: Option<String>, retry_after: Option<u64> },
+}
+
+/// A reqwest error and its causes on one line, the URL left out.
+fn error_chain(e: reqwest::Error) -> String {
+    let e = e.without_url();
+    let mut text = e.to_string();
+    let mut source = std::error::Error::source(&e);
+    while let Some(s) = source {
+        text.push_str(": ");
+        text.push_str(&s.to_string());
+        source = s.source();
+    }
+    text
+}
+
 /// `retry-after` in whole seconds, for the one `$batch` retry. Clamped to
 /// 1..=5: capped so a throttled listing cannot hold a caller for the minutes
 /// Graph sometimes asks for, floored so `retry-after: 0` is a retry rather than
@@ -962,6 +993,45 @@ impl GraphClient {
             .map_err(|e| format!("Graph create_message_from_mime parse error: {}", e))?;
 
         Ok(msg.id)
+    }
+
+    /// Send a complete MIME message as it is (`POST /me/sendMail`, the bytes
+    /// base64-encoded, `Content-Type: text/plain`). Graph answers 202 and
+    /// files the copy in Sent Items itself. Recipients come off the MIME's
+    /// To/Cc/Bcc headers: there is no envelope.
+    ///
+    /// Never retried here: a request that timed out after Graph took it has
+    /// already sent the mail, and a second try would send it twice.
+    pub async fn send_mime(&self, mime: &[u8], timeout: std::time::Duration) -> Result<(), SendMailError> {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(mime);
+        if encoded.len() > SEND_MAIL_LIMIT_BYTES {
+            return Err(SendMailError::TooLarge { encoded_bytes: encoded.len() });
+        }
+        let url = format!("{}/me/sendMail", graph_base());
+        let resp = self
+            .client
+            .send(self.client
+                .post(&url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", "text/plain")
+                .timeout(timeout)
+                .body(encoded))
+            .await
+            .map_err(|e| SendMailError::Transport { timed_out: e.is_timeout(), detail: error_chain(e) })?;
+
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(());
+        }
+        let retry_after = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.trim().parse::<u64>().ok());
+        let body = resp.text().await.unwrap_or_default();
+        let error: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+        let field = |k: &str| error["error"][k].as_str().map(str::to_string).filter(|s| !s.is_empty());
+        Err(SendMailError::Refused { status: status.as_u16(), code: field("code"), message: field("message"), retry_after })
     }
 
     /// Create a mail folder. If `parent_folder_id` is provided, creates a child folder.
