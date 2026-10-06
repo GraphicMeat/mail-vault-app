@@ -1,0 +1,116 @@
+/* Focus lock scene: the pixel-art backdrop behind the countdown (FocusScene.jsx). */
+
+.focus-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* The dawn sky, shown for the moment before the scene's first frame. */
+  background: linear-gradient(#8f9fd6, #ffc59a);
+}
+
+.focus-scene canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  /* The scene renders small and is scaled up: keep every art pixel square and sharp. */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  opacity: 0;
+  transition: opacity 900ms ease-out;
+}
+
+.focus-scene canvas.is-ready {
+  opacity: 1;
+}
+
+/* The countdown over the scene. Its ink follows the sky (FocusScene sets
+   data-ink): dark navy on the day sky, white once the sky darkens. Each ink
+   has a soft halo in the opposite tone, nearly invisible in steady light,
+   that keeps the text above 4.5:1 through the change. The halos crossfade, so
+   the switch reads as the light changing, not as a toggle. */
+.focus-scene-text {
+  position: relative;
+  /* Its own stacking context, so the halos sit behind the text but still in
+     front of the scene canvas. */
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: clamp(14px, 7vh, 110px) 16px 20px;
+  gap: clamp(4px, 1.1vh, 14px);
+  color: #0f1b34;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.3);
+  transition: color 2.5s ease;
+}
+
+.focus-scene-text::before,
+.focus-scene-text::after {
+  content: '';
+  position: absolute;
+  inset: 0 -10% -16px;
+  z-index: -1;
+  pointer-events: none;
+  transition: opacity 2.5s ease;
+}
+
+.focus-scene-text::before {
+  background: radial-gradient(50% 50% at 50% 55%, rgb(255 255 255 / 0.34), rgb(255 255 255 / 0.3) 58%, rgb(255 255 255 / 0) 100%);
+}
+
+.focus-scene-text::after {
+  background: radial-gradient(50% 50% at 50% 55%, rgb(10 14 32 / 0.46), rgb(10 14 32 / 0.42) 58%, rgb(10 14 32 / 0) 100%);
+  opacity: 0;
+}
+
+.focus-scene-text[data-ink='light'] {
+  color: #fff;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.35), 0 0 14px rgb(0 0 0 / 0.25);
+}
+
+.focus-scene-text[data-ink='light']::before {
+  opacity: 0;
+}
+
+.focus-scene-text[data-ink='light']::after {
+  opacity: 1;
+}
+
+.focus-scene-text h1 {
+  margin: 0;
+  font-size: clamp(14px, 2.4vh, 26px);
+  font-weight: 600;
+}
+
+.focus-scene-text .focus-scene-time {
+  font-size: clamp(40px, min(13vw, 11vh), 132px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-scene-text .focus-scene-sub {
+  font-size: clamp(12px, 1.8vh, 18px);
+}
+
+.focus-scene-text .focus-scene-link {
+  color: inherit;
+  text-decoration: underline;
+  font-size: clamp(11px, 1.6vh, 16px);
+}
+
+.focus-scene-text .focus-scene-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-scene canvas,
+  .focus-scene-text,
+  .focus-scene-text::before,
+  .focus-scene-text::after {
+    transition: none;
+  }
+}

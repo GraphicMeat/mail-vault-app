@@ -24,7 +24,7 @@ vi.mock('../../services/api', () => ({
 const { sendNotification } = await import('../../services/api');
 const {
   useFocusStore, useFocusClock, notify, remainingMs, formatRemaining,
-  getNotificationDecisions, clearNotificationDecisions,
+  getNotificationDecisions, clearNotificationDecisions, FOCUS_SCENES,
 } = await import('../focusStore');
 const { useSettingsStore } = await import('../settingsStore');
 
@@ -283,5 +283,53 @@ describe('notify() with a mail-arrival context', () => {
     expect(log).toHaveLength(200);
     expect(log[0].subject).toBe('Subject 5');
     expect(log[199].subject).toBe('Subject 204');
+  });
+});
+
+describe('scene', () => {
+  afterEach(() => {
+    useFocusStore.setState({ scene: 'countryside' });
+    delete mem.store['mailvault-focus'];
+  });
+
+  it('keeps the last scene when a session starts without one', () => {
+    useFocusStore.setState({ scene: 'sea' });
+    useFocusStore.getState().start(25);
+    expect(useFocusStore.getState().scene).toBe('sea');
+  });
+
+  it('remembers the scene a session starts on, the plain lock included', () => {
+    useFocusStore.getState().start(25, 'town');
+    expect(useFocusStore.getState().scene).toBe('town');
+    useFocusStore.getState().abandon();
+    useFocusStore.getState().start(25, 'none');
+    expect(useFocusStore.getState().scene).toBe('none');
+  });
+
+  it('ignores a scene it does not know', () => {
+    useFocusStore.getState().start(25, 'volcano');
+    expect(useFocusStore.getState().scene).toBe('countryside');
+  });
+
+  it('writes the scene to the persisted file and reads it back after a relaunch', async () => {
+    useFocusStore.getState().start(25, 'sea');
+    const saved = mem.store['mailvault-focus'];
+    expect(JSON.parse(saved).state.scene).toBe('sea');
+    // Forget it in memory (persist writes that too), then relaunch on the saved file.
+    useFocusStore.setState({ scene: 'countryside' });
+    mem.store['mailvault-focus'] = saved;
+    await useFocusStore.persist.rehydrate();
+    expect(useFocusStore.getState().scene).toBe('sea');
+  });
+
+  it('reads a scene saved by a newer build as the default rather than a blank lock', async () => {
+    mem.store['mailvault-focus'] = JSON.stringify({ state: { durationMin: 25, scene: 'volcano', endsAt: null }, version: 0 });
+    await useFocusStore.persist.rehydrate();
+    expect(useFocusStore.getState().scene).toBe('countryside');
+  });
+
+  it('has a loader for every scene it offers, and offers every scene there is', async () => {
+    const { SCENE_LOADERS } = await import('../../components/focus/scenes/index.js');
+    expect(Object.keys(SCENE_LOADERS).sort()).toEqual([...FOCUS_SCENES].sort());
   });
 });

@@ -85,19 +85,28 @@ function flushHeld(held) {
   }
 }
 
+/**
+ * The animated scenes a lock can run on (components/focus/scenes). 'none' is
+ * the plain lock, and the fallback wherever WebGL is missing.
+ */
+export const FOCUS_SCENES = ['countryside', 'sea', 'town'];
+const isScene = (s) => s === 'none' || FOCUS_SCENES.includes(s);
+
 export const useFocusStore = create(
   persist(
     (set, get) => ({
       durationMin: 25,      // persisted — the last preset chosen
+      scene: 'countryside', // persisted — the last scene chosen
       endsAt: null,         // persisted — epoch ms while a session runs
 
       // { title, body, sound?, target? } held while a session runs.
       // ponytail: a relaunch drops held notifications; persist them if anyone misses one
       held: [],
 
-      start: (minutes) => {
+      start: (minutes, scene) => {
         set({
           durationMin: minutes,
+          ...(isScene(scene) ? { scene } : {}),
           endsAt: Date.now() + minutes * 60_000,
           held: [],
         });
@@ -143,9 +152,15 @@ export const useFocusStore = create(
       storage: createJSONStorage(() => safeStorage),
       partialize: (s) => ({
         durationMin: s.durationMin,
+        scene: s.scene,
         endsAt: s.endsAt,
       }),
-      merge: (persisted, current) => ({ ...current, ...(persisted || {}) }),
+      // A scene saved by a newer build that this one does not know reads as the default.
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted || {}) };
+        if (!isScene(merged.scene)) merged.scene = current.scene;
+        return merged;
+      },
       onRehydrateStorage: () => (state) => state?.resume(),
     }
   )

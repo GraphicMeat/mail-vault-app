@@ -54,6 +54,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tauri-plugin-sparkle-updater-api": "^0.2.2",
+    "three": "^0.186.1",
     "tom-select": "^2.6.2",
     "zustand": "^4.4.7"
   },

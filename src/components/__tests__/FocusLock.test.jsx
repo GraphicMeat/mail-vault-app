@@ -29,14 +29,25 @@ vi.mock('../../services/api', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
 }));
 
+// The real scene needs WebGL, which jsdom has not got; scenes.test.js and
+// view.test.js cover it. This stand-in hands back the props the lock passed.
+const sceneProps = vi.hoisted(() => ({ current: null }));
+vi.mock('../focus/FocusScene', () => ({
+  FocusScene: (props) => {
+    sceneProps.current = props;
+    return React.createElement('div', { 'data-testid': 'focus-scene', 'data-scene': props.scene });
+  },
+}));
+
 const { useFocusStore, useFocusClock } = await import('../../stores/focusStore');
 const { FocusLock } = await import('../FocusLock');
 
 const NOW = 1_700_000_000_000;
 
 beforeEach(() => {
-  useFocusStore.setState({ endsAt: null, held: [], durationMin: 25 });
+  useFocusStore.setState({ endsAt: null, held: [], durationMin: 25, scene: 'countryside' });
   useFocusClock.setState({ now: 0 });
+  sceneProps.current = null;
 });
 
 afterEach(() => {
@@ -112,5 +123,90 @@ describe('FocusLock', () => {
 
     fireEvent.click(screen.getByText("I'll finish the next one"));
     expect(document.querySelector('[data-testid="focus-early"]')).toBe(null);
+  });
+});
+
+describe('FocusLock — scenes', () => {
+  const timerIcon = () => document.querySelector('[data-icon="Timer"]');
+
+  it('opens on the chosen scene, its day spanning the session, with the countdown on top', () => {
+    lock({ scene: 'sea' });
+    render(<FocusLock />);
+    expect(screen.getByTestId('focus-scene').getAttribute('data-scene')).toBe('sea');
+    expect(sceneProps.current.endsAt).toBe(NOW + 61_000);
+    expect(sceneProps.current.startedAt).toBe(NOW + 61_000 - 25 * 60_000);
+    expect(screen.getByTestId('focus-remaining').textContent).toBe('01:01');
+    expect(timerIcon()).toBe(null);
+  });
+
+  it('is the plain lock when the scene is none', () => {
+    lock({ scene: 'none' });
+    render(<FocusLock />);
+    expect(screen.queryByTestId('focus-scene')).toBe(null);
+    expect(timerIcon()).toBeTruthy();
+    expect(screen.getByTestId('focus-remaining').textContent).toBe('01:01');
+  });
+
+  it('falls back to the plain lock when the scene cannot run, and keeps counting', () => {
+    lock();
+    render(<FocusLock />);
+    act(() => sceneProps.current.onUnavailable(new Error('no WebGL')));
+    expect(screen.queryByTestId('focus-scene')).toBe(null);
+    expect(timerIcon()).toBeTruthy();
+    expect(screen.getByTestId('focus-remaining').textContent).toBe('01:01');
+    expect(useFocusStore.getState().endsAt).toBe(NOW + 61_000);
+  });
+
+  it('gives the scene another try on the next session', () => {
+    lock();
+    render(<FocusLock />);
+    act(() => sceneProps.current.onUnavailable());
+    act(() => useFocusStore.setState({ endsAt: null }));
+    act(() => lock());
+    expect(screen.getByTestId('focus-scene')).toBeTruthy();
+  });
+
+  it('asks before unlocking over a scene too, and keeps the scene behind the question', () => {
+    lock({ scene: 'town' });
+    render(<FocusLock />);
+    fireEvent.click(screen.getByTestId('focus-unlock-early'));
+    expect(screen.getByText('Keep going')).toBeTruthy();
+    expect(screen.getByTestId('focus-scene')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('focus-unlock-confirm'));
+    expect(useFocusStore.getState().endsAt).toBe(null);
+  });
+});
+
+// The plain lock is also where a failed scene lands, so its confirm step is
+// pinned on its own, not only through the scene mode the cases above run in.
+describe('FocusLock — plain lock', () => {
+  it('asks before it lets go, and takes no for an answer', () => {
+    lock({ scene: 'none' });
+    render(<FocusLock />);
+    fireEvent.click(screen.getByTestId('focus-unlock-early'));
+    expect(screen.getByText('Unlock anyway')).toBeTruthy();
+    expect(screen.queryByTestId('focus-remaining')).toBe(null);
+    fireEvent.click(screen.getByText('Keep going'));
+    expect(screen.getByTestId('focus-remaining').textContent).toBe('01:01');
+    expect(useFocusStore.getState().endsAt).toBe(NOW + 61_000);
+  });
+
+  it('unlocks on the second ask', () => {
+    lock({ scene: 'none' });
+    render(<FocusLock />);
+    fireEvent.click(screen.getByTestId('focus-unlock-early'));
+    fireEvent.click(screen.getByTestId('focus-unlock-confirm'));
+    expect(useFocusStore.getState().endsAt).toBe(null);
+    expect(screen.getByTestId('focus-early').textContent).toContain('Back so soon?');
+  });
+
+  it('drops the confirm step when the session ends under it', () => {
+    lock({ scene: 'none' });
+    render(<FocusLock />);
+    fireEvent.click(screen.getByTestId('focus-unlock-early'));
+    act(() => useFocusStore.setState({ endsAt: null }));
+    act(() => lock({ scene: 'none' }));
+    expect(screen.getByTestId('focus-remaining')).toBeTruthy();
+    expect(screen.queryByText('Unlock anyway')).toBe(null);
   });
 });

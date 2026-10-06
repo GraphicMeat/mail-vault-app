@@ -41,7 +41,7 @@ const FREE = { hasSubscription: false };
 
 beforeEach(() => {
   useFocusStore.getState().abandon();
-  useFocusStore.setState({ endsAt: null, held: [], durationMin: 25 });
+  useFocusStore.setState({ endsAt: null, held: [], durationMin: 25, scene: 'countryside' });
   useSettingsStore.setState({ billingProfile: PREMIUM });
 });
 
@@ -193,5 +193,50 @@ describe('FocusTimerButton: premium gate', () => {
     expect(screen.getByTestId('focus-preset-25')).toBeTruthy();
     expect(screen.getByTestId('focus-start')).toBeTruthy();
     expect(document.querySelector('[data-testid="focus-upsell"]')).toBe(null);
+  });
+});
+
+describe('FocusTimerButton — scene', () => {
+  const open = () => {
+    render(<FocusTimerButton />);
+    fireEvent.click(screen.getByTestId('focus-button'));
+  };
+  const checked = id => screen.getByTestId(`focus-scene-${id}`).getAttribute('aria-checked');
+
+  it('offers the three scenes and the plain lock, on the remembered one', () => {
+    useFocusStore.setState({ scene: 'town' });
+    open();
+    expect(['countryside', 'sea', 'town', 'none'].map(checked)).toEqual(['false', 'false', 'true', 'false']);
+    expect(screen.getByRole('radiogroup', { name: 'Scene' })).toBeTruthy();
+  });
+
+  it('starts the session on the scene picked', () => {
+    open();
+    fireEvent.click(screen.getByTestId('focus-scene-sea'));
+    expect(checked('sea')).toBe('true');
+    expect(checked('countryside')).toBe('false');
+    fireEvent.click(screen.getByTestId('focus-start'));
+    expect(useFocusStore.getState().scene).toBe('sea');
+    expect(useFocusStore.getState().endsAt).not.toBe(null);
+  });
+
+  it('moves the choice with the arrow keys, since there is no field to type a scene into', () => {
+    open();
+    const group = screen.getByRole('radiogroup', { name: 'Scene' });
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(checked('sea')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByTestId('focus-scene-sea'));
+    fireEvent.keyDown(group, { key: 'ArrowLeft' });
+    fireEvent.keyDown(group, { key: 'ArrowLeft' });
+    expect(checked('none')).toBe('true');
+    expect(screen.getByTestId('focus-scene-none').getAttribute('tabindex')).toBe('0');
+    expect(screen.getByTestId('focus-scene-countryside').getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('only remembers a scene once a session starts on it', () => {
+    open();
+    fireEvent.click(screen.getByTestId('focus-scene-none'));
+    expect(checked('none')).toBe('true');
+    expect(useFocusStore.getState().scene).toBe('countryside');
   });
 });

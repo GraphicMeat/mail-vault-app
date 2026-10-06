@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Timer } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
@@ -9,6 +9,15 @@ import { hasPremiumAccess, useSettingsStore } from '../stores/settingsStore';
 
 const PRESETS = [15, 25, 45, 60];
 const MAX_MIN = 480;
+
+/* The lock's backdrop. 'none' keeps the plain lock. */
+const SCENES = [
+  { id: 'countryside', labelKey: 'focus.sceneCountryside' },
+  { id: 'sea', labelKey: 'focus.sceneSea' },
+  { id: 'town', labelKey: 'focus.sceneTown' },
+  { id: 'none', labelKey: 'focus.sceneNone' },
+];
+const ARROW_STEP = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
 
 /* The app's input class minus `w-full`: both widths live in Tailwind's width
    group, so keeping it would leave the winner to stylesheet order. */
@@ -39,6 +48,8 @@ export function FocusTimerButton({ collapsed, onUpgrade }) {
      under the cursor. `minutes` is derived, and is the one source of truth
      for both the chips and Start. */
   const [draft, setDraft] = useState(String(durationMin));
+  const [sceneDraft, setSceneDraft] = useState('countryside');
+  const sceneLabelId = useId();
 
   const minutes = /^\d+$/.test(draft) ? Number(draft) : NaN;
   const valid = Number.isInteger(minutes) && minutes >= 1 && minutes <= MAX_MIN;
@@ -51,8 +62,22 @@ export function FocusTimerButton({ collapsed, onUpgrade }) {
      hydration is async, so a sidebar mounted before it would offer the
      defaults instead of what the user last chose. */
   const openDialog = () => {
-    setDraft(String(useFocusStore.getState().durationMin));
+    const { durationMin: last, scene } = useFocusStore.getState();
+    setDraft(String(last));
+    setSceneDraft(scene);
     setOpen(true);
+  };
+
+  /* Unlike the minutes, the scene has no field to type into, so the group
+     roves on the arrow keys: Tab reaches the chosen chip, arrows move the choice. */
+  const onSceneKey = (e) => {
+    const step = ARROW_STEP[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const i = SCENES.findIndex(s => s.id === sceneDraft);
+    const n = (i + step + SCENES.length) % SCENES.length;
+    setSceneDraft(SCENES[n].id);
+    e.currentTarget.querySelectorAll('[role="radio"]')[n]?.focus();
   };
 
   return (
@@ -90,7 +115,7 @@ export function FocusTimerButton({ collapsed, onUpgrade }) {
           <Button
             variant="primary" size="lg" fullWidth
             disabled={!valid}
-            onClick={() => { start(minutes); setOpen(false); }}
+            onClick={() => { start(minutes, sceneDraft); setOpen(false); }}
             data-testid="focus-start"
           >
             {t('bulk.ops.start')}
@@ -153,6 +178,26 @@ export function FocusTimerButton({ collapsed, onUpgrade }) {
                 />
               </label>
               <span className="text-sm text-mail-text-muted">{t('focus.minutesUnit')}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-mail-text-muted" id={sceneLabelId}>{t('focus.scene')}</span>
+              <div className="flex gap-2" role="radiogroup" aria-labelledby={sceneLabelId} onKeyDown={onSceneKey}>
+                {SCENES.map(({ id, labelKey }) => (
+                  <Button
+                    key={id}
+                    variant={id === sceneDraft ? 'accentTint' : 'secondary'}
+                    size="sm"
+                    className={id === sceneDraft ? 'flex-1 border border-mail-accent' : 'flex-1'}
+                    role="radio"
+                    aria-checked={id === sceneDraft}
+                    tabIndex={id === sceneDraft ? 0 : -1}
+                    onClick={() => setSceneDraft(id)}
+                    data-testid={`focus-scene-${id}`}
+                  >
+                    {t(labelKey)}
+                  </Button>
+                ))}
+              </div>
             </div>
             {/* Start covers the window with no warning otherwise. */}
             <p className="text-xs text-mail-text-muted">{t('focus.startHint')}</p>
