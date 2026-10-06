@@ -81,8 +81,14 @@ async fn dial(host: &str, port: u16) -> Result<(), ()> {
     let connect = async {
         match literal {
             Some(ip) => TcpStream::connect(SocketAddr::new(ip, port)).await,
+            // Every address at once, as the hosts are: one after another, a
+            // first address that refuses can spend the whole timeout (Windows
+            // retries a refused connect before giving up), and `localhost`
+            // there resolves to ::1 before 127.0.0.1.
             None => match lookup(host, port).await {
-                Ok(addrs) => TcpStream::connect(&addrs[..]).await,
+                Ok(addrs) => futures::future::select_ok(addrs.into_iter().map(|a| Box::pin(TcpStream::connect(a))))
+                    .await
+                    .map(|(stream, _)| stream),
                 Err(e) => Err(e),
             },
         }

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **The online check reaches a mail server through any of its addresses.** When a server's name gave more than one address, the check tried them one after another inside its 1.5 seconds, so a first address that refused (an IPv6 address where the server only listens on IPv4, say) could use up the time, most of all on Windows, which retries a refused connection. On a network that also blocks the public DNS servers the check dials, the app then read a working connection as offline. All of a server's addresses are now tried at once.
+
 ## [2.19.0] - 2026-10-07
 
 ### Added
