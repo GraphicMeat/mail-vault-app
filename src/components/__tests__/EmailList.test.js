@@ -81,6 +81,27 @@ vi.mock('../../utils/linkSafety', () => ({
   getCachedAlerts: () => [],
   getAlertsForEmails: () => [],
 }));
+// The real tracker backfill, watched: the list arms it 400 ms after the
+// visible window settles. A plain list of its runs, not a vi.fn: a spy settles
+// every promise it returns, which marks a rejection handled and hides it from
+// the run's unhandled-error check.
+const backfillRuns = vi.hoisted(() => []);
+vi.mock('../../services/trackerVerdicts', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    backfillTrackerVerdicts: (...args) => {
+      const run = actual.backfillTrackerVerdicts(...args);
+      backfillRuns.push(run);
+      return run;
+    },
+  };
+});
+// The backfill reads bodies from the vault, and jsdom has no vault.
+vi.mock('../../services/db', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getLocalEmailLight: vi.fn(async () => undefined),
+}));
 vi.mock('../../utils/dateFormat', () => ({
   formatEmailDate: (d) => String(d),
   formatDateOnly: (d) => String(d),
@@ -196,6 +217,10 @@ vi.mock('../../stores/settingsStore', async () => {
     // Rows subscribe to this to decide whether the tracker glyph reads
     // "blocked" or "tracks you"; without a profile it is simply off.
     trackerBlockingEnabled: true,
+    // The real store's default. The list's tracker backfill reads it 400 ms
+    // after mount, so any spec slower than that reaches it.
+    trackerAlerts: {},
+    setTrackerAlert: vi.fn(),
     billingProfile: null,
     listTimelineVisible: false,
     setListTimelineVisible: vi.fn(value => store.setState({ listTimelineVisible: value })),
@@ -266,6 +291,10 @@ vi.mock('../../utils/emailParser', async (importOriginal) => ({
     return party?.name || party?.address || '';
   },
 }));
+
+// No `globals`, so RTL registers no cleanup of its own. A list left mounted
+// keeps its timers, and whichever spec runs when one fires gets its rejection.
+afterEach(cleanup);
 
 describe('EmailList virtualization', () => {
   beforeEach(() => {
@@ -733,6 +762,44 @@ describe('bulk run across folders', () => {
   });
 });
 
+// The list reads tracker verdicts 400 ms after its visible window settles. A
+// list a spec left mounted fired that read in whichever spec ran 400 ms later,
+// and a fixture missing what the read needs failed the whole run as an
+// unhandled rejection while every test passed. Fake timers make "400 ms later"
+// exact; the two-spec pair is the point, so the first must not restore them.
+describe('the tracker backfill timer', () => {
+  it('is armed by a list that stays mounted when its spec ends', async () => {
+    const { EmailList } = await import('../EmailList.jsx');
+    backfillRuns.length = 0;
+    vi.useFakeTimers();
+    render(React.createElement(EmailList));
+    expect(backfillRuns).toHaveLength(0);
+  });
+
+  it('never runs in the next spec', () => {
+    try {
+      act(() => { vi.advanceTimersByTime(400); });
+      expect(backfillRuns).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the rows of a list still on screen when it settles', async () => {
+    const { EmailList } = await import('../EmailList.jsx');
+    backfillRuns.length = 0;
+    vi.useFakeTimers();
+    try {
+      render(React.createElement(EmailList));
+      act(() => { vi.advanceTimersByTime(400); });
+      expect(backfillRuns.length).toBeGreaterThan(0);
+      await Promise.all(backfillRuns);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 // purgeEverywhere's four outcome counts (deleted/failed/queuedBackup/needsResync)
 // are not mutually exclusive, and needsResync had no consumer before this —
 // a run that held uids back for a UIDVALIDITY mismatch must not read as silent
@@ -1009,8 +1076,6 @@ describe('unread-only filter', () => {
 // memo started working, and the state icon froze on "on the server" for the rest
 // of the session. Two connected-* e2e specs caught it. This pins it in CI.
 describe('rows repaint when the derivation mutates them in place', () => {
-  afterEach(cleanup);
-
   it('flips the state icon after an in-place archive', async () => {
     const { useMailStore } = await import('../../stores/mailStore');
     const rows = mockEmails.slice(0, 5);
@@ -1231,10 +1296,6 @@ describe('the open thread is re-read from the map the list builds', () => {
 // and it sat one line under a count whose "of" meant the SERVER total. Two
 // adjacent lines, two populations, one preposition.
 describe('vault share line', () => {
-  // This file has no global cleanup — without it the previous test's DOM is
-  // still mounted and queryByTestId answers about it.
-  afterEach(() => cleanup());
-
   const row = (uid, isArchived) => ({
     uid, isArchived, subject: `s${uid}`, from: 'a@b.c', date: '2026-01-01T00:00:00Z', flags: ['\\Seen'],
   });
@@ -1509,8 +1570,6 @@ describe('thread modes', () => {
 // broke the virtualizer's per-key size cache and stacked the rows on top of
 // each other.
 describe('sender grouping keys topics per thread', () => {
-  afterEach(() => cleanup());
-
   const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
   const SUBJ = 'Contact form — Robertgat';
   const msg = (uid) => ({
