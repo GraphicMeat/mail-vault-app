@@ -186,6 +186,65 @@ describe('AttachmentItem preview', () => {
     expect(frame.getAttribute('src')).toBe('blob:mock-pdf');
   });
 
+  // The reported defect: the open preview reloaded over and over. The frame's
+  // blob: URL was minted again (and the old one revoked) on every render of
+  // the row, because the preview's effect depended on a function the row
+  // re-creates each render. Anything that repaints the row while someone is
+  // reading must leave the frame alone.
+  describe('does not reload while open', () => {
+    const openPdfPreview = async () => {
+      const view = renderItem({ ...PDF });
+      fireEvent.click(screen.getByTestId('attachment-preview'));
+      await screen.findByTestId('attachment-preview-pdf');
+      return view;
+    };
+    const rowProps = {
+      attachmentIndex: 0, emailUid: 7, accountId: 'acct-1', mailbox: 'INBOX',
+    };
+
+    it('keeps the PDF frame when the row repaints from its own state', async () => {
+      await openPdfPreview();
+      expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+      // Download from inside the preview flips downloading/downloadedPath/
+      // justDownloaded on the row: three repaints under the open frame.
+      fireEvent.click(screen.getByTestId('attachment-preview-download'));
+      await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'save_attachment_to')).toBe(true));
+      await waitFor(() => expect(screen.getByTestId('attachment-preview-open')).toBeTruthy());
+
+      expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+      expect(screen.getByTestId('attachment-preview-pdf').getAttribute('src')).toBe('blob:mock-pdf');
+    });
+
+    it('keeps the PDF frame when the parent hands down an equal attachment object again', async () => {
+      const { rerender } = await openPdfPreview();
+      for (let i = 0; i < 3; i += 1) {
+        rerender(<AttachmentItem attachment={{ ...PDF }} {...rowProps} />);
+      }
+      await act(async () => {});
+
+      expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    });
+
+    it('reads the bytes once however often the row repaints', async () => {
+      const { rerender } = await openPdfPreview();
+      rerender(<AttachmentItem attachment={{ ...PDF }} {...rowProps} />);
+      rerender(<AttachmentItem attachment={{ ...PDF }} {...rowProps} />);
+      await act(async () => {});
+
+      expect(invoke.mock.calls.filter(([cmd]) => cmd === 'maildir_read_attachment')).toHaveLength(1);
+    });
+
+    it('still reloads for a different attachment', async () => {
+      const { rerender } = await openPdfPreview();
+      rerender(<AttachmentItem attachment={{ ...PDF, filename: 'other.pdf' }} {...rowProps} attachmentIndex={1} />);
+      await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
+      expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('offers no preview for a type it cannot render', () => {
     renderItem(ZIP);
     expect(screen.queryByTestId('attachment-preview')).toBeNull();

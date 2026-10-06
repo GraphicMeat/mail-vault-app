@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { displayText } from '../../utils/bidiText';
 import { AnimatePresence } from 'framer-motion';
 import { Popover, MenuItem } from '../ui/Popover';
@@ -233,6 +233,11 @@ function AttachmentPreviewDialog({ attachment, kind, loadContent, downloadedPath
   const pa = usePrivateAttr();
   const [src, setSrc] = useState(null);
   const [error, setError] = useState(null);
+  // The row repaints on every download/flash state change and its parent hands
+  // down a fresh attachment object per render. Neither may re-run the effect
+  // below: a new blob: URL reloads the frame under the reader's eyes.
+  const attachmentRef = useRef(attachment);
+  attachmentRef.current = attachment;
 
   useEffect(() => {
     let blobUrl = null;
@@ -243,7 +248,7 @@ function AttachmentPreviewDialog({ attachment, kind, loadContent, downloadedPath
         blobUrl = URL.createObjectURL(new Blob([base64ToBytes(b64)], { type: 'application/pdf' }));
         setSrc(blobUrl);
       } else {
-        setSrc(`data:${mimeOf(attachment)};base64,${getCleanBase64(b64)}`);
+        setSrc(`data:${mimeOf(attachmentRef.current)};base64,${getCleanBase64(b64)}`);
       }
     }).catch((err) => {
       console.error('[Attachment] Preview failed:', err);
@@ -253,7 +258,7 @@ function AttachmentPreviewDialog({ attachment, kind, loadContent, downloadedPath
       cancelled = true;
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [attachment, kind, loadContent, t]);
+  }, [kind, loadContent, t]);
 
   const isTauri = !!window.__TAURI__;
   const footer = (
@@ -350,12 +355,13 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, mailbox, emailUid, attachmentIndex, isTauri]);
 
-  const ensureContent = async () => {
+  // Stable per message location: the preview dialog keys its effect on it.
+  const ensureContent = useCallback(async () => {
     if (contentRef.current) return contentRef.current;
     if (!window.__TAURI__?.core?.invoke) throw new Error('Attachment content not available');
-    contentRef.current = await readAttachment(location);
+    contentRef.current = await readAttachment({ accountId, mailbox, uid: emailUid, attachmentIndex });
     return contentRef.current;
-  };
+  }, [accountId, mailbox, emailUid, attachmentIndex]);
 
   // The thumbnail shares `contentRef` with the preview and the download, so
   // an image is read from the .eml once however many of the three run.
