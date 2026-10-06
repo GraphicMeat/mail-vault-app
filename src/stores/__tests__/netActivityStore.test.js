@@ -278,9 +278,12 @@ describe('copyText', () => {
   });
 
   it('writes a lookup as name and answer, not as a connection to port 53', () => {
-    const line = copyText([ev({ protocol: 'dns', host: 'imap.a.test', ip: '192.0.2.9', port: 53 })]);
-    expect(line).toContain('imap.a.test -> 192.0.2.9');
-    expect(line).not.toContain(':53');
+    // Pinned to second :53, so the ISO time holds ":53" too. A check on the
+    // whole line read that as a port and failed whenever the clock said :53.
+    const atMs = Date.UTC(2026, 9, 6, 19, 16, 53, 645);
+    const fields = copyText([ev({ atMs, protocol: 'dns', host: 'imap.a.test', ip: '192.0.2.9', port: 53 })]).split('\t');
+    expect(fields).toContain('imap.a.test -> 192.0.2.9');
+    expect(fields.filter(f => /:53$/.test(f))).toEqual([]);
   });
 });
 
