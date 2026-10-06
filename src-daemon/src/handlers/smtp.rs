@@ -82,6 +82,40 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Value {
 /// up after `CMD_STALL` of silence, which can be before the server has stored
 /// the message. A single look taken then found nothing, so the staged local
 /// copy stayed beside the server's for good.
+/// The sent message's header block for the Verbose log: without its `Bcc:`
+/// lines (a Graph send writes the Bcc into the MIME, and hidden recipients
+/// have no place in a log), cut to 800 bytes on a character boundary.
+fn header_preview(raw: &[u8]) -> String {
+    let text = String::from_utf8_lossy(raw);
+    // The first blank line, whichever line ending it has.
+    let end = match (text.find("\r\n\r\n"), text.find("\n\n")) {
+        (Some(c), Some(l)) => c.min(l),
+        (c, l) => c.or(l).unwrap_or(text.len()),
+    };
+    let mut preview = String::new();
+    let mut in_bcc = false;
+    for line in text[..end].split_inclusive('\n') {
+        // A line that starts with white space continues the header above it.
+        if !line.starts_with([' ', '\t']) {
+            in_bcc = line
+                .get(..3)
+                .is_some_and(|name| name.eq_ignore_ascii_case("bcc"))
+                && line[3..].trim_start_matches([' ', '\t']).starts_with(':');
+        }
+        if !in_bcc {
+            preview.push_str(line);
+        }
+    }
+    // A Bcc as the last header leaves the line ending of the one before it.
+    preview.truncate(preview.trim_end_matches(['\r', '\n']).len());
+    let mut cut = preview.len().min(800);
+    while !preview.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    preview.truncate(cut);
+    preview
+}
+
 async fn sent_copy_uid(pool: &imap::ImapPool, account: &ImapConfig, mailbox: &str, message_id: &str) -> Option<u32> {
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(SENT_RECHECK_SECS);
     let mut session = match tokio::time::timeout_at(deadline, imap::create_imap_session_no_compress(account, pool)).await {
@@ -224,13 +258,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 account_id_for_log, result.message_id, result.raw_rfc2822.len()
             );
 
-            let header_preview = {
-                let text = String::from_utf8_lossy(&result.raw_rfc2822);
-                let end = text.find("\r\n\r\n").or_else(|| text.find("\n\n")).unwrap_or(text.len());
-                text[..end.min(800)].to_string()
-            };
             // To/Cc and Subject: Verbose logs only.
-            tracing::debug!("[send:raw_headers]\n{}", header_preview);
+            tracing::debug!("[send:raw_headers]\n{}", header_preview(&result.raw_rfc2822));
 
             let message_id_for_response = result.message_id.clone();
 
@@ -411,6 +440,36 @@ mod tests {
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
         route(s, method, &params, json!(1)).await.expect("routed")
+    }
+
+    /// The Verbose log's header preview is for To/Cc and Subject. A Graph
+    /// send writes the Bcc into the MIME it sends, and the hidden recipients
+    /// must not land in a log file: every `Bcc:` line goes, in any case, with
+    /// the lines folded under it, for either line ending.
+    #[test]
+    fn the_header_preview_leaves_out_bcc() {
+        let crlf = b"From: a@x.com\r\nTo: b@x.com\r\nBcc: Hidden One <hidden1@x.com>,\r\n Hidden Two <hidden2@x.com>\r\nbCC:\thidden3@x.com\r\nSubject: s\r\n\r\nBcc: not a header\r\n";
+        assert_eq!(header_preview(crlf), "From: a@x.com\r\nTo: b@x.com\r\nSubject: s");
+
+        let lf = b"From: a@x.com\nBCC: hidden@x.com,\n\tmore@x.com\nSubject: s\n\nbody";
+        assert_eq!(header_preview(lf), "From: a@x.com\nSubject: s");
+
+        let last = b"From: a@x.com\r\nBcc: hidden@x.com\r\n\r\nbody";
+        assert_eq!(header_preview(last), "From: a@x.com");
+
+        // Bcc-ish names that are other headers stay.
+        let other = b"Bcc-Note: kept\r\nX-Bcc: kept\r\n\r\nbody";
+        assert_eq!(header_preview(other), "Bcc-Note: kept\r\nX-Bcc: kept");
+    }
+
+    /// Cut to 800 bytes on a character boundary: a cut through a multi-byte
+    /// character would panic the handler of a send that had already gone out.
+    #[test]
+    fn the_header_preview_is_cut_on_a_character_boundary() {
+        let raw = format!("Subject: {}\r\n\r\nbody", "\u{e9}".repeat(600));
+        let preview = header_preview(raw.as_bytes());
+        assert!(preview.len() <= 800 && preview.len() >= 798, "{}", preview.len());
+        assert!(raw.starts_with(&preview));
     }
 
     /// Both mock listeners (IMAP + SMTP) are set before any connection is
