@@ -2,9 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-- **The online check reaches a mail server through any of its addresses.** When a server's name gave more than one address, the check tried them one after another inside its 1.5 seconds, so a first address that refused (an IPv6 address where the server only listens on IPv4, say) could use up the time, most of all on Windows, which retries a refused connection. On a network that also blocks the public DNS servers the check dials, the app then read a working connection as offline. All of a server's addresses are now tried at once.
-
 ## [2.19.0] - 2026-10-07
 
 ### Added
@@ -27,6 +24,7 @@
 - **Inline pictures from Outlook mail show up instead of an empty box.** A message that embeds a picture (a pasted screenshot of a spreadsheet, say) could open with a large bordered rectangle and nothing in it. Outlook writes the picture's address with its `@` percent-encoded, so the reader never matched it to the attached image and never loaded it. The address is now decoded before matching, in the reading pane, the cache, exports, and replies and forwards.
 - **A forwarded HTML email arrives looking like the original.** Forward used to put the original into the editor, which dropped its tables, colours and styles, so a newsletter or receipt went out as plain stacked paragraphs, and its inline pictures arrived broken beside loose attachments. The original now stays out of the editor, opens in the panel beside it, and goes out exactly as it arrived, with its inline pictures in place. You write your note above it; the forwarded message itself is no longer editable. A reply or forward reopened from Drafts, or a scheduled one opened for editing, keeps its original beside your text the same way, instead of pouring it into the editor where its formatting was lost.
 - **Text on Linux keeps its word spaces.** With the default Instrument Sans font, the Linux app (Snap included) drew small text with spaces missing and letters pulled apart, so "Its contents" read "Itscontents" and "message" read "me ssage", at 12 and 14 pixels, the size of most of the app's text. The app now bundles the font's four regular weights instead of its variable version, which Linux's web engine laid out wrongly. The few labels set between semibold and bold now draw in bold.
+- **The online check reaches a mail server through any of its addresses.** When a server's name gave more than one address, the check tried them one after another inside its 1.5 seconds, so a first address that refused (an IPv6 address where the server only listens on IPv4, say) could use up the time, most of all on Windows, which retries a refused connection. On a network that also blocks the public DNS servers the check dials, the app then read a working connection as offline. All of a server's addresses are now tried at once.
 
 ## [2.18.1] - 2026-10-04
 
