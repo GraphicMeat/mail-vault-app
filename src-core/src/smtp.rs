@@ -382,14 +382,12 @@ fn build_mime_opts(
     Ok(BuiltMime { message, raw_rfc2822 })
 }
 
-/// Decide implicit-TLS (wrapper, typically port 465) vs STARTTLS (587).
-/// Explicit `smtp_secure` wins; when absent, infer from the port so a config
-/// missing the flag still picks the right handshake.
+/// Decide implicit-TLS (wrapper) vs STARTTLS. Port 465 is implicit TLS
+/// (RFC 8314) whatever the flag says: the account form saves `smtpSecure:false`
+/// without asking, so a stored false carries no choice. `Some(true)` forces the
+/// wrapper on any other port.
 fn use_implicit_tls(smtp_secure: Option<bool>, smtp_port: u16) -> bool {
-    match smtp_secure {
-        Some(v) => v,
-        None => smtp_port == 465,
-    }
+    smtp_port == 465 || smtp_secure == Some(true)
 }
 
 /// True if `host` is a loopback literal (127.0.0.1/::1/localhost). Used to allow
@@ -604,10 +602,10 @@ pub async fn send_built(
     let transport = build_transport(account, io_timeout)?;
 
     info!(
-        "[smtp] Sending via {}:{} (tls={}, oauth2={})",
+        "[smtp] Sending via {}:{} (implicit_tls={}, oauth2={})",
         smtp_host,
         smtp_port,
-        account.smtp_secure.unwrap_or(false),
+        use_implicit_tls(account.smtp_secure, smtp_port),
         account.is_oauth2()
     );
 
@@ -693,11 +691,11 @@ pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc28
         lettre::address::Envelope::new(Some(from), to).map_err(|e| format!("Failed to build envelope: {}", e))?;
 
     info!(
-        "[smtp] Sending a frozen message ({} bytes) via {}:{} (tls={}, oauth2={})",
+        "[smtp] Sending a frozen message ({} bytes) via {}:{} (implicit_tls={}, oauth2={})",
         raw_rfc2822.len(),
         smtp_host,
         smtp_port,
-        account.smtp_secure.unwrap_or(false),
+        use_implicit_tls(account.smtp_secure, smtp_port),
         account.is_oauth2()
     );
 
@@ -734,9 +732,16 @@ mod tests {
     }
 
     #[test]
-    fn implicit_tls_explicit_flag_wins() {
+    fn implicit_tls_explicit_true_forces_wrapper() {
         assert!(use_implicit_tls(Some(true), 587)); // explicit true overrides port
-        assert!(!use_implicit_tls(Some(false), 465)); // explicit false overrides port
+        assert!(!use_implicit_tls(Some(false), 587));
+    }
+
+    #[test]
+    fn implicit_tls_on_465_even_when_flag_says_false() {
+        // The account form saves smtpSecure:false for every account; STARTTLS on
+        // 465 meets a TLS server and fails with "incomplete response" (discussion #21).
+        assert!(use_implicit_tls(Some(false), 465));
     }
 
     #[test]
