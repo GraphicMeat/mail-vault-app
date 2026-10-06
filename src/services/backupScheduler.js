@@ -126,6 +126,16 @@ class BackupCoordinator {
     this._stalled = new Set();       // accounts the watchdog cancelled (retry, don't call it cancelled)
     this._flushTimer = null;         // trailing flush for the progress throttle
     this._limitHolds = new Map();    // accountId -> { until, timer }: stopped at the daily limit, runs again after `until`
+    this._timers = new Set();        // armed due-checks and retry backoffs; stopAll cancels them
+  }
+
+  /** A setTimeout stopAll can take back: a stop must not be followed by a run. */
+  _later(fn, ms) {
+    const timer = setTimeout(() => {
+      this._timers.delete(timer);
+      fn();
+    }, ms);
+    this._timers.add(timer);
   }
 
   // ── Lifecycle transitions ──────────────────────────────────────────────
@@ -218,6 +228,8 @@ class BackupCoordinator {
 
   /** Full stop — cancel active backup and clear queue */
   stopAll() {
+    for (const timer of this._timers) clearTimeout(timer);
+    this._timers.clear();
     this._queue = [];
     this._publishQueue();
     this._manualIds.clear();
@@ -700,9 +712,7 @@ class BackupCoordinator {
       this._retryCount.set(accountId, retries + 1);
       const delay = RETRY_DELAYS[retries];
       console.warn(`[backup] Retry ${retries + 1}/3 for ${account.email} — re-queuing in ${delay / 1000}s`);
-      setTimeout(() => {
-        this.queueBackup(accountId);
-      }, delay);
+      this._later(() => this.queueBackup(accountId), delay);
       return;
     }
     const storeNow = useSettingsStore.getState();
@@ -870,7 +880,7 @@ class BackupCoordinator {
 
   _scheduleCheck() {
     // Small delay to let state settle after wake/online/idle transitions
-    setTimeout(() => this.checkAndQueueDue(), 2000);
+    this._later(() => this.checkAndQueueDue(), 2000);
   }
 
   _showNextOrDone() {

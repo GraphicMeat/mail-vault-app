@@ -1645,6 +1645,53 @@ describe('BackupCoordinator - manual trigger edge cases', () => {
 // nor a cancel: it keeps its resume position, says so on the card, is not run
 // again before the reset, and runs again right after it (UTC midnight, which
 // the daemon's terminal frame carries as `resume_after_ms`).
+// stopAll() is the hook's teardown and every spec's reset. A due-check or a
+// retry it leaves armed fires later anyway: in the app after the hook is gone,
+// in this file inside whichever spec is running two seconds on. On a loaded
+// Windows runner a resume test's due-check landed in the daily-limit negative
+// control below and queued a third run.
+describe('BackupCoordinator — stopAll cancels the timers it armed', () => {
+  beforeEach(() => {
+    resetCoordinator();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    backupScheduler.stopAll();
+    vi.useRealTimers();
+  });
+
+  it('cancels the due-check a resume scheduled', () => {
+    const check = vi.spyOn(backupScheduler, 'checkAndQueueDue');
+    backupScheduler.onSleep();
+    backupScheduler.onWake();
+    backupScheduler.onOffline();
+    backupScheduler.onOnline();
+    backupScheduler.stopAll();
+    vi.advanceTimersByTime(10_000);
+    expect(check).not.toHaveBeenCalled();
+    check.mockRestore();
+  });
+
+  it('cancels a retry that is waiting out its backoff', async () => {
+    api.backupRunAccount.mockRejectedValueOnce(new Error('IMAP down'));
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+    expect(backupScheduler._retryCount.get('acc-1')).toBe(1);
+
+    backupScheduler.stopAll();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('still runs the retry when nothing stopped it (control)', async () => {
+    api.backupRunAccount.mockRejectedValueOnce(new Error('IMAP down'));
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('BackupCoordinator — stopped at the daily download limit', () => {
   const HOUR = 3600_000;
 
