@@ -2,9 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { ExportFilesPanel } from './ExportFilesPanel';
+import { ExportFormatTabs } from './ExportFormatTabs';
+import { SocialExportPanel } from './SocialExportPanel';
 import { useExportOptions } from './useExportOptions';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePrivacyStore } from '../../stores/privacyStore';
+import { composeSocialFile } from '../../services/export/social/buildSocialExport';
 import { startPrivacySync } from '../../utils/privacy/privacySync';
 import { useT } from '../../i18n/index.js';
 
@@ -17,16 +21,25 @@ const hydrated = store => store.persist?.hasHydrated?.() ? Promise.resolve() : n
   if (!stop) resolve();
 });
 
+// The PNG the main window rendered, as a bitmap to compose from. No blob: URL
+// (the app's CSP admits none): createImageBitmap reads the bytes directly.
+async function decodePng(base64) {
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  return createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+}
+
 /**
- * The Image and HTML export in a window of its own (useExportWindow is the
- * main window's half). The panel is the dialog's; its files come from the main
- * window, already redacted there, and are saved here. "Back to app" hands the
- * choices back to the export dialog.
+ * The export in a window of its own (useExportWindow is the main window's
+ * half): Image, HTML or Social, switched by tab. The panels are the dialog's;
+ * what they show comes from the main window, already redacted there (files,
+ * or the Social PNG, composed and saved here so the preview can be as big as
+ * the window). "Back to app" hands the choices back to the export dialog.
  */
 export function ExportWindow() {
   const [boot, setBoot] = useState(null); // { initial, messages }
   const [error, setError] = useState('');
   const pending = useRef(new Map());
+  const names = useRef(new WeakMap()); // Social content bitmap -> the file name main offered
 
   useEffect(() => startPrivacySync(), []);
 
@@ -45,12 +58,13 @@ export function ExportWindow() {
       }));
       stops.push(await listen('export-window-payload', async ({ payload }) => {
         if (disposed || payload?.token !== token) return;
-        await hydrated(useThemeStore);
+        await Promise.all([hydrated(useSettingsStore), hydrated(useThemeStore)]);
         if (disposed) return;
-        // Writes are off in a child window (safeStorage): this stays in memory.
+        // Writes are off in a child window (safeStorage): these stay in memory.
+        if (payload.settings) useSettingsStore.setState(payload.settings);
         useThemeStore.setState(payload.theme);
         useThemeStore.getState().initTheme();
-        setBoot({ initial: payload.initial || {}, messages: payload.messages || [] });
+        setBoot({ initial: payload.initial || {}, messages: payload.messages || [], socialDefaults: payload.socialDefaults });
       }));
       if (!disposed) await emit('export-window-ready', { token, label: getCurrentWebviewWindow().label });
     };
@@ -63,27 +77,49 @@ export function ExportWindow() {
     };
   }, []);
 
-  const build = useMemo(() => ({ format, layout, mirror, attachments, redact, width }) => new Promise((resolve, reject) => {
+  const request = useMemo(() => (options) => new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
     const timeout = setTimeout(() => {
       pending.current.delete(requestId);
       reject(new Error('timed out'));
     }, REQUEST_TIMEOUT_MS);
     pending.current.set(requestId, { resolve, reject, timeout });
-    void emit('export-window-request', {
-      token, requestId, options: { format, layout, mirror, attachments, redact, ...(width ? { width } : {}) },
-    }).catch(reject);
+    void emit('export-window-request', { token, requestId, options }).catch(reject);
   }), []);
+
+  const build = useMemo(() => ({ format, layout, mirror, attachments, redact, width }) => request({
+    format, layout, mirror, attachments, redact, ...(width ? { width } : {}),
+  }), [request]);
+
+  const social = useMemo(() => ({
+    buildContent: options => request({ ...options, format: 'social' }).then(async ({ base64, name }) => {
+      const bitmap = await decodePng(base64);
+      names.current.set(bitmap, name);
+      return bitmap;
+    }),
+    save: (options, content) => composeSocialFile({ content, options, name: names.current.get(content) || 'MailVault - social.png' }),
+  }), [request]);
 
   if (error) return <p role="alert" className="p-4 text-mail-danger">{error}</p>;
   if (!boot) return <div className="h-screen bg-mail-bg" aria-busy="true" />;
-  return <Loaded boot={boot} build={build} />;
+  return <Loaded boot={boot} build={build} social={social} />;
 }
 
-function Loaded({ boot, build }) {
+function Loaded({ boot, build, social }) {
   const t = useT();
-  const { initial, messages } = boot;
-  const opts = useExportOptions(initial);
+  const { initial, messages, socialDefaults } = boot;
+  const isThread = messages.length > 1;
+  // `initial` is { format, files, social? }: each panel's choices under its own name.
+  const [format, setFormat] = useState(initial.format === 'social' && isThread ? 'image' : initial.format || 'image');
+  const opts = useExportOptions(initial.files);
+  // The pop-out's style seeds Social once. After that the window's own settings,
+  // kept current below, are the truth: a seed read again would undo a change made here.
+  const socialSeed = useRef(initial.social);
+  const pick = next => {
+    if (format === 'social' && socialSeed.current?.prefs) socialSeed.current = { ...socialSeed.current, prefs: undefined };
+    setFormat(next);
+  };
+  const dock = choices => { void emit('export-window-dock', { token, initial: choices }); };
   const [popInSlot, setPopInSlot] = useState(null);
   const privacyOn = usePrivacyStore(s => s.enabled);
   // Turned on mid-window: the export follows, as it does in the dialog.
@@ -99,9 +135,20 @@ function Loaded({ boot, build }) {
         </h1>
         <div ref={setPopInSlot} className="flex items-center gap-1" />
       </header>
-      <ExportFilesPanel detached opts={opts} format={initial.format || 'image'} messages={messages}
-        build={build} onDone={close} headerSlot={popInSlot}
-        onPopIn={choices => { void emit('export-window-dock', { token, initial: choices }); }} />
+      <ExportFormatTabs value={format} onChange={pick} socialDisabled={isThread} />
+      {format === 'social' ? (
+        <SocialExportPanel detached source={social} initial={{ revealSender: socialDefaults?.revealSender ?? false, ...socialSeed.current }}
+          onDone={close} headerSlot={popInSlot}
+          onPrefsChange={patch => {
+            useSettingsStore.getState().setSocialExport(patch);
+            void emit('export-window-prefs', { token, patch });
+          }}
+          onPopIn={choices => dock({ format: 'social', files: opts.choices('image'), social: choices })} />
+      ) : (
+        <ExportFilesPanel detached opts={opts} format={format} messages={messages}
+          build={build} onDone={close} headerSlot={popInSlot}
+          onPopIn={choices => dock({ format, files: choices })} />
+      )}
     </main>
   );
 }

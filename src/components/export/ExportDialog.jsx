@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { ImageDown, FileCode2, Share2 } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Z } from '../ui/layers';
@@ -10,12 +9,15 @@ import { usePrivacyStore } from '../../stores/privacyStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { SocialExportPanel } from './SocialExportPanel';
 import { ExportFilesPanel } from './ExportFilesPanel';
-import { Choice } from './ExportChoice';
+import { ExportFormatTabs } from './ExportFormatTabs';
 import { useExportOptions } from './useExportOptions';
 
-// `social` / `files`: the choices of the Social or the Image and HTML export
-// coming back from their own window; the dialog opens on that format with them.
-// `onPopOut(choices)` moves the open format there (`choices.format` says which).
+// `social` / `files`: the choices of the Social and of the Image and HTML export
+// coming back from the export window; the dialog opens on Social when it sent
+// those, else on `files.format`, with each panel's choices under its own name
+// (the two disagree: redact is on by default in one, off in the other).
+// `onPopOut({ format, files, social? })` moves the open format there, with the
+// choices of the Image and HTML export beside the open format's own.
 // Premium fills the window with 32px around it: three formats' worth of preview
 // and options do not fit a 672px column.
 export function ExportDialog({ open, messages, account, mailbox, social, files, onClose, onUpgrade, onShowSamples, onPopOut }) {
@@ -41,8 +43,9 @@ export function ExportDialog({ open, messages, account, mailbox, social, files, 
     if (!open) return;
     opts.setNotice(null);
     opts.setBusy(false);
+    if (files) opts.restore(files);
     if (social) setFormat('social');
-    if (files) { setFormat(files.format); opts.restore(files); }
+    else if (files) setFormat(files.format);
     // Someone recording with privacy mode on means a shareable export too.
     if (usePrivacyStore.getState().enabled) opts.turnRedact(true);
   }, [open, social, files]);
@@ -80,23 +83,15 @@ export function ExportDialog({ open, messages, account, mailbox, social, files, 
         </>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col gap-4">
-          <div className="grid grid-cols-3 gap-2">
-            <Choice name="mv-export-format" value="image" checked={activeFormat === 'image'} onChange={setFormat}
-              icon={ImageDown} label={t('export.dialog.formatImageLabel')} hint={t('export.dialog.formatImageHint')} />
-            <Choice name="mv-export-format" value="html" checked={activeFormat === 'html'} onChange={setFormat}
-              icon={FileCode2} label={t('export.dialog.formatHtmlLabel')} hint={t('export.dialog.formatHtmlHint')} />
-            <Choice name="mv-export-format" value="social" checked={isSocial} onChange={setFormat} disabled={isThread}
-              icon={Share2} label={t('export.social.formatLabel')}
-              hint={isThread ? t('export.social.singleOnly') : t('export.social.formatHint')} />
-          </div>
+          <ExportFormatTabs value={activeFormat} onChange={setFormat} socialDisabled={isThread} />
 
           {isSocial ? (
             <SocialExportPanel fill message={messages[0]} account={account} mailbox={mailbox} onDone={onClose}
-              initial={social} onPopOut={onPopOut && (choices => onPopOut({ ...choices, format: 'social' }))}
+              initial={social} onPopOut={onPopOut && (choices => onPopOut({ format: 'social', files: opts.choices('image'), social: choices }))}
               headerSlot={offerWindow ? popOutSlot : undefined} />
           ) : (
             <ExportFilesPanel opts={opts} format={activeFormat} messages={messages} account={account} mailbox={mailbox}
-              onDone={onClose} onPopOut={onPopOut} headerSlot={offerWindow ? popOutSlot : undefined} />
+              onDone={onClose} onPopOut={onPopOut && (choices => onPopOut({ format: choices.format, files: choices }))} headerSlot={offerWindow ? popOutSlot : undefined} />
           )}
         </div>
       )}

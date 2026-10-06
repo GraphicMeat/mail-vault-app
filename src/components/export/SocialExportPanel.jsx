@@ -140,7 +140,7 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * preview picks one.
  *
  * The preview zooms (Fit, actual pixels, steps between). `onPopOut` offers the
- * panel in a window of its own (SocialExportWindow), handing over the per-open
+ * panel in the export window (ExportWindow), handing over the per-open
  * choices; there `detached` fills the window, `source` asks the main window to
  * render and `onPopIn` brings it back. `initial` carries those choices across.
  * `headerSlot` is an element at the top right of the dialog or the window that

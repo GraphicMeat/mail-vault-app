@@ -74,6 +74,12 @@ async function clickExport() {
 }
 
 describe('ExportDialog', () => {
+  it('offers the formats as one tab strip', () => {
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    const group = screen.getByRole('radiogroup', { name: /export/i });
+    expect(within(group).getAllByRole('radio').map(r => r.getAttribute('aria-label'))).toEqual(['Image', 'HTML', 'Social']);
+  });
+
   it('offers both formats', () => {
     render(<ExportDialog {...props} messages={messages} />);
     expect(screen.getByRole('radio', { name: /^image$/i })).toBeTruthy();
@@ -94,8 +100,9 @@ describe('ExportDialog', () => {
 
   it('offers Social for one message only, and says so', () => {
     render(<ExportDialog {...props} messages={messages} />);
-    expect(screen.getByRole('radio', { name: /^social$/i }).disabled).toBe(true);
-    expect(screen.getByText(/select one message for a social image/i)).toBeTruthy();
+    const social = screen.getByRole('radio', { name: /^social$/i });
+    expect(social.disabled).toBe(true);
+    expect(social.closest('label').getAttribute('title')).toMatch(/select one message for a social image/i);
   });
 
   it('opens on Social with the choices a detached window handed back, and offers the window', async () => {
@@ -108,7 +115,7 @@ describe('ExportDialog', () => {
     expect(within(popOut.closest('div')).getByRole('button', { name: 'Close' })).toBeTruthy();
     expect(within(popOut.closest('div')).queryByRole('button', { name: /save png/i })).toBeNull();
     fireEvent.click(popOut);
-    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ redact: false }));
+    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ format: 'social', social: expect.objectContaining({ redact: false }) }));
   });
 
   it('has the mirror toggle on by default and says what it does', () => {
@@ -343,7 +350,8 @@ describe('opening the Image and HTML export in a window', () => {
     expect(within(openInWindow().closest('div')).getByRole('button', { name: 'Close' })).toBeTruthy();
     fireEvent.click(openInWindow());
     expect(onPopOut).toHaveBeenCalledWith({
-      format: 'image', layout: 'single', mirror: false, attachments: true, redact: false, redactStyle: 'blur', width: 1200,
+      format: 'image',
+      files: { format: 'image', layout: 'single', mirror: false, attachments: true, redact: false, redactStyle: 'blur', width: 1200 },
     });
   });
 
@@ -353,14 +361,34 @@ describe('opening the Image and HTML export in a window', () => {
     fireEvent.click(screen.getByRole('radio', { name: /separate images/i }));
     fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
     fireEvent.click(openInWindow());
-    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ format: 'html', layout: 'separate' }));
+    expect(onPopOut).toHaveBeenCalledWith({
+      format: 'html', files: expect.objectContaining({ format: 'html', layout: 'separate' }),
+    });
   });
 
   it('tells the window which format Social is, beside its own choices', () => {
     const onPopOut = vi.fn();
     render(<ExportDialog {...props} messages={[messages[0]]} social={{ redact: false }} onPopOut={onPopOut} />);
     fireEvent.click(openInWindow());
-    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ format: 'social', redact: false }));
+    expect(onPopOut).toHaveBeenCalledWith(expect.objectContaining({ format: 'social', social: expect.objectContaining({ redact: false }) }));
+  });
+
+  it('keeps Social\'s choices out of the Image and HTML ones: redact is on by default there, off here', () => {
+    const onPopOut = vi.fn();
+    render(<ExportDialog {...props} messages={[messages[0]]} social={{ redact: true }} onPopOut={onPopOut} />);
+    fireEvent.click(openInWindow());
+    const { files, social } = onPopOut.mock.calls[0][0];
+    expect(social.redact).toBe(true);
+    expect(files).toMatchObject({ redact: false, attachments: true });
+  });
+
+  it('opens on Social when a window docks with both, the Image and HTML choices kept for when you switch', () => {
+    const files = { format: 'html', layout: 'single', mirror: false, attachments: false, redact: true, redactStyle: 'bar', width: 1000 };
+    render(<ExportDialog {...props} messages={[messages[0]]} files={files} social={{ redact: false }} />);
+    expect(screen.getByRole('radio', { name: /^social$/i }).checked).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /^html$/i }));
+    expect(screen.getByRole('checkbox', { name: /mirror remote content/i }).checked).toBe(false);
+    expect(screen.getByRole('checkbox', { name: /redact sensitive info/i }).checked).toBe(true);
   });
 
   it('offers no window where nothing can open one, or to a free user', () => {

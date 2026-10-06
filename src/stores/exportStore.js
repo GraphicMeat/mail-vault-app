@@ -9,8 +9,8 @@ import { useSettingsStore, hasPremiumAccess } from './settingsStore';
 // row belongs to the account it came from, not to whichever account is active.
 // Four surfaces each deriving that themselves is four chances to stamp the
 // wrong address into an exported file's footer.
-// `social` / `files` (optional): the choices of the Social panel or of the
-// Image and HTML export, handed back by their detached window.
+// `social` / `files` (optional): the choices of the Social panel and of the
+// Image and HTML export, handed back by the detached export window.
 function describeTarget({ messages, account, mailbox, social, files }) {
   const { accounts = [], activeAccountId, activeMailbox } = useMailStore.getState();
   const first = messages?.[0] || {};

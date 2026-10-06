@@ -8,7 +8,7 @@ afterEach(() => at(''));
 describe('isChildWindow', () => {
   // A child window must not write the shared settings and privacy files: it
   // holds a partial copy and would overwrite the owner's state.
-  it.each(['compose', 'original', 'settings', 'social', 'export'])('is a child window for ?%s=', (kind) => {
+  it.each(['compose', 'original', 'settings', 'export'])('is a child window for ?%s=', (kind) => {
     at(`?${kind}=tok-1`);
     expect(isChildWindow()).toBe(true);
   });

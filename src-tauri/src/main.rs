@@ -1338,7 +1338,7 @@ async fn open_auxiliary_window(app: tauri::AppHandle, kind: String, token: Strin
     use tauri::webview::WebviewWindowBuilder;
     use tauri::WebviewUrl;
 
-    if !matches!(kind.as_str(), "original" | "settings" | "social" | "export")
+    if !matches!(kind.as_str(), "original" | "settings" | "export")
         || token.len() > 128
         || !token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err("Invalid auxiliary window request".into());
@@ -1346,11 +1346,10 @@ async fn open_auxiliary_window(app: tauri::AppHandle, kind: String, token: Strin
     let n = WINDOW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let label = format!("{}-{}", kind, n);
     let url = format!("app.html?{}={}", kind, token);
-    // The two export panels are workbenches: a preview beside their options.
-    let workbench = matches!(kind.as_str(), "social" | "export");
+    // The export window is a workbench: a preview beside its options.
+    let workbench = kind == "export";
     let (title, w, h) = match kind.as_str() {
         "settings" => ("Settings", 1080.0, 760.0),
-        "social" => ("Social Image", 1200.0, 820.0),
         "export" => ("Export Message", 1200.0, 820.0),
         _ => ("Original Message", 700.0, 680.0),
     };

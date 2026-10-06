@@ -5,23 +5,34 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { usePrivacyStore } from '../stores/privacyStore';
+import { useMailStore } from '../stores/mailStore';
+import { isSpamMessage } from '../utils/spamFolder';
+import { captureTargetOf, isCaptureTarget } from '../utils/captureTarget';
 import { buildLocal } from '../services/export/exportSource';
+import { buildSocialContent, socialFileName } from '../services/export/social/buildSocialExport';
+import { canvasToPngBase64 } from '../services/export/social/encodePng';
 
 /**
- * The main window's half of the detached Image and HTML export (ExportWindow),
- * the twin of useSocialExportWindow.
+ * The main window's half of the detached export (ExportWindow): Image, HTML
+ * and Social, switched by tab in the one window.
  *
  * The window is only the panel: every build happens here, where the messages,
- * the mirrored remote content and the privacy dictionary live, and the window
- * previews and saves from the files it gets back. It is handed a bare list of
- * the messages (ids, to key its preview), and when it docks back the dialog
+ * the mirrored remote content, the privacy dictionary and (for an app shot)
+ * the window being shot live, and the window previews and saves from what it
+ * gets back (files, or the Social PNG). It is handed a bare list of the
+ * messages (ids, to key its preview), and when it docks back the dialog
  * reopens on the messages held here, never on anything the window sends.
  *
  * Privacy mode is enforced here too: while it is on, a build is redacted
- * whatever the window asked.
+ * whatever the window asked (buildSocialContent does so for Social).
+ *
+ * A Social app shot shoots whatever main has open: once the user has opened
+ * another message there, it answers `not-open` instead of shooting the wrong
+ * mail. The Social style is remembered here: a child's settings writes are off.
  *
  * One window at a time. `onDock` receives `{ messages, account, mailbox, initial }`
- * when the window hands itself back to the dialog.
+ * when the window hands itself back to the dialog; `initial` is the window's
+ * `{ format, files, social? }`.
  */
 export function useExportWindow({ onDock }) {
   const current = useRef(null); // { token, label, messages, account, mailbox, initial }
@@ -44,6 +55,9 @@ export function useExportWindow({ onDock }) {
             Object.fromEntries(Object.entries({ uid, messageId, _accountId, _mailbox }).filter(([, v]) => v !== undefined))
           )),
           theme: { theme: theme.theme, palette: theme.palette },
+          settings: { socialExport: useSettingsStore.getState().socialExport },
+          // A Social tab opened from Image or HTML has no choices of its own to say it.
+          socialDefaults: { revealSender: isSpamMessage(record.messages[0], useMailStore.getState()) },
         }).catch(() => {});
       }),
       listen('export-window-request', async ({ payload }) => {
@@ -51,12 +65,28 @@ export function useExportWindow({ onDock }) {
         const { token, label, messages, account, mailbox } = current.current;
         const reply = body => emitTo(label, 'export-window-reply', { token, requestId: payload.requestId, ...body }).catch(() => {});
         try {
+          const options = payload.options || {};
+          const premium = hasPremiumAccess(useSettingsStore.getState().billingProfile);
+          if (options.format === 'social') {
+            if (!premium) throw new Error('premium');
+            const { format: _format, ...social } = options;
+            const state = useMailStore.getState();
+            if (social.content === 'app' && !isCaptureTarget(state.selectedEmail, captureTargetOf(messages[0], state), state)) {
+              await reply({ ok: false, error: 'not-open' });
+              return;
+            }
+            const [canvas, name] = await Promise.all([
+              buildSocialContent(messages[0], social),
+              socialFileName(messages[0], { redact: social.redact, revealSender: social.revealSender }),
+            ]);
+            await reply({ ok: true, result: { base64: await canvasToPngBase64(canvas), name } });
+            return;
+          }
           // In the shape of a failed build: the panel words it as the premium notice.
-          if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) {
+          if (!premium) {
             await reply({ ok: true, result: { ok: false, reason: 'premium' } });
             return;
           }
-          const options = payload.options || {};
           const redact = options.redact || (usePrivacyStore.getState().enabled
             ? { style: options.format === 'html' ? 'bar' : 'blur' }
             : null);
@@ -65,6 +95,9 @@ export function useExportWindow({ onDock }) {
         } catch (err) {
           await reply({ ok: false, error: String(err?.message || err) });
         }
+      }),
+      listen('export-window-prefs', ({ payload }) => {
+        if (mine(payload) && payload.patch) useSettingsStore.getState().setSocialExport(payload.patch);
       }),
       listen('export-window-dock', ({ payload }) => {
         if (!mine(payload)) return;
