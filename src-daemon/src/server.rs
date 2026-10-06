@@ -750,10 +750,39 @@ pub(crate) async fn handle_request_for_test(state: &Arc<DaemonState>, method: &s
     handle_request(state, RpcRequest { method: method.into(), params, id: Some(serde_json::json!(1)) }).await
 }
 
+/// The open-file cap the test process lifts its soft limit to, or the hard
+/// limit if that is lower.
+#[cfg(all(test, unix))]
+const TEST_OPEN_FILES: libc::rlim_t = 10_240;
+
+/// Every daemon test shares one process. Ten threads of states, mock servers
+/// and temp files peaked near macOS's default soft limit of 256 open files,
+/// and whichever test opened the one too many failed with "Too many open
+/// files" (the mini, 2026-10-07). Lifted once, as `ulimit -n` would; Linux
+/// starts far above it.
+#[cfg(test)]
+fn lift_open_file_limit() {
+    #[cfg(unix)]
+    {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            let mut lim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+            // SAFETY: getrlimit/setrlimit only read and write the struct passed.
+            unsafe {
+                if libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) == 0 && lim.rlim_cur < lim.rlim_max.min(TEST_OPEN_FILES) {
+                    lim.rlim_cur = lim.rlim_max.min(TEST_OPEN_FILES);
+                    libc::setrlimit(libc::RLIMIT_NOFILE, &lim);
+                }
+            }
+        });
+    }
+}
+
 #[cfg(test)]
 impl DaemonState {
     /// A state wired the way main.rs wires it, but pointed at scratch dirs.
     pub(crate) fn for_test(mail_dir: PathBuf, app_dir: PathBuf, mail_dir_ok: bool) -> Arc<DaemonState> {
+        lift_open_file_limit();
         let app_dir_for_index = app_dir.clone();
         let imap_pool = Arc::new(imap::ImapPool::new());
         let contacts = contacts_index::ContactsState::new(mail_dir.clone());
@@ -885,6 +914,18 @@ mod tests {
 
     fn err_message(resp: RpcResponse) -> String {
         resp.error.map(|e| e.message).unwrap_or_default()
+    }
+
+    /// A test state lifts the process's soft open-file limit, so parallel
+    /// tests do not run out at macOS's default of 256.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_test_state_lifts_the_open_file_limit() {
+        let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let _s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        let mut lim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        assert_eq!(unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) }, 0);
+        assert!(lim.rlim_cur >= lim.rlim_max.min(TEST_OPEN_FILES), "soft {} of hard {}", lim.rlim_cur, lim.rlim_max);
     }
 
     // ── The index yields to the user ───────────────────────────────────
