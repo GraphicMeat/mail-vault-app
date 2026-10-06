@@ -7,7 +7,7 @@ import { basename, join, resolve } from 'node:path';
 // The Graph specs need the Graph mailbox only wdio.graph.conf.js loads. The
 // default conf must never pick them up, and the Graph conf must pick up
 // nothing else.
-const graph = ['graph-folder-keys.test.js', 'graph-folder-keys-adopt.test.js', 'graph-backup-one-dir-per-folder.test.js'];
+const graph = ['graph-folder-keys.test.js', 'graph-folder-keys-adopt.test.js', 'graph-backup-one-dir-per-folder.test.js', 'graph-send-bcc.test.js'];
 let testDirectory;
 beforeAll(() => {
   testDirectory = mkdtempSync(join(tmpdir(), 'mailvault-graph-isolation-'));
