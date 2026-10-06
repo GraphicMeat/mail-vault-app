@@ -491,9 +491,11 @@ pub enum SendMailError {
     /// Over `SEND_MAIL_LIMIT_BYTES` once encoded: refused before any request.
     TooLarge { encoded_bytes: usize },
     /// The request got no answer (connect, TLS, timeout, a dropped
-    /// connection). `maybe_sent` is false only when no connection was made,
-    /// so Graph cannot have the message; after that it may have it. `detail`
-    /// is the error with its causes, the URL left out.
+    /// connection). `maybe_sent` is false only for what reqwest reports as a
+    /// failed connect, so Graph cannot have the message; anything else may
+    /// have reached it. A connect that hangs until the request's own timeout
+    /// is reported as a timeout, not a connect, so it counts as maybe sent:
+    /// the safe side. `detail` is the error with its causes, the URL left out.
     Transport { timed_out: bool, maybe_sent: bool, detail: String },
     /// Graph answered, and not with a 2xx. `code` and `message` are the error
     /// body's `error.code` / `error.message` when it had them.
