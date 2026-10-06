@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-10-07
+
 ### Added
 - **A focus session can run on a calm animated scene.** When you start a session, pick Countryside, Sea or Town, or None for the plain lock; the app remembers your choice. The lock becomes a window onto a small pixel-art world whose day follows your session, from dawn when it starts to night when it ends: chimney smoke drifts, sheep graze, a sailboat laps a lighthouse, and windows light up one by one at dusk. The countdown stays at the top, its colour following the sky so it reads clearly from dawn to night, and the scene fits the window at any size and screen scale. With Reduce motion turned on in your system the scene holds still while its light still follows the session, and on a computer that cannot draw 3D graphics the lock looks as it always has.
 
