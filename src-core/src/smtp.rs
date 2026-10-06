@@ -460,9 +460,10 @@ fn friendly_smtp_error(host: &str, port: u16, from_addr: &str, err_str: &str) ->
     }
 }
 
-/// What the Graph send says when only a new sign-in can help. Also the marker
-/// `is_terminal_send_error` reads, so the two never drift.
-const GRAPH_SIGN_IN_AGAIN: &str = "Sign in to this account again under Settings, Accounts, then try again.";
+/// What a send says when only a new sign-in can help (a Graph token Microsoft
+/// refused, a scheduled send's expired token that could not be renewed). Also
+/// the marker `is_terminal_send_error` reads, so the two never drift.
+pub const SIGN_IN_AGAIN: &str = "Sign in to this account again under Settings, Accounts, then try again.";
 
 /// The size refusal's marker, likewise.
 const GRAPH_SIZE_LIMIT: &str = "the limit is 4 MB";
@@ -493,7 +494,7 @@ fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) 
                     from_addr
                 )
             } else if matches!(status, 401 | 403) {
-                format!("Microsoft did not accept the sign-in for {} when sending. {}", login, GRAPH_SIGN_IN_AGAIN)
+                format!("Microsoft did not accept the sign-in for {} when sending. {}", login, SIGN_IN_AGAIN)
             } else if *status == 413 {
                 format!("This message is too large to send through Microsoft: {}. Remove some attachments and try again.", GRAPH_SIZE_LIMIT)
             } else if *status == 429 {
@@ -526,7 +527,7 @@ fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) 
 pub fn is_terminal_send_error(msg: &str) -> bool {
     msg.contains("Authentication failed for")
         || msg.contains("refused to send as")
-        || msg.contains(GRAPH_SIGN_IN_AGAIN)
+        || msg.contains(SIGN_IN_AGAIN)
         || msg.contains(GRAPH_SIZE_LIMIT)
 }
 
@@ -587,7 +588,7 @@ fn message_id_of(raw: &[u8]) -> Option<String> {
 async fn send_via_graph(account: &ImapConfig, raw: Vec<u8>, bcc: &[Mailbox]) -> Result<SendResult, String> {
     let raw = with_bcc_header(raw, bcc);
     let Some(token) = account.access_token.as_deref().filter(|t| !t.is_empty()) else {
-        return Err(format!("There is no Microsoft sign-in for {} to send with. {}", account.email, GRAPH_SIGN_IN_AGAIN));
+        return Err(format!("There is no Microsoft sign-in for {} to send with. {}", account.email, SIGN_IN_AGAIN));
     };
     // The SMTP path's budget: a minute, plus a second per 50 KB, capped.
     let timeout = Duration::from_secs(60 + (raw.len() / 50_000) as u64).min(Duration::from_secs(600));

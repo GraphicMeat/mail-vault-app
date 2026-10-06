@@ -746,6 +746,86 @@ mod tests {
         assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer graph-token-stored"));
     }
 
+    fn now_ms() -> i64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64
+    }
+
+    /// What Microsoft answers a refresh token it will no longer honour.
+    fn refresh_refused() -> (u16, String) {
+        (400, json!({"error": "invalid_grant", "error_description": "AADSTS70008: The refresh token has expired."}).to_string())
+    }
+
+    /// A refresh inside the margin that fails, while the stored token has
+    /// minutes left: the send goes with the stored token, as it did before
+    /// the worker refreshed anything. A send that worked must not start
+    /// failing because the refresh did.
+    #[tokio::test]
+    async fn a_failed_refresh_sends_with_the_stored_token_while_it_is_still_valid() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let _tokens = crate::handlers::oauth2::test_token_mock(vec![refresh_refused()]);
+        let s = st();
+        graph_acc1(&s, json!({"oauth2RefreshToken": "rt-graph", "oauth2ExpiresAt": now_ms() + 120_000}));
+        let (id, _) = graph_row(&s, "Graph in two minutes").await;
+
+        let sent = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(sent["status"], json!("sent"), "row: {sent:?}");
+        assert_eq!(crate::handlers::oauth2::test_token_posts().len(), 1, "inside the margin, so a refresh was tried");
+        let requests = crate::handlers::graph::test_graph_requests();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer graph-token-stored"));
+    }
+
+    /// The stored token has expired and Microsoft refuses to renew it: no
+    /// retry can fix that, and sending with the dead token only earns a
+    /// refusal worded as something else. The row ends asking for a new
+    /// sign-in, and nothing is sent.
+    #[tokio::test]
+    async fn an_expired_token_that_cannot_be_renewed_ends_the_row_asking_to_sign_in() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let _tokens = crate::handlers::oauth2::test_token_mock(vec![refresh_refused()]);
+        let s = st();
+        graph_acc1(&s, json!({"oauth2RefreshToken": "rt-graph", "oauth2ExpiresAt": 1_000_000_000_000i64}));
+        let (id, _) = graph_row(&s, "Graph expired for good").await;
+
+        let row = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(row["status"], json!("failed"), "row: {row:?}");
+        let last_error = row["lastError"].as_str().unwrap_or("");
+        assert!(last_error.contains("Sign in to this account again"), "{last_error}");
+        assert!(last_error.contains(GRAPH_EMAIL), "{last_error}");
+        assert!(!last_error.contains('\u{2014}'), "no em dash: {last_error}");
+        assert_eq!(crate::handlers::oauth2::test_token_posts().len(), 1);
+        assert!(crate::handlers::graph::test_graph_requests().is_empty(), "nothing goes out with an expired token");
+    }
+
+    /// The stored token has expired and the renewal got no usable answer (a
+    /// provider outage, a dropped connection): that can clear on its own, so
+    /// the row waits for another try instead of failing, and nothing is sent
+    /// with the dead token meanwhile.
+    #[tokio::test]
+    async fn an_expired_token_whose_renewal_went_unanswered_waits_for_another_try() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let _tokens = crate::handlers::oauth2::test_token_mock(vec![(503, "Service Unavailable".to_string())]);
+        let s = st();
+        graph_acc1(&s, json!({"oauth2RefreshToken": "rt-graph", "oauth2ExpiresAt": 1_000_000_000_000i64}));
+        let (id, _) = graph_row(&s, "Graph renewal outage").await;
+
+        let row = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(row["status"], json!("queued"), "row: {row:?}");
+        let last_error = row["lastError"].as_str().unwrap_or("");
+        assert!(last_error.contains("renew"), "{last_error}");
+        assert!(!smtp::is_terminal_send_error(last_error), "{last_error}");
+        assert!(crate::handlers::graph::test_graph_requests().is_empty(), "nothing goes out with an expired token");
+    }
+
     fn edit_params(id: &str, to: &str) -> Value {
         json!({
             "id": id,

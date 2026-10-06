@@ -299,10 +299,11 @@ fn emit(state: &Arc<DaemonState>, id: &str, status: &str) {
 }
 
 /// The failures a retry can never fix, as `smtp` words them: a rejected
-/// login (SMTP, or a Graph sign-in Microsoft will not take), a sender this
-/// account is not allowed to send as, a message over Graph's size limit.
-/// Everything else (a timeout, a throttle, a host that refuses for a moment,
-/// an SMTP hostname that won't resolve) gets the retry ladder.
+/// login (SMTP, a Graph sign-in Microsoft will not take, or an expired token
+/// that could not be renewed), a sender this account is not allowed to send
+/// as, a message over Graph's size limit. Everything else (a timeout, a
+/// throttle, a host that refuses for a moment, an SMTP hostname that won't
+/// resolve) gets the retry ladder.
 fn is_terminal_smtp_error(msg: &str) -> bool {
     smtp::is_terminal_send_error(msg)
 }
@@ -316,10 +317,10 @@ fn is_terminal_smtp_error(msg: &str) -> bool {
 /// timeout that is not a failure the ladder can classify; it is a worker that
 /// never comes back and takes the rest of the queue with it.
 ///
-/// Then the OAuth2 token is made fresh (`with_fresh_token`).
-async fn resolve_credentials(state: &Arc<DaemonState>, account_id: &str) -> Result<ImapConfig, String> {
-    let (account, record) = crate::credentials::resolve_account_with_record_guarded(account_id).await?;
-    Ok(with_fresh_token(state, account, &record).await)
+/// The stored record comes back too: `with_fresh_token` reads its OAuth2
+/// fields.
+async fn resolve_credentials(account_id: &str) -> Result<(ImapConfig, serde_json::Value), String> {
+    crate::credentials::resolve_account_with_record_guarded(account_id).await
 }
 
 /// Refresh this long before the stored expiry, as the app's
@@ -336,19 +337,30 @@ const TOKEN_REFRESH_MARGIN_MS: i64 = 5 * 60 * 1000;
 /// for the app. The new token is used for this send only and not written
 /// back: the app rewrites the whole credentials blob from its own copy, so a
 /// daemon write would race it, and the refresh token stays valid either way.
-/// A refresh that fails leaves the stored token, and the send says what the
-/// server made of it. No expiry on record means no refresh, as in the app.
-async fn with_fresh_token(state: &Arc<DaemonState>, mut account: ImapConfig, record: &serde_json::Value) -> ImapConfig {
+/// No expiry on record means no refresh, as in the app.
+///
+/// A refresh that fails while the stored token is still valid leaves the
+/// stored one, so a send that worked before this refresh existed still works.
+/// Once it has expired there is nothing to send with, and `Err` says why: a
+/// refusal (the provider said no, or a client this build cannot pair) asks
+/// for a new sign-in (`smtp::SIGN_IN_AGAIN`, which ends the row); no usable
+/// answer at all (`renewal_unanswered`) is for the retry ladder and the
+/// network gate.
+async fn with_fresh_token(
+    state: &Arc<DaemonState>,
+    mut account: ImapConfig,
+    record: &serde_json::Value,
+) -> Result<ImapConfig, String> {
     if !account.is_oauth2() {
-        return account;
+        return Ok(account);
     }
     let text = |k: &str| record.get(k).and_then(serde_json::Value::as_str).filter(|v| !v.is_empty()).map(str::to_owned);
-    let Some(refresh) = text("oauth2RefreshToken") else { return account };
+    let Some(refresh) = text("oauth2RefreshToken") else { return Ok(account) };
     let Some(expires_at) = record.get("oauth2ExpiresAt").and_then(serde_json::Value::as_f64).map(|v| v as i64) else {
-        return account;
+        return Ok(account);
     };
     if now_ms() < expires_at - TOKEN_REFRESH_MARGIN_MS {
-        return account;
+        return Ok(account);
     }
     let refreshed = state
         .oauth2
@@ -361,15 +373,36 @@ async fn with_fresh_token(state: &Arc<DaemonState>, mut account: ImapConfig, rec
             text("oauth2ClientId"),
         )
         .await;
-    match refreshed {
+    let failure = match refreshed {
         Ok(tokens) if !tokens.access_token.is_empty() => {
             info!("[scheduled-send] refreshed the expiring token for {}", account.email);
             account.access_token = Some(tokens.access_token);
+            return Ok(account);
         }
-        Ok(_) => warn!("[scheduled-send] the token refresh for {} returned no token; sending with the stored one", account.email),
-        Err(e) => warn!("[scheduled-send] could not refresh the token for {}: {e}; sending with the stored one", account.email),
+        Ok(_) => "the refresh returned no token".to_string(),
+        Err(e) => e,
+    };
+    if now_ms() < expires_at {
+        warn!("[scheduled-send] could not refresh the token for {}: {failure}; sending with the stored one, still valid", account.email);
+        return Ok(account);
     }
-    account
+    warn!("[scheduled-send] the token for {} has expired and could not be refreshed: {failure}", account.email);
+    if renewal_unanswered(&failure) {
+        // The provider's text can carry an em dash; ours does not.
+        let failure = failure.replace(" \u{2014} ", ": ");
+        return Err(format!("Could not renew the sign-in for {}: {}", account.email, failure));
+    }
+    Err(format!("The sign-in for {} has expired and could not be renewed. {}", account.email, smtp::SIGN_IN_AGAIN))
+}
+
+/// A refresh that got no usable answer, as `oauth2::refresh_token` words it:
+/// the request failed, the reply was not a token response, or the provider
+/// said it is down for now. Anything else is a refusal no retry will change.
+fn renewal_unanswered(failure: &str) -> bool {
+    failure.starts_with("Refresh request failed")
+        || failure.starts_with("Refresh response parse failed")
+        || failure.contains("temporarily_unavailable")
+        || failure.contains("server_error")
 }
 
 async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> Outcome {
@@ -377,8 +410,8 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
     // (an OAuth2 token especially) can rotate between scheduling and firing,
     // and this is the exact seam `sync.now`/`sync.watch` already use to keep
     // a background job off whatever a stale RPC payload said.
-    let account = match resolve_credentials(state, &row.account_id).await {
-        Ok(a) => a,
+    let (account, record) = match resolve_credentials(&row.account_id).await {
+        Ok(found) => found,
         Err(e) => {
             let msg = format!("Could not load this account's credentials: {e}");
             // Waiting on the user to unlock the keychain is not a failure of
@@ -388,6 +421,11 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
             }
             return if within_credential_grace() { Outcome::Transient(msg) } else { Outcome::Terminal(msg) };
         }
+    };
+    let account = match with_fresh_token(state, account, &record).await {
+        Ok(a) => a,
+        Err(e) if is_terminal_smtp_error(&e) => return Outcome::Terminal(e),
+        Err(e) => return if state.net.note_failure(&e).await { Outcome::Transient(e) } else { Outcome::Offline(e) },
     };
 
     let stored: StoredEnvelope = match serde_json::from_str(&row.envelope) {
@@ -483,4 +521,119 @@ fn append_to_sent(
             json!({"accountId": account_id, "mailbox": mailbox, "messageId": message_id, "ok": ok, "verify": verify_payload}),
         );
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn st() -> Arc<DaemonState> {
+        let dir = std::env::temp_dir().join(format!("mv-scheduled-worker-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        DaemonState::for_test(dir.clone(), dir, true)
+    }
+
+    /// A stored OAuth2 record whose token expired long ago, with `extra`
+    /// merged in, and the `ImapConfig` the keychain read makes of it.
+    fn expired_record(extra: Value) -> (ImapConfig, Value) {
+        let mut record = json!({
+            "authType": "oauth2",
+            "oauth2AccessToken": "token-stored",
+            "oauth2RefreshToken": "rt-stored",
+            "oauth2ExpiresAt": 1_000_000_000_000i64,
+        });
+        for (k, v) in extra.as_object().cloned().unwrap_or_default() {
+            record[k] = v;
+        }
+        (serde_json::from_value(record.clone()).expect("ImapConfig"), record)
+    }
+
+    fn field(body: &str, key: &str) -> Option<String> {
+        url::form_urlencoded::parse(body.as_bytes()).find(|(k, _)| k == key).map(|(_, v)| v.to_string())
+    }
+
+    fn fresh(token: &str) -> (u16, String) {
+        (200, json!({"access_token": token, "expires_in": 3600}).to_string())
+    }
+
+    /// A Gmail account refreshes with the Google client that issued its
+    /// refresh token (the one stamped on the record) and Google's mail scope:
+    /// never Graph's scopes, and never the other Google client, whose token
+    /// endpoint would answer `invalid_grant` for a grant it did not issue.
+    #[tokio::test]
+    async fn a_google_record_refreshes_with_its_own_client_and_the_google_scope() {
+        let _tokens = crate::handlers::oauth2::test_token_mock(vec![fresh("g-fresh"), fresh("g-fresh-2")]);
+        let s = st();
+        let thunderbird = mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID;
+        let google = |stamp: &str| {
+            expired_record(json!({
+                "email": "me@gmail.test",
+                "imapHost": "imap.gmail.com",
+                "smtpHost": "smtp.gmail.com",
+                "oauth2Provider": "google",
+                "oauth2ClientId": stamp,
+            }))
+        };
+
+        let (account, record) = google(thunderbird);
+        let _ = with_fresh_token(&s, account, &record).await;
+        let posts = crate::handlers::oauth2::test_token_posts();
+        assert_eq!(posts.len(), 1, "{posts:?}");
+        assert_eq!(field(&posts[0], "grant_type").as_deref(), Some("refresh_token"));
+        assert_eq!(field(&posts[0], "refresh_token").as_deref(), Some("rt-stored"));
+        assert_eq!(field(&posts[0], "client_id").as_deref(), Some(thunderbird));
+        assert_eq!(field(&posts[0], "scope").as_deref(), Some("https://mail.google.com/"));
+
+        // The other client: MailVault's own when this build carries it, else
+        // one this build cannot pair, which must not fall back to Thunderbird's.
+        let other = mailvault_core::oauth2::own_google_client_id().unwrap_or("someone-else.apps.googleusercontent.com");
+        let (account, record) = google(other);
+        let _ = with_fresh_token(&s, account, &record).await;
+        let posts = crate::handlers::oauth2::test_token_posts();
+        assert!(posts.iter().all(|p| field(p, "client_id").as_deref() != Some(thunderbird)), "{posts:?}");
+        if mailvault_core::oauth2::own_google_client_id().is_some() {
+            assert_eq!(posts.len(), 1, "{posts:?}");
+            assert_eq!(field(&posts[0], "client_id").as_deref(), Some(other));
+            assert_eq!(field(&posts[0], "scope").as_deref(), Some("https://mail.google.com/"));
+        } else {
+            assert!(posts.is_empty(), "a client this build cannot pair is never asked: {posts:?}");
+        }
+    }
+
+    /// An Outlook account on IMAP (not the Graph transport) refreshes with the
+    /// IMAP and SMTP scopes it was signed in with. The Graph record beside it
+    /// is the control: same provider, Graph's scopes.
+    #[tokio::test]
+    async fn a_microsoft_imap_record_refreshes_with_the_imap_scopes() {
+        let _tokens = crate::handlers::oauth2::test_token_mock(vec![fresh("ms-fresh"), fresh("graph-fresh")]);
+        let s = st();
+        let microsoft = |transport: Option<&str>| {
+            expired_record(json!({
+                "email": "me@contoso.test",
+                "imapHost": "outlook.office365.com",
+                "smtpHost": "smtp.office365.com",
+                "oauth2Provider": "microsoft",
+                "oauth2Transport": transport,
+            }))
+        };
+
+        let (account, record) = microsoft(None);
+        assert!(!account.uses_graph());
+        let _ = with_fresh_token(&s, account, &record).await;
+        let (graph_account, graph_record) = microsoft(Some("graph"));
+        assert!(graph_account.uses_graph());
+        let _ = with_fresh_token(&s, graph_account, &graph_record).await;
+
+        let posts = crate::handlers::oauth2::test_token_posts();
+        assert_eq!(posts.len(), 2, "{posts:?}");
+        let imap_scope = field(&posts[0], "scope").unwrap_or_default();
+        assert!(imap_scope.contains("https://outlook.office.com/IMAP.AccessAsUser.All"), "{imap_scope}");
+        assert!(imap_scope.contains("https://outlook.office.com/SMTP.Send"), "{imap_scope}");
+        assert!(!imap_scope.contains("Mail.Send") && !imap_scope.contains("Mail.ReadWrite"), "{imap_scope}");
+        assert_eq!(field(&posts[0], "refresh_token").as_deref(), Some("rt-stored"));
+        let graph_scope = field(&posts[1], "scope").unwrap_or_default();
+        assert!(graph_scope.contains("Mail.Send") && !graph_scope.contains("IMAP"), "control: {graph_scope}");
+        assert_ne!(field(&posts[0], "client_id").as_deref(), Some(mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID));
+    }
 }
