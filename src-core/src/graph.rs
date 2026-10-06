@@ -1,5 +1,5 @@
 use base64::Engine;
-use crate::net_activity::{http_client, Tracked};
+use crate::net_activity::{http_client, http_client_with, Tracked};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -493,9 +493,11 @@ pub enum SendMailError {
     /// The request got no answer (connect, TLS, timeout, a dropped
     /// connection). `maybe_sent` is false only for what reqwest reports as a
     /// failed connect, so Graph cannot have the message; anything else may
-    /// have reached it. A connect that hangs until the request's own timeout
-    /// is reported as a timeout, not a connect, so it counts as maybe sent:
-    /// the safe side. `detail` is the error with its causes, the URL left out.
+    /// have reached it. A connect that hangs fails as a connect too, after
+    /// `SEND_CONNECT_TIMEOUT` (`GraphClient::for_send`), since nothing was
+    /// written yet; a client without that timeout would report it as the
+    /// request's own timeout, so as maybe sent. `detail` is the error with its
+    /// causes, the URL left out.
     Transport { timed_out: bool, maybe_sent: bool, detail: String },
     /// Graph answered, and not with a 2xx. `code` and `message` are the error
     /// body's `error.code` / `error.message` when it had them.
@@ -504,15 +506,27 @@ pub enum SendMailError {
 
 /// A reqwest error and its causes on one line, the URL left out.
 fn error_chain(e: reqwest::Error) -> String {
-    let e = e.without_url();
-    let mut text = e.to_string();
-    let mut source = std::error::Error::source(&e);
-    while let Some(s) = source {
-        text.push_str(": ");
-        text.push_str(&s.to_string());
-        source = s.source();
-    }
-    text
+    crate::net_activity::error_chain(&e.without_url())
+}
+
+/// How long a send waits for its connection to open, TCP and TLS, before it
+/// gives up. Without it a connect that never answers (a captive portal, a
+/// firewall that drops the packets) ran into the request's own timeout,
+/// which reads as a send Microsoft may have taken. This way it fails as a
+/// connect, before any byte of the request was written. Well under the
+/// send's own timeout (a minute at least, `smtp::send_via_graph`).
+const SEND_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// The send's HTTP client: purpose "send", and a connect that gives up
+/// after `connect_timeout`.
+fn send_client(connect_timeout: std::time::Duration) -> Tracked {
+    http_client_with("send", reqwest::Client::builder().connect_timeout(connect_timeout))
+}
+
+/// A send request that got no answer. Only a failed connect wrote nothing,
+/// so anything else may have reached Graph (`SendMailError::Transport`).
+fn transport_error(e: reqwest::Error) -> SendMailError {
+    SendMailError::Transport { timed_out: e.is_timeout(), maybe_sent: !e.is_connect(), detail: error_chain(e) }
 }
 
 /// `retry-after` in whole seconds, for the one `$batch` retry. Clamped to
@@ -546,6 +560,13 @@ impl GraphClient {
             client: http_client(purpose, None),
             access_token: access_token.to_string(),
         }
+    }
+
+    /// A client for `send_mime`, purpose "send", whose connection gives up
+    /// after `SEND_CONNECT_TIMEOUT`: a send that never left then reports a
+    /// failed connect, never one that may have gone out.
+    pub fn for_send(access_token: &str) -> Self {
+        Self { client: send_client(SEND_CONNECT_TIMEOUT), access_token: access_token.to_string() }
     }
 
     /// Its requests shown as `email`'s (`Tracked::for_account`).
@@ -1021,7 +1042,7 @@ impl GraphClient {
                 .timeout(timeout)
                 .body(encoded))
             .await
-            .map_err(|e| SendMailError::Transport { timed_out: e.is_timeout(), maybe_sent: !e.is_connect(), detail: error_chain(e) })?;
+            .map_err(transport_error)?;
 
         let status = resp.status();
         if status.is_success() {
@@ -1845,5 +1866,59 @@ mod tests {
         })).unwrap();
         assert_eq!(parsed.storage_key, "");
         assert_eq!(parsed.well_known_name, None);
+    }
+
+    // -- A send whose connection never opens ---------------------------------
+
+    /// A loopback port whose accept queue is full: nothing accepts, so the
+    /// kernel drops the next SYN and a connect to it hangs. `None` where the
+    /// system refuses instead (Windows answers a full queue with a reset).
+    /// The listener and the connections that fill it must outlive the test.
+    async fn hanging_port() -> Option<(std::net::SocketAddr, tokio::net::TcpListener, Vec<std::net::TcpStream>)> {
+        let socket = tokio::net::TcpSocket::new_v4().unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let listener = socket.listen(1).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut held = Vec::new();
+        for _ in 0..64 {
+            match std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500)) {
+                Ok(stream) => held.push(stream),
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => return Some((addr, listener, held)),
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+
+    /// A captive portal or a firewall that drops the packets: the connect to
+    /// Graph never opens and nothing is written, so the send could not reach
+    /// Microsoft, which may be tried again. The send client's connect timeout
+    /// fires first and says so. Without one (the control, the client sends
+    /// used before) the request's own timeout fired first, and reqwest called
+    /// that a timeout, not a connect: "may have gone out", the end of a
+    /// scheduled send. The timeouts are shortened here because macOS gives up
+    /// a dropped loopback SYN by itself after about 8 seconds; the real ones
+    /// are 20 seconds for the connect and a minute or more for the send.
+    #[tokio::test]
+    async fn a_send_whose_connection_never_opens_was_not_sent() {
+        let Some((addr, _listener, _held)) = hanging_port().await else {
+            assert!(!cfg!(target_os = "macos"), "a connect to a full accept queue must hang on macOS");
+            eprintln!("skipped: this system refuses a connect to a full accept queue instead of leaving it hanging");
+            return;
+        };
+        let url = format!("http://{addr}/me/sendMail");
+        let request_timeout = std::time::Duration::from_secs(5);
+        assert!(SEND_CONNECT_TIMEOUT < std::time::Duration::from_secs(60), "the connect must give up before the send does");
+
+        let send = send_client(std::time::Duration::from_millis(1500));
+        let err = send.send(send.post(&url).timeout(request_timeout).body("mime")).await.expect_err("nothing accepts");
+        let SendMailError::Transport { maybe_sent, detail, .. } = transport_error(err) else { panic!("a transport error") };
+        assert!(!maybe_sent, "nothing was written: {detail}");
+        assert!(crate::net::looks_like_network_down(&detail), "{detail}");
+
+        let plain = http_client("send", None);
+        let err = plain.send(plain.post(&url).timeout(request_timeout).body("mime")).await.expect_err("nothing accepts");
+        let control = transport_error(err);
+        assert!(matches!(control, SendMailError::Transport { maybe_sent: true, timed_out: true, .. }), "control: {control:?}");
     }
 }

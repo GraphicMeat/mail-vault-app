@@ -605,7 +605,7 @@ async fn send_via_graph(account: &ImapConfig, raw: Vec<u8>, bcc: &[Mailbox]) -> 
     let timeout = Duration::from_secs(60 + (raw.len() / 50_000) as u64).min(Duration::from_secs(600));
     info!("[smtp] Sending {} bytes via Microsoft Graph (sendMail)", raw.len());
 
-    let client = GraphClient::for_purpose(token, "send").for_account(&account.email);
+    let client = GraphClient::for_send(token).for_account(&account.email);
     client
         .send_mime(&raw, timeout)
         .await

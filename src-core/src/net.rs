@@ -140,9 +140,14 @@ async fn lookup(host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
 /// Everything here is raised before or during connect, never by a server that
 /// answered: a tagged `NO`/`BAD` means the network is fine.
 pub fn looks_like_network_down(err: &str) -> bool {
-    const NEEDLES: [&str; 12] = [
+    const NEEDLES: [&str; 14] = [
         "tcp connect to",          // imap::connect_transport's own wrapper
         "tls handshake with",      // handshake died before any IMAP byte
+        // hyper's words for an HTTP request whose connection never opened (a
+        // token renewal, a Graph call), ahead of a cause that Windows words
+        // in the system's language.
+        "tcp connect error",
+        "dns error",
         "no ipv4 address found",   // resolver answered with nothing
         "failed to lookup address",
         "nodename nor servname",   // macOS getaddrinfo
@@ -369,6 +374,21 @@ mod tests {
             "TLS handshake with imap.zoho.com failed: connection closed via error",
             "No IPv4 address found for imap.example.com",
             "Network is unreachable (os error 51)",
+        ] {
+            assert!(looks_like_network_down(err), "should suspect: {err}");
+        }
+    }
+
+    /// What an HTTP request (a token renewal, a Graph send) says when its
+    /// connection never opened. The cause after hyper's own words is the
+    /// system's, in the system's language on Windows, so hyper's words are
+    /// what must be recognised.
+    #[test]
+    fn an_http_connect_that_failed_is_network_shaped_in_any_language() {
+        for err in [
+            "error sending request: client error (Connect): tcp connect error: deadline has elapsed",
+            "error sending request: client error (Connect): tcp connect error: No connection could be made because the target machine actively refused it. (os error 10061)",
+            "error sending request: client error (Connect): dns error: No such host is known. (os error 11001)",
         ] {
             assert!(looks_like_network_down(err), "should suspect: {err}");
         }
