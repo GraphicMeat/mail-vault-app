@@ -655,7 +655,9 @@ impl OAuth2Manager {
         let resp = client
             .send(client.post(config.token_endpoint).form(&params))
             .await
-            .map_err(|e| format!("Refresh request failed: {}", e))?;
+            // With its causes: "error sending request" alone says nothing of
+            // why, and the causes are what the network gate recognises.
+            .map_err(|e| format!("Refresh request failed: {}", crate::net_activity::error_chain(&e)))?;
 
         let data: serde_json::Value = resp
             .json()

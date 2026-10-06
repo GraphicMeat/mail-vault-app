@@ -401,9 +401,11 @@ pub async fn measure(
     (out, Some(ev))
 }
 
-/// The error with its cause chain, the URL (path and query can carry
-/// tokens) cut down to host:port.
-fn error_text(e: &reqwest::Error, host: &str, port: u16) -> String {
+/// A reqwest error and its causes on one line. reqwest's own text stops at
+/// "error sending request"; the causes ("client error (Connect): tcp connect
+/// error: Connection refused") say what failed, and are what the network
+/// gate recognises (`net::looks_like_network_down`).
+pub fn error_chain(e: &reqwest::Error) -> String {
     let mut text = e.to_string();
     let mut source = std::error::Error::source(e);
     while let Some(s) = source {
@@ -411,6 +413,13 @@ fn error_text(e: &reqwest::Error, host: &str, port: u16) -> String {
         text.push_str(&s.to_string());
         source = s.source();
     }
+    text
+}
+
+/// The error with its cause chain, the URL (path and query can carry
+/// tokens) cut down to host:port.
+fn error_text(e: &reqwest::Error, host: &str, port: u16) -> String {
+    let text = error_chain(e);
     match e.url() {
         Some(u) => text.replace(u.as_str(), &format!("{host}:{port}")),
         None => text,

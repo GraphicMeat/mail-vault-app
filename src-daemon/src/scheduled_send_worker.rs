@@ -344,8 +344,8 @@ const TOKEN_REFRESH_MARGIN_MS: i64 = 5 * 60 * 1000;
 /// Once it has expired there is nothing to send with, and `Err` says why: a
 /// refusal (the provider said no, or a client this build cannot pair) asks
 /// for a new sign-in (`smtp::SIGN_IN_AGAIN`, which ends the row); no usable
-/// answer at all (`renewal_unanswered`) is for the retry ladder and the
-/// network gate.
+/// answer at all (`renewal_unanswered`) goes to the network probe: offline
+/// waits for the network, online takes the retry ladder.
 async fn with_fresh_token(
     state: &Arc<DaemonState>,
     mut account: ImapConfig,
@@ -425,7 +425,12 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
     let account = match with_fresh_token(state, account, &record).await {
         Ok(a) => a,
         Err(e) if is_terminal_smtp_error(&e) => return Outcome::Terminal(e),
-        Err(e) => return if state.net.note_failure(&e).await { Outcome::Transient(e) } else { Outcome::Offline(e) },
+        // A renewal that got no answer always asks the probe, not
+        // `note_failure`, whose needles only guess from the wording: the
+        // cause can be in the system's language (Windows) or missing. An
+        // expired token at wake, before the Wi-Fi joins, otherwise read as
+        // online and spent the row's tries in 90 seconds.
+        Err(e) => return if state.net.confirm_online().await { Outcome::Transient(e) } else { Outcome::Offline(e) },
     };
 
     let stored: StoredEnvelope = match serde_json::from_str(&row.envelope) {

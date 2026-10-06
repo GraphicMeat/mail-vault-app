@@ -782,13 +782,24 @@ fn lift_open_file_limit() {
 impl DaemonState {
     /// A state wired the way main.rs wires it, but pointed at scratch dirs.
     pub(crate) fn for_test(mail_dir: PathBuf, app_dir: PathBuf, mail_dir_ok: bool) -> Arc<DaemonState> {
+        // A gate whose probe always answers "online": these tests are about
+        // routing and state, never about connectivity.
+        Self::for_test_with_probe(mail_dir, app_dir, mail_dir_ok, Arc::new(|| Box::pin(async { true })))
+    }
+
+    /// `for_test` with the network gate's probe scripted by the caller, for
+    /// a test about what a send does when the probe says the network is down.
+    pub(crate) fn for_test_with_probe(
+        mail_dir: PathBuf,
+        app_dir: PathBuf,
+        mail_dir_ok: bool,
+        probe: crate::netgate::Probe,
+    ) -> Arc<DaemonState> {
         lift_open_file_limit();
         let app_dir_for_index = app_dir.clone();
         let imap_pool = Arc::new(imap::ImapPool::new());
         let contacts = contacts_index::ContactsState::new(mail_dir.clone());
-        // A gate whose probe always answers "online": these tests are about
-        // routing and state, never about connectivity.
-        let net = NetGate::with_probe(Arc::new(|| Box::pin(async { true })));
+        let net = NetGate::with_probe(probe);
         let vault_closed = Arc::new(AtomicBool::new(false));
         let vault_gate = Arc::new(std::sync::RwLock::new(()));
         let sync_engine = Arc::new(sync_engine::SyncEngine::new(

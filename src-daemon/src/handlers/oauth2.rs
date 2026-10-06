@@ -131,6 +131,15 @@ pub(crate) fn test_token_posts() -> Vec<String> {
     std::mem::take(&mut *tests::POSTED.lock().unwrap())
 }
 
+/// Test seam for a refresh that cannot connect: while the guard lives, both
+/// providers' token endpoints point at a loopback port nothing listens on.
+/// Holds the mock's lock like `test_token_mock`, and points the endpoints back
+/// at the mock before it lets go.
+#[cfg(test)]
+pub(crate) fn test_token_endpoint_refused() -> tests::RefusedEndpoint {
+    tests::refused_endpoint()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,6 +239,33 @@ mod tests {
         queue.extend(responses);
         POSTED.lock().unwrap().clear();
         guard
+    }
+
+    /// See `test_token_endpoint_refused`.
+    #[must_use]
+    pub(crate) struct RefusedEndpoint {
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for RefusedEndpoint {
+        // Runs before `_lock` is released, so no other test sees the closed port.
+        fn drop(&mut self) {
+            let base = format!("http://127.0.0.1:{}", mock_server_port());
+            std::env::set_var("MAILVAULT_MS_TOKEN_ENDPOINT", &base);
+            std::env::set_var("MAILVAULT_GOOGLE_TOKEN_ENDPOINT", &base);
+        }
+    }
+
+    pub(super) fn refused_endpoint() -> RefusedEndpoint {
+        let lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        mock_server_port();
+        POSTED.lock().unwrap().clear();
+        // Bound, read and released: a loopback port nothing listens on.
+        let closed = TcpListener::bind("127.0.0.1:0").expect("bind a port to close").local_addr().unwrap().port();
+        let base = format!("http://127.0.0.1:{closed}");
+        std::env::set_var("MAILVAULT_MS_TOKEN_ENDPOINT", &base);
+        std::env::set_var("MAILVAULT_GOOGLE_TOKEN_ENDPOINT", &base);
+        RefusedEndpoint { _lock: lock }
     }
 
     /// One field of the oldest form body the mock has not been asked about yet.

@@ -826,6 +826,113 @@ mod tests {
         assert!(crate::handlers::graph::test_graph_requests().is_empty(), "nothing goes out with an expired token");
     }
 
+    /// A state whose network probe always answers `online`, and a count of
+    /// how many times it was asked.
+    fn st_probed(online: bool) -> (Arc<DaemonState>, Arc<std::sync::atomic::AtomicUsize>) {
+        let dir = std::env::temp_dir().join(format!("mv-scheduled-handler-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&calls);
+        let probe: crate::netgate::Probe = Arc::new(move || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move { online })
+        });
+        (DaemonState::for_test_with_probe(dir.clone(), dir, true, probe), calls)
+    }
+
+    /// A Gmail account whose token expired long ago, stored as `acc1` the
+    /// way `graph_acc1` stores the Outlook one. Its SMTP server is a closed
+    /// loopback port, so nothing can reach Google from a test.
+    fn gmail_acc1(s: &Arc<DaemonState>) {
+        let record = json!({
+            "email": "han@gmail.test",
+            "imapHost": "127.0.0.1",
+            "imapPort": 1,
+            "smtpHost": "127.0.0.1",
+            "smtpPort": 1,
+            "authType": "oauth2",
+            "oauth2Provider": "google",
+            "oauth2ClientId": mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,
+            "oauth2AccessToken": "gmail-token-stored",
+            "oauth2RefreshToken": "rt-gmail",
+            "oauth2ExpiresAt": 1_000_000_000_000i64,
+        });
+        let creds_path = s.app_dir.join("credentials.json");
+        let blob: std::collections::HashMap<String, String> = [("acc1".to_string(), record.to_string())].into();
+        std::fs::write(&creds_path, serde_json::to_string(&blob).unwrap()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds_path);
+    }
+
+    /// One row per provider, each on a fresh state whose probe answers
+    /// `online`, fired while the token endpoint refuses every connect: each
+    /// row as it was before and after, and how often the probe was asked.
+    async fn fire_with_the_renewal_refused(online: bool) -> Vec<(&'static str, Arc<DaemonState>, scheduled::ScheduledSend, scheduled::ScheduledSend, usize)> {
+        let mut seen = Vec::new();
+        for provider in ["Graph", "Gmail"] {
+            let (s, probes) = st_probed(online);
+            let id = if provider == "Graph" {
+                graph_acc1(&s, json!({"oauth2RefreshToken": "rt-graph", "oauth2ExpiresAt": 1_000_000_000_000i64}));
+                graph_row(&s, "Graph at wake").await.0
+            } else {
+                gmail_acc1(&s);
+                call(&s, "scheduled.create", create_params("acc1")).await["id"].as_str().unwrap().to_string()
+            };
+            let before = stored(&s, &id);
+            call(&s, "scheduled.send_now", json!({"id": id})).await;
+            let after = stored(&s, &id);
+            let asked = probes.load(std::sync::atomic::Ordering::SeqCst);
+            seen.push((provider, s, before, after, asked));
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        seen
+    }
+
+    /// The laptop wakes, the catch-up pass fires before the Wi-Fi has
+    /// joined, and the token expired overnight: the renewal cannot connect.
+    /// Nothing is wrong with the account, so the row waits for the network as
+    /// a send that cannot connect does: queued, its try given back, its due
+    /// time untouched. The renewal's error named no cause the gate knew, so it
+    /// went down the retry ladder instead and ended `failed` in 90 seconds.
+    /// Gmail and Graph alike: every account signed in with Google or
+    /// Microsoft is renewed here.
+    #[tokio::test]
+    async fn an_expired_token_whose_renewal_cannot_connect_while_offline_waits_for_the_network() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
+        let _refused = crate::handlers::oauth2::test_token_endpoint_refused();
+
+        for (provider, s, before, after, asked) in fire_with_the_renewal_refused(false).await {
+            assert_eq!(after.status, "queued", "{provider}: {after:?}");
+            assert_eq!(after.attempts, before.attempts, "{provider}: offline must not spend a try: {after:?}");
+            assert_eq!(after.fire_at, before.fire_at, "{provider}: {after:?}");
+            assert!(after.last_error.contains("renew"), "{provider}: {}", after.last_error);
+            assert!(after.last_error.contains("tcp connect error"), "{provider}: the cause, not only \"error sending request\": {}", after.last_error);
+            assert!(asked >= 1, "{provider}: the probe decides, not the error's wording");
+            assert!(!s.net.is_online(), "{provider}");
+        }
+        assert!(crate::handlers::graph::test_graph_requests().is_empty(), "nothing goes out with an expired token");
+    }
+
+    /// The control: the same renewal that cannot connect, with the network
+    /// up (the provider's endpoint is down, or the way to it). That is worth
+    /// another try, so the row takes the retry ladder as it always did: one
+    /// try spent, due again after the backoff.
+    #[tokio::test]
+    async fn an_expired_token_whose_renewal_cannot_connect_while_online_is_tried_again() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
+        let _refused = crate::handlers::oauth2::test_token_endpoint_refused();
+
+        for (provider, s, before, after, _) in fire_with_the_renewal_refused(true).await {
+            assert_eq!(after.status, "queued", "{provider}: {after:?}");
+            assert_eq!(after.attempts, before.attempts + 1, "{provider}: {after:?}");
+            assert!(after.fire_at != before.fire_at && after.fire_at > now_ms(), "{provider}: backed off: {after:?}");
+            assert!(!smtp::is_terminal_send_error(&after.last_error), "{provider}: {}", after.last_error);
+            assert!(s.net.is_online(), "{provider}");
+        }
+        assert!(crate::handlers::graph::test_graph_requests().is_empty(), "nothing goes out with an expired token");
+    }
+
     /// Graph read the whole sendMail and the connection died before it
     /// answered: the message may well have gone. Requeueing the row (the
     /// ladder a dropped connection used to get) sends it a second time, so
