@@ -1228,7 +1228,7 @@ fn run_pass(st: &SearchIndexState, reopen: bool, rebuild: bool, recover: bool, o
                 premium,
                 config.image_text,
                 config.bodies,
-                &extractor,
+                extractor,
                 |account_id, vault_dir, uid, filename, part_index| {
                     yield_to_foreground(st);
                     read_attachment_part(&maildir, account_id, vault_dir, uid, filename, part_index)

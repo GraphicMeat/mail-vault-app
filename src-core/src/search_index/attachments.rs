@@ -11,6 +11,9 @@
 //! exact bug: pinning IsADirectory as BODY_UNPARSEABLE forever").
 
 use super::text::{cap_chars, html_to_text};
+use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+use std::sync::{mpsc, Arc};
+use std::time::Duration;
 
 pub const MAX_PART_BYTES: u64 = 25 * 1024 * 1024;
 pub const MAX_ZIP_UNCOMPRESSED: u64 = 50 * 1024 * 1024;
@@ -55,6 +58,69 @@ impl TextExtractor for NoOcrExtractor {
     }
     fn image_ocr(&self, _bytes: &[u8], _mime: &str) -> Result<String, ExtractError> {
         Err(ExtractError::Permanent("unsupported"))
+    }
+}
+
+/// A native extractor with a deadline on every call. Vision and PDFKit run
+/// in-process and cannot be killed, and Vision has been seen never to return:
+/// a live daemon's index worker sat in `TextRecognition` for a day and indexed
+/// nothing after it, so no new mail reached a view or a search. Each call runs
+/// on a thread of its own; past `limit` the part is `failed`, a verdict rather
+/// than a retry, so the same file cannot wedge the next pass too, and the
+/// thread is left to finish whenever it does. Until it does, no other native
+/// call starts: the parts it turns away stay pending, and a wedged framework
+/// costs one thread, not one per part. Built for one caller, the index worker.
+pub struct BoundedExtractor<E> {
+    inner: Arc<E>,
+    limit: Duration,
+    busy: Arc<AtomicBool>,
+}
+
+impl<E: TextExtractor + 'static> BoundedExtractor<E> {
+    pub fn new(inner: E, limit: Duration) -> Self {
+        Self { inner: Arc::new(inner), limit, busy: Arc::new(AtomicBool::new(false)) }
+    }
+
+    fn call<T: Send + 'static>(&self, work: impl FnOnce(&E) -> Result<T, ExtractError> + Send + 'static) -> Result<T, ExtractError> {
+        if self.busy.swap(true, SeqCst) {
+            return Err(ExtractError::Transient("an earlier extraction has not returned".into()));
+        }
+        // Cleared by the call's own thread when it returns or panics, never by
+        // a caller that stopped waiting for it.
+        struct Clear(Arc<AtomicBool>);
+        impl Drop for Clear {
+            fn drop(&mut self) {
+                self.0.store(false, SeqCst);
+            }
+        }
+        let clear = Clear(Arc::clone(&self.busy));
+        let inner = Arc::clone(&self.inner);
+        let (tx, rx) = mpsc::channel();
+        let spawned = std::thread::Builder::new().name("attachment-extract".into()).spawn(move || {
+            let result = work(&inner);
+            drop(clear);
+            let _ = tx.send(result);
+        });
+        if let Err(e) = spawned {
+            return Err(ExtractError::Transient(e.to_string()));
+        }
+        // A panic is as much a verdict on the file as a hang.
+        rx.recv_timeout(self.limit).unwrap_or(Err(ExtractError::Permanent("failed")))
+    }
+}
+
+impl<E: TextExtractor + 'static> TextExtractor for BoundedExtractor<E> {
+    fn pdf_text_layer(&self, bytes: &[u8]) -> Result<(String, usize), ExtractError> {
+        let bytes = bytes.to_vec();
+        self.call(move |inner| inner.pdf_text_layer(&bytes))
+    }
+    fn pdf_ocr(&self, bytes: &[u8], max_pages: usize) -> Result<String, ExtractError> {
+        let bytes = bytes.to_vec();
+        self.call(move |inner| inner.pdf_ocr(&bytes, max_pages))
+    }
+    fn image_ocr(&self, bytes: &[u8], mime: &str) -> Result<String, ExtractError> {
+        let (bytes, mime) = (bytes.to_vec(), mime.to_owned());
+        self.call(move |inner| inner.image_ocr(&bytes, &mime))
     }
 }
 
@@ -211,7 +277,7 @@ pub fn extract(input: &AttachmentInput, premium: bool, enabled: bool, extractor:
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn input(mime: &str, filename: &str, bytes: Vec<u8>) -> AttachmentInput {
@@ -393,5 +459,78 @@ mod tests {
         assert!(text.len() < 100_000, "extracted text unexpectedly large: {} bytes", text.len());
         assert!(text.contains("hi"));
         assert!(elapsed.as_secs() < 5, "extraction took too long: {elapsed:?}");
+    }
+
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// A native call (Vision, PDFKit) that does not come back until the test
+    /// lets it, counting every call that reached it.
+    pub(crate) struct Hangs {
+        pub(crate) calls: Arc<AtomicUsize>,
+        pub(crate) release: Mutex<mpsc::Receiver<()>>,
+    }
+    impl Hangs {
+        fn wait(&self) {
+            self.calls.fetch_add(1, SeqCst);
+            let _ = self.release.lock().unwrap().recv();
+        }
+    }
+    impl TextExtractor for Hangs {
+        fn pdf_text_layer(&self, _b: &[u8]) -> Result<(String, usize), ExtractError> {
+            self.wait();
+            Ok(("late".into(), 1))
+        }
+        fn pdf_ocr(&self, _b: &[u8], _m: usize) -> Result<String, ExtractError> {
+            self.wait();
+            Ok("late".into())
+        }
+        fn image_ocr(&self, _b: &[u8], _m: &str) -> Result<String, ExtractError> {
+            self.wait();
+            Ok("late".into())
+        }
+    }
+
+    /// Vision once never came back on the index worker (a live daemon sat in
+    /// `TextRecognition` for a day) and nothing was indexed after it, so views
+    /// and search stopped seeing new mail. A native call has a deadline: the
+    /// part it was reading fails, and no other native call starts while that
+    /// one is still stuck, so a wedged framework costs one thread, not one per
+    /// part.
+    #[test]
+    fn a_native_call_that_never_returns_fails_its_part_and_holds_off_the_next_until_it_does() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let (release, rx) = mpsc::channel();
+        let hangs = Hangs { calls: Arc::clone(&calls), release: Mutex::new(rx) };
+        let bounded = Arc::new(BoundedExtractor::new(hangs, Duration::from_millis(200)));
+        let first = {
+            let bounded = Arc::clone(&bounded);
+            let (tx, rx) = mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(bounded.image_ocr(&[0; 16], "image/png"));
+            });
+            rx.recv_timeout(Duration::from_secs(5)).expect("a stuck native call held its caller")
+        };
+        assert!(matches!(first, Err(ExtractError::Permanent("failed"))), "{first:?}");
+
+        // Still stuck: nothing else reaches the framework, and what is turned
+        // away stays retryable.
+        assert!(matches!(bounded.image_ocr(&[0; 16], "image/png"), Err(ExtractError::Transient(_))));
+        assert!(matches!(bounded.pdf_text_layer(&[0; 16]), Err(ExtractError::Transient(_))));
+        assert_eq!(calls.load(SeqCst), 1);
+
+        // It comes back: the next call reaches the framework again.
+        release.send(()).unwrap();
+        release.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let next = loop {
+            match bounded.image_ocr(&[0; 16], "image/png") {
+                Err(ExtractError::Transient(_)) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
+                other => break other,
+            }
+        };
+        assert_eq!(next.ok().as_deref(), Some("late"));
+        assert_eq!(calls.load(SeqCst), 2);
     }
 }

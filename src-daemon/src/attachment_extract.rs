@@ -1,6 +1,6 @@
 //! PDF text and OCR for the daemon's search index (moved from the app, spec 2026-09-14 §5.2).
 
-use mailvault_core::search_index::attachments::{ExtractError, TextExtractor};
+use mailvault_core::search_index::attachments::{BoundedExtractor, ExtractError, TextExtractor};
 
 #[cfg(target_os = "macos")]
 mod imp {
@@ -13,6 +13,9 @@ mod imp {
 
     impl TextExtractor for NativeExtractor {
         fn pdf_text_layer(&self, bytes: &[u8]) -> Result<(String, usize), ExtractError> {
+            // A thread of its own (`BoundedExtractor`), not the worker's, so
+            // the worker's background QoS is set again rather than assumed.
+            crate::mbox_upload_job::background_qos();
             // Every Obj-C temporary these frameworks hand back is autoreleased.
             // The index worker is a long-lived thread with no run loop, so its
             // top-level pool only drains when the thread exits — i.e. never.
@@ -49,6 +52,8 @@ mod imp {
         fn image_ocr(&self, bytes: &[u8], _mime: &str) -> Result<String, ExtractError> {
             use objc2_foundation::NSArray;
             use objc2_vision::{VNImageRequestHandler, VNRecognizeTextRequest, VNRequest, VNRequestTextRecognitionLevel};
+
+            crate::mbox_upload_job::background_qos();
 
             // Same pool rule as `pdf_text_layer` — Vision is the worst
             // offender of the two (every recognised image leaks its reader
@@ -217,8 +222,14 @@ mod imp {
     }
 }
 
-pub fn current_extractor() -> imp::NativeExtractor {
-    imp::NativeExtractor
+/// Long enough for Vision's first call, which loads its models.
+const NATIVE_CALL_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The index worker's extractor, one for the daemon's life: a call that never
+/// returned keeps every later one off the framework (`BoundedExtractor`).
+pub fn current_extractor() -> &'static BoundedExtractor<imp::NativeExtractor> {
+    static EXTRACTOR: std::sync::OnceLock<BoundedExtractor<imp::NativeExtractor>> = std::sync::OnceLock::new();
+    EXTRACTOR.get_or_init(|| BoundedExtractor::new(imp::NativeExtractor, NATIVE_CALL_LIMIT))
 }
 
 #[cfg(all(test, target_os = "macos"))]
@@ -228,7 +239,7 @@ mod tests {
     #[test]
     fn pdfkit_extracts_the_text_layer_of_a_real_pdf() {
         let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/hello.pdf")).unwrap();
-        let extractor = current_extractor();
+        let extractor = imp::NativeExtractor;
         let (text, pages) = extractor.pdf_text_layer(&bytes).unwrap();
         assert!(text.contains("Hello"), "got: {text:?}");
         assert_eq!(pages, 1);
@@ -236,7 +247,7 @@ mod tests {
 
     #[test]
     fn pdfkit_rejects_garbage_bytes_as_failed_not_encrypted() {
-        let extractor = current_extractor();
+        let extractor = imp::NativeExtractor;
         let err = extractor.pdf_text_layer(b"not a pdf, just garbage bytes").unwrap_err();
         match err {
             ExtractError::Permanent(state) => assert_eq!(state, "failed"),
@@ -247,7 +258,7 @@ mod tests {
     #[test]
     fn vision_reads_the_text_of_a_rendered_page() {
         let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/hello.png")).unwrap();
-        let text = current_extractor().image_ocr(&bytes, "image/png").unwrap();
+        let text = imp::NativeExtractor.image_ocr(&bytes, "image/png").unwrap();
         assert!(text.to_lowercase().contains("hello"), "got: {text:?}");
     }
 
@@ -262,7 +273,7 @@ mod tests {
     #[ignore]
     fn vision_ocr_does_not_grow_the_footprint() {
         let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/hello.png")).unwrap();
-        let extractor = current_extractor();
+        let extractor = imp::NativeExtractor;
         for _ in 0..20 {
             let _ = extractor.image_ocr(&bytes, "image/png");
         }

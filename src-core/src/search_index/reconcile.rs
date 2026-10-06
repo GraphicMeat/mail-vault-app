@@ -1890,6 +1890,49 @@ mod tests {
         assert_eq!(state, "pending", "must still be pending so the next sweep retries it");
     }
 
+    /// The index worker runs this between sweeps, so one Vision call that
+    /// never returned stopped all indexing: new mail never reached a view or
+    /// a search. Behind `BoundedExtractor` the batch finishes; the stuck part
+    /// fails and the rest wait for a later pass.
+    #[test]
+    fn a_native_call_that_never_returns_does_not_hold_the_batch() {
+        use crate::search_index::attachments::{tests::Hangs, AttachmentInput, BoundedExtractor};
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let image = |name: &str| AttachmentMeta { filename: name.into(), mime: "image/png".into(), size: 20_000 };
+        let doc = IndexDoc { attachment_candidates: vec![image("a.png"), image("b.png")], ..IndexDoc::default() };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+        let shared = std::sync::Arc::new(Mutex::new(Some(conn)));
+
+        let calls = std::sync::Arc::new(AtomicUsize::new(0));
+        let (_release, rx) = std::sync::mpsc::channel::<()>();
+        let hangs = Hangs { calls: calls.clone(), release: Mutex::new(rx) };
+        let extractor = BoundedExtractor::new(hangs, std::time::Duration::from_millis(200));
+        let (tx, done) = std::sync::mpsc::channel();
+        let db = shared.clone();
+        std::thread::spawn(move || {
+            let changed = super::run_pending_extractions(&db, true, true, true, &extractor, |_a, _d, _u, _f, part| {
+                Some((
+                    AttachmentInput { filename: format!("{part}.png"), mime: "image/png".into(), size: 20_000, bytes: vec![0; 16] },
+                    IndexDoc::default(),
+                ))
+            }, &|| true);
+            let _ = tx.send(changed);
+        });
+        let changed = done.recv_timeout(std::time::Duration::from_secs(5)).expect("a stuck native call held the index worker");
+        assert_eq!(changed.unwrap(), 1);
+
+        let guard = crate::search_index::lock(&shared);
+        let conn = guard.as_ref().unwrap();
+        let states: Vec<String> = conn
+            .prepare("SELECT state FROM attachments ORDER BY state").unwrap()
+            .query_map([], |r| r.get(0)).unwrap()
+            .collect::<Result<_, _>>().unwrap();
+        assert_eq!(states, vec!["failed", "pending"]);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "no second native call while the first is stuck");
+    }
+
     #[test]
     fn a_missing_file_leaves_the_row_pending_without_looping_forever_in_one_call() {
         let tmp = tempfile::tempdir().unwrap();
