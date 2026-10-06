@@ -540,9 +540,16 @@ export function computeReplyRecipients(replyTo, mode, ownAddresses = []) {
   return { to: to.join(', '), cc: cc.join(', ') };
 }
 
-/** Synthetic id for a message that carries no Message-ID. Never referenced. */
+/**
+ * Synthetic id for a message that carries no Message-ID. Never referenced.
+ *
+ * A uid is only unique within one mailbox, and the INBOX list threads INBOX and
+ * Sent together: without the mailbox, a header-less INBOX message and a Sent one
+ * sharing a uid got one id and were pulled into one thread.
+ */
 function fallbackId(email) {
-  return `uid-${email._accountId || ''}:${email.uid}`;
+  const mailbox = email._mailbox || (email._fromSentFolder ? 'sent' : '');
+  return `uid-${email._accountId || ''}:${mailbox}:${email.uid}`;
 }
 
 /** A message's own Message-ID in canonical form (camelCase or snake_case). */

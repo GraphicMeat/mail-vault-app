@@ -310,3 +310,21 @@ describe('threadRowMembers', () => {
     expect(threadRowMembers(emails)).toEqual(emails);
   });
 });
+
+describe('buildThreads messages without a Message-ID', () => {
+  // A uid is only unique inside one mailbox. The INBOX list threads INBOX + Sent
+  // together, so an old header-less INBOX message and a Sent message that share
+  // a uid must stay two messages, not collapse into one id and one thread.
+  it('keeps same-uid messages from different mailboxes apart', () => {
+    const old = mk({ uid: 7, messageId: undefined, subject: '', date: '2019-04-29T15:20:00Z', _mailbox: 'INBOX' });
+    const sent = mk({ uid: 7, messageId: undefined, subject: '', date: '2026-10-06T14:44:00Z', _mailbox: 'Sent', _fromSentFolder: true });
+    const threads = buildThreads([old, sent]);
+    expect(threads.size).toBe(2);
+  });
+
+  it('keeps a Sent copy tagged only by _fromSentFolder apart from an INBOX uid', () => {
+    const old = mk({ uid: 7, messageId: undefined, subject: '' });
+    const sent = mk({ uid: 7, messageId: undefined, subject: '', _fromSentFolder: true });
+    expect(buildThreads([old, sent]).size).toBe(2);
+  });
+});
