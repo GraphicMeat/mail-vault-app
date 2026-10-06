@@ -1,8 +1,12 @@
 name: CI
 
+# Main: never cancel a running build. GitHub holds one pending run per group
+# and a newer push replaces it, so pushes landing mid-run batch into one run on
+# the newest commit. A superseded pending run shows as cancelled; the newer run
+# covers its commit. PRs: a new push makes the old build worthless, cancel it.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
