@@ -24,8 +24,10 @@ export const config = {
     console.log(`[wdio.graph] German mailbox loaded into the mock at ${origin}`);
   },
 
-  beforeSession: function (cfg, caps, specs) {
-    base.beforeSession.call(this, cfg, caps, specs);
+  // Awaited: the shared hook is async and wipes the data dir (resetAppState),
+  // so a seed planted before it settles is deleted before the app launches.
+  beforeSession: async function (cfg, caps, specs) {
+    await base.beforeSession.call(this, cfg, caps, specs);
     if ((specs || []).some((s) => s.includes('graph-folder-keys-adopt'))) {
       seedLegacyGraphDirs(process.env.E2E_DATA_DIR, GRAPH_ACCOUNT_ID);
     }
