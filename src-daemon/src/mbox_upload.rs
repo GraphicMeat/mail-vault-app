@@ -842,18 +842,29 @@ mod tests {
         server.state().find(mailbox).and_then(|m| m.by_uid(uid).cloned()).expect("on the server")
     }
 
-    /// File names in the vault dir sync writes for `mailbox`, sorted.
+    /// File names in the vault dir sync writes for `mailbox`, sorted, spelled
+    /// with `:` whatever the platform writes, as the assertions name them.
     fn names_in(root: &Path, mailbox: &str) -> Vec<String> {
         let cur = vault_files::cur_path(root, "acct1", mailbox);
-        let mut names: Vec<String> = std::fs::read_dir(cur).into_iter().flatten().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        let mut names: Vec<String> = std::fs::read_dir(cur).into_iter().flatten().flatten().map(|e| colon(&e.file_name().to_string_lossy())).collect();
         names.sort();
         names
+    }
+
+    /// A vault name as tests spell it (`5:2,S.eml`) in this platform's own
+    /// spelling, and back.
+    fn native(name: &str) -> String {
+        maildir::respell_for_platform(name)
+    }
+
+    fn colon(name: &str) -> String {
+        name.replacen(maildir::INFO_PREFIX, ":2,", 1)
     }
 
     fn seed_vault(root: &Path, mailbox: &str, name: &str, raw: &[u8]) {
         let cur = vault_files::cur_path(root, "acct1", mailbox);
         std::fs::create_dir_all(&cur).unwrap();
-        std::fs::write(cur.join(name), raw).unwrap();
+        std::fs::write(cur.join(native(name)), raw).unwrap();
     }
 
     fn cache_headers(s: &Arc<DaemonState>, mailbox: &str, value: Value) {
@@ -960,7 +971,7 @@ mod tests {
 
         assert_eq!(names_in(v.path(), "INBOX"), ["1:2,S.eml", "5:2,AF.eml", "6:2,AS.eml"]);
         let cur = vault_files::cur_path(v.path(), "acct1", "INBOX");
-        assert_eq!(std::fs::read(cur.join("5:2,AF.eml")).unwrap(), stored("a@x", "starred unread", "Inbox,Starred,Unread"));
+        assert_eq!(std::fs::read(cur.join(native("5:2,AF.eml"))).unwrap(), stored("a@x", "starred unread", "Inbox,Starred,Unread"));
         assert_eq!(reg.uid_sets(v.path(), "acct1", "INBOX"), Some((vec![1, 5, 6], vec![5, 6])));
         assert_eq!(reg.listing_count(), 1, "the rows came from the upload, not a relisting");
     }
@@ -992,9 +1003,9 @@ mod tests {
 
         assert_eq!(names_in(v.path(), "INBOX"), ["5:2,S.eml", "6:2,S.eml"]);
         let cur = vault_files::cur_path(v.path(), "acct1", "INBOX");
-        assert_eq!(std::fs::read(cur.join("5:2,S.eml")).unwrap(), theirs, "never overwritten");
+        assert_eq!(std::fs::read(cur.join(native("5:2,S.eml"))).unwrap(), theirs, "never overwritten");
         let aside = cur.parent().unwrap().join(maildir::ORPHAN_DIR);
-        let kept: Vec<_> = std::fs::read_dir(&aside).unwrap().flatten().map(|e| (e.file_name().to_string_lossy().into_owned(), std::fs::read(e.path()).unwrap())).collect();
+        let kept: Vec<_> = std::fs::read_dir(&aside).unwrap().flatten().map(|e| (colon(&e.file_name().to_string_lossy()), std::fs::read(e.path()).unwrap())).collect();
         assert_eq!(kept, vec![("5:2,AS.eml".to_string(), stored("a@x", "one", "Inbox,Opened"))], "the new copy is set aside, the same message is not");
     }
 
@@ -1711,7 +1722,7 @@ mod tests {
         let repair = crate::handlers::custody::repair_generation_for(&s, "acct1", "[Gmail]/All Mail").unwrap();
         assert!(repair.orphaned.is_empty(), "{repair:?}");
         assert_eq!(names_in(v.path(), "[Gmail]/All Mail"), ["1:2,AS.eml", "2:2,AS.eml"]);
-        assert_eq!(std::fs::read(all_mail.join("2:2,AS.eml")).unwrap(), crate::mbox::mbox_unescape_from(&huge), "whole");
+        assert_eq!(std::fs::read(all_mail.join(native("2:2,AS.eml"))).unwrap(), crate::mbox::mbox_unescape_from(&huge), "whole");
     }
 
     /// A paused job lets its connection go; the next message makes a new one.

@@ -1382,6 +1382,7 @@ mod tests {
     /// count reports it (with whatever the still-open store answers), and a
     /// save refuses rather than build the vault's folders on the boot volume.
     #[tokio::test]
+    #[cfg_attr(windows, ignore = "Windows will not delete a folder whose files the still-open store holds, so the unplug cannot be faked")]
     async fn a_vault_lost_since_startup_is_unreachable_and_a_save_refuses_it() {
         let r = rig();
         cached(&r.s, "INBOX", [1]);

@@ -1,0 +1,7 @@
+[env]
+# libtest runs each test on a thread with a 2 MiB stack. Debug builds on
+# Windows lay out async frames bigger than macOS and Linux do, and a few
+# tokio tests (a #[tokio::test] keeps its whole future on that stack) passed
+# 2 MiB there: the overflow aborts the entire test binary. 4 MiB was measured
+# to be enough; 8 MiB is headroom. Reaches only processes cargo starts.
+RUST_MIN_STACK = "8388608"

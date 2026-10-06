@@ -987,14 +987,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mailbox = tmp.path().join("INBOX");
         fs::create_dir_all(mailbox.join("cur")).unwrap();
-        fs::write(mailbox.join("cur").join("5:2,S.eml"), "the vault's own").unwrap();
-        let first = set_aside_copy(&mailbox, "5:2,AS.eml", b"first").unwrap();
-        let second = set_aside_copy(&mailbox, "5:2,AS.eml", b"second").unwrap();
-        assert_eq!(first, mailbox.join(ORPHAN_DIR).join("5:2,AS.eml"));
+        let (own, aside) = (format!("5{INFO_PREFIX}S.eml"), format!("5{INFO_PREFIX}AS.eml"));
+        fs::write(mailbox.join("cur").join(&own), "the vault's own").unwrap();
+        let first = set_aside_copy(&mailbox, &aside, b"first").unwrap();
+        let second = set_aside_copy(&mailbox, &aside, b"second").unwrap();
+        assert_eq!(first, mailbox.join(ORPHAN_DIR).join(&aside));
         assert_ne!(first, second);
         assert_eq!(fs::read(&first).unwrap(), b"first");
         assert_eq!(fs::read(&second).unwrap(), b"second");
-        assert_eq!(fs::read_to_string(mailbox.join("cur").join("5:2,S.eml")).unwrap(), "the vault's own");
+        assert_eq!(fs::read_to_string(mailbox.join("cur").join(&own)).unwrap(), "the vault's own");
         assert_eq!(fs::read_dir(mailbox.join("cur")).unwrap().count(), 1);
         assert_eq!(orphan_stats(&mailbox).count, 2);
     }

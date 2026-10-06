@@ -3562,12 +3562,13 @@ mod tests {
     #[test]
     fn write_durable_lands_the_bytes_and_leaves_no_temp_file() {
         let dir = tempfile::tempdir().unwrap();
-        let dst = dir.path().join("7:2,AS.eml");
+        let name = format!("7{}AS.eml", crate::maildir::INFO_PREFIX);
+        let dst = dir.path().join(&name);
         write_durable(&dst, b"Message-ID: <d@x>\r\n\r\nbody").unwrap();
         assert_eq!(std::fs::read(&dst).unwrap(), b"Message-ID: <d@x>\r\n\r\nbody");
         let names: Vec<String> =
             std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
-        assert_eq!(names, vec!["7:2,AS.eml".to_string()]);
+        assert_eq!(names, vec![name]);
         // A folder that is not there fails, and leaves nothing either.
         assert!(write_durable(&dir.path().join("gone").join("x.eml"), b"x").is_err());
     }
