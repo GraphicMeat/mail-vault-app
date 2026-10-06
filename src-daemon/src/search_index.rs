@@ -2997,8 +2997,9 @@ mod tests {
         wait_for(&st, "first pass", |s| s["firstPassDone"] == true);
         assert_eq!(crate::search_index::destroy(&st, std::time::Duration::from_secs(20))["ok"], true);
         crate::search_index::configure(&st, cfg());
-        let s = wait_for(&st, "rebuilt", |s| s["firstPassDone"] == true && s["indexed"] == 4);
-        assert_eq!(s["state"], "idle");
+        // The first pass is recorded before the pass that wrote it ends, so
+        // "indexing" can still show for a moment; idle is waited for, not read once.
+        wait_for(&st, "rebuilt", |s| s["firstPassDone"] == true && s["indexed"] == 4 && s["state"] == "idle");
     }
 
     #[test]
