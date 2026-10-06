@@ -285,6 +285,17 @@ pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<Ima
     account_from_blob(&blob, account_id)
 }
 
+/// `resolve_account_credentials_guarded` plus the account's whole stored
+/// record, from the same read: the OAuth2 fields `ImapConfig` drops (refresh
+/// token, expiry, provider, client) for a caller that refreshes a token
+/// itself. The record holds secrets too: never log it.
+pub async fn resolve_account_with_record_guarded(account_id: &str) -> Result<(ImapConfig, Value), String> {
+    let blob = guarded(CREDENTIALS_KEY, blob_read(may_prompt()), AI_KEY_TIMEOUT).await?;
+    let account = account_from_blob(&blob, account_id)?;
+    let record = blob.get(account_id).and_then(|raw| serde_json::from_str(raw).ok()).unwrap_or(Value::Null);
+    Ok((account, record))
+}
+
 /// `resolve_account_credentials_guarded` for background work that must never
 /// be what raises the keychain prompt (the eviction worker's daily pass):
 /// the read runs with interaction off, so a locked keychain answers an error

@@ -115,6 +115,22 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
+/// Test seam for other modules' tests that refresh a token: both providers'
+/// token endpoints point at this module's one loopback mock, `responses` are
+/// what the next refreshes get, and the lock is held until the guard drops.
+/// The endpoint overrides are process-wide, so nobody else may set them.
+#[cfg(test)]
+pub(crate) fn test_token_mock(responses: Vec<(u16, String)>) -> std::sync::MutexGuard<'static, ()> {
+    tests::mock_token_responses(responses)
+}
+
+/// The form bodies the token mock received since `test_token_mock`, oldest
+/// first, taken off the log so this module's own tests never see them.
+#[cfg(test)]
+pub(crate) fn test_token_posts() -> Vec<String> {
+    std::mem::take(&mut *tests::POSTED.lock().unwrap())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,7 +158,7 @@ mod tests {
     static TEST_LOCK: Mutex<()> = Mutex::new(());
     static QUEUE: Mutex<std::collections::VecDeque<(u16, String)>> = Mutex::new(std::collections::VecDeque::new());
     /// Form bodies the mock has received, oldest first.
-    static POSTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    pub(super) static POSTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
     fn mock_server_port() -> u16 {
         static PORT: OnceLock<u16> = OnceLock::new();
@@ -200,6 +216,19 @@ mod tests {
         let guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         mock_server_port();
         QUEUE.lock().unwrap().push_back((status, body.to_string()));
+        guard
+    }
+
+    /// `mock_token_response` for a caller outside this module: the queue and
+    /// the form-body log start empty, so whatever an earlier test left behind
+    /// is not this caller's.
+    pub(super) fn mock_token_responses(responses: Vec<(u16, String)>) -> std::sync::MutexGuard<'static, ()> {
+        let guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        mock_server_port();
+        let mut queue = QUEUE.lock().unwrap();
+        queue.clear();
+        queue.extend(responses);
+        POSTED.lock().unwrap().clear();
         guard
     }
 

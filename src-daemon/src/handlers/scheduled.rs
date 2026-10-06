@@ -588,6 +588,164 @@ mod tests {
         server
     }
 
+    // ── Graph (Outlook.com signed in with Microsoft) ────────────────────────
+
+    const GRAPH_EMAIL: &str = "leia@outlook.test";
+
+    /// `acc1` as an Outlook.com account on the Graph transport, resolved
+    /// through the `MAILVAULT_TEST_CREDENTIALS` file bypass: a Graph token, no
+    /// SMTP server. `extra` is merged into the stored record (refresh token,
+    /// expiry). The caller holds `test_env_lock` and removes the var when done.
+    fn graph_acc1(s: &Arc<DaemonState>, extra: Value) {
+        let mut record = json!({
+            "email": GRAPH_EMAIL,
+            "imapHost": "outlook.office365.com",
+            "authType": "oauth2",
+            "oauth2Provider": "microsoft",
+            "oauth2Transport": "graph",
+            "oauth2AccessToken": "graph-token-stored",
+        });
+        for (k, v) in extra.as_object().cloned().unwrap_or_default() {
+            record[k] = v;
+        }
+        let creds_path = s.app_dir.join("credentials.json");
+        let blob: std::collections::HashMap<String, String> = [("acc1".to_string(), record.to_string())].into();
+        std::fs::write(&creds_path, serde_json::to_string(&blob).unwrap()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds_path);
+    }
+
+    /// A row for the Graph account, Bcc and all, frozen by `scheduled.create`.
+    async fn graph_row(s: &Arc<DaemonState>, subject: &str) -> (String, u32) {
+        let mut params = create_params("acc1");
+        params["account"] = json!({"email": GRAPH_EMAIL, "imapHost": "outlook.office365.com", "oauth2Transport": "graph"});
+        params["email"] = json!({"to": "partner@example.com", "bcc": "Hidden Person <hidden@example.com>", "subject": subject, "text": "body"});
+        let row = call(s, "scheduled.create", params).await;
+        (row["id"].as_str().unwrap().to_string(), row["uid"].as_u64().unwrap() as u32)
+    }
+
+    fn decoded_mime(body: &str) -> String {
+        use base64::Engine;
+        String::from_utf8_lossy(&base64::engine::general_purpose::STANDARD.decode(body.trim()).unwrap_or_default()).into_owned()
+    }
+
+    /// A scheduled email from an Outlook.com account goes out through Graph's
+    /// sendMail, never SMTP, with the Bcc the frozen bytes left out (they
+    /// keep it in the envelope) put back into the MIME.
+    #[tokio::test]
+    async fn a_graph_row_is_sent_through_graph_with_its_bcc() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let s = st();
+        graph_acc1(&s, json!({}));
+        let (id, uid) = graph_row(&s, "Graph later").await;
+
+        let sent = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(sent["status"], json!("sent"), "row: {sent:?}");
+        let requests = crate::handlers::graph::test_graph_requests();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert!(requests[0].path.ends_with("/me/sendMail"), "{}", requests[0].path);
+        assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer graph-token-stored"));
+        let mime = decoded_mime(&requests[0].body);
+        assert!(mime.contains("Subject: Graph later"), "{mime}");
+        let headers = mime.split("\r\n\r\n").next().unwrap_or("");
+        let bcc: Vec<_> = headers.split("\r\n").filter(|l| l.to_ascii_lowercase().starts_with("bcc:")).collect();
+        assert_eq!(bcc.len(), 1, "{mime}");
+        assert!(bcc[0].contains("hidden@example.com"), "{mime}");
+        assert!(
+            !mailvault_core::vault_files::exists(&s.data_dir, "acc1", "Scheduled", uid),
+            "a sent row's frozen .eml must be removed"
+        );
+    }
+
+    /// What Graph's refusals do to a row: a sign-in Graph will not take, and a
+    /// sender it will not send as, end the row at once (no retry can fix
+    /// them); throttling and a server fault leave it queued for another try.
+    /// None of them reads as the SMTP "Authentication failed" of the report.
+    #[tokio::test]
+    async fn graph_refusals_end_the_row_or_leave_it_for_a_retry() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let err = |code: &str| json!({"error": {"code": code, "message": "refused"}}).to_string();
+        let cases = [
+            (401, err("InvalidAuthenticationToken"), "failed", "Sign in to this account again"),
+            (403, err("ErrorAccessDenied"), "failed", "Sign in to this account again"),
+            (403, err("ErrorSendAsDenied"), "failed", "refused to send as"),
+            (429, err("ApplicationThrottled"), "queued", "429"),
+            (500, err("InternalServerError"), "queued", "500"),
+        ];
+        let _graph = crate::handlers::graph::test_graph_mock_with(cases.iter().map(|(st, body, _, _)| (*st, body.clone())).collect());
+        let s = st();
+        graph_acc1(&s, json!({}));
+        let mut seen = Vec::new();
+        for (status, _, want_status, want_text) in &cases {
+            let (id, _) = graph_row(&s, &format!("refused {status}")).await;
+            let row = call(&s, "scheduled.send_now", json!({"id": id})).await;
+            seen.push((status, row["status"].clone(), row["attempts"].clone(), row["lastError"].as_str().unwrap_or("").to_string(), *want_status, *want_text));
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(crate::handlers::graph::test_graph_requests().len(), cases.len(), "one request per row, no retry inside a send");
+        for (status, got_status, attempts, last_error, want_status, want_text) in seen {
+            assert_eq!(got_status, json!(want_status), "{status}: {last_error}");
+            assert_eq!(attempts, json!(1), "{status}");
+            assert!(last_error.contains(want_text), "{status}: {last_error}");
+            assert!(!last_error.contains("Authentication failed for"), "{status}: {last_error}");
+        }
+    }
+
+    /// The worker sends with the token the keychain holds, and the app only
+    /// refreshes it while it is open: a row due after a night with the app
+    /// closed found an expired one. A token near its expiry is refreshed first,
+    /// with the Graph scopes the account was signed in with.
+    #[tokio::test]
+    async fn a_graph_row_with_an_expired_token_is_sent_with_a_fresh_one() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let _tokens = crate::handlers::oauth2::test_token_mock(vec![(
+            200,
+            json!({"access_token": "graph-token-fresh", "refresh_token": "rt-next", "expires_in": 3600}).to_string(),
+        )]);
+        let s = st();
+        graph_acc1(&s, json!({"oauth2RefreshToken": "rt-graph", "oauth2ExpiresAt": 1_000_000_000_000i64}));
+        let (id, _) = graph_row(&s, "Graph after the night").await;
+
+        let sent = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let posts = crate::handlers::oauth2::test_token_posts();
+
+        assert_eq!(sent["status"], json!("sent"), "row: {sent:?}");
+        assert_eq!(posts.len(), 1, "one refresh: {posts:?}");
+        let field = |k: &str| url::form_urlencoded::parse(posts[0].as_bytes()).find(|(n, _)| n == k).map(|(_, v)| v.to_string());
+        assert_eq!(field("grant_type").as_deref(), Some("refresh_token"));
+        assert_eq!(field("refresh_token").as_deref(), Some("rt-graph"));
+        assert!(field("scope").is_some_and(|s| s.contains("Mail.Send") && s.contains("Mail.ReadWrite")), "{:?}", field("scope"));
+        let requests = crate::handlers::graph::test_graph_requests();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer graph-token-fresh"));
+    }
+
+    /// A token still good for more than the margin is used as it is: no
+    /// refresh round trip for every scheduled send.
+    #[tokio::test]
+    async fn a_graph_row_with_a_good_token_is_sent_without_a_refresh() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let _tokens = crate::handlers::oauth2::test_token_mock(Vec::new());
+        let s = st();
+        let in_an_hour = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64 + 3_600_000;
+        graph_acc1(&s, json!({"oauth2RefreshToken": "rt-graph", "oauth2ExpiresAt": in_an_hour}));
+        let (id, _) = graph_row(&s, "Graph soon").await;
+
+        let sent = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(sent["status"], json!("sent"), "row: {sent:?}");
+        assert!(crate::handlers::oauth2::test_token_posts().is_empty(), "a good token must not be refreshed");
+        let requests = crate::handlers::graph::test_graph_requests();
+        assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer graph-token-stored"));
+    }
+
     fn edit_params(id: &str, to: &str) -> Value {
         json!({
             "id": id,

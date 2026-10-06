@@ -298,12 +298,13 @@ fn emit(state: &Arc<DaemonState>, id: &str, status: &str) {
     state.events.emit("scheduled-send", json!({"id": id, "status": status}));
 }
 
-/// `smtp::friendly_smtp_error`'s own wording for the two failures a retry can
-/// never fix: a rejected login, and a sender this account is not allowed to
-/// send as. Everything else it produces (a timeout, a host that refuses for a
-/// moment, an SMTP hostname that won't resolve) gets the retry ladder.
+/// The failures a retry can never fix, as `smtp` words them: a rejected
+/// login (SMTP, or a Graph sign-in Microsoft will not take), a sender this
+/// account is not allowed to send as, a message over Graph's size limit.
+/// Everything else (a timeout, a throttle, a host that refuses for a moment,
+/// an SMTP hostname that won't resolve) gets the retry ladder.
 fn is_terminal_smtp_error(msg: &str) -> bool {
-    msg.contains("Authentication failed for") || msg.contains("refused to send as")
+    smtp::is_terminal_send_error(msg)
 }
 
 /// The keychain read, off the async worker and under a clock.
@@ -314,8 +315,61 @@ fn is_terminal_smtp_error(msg: &str) -> bool {
 /// login that is nobody, for as long as the machine is unattended. Without a
 /// timeout that is not a failure the ladder can classify; it is a worker that
 /// never comes back and takes the rest of the queue with it.
-async fn resolve_credentials(account_id: &str) -> Result<ImapConfig, String> {
-    crate::credentials::resolve_account_credentials_guarded(account_id).await
+///
+/// Then the OAuth2 token is made fresh (`with_fresh_token`).
+async fn resolve_credentials(state: &Arc<DaemonState>, account_id: &str) -> Result<ImapConfig, String> {
+    let (account, record) = crate::credentials::resolve_account_with_record_guarded(account_id).await?;
+    Ok(with_fresh_token(state, account, &record).await)
+}
+
+/// Refresh this long before the stored expiry, as the app's
+/// `ensureFreshToken` does (`REFRESH_BUFFER_MS`).
+const TOKEN_REFRESH_MARGIN_MS: i64 = 5 * 60 * 1000;
+
+/// The account with an OAuth2 token good for the send.
+///
+/// The keychain holds whatever token the app last stored, and the app only
+/// refreshes while it is open: a row due after a night with the app closed
+/// found one that expired hours ago. A token within the margin of its expiry
+/// is refreshed here, with the record's own provider, client and scopes (a
+/// Graph account's Graph scopes, `use_graph`), the way `oauth2_refresh` does
+/// for the app. The new token is used for this send only and not written
+/// back: the app rewrites the whole credentials blob from its own copy, so a
+/// daemon write would race it, and the refresh token stays valid either way.
+/// A refresh that fails leaves the stored token, and the send says what the
+/// server made of it. No expiry on record means no refresh, as in the app.
+async fn with_fresh_token(state: &Arc<DaemonState>, mut account: ImapConfig, record: &serde_json::Value) -> ImapConfig {
+    if !account.is_oauth2() {
+        return account;
+    }
+    let text = |k: &str| record.get(k).and_then(serde_json::Value::as_str).filter(|v| !v.is_empty()).map(str::to_owned);
+    let Some(refresh) = text("oauth2RefreshToken") else { return account };
+    let Some(expires_at) = record.get("oauth2ExpiresAt").and_then(serde_json::Value::as_f64).map(|v| v as i64) else {
+        return account;
+    };
+    if now_ms() < expires_at - TOKEN_REFRESH_MARGIN_MS {
+        return account;
+    }
+    let refreshed = state
+        .oauth2
+        .refresh_token(
+            &refresh,
+            text("oauth2Provider"),
+            text("oauth2CustomClientId"),
+            text("oauth2TenantId"),
+            account.uses_graph(),
+            text("oauth2ClientId"),
+        )
+        .await;
+    match refreshed {
+        Ok(tokens) if !tokens.access_token.is_empty() => {
+            info!("[scheduled-send] refreshed the expiring token for {}", account.email);
+            account.access_token = Some(tokens.access_token);
+        }
+        Ok(_) => warn!("[scheduled-send] the token refresh for {} returned no token; sending with the stored one", account.email),
+        Err(e) => warn!("[scheduled-send] could not refresh the token for {}: {e}; sending with the stored one", account.email),
+    }
+    account
 }
 
 async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> Outcome {
@@ -323,7 +377,7 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
     // (an OAuth2 token especially) can rotate between scheduling and firing,
     // and this is the exact seam `sync.now`/`sync.watch` already use to keep
     // a background job off whatever a stale RPC payload said.
-    let account = match resolve_credentials(&row.account_id).await {
+    let account = match resolve_credentials(state, &row.account_id).await {
         Ok(a) => a,
         Err(e) => {
             let msg = format!("Could not load this account's credentials: {e}");
@@ -391,6 +445,12 @@ fn append_to_sent(
     sent_mailbox: Option<String>,
     result: &smtp::SendResult,
 ) {
+    // Microsoft Graph filed its own Sent copy, and a Graph account has no
+    // IMAP. (Nothing local was staged for a scheduled send, so there is no
+    // completion event to send either.)
+    if result.server_saved_sent {
+        return;
+    }
     let Some(mailbox) = sent_mailbox.filter(|m| !m.is_empty()) else { return };
     let raw_bytes = result.raw_rfc2822.clone();
     let account = account.clone();
