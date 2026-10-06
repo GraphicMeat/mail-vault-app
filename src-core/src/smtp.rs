@@ -554,12 +554,15 @@ fn with_bcc_header(raw: Vec<u8>, bcc: &[Mailbox]) -> Vec<u8> {
     if bcc.is_empty() {
         return raw;
     }
-    let (block_end, crlf) = match raw.windows(4).position(|w| w == b"\r\n\r\n") {
-        Some(i) => (Some(i + 2), true),
-        None => match raw.windows(2).position(|w| w == b"\n\n") {
-            Some(i) => (Some(i + 1), false),
-            None => (None, true),
-        },
+    // The first blank line ends the header block, whichever line ending it
+    // has: a CRLF one further down a bare-LF message is in its body.
+    let crlf_end = raw.windows(4).position(|w| w == b"\r\n\r\n");
+    let lf_end = raw.windows(2).position(|w| w == b"\n\n");
+    let (block_end, crlf) = match (crlf_end, lf_end) {
+        (Some(c), Some(l)) if l < c => (Some(l + 1), false),
+        (Some(c), _) => (Some(c + 2), true),
+        (None, Some(l)) => (Some(l + 1), false),
+        (None, None) => (None, true),
     };
     let block = &raw[..block_end.unwrap_or(0)];
     let has_bcc = block
@@ -1307,6 +1310,22 @@ mod tests {
         let raw = b"From: a@x.com\nTo: b@x.com\n\nbody\n".to_vec();
         let out = String::from_utf8(with_bcc_header(raw, &[mailbox("c@x.com")])).unwrap();
         assert_eq!(out, "From: a@x.com\nTo: b@x.com\nBcc: c@x.com\n\nbody\n");
+    }
+
+    /// The header block ends at the first blank line, whatever its line
+    /// ending: a bare-LF message whose body holds a CRLF blank line had the
+    /// Bcc written into its body, where Graph never reads it.
+    #[test]
+    fn bcc_header_goes_at_the_first_blank_line_whatever_its_line_ending() {
+        let lf = b"From: a@x.com\nTo: b@x.com\n\nbody\r\n\r\nmore\n".to_vec();
+        let out = String::from_utf8(with_bcc_header(lf, &[mailbox("c@x.com")])).unwrap();
+        assert_eq!(out, "From: a@x.com\nTo: b@x.com\nBcc: c@x.com\n\nbody\r\n\r\nmore\n");
+
+        // The other way round already held: a CRLF message with a bare-LF
+        // blank line in its body.
+        let crlf = b"From: a@x.com\r\nTo: b@x.com\r\n\r\nbody\n\nmore\r\n".to_vec();
+        let out = String::from_utf8(with_bcc_header(crlf, &[mailbox("c@x.com")])).unwrap();
+        assert_eq!(out, "From: a@x.com\r\nTo: b@x.com\r\nBcc: c@x.com\r\n\r\nbody\n\nmore\r\n");
     }
 
     #[test]
