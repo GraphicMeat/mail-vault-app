@@ -468,6 +468,10 @@ pub const SIGN_IN_AGAIN: &str = "Sign in to this account again under Settings, A
 /// The size refusal's marker, likewise.
 const GRAPH_SIZE_LIMIT: &str = "the limit is 4 MB";
 
+/// The marker of a Graph send that got no answer after the request left: the
+/// message may have gone out, so it is never sent again on its own.
+const MAY_HAVE_GONE_OUT: &str = "the message may have gone out";
+
 /// Map a Graph `sendMail` failure to what the user reads. Never the SMTP
 /// "Authentication failed for smtp.office365.com" wording: no SMTP server was
 /// involved. `from_addr` is the identity sent as, `login` the account.
@@ -478,12 +482,17 @@ fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) 
             *encoded_bytes as f64 / (1024.0 * 1024.0),
             GRAPH_SIZE_LIMIT
         ),
-        // "timed out" on purpose: like an SMTP timeout, it asks the
-        // connectivity gate whether the network is down.
-        SendMailError::Transport { timed_out: true, .. } => {
-            "Microsoft did not answer the send in time (timed out). Check Sent before trying again: the message may have gone out."
-                .to_string()
-        }
+        // The request left, and no answer came: Graph may have taken it, and
+        // a second try would send it twice. Only Sent can tell.
+        SendMailError::Transport { maybe_sent: true, timed_out, .. } => format!(
+            "{}. Check Sent before trying again: {}.",
+            if *timed_out {
+                "Microsoft did not answer the send in time (timed out)"
+            } else {
+                "The connection to Microsoft broke before it confirmed the send"
+            },
+            MAY_HAVE_GONE_OUT
+        ),
         SendMailError::Transport { detail, .. } => format!("Could not reach Microsoft to send the message: {}", detail),
         SendMailError::Refused { status, code, message, retry_after } => {
             let said = format!("{} {}", code.as_deref().unwrap_or(""), message.as_deref().unwrap_or("")).to_lowercase();
@@ -520,15 +529,17 @@ fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) 
     }
 }
 
-/// A send failure no retry can fix: a login the server refused, a sender it
-/// will not send as, a message over Graph's size limit. Everything else (a
-/// timeout, a throttle, a server fault) is worth another try. Scheduled
-/// Send's retry ladder reads this.
+/// A send failure no retry may follow: a login the server refused, a sender
+/// it will not send as, a message over Graph's size limit, and a Graph send
+/// that may already have gone out (a retry would send it twice). Everything
+/// else (a connection that never opened, a throttle, a server fault) is worth
+/// another try. Scheduled Send's retry ladder reads this.
 pub fn is_terminal_send_error(msg: &str) -> bool {
     msg.contains("Authentication failed for")
         || msg.contains("refused to send as")
         || msg.contains(SIGN_IN_AGAIN)
         || msg.contains(GRAPH_SIZE_LIMIT)
+        || msg.contains(MAY_HAVE_GONE_OUT)
 }
 
 /// `raw` with a `Bcc:` header naming `bcc`, unless it already has one (then it
@@ -1250,8 +1261,12 @@ mod tests {
             (refused(500, Some("InternalServerError"), None), "HTTP 500", false),
             (refused(503, None, None), "HTTP 503", false),
             (refused(400, Some("ErrorInvalidRecipients"), None), "HTTP 400: ErrorInvalidRecipients: refused", false),
-            (SendMailError::Transport { timed_out: true, detail: "x".into() }, "timed out", false),
-            (SendMailError::Transport { timed_out: false, detail: "tcp connect error".into() }, "tcp connect error", false),
+            // Graph may have taken it: never tried again, or it goes twice.
+            (SendMailError::Transport { timed_out: true, maybe_sent: true, detail: "x".into() }, "may have gone out", true),
+            (SendMailError::Transport { timed_out: false, maybe_sent: true, detail: "x".into() }, "may have gone out", true),
+            // No connection was made: Graph cannot have it, so try again.
+            (SendMailError::Transport { timed_out: true, maybe_sent: false, detail: "connect timed out".into() }, "connect timed out", false),
+            (SendMailError::Transport { timed_out: false, maybe_sent: false, detail: "tcp connect error".into() }, "tcp connect error", false),
         ];
         for (err, want, terminal) in cases {
             let msg = word(&err);

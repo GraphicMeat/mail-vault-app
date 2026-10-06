@@ -826,6 +826,28 @@ mod tests {
         assert!(crate::handlers::graph::test_graph_requests().is_empty(), "nothing goes out with an expired token");
     }
 
+    /// Graph read the whole sendMail and the connection died before it
+    /// answered: the message may well have gone. Requeueing the row (the
+    /// ladder a dropped connection used to get) sends it a second time, so
+    /// the row ends instead, saying to check Sent.
+    #[tokio::test]
+    async fn a_graph_send_that_may_have_gone_out_is_never_sent_again() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(0, String::new()), (202, String::new())]);
+        let s = st();
+        graph_acc1(&s, json!({}));
+        let (id, _) = graph_row(&s, "Graph unanswered").await;
+
+        let row = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(row["status"], json!("failed"), "row: {row:?}");
+        assert_eq!(row["attempts"], json!(1));
+        let last_error = row["lastError"].as_str().unwrap_or("");
+        assert!(last_error.contains("may have gone out"), "{last_error}");
+        assert_eq!(crate::handlers::graph::test_graph_requests().len(), 1, "one sendMail, never repeated");
+    }
+
     fn edit_params(id: &str, to: &str) -> Value {
         json!({
             "id": id,

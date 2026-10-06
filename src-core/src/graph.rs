@@ -490,9 +490,11 @@ pub const SEND_MAIL_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 pub enum SendMailError {
     /// Over `SEND_MAIL_LIMIT_BYTES` once encoded: refused before any request.
     TooLarge { encoded_bytes: usize },
-    /// The request got no answer (connect, TLS, timeout). `detail` is the
-    /// error with its causes, the URL left out.
-    Transport { timed_out: bool, detail: String },
+    /// The request got no answer (connect, TLS, timeout, a dropped
+    /// connection). `maybe_sent` is false only when no connection was made,
+    /// so Graph cannot have the message; after that it may have it. `detail`
+    /// is the error with its causes, the URL left out.
+    Transport { timed_out: bool, maybe_sent: bool, detail: String },
     /// Graph answered, and not with a 2xx. `code` and `message` are the error
     /// body's `error.code` / `error.message` when it had them.
     Refused { status: u16, code: Option<String>, message: Option<String>, retry_after: Option<u64> },
@@ -1017,7 +1019,7 @@ impl GraphClient {
                 .timeout(timeout)
                 .body(encoded))
             .await
-            .map_err(|e| SendMailError::Transport { timed_out: e.is_timeout(), detail: error_chain(e) })?;
+            .map_err(|e| SendMailError::Transport { timed_out: e.is_timeout(), maybe_sent: !e.is_connect(), detail: error_chain(e) })?;
 
         let status = resp.status();
         if status.is_success() {

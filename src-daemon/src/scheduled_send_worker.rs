@@ -298,12 +298,12 @@ fn emit(state: &Arc<DaemonState>, id: &str, status: &str) {
     state.events.emit("scheduled-send", json!({"id": id, "status": status}));
 }
 
-/// The failures a retry can never fix, as `smtp` words them: a rejected
-/// login (SMTP, a Graph sign-in Microsoft will not take, or an expired token
-/// that could not be renewed), a sender this account is not allowed to send
-/// as, a message over Graph's size limit. Everything else (a timeout, a
-/// throttle, a host that refuses for a moment, an SMTP hostname that won't
-/// resolve) gets the retry ladder.
+/// The failures no retry may follow, as `smtp` words them: a rejected login
+/// (SMTP, or a Graph sign-in Microsoft will not take, or an expired token that
+/// could not be renewed), a sender this account is not allowed to send as, a
+/// message over Graph's size limit, and a Graph send that may already have
+/// gone out. Everything else (an SMTP timeout, a throttle, a host that refuses
+/// for a moment, an SMTP hostname that won't resolve) gets the retry ladder.
 fn is_terminal_smtp_error(msg: &str) -> bool {
     smtp::is_terminal_send_error(msg)
 }
@@ -454,18 +454,19 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
             append_to_sent(state, &account, &row.account_id, stored.sent_mailbox, &result);
             Outcome::Sent
         }
+        // Ahead of the network probe: a Graph send that may have gone out
+        // must end the row even when the network then looks down, because
+        // the offline requeue would send it a second time.
+        Err(e) if is_terminal_smtp_error(&e) => Outcome::Terminal(e),
         Err(e) => {
             // Same idiom `sync_engine::sync_account` uses: a success is proof
             // of reach, a connect-shaped failure only asks — `note_failure`
             // probes and the probe decides, so one provider's SMTP outage
             // never gates every other account's scheduled sends.
-            let online_after = state.net.note_failure(&e).await;
-            if !online_after {
-                Outcome::Offline(e)
-            } else if is_terminal_smtp_error(&e) {
-                Outcome::Terminal(e)
-            } else {
+            if state.net.note_failure(&e).await {
                 Outcome::Transient(e)
+            } else {
+                Outcome::Offline(e)
             }
         }
     }

@@ -345,7 +345,8 @@ pub(crate) fn test_graph_mock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 /// `test_graph_mock` with the answers the caller's requests should get, in
-/// order (`(status, body)`, one per connection), and the request log cleared,
+/// order (`(status, body)`, one per connection; status 0 reads the request
+/// and closes the connection without answering), and the request log cleared,
 /// so `test_graph_requests` lists only this test's requests.
 #[cfg(test)]
 pub(crate) fn test_graph_mock_with(responses: Vec<(u16, String)>) -> std::sync::MutexGuard<'static, ()> {
@@ -451,6 +452,10 @@ mod tests {
             SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(req);
         }
         let (status, body) = QUEUE.lock().unwrap().pop_front().unwrap_or((500, "no response queued".into()));
+        // Status 0: took the request, and the connection dies unanswered.
+        if status == 0 {
+            return;
+        }
         let reason = if (200..300).contains(&status) { "OK" } else { "Mock Error" };
         let resp = format!(
             "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",

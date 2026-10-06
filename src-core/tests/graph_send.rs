@@ -108,6 +108,11 @@ fn answer(req: &Req) -> (u16, Vec<(&'static str, &'static str)>, String) {
 fn serve(stub: &'static Stub, mut stream: TcpStream) {
     let Some(req) = read_request(&mut stream) else { return };
     stub.log.lock().unwrap().push(req.clone());
+    // Graph took the whole request, and the connection died before it
+    // answered: from the client's side, the message may or may not have gone.
+    if req.mime().contains("Subject: case-drop") {
+        return;
+    }
     let (status, extra, body) = if req.method == "POST" && req.path == "/me/sendMail" {
         answer(&req)
     } else {
@@ -368,6 +373,19 @@ async fn graph_refusals_are_worded_for_what_happened() {
         assert!(!err.contains('\u{2014}'), "{subject}: no em dash in a new message: {err}");
         assert_eq!(sends_marked(&format!("Subject: {subject}")).len(), 1, "{subject}: sent once, never retried");
     }
+}
+
+/// Graph read the whole request and the connection died before it answered,
+/// so the message may well have gone out. That is not "could not reach
+/// Microsoft", which Scheduled Send tries again into a second copy: it says to
+/// check Sent, and no retry may follow it. Nothing here retried either.
+#[tokio::test]
+async fn a_send_graph_took_but_never_answered_may_have_gone_out() {
+    let err = smtp::send_email(&graph_account(), &email("case-drop", None)).await.err().expect("no answer is not a success");
+    assert!(err.contains("may have gone out"), "{err}");
+    assert!(smtp::is_terminal_send_error(&err), "a send that may have gone out must never be retried: {err}");
+    assert!(!err.contains("Could not reach"), "{err}");
+    assert_eq!(sends_marked("Subject: case-drop").len(), 1, "sent once, never retried");
 }
 
 /// No token at all is a sign-in problem too, and nothing is sent.
