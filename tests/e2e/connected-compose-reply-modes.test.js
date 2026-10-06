@@ -244,7 +244,7 @@ describe('Connected Compose Reply Modes', function () {
   // Forward
   // -------------------------------------------------------------------------
 
-  it('prefills a Forward with the original inline and carries its attachment', async function () {
+  it('prefills a Forward with the original beside it and carries its attachment', async function () {
     await openMode(EMAIL, 'f');
 
     expect(await modalTitle()).toBe('Forward');
@@ -252,10 +252,15 @@ describe('Connected Compose Reply Modes', function () {
     // A forward has no recipient yet — that is the one thing the user must add.
     expect(await fieldValue('compose-to')).toBe('');
 
-    // Unlike a reply, the original is part of the editable body.
-    const body = (await editorText()) || '';
-    expect(body).toContain('Original Message');
-    expect(body).toContain('Original html body');
+    // The original rides beside the body, as a reply's does, and goes out as
+    // it arrived: the editor's schema would drop its tables and styles. The
+    // editor holds only what the user types.
+    await browser.waitUntil(async () => ((await quotedText()) || '').includes('Original html body'), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The forward opened without its original beside it',
+    });
+    expect((await editorText()) || '').not.toContain('Original html body');
 
     expect(await attachments()).toContain('deck.pdf');
     expect(await testidText('compose-attachments')).toContain('1 Attachment(s)');
@@ -422,10 +427,9 @@ describe('Connected Compose Reply Modes', function () {
     expect(await quotedText()).toContain(BROKEN_IMG);
   });
 
-  // A guard, green before the fix too: a Forward puts the original into the
-  // editor, where only TipTap's schema stands between its markup and the app
-  // window (Image keeps src/alt/title, Link refuses javascript:).
-  it('runs nothing from an HTML original a Forward carries into the editor', async function () {
+  // A Forward shows its original in the same frame a Reply does, and none of
+  // it reaches the editor.
+  it('runs nothing from an HTML original a Forward shows', async function () {
     await browser.execute(() => { delete window.__mvQuoteRan; });
     await openMode({
       ...EMAIL,
@@ -433,13 +437,13 @@ describe('Connected Compose Reply Modes', function () {
       html: `<p>Original html body</p>${BROKEN_IMG}<p><a href="javascript:${RAN}">details</a></p>`,
     }, 'f');
 
-    await browser.waitUntil(async () => ((await editorText()) || '').includes('Original html body'), {
+    await expandQuote();
+    await browser.waitUntil(async () => ((await quotedText()) || '').includes('Original html body'), {
       timeout: 10_000,
       interval: 200,
-      timeoutMsg: 'The forwarded original never reached the editor, so "nothing ran" proves nothing',
+      timeoutMsg: 'The forwarded original never showed its body, so "nothing ran" proves nothing',
     });
-    await browser.pause(1500);
-    expect(await browser.execute(() => window.__mvQuoteRan ?? null)).toBe(null);
+    expect(await quoteRan()).toEqual({ app: null, frame: null });
     expect(await browser.execute(() =>
       document.querySelectorAll('.ProseMirror [onerror], .ProseMirror a[href^="javascript:"]').length)).toBe(0);
   });
