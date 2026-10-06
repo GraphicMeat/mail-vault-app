@@ -34,6 +34,13 @@ vi.mock('framer-motion', () => {
   });
   return { motion, AnimatePresence: ({ children }) => children };
 });
+// A real TipTap editor destroys itself on a 1ms timer after unmount; the last
+// spec of the file can end before it fires, and it then throws into a torn-down
+// jsdom (an unhandled error that fails the whole run).
+vi.mock('../RichTextEditor', async (importOriginal) => ({
+  ...(await importOriginal()),
+  RichTextEditor: ({ placeholder }) => React.createElement('div', { 'data-testid': 'editor-stub' }, placeholder),
+}));
 vi.mock('../ContactsPicker', () => ({ ContactsPickerButton: () => null, ContactsAutocomplete: () => null }));
 vi.mock('../../services/localDrafts', () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),
