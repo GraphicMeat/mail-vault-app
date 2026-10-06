@@ -8,6 +8,11 @@
  * they drive it over HTTP: PUT /__mock/folders replaces the mailbox, and
  * GET /__mock/requests lists what the app asked for since the last DELETE.
  * PUT/DELETE /__mock/hold pauses and later releases one message's MIME answer.
+ * GET /__mock/sent lists every `POST /me/sendMail` (its Content-Type and the
+ * decoded MIME) since the last DELETE /__mock/sent.
+ *
+ * `POST /me/sendMail` answers 202 and files the message in the `sentitems`
+ * folder, as Graph does: the sender's copy keeps its Bcc header.
  *
  * `list_folders` also resolves the six well-known folder ids in one `$batch` of
  * `GET /me/mailFolders/{well-known}?$select=id`, and the app reads a message's
@@ -38,6 +43,8 @@ export function startMockGraph() {
   let requests = [];     // [{ method, path }]
   let held = null;       // a message id whose MIME answer waits for DELETE /__mock/hold
   let waiting = [];      // answers parked behind that hold
+  let sent = [];         // [{ contentType, mime }] per POST /me/sendMail
+  let sentSeq = 0;
 
   const json = (res, status, body) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -146,6 +153,44 @@ export function startMockGraph() {
     return { status: 404, body: { error: { code: 'NotMocked', path } } };
   }
 
+  /** The header block of `mime` as { lower-cased name: first value }, unfolded. */
+  const headersOf = (mime) => {
+    const block = mime.split(/\r?\n\r?\n/)[0].replace(/\r?\n[ \t]+/g, ' ');
+    const out = {};
+    for (const line of block.split(/\r?\n/)) {
+      const i = line.indexOf(':');
+      if (i > 0) {
+        const name = line.slice(0, i).trim().toLowerCase();
+        if (!(name in out)) out[name] = line.slice(i + 1).trim();
+      }
+    }
+    return out;
+  };
+
+  /** "Name <addr>" or "addr" -> a Graph recipient. */
+  const recipient = (text) => {
+    const m = String(text || '').trim().match(/^"?(.*?)"?\s*<([^>]+)>$/);
+    return { emailAddress: m ? { name: m[1], address: m[2] } : { name: '', address: String(text || '').trim() } };
+  };
+
+  /** File a sent message in Sent Items the way Graph does after a 202. */
+  const fileSent = (mime) => {
+    const folder = folders.find((f) => wellKnownOf(f) === 'sentitems');
+    if (!folder) return;
+    const h = headersOf(mime);
+    sentSeq += 1;
+    folder.messages.push({
+      id: `msg-sendmail-${sentSeq}`,
+      internetMessageId: h['message-id'] || `<msg-sendmail-${sentSeq}@mock.test>`,
+      receivedDateTime: new Date().toISOString(),
+      subject: h.subject || '',
+      from: recipient(h.from),
+      toRecipients: (h.to || '').split(',').filter((x) => x.trim()).map(recipient),
+      isRead: true,
+      mime,
+    });
+  };
+
   const send = (res, out) => {
     if (out.raw !== undefined) {
       res.writeHead(out.status, { 'Content-Type': out.contentType });
@@ -163,6 +208,10 @@ export function startMockGraph() {
       req.on('data', (c) => { body += c; });
       req.on('end', () => { folders = JSON.parse(body); json(res, 200, { ok: true }); });
       return;
+    }
+    if (path === '/__mock/sent') {
+      if (req.method === 'DELETE') sent = [];
+      return json(res, 200, sent);
     }
     if (path === '/__mock/requests') {
       if (req.method === 'DELETE') requests = [];
@@ -186,6 +235,20 @@ export function startMockGraph() {
 
     requests.push({ method: req.method, path });
     if (!/^Bearer \S+/.test(req.headers.authorization || '')) return json(res, 401, { error: { code: 'InvalidAuthenticationToken' } });
+
+    if (path === '/v1.0/me/sendMail' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        // MIME sendMail: the whole message, base64-encoded, as text/plain.
+        const mime = Buffer.from(body.trim(), 'base64').toString('utf8');
+        sent.push({ contentType: req.headers['content-type'] || '', mime });
+        fileSent(mime);
+        res.writeHead(202);
+        res.end();
+      });
+      return;
+    }
 
     if (path === '/v1.0/$batch' && req.method === 'POST') {
       let body = '';
