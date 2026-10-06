@@ -57,19 +57,6 @@ export function localSnoozeKeys(rows) {
   return keys;
 }
 
-/// Unread messages among `emails`, `accountId`'s INBOX rows, less the ones a
-/// local snooze holds out of it: the badge counts what the inbox shows.
-export function inboxUnread(accountId, emails) {
-  const held = localSnoozeKeys(useSnoozeStore.getState().rows);
-  let n = 0;
-  for (const e of emails) {
-    if (e.flags?.includes('\\Seen')) continue;
-    if (held.size && e.messageId && held.has(localSnoozeKey(accountId, 'INBOX', e.messageId))) continue;
-    n++;
-  }
-  return n;
-}
-
 // A local wake only clears \Seen, so no sync reports an arrival: the banner
 // is raised here, previewing that message rather than the folder's newest.
 async function announceLocalWake(row) {

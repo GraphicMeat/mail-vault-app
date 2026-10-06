@@ -6,8 +6,7 @@ import { Button } from './ui/Button';
 import { useMailStore } from '../stores/mailStore';
 import { useComposeStore } from '../stores/composeStore';
 import { useT } from '../i18n/index.js';
-
-const SHOW_MS = 8000;
+import { UNDO_TOAST_MS } from '../stores/slices/undoSlice';
 
 /**
  * The last undoable action, for 8 s.
@@ -26,7 +25,7 @@ export function UndoToast() {
   useEffect(() => {
     if (!undo) { setShownId(null); return; }
     setShownId(undo.id);
-    const timer = setTimeout(() => setShownId((cur) => (cur === undo.id ? null : cur)), SHOW_MS);
+    const timer = setTimeout(() => setShownId((cur) => (cur === undo.id ? null : cur)), UNDO_TOAST_MS);
     return () => clearTimeout(timer);
   }, [undo?.id]);
 

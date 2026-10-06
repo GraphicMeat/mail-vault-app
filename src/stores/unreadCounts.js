@@ -12,14 +12,48 @@
 // COMPLETE cache (`emails` holding every message the folder has): a partial one
 // reads as fewer unread. Anything else moves the count by one per message that
 // changed state, and a message nothing loaded tells us about does not move it.
-// The count of a folder is never read off rows that belong to another.
+// The count of a folder is never read off rows that belong to another, and a
+// recount counts only what the list itself would show (rowVisibility): a
+// message it holds back is no unread message the user can find.
 //
 // No heavy work lives here: a recount is over rows the caller already holds,
 // and a cache read is the caller's (the scheduler, off the click path).
 import { useSettingsStore } from './settingsStore';
-import { inboxUnread } from './snoozeStore';
+import { localSnoozeKeys, useSnoozeStore } from './snoozeStore';
+import { useTagStore } from './tagStore';
+import { useAutoTagStore } from './autoTagStore';
+import { rowVisibility } from '../utils/rowVisibility';
 
 const settings = () => useSettingsStore.getState();
+
+// The store holding what the list keeps back (a delete's tombstone, the vault
+// marks). It imports this module, so it hands itself over (mailStore.js).
+let listStore = null;
+export function setListStore(store) {
+  listStore = store;
+}
+
+/// Would `accountId`'s INBOX list show a row of its cache? The list's own rule
+/// set: a delete still owed to the server, \Deleted not yet expunged, an
+/// auto-tag hide and a local snooze keep a message off it. A refused delete
+/// left its row tombstoned while every sync brought it back unread from the
+/// server's copy: "1" on the badge, "No unread messages" in the list.
+/// `tombstones: false` is for a shift: a delete lays its tombstone before it
+/// shifts and an undo lifts it before, so the message the shift is about
+/// always has one.
+function shownInInbox(accountId, { tombstones = true } = {}) {
+  const s = listStore?.getState() ?? {};
+  const hiddenTagIds = useAutoTagStore.getState().hiddenTagIds();
+  return rowVisibility({
+    activeAccountId: accountId,
+    activeMailbox: 'INBOX',
+    archivedEmailIds: s.archivedEmailIds,
+    deleteTombstones: tombstones ? s.deleteTombstones : null,
+    hiddenTagIds,
+    tagsByRow: hiddenTagIds.size ? useTagStore.getState().byRow : null,
+    localSnoozes: localSnoozeKeys(useSnoozeStore.getState().rows),
+  });
+}
 
 /// Does `cache` hold the whole folder? Its row count reaches the folder's own.
 export const isCompleteCache = (cache) =>
@@ -44,10 +78,13 @@ export const selectTotalUnread = (state, accounts) =>
   unreadRows(state, accounts).reduce((sum, row) => sum + row.unread, 0);
 
 /// The unread count of `accountId`'s INBOX as `cache` (`{ emails, totalEmails }`)
-/// tells it, or null when the cache is not complete. Less what a local snooze
-/// holds out of the inbox, as the list.
-export const inboxCount = (accountId, cache) =>
-  (isCompleteCache(cache) ? inboxUnread(accountId, cache.emails) : null);
+/// tells it, or null when the cache is not complete. Only the rows the list
+/// shows (shownInInbox).
+export function inboxCount(accountId, cache) {
+  if (!isCompleteCache(cache)) return null;
+  const shown = shownInInbox(accountId);
+  return cache.emails.filter(e => !e.flags?.includes('\\Seen') && shown(e)).length;
+}
 
 /// Recount `accountId`'s INBOX from `cache`, when it is complete. Returns
 /// whether it wrote.
@@ -60,13 +97,15 @@ export function recountInbox(accountId, cache) {
 
 /// `entries` are `{ accountId, mailbox, row }`, one per message that stopped or
 /// started counting: the caller has decided which way, `sign` is -1 or +1.
-/// INBOX messages only, and not one a local snooze holds out of the inbox: it
-/// was never counted, so moving it moves nothing.
+/// INBOX messages only, and not one the list holds back (shownInInbox): it was
+/// never counted, so moving it moves nothing.
 export function shiftInbox(entries, sign) {
   const byAccount = new Map();
+  const shown = new Map();
   for (const { accountId, mailbox, row } of entries) {
     if (mailbox !== 'INBOX' || !accountId) continue;
-    if (!inboxUnread(accountId, [{ ...row, flags: [] }])) continue;
+    if (!shown.has(accountId)) shown.set(accountId, shownInInbox(accountId, { tombstones: false }));
+    if (!shown.get(accountId)({ ...row, flags: (row?.flags || []).filter(f => f !== '\\Seen') })) continue;
     byAccount.set(accountId, (byAccount.get(accountId) || 0) + sign);
   }
   const s = settings();

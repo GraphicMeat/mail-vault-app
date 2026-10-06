@@ -13,6 +13,7 @@ import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
 import { useSnoozeStore } from './snoozeStore';
 import { registerRows, setIdentityStore, mapList } from './messageRows';
+import { setListStore } from './unreadCounts';
 
 // Re-exports for external consumers
 export { graphMessageToEmail } from '../services/graphConfig';
@@ -51,6 +52,8 @@ export const useMailStore = create((...a) => ({
 // row through patchEverywhere and a resolver reads the candidates through
 // resolvePool, and neither keeps a list of these of its own.
 setIdentityStore(useMailStore);
+// The unread badge counts only what the list shows (unreadCounts).
+setListStore(useMailStore);
 const listPatch = (field) => (state, ctx) => {
   const next = mapList(state[field], ctx);
   return next === state[field] ? null : { [field]: next };

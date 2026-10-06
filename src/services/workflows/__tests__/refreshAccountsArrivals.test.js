@@ -69,7 +69,10 @@ vi.mock('../../authUtils', () => ({
   hasValidCredentials: () => true,
   ensureFreshToken: async (a) => a,
 }));
-vi.mock('../../../stores/slices/unifiedHelpers', () => ({ _resolveMailboxPath: (_m, target) => target }));
+vi.mock('../../../stores/slices/unifiedHelpers', async (importOriginal) => ({
+  ...(await importOriginal()),
+  _resolveMailboxPath: (_m, target) => target,
+}));
 const mockSetUnreadPerAccount = vi.fn();
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: {

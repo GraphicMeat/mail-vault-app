@@ -136,7 +136,10 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-const { applyFlagToTargets, applyServerRemoval, moveEmails } = await import('../messageMutations');
+const { applyFlagToTargets, applyServerRemoval, moveEmails, deleteEmailFromServer } = await import('../messageMutations');
+const { recountInbox } = await import('../../../stores/unreadCounts');
+const { useAutoTagStore } = await import('../../../stores/autoTagStore');
+const { useTagStore, tagRowKey } = await import('../../../stores/tagStore');
 
 const A1 = { id: 'a1', email: 'a1@x' };
 const A2 = { id: 'a2', email: 'a2@x' };
@@ -280,5 +283,89 @@ describe('other ways an unread message leaves a partial INBOX list', () => {
     await applyServerRemoval(1, { accountId: 'a1', mailbox: 'INBOX', skipRefresh: true, counted: true });
 
     expect(unreadPerAccount.a1).toBe(7);
+  });
+});
+
+// A delete the server refused keeps its row off the list (its tombstone) and its
+// entry in the journal, while the server, and the cache every sync repaints the
+// list from, still hold the message unread. The badge counted it: "1" beside
+// the account, "No unread messages" in its list. The badge counts by the list's
+// own rule set (rowVisibility), whichever writer recounts.
+describe('a message the list holds back is not on the badge', () => {
+  it('a delete still owed to the server, after a reload brought its row back from the cache', () => {
+    prime({ emails: [row(1, { flags: ['\\Seen'] })], badge: { a1: 0 } });
+
+    useMailStore.setState({ deleteTombstones: new Set(['a1|INBOX|368']), emails: [row(1, { flags: ['\\Seen'] }), row(368)], totalEmails: 2 });
+    useMailStore.getState().updateSortedEmails();
+
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([1]);
+    expect(unreadPerAccount.a1).toBe(0);
+  });
+
+  it('counted from the cache of an account the list is not showing', () => {
+    prime({ emails: [row(1, { flags: ['\\Seen'] })], badge: { a1: 0, a2: 1 } });
+    useMailStore.setState({ deleteTombstones: new Set(['a2|INBOX|368']) });
+
+    expect(recountInbox('a2', { emails: [row(368), row(5, { flags: ['\\Seen'] })], totalEmails: 2 })).toBe(true);
+
+    expect(unreadPerAccount.a2).toBe(0);
+  });
+
+  it('a message flagged \\Deleted on the server and not yet expunged', () => {
+    prime({ emails: [row(1, { flags: ['\\Seen'] })], badge: { a1: 0, a2: 1 } });
+
+    recountInbox('a2', { emails: [row(9, { flags: ['\\Deleted'] }), row(10)], totalEmails: 2 });
+
+    expect(unreadPerAccount.a2).toBe(1);
+  });
+
+  it('a message an auto-tag rule keeps off the Inbox', () => {
+    prime({ emails: [row(1, { flags: ['\\Seen'] })], badge: { a1: 0, a2: 2 } });
+    useAutoTagStore.setState({ rules: [{ id: 'r', tagId: 't1', enabled: true, inboxAction: 'hide' }] });
+    useTagStore.setState({ byRow: { [tagRowKey('a2', 'INBOX', 7)]: ['t1'] } });
+    try {
+      recountInbox('a2', { emails: [row(7), row(8)], totalEmails: 2 });
+    } finally {
+      useAutoTagStore.setState({ rules: [] });
+      useTagStore.setState({ byRow: {} });
+    }
+
+    expect(unreadPerAccount.a2).toBe(1);
+  });
+
+  // A partial INBOX never recounts, so the shift is all the badge hears: it
+  // moves for a message only as a recount would count it.
+  it('marking unread a message an auto-tag rule keeps off a partial Inbox leaves the badge alone', async () => {
+    useAutoTagStore.setState({ rules: [{ id: 'r', tagId: 't1', enabled: true, inboxAction: 'hide' }] });
+    useTagStore.setState({ byRow: { [tagRowKey('a1', 'INBOX', 7)]: ['t1'], [tagRowKey('a1', 'INBOX', 8)]: [] } });
+    try {
+      prime({ emails: [row(7, { flags: ['\\Seen'] }), row(8)], total: 500 });
+      await applyFlagToTargets([target('a1', 'INBOX', 7)], '\\Seen', false);
+    } finally {
+      useAutoTagStore.setState({ rules: [] });
+      useTagStore.setState({ byRow: {} });
+    }
+
+    expect(unreadPerAccount.a1).toBe(7);
+  });
+
+  // The delete lays its tombstone before it shifts: the message leaving is
+  // exactly what the shift counts, so the tombstone must not hide it from it.
+  it('a delete from a partial Inbox still takes its unread message off the badge', async () => {
+    netOnline = false;
+    prime({ emails: [row(1), row(2)], total: 500 });
+
+    await deleteEmailFromServer(1);
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|1')).toBe(true);
+    expect(unreadPerAccount.a1).toBe(6);
+  });
+
+  it('still counts every unread message the list shows', () => {
+    prime({ emails: [row(1, { flags: ['\\Seen'] })], badge: { a1: 0, a2: 0 } });
+
+    recountInbox('a2', { emails: [row(7), row(8), row(9, { flags: ['\\Seen'] })], totalEmails: 3 });
+
+    expect(unreadPerAccount.a2).toBe(2);
   });
 });

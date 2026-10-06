@@ -7,6 +7,9 @@ import { t as tr } from '../../i18n/index.js';
 
 let _seq = 0;
 
+/** How long the toast offers a slot. The slot itself holds until the next action. */
+export const UNDO_TOAST_MS = 8000;
+
 export const createUndoSlice = (set, get) => ({
   /** @type {null | { id: number, labelKey: string, labelParams?: object, canUndo: boolean, run?: () => Promise<void>, at: number }} */
   undo: null,

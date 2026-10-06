@@ -65,6 +65,7 @@ vi.mock('../../../stores/mailStore', () => ({
 vi.mock('../../daemonClient', () => ({ daemonCall: async () => ({ online: true }) }));
 
 import { replayOps, shouldRetryNow, wireReplayOnReconnect } from '../replayOps';
+import { UNDO_TOAST_MS } from '../../../stores/slices/undoSlice';
 import { useConnectivityStore } from '../../../stores/connectivityStore';
 
 const entry = (over) => ({ id: 1, op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: {}, at: 1, ...over });
@@ -213,12 +214,23 @@ describe('wireReplayOnReconnect', () => {
     mailState.undo = null;
     expect(await shouldRetryNow()).toBe(true);
 
-    mailState.undo = { kind: 'delete' };
+    mailState.undo = { kind: 'delete', at: Date.now() };
     expect(await shouldRetryNow()).toBe(false);
 
     mailState.undo = null;
     useConnectivityStore.getState().setOnline(false);
     expect(await shouldRetryNow()).toBe(false);
     useConnectivityStore.getState().setOnline(true);
+  });
+
+  // The slot outlives its toast: Cmd+Z reaches it until the next action
+  // replaces it. Held on the slot, the tick stopped for the rest of the session
+  // after the first delete, and an op a flaky link refused sat in the journal
+  // for hours: the server kept the message unread and the badge counted it.
+  it('runs the retry tick once the undo toast is gone, though the slot still holds', async () => {
+    useConnectivityStore.getState().setOnline(true);
+    mailState.undo = { kind: 'delete', at: Date.now() - UNDO_TOAST_MS - 1 };
+    expect(await shouldRetryNow()).toBe(true);
+    mailState.undo = null;
   });
 });

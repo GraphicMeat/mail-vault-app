@@ -6,6 +6,7 @@ import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { markServerDeleted } from './messageMutations';
 import { useConnectivityStore } from '../../stores/connectivityStore';
+import { UNDO_TOAST_MS } from '../../stores/slices/undoSlice';
 
 /**
  * Relay to the Rust log as well as the console.
@@ -215,7 +216,8 @@ const RETRY_INTERVAL_MS = 5 * 60_000;
 export async function shouldRetryNow() {
   if (!useConnectivityStore.getState().online) return false;
   const { useMailStore } = await import('../../stores/mailStore');
-  return !useMailStore.getState().undo;
+  const { undo } = useMailStore.getState();
+  return !undo || Date.now() - undo.at >= UNDO_TOAST_MS;
 }
 
 let _wired = false;
@@ -271,5 +273,8 @@ export function wireReplayOnReconnect() {
   // the user's undo toast every five minutes for reasons that have nothing to
   // do with the delete they just made. Skipping the tick is the right half to
   // give up: the entry is already stuck, five more minutes costs nothing.
+  // Live means the toast, not the slot: the slot holds until the next action,
+  // so gating on it stopped the tick for the rest of the session after the
+  // first delete, and an op a flaky link refused was never sent.
   setInterval(async () => { if (await shouldRetryNow()) run('retry'); }, RETRY_INTERVAL_MS);
 }
