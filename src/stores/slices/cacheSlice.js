@@ -2,6 +2,7 @@
 
 import { invalidateRestoreDescriptors as _invalidateRestore } from '../../services/cacheManager';
 import { recordSize as _recordCacheSize, shouldPrefetch as _shouldPrefetch } from '../../services/cachePressure';
+import { htmlReferencesCid } from '../../utils/cidRefs';
 
 // Module-level cache size tracking — avoids mutating Zustand state outside set()
 let _cacheCurrentSizeMB = 0;
@@ -71,7 +72,7 @@ export const createCacheSlice = (set, get) => ({
     if (lightEmail.attachments) {
       const html = lightEmail.html || '';
       lightEmail.attachments = lightEmail.attachments.map(att => {
-        if (att.contentId && html.includes(`cid:${att.contentId.replace(/^<|>$/g, '')}`)) return att;
+        if (htmlReferencesCid(html, att.contentId)) return att;
         const { content, ...meta } = att;
         return meta;
       });

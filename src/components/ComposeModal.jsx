@@ -14,6 +14,7 @@ import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './Origi
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
 import { replyTemplateHtml } from '../utils/replyTemplate';
+import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import { withoutSnippet } from '../utils/withoutSnippet';
 import { composeIdentities, composeSenderName, composeSignature, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
@@ -563,14 +564,13 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         // A picture the original's HTML shows by cid: keeps that Content-ID,
         // or it arrives as a broken image beside a loose attachment.
         const forwarded = replyTo.attachments.map((att, i) => {
-          const cid = att.contentId?.replace(/^<|>$/g, '');
           return {
             filename: att.filename,
             contentType: att.contentType,
             size: att.size,
             content: att.content,
             isFromOriginal: true,
-            ...(cid && replyTo.html?.includes(`cid:${cid}`) && { cid }),
+            ...(htmlReferencesCid(replyTo.html, att.contentId) && { cid: bareContentId(att.contentId) }),
             ...(!att.content && loc && replyTo.uid != null
               ? { _source: { ...loc, uid: replyTo.uid, attachmentIndex: att._originalIndex ?? i } } : {}),
           };

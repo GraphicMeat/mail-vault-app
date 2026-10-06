@@ -13,6 +13,7 @@
 // than adding one per typing pause.
 
 import * as api from './api';
+import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import * as db from './db';
 import { useMailStore } from '../stores/mailStore';
 import { _resolveMailboxPath, sameMessage, vaultKey } from '../stores/slices/unifiedHelpers';
@@ -159,8 +160,7 @@ const _escapeHtml = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<'
 function _withOriginal(html, attachments) {
   const { body, quotedHtml, forward } = splitWireHtml(html);
   const cidIn = att => {
-    const cid = att.contentId?.replace(/^<|>$/g, '');
-    return cid && quotedHtml.includes(`cid:${cid}`) ? { cid } : {};
+    return htmlReferencesCid(quotedHtml, att.contentId) ? { cid: bareContentId(att.contentId) } : {};
   };
   return {
     body,

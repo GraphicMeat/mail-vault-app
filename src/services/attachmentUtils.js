@@ -7,6 +7,7 @@
  * lazy loading via `maildir_read_attachment`.
  */
 import { send } from './transport';
+import { bareContentId, htmlReferencesCid, replaceCidRefs } from '../utils/cidRefs';
 import { t } from '../i18n/index.js';
 import { avoidReserved, isWindowsPlatform } from '../stores/slices/unifiedHelpers.js';
 
@@ -51,10 +52,7 @@ export function getRealAttachments(attachments, html) {
       if (!type.startsWith('image/')) return true;
       // Only hide if the image has a Content-ID that is actually
       // referenced in the HTML body (i.e. embedded via cid:)
-      if (att.contentId && html) {
-        const cid = att.contentId.replace(/^<|>$/g, '');
-        if (html.includes(`cid:${cid}`)) return false;
-      }
+      if (htmlReferencesCid(html, att.contentId)) return false;
       // Tracking pixels: tiny unnamed images
       if (!att.filename && att.size && att.size < 5000) return false;
       return true;
@@ -67,16 +65,13 @@ export function getRealAttachments(attachments, html) {
  */
 export function replaceCidUrls(html, attachments) {
   if (!html || !attachments?.length) return html;
-  let result = html;
+  const byCid = new Map();
   for (const att of attachments) {
     if (!att.contentId || !att.content) continue;
-    const cid = att.contentId.replace(/^<|>$/g, '');
-    if (!result.includes(`cid:${cid}`)) continue;
     const contentType = (att.contentType || 'application/octet-stream').split(';')[0].trim();
-    const dataUri = `data:${contentType};base64,${att.content}`;
-    result = result.replaceAll(`cid:${cid}`, dataUri);
+    byCid.set(bareContentId(att.contentId), `data:${contentType};base64,${att.content}`);
   }
-  return result;
+  return byCid.size ? replaceCidRefs(html, cid => byCid.get(cid)) : html;
 }
 
 /**
@@ -100,8 +95,7 @@ export async function hydrateInlineImages(email, accountId, mailbox) {
     if (att.content || !att.contentId) return;
     // ponytail: 10MB cap keeps a pathological inline image out of the email cache
     if (att.size > 10 * 1024 * 1024) return;
-    const cid = att.contentId.replace(/^<|>$/g, '');
-    if (email.html.includes(`cid:${cid}`)) indices.push(index);
+    if (htmlReferencesCid(email.html, att.contentId)) indices.push(index);
   });
   if (!indices.length) return email;
 
