@@ -259,6 +259,26 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
             info!("[send:messageid_header] account={} extracted={:?}", account_id_for_log, message_id_header);
 
+            // Microsoft Graph filed its own copy in Sent Items when it took
+            // the message (202), and a Graph account has no IMAP to APPEND
+            // over. Compose drops its staged local copy on this event, so it
+            // comes now, naming this message. Waiting to see the copy in Sent
+            // Items instead could wait for good: Exchange may rewrite the
+            // Message-ID.
+            if result.server_saved_sent {
+                let payload = json!({
+                    "accountId": account_id_for_log,
+                    "mailbox": sent_mailbox,
+                    "messageId": result.message_id,
+                    "messageIdHeader": message_id_header,
+                    "ok": true,
+                    "verify": {"serverSaved": true},
+                });
+                info!("[send:server_saved_sent] account={} Graph filed the Sent copy, no APPEND", account_id_for_log);
+                state.events.emit("send-server-append-complete", payload);
+                return Some(RpcResponse::success(id, json!({"success": true, "messageId": message_id_for_response})));
+            }
+
             // Background: best-effort APPEND to the server Sent folder. Never
             // blocks the RPC response. Uses a dedicated no-compress session,
             // never the daemon's pooled ImapPool — same reasoning
@@ -673,6 +693,90 @@ mod tests {
         assert!(!raw.contains("<x@mock.test>"), "{raw}");
         let log = server.smtp_commands();
         assert!(!log.iter().any(|l| l.contains("evil@attacker.test")), "{log:?}");
+    }
+
+    /// An Outlook.com account signed in with Microsoft: Graph transport and
+    /// token, no SMTP server. Its IMAP host is a live mock so a test can prove
+    /// nothing ever dialled it.
+    fn graph_account_json(server: &MockImap) -> Value {
+        json!({
+            "email": "leia@outlook.test",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+            "authType": "oauth2",
+            "oauth2Transport": "graph",
+            "oauth2AccessToken": "graph-token-123",
+        })
+    }
+
+    /// The Graph send (discussion #22). Graph files its own copy in Sent Items
+    /// and there is no IMAP to APPEND over, so the completion event compose
+    /// waits for (to drop its staged local copy) comes straight after Graph's
+    /// 202, naming this message. Without it the staged copy stayed beside the
+    /// server's for good. A `sentMailbox` passed anyway changes nothing.
+    #[tokio::test]
+    async fn a_graph_send_goes_through_graph_and_reports_the_sent_copy_without_imap() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+        let mut email = outgoing_email("partner@example.com");
+        email["bcc"] = json!("hidden@example.com");
+        email["messageId"] = json!("<graph.7@outlook.test>");
+
+        let resp = call(
+            &s,
+            "smtp_send_email",
+            json!({"account": graph_account_json(&server), "email": email, "sentMailbox": "Sent"}),
+        )
+        .await;
+        let result = resp.result.unwrap_or_else(|| panic!("the Graph send failed: {:?}", resp.error));
+        assert_eq!(result["success"], json!(true));
+
+        let requests = crate::handlers::graph::test_graph_requests();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert_eq!(requests[0].method, "POST");
+        assert!(requests[0].path.ends_with("/me/sendMail"), "{}", requests[0].path);
+
+        let line = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .expect("send-server-append-complete must be emitted")
+            .unwrap();
+        let (name, payload) = mailvault_core::daemon_ipc::parse_event(&line).expect("a valid event line");
+        assert_eq!(name, "send-server-append-complete");
+        assert_eq!(payload["accountId"], json!("leia@outlook.test"));
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_eq!(payload["messageIdHeader"], json!("graph.7@outlook.test"), "{payload}");
+
+        // Graph has no IMAP: nothing was appended, nothing even connected.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(server.commands().is_empty(), "IMAP was dialled: {:?}", server.commands());
+        assert!(server.state().find("Sent").unwrap().messages.is_empty());
+    }
+
+    /// A refused Graph send is an RPC error in Graph's terms, and no
+    /// completion event: the staged copy is all the user has.
+    #[tokio::test]
+    async fn a_refused_graph_send_is_an_error_and_emits_nothing() {
+        let server = MockImap::start(Scenario::new());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(
+            401,
+            json!({"error": {"code": "InvalidAuthenticationToken", "message": "Access token has expired."}}).to_string(),
+        )]);
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+
+        let resp = call(
+            &s,
+            "smtp_send_email",
+            json!({"account": graph_account_json(&server), "email": outgoing_email("partner@example.com")}),
+        )
+        .await;
+        let err = resp.error.expect("a 401 must fail the send").message;
+        assert!(err.contains("Sign in to this account again"), "{err}");
+        assert!(!err.contains("Authentication failed for"), "{err}");
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await.is_err(), "no event for a failed send");
     }
 
     #[tokio::test]

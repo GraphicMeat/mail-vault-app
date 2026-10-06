@@ -344,6 +344,23 @@ pub(crate) fn test_graph_mock() -> std::sync::MutexGuard<'static, ()> {
     tests::mock_graph(Vec::new())
 }
 
+/// `test_graph_mock` with the answers the caller's requests should get, in
+/// order (`(status, body)`, one per connection), and the request log cleared,
+/// so `test_graph_requests` lists only this test's requests.
+#[cfg(test)]
+pub(crate) fn test_graph_mock_with(responses: Vec<(u16, String)>) -> std::sync::MutexGuard<'static, ()> {
+    let guard = tests::mock_graph(responses);
+    tests::SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    guard
+}
+
+/// The requests the shared Graph mock has answered since the last
+/// `test_graph_mock_with`, oldest first. Hold that guard while reading.
+#[cfg(test)]
+pub(crate) fn test_graph_requests() -> Vec<tests::SeenRequest> {
+    tests::SEEN.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,11 +382,22 @@ mod tests {
     // `src-core/src/graph.rs`'s own job).
     //
     // ponytail: hand-rolled single-shot HTTP/1.1 responder (no chunked
-    // request bodies, no keep-alive, no request inspection) — sufficient for
-    // a test fixture; reach for a real crate (wiremock) only if a future
-    // test needs to assert on the outgoing request itself.
+    // request bodies, no keep-alive) — sufficient for a test fixture. It reads
+    // each request through its Content-Length and records it in `SEEN`, which
+    // the send tests read back (`test_graph_requests`); this module's own
+    // tests never look.
     static TEST_LOCK: Mutex<()> = Mutex::new(());
     static QUEUE: Mutex<VecDeque<(u16, String)>> = Mutex::new(VecDeque::new());
+    pub(crate) static SEEN: Mutex<Vec<SeenRequest>> = Mutex::new(Vec::new());
+
+    /// One request the mock answered: request line, lower-cased headers, body.
+    #[derive(Clone, Debug)]
+    pub(crate) struct SeenRequest {
+        pub method: String,
+        pub path: String,
+        pub headers: std::collections::HashMap<String, String>,
+        pub body: String,
+    }
 
     fn mock_server_port() -> u16 {
         static PORT: OnceLock<u16> = OnceLock::new();
@@ -386,9 +414,42 @@ mod tests {
         })
     }
 
-    fn handle_conn(mut stream: TcpStream) {
+    /// Read one request whole: headers, then the body up to its
+    /// Content-Length. Answering after a single read() closed the socket on a
+    /// POST body still in flight, which the client can see as a reset.
+    fn read_request(stream: &mut TcpStream) -> Option<SeenRequest> {
+        let mut raw: Vec<u8> = Vec::new();
         let mut buf = [0u8; 8192];
-        let _ = stream.read(&mut buf);
+        let head_end = loop {
+            if let Some(p) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                break p;
+            }
+            let n = stream.read(&mut buf).ok().filter(|n| *n > 0)?;
+            raw.extend_from_slice(&buf[..n]);
+        };
+        let head = String::from_utf8_lossy(&raw[..head_end]).into_owned();
+        let mut lines = head.split("\r\n");
+        let mut request_line = lines.next()?.split(' ');
+        let method = request_line.next()?.to_string();
+        let path = request_line.next()?.to_string();
+        let headers: std::collections::HashMap<String, String> = lines
+            .filter_map(|l| l.split_once(':').map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string())))
+            .collect();
+        let want: usize = headers.get("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+        let mut body = raw[head_end + 4..].to_vec();
+        while body.len() < want {
+            match stream.read(&mut buf) {
+                Ok(n) if n > 0 => body.extend_from_slice(&buf[..n]),
+                _ => break,
+            }
+        }
+        Some(SeenRequest { method, path, headers, body: String::from_utf8_lossy(&body).into_owned() })
+    }
+
+    fn handle_conn(mut stream: TcpStream) {
+        if let Some(req) = read_request(&mut stream) {
+            SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(req);
+        }
         let (status, body) = QUEUE.lock().unwrap().pop_front().unwrap_or((500, "no response queued".into()));
         let reason = if (200..300).contains(&status) { "OK" } else { "Mock Error" };
         let resp = format!(
