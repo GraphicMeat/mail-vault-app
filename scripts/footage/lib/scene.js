@@ -12,8 +12,11 @@ import { waitForApp, waitForEmails, openSettings, closeSettings } from '../../..
 import { raiseWindow } from '../../screenshots/window.js';
 import { makeLabels } from '../../screenshots/labels.js';
 import { windowSize, restoreMotion, windowInfo, pointer, OUT_DIR } from './footage.js';
+import { APP_LOCALE } from './locale.js';
 
-export const L = makeLabels('en');
+// The app's own strings in the run's UI language (FOOTAGE_LOCALE, lib/locale.js),
+// resolved before SEL below is built from them.
+export const L = makeLabels(APP_LOCALE);
 
 export const SEL = {
   row: '[data-testid="email-row"]',

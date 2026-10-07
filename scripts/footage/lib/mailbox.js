@@ -27,6 +27,7 @@ import { deflateSync } from 'node:zlib';
 import { demoScenarios } from '../../screenshots/demoData.js';
 import { TIER2C_ON, tier2cMessages } from './tier2cMail.js';
 import { TIER3B_ON, tier3bMessages } from './tier3bMail.js';
+import { APP_LOCALE } from './locale.js';
 
 // ── 1. Text patches ─────────────────────────────────────────────────────────
 
@@ -670,12 +671,27 @@ function patchScenario(scenario, { history = null, deltaMs = 0, extra = null } =
 }
 
 /**
+ * The demo's marker subjects (demoData.js MARKERS) in `code`, as the list
+ * shows them: translated by the demo catalog, then text-patched like the MIME
+ * they came from. A spec finds rows by these instead of English needles.
+ */
+export function footageMarkers(code = APP_LOCALE) {
+  const { MARKERS, SCHEDULED_REPLY } = demoScenarios(code);
+  const out = Object.fromEntries(Object.entries(MARKERS).map(([k, v]) => [k, patchText(v)]));
+  out.scheduledReplyBody = patchText(SCHEDULED_REPLY.body);
+  out.scheduledReplySubject = patchText(SCHEDULED_REPLY.subject);
+  return out;
+}
+
+/**
  * The demo accounts for a footage run: same ids and names, patched addresses,
  * and scenarios that build the patched mailbox. History (if any) goes into the
  * FIRST account's INBOX, the work account every scene opens.
  */
-export function footageAccounts() {
-  const { DEMO_ACCOUNTS } = demoScenarios('en');
+export function footageAccounts(code = APP_LOCALE) {
+  // The demo mailbox in the run's language (demo/<code>.json); the history,
+  // extra, subscription, tier2c and tier3b mail below are English only.
+  const { DEMO_ACCOUNTS } = demoScenarios(code);
   const spec = historySpec();
   const history = spec ? historyMessages(spec) : null;
   if (history) {

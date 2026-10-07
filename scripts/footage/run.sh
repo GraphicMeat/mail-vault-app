@@ -22,6 +22,8 @@
 # FOOTAGE_WINDOW=1536x928 (web content; the window adds a 32 pt title bar),
 # FOOTAGE_CAPTURE=app|window|display|screen, FOOTAGE_THEME=dark|light,
 # FOOTAGE_CODEC=hevc|h264, FOOTAGE_BITRATE=80, FOOTAGE_REAL_MOTION=1|0, FOOTAGE_QUERY,
+# FOOTAGE_LOCALE (en | a website dir | an app code; lib/locale.js),
+# FOOTAGE_WEBCLIP=1 (+ FOOTAGE_WEBCLIP_VARIANTS=1; webclip-encode.sh),
 # FOOTAGE_CORPUS_50K=1 (+ optional FOOTAGE_CORPUS_DIR, FOOTAGE_CORPUS_N=49932; the
 # 50,000-message search vault, seeded by wdio.footage.conf.js; pair with
 # FOOTAGE_EXPECT_TOTAL=82).
@@ -99,6 +101,14 @@ cat > "$FOOTAGE_CAP" <<'JSON'
 }
 JSON
 echo "wrote $FOOTAGE_CAP"
+# FOOTAGE_OPT_LEVEL=3: the app and the daemon compiled optimized (cargo's dev
+# profile at that opt-level). Debug assertions stay on, so the debug-only test
+# hatches (MAILVAULT_TEST_CREDENTIALS, the plaintext mock IMAP) still work; a
+# plain debug build runs search several times slower than what ships.
+if [ -n "${FOOTAGE_OPT_LEVEL:-}" ]; then
+  echo "cargo dev profile at opt-level $FOOTAGE_OPT_LEVEL"
+  export CARGO_PROFILE_DEV_OPT_LEVEL="$FOOTAGE_OPT_LEVEL"
+fi
 npm run build:e2e || exit 1
 # The app build copies src-tauri/binaries/mailvault-daemon-<triple> over
 # target/debug/mailvault-daemon; build:e2e staged the fresh debug daemon first,
@@ -182,6 +192,13 @@ for clip in $clips; do
     fs.writeFileSync(a, JSON.stringify(A, null, 2));
   ' "$OUT/$clip.actions.json" "$OUT/$clip.stats.json" && echo "$clip.actions.json: added shown times"
 done
+
+# FOOTAGE_WEBCLIP=1 (website feature cards, scenes/web-clips.js): cut every take
+# that wrote a <clip>.webclip.json into web/<clip>.mp4 + web/<clip>.jpg.
+if [ "${FOOTAGE_WEBCLIP:-0}" = 1 ]; then
+  step "web clips"
+  bash scripts/footage/webclip-encode.sh "$OUT" "$OUT/web" || echo "web clips: encode reported a failure"
+fi
 ls -la "$OUT"
 du -sh "$OUT"
 exit $take

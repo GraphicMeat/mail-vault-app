@@ -28,6 +28,7 @@ import {
 import { footageAccounts } from './scripts/footage/lib/mailbox.js';
 import { PREMIUM_BILLING_PROFILE } from './scripts/screenshots/premiumSeed.js';
 import { writeCorpus } from './scripts/screenshots/search50kCorpus.mjs';
+import { APP_LOCALE } from './scripts/footage/lib/locale.js';
 
 // FOOTAGE_CORPUS_50K=1 adds the 50,000-message search vault the screenshot
 // harness photographs (scripts/screenshots/search50kCorpus.mjs) to the work
@@ -39,7 +40,10 @@ const CORPUS_50K = process.env.FOOTAGE_CORPUS_50K === '1';
 // older FOOTAGE_SCENE still works for a one-clip spec named after its clip.
 const SPEC = process.env.FOOTAGE_SPEC || process.env.FOOTAGE_SCENE || 's4-search';
 const THEME = process.env.FOOTAGE_THEME === 'light' ? 'light' : 'dark';
-const DEMO_ACCOUNTS = footageAccounts();
+// FOOTAGE_LOCALE (default en; a website dir like `pt-br` or an app code like
+// `pt-BR`): the app's UI language and the demo mailbox's catalog. See lib/locale.js.
+const LOCALE = APP_LOCALE;
+const DEMO_ACCOUNTS = footageAccounts(LOCALE);
 
 const appBinary = process.env.TAURI_APP_BINARY || resolve(import.meta.dirname, 'target/debug/mailvault');
 
@@ -74,7 +78,7 @@ function seedFrontendSettings() {
         sidebarCollapsed: false,
         appearanceOnboardingPromptSeen: true,
         searchOperatorsHintSeen: true,
-        language: 'en',
+        language: LOCALE,
         viewStyle: 'list',
         layoutMode: 'three-column',
         sidebarLayout: 'stacked',
@@ -115,7 +119,7 @@ export const config = {
   connectionRetryCount: 15,
 
   onPrepare: async function () {
-    console.log(`[footage] spec ${SPEC}, theme ${THEME}, HOME ${dataDir}, driver ${driverBin} on ${driverPort}`);
+    console.log(`[footage] spec ${SPEC}, theme ${THEME}, locale ${LOCALE}, HOME ${dataDir}, driver ${driverBin} on ${driverPort}`);
     let live = '';
     try { live = execFileSync('pgrep', ['-fl', 'tauri-wd'], { encoding: 'utf-8' }).trim(); } catch { /* none */ }
     if (live) throw new Error(`a tauri-wd driver is already running; one app instance at a time:\n${live}`);

@@ -1,0 +1,8 @@
+{
+  "archive-delete": { "crop": [150, 30, 900, 619] },
+  "search-50k": { "crop": [126, 172, 760, 523] },
+  "scheduled-backups": { "crop": [395, 70, 910, 626] },
+  "link-safety": { "crop": [520, 200, 850, 584] },
+  "time-capsule": { "crop": [388, 186, 996, 685] },
+  "unified-inbox": { "crop": [4, 174, 795, 547] }
+}
