@@ -439,6 +439,13 @@
   "compose.later.sendsIn": "Envoi dans {{duration}} ({{time}})",
   "compose.later.sendsAt": "Envoi : {{time}} ({{city}})",
   "compose.later.clear": "Envoyer maintenant",
+  "compose.remind.title": "Me rappeler sans réponse",
+  "compose.remind.off": "Désactivé",
+  "compose.remind.days1": "1 jour",
+  "compose.remind.days3": "3 jours",
+  "compose.remind.days7": "1 semaine",
+  "compose.remind.hint": "Si personne n'a répondu d'ici là, cet e-mail revient en haut de votre boîte de réception.",
+  "compose.remind.upsell": "Les rappels quand personne ne répond font partie de Premium.",
   "compose.sending": "Envoi…",
   "compose.show": "Afficher",
   "compose.showHideOriginalMessage": "{{action}} le message d'origine",
@@ -1273,6 +1280,8 @@
   "premium.migration.blurb": "Déplacez du courrier entre comptes IMAP, avec correspondance des dossiers et progression visible.",
   "premium.migration.title": "Migration de boîte mail",
   "premium.attachmentReminder.blurb": "L'envoi s'arrête et vous demande confirmation quand votre message mentionne une pièce jointe sans en contenir, dans toutes les langues de l'app.",
+  "premium.followUpReminder.title": "Rappels sans réponse",
+  "premium.followUpReminder.blurb": "Choisissez 1 jour, 3 jours ou une semaine à l'envoi. Si personne n'a répondu d'ici là, l'e-mail revient en haut de votre boîte de réception.",
   "premium.attachmentReminder.title": "Rappel de pièce jointe",
   "premium.scheduledSend.blurb": "Envoyez un e-mail à la date et à l'heure de votre choix, dans n'importe quel fuseau horaire, celui du destinataire étant suggéré d'après son dernier e-mail. Retarder un envoi de 5 minutes au plus reste gratuit.",
   "premium.scheduledSend.title": "Envoi programmé",
@@ -3660,5 +3669,8 @@
   "export.social.popIn": "Revenir à l’app",
   "export.social.openInApp": "Pour capturer la fenêtre de l’app, rouvrez ce message dans MailVault.",
   "export.social.width": "Largeur de l’e-mail",
-  "export.dialog.previewUnavailable": "Aperçu indisponible"
+  "export.dialog.previewUnavailable": "Aperçu indisponible",
+  "followUp.notifyTitle": "Toujours pas de réponse",
+  "followUp.notifyBody": "{{subject}}, envoyé à {{recipients}}",
+  "followUp.rowTitle": "Toujours pas de réponse. Envoyé {{date}}"
 }

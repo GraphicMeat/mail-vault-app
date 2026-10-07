@@ -439,6 +439,13 @@
   "compose.later.sendsIn": "Invio tra {{duration}} ({{time}})",
   "compose.later.sendsAt": "Invio: {{time}} ({{city}})",
   "compose.later.clear": "Invia ora",
+  "compose.remind.title": "Ricordamelo se non rispondono",
+  "compose.remind.off": "Disattivato",
+  "compose.remind.days1": "1 giorno",
+  "compose.remind.days3": "3 giorni",
+  "compose.remind.days7": "1 settimana",
+  "compose.remind.hint": "Se nessuno risponde entro allora, questa email torna in cima alla posta in arrivo.",
+  "compose.remind.upsell": "I promemoria quando nessuno risponde fanno parte di Premium.",
   "compose.sending": "Invio…",
   "compose.show": "Mostra",
   "compose.showHideOriginalMessage": "{{action}} il messaggio originale",
@@ -1273,6 +1280,8 @@
   "premium.migration.blurb": "Sposta la posta tra account IMAP, con corrispondenza delle cartelle e avanzamento sotto gli occhi.",
   "premium.migration.title": "Migrazione della casella",
   "premium.attachmentReminder.blurb": "L'invio si ferma e chiede conferma quando il messaggio menziona un allegato ma non ne contiene, in tutte le lingue dell'app.",
+  "premium.followUpReminder.title": "Promemoria senza risposta",
+  "premium.followUpReminder.blurb": "Scegli 1 giorno, 3 giorni o una settimana quando invii. Se nessuno ha risposto entro allora, l'email torna in cima alla posta in arrivo.",
   "premium.attachmentReminder.title": "Promemoria allegati",
   "premium.scheduledSend.blurb": "Invia un'email alla data e all'ora che scegli, in qualsiasi fuso orario, con il fuso del destinatario suggerito dalla sua ultima email. Ritardare un invio fino a 5 minuti resta gratis.",
   "premium.scheduledSend.title": "Invio programmato",
@@ -3660,5 +3669,8 @@
   "export.social.popIn": "Torna all’app",
   "export.social.openInApp": "Per catturare la finestra dell’app, riapri questo messaggio in MailVault.",
   "export.social.width": "Larghezza dell’email",
-  "export.dialog.previewUnavailable": "Anteprima non disponibile"
+  "export.dialog.previewUnavailable": "Anteprima non disponibile",
+  "followUp.notifyTitle": "Ancora nessuna risposta",
+  "followUp.notifyBody": "{{subject}}, inviata a {{recipients}}",
+  "followUp.rowTitle": "Ancora nessuna risposta. Inviata {{date}}"
 }

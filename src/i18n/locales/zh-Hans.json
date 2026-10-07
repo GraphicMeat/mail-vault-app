@@ -439,6 +439,13 @@
   "compose.later.sendsIn": "{{duration}}后发送（{{time}}）",
   "compose.later.sendsAt": "发送时间：{{time}}（{{city}}）",
   "compose.later.clear": "改为立即发送",
+  "compose.remind.title": "无人回复时提醒我",
+  "compose.remind.off": "关闭",
+  "compose.remind.days1": "1 天",
+  "compose.remind.days3": "3 天",
+  "compose.remind.days7": "1 周",
+  "compose.remind.hint": "如果届时无人回复，这封邮件会回到收件箱顶部。",
+  "compose.remind.upsell": "无人回复时的提醒属于 Premium 功能。",
   "compose.sending": "正在发送…",
   "compose.show": "显示",
   "compose.showHideOriginalMessage": "{{action}}原始邮件",
@@ -1273,6 +1280,8 @@
   "premium.migration.blurb": "在 IMAP 账户之间搬运邮件，带文件夹映射和可见的进度。",
   "premium.migration.title": "邮箱迁移",
   "premium.attachmentReminder.blurb": "邮件提到附件但未添加时，发送前会先询问。支持应用的所有语言。",
+  "premium.followUpReminder.title": "无人回复提醒",
+  "premium.followUpReminder.blurb": "发送时选择 1 天、3 天或一周。如果届时无人回复，邮件会回到收件箱顶部。",
   "premium.attachmentReminder.title": "附件提醒",
   "premium.scheduledSend.blurb": "在你选定的日期和时间、按任意时区发送邮件，并根据收件人最近一封来信推荐其时区。最多 5 分钟的发送延迟仍然免费。",
   "premium.scheduledSend.title": "定时发送",
@@ -3660,5 +3669,8 @@
   "export.social.popIn": "返回应用",
   "export.social.openInApp": "要截取应用窗口，请在 MailVault 中重新打开此邮件。",
   "export.social.width": "邮件宽度",
-  "export.dialog.previewUnavailable": "无法预览"
+  "export.dialog.previewUnavailable": "无法预览",
+  "followUp.notifyTitle": "尚无回复",
+  "followUp.notifyBody": "{{subject}}，发给 {{recipients}}",
+  "followUp.rowTitle": "尚无回复。发送于 {{date}}"
 }

@@ -12,8 +12,9 @@ import { createUiSlice } from './slices/uiSlice';
 import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
 import { useSnoozeStore } from './snoozeStore';
+import { useFollowUpStore } from './followUpStore';
 import { registerRows, setIdentityStore, mapList } from './messageRows';
-import { setListStore } from './unreadCounts';
+import { setListStore, shiftFollowUps } from './unreadCounts';
 
 // Re-exports for external consumers
 export { graphMessageToEmail } from '../services/graphConfig';
@@ -158,4 +159,12 @@ useAutoTagStore.subscribe((state, prev) => {
 // (deriveDisplayRows), so a new, woken or reloaded row re-derives it.
 useSnoozeStore.subscribe((state, prev) => {
   if (state.rows !== prev.rows) useMailStore.getState().updateSortedEmails();
+});
+
+// A follow-up reminder that went due, was opened or was dismissed changes the
+// inbox list and its badge, whichever view is open.
+useFollowUpStore.subscribe((state, prev) => {
+  if (state.rows === prev.rows) return;
+  shiftFollowUps(prev.rows, state.rows);
+  useMailStore.getState().updateSortedEmails();
 });

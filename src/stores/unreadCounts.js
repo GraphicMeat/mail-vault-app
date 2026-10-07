@@ -20,6 +20,7 @@
 // and a cache read is the caller's (the scheduler, off the click path).
 import { useSettingsStore } from './settingsStore';
 import { localSnoozeKeys, useSnoozeStore } from './snoozeStore';
+import { dueFollowUps, useFollowUpStore } from './followUpStore';
 import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
 import { rowVisibility } from '../utils/rowVisibility';
@@ -79,11 +80,42 @@ export const selectTotalUnread = (state, accounts) =>
 
 /// The unread count of `accountId`'s INBOX as `cache` (`{ emails, totalEmails }`)
 /// tells it, or null when the cache is not complete. Only the rows the list
-/// shows (shownInInbox).
+/// shows (shownInInbox), and the follow-up reminders it shows unread at its top.
 export function inboxCount(accountId, cache) {
   if (!isCompleteCache(cache)) return null;
   const shown = shownInInbox(accountId);
-  return cache.emails.filter(e => !e.flags?.includes('\\Seen') && shown(e)).length;
+  return cache.emails.filter(e => !e.flags?.includes('\\Seen') && shown(e)).length
+    + (unreadFollowUps(useFollowUpStore.getState().rows).get(accountId) || 0);
+}
+
+/// Unread due reminders per account: each is an unread row in that inbox.
+function unreadFollowUps(rows) {
+  const byAccount = new Map();
+  for (const r of dueFollowUps(rows)) {
+    if (!r.seen) byAccount.set(r.accountId, (byAccount.get(r.accountId) || 0) + 1);
+  }
+  return byAccount;
+}
+
+/// The reminder rows changed from `prev` to `next` (one went due, was opened,
+/// marked unread or dismissed): each account moves by the change in its
+/// unread reminders. A recount from a complete cache lands after this and
+/// settles on the same number.
+///
+/// The counts are persisted, so a row read for the first time (the launch's
+/// load) that was already announced was counted by the session that
+/// announced it: it is taken as counted before too. One not announced went
+/// due while the app was closed, and moves the count.
+export function shiftFollowUps(prev, next) {
+  const known = new Set((prev || []).map(r => r.id));
+  const counted = (next || []).filter(r => !known.has(r.id) && r.announced);
+  const before = unreadFollowUps([...(prev || []), ...counted]);
+  const after = unreadFollowUps(next);
+  const s = settings();
+  for (const id of new Set([...before.keys(), ...after.keys()])) {
+    const n = (after.get(id) || 0) - (before.get(id) || 0);
+    if (n) s.setUnreadForAccount(id, Math.max(0, (s.unreadPerAccount?.[id] || 0) + n));
+  }
 }
 
 /// Recount `accountId`'s INBOX from `cache`, when it is complete. Returns

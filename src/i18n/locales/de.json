@@ -439,6 +439,13 @@
   "compose.later.sendsIn": "Wird in {{duration}} gesendet ({{time}})",
   "compose.later.sendsAt": "Wird gesendet: {{time}} ({{city}})",
   "compose.later.clear": "Stattdessen jetzt senden",
+  "compose.remind.title": "Erinnern, wenn niemand antwortet",
+  "compose.remind.off": "Aus",
+  "compose.remind.days1": "1 Tag",
+  "compose.remind.days3": "3 Tage",
+  "compose.remind.days7": "1 Woche",
+  "compose.remind.hint": "Antwortet bis dahin niemand, erscheint diese E-Mail wieder oben in deinem Posteingang.",
+  "compose.remind.upsell": "Erinnerungen, wenn niemand antwortet, gehören zu Premium.",
   "compose.sending": "Wird gesendet …",
   "compose.show": "Anzeigen",
   "compose.showHideOriginalMessage": "Ursprüngliche Nachricht {{action}}",
@@ -1273,6 +1280,8 @@
   "premium.migration.blurb": "Verschiebe Mail zwischen IMAP-Konten, mit Ordnerzuordnung und sichtbarem Fortschritt.",
   "premium.migration.title": "Postfach-Umzug",
   "premium.attachmentReminder.blurb": "Senden hält an und fragt nach, wenn deine Nachricht einen Anhang erwähnt, aber nichts angehängt ist, in jeder Sprache der App.",
+  "premium.followUpReminder.title": "Erinnerung bei fehlender Antwort",
+  "premium.followUpReminder.blurb": "Wähle beim Senden 1 Tag, 3 Tage oder eine Woche. Hat bis dahin niemand geantwortet, erscheint die E-Mail wieder oben in deinem Posteingang.",
   "premium.attachmentReminder.title": "Anhang-Erinnerung",
   "premium.scheduledSend.blurb": "Sende eine E-Mail zu Datum und Uhrzeit deiner Wahl in jeder Zeitzone; die Zeitzone des Empfängers wird aus seiner letzten E-Mail vorgeschlagen. Bis zu 5 Minuten Sendeverzögerung bleiben kostenlos.",
   "premium.scheduledSend.title": "Geplanter Versand",
@@ -3660,5 +3669,8 @@
   "export.social.popIn": "Zurück zur App",
   "export.social.openInApp": "Öffne diese Nachricht wieder in MailVault, um das App-Fenster aufzunehmen.",
   "export.social.width": "E-Mail-Breite",
-  "export.dialog.previewUnavailable": "Vorschau nicht verfügbar"
+  "export.dialog.previewUnavailable": "Vorschau nicht verfügbar",
+  "followUp.notifyTitle": "Noch keine Antwort",
+  "followUp.notifyBody": "{{subject}}, gesendet an {{recipients}}",
+  "followUp.rowTitle": "Noch keine Antwort. Gesendet {{date}}"
 }

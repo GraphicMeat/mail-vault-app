@@ -439,6 +439,13 @@
   "compose.later.sendsIn": "{{duration}}後に送信（{{time}}）",
   "compose.later.sendsAt": "送信予定：{{time}}（{{city}}）",
   "compose.later.clear": "今すぐ送信に戻す",
+  "compose.remind.title": "返信がなければ通知",
+  "compose.remind.off": "オフ",
+  "compose.remind.days1": "1 日",
+  "compose.remind.days3": "3 日",
+  "compose.remind.days7": "1 週間",
+  "compose.remind.hint": "それまでに返信がなければ、このメールが受信トレイの一番上に戻ります。",
+  "compose.remind.upsell": "返信がないときのリマインダーは Premium の機能です。",
   "compose.sending": "送信中…",
   "compose.show": "表示",
   "compose.showHideOriginalMessage": "元のメッセージを{{action}}",
@@ -1273,6 +1280,8 @@
   "premium.migration.blurb": "IMAP アカウント間でメールを移せます。フォルダの対応付けと、目で追える進捗つき。",
   "premium.migration.title": "メールボックスの移行",
   "premium.attachmentReminder.blurb": "メッセージで添付ファイルに触れているのに何も添付されていないと、送信前に確認します。アプリのすべての言語に対応します。",
+  "premium.followUpReminder.title": "返信がないときのリマインダー",
+  "premium.followUpReminder.blurb": "送信時に 1 日、3 日、1 週間から選べます。それまでに誰も返信しなければ、メールが受信トレイの一番上に戻ります。",
   "premium.attachmentReminder.title": "添付ファイルのリマインダー",
   "premium.scheduledSend.blurb": "日付と時刻を指定し、どのタイムゾーンでもメールを送信できます。相手のタイムゾーンは最後に届いたメールから提案されます。最大 5 分の送信の遅延は引き続き無料です。",
   "premium.scheduledSend.title": "送信の予約",
@@ -3660,5 +3669,8 @@
   "export.social.popIn": "アプリに戻す",
   "export.social.openInApp": "アプリのウインドウを撮影するには、このメッセージをMailVaultでもう一度開いてください。",
   "export.social.width": "メールの幅",
-  "export.dialog.previewUnavailable": "プレビューを表示できません"
+  "export.dialog.previewUnavailable": "プレビューを表示できません",
+  "followUp.notifyTitle": "まだ返信がありません",
+  "followUp.notifyBody": "{{subject}}（{{recipients}} 宛て）",
+  "followUp.rowTitle": "まだ返信がありません。送信日時: {{date}}"
 }

@@ -23,6 +23,7 @@ import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIc
 import { isRowArchived } from '../utils/quickActionFacts';
 import {
   AlarmClock,
+  Bell,
   Paperclip,
   Star,
 } from 'lucide-react';
@@ -167,11 +168,20 @@ export function RowGutter({ stacked, threadSlot, disclosure = null, checked, onT
 }
 
 // A snoozed message (it sits in Snoozed) shows when it comes back instead of
-// when it arrived.
+// when it arrived. A follow-up reminder (the Sent message back in the inbox)
+// is dated when it came back, and says why it is there.
 function RowDate({ email }) {
   const t = useT();
   const timeFormat = useSettingsStore(s => s.timeFormat);
   const wakeAt = useSnoozeStore(s => wakeAtFor(s.rows, email._accountId || useMailStore.getState().activeAccountId, email.messageId));
+  if (email._followUpId) {
+    return (
+      <span data-testid="row-follow-up" title={t('followUp.rowTitle', { date: email._sentAt ? formatEmailDate(new Date(email._sentAt).toISOString()) : '' })}
+        className="inline-flex items-center gap-1">
+        <Bell size={11} aria-hidden="true" />{formatEmailDate(email.date)}
+      </span>
+    );
+  }
   if (wakeAt == null) return formatEmailDate(email.date);
   const when = new Intl.DateTimeFormat(intlLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: hour12For(timeFormat) }).format(wakeAt);
   return (

@@ -115,6 +115,7 @@ const { useMailStore } = await import('../mailStore');
 const { serverUids, NO_SERVER_UIDS } = await import('../slices/serverUids');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 const { useSnoozeStore } = await import('../snoozeStore');
+const { useFollowUpStore } = await import('../followUpStore');
 
 /**
  * loadUnifiedInbox asks every account for its Sent headers once the list has
@@ -1002,6 +1003,108 @@ describe('local snooze', () => {
     mockSettingsState.setUnreadForAccount = setUnread;
     useSnoozeStore.getState().upsert([held]);
     expect(setUnread).toHaveBeenLastCalledWith('acct-1', 1);
+  });
+});
+
+// A follow-up reminder that went due puts the SENT message back at the top
+// of the inbox, unread, until the user opens or dismisses it. Nothing moved
+// on the server: the row is the Sent copy, shown in the inbox's list.
+describe('follow-up reminders', () => {
+  const reminder = {
+    id: 'f1', accountId: 'acct-1', messageId: '<asked@me>', subject: 'Quote?', recipients: 'ana@x.co',
+    sentAt: Date.UTC(2026, 0, 1), remindAt: Date.UTC(2026, 0, 10), state: 'due',
+    sentMailbox: 'Sent', sentUid: 77, seen: false, announced: true,
+  };
+  const inbox = () => [
+    { uid: 1, messageId: '<a@x>', flags: [], date: 'Mon, 05 Jan 2026 12:00:00 +0000' },
+    { uid: 2, messageId: '<b@x>', flags: ['\\Seen'], date: 'Sun, 04 Jan 2026 12:00:00 +0000' },
+  ];
+  const keys = () => useMailStore.getState().sortedEmails.map(e => `${e._mailbox || ''}${e.uid}`);
+  const realSetUnread = mockSettingsState.setUnreadForAccount;
+
+  beforeEach(() => {
+    useFollowUpStore.setState({ rows: [] });
+    invalidateChatAndThreadCaches();
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      unifiedFolder: null,
+      mailboxScope: null,
+      viewMode: 'all',
+      accounts: [{ id: 'acct-1', email: 'me@one.co' }, { id: 'acct-2', email: 'me@two.co' }],
+      emails: inbox(),
+      sentEmails: [],
+      localEmails: [],
+      archivedEmailIds: new Set(),
+      savedEmailIds: new Set(),
+      serverUids: NO_SERVER_UIDS,
+      deleteTombstones: new Set(),
+      totalEmails: 2,
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+  });
+  afterEach(() => {
+    useFollowUpStore.setState({ rows: [] });
+    mockSettingsState.setUnreadForAccount = realSetUnread;
+  });
+
+  it('shows a due reminder at the top of the inbox, unread, as its Sent copy, until it ends', () => {
+    expect(keys()).toEqual(['1', '2']);
+    useFollowUpStore.setState({ rows: [reminder] });
+    expect(keys()).toEqual(['Sent77', '1', '2']);
+    const row = useMailStore.getState().sortedEmails[0];
+    expect(row).toMatchObject({ _followUpId: 'f1', _accountId: 'acct-1', messageId: '<asked@me>', flags: [] });
+    useFollowUpStore.getState().applyEvent({ id: 'f1', state: 'dismissed' });
+    expect(keys()).toEqual(['1', '2']);
+  });
+
+  it('reads as read once opened, and stays', () => {
+    useFollowUpStore.setState({ rows: [{ ...reminder, seen: true }] });
+    expect(useMailStore.getState().sortedEmails[0].flags).toEqual(['\\Seen']);
+  });
+
+  it('is not shown before it is due, in another folder, or in another account\'s inbox', () => {
+    useFollowUpStore.setState({ rows: [{ ...reminder, state: 'waiting' }] });
+    expect(keys()).toEqual(['1', '2']);
+    useFollowUpStore.setState({ rows: [{ ...reminder, accountId: 'acct-2' }] });
+    expect(keys()).toEqual(['1', '2']);
+    useMailStore.setState({ activeMailbox: 'Sent', emails: [], _sortedEmailsFingerprint: '' });
+    useFollowUpStore.setState({ rows: [reminder] });
+    expect(keys()).toEqual([]);
+  });
+
+  it('shows every visible account\'s reminders in All inboxes', () => {
+    useMailStore.setState({
+      unifiedInbox: true, activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX',
+      emails: [{ uid: 1, _accountId: 'acct-2', _mailbox: 'INBOX', messageId: '<c@x>', flags: [], date: 'Mon, 05 Jan 2026 12:00:00 +0000' }],
+      _sortedEmailsFingerprint: '',
+    });
+    useFollowUpStore.setState({ rows: [reminder, { ...reminder, id: 'f2', accountId: 'acct-2', sentUid: 5, remindAt: Date.UTC(2025, 11, 1) }] });
+    const rows = useMailStore.getState().sortedEmails.map(e => `${e._accountId}:${e._mailbox}:${e.uid}`);
+    expect(rows).toEqual(['acct-1:Sent:77', 'acct-2:INBOX:1', 'acct-2:Sent:5']);
+    mockSettingsState.hiddenAccounts = { 'acct-1': true };
+    useFollowUpStore.setState({ rows: [...useFollowUpStore.getState().rows] });
+    expect(useMailStore.getState().sortedEmails.map(e => e._accountId)).not.toContain('acct-1');
+    mockSettingsState.hiddenAccounts = {};
+  });
+
+  it('is not merged a second time from Sent into the conversation view', () => {
+    useMailStore.setState({
+      sentEmails: [{ uid: 77, messageId: '<asked@me>', flags: ['\\Seen'], date: 'Thu, 01 Jan 2026 12:00:00 +0000' }],
+    });
+    useFollowUpStore.setState({ rows: [reminder] });
+    const chat = useMailStore.getState().getChatEmails();
+    expect(chat.filter(e => e.messageId === '<asked@me>')).toHaveLength(1);
+    expect(chat[0]._followUpId).toBe('f1');
+  });
+
+  it('counts in the inbox badge while unread', () => {
+    const setUnread = vi.fn();
+    mockSettingsState.setUnreadForAccount = setUnread;
+    useFollowUpStore.setState({ rows: [reminder] });
+    expect(setUnread).toHaveBeenLastCalledWith('acct-1', 2);
   });
 });
 

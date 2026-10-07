@@ -13,8 +13,10 @@ vi.mock('../settingsStore', () => ({ useSettingsStore: settings }));
 vi.mock('../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 
 const { useSnoozeStore } = await import('../snoozeStore');
+const { useFollowUpStore } = await import('../followUpStore');
 const {
   selectTotalUnread, unreadRows, isCompleteCache, recountInbox, shiftInbox, addArrivals, applyRecounts, forgetAccount,
+  shiftFollowUps,
 } = await import('../unreadCounts');
 
 const counts = () => settings.getState().unreadPerAccount;
@@ -24,6 +26,7 @@ const seen = (uid) => ({ uid, flags: ['\\Seen'] });
 beforeEach(() => {
   settings.setState({ unreadPerAccount: { a1: 7, a2: 5 }, hiddenAccounts: {}, displayNames: {}, getOrderedAccounts: undefined });
   useSnoozeStore.setState({ rows: [] });
+  useFollowUpStore.setState({ rows: [] });
 });
 
 describe('the total', () => {
@@ -138,5 +141,44 @@ describe('the other writers', () => {
   it('forgets a removed account', () => {
     forgetAccount('a1');
     expect(counts()).toEqual({ a2: 5 });
+  });
+});
+
+// A due follow-up reminder is an unread row at the top of the inbox: the
+// account's number has to agree with the list.
+describe('follow-up reminders', () => {
+  const due = (id, accountId, extra = {}) => ({ id, accountId, state: 'due', sentMailbox: 'Sent', sentUid: 9, seen: false, ...extra });
+
+  it('a recount counts an unread due reminder of that account', () => {
+    useFollowUpStore.setState({ rows: [
+      due('r1', 'a1'),
+      due('read', 'a1', { seen: true }),
+      due('waiting', 'a1', { state: 'waiting' }),
+      due('other', 'a2'),
+    ] });
+    recountInbox('a1', { emails: [unread(1), seen(2)], totalEmails: 2 });
+    expect(counts().a1).toBe(2);
+  });
+
+  it('a reminder going due, read or dismissed moves its account by one', () => {
+    const before = [due('r1', 'a1', { state: 'waiting' })];
+    const dueNow = [due('r1', 'a1')];
+    shiftFollowUps(before, dueNow);
+    expect(counts().a1).toBe(8);
+    shiftFollowUps(dueNow, [due('r1', 'a1', { seen: true })]);
+    expect(counts().a1).toBe(7);
+    shiftFollowUps([due('r1', 'a1', { seen: true })], [due('r1', 'a1')]);
+    expect(counts().a1).toBe(8); // marked unread again
+    shiftFollowUps(dueNow, []);
+    expect(counts().a1).toBe(7);
+    expect(counts().a2).toBe(5);
+  });
+
+  // The counts outlive the app; the reminder rows are read again at launch.
+  it('a launch does not count again a reminder an earlier session announced', () => {
+    shiftFollowUps([], [due('old', 'a1', { announced: true })]);
+    expect(counts().a1).toBe(7);
+    shiftFollowUps([], [due('new', 'a1', { announced: false })]);
+    expect(counts().a1).toBe(8);
   });
 });

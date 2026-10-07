@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 
 import { bootstrapTags } from './services/tagMigration';
 import { initScheduledSend } from './stores/scheduledStore';
 import { initSnooze } from './stores/snoozeStore';
+import { initFollowUp } from './stores/followUpStore';
 import { initAutoTags } from './stores/autoTagStore';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
@@ -1348,6 +1349,8 @@ function App() {
           initScheduledSend();
           // Snooze rows and their wake events (the worker lives in the daemon).
           initSnooze();
+          // Follow-up reminders: rows, their events, and the one banner each.
+          initFollowUp();
           // Loads Auto Tag rules and subscribes to backfill progress/completion.
           initAutoTags();
         }).catch((err) => {

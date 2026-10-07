@@ -439,6 +439,13 @@
   "compose.later.sendsIn": "Sends in {{duration}}, at {{time}}",
   "compose.later.sendsAt": "Sends {{time}} ({{city}})",
   "compose.later.clear": "Send now instead",
+  "compose.remind.title": "Remind me if no reply",
+  "compose.remind.off": "Off",
+  "compose.remind.days1": "1 day",
+  "compose.remind.days3": "3 days",
+  "compose.remind.days7": "1 week",
+  "compose.remind.hint": "If nobody answers by then, this email comes back to the top of your inbox.",
+  "compose.remind.upsell": "Reminders when nobody replies are part of Premium.",
   "compose.sending": "Sending...",
   "compose.show": "Show",
   "compose.showHideOriginalMessage": "{{action}} original message",
@@ -1273,6 +1280,8 @@
   "premium.migration.blurb": "Move mail between IMAP accounts with folder mapping and progress you can watch.",
   "premium.migration.title": "Mailbox migration",
   "premium.attachmentReminder.blurb": "Send stops and asks when your message mentions an attachment but nothing is attached, in any of the app's languages.",
+  "premium.followUpReminder.title": "Reminders if nobody replies",
+  "premium.followUpReminder.blurb": "Choose 1 day, 3 days or a week when you send. If nobody has answered by then, the email comes back to the top of your inbox.",
   "premium.attachmentReminder.title": "Attachment Reminder",
   "premium.scheduledSend.blurb": "Send an email at an exact date and time in any time zone, with the recipient's zone suggested from their last email. Delaying a send by up to 5 minutes stays free.",
   "premium.scheduledSend.title": "Scheduled Send",
@@ -3660,5 +3669,8 @@
   "export.social.popIn": "Back to app",
   "export.social.openInApp": "To shoot the app window, open this message in MailVault again.",
   "export.social.width": "Email width",
-  "export.dialog.previewUnavailable": "Preview unavailable"
+  "export.dialog.previewUnavailable": "Preview unavailable",
+  "followUp.notifyTitle": "No reply yet",
+  "followUp.notifyBody": "{{subject}}, sent to {{recipients}}",
+  "followUp.rowTitle": "No reply yet. Sent {{date}}"
 }

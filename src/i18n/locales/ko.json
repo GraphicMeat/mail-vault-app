@@ -439,6 +439,13 @@
   "compose.later.sendsIn": "{{duration}} 후 보내기 ({{time}})",
   "compose.later.sendsAt": "보낼 시간: {{time}} ({{city}})",
   "compose.later.clear": "지금 보내기로 변경",
+  "compose.remind.title": "답장이 없으면 알림",
+  "compose.remind.off": "끄기",
+  "compose.remind.days1": "1일",
+  "compose.remind.days3": "3일",
+  "compose.remind.days7": "1주",
+  "compose.remind.hint": "그때까지 아무도 답장하지 않으면 이 이메일이 받은편지함 맨 위로 돌아옵니다.",
+  "compose.remind.upsell": "답장이 없을 때의 알림은 Premium 기능입니다.",
   "compose.sending": "보내는 중…",
   "compose.show": "보기",
   "compose.showHideOriginalMessage": "원본 메시지 {{action}}",
@@ -1273,6 +1280,8 @@
   "premium.migration.blurb": "폴더 매핑과 눈으로 확인하는 진행률과 함께 IMAP 계정 사이로 메일을 옮깁니다.",
   "premium.migration.title": "사서함 이전",
   "premium.attachmentReminder.blurb": "메시지에 첨부 파일이 언급되어 있지만 첨부된 파일이 없으면 보내기 전에 확인합니다. 앱의 모든 언어를 지원합니다.",
+  "premium.followUpReminder.title": "답장이 없을 때 알림",
+  "premium.followUpReminder.blurb": "보낼 때 1일, 3일 또는 1주를 고르세요. 그때까지 아무도 답장하지 않으면 이메일이 받은편지함 맨 위로 돌아옵니다.",
   "premium.attachmentReminder.title": "첨부 파일 알림",
   "premium.scheduledSend.blurb": "원하는 날짜와 시간에, 어느 시간대로든 이메일을 보냅니다. 받는 사람의 시간대는 그 사람의 마지막 이메일에서 추천됩니다. 최대 5분의 보내기 지연은 계속 무료입니다.",
   "premium.scheduledSend.title": "예약 발송",
@@ -3660,5 +3669,8 @@
   "export.social.popIn": "앱으로 돌아가기",
   "export.social.openInApp": "앱 창을 캡처하려면 MailVault에서 이 메시지를 다시 여세요.",
   "export.social.width": "이메일 너비",
-  "export.dialog.previewUnavailable": "미리보기를 표시할 수 없습니다"
+  "export.dialog.previewUnavailable": "미리보기를 표시할 수 없습니다",
+  "followUp.notifyTitle": "아직 답장이 없습니다",
+  "followUp.notifyBody": "{{subject}}, {{recipients}}에게 보냄",
+  "followUp.rowTitle": "아직 답장이 없습니다. 보낸 날짜: {{date}}"
 }
