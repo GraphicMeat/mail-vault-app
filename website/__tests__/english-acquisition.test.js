@@ -379,12 +379,12 @@ describe('English acquisition journey', () => {
     }
     expect(tagged(readFileSync(resolve('src/demo/index.html'), 'utf8').replace('src="/gm.js"', 'src="/gm.js?v=x"'))).toBe(true);
   });
-  // The clips change: the English homepage and the seventeen English pages with
+  // The clips change: the English homepage and the twenty-two English pages with
   // a clip. Their locale copies have no clips and keep the conversion tag.
   it('tags exactly the pages of the conversion and clips changes, in every language', () => {
     const TAG = 'conversion-2026-10';
     const CLIPS_TAG = 'clips-2026-10';
-    const clipPages = new Set(['index.html', ...['archive-and-delete', 'scheduled-backups', 'time-capsule', 'email-tracker-blocking', 'link-safety', 'undo-send', 'unified-inbox', 'local-backups', 'saved-views', 'custom-fields', 'ai-writing', 'local-vault', 'sender-verification', 'views', 'layouts', 'scheduled-send', 'insights'].map(p => 'features/' + p + '.html')]);
+    const clipPages = new Set(['index.html', ...['archive-and-delete', 'scheduled-backups', 'time-capsule', 'email-tracker-blocking', 'link-safety', 'undo-send', 'unified-inbox', 'local-backups', 'saved-views', 'custom-fields', 'ai-writing', 'local-vault', 'sender-verification', 'views', 'layouts', 'scheduled-send', 'insights', 'tagging-rules', 'templates', 'tags', 'keyboard-shortcuts', 'notifications'].map(p => 'features/' + p + '.html')]);
     const tagOf = html => (html.match(/<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="([^"]+)">\s*<\/script>/) || [])[1];
     const english = ['index.html', 'features.html', 'pricing.html', 'get-started.html', ...readdirSync(resolve(root, 'features')).filter(f => f.endsWith('.html')).map(f => 'features/' + f)];
     const locales = ['de','fr','es','it','ja','ko','zh','pt-br'];

@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import * as i18n from '../i18n/i18n.mjs';
 
 // The English homepage, laid out as clip cards: a hero with the price card, one
-// download and the hero clip, four key points, six groups of clips (two columns at most),
-// the small-things grid, a spec card, then the comparison, feedback and the
+// download and the hero clip, four key points, six carousels of clips, the
+// small-things carousel and its row of links, a spec card, then the comparison, feedback and the
 // closing download. English only for now: the locale homepages are built from a
 // frozen snapshot of the previous English page and do not change.
 const read = (f) => readFileSync(f, 'utf8');
@@ -239,17 +239,20 @@ describe('key points', () => {
 });
 
 // The five long sections, each now a clip group with its headline and lead,
-// then one group for the remaining everyday clips. Only real clips render; the
-// clips still to be recorded wait as commented card markup.
+// then the small things, also a clip group. Every group is a carousel of large
+// clip cards. Only real clips render; the clips still to be recorded wait as
+// commented card markup.
 const GROUPS = {
   backups: ['Free up your mailbox. Keep every message.', ['archive-delete', 'scheduled-backups', 'time-capsule', 'manual-backup']],
-  'notion-mail': ["Notion Mail is gone. Your way of working isn't.", ['views', 'custom-fields', 'ai-writing']],
+  'notion-mail': ["Notion Mail is gone. Your way of working isn't.", ['views', 'custom-fields', 'tagging-rules', 'ai-writing']],
   privacy: ["Your inbox is nobody's business. Not even ours.", ['search-local', 'sender-verification']],
   trackers: ['Read in private. Senders learn nothing.', ['trackers', 'link-safety', 'privacy-mode']],
-  customize: ['Email that fits the way you work. Change almost anything.', ['chat-view', 'layouts']],
+  customize: ['Email that fits the way you work. Change almost anything.', ['chat-view', 'layouts', 'column-layout', 'explorer-view', 'quick-actions', 'shortcuts', 'notification-rules']],
   accounts: ['Every account. One calm window.', ['unified-inbox', 'undo-send', 'scheduled-send', 'insights']],
+  more: ['Small things. Every day.', ['templates', 'tags', 'radial-menu', 'snooze', 'focus-session']],
 };
-// Each clip's Learn more link. Privacy mode has no feature page of its own.
+// Each clip's Learn more link. Privacy mode has no feature page of its own;
+// the radial menu, snooze and focus sessions have no page at all, so no link.
 const LINKS = {
   'archive-delete': '/features/archive-and-delete.html',
   'scheduled-backups': '/features/scheduled-backups.html',
@@ -257,6 +260,7 @@ const LINKS = {
   'manual-backup': '/features/local-backups.html',
   views: '/features/saved-views.html',
   'custom-fields': '/features/custom-fields.html',
+  'tagging-rules': '/features/tagging-rules.html',
   'ai-writing': '/features/ai-writing.html',
   'search-local': '/features/local-vault.html',
   'sender-verification': '/features/sender-verification.html',
@@ -265,16 +269,28 @@ const LINKS = {
   'privacy-mode': '/faq/premium.html#share-screenshots-privately',
   'chat-view': '/features/views.html',
   layouts: '/features/layouts.html',
+  'column-layout': '/features/layouts.html',
+  'explorer-view': '/features/views.html',
+  'quick-actions': '/features/keyboard-shortcuts.html',
+  shortcuts: '/features/keyboard-shortcuts.html',
+  'notification-rules': '/features/notifications.html',
   'unified-inbox': '/features/unified-inbox.html',
   'undo-send': '/features/undo-send.html',
   'scheduled-send': '/features/scheduled-send.html',
   insights: '/features/insights.html',
+  templates: '/features/templates.html',
+  tags: '/features/tags.html',
 };
-// The English feature pages that carry their clip (and the clips tag).
-const PAGES = Object.fromEntries(Object.entries(LINKS).filter(([, href]) => href.startsWith('/features/')).map(([clip, href]) => [clip, href.slice('/features/'.length, -'.html'.length)]));
-// The Premium chip, exactly where the linked page says Premium.
-const PREMIUM = new Set(['archive-delete', 'scheduled-backups', 'time-capsule', 'trackers', 'privacy-mode', 'scheduled-send']);
-const PENDING = ['tagging-rules', 'add-account', 'quick-actions', 'email-cleanup'];
+const UNLINKED = ['radial-menu', 'snooze', 'focus-session'];
+const ALL_CLIPS = Object.values(GROUPS).flatMap(([, clips]) => clips);
+// The English feature pages that carry a clip (and the clips tag). Layouts now
+// shows the column-layout clip; the theme clip stays on the homepage only.
+const PAGES = ['archive-and-delete', 'scheduled-backups', 'time-capsule', 'local-backups', 'saved-views', 'custom-fields', 'tagging-rules', 'ai-writing', 'local-vault', 'sender-verification', 'email-tracker-blocking', 'link-safety', 'views', 'layouts', 'keyboard-shortcuts', 'notifications', 'unified-inbox', 'undo-send', 'scheduled-send', 'insights', 'templates', 'tags'];
+// The Premium chip, exactly where the linked page says Premium. Focus sessions
+// have no page; features.html lists them as Premium, so their card says so.
+const PREMIUM = new Set(['archive-delete', 'scheduled-backups', 'time-capsule', 'trackers', 'privacy-mode', 'scheduled-send', 'focus-session']);
+const PENDING = ['add-account', 'email-cleanup'];
+const BATCH3 = ['tagging-rules', 'quick-actions', 'explorer-view', 'column-layout', 'shortcuts', 'notification-rules', 'templates', 'tags', 'radial-menu', 'snooze', 'focus-session'];
 
 describe('clip groups', () => {
   it.each(Object.entries(GROUPS))('%s: two-line gradient headline, a short lead, its real clips in order', (id, [title, clips]) => {
@@ -285,49 +301,76 @@ describe('clip groups', () => {
     expect(h2.querySelector('br')).not.toBeNull();
     expect(h2.querySelector('.hm-grad')).not.toBeNull();
     expect(heading(h2)).toBe(title);
-    const lead = text(group.querySelector('.hm-center .hm-body'));
+    const lead = text(group.querySelector('.hm-carousel-intro .hm-body'));
     expect(lead).not.toBe('');
     expect(lead.split(/[.!?](?:\s|$)/).filter(Boolean).length, lead).toBeLessThanOrEqual(2);
     expect([...group.querySelectorAll('figure.mv-clip')].map((f) => f.dataset.clip)).toEqual(clips);
-    expect(group.querySelector('.mv-clip-grid-3')).toBeNull();
-    expect(group.querySelector('.mv-button, [data-download]')).toBeNull();
+    expect(group.querySelector('.mv-clip-grid, .mv-clip-grid-3')).toBeNull();
+    expect(group.querySelector('.mv-button, [data-download], [data-acquisition-download]')).toBeNull();
   });
 
-  it('keeps the Notion Mail date, its article link and the alerts line', () => {
+  it('keeps the Notion Mail date and its article link; the alerts line became a clip', () => {
     const notion = doc.getElementById('notion-mail');
     expect(text(notion)).toContain('Notion Mail shut down on 22 September 2026');
     expect(notion.querySelector('a[href="/blog/notion-mail-closing.html"]')).not.toBeNull();
-    expect(text(doc.getElementById('customize'))).toContain('Only the alerts you want');
+    const customize = doc.getElementById('customize');
+    expect(customize.querySelector('.hm-group-link')).toBeNull();
+    expect(text(customize.querySelector('figure[data-clip="notification-rules"] .mv-clip-title'))).toBe('Only the alerts you want');
   });
 
-  it('has no empty group left, so the rules that hid one are gone', () => {
-    for (const id of Object.keys(GROUPS)) expect(doc.getElementById(id).querySelectorAll('.mv-clip-grid > figure.mv-clip').length, id).toBeGreaterThanOrEqual(2);
+  it('shows every clip once on the page', () => {
+    const shownClips = [...doc.querySelectorAll('main figure.mv-clip')].map((f) => f.dataset.clip);
+    expect(shownClips).toEqual(['hero-montage', ...ALL_CLIPS]);
+    expect(new Set(ALL_CLIPS).size).toBe(ALL_CLIPS.length);
+    expect(ALL_CLIPS).toHaveLength(29);
     expect(plain).not.toMatch(/:not\(:has\(/);
   });
 
-  it.each(Object.entries(LINKS))('%s: a real clip, a light poster, a title, a caption and a Learn more link', (clip, href) => {
+  it.each(ALL_CLIPS)('%s: a real clip over a lazy poster, a title, a caption, and its Learn more link where a page exists', (clip) => {
     const figure = doc.querySelector(`.hm-clip-group figure[data-clip="${clip}"]`);
-    const video = figure.querySelector('video');
+    const media = figure.querySelector('.mv-clip-media');
+    // The poster is a lazy image under the clip, so it loads without a script
+    // and only near the screen. The video has no poster attribute of its own.
+    const img = media.querySelector(':scope > img.mv-clip-poster');
+    expect(img, clip).not.toBeNull();
+    expect(img.getAttribute('src')).toBe(`/assets/clips/en/${clip}-poster.jpg`);
+    expect(img.getAttribute('loading')).toBe('lazy');
+    expect(img.getAttribute('decoding')).toBe('async');
+    expect([img.getAttribute('width'), img.getAttribute('height')]).toEqual(['640', '440']);
+    expect(img.getAttribute('alt')).toBe('');
+    const video = media.querySelector(':scope > video');
+    expect(before(img, video)).toBe(true);
     for (const flag of ['muted', 'loop', 'playsinline']) expect(video.hasAttribute(flag)).toBe(true);
     expect(video.hasAttribute('autoplay')).toBe(false);
+    expect(video.hasAttribute('poster')).toBe(false);
     expect(video.getAttribute('preload')).toBe('none');
-    expect(video.getAttribute('poster')).toBe(`/assets/clips/en/${clip}-poster.jpg`);
+    expect([video.getAttribute('width'), video.getAttribute('height')]).toEqual(['960', '660']);
     expect(video.querySelector('source').getAttribute('src')).toBe(`/assets/clips/en/${clip}.mp4`);
     const mp4 = `website/assets/clips/en/${clip}.mp4`;
     const poster = `website/assets/clips/en/${clip}-poster.jpg`;
-    expect(existsSync(mp4) && statSync(mp4).size).toBeLessThan(260 * 1024);
+    expect(existsSync(mp4), mp4).toBe(true);
+    expect(statSync(mp4).size).toBeLessThan(260 * 1024);
     expect(existsSync(poster), poster).toBe(true);
     expect(statSync(poster).size).toBeLessThan(45 * 1024);
     expect(jpegWidth(poster)).toBe(640);
     expect(text(figure.querySelector('.mv-clip-title')).length).toBeGreaterThan(3);
     expect(text(figure.querySelector('.mv-clip-text'))).toMatch(/\.$/);
     const link = figure.querySelector('figcaption a.mv-text-link');
-    expect(link.getAttribute('href')).toBe(href);
-    expect(existsSync('website' + href.replace(/#.*$/, '')), href).toBe(true);
-    expect(text(link)).toMatch(/^Learn more/);
-    expect(text(link.querySelector('.hm-sr'))).toBe(`about ${text(figure.querySelector('.mv-clip-title')).replace(/ Premium$/, '')}`);
+    if (UNLINKED.includes(clip)) {
+      expect(LINKS[clip]).toBeUndefined();
+      expect(figure.querySelector('a')).toBeNull();
+      // With no link inside, the card itself takes a tab stop.
+      expect(figure.getAttribute('tabindex')).toBe('0');
+    } else {
+      const href = LINKS[clip];
+      expect(link.getAttribute('href')).toBe(href);
+      expect(existsSync('website' + href.replace(/#.*$/, '')), href).toBe(true);
+      expect(text(link)).toMatch(/^Learn more/);
+      expect(text(link.querySelector('.hm-sr'))).toBe(`about ${text(figure.querySelector('.mv-clip-title')).replace(/ Premium$/, '')}`);
+      expect(figure.hasAttribute('tabindex')).toBe(false);
+    }
     expect(Boolean(figure.querySelector('.mv-clip-title .hm-chip'))).toBe(PREMIUM.has(clip));
-    const label = figure.querySelector('video').getAttribute('aria-label');
+    const label = video.getAttribute('aria-label');
     expect(label.length).toBeGreaterThan(40);
     expect(label).not.toMatch(/Describe exactly/);
     const caption = text(figure.querySelector('.mv-clip-text'));
@@ -335,29 +378,38 @@ describe('clip groups', () => {
     expect(figure.outerHTML).not.toMatch(/—|&mdash;/);
   });
 
+  it('ships every batch-3 clip under 250 KB, with its 960 px still and a 15-41 KB 640 px poster', () => {
+    for (const clip of BATCH3) {
+      const mp4 = `website/assets/clips/en/${clip}.mp4`;
+      const still = `website/assets/clips/en/${clip}.jpg`;
+      expect(existsSync(mp4) && existsSync(still), clip).toBe(true);
+      expect(statSync(mp4).size, mp4).toBeLessThan(250 * 1024);
+      expect(jpegWidth(still), still).toBe(960);
+      const poster = statSync(`website/assets/clips/en/${clip}-poster.jpg`).size;
+      expect(poster, clip).toBeGreaterThan(15 * 1024);
+      expect(poster, clip).toBeLessThanOrEqual(41 * 1024);
+    }
+  });
+
+  it('describes tagging rules without claiming speed or naming a model', () => {
+    const fig = doc.querySelector('figure[data-clip="tagging-rules"]');
+    const words = text(fig) + ' ' + fig.querySelector('video').getAttribute('aria-label');
+    expect(words).toContain('Invoice');
+    expect(words).not.toMatch(/instant|immediately|in seconds|as it arrives|Apple Intelligence|model|provider|on your computer/i);
+  });
+
   it('ships no card without its clip, and keeps the cards still to be recorded as commented markup', () => {
     for (const fig of doc.querySelectorAll('figure.mv-clip')) {
       const src = fig.querySelector('video source')?.getAttribute('src');
       expect(src && existsSync('website' + src), fig.dataset.clip).toBe(true);
     }
-    expect([...doc.querySelectorAll('.hm-clip-group figure.mv-clip')].map((f) => f.dataset.clip).sort()).toEqual(Object.keys(LINKS).sort());
+    expect([...doc.querySelectorAll('.hm-clip-group figure.mv-clip')].map((f) => f.dataset.clip).sort()).toEqual([...ALL_CLIPS].sort());
     for (const clip of PENDING) {
       expect(doc.querySelector(`[data-clip="${clip}"]`), clip).toBeNull();
       expect(comments.filter((c) => c.includes(`data-clip="${clip}"`)), clip).toHaveLength(1);
     }
     // A shown clip leaves no commented copy of its card behind.
-    for (const clip of Object.keys(LINKS)) expect(comments.filter((c) => c.includes(`data-clip="${clip}"`)), clip).toEqual([]);
-  });
-
-  it('caps the grid at two columns and lets an odd last card span, never leaving a hole', () => {
-    const grid = rulesFor(plain, '.hm-clip-group .mv-clip-grid');
-    expect(grid).toMatch(/grid-template-columns\s*:\s*repeat\(\s*2\s*,/);
-    for (const [, sel, body] of plain.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (/mv-clip/.test(sel)) expect(body, sel.trim()).not.toMatch(/repeat\(\s*[3-9]/);
-    }
-    expect(rulesFor(plain, '.hm-clip-group .mv-clip-grid > :last-child:nth-child(odd)')).toMatch(/grid-column\s*:\s*1\s*\/\s*-1/);
-    const phone = mediaBlocks(plain, '@media (max-width:760px)').join('\n');
-    expect(rulesFor(phone, '.hm-clip-group .mv-clip-grid')).toMatch(/grid-template-columns\s*:\s*1fr/);
+    for (const clip of ALL_CLIPS) expect(comments.filter((c) => c.includes(`data-clip="${clip}"`)), clip).toEqual([]);
   });
 
   it('replaces the old clips section', () => {
@@ -365,37 +417,140 @@ describe('clip groups', () => {
   });
 });
 
+// Every group is a horizontal carousel: native scroll-snap, no library, no
+// auto-advance. Arrows beside the heading, hidden until the script runs.
+describe('clip carousels', () => {
+  const groups = Object.keys(GROUPS).map((id) => doc.getElementById(id));
+
+  it.each(Object.keys(GROUPS))('%s: a labelled, focusable carousel region holding its cards', (id) => {
+    const group = doc.getElementById(id);
+    const tracks = group.querySelectorAll('.hm-carousel-track');
+    expect(tracks).toHaveLength(1);
+    const track = tracks[0];
+    expect(track.getAttribute('role')).toBe('region');
+    expect(track.getAttribute('aria-roledescription')).toBe('carousel');
+    expect(track.getAttribute('aria-label')).toMatch(/\w{3,}/);
+    expect(track.getAttribute('tabindex')).toBe('0');
+    expect(track.id).toBe(`${id}-track`);
+    expect([...track.children].every((c) => c.matches('figure.mv-clip'))).toBe(true);
+    expect(track.children.length).toBe(GROUPS[id][1].length);
+  });
+
+  it.each(Object.keys(GROUPS))('%s: previous and next are real buttons beside the heading, hidden without a script', (id) => {
+    const group = doc.getElementById(id);
+    const head = group.querySelector('.hm-carousel-head');
+    expect(head.querySelector('h2')).not.toBeNull();
+    const nav = head.querySelector('.hm-carousel-nav');
+    expect(nav.hasAttribute('hidden')).toBe(true);
+    const buttons = [...nav.querySelectorAll('button')];
+    expect(buttons).toHaveLength(2);
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Previous clip', 'Next clip']);
+    for (const b of buttons) {
+      expect(b.getAttribute('type')).toBe('button');
+      expect(b.getAttribute('aria-controls')).toBe(`${id}-track`);
+      expect(b.classList.contains('mv-button')).toBe(false);
+      expect(b.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(buttons[0].hasAttribute('disabled')).toBe(true);
+    expect(before(head, group.querySelector('.hm-carousel-track'))).toBe(true);
+  });
+
+  it('gives the carousels distinct names', () => {
+    const names = groups.map((g) => g.querySelector('.hm-carousel-track').getAttribute('aria-label'));
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('scrolls natively with mandatory snapping, one large card and a peek of the next', () => {
+    const track = rulesFor(plain, '.hm-carousel-track');
+    expect(track).toMatch(/overflow-x\s*:\s*auto/);
+    expect(track).toMatch(/scroll-snap-type\s*:\s*x\s+mandatory/);
+    expect(track).toMatch(/display\s*:\s*flex/);
+    expect(track).not.toMatch(/scroll-behavior\s*:\s*smooth/);
+    // The row contains its absolutely positioned screen-reader text, so cards
+    // scrolled out of it never widen the page.
+    expect(track).toMatch(/position\s*:\s*relative/);
+    const card = rulesFor(plain, '.hm-carousel-track > .mv-clip');
+    expect(card).toMatch(/scroll-snap-align\s*:\s*start/);
+    // The card stays wide enough that less than half of the next one shows, so
+    // only one clip plays at a time.
+    expect(card).toMatch(/flex\s*:\s*0 0 min\(\s*780px\s*,\s*78%\s*\)/);
+    const phone = mediaBlocks(plain, '@media (max-width:760px)').join('\n');
+    expect(rulesFor(phone, '.hm-carousel-track > .mv-clip')).toMatch(/flex-basis\s*:\s*86%/);
+    expect(rulesFor(phone, '.hm-carousel-nav')).toMatch(/display\s*:\s*none/);
+    // The old two-column grid rules are gone.
+    expect(plain).not.toMatch(/\.mv-clip-grid/);
+  });
+
+  it('layers the clip over its poster, shown only once it plays, never with display:none', () => {
+    expect(rulesFor(plain, '.hm-carousel-track .mv-clip-media')).toMatch(/position\s*:\s*relative/);
+    const video = rulesFor(plain, '.hm-carousel-track .mv-clip video');
+    expect(video).toMatch(/position\s*:\s*absolute/);
+    expect(video).toMatch(/opacity\s*:\s*0\b/);
+    expect(video).toMatch(/background\s*:\s*transparent/);
+    expect(video).not.toMatch(/display\s*:\s*none|visibility\s*:\s*hidden/);
+    expect(rulesFor(plain, '.hm-carousel-track .mv-clip.is-live video')).toMatch(/opacity\s*:\s*1/);
+    expect(rulesFor(plain, '.mv-clip-poster')).toMatch(/aspect-ratio\s*:\s*960\s*\/\s*660/);
+    const reduce = mediaBlocks(plain, '@media (prefers-reduced-motion:reduce)').join('\n');
+    expect(reduce).toMatch(/\.hm-carousel-track \.mv-clip video\s*\{[^}]*transition\s*:\s*none/);
+  });
+
+  it('keeps a focus ring inside the scroller for a card that takes focus', () => {
+    expect(rulesFor(plain, '.hm-carousel-track > .mv-clip:focus-visible')).toMatch(/outline-offset\s*:\s*-/);
+  });
+
+  it('loads the carousel script on this page only, deferred, before the clip player', () => {
+    const scripts = [...doc.querySelectorAll('script[src]')].map((s) => s.getAttribute('src'));
+    const carousel = scripts.findIndex((s) => /^\/assets\/home-clips\.js\?v=[\w-]+$/.test(s));
+    const player = scripts.findIndex((s) => s.startsWith('/assets/english-site.js?'));
+    expect(carousel).toBeGreaterThan(-1);
+    expect(carousel).toBeLessThan(player);
+    expect(doc.querySelector('script[src^="/assets/home-clips.js"]').hasAttribute('defer')).toBe(true);
+    expect(existsSync('website/assets/home-clips.js')).toBe(true);
+    for (const l of LOCALES) expect(read(`website/${l}/index.html`), l).not.toContain('home-clips.js');
+  });
+
+  it('keeps the hero clip as it was: eager poster attribute, no lazy image', () => {
+    const hero = doc.querySelector('.hm-hero-clip');
+    expect(hero.querySelector('video').getAttribute('poster')).toBe('/assets/clips/en/hero-montage.jpg');
+    expect(hero.querySelector('img')).toBeNull();
+    expect(hero.closest('.hm-carousel-track')).toBeNull();
+  });
+});
+
 describe('small things', () => {
   const more = doc.getElementById('more');
 
-  // Everything a clip card now shows has left the grid; the grid is the features
-  // that have no clip yet, each linking to its own page.
-  const SMALL = ['search', 'keyboard-shortcuts', 'templates', 'tags', 'tagging-rules', 'notifications', 'no-account', 'native-app', 'email-cleanup'];
+  // The features with no clip yet: one compact row of links under the carousel.
+  // Search has a clip card in #privacy, and the shortcuts and notification
+  // features have theirs in #customize, so none of them is repeated here.
+  const ROW = ['no-account', 'native-app', 'email-cleanup'];
 
-  it('is a full three by three grid of icon cards, one per feature page', () => {
-    const cards = more.querySelectorAll('.hm-icon-grid > a');
-    expect(cards).toHaveLength(9);
-    expect([...cards].map((a) => a.getAttribute('href'))).toEqual(SMALL.map((p) => `/features/${p}.html`));
-    for (const a of cards) {
+  it('lists the features with no clip as a compact row of links under the carousel', () => {
+    expect(more.querySelector('.hm-icon-grid')).toBeNull();
+    const row = more.querySelector('ul.hm-more-links');
+    expect(row).not.toBeNull();
+    expect(before(more.querySelector('.hm-carousel-track'), row)).toBe(true);
+    const links = [...row.querySelectorAll('li > a')];
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(ROW.map((p) => `/features/${p}.html`));
+    for (const a of links) {
       expect(existsSync('website' + a.getAttribute('href')), a.getAttribute('href')).toBe(true);
-      expect(a.querySelector('.hm-icon svg[aria-hidden="true"]')).not.toBeNull();
-      expect(text(a.querySelector('strong'))).not.toBe('');
-      expect(text(a.querySelector('span:not(.hm-icon)'))).toMatch(/\.$/);
+      expect(text(a).length).toBeGreaterThan(3);
       expect(a.outerHTML).not.toMatch(/—|&mdash;/);
     }
-    const all = text(more);
-    for (const fact of ['50,000 messages searched in under 15 ms', 'Tauri', 'rebind', 'every provider']) expect(all).toContain(fact);
-    expect([...more.querySelectorAll('.hm-chip')].map((c) => c.closest('a').getAttribute('href'))).toEqual(['/features/email-cleanup.html']);
-    expect(more.querySelector('video')).toBeNull();
-    expect(rulesFor(plain, '.hm-icon-grid')).toMatch(/grid-template-columns\s*:\s*repeat\(\s*3\s*,/);
+    expect(links.map((a) => text(a))).toEqual(['No account with us', 'Light on your computer', 'A tidier inbox Premium']);
+    expect([...row.querySelectorAll('.hm-chip')].map((c) => c.closest('a').getAttribute('href'))).toEqual(['/features/email-cleanup.html']);
+    expect(more.querySelector('a[href="/features.html"]')).not.toBeNull();
   });
 
-  it('repeats no feature a clip card already shows', () => {
+  it('repeats no feature a clip card already shows, anywhere on the page', () => {
     const clipped = new Set([...doc.querySelectorAll('.hm-clip-group figure.mv-clip figcaption a')].map((a) => a.getAttribute('href').replace(/#.*$/, '')));
-    const small = [...more.querySelectorAll('.hm-icon-grid > a')].map((a) => a.getAttribute('href').replace(/#.*$/, ''));
-    expect(small.filter((h) => clipped.has(h))).toEqual([]);
-    expect(new Set(small).size).toBe(small.length);
-    for (const gone of ['Hide who you write to', 'Pick how mail reads', 'Arrange your window', 'Know who really sent it', 'Free AI writing help', 'See your mail at a glance']) {
+    const row = [...more.querySelectorAll('.hm-more-links a')].map((a) => a.getAttribute('href').replace(/#.*$/, ''));
+    expect(row.filter((h) => clipped.has(h))).toEqual([]);
+    expect(new Set(row).size).toBe(row.length);
+    // The search card in #privacy already covers search; no second search item.
+    expect(more.querySelector('a[href="/features/search.html"]')).toBeNull();
+    expect(text(more)).not.toContain('Find it in milliseconds');
+    for (const gone of ['Hide who you write to', 'Know who really sent it', 'Free AI writing help', 'See your mail at a glance', 'Rules in plain words', 'Quiet hours']) {
       expect(text(more), gone).not.toContain(gone);
     }
   });
@@ -424,7 +579,8 @@ describe('spec card', () => {
 describe('page order', () => {
   it('runs hero, key points, the six groups, small things, spec, comparison, feedback, download', () => {
     const ids = [...doc.querySelectorAll('main > section[id]')].map((s) => s.id);
-    expect(ids).toEqual(['key-points', ...Object.keys(GROUPS), 'more', 'spec', 'compare', 'feedback', 'newsletter', 'download']);
+    expect(Object.keys(GROUPS).at(-1)).toBe('more');
+    expect(ids).toEqual(['key-points', ...Object.keys(GROUPS), 'spec', 'compare', 'feedback', 'newsletter', 'download']);
   });
 
   it('retires the free section and the old clips section', () => {
@@ -447,15 +603,16 @@ describe('Meatlytics tag and stylesheet', () => {
   const tagOf = (h) => (h.match(/<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="([^"]+)">\s*<\/script>/) || [])[1];
 
   it('tags the English homepage and the English clip pages clips-2026-10, their locale copies conversion-2026-10', () => {
-    expect(Object.keys(PAGES)).toHaveLength(17);
-    for (const f of ['website/index.html', 'index.html', ...Object.values(PAGES).map((p) => `website/features/${p}.html`)]) expect(tagOf(read(f)), f).toBe('clips-2026-10');
+    expect(PAGES).toHaveLength(22);
+    for (const f of ['website/index.html', 'index.html', ...PAGES.map((p) => `website/features/${p}.html`)]) expect(tagOf(read(f)), f).toBe('clips-2026-10');
     for (const l of LOCALES) {
-      for (const rel of ['index.html', ...Object.values(PAGES).map((p) => `features/${p}.html`)]) expect(tagOf(read(`website/${l}/${rel}`)), `${l}/${rel}`).toBe('conversion-2026-10');
+      for (const rel of ['index.html', ...PAGES.map((p) => `features/${p}.html`)]) expect(tagOf(read(`website/${l}/${rel}`)), `${l}/${rel}`).toBe('conversion-2026-10');
     }
   });
 
-  it('loads the section styles on the English homepage only', () => {
+  it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
+    expect(html).not.toContain('home-sections.css?v=2"');
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
   });
 
@@ -475,7 +632,7 @@ describe('locale homepages stay as they are', () => {
   it.each(i18n.LOCALES.map((l) => l.dir))('%s: the build reproduces the committed homepage and clip pages byte for byte', (dir) => {
     const loc = i18n.LOCALES.find((l) => l.dir === dir);
     const dict = i18n.loadDict(loc);
-    for (const rel of ['index.html', ...Object.values(PAGES).map((p) => `features/${p}.html`)]) {
+    for (const rel of ['index.html', ...PAGES.map((p) => `features/${p}.html`)]) {
       const out = i18n.render(i18n.sourceHtml?.(rel) ?? read(`website/${rel}`), rel, loc, dict);
       expect(out === read(`website/${dir}/${rel}`), `${dir}/${rel}`).toBe(true);
     }

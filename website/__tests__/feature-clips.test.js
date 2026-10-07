@@ -23,25 +23,42 @@ const CLIPS = {
   'search-local': 'local-vault',
   'sender-verification': 'sender-verification',
   'chat-view': 'views',
-  layouts: 'layouts',
+  'column-layout': 'layouts',
   'scheduled-send': 'scheduled-send',
   insights: 'insights',
+  'tagging-rules': 'tagging-rules',
+  templates: 'templates',
+  tags: 'tags',
+  shortcuts: 'keyboard-shortcuts',
+  'notification-rules': 'notifications',
 };
-// Privacy mode has no feature page; its homepage card links to the Premium FAQ.
-const HOME_ONLY = { 'privacy-mode': '/faq/premium.html#share-screenshots-privately' };
+// Homepage cards whose clip is not the one on their linked page: privacy mode
+// has no feature page (its card links to the Premium FAQ); the theme clip, the
+// Explorer clip and the quick-actions clip share a page with another clip; the
+// radial menu, snooze and focus sessions have no page, so no link.
+const HOME_ONLY = {
+  'privacy-mode': '/faq/premium.html#share-screenshots-privately',
+  layouts: '/features/layouts.html',
+  'explorer-view': '/features/views.html',
+  'quick-actions': '/features/keyboard-shortcuts.html',
+};
+const UNLINKED = ['radial-menu', 'snooze', 'focus-session'];
 const GROUPS = [
   ['archive-delete', 'scheduled-backups', 'time-capsule', 'manual-backup'],
-  ['views', 'custom-fields', 'ai-writing'],
+  ['views', 'custom-fields', 'tagging-rules', 'ai-writing'],
   ['search-local', 'sender-verification'],
   ['trackers', 'link-safety', 'privacy-mode'],
-  ['chat-view', 'layouts'],
+  ['chat-view', 'layouts', 'column-layout', 'explorer-view', 'quick-actions', 'shortcuts', 'notification-rules'],
   ['unified-inbox', 'undo-send', 'scheduled-send', 'insights'],
+  ['templates', 'tags', 'radial-menu', 'snooze', 'focus-session'],
 ];
 const load = (file) => new JSDOM(readFileSync(file, 'utf8')).window.document;
 const home = load('website/index.html');
 const visible = (els) => [...els].filter((el) => !el.closest('[hidden]'));
 
-function checkFigure(figure, clip, poster = `${clip}.jpg`) {
+// A homepage card shows its poster as a lazy <img> under the clip; a feature
+// page keeps the poster attribute on the video.
+function checkFigure(figure, clip, { home = false } = {}) {
   expect(figure.dataset.clip).toBe(clip);
   const video = figure.querySelector('video');
   expect(video, clip).not.toBeNull();
@@ -49,7 +66,16 @@ function checkFigure(figure, clip, poster = `${clip}.jpg`) {
   // No autoplay attribute: english-site.js starts a clip only once it is on screen.
   expect(video.hasAttribute('autoplay')).toBe(false);
   expect(video.getAttribute('preload')).toBe('none');
-  expect(video.getAttribute('poster')).toBe(`/assets/clips/en/${poster}`);
+  const poster = home ? `${clip}-poster.jpg` : `${clip}.jpg`;
+  if (home) {
+    expect(video.hasAttribute('poster')).toBe(false);
+    const img = figure.querySelector('.mv-clip-media > img.mv-clip-poster');
+    expect(img.getAttribute('src')).toBe(`/assets/clips/en/${poster}`);
+    expect(img.getAttribute('loading')).toBe('lazy');
+  } else {
+    expect(video.getAttribute('poster')).toBe(`/assets/clips/en/${poster}`);
+    expect(figure.querySelector('img')).toBeNull();
+  }
   expect(video.getAttribute('width')).toBe('960');
   expect(video.getAttribute('height')).toBe('660');
   expect(video.getAttribute('aria-label').length).toBeGreaterThan(30);
@@ -74,7 +100,7 @@ function checkFigure(figure, clip, poster = `${clip}.jpg`) {
 describe('homepage clips', () => {
   const groups = [...home.querySelectorAll('main > section.hm-clip-group')];
 
-  it('shows eighteen clips in six headed groups, after the key points', () => {
+  it('shows twenty-nine clips in seven headed groups, after the key points', () => {
     expect(groups.map((g) => [...g.querySelectorAll('figure.mv-clip')].map((f) => f.dataset.clip))).toEqual(GROUPS);
     expect(home.getElementById('key-points').nextElementSibling).toBe(groups[0]);
     for (const g of groups) {
@@ -83,8 +109,12 @@ describe('homepage clips', () => {
     }
   });
 
-  it.each([...Object.keys(CLIPS), ...Object.keys(HOME_ONLY)])('%s is a muted, lazy clip with a light poster and a caption', (clip) => {
-    checkFigure(home.querySelector(`.hm-clip-group figure[data-clip="${clip}"]`), clip, `${clip}-poster.jpg`);
+  it.each([...Object.keys(CLIPS), ...Object.keys(HOME_ONLY), ...UNLINKED])('%s is a muted, lazy clip with a light poster and a caption', (clip) => {
+    checkFigure(home.querySelector(`.hm-clip-group figure[data-clip="${clip}"]`), clip, { home: true });
+  });
+
+  it.each(UNLINKED)('%s has no feature page, so its card has no link', (clip) => {
+    expect(home.querySelector(`.hm-clip-group figure[data-clip="${clip}"] a`)).toBeNull();
   });
 
   it.each([...Object.entries(CLIPS).map(([c, p]) => [c, `/features/${p}.html`]), ...Object.entries(HOME_ONLY)])('%s links to %s with its own accessible name', (clip, href) => {
@@ -96,13 +126,14 @@ describe('homepage clips', () => {
 
   it('gives every Learn more link a distinct accessible name', () => {
     const names = groups.flatMap((g) => [...g.querySelectorAll('figcaption a')].map((a) => a.textContent.trim()));
-    expect(names).toHaveLength(18);
-    expect(new Set(names).size).toBe(18);
+    expect(names).toHaveLength(26);
+    expect(new Set(names).size).toBe(26);
   });
 
-  it('adds no button, and no download', () => {
+  it('adds no download, and no button but the two carousel arrows', () => {
     for (const g of groups) {
-      expect(g.querySelector('.mv-button, button, [data-download], [data-acquisition-download]')).toBeNull();
+      expect(g.querySelector('.mv-button, [data-download], [data-acquisition-download], [data-acquisition-event]')).toBeNull();
+      expect([...g.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Previous clip', 'Next clip']);
       expect(g.textContent).not.toMatch(/—/);
     }
   });
