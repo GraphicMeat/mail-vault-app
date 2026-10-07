@@ -276,6 +276,113 @@ pub fn sender_clock(conn: &Connection, address: &str) -> Result<Option<(i32, Opt
     Ok(Some((offset, at)))
 }
 
+/// Subject openings of automatic replies, for the follow-up check's cache
+/// scan: the cache keeps no Auto-Submitted for mail it fetched before
+/// `autoReply` existed, and some servers send a vacation notice without one.
+/// Outlook's and Exchange's forms in the app's nine languages, and the common
+/// server ones. Compared case-insensitively against the subject's start.
+pub const AUTO_REPLY_SUBJECT_PREFIXES: &[&str] = &[
+    // English
+    "Automatic reply:", "Auto reply:", "Auto-reply:", "Autoreply:", "Auto:", "Out of Office", "Out of office:",
+    // German
+    "Automatische Antwort:", "Abwesenheitsnotiz", "Abwesend:",
+    // French
+    "Réponse automatique", "Absence du bureau",
+    // Spanish
+    "Respuesta automática:", "Fuera de la oficina",
+    // Italian
+    "Risposta automatica:", "Fuori sede",
+    // Portuguese (Brazil)
+    "Resposta automática:", "Ausente do escritório",
+    // Japanese
+    "自動応答", "自動返信",
+    // Korean
+    "자동 회신", "자동 응답",
+    // Chinese (Simplified, and the Traditional form Outlook also sends)
+    "自动回复", "自動回覆",
+];
+
+/// Does `subject` open like an automatic reply (`AUTO_REPLY_SUBJECT_PREFIXES`)?
+pub fn is_auto_reply_subject(subject: &str) -> bool {
+    let subject = subject.trim_start().to_lowercase();
+    AUTO_REPLY_SUBJECT_PREFIXES.iter().any(|p| subject.starts_with(&p.to_lowercase()))
+}
+
+/// Is the cached `header` someone's answer to the message `id` (normalized,
+/// `maildir::normalize_message_id`): its In-Reply-To or a References entry
+/// names it, it is from none of `own` (whole address, any case), and neither
+/// its `autoReply` mark nor its subject says a machine sent it.
+fn answers(header: &Value, id: &str, own: &[String]) -> bool {
+    let names_it = |v: &Value| -> bool {
+        let ids: Vec<&str> = match v {
+            Value::String(s) => s.split_whitespace().collect(),
+            Value::Array(items) => items.iter().filter_map(Value::as_str).flat_map(str::split_whitespace).collect(),
+            _ => Vec::new(),
+        };
+        ids.iter().any(|candidate| crate::maildir::normalize_message_id(candidate) == id)
+    };
+    if !(header.get("inReplyTo").is_some_and(names_it) || header.get("references").is_some_and(names_it)) {
+        return false;
+    }
+    let from = header.pointer("/from/address").and_then(Value::as_str).unwrap_or("").trim();
+    if own.iter().any(|o| o.trim().eq_ignore_ascii_case(from)) {
+        return false;
+    }
+    if header.get("autoReply").and_then(Value::as_str).is_some_and(|v| !v.is_empty()) {
+        return false;
+    }
+    !is_auto_reply_subject(header.get("subject").and_then(Value::as_str).unwrap_or(""))
+}
+
+/// One page of `reply_scan_page`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplyPage {
+    /// A cached message in the page answers the message.
+    pub replied: bool,
+    /// Where the next page starts (the last uid read), `None` at the end.
+    pub next_after: Option<u32>,
+}
+
+/// One bounded unit of the follow-up check's header cache scan: the next
+/// `limit` cached rows of one folder after `after_uid`, in uid order, and
+/// whether any of them answers `message_id` (`answers`). A caller walks a
+/// folder page by page and lets the custody lock go between pages, so a
+/// foreground read never waits behind a whole folder.
+///
+/// The LIKE (same prefilter as `sender_clock`) only spares the JSON parse of
+/// rows that cannot match; a row is read whether it matches or not, which is
+/// what bounds the page.
+pub fn reply_scan_page(
+    conn: &Connection,
+    account: &str,
+    mailbox: &str,
+    message_id: &str,
+    own_addresses: &[String],
+    after_uid: u32,
+    limit: u32,
+) -> Result<ReplyPage, String> {
+    let id = crate::maildir::normalize_message_id(message_id);
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT uid, CASE WHEN ?4 <> '' AND header_json LIKE '%' || ?4 || '%' THEN header_json END
+             FROM header_cache WHERE account_id = ?1 AND mailbox_path = ?2 AND uid > ?3
+             ORDER BY uid LIMIT ?5",
+        )
+        .map_err(err)?;
+    let mut rows = stmt.query(params![account, mailbox, after_uid, id, limit]).map_err(err)?;
+    let (mut read, mut last, mut replied) = (0u32, after_uid, false);
+    while let Some(row) = rows.next().map_err(err)? {
+        read += 1;
+        last = row.get(0).map_err(err)?;
+        let Some(json) = row.get::<_, Option<String>>(1).map_err(err)? else { continue };
+        if serde_json::from_str::<Value>(&json).is_ok_and(|h| answers(&h, &id, own_addresses)) {
+            replied = true;
+            break;
+        }
+    }
+    Ok(ReplyPage { replied, next_after: (!replied && read == limit).then_some(last) })
+}
+
 /// How many headers this mailbox has cached. Replaces counting `<uid>.json`
 /// files in the sidecar directory — which also had to exclude `_meta.json`
 /// and the Outlook uid ledger that still live there.
@@ -904,6 +1011,94 @@ mod tests {
 
     fn utc(y: i32, m: u32, d: u32, h: u32) -> i64 {
         Utc.with_ymd_and_hms(y, m, d, h, 0, 0).unwrap().timestamp_millis()
+    }
+
+    /// Every page of one folder, the way the follow-up worker reads it.
+    fn replied_in(c: &Connection, mailbox: &str, id: &str, own: &[&str]) -> bool {
+        let own: Vec<String> = own.iter().map(|s| s.to_string()).collect();
+        let mut after = 0;
+        loop {
+            let page = reply_scan_page(c, "a", mailbox, id, &own, after, 2).unwrap();
+            if page.replied {
+                return true;
+            }
+            match page.next_after {
+                Some(next) => after = next,
+                None => return false,
+            }
+        }
+    }
+
+    #[test]
+    fn a_cached_reply_is_someone_elses_message_naming_the_id() {
+        let (_t, c) = store();
+        put(&c, "a", "INBOX", 1, 1, json!({"uid": 1, "subject": "Re: Quote", "inReplyTo": "<q_1@me.x>", "from": {"address": "ana@y.com"}}));
+        assert!(replied_in(&c, "INBOX", "<q_1@me.x>", &["me@x.com"]));
+        // Named in References only, without brackets, among others; on a later page.
+        for uid in 2..6 {
+            put(&c, "a", "Trash", uid, uid, json!({"uid": uid, "subject": "noise", "from": {"address": "x@y.com"}}));
+        }
+        put(&c, "a", "Trash", 9, 9, json!({"uid": 9, "references": ["<root@y.com>", "r2@me.x"], "from": {"address": "ana@y.com"}}));
+        assert!(replied_in(&c, "Trash", "<r2@me.x>", &["me@x.com"]));
+        // A reference string, as some rows carry it.
+        put(&c, "a", "Archive", 1, 1, json!({"uid": 1, "references": "<r@y.com> <s3@me.x>", "from": {"address": "bo@y.com"}}));
+        assert!(replied_in(&c, "Archive", "<s3@me.x>", &["me@x.com"]));
+    }
+
+    #[test]
+    fn the_senders_own_addresses_are_no_reply_compared_whole_and_without_case() {
+        let (_t, c) = store();
+        let own = ["me@x.com", "Alias@X.com"];
+        put(&c, "a", "INBOX", 1, 1, json!({"uid": 1, "inReplyTo": "<q@me.x>", "from": {"address": "alias@x.com"}}));
+        put(&c, "a", "INBOX", 2, 2, json!({"uid": 2, "inReplyTo": "<q@me.x>", "from": {"address": "ME@x.com"}}));
+        assert!(!replied_in(&c, "INBOX", "<q@me.x>", &own));
+        // An address that only contains one of them is someone else.
+        put(&c, "a", "INBOX", 3, 3, json!({"uid": 3, "inReplyTo": "<q@me.x>", "from": {"address": "notme@x.com"}}));
+        assert!(replied_in(&c, "INBOX", "<q@me.x>", &own));
+    }
+
+    #[test]
+    fn an_automatic_reply_is_no_reply_by_its_header_or_its_subject() {
+        let (_t, c) = store();
+        put(&c, "a", "INBOX", 1, 1, json!({"uid": 1, "subject": "Re: Quote", "autoReply": "auto-replied", "inReplyTo": "<q@me.x>", "from": {"address": "ana@y.com"}}));
+        put(&c, "a", "INBOX", 2, 2, json!({"uid": 2, "subject": "Automatic reply: Quote", "inReplyTo": "<q@me.x>", "from": {"address": "bo@y.com"}}));
+        put(&c, "a", "INBOX", 3, 3, json!({"uid": 3, "subject": "Abwesenheitsnotiz: Angebot", "references": ["<q@me.x>"], "from": {"address": "cy@y.com"}}));
+        assert!(!replied_in(&c, "INBOX", "<q@me.x>", &["me@x.com"]));
+    }
+
+    #[test]
+    fn a_lookalike_id_and_another_accounts_reply_are_no_reply() {
+        let (_t, c) = store();
+        // `_` is a LIKE wildcard: the prefilter lets this through, the parse does not.
+        put(&c, "a", "INBOX", 1, 1, json!({"uid": 1, "inReplyTo": "<qx1@me.x>", "from": {"address": "ana@y.com"}}));
+        put(&c, "b", "INBOX", 2, 2, json!({"uid": 2, "inReplyTo": "<q_1@me.x>", "from": {"address": "ana@y.com"}}));
+        assert!(!replied_in(&c, "INBOX", "<q_1@me.x>", &["me@x.com"]));
+        assert!(!replied_in(&c, "INBOX", "<>", &["me@x.com"]), "an empty id answers nothing");
+    }
+
+    #[test]
+    fn a_page_stops_at_its_limit_and_says_where_to_go_on() {
+        let (_t, c) = store();
+        for uid in [3, 7, 9] {
+            put(&c, "a", "INBOX", uid, uid as i64, json!({"uid": uid, "from": {"address": "x@y.com"}}));
+        }
+        let own = vec!["me@x.com".to_string()];
+        assert_eq!(reply_scan_page(&c, "a", "INBOX", "<q@me.x>", &own, 0, 2).unwrap(), ReplyPage { replied: false, next_after: Some(7) });
+        assert_eq!(reply_scan_page(&c, "a", "INBOX", "<q@me.x>", &own, 7, 2).unwrap(), ReplyPage { replied: false, next_after: None });
+    }
+
+    #[test]
+    fn auto_reply_subjects_are_known_in_every_app_language() {
+        for subject in [
+            "Automatic reply: Quote", "AUTO: Quote", "Out of Office AutoReply: Quote", "Automatische Antwort: Angebot",
+            "Réponse automatique : Devis", "Respuesta automática: Presupuesto", "Risposta automatica: Preventivo",
+            "Resposta automática: Orçamento", "自動応答: 見積もり", "자동 회신: 견적", "自动回复: 报价",
+        ] {
+            assert!(is_auto_reply_subject(subject), "{subject}");
+        }
+        for subject in ["Re: Quote", "Autumn plans", "Outing on Friday"] {
+            assert!(!is_auto_reply_subject(subject), "{subject}");
+        }
     }
 
     #[test]

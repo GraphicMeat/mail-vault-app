@@ -610,3 +610,20 @@ async fn insights_imap_dates_preserve_rfc_date_and_receive_time() {
     assert_eq!(row["receivedAt"], "2026-09-09T00:30:00+00:00");
     assert_eq!(row["receivedAt"], row["internalDate"]);
 }
+
+/// The header page fetches the auto-reply fields too, so the cached row says
+/// a vacation notice is one (the follow-up check reads it from the cache).
+#[async_std::test]
+async fn a_header_page_marks_an_automatic_reply() {
+    let auto = "From: Ana <ana@example.com>\r\nTo: user@example.com\r\nSubject: Re: Quote\r\n\
+                Date: Thu, 01 Jan 2026 12:00:00 +0000\r\nMessage-ID: <vac@example.com>\r\n\
+                Auto-Submitted: auto-replied\r\n\r\nAway.\r\n";
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push(auto).push(eml("Plain", "bo@example.com", "Hello"))),
+    );
+    let mut sess = session(&server).await;
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.unwrap();
+    let by_subject = |s: &str| emails.iter().find(|e| e.subject == s).unwrap_or_else(|| panic!("{s} not fetched"));
+    assert_eq!(by_subject("Re: Quote").auto_reply.as_deref(), Some("auto-replied"));
+    assert_eq!(by_subject("Plain").auto_reply, None);
+}

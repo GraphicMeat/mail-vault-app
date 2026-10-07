@@ -175,6 +175,12 @@ pub struct EmailHeader {
     pub list_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub precedence: Option<String>,
+    /// The message says a machine sent it: `Auto-Submitted` (any value but
+    /// "no", RFC 3834), or the field name of `X-Autoreply`, `X-Autorespond`
+    /// or `X-Auto-Response-Suppress`. What the follow-up check's header cache
+    /// scan leaves out (`custody::cache::reply_scan_page`).
+    #[serde(rename = "autoReply", skip_serializing_if = "Option::is_none")]
+    pub auto_reply: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -676,7 +682,7 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
 // both. Thunderbird fetches the size on every pass; BODYSTRUCTURE is a few
 // hundred bytes per multipart message under DEFLATE, and this exact spec has
 // served search results in production since the search feature shipped.
-const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Unsubscribe-Post List-Id Precedence)])";
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Unsubscribe-Post List-Id Precedence Auto-Submitted X-Autoreply X-Autorespond X-Auto-Response-Suppress)])";
 
 /// Gmail suspends accounts that exceed daily IMAP bandwidth caps (2500 MB down,
 /// 500 MB up) — the suspension can last up to 24h and locks webmail sign-in too.
@@ -3242,6 +3248,8 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
     let precedence = raw_headers.as_ref()
         .and_then(|raw| parse_single_header(raw, "Precedence"));
 
+    let auto_reply = raw_headers.as_deref().and_then(auto_reply_marker);
+
     let date = envelope
         .date
         .as_ref()
@@ -3308,6 +3316,7 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         list_unsubscribe_post,
         list_id,
         precedence,
+        auto_reply,
     })
 }
 
@@ -3343,6 +3352,32 @@ fn parse_references_header(raw: &str) -> Vec<String> {
 
 /// Parse a single header value from raw header text.
 /// Handles multi-line (folded) headers per RFC 5322.
+/// Whether the fetched header fields say a machine sent the message, and
+/// which: `Auto-Submitted`'s value (anything but "no", RFC 3834), else the
+/// lowercased name of the first of `X-Autoreply`, `X-Autorespond`,
+/// `X-Auto-Response-Suppress` present (the last is what Exchange and Outlook
+/// put on their own automatic replies). The same set the follow-up server
+/// search leaves out (`AUTO_REPLY_HEADERS`).
+pub fn auto_reply_marker(raw_headers: &str) -> Option<String> {
+    if let Some(value) = parse_single_header(raw_headers, "Auto-Submitted") {
+        let value = value.trim().to_lowercase();
+        if value != "no" {
+            return Some(value);
+        }
+    }
+    ["X-Autoreply", "X-Autorespond", "X-Auto-Response-Suppress"]
+        .into_iter()
+        .find(|field| raw_headers.lines().any(|l| l.to_ascii_lowercase().starts_with(&format!("{}:", field.to_ascii_lowercase()))))
+        .map(str::to_ascii_lowercase)
+}
+
+/// A folder the app takes for Sent or Drafts by its name, the way the folder
+/// list guesses a role for a server that declares none: for callers with no
+/// folder list at hand, or a folder the list does not name.
+pub fn is_own_mail_path(path: &str) -> bool {
+    matches!(guessed_special_use(path).as_deref(), Some("\\Sent") | Some("\\Drafts"))
+}
+
 fn parse_single_header(raw: &str, header_name: &str) -> Option<String> {
     let search = format!("{}:", header_name);
     // Case-insensitive search for the header name
@@ -4072,6 +4107,32 @@ mod is_missing_mailbox_tests {
         assert!(!is_missing_mailbox(
             "TLS handshake with imap.gmail.com failed: connection closed via error"
         ));
+    }
+}
+
+#[cfg(test)]
+mod auto_reply_marker_tests {
+    use super::*;
+
+    #[test]
+    fn a_machine_sent_message_says_so_in_one_of_four_headers() {
+        assert_eq!(auto_reply_marker("Auto-Submitted: auto-replied\r\n").as_deref(), Some("auto-replied"));
+        assert_eq!(auto_reply_marker("auto-submitted: Auto-Generated\r\n").as_deref(), Some("auto-generated"));
+        assert_eq!(auto_reply_marker("X-Autoreply: yes\r\n").as_deref(), Some("x-autoreply"));
+        assert_eq!(auto_reply_marker("X-Autorespond: on\r\n").as_deref(), Some("x-autorespond"));
+        assert_eq!(auto_reply_marker("X-Auto-Response-Suppress: All\r\n").as_deref(), Some("x-auto-response-suppress"));
+        assert_eq!(auto_reply_marker("Auto-Submitted: no\r\nList-Id: x\r\n"), None, "RFC 3834: \"no\" is a person");
+        assert_eq!(auto_reply_marker("References: <a@b>\r\n"), None);
+    }
+
+    #[test]
+    fn sent_and_drafts_folders_are_known_by_name_where_no_role_says_so() {
+        for path in ["Sent", "INBOX.Sent", "Sent Items", "[Gmail]/Sent Mail", "Drafts", "INBOX/Drafts"] {
+            assert!(is_own_mail_path(path), "{path}");
+        }
+        for path in ["INBOX", "Archive", "Trash", "[Gmail]/All Mail"] {
+            assert!(!is_own_mail_path(path), "{path}");
+        }
     }
 }
 

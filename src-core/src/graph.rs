@@ -214,6 +214,7 @@ impl GraphMessage {
             list_unsubscribe_post: self.get_header("List-Unsubscribe-Post"),
             list_id: self.get_header("List-Id"),
             precedence: self.get_header("Precedence"),
+            auto_reply: None,
         }
     }
 

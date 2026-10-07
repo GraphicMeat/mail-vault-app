@@ -479,6 +479,7 @@ mod tests {
             list_unsubscribe_post: None,
             list_id: None,
             precedence: None,
+            auto_reply: None,
         }
     }
 
