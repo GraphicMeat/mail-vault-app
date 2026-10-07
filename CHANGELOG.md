@@ -15,7 +15,7 @@
 - **Alerts break their lines again.** Eight "could not save / read / write" error alerts showed a literal "\n\nDetails:" in every language instead of putting the details on their own line, and the MBOX import summary showed a literal "\n\n" too.
 
 ### Fixed
-- **Email Cleanup drops the mail you delete.** Selecting a group such as Newsletter and pressing Delete finished, yet every message stayed listed, because Cleanup kept its results for mail the server no longer had. Mail that is deleted, archived and then removed from the server, or moved to another folder, now leaves the Cleanup list and its counts, whether you did it in MailVault or another mail app, and a moved message is sorted again in its new folder. The Delete and Archive buttons in Cleanup and the All preset in Bulk operations now follow the app's language.
+- **Email Cleanup drops the mail you delete.** Selecting a group such as Newsletter and pressing Delete finished, yet every message stayed listed, because Cleanup kept its results for mail the server no longer had. Mail that is deleted, archived and then removed from the server, or moved to another folder, now leaves the Cleanup list and its counts, whether you did it in MailVault or another mail app, and a moved message is sorted again where it now is the next time Cleanup sorts your mail. The Delete and Archive buttons in Cleanup and the All preset in Bulk operations now follow the app's language.
 
 ## [2.19.1] - 2026-10-07
 

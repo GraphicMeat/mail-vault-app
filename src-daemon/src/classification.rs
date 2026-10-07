@@ -253,7 +253,7 @@ pub fn override_classification(
     importance: Option<&str>,
     action: Option<&str>,
 ) -> Result<EmailClassification, String> {
-    let mut all = load_classifications(data_dir, account_id);
+    let all = load_classifications(data_dir, account_id);
 
     let entry = all.get(message_id).cloned().ok_or_else(|| {
         format!("No classification found for message {}", message_id)
@@ -270,10 +270,9 @@ pub fn override_classification(
         snapshot: entry.snapshot.clone(),
     };
 
-    all.insert(message_id.to_string(), updated.clone());
-
-    let rows = encode(&all)?;
-    with_app_db(data_dir, |conn| store::replace_account(conn, account_id, &rows))?;
+    // This row only: rewriting the account would put back rows forgotten
+    // since `all` was read.
+    save_single_classification(data_dir, account_id, message_id, &updated)?;
 
     Ok(updated)
 }
