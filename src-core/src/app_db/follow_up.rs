@@ -228,8 +228,9 @@ pub fn mark_announced(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("UPDATE follow_ups SET announced = 1 WHERE id = ?1", [id]).map(|_| ()).map_err(|e| e.to_string())
 }
 
-/// The user is done with it: delete, archive or move on the resurfaced row,
-/// or turning the reminder off before it fires. History rows stay as they are.
+/// The user is done with it: the pinned row's x, a removed account, or the
+/// Sent copy it points at deleted or moved (`dismiss_at`). History rows stay
+/// as they are.
 pub fn dismiss(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute(
         "UPDATE follow_ups SET state = 'dismissed', retry_at = 0 WHERE id = ?1 AND state IN ('waiting', 'due', 'failed')",
@@ -237,6 +238,24 @@ pub fn dismiss(conn: &Connection, id: &str) -> Result<(), String> {
     )
     .map(|_| ())
     .map_err(|e| e.to_string())
+}
+
+/// The Sent copies at `uids` in `mailbox` were deleted or moved: the due
+/// reminders that point at them point at nothing now, and end. Returns the
+/// ids it ended, for the caller to announce.
+pub fn dismiss_at(conn: &Connection, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<Vec<String>, String> {
+    let mut ended = Vec::new();
+    for uid in uids {
+        let ids = conn
+            .prepare("SELECT id FROM follow_ups WHERE account_id = ?1 AND sent_mailbox = ?2 AND sent_uid = ?3 AND state = 'due'")
+            .and_then(|mut stmt| stmt.query_map(params![account_id, mailbox, uid], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>())
+            .map_err(|e| e.to_string())?;
+        for id in ids {
+            dismiss(conn, &id)?;
+            ended.push(id);
+        }
+    }
+    Ok(ended)
 }
 
 #[cfg(test)]
@@ -435,6 +454,30 @@ mod tests {
         dismiss(&c, "a").unwrap();
         assert_eq!(state_of(&c, "a"), "dismissed");
         assert!(list(&c, None).unwrap().is_empty());
+    }
+
+    /// The Sent copy a due reminder points at was deleted or moved: the
+    /// reminder goes with it, and only that one.
+    #[test]
+    fn dismiss_at_ends_the_due_reminders_of_exactly_those_messages() {
+        let c = conn();
+        for id in ["hit", "other-uid", "other-folder", "waiting"] {
+            seed(&c, id, 100);
+        }
+        let at = |id: &str, mailbox: &str, uid: u32| {
+            record_outcome(&c, id, &Outcome::NoReply { sent_mailbox: mailbox.into(), sent_uid: uid }, 200).unwrap();
+        };
+        at("hit", "Sent", 7);
+        at("other-uid", "Sent", 8);
+        at("other-folder", "Archive", 7);
+        let ended = dismiss_at(&c, "acct", "Sent", &[7, 99]).unwrap();
+        assert_eq!(ended, vec!["hit".to_string()]);
+        assert_eq!(state_of(&c, "hit"), "dismissed");
+        for id in ["other-uid", "other-folder"] {
+            assert_eq!(state_of(&c, id), "due", "{id}");
+        }
+        assert_eq!(state_of(&c, "waiting"), "waiting");
+        assert!(dismiss_at(&c, "someone-else", "Sent", &[8]).unwrap().is_empty());
     }
 
     #[test]

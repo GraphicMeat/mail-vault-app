@@ -2837,7 +2837,7 @@ const AUTO_REPLY_HEADERS: [(&str, &str); 4] = [
 /// substring match, so an address that merely contains one of them is left
 /// out too: a reply missed, never one invented. `None` for an empty
 /// Message-ID, which would match every header.
-pub fn reply_search_criteria(message_id: &str, own_addresses: &[String]) -> Option<String> {
+pub fn reply_search_criteria(message_id: &str, own_addresses: &[String], skip_auto_replies: bool) -> Option<String> {
     let term = message_id_search_term(message_id);
     if term.is_empty() {
         return None;
@@ -2850,10 +2850,49 @@ pub fn reply_search_criteria(message_id: &str, own_addresses: &[String]) -> Opti
             criteria.push_str(&format!(" NOT FROM \"{own}\""));
         }
     }
-    for (field, value) in AUTO_REPLY_HEADERS {
-        criteria.push_str(&format!(" NOT HEADER {field} \"{value}\""));
+    // A server can refuse these (an empty HEADER string, a field it does not
+    // index): the caller asks again without them rather than not at all.
+    if skip_auto_replies {
+        for (field, value) in AUTO_REPLY_HEADERS {
+            criteria.push_str(&format!(" NOT HEADER {field} \"{value}\""));
+        }
     }
     Some(criteria)
+}
+
+/// What one folder said to a reply search (`uid_search_tolerant`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FolderSearch {
+    Hits(Vec<u32>),
+    /// The SELECT was refused (tagged NO): the folder is not there, or the
+    /// server will not open it.
+    FolderRefused(String),
+    /// The SEARCH was refused (tagged NO or BAD): the criteria, not the folder.
+    SearchRefused(String),
+}
+
+/// SELECT + `UID SEARCH criteria`, telling a folder or a search the server
+/// turned away (both leave the session usable) from a failure of the
+/// connection, which is still an error.
+pub async fn uid_search_tolerant(session: &mut ImapSession, mailbox: &str, criteria: &str) -> Result<FolderSearch, String> {
+    match session.select(mailbox).await {
+        Ok(mbox) => {
+            selected(mailbox, mbox)?;
+        }
+        Err(async_imap::error::Error::No(msg)) => return Ok(FolderSearch::FolderRefused(msg)),
+        Err(e) => return Err(format!("SELECT {} failed: {}", mailbox, e)),
+    }
+    match patient(uid_search_to_tag(session, criteria)).await {
+        Ok(mut uids) => {
+            uids.sort_unstable();
+            uids.dedup();
+            Ok(FolderSearch::Hits(uids))
+        }
+        // `uid_search_to_tag` read the tagged reply through: a NO or BAD is
+        // the server's answer, with nothing left unread on the socket.
+        Err(e) if e.starts_with("SEARCH failed: No ") || e.starts_with("SEARCH failed: Bad ") => Ok(FolderSearch::SearchRefused(e)),
+        Err(e) => Err(e),
+    }
 }
 
 /// SELECT + UID SEARCH one folder for a Message-ID.
@@ -4046,7 +4085,7 @@ mod reply_search_criteria_tests {
     fn a_reply_names_the_id_comes_from_none_of_the_senders_and_is_no_auto_reply() {
         let own = vec!["me@x.com".to_string(), "alias@x.com".to_string(), "ME@x.com".to_string()];
         assert_eq!(
-            reply_search_criteria("<abc@mail.x>", &own),
+            reply_search_criteria("<abc@mail.x>", &own, true),
             Some(format!(r#"OR HEADER In-Reply-To "abc@mail.x" HEADER References "abc@mail.x" NOT FROM "me@x.com" NOT FROM "alias@x.com"{AUTO}"#))
         );
     }
@@ -4054,20 +4093,28 @@ mod reply_search_criteria_tests {
     #[test]
     fn quotes_in_either_value_are_escaped() {
         assert_eq!(
-            reply_search_criteria("<a\"b@x>", &["o\"dd@x.com".to_string()]),
+            reply_search_criteria("<a\"b@x>", &["o\"dd@x.com".to_string()], true),
             Some(format!(r#"OR HEADER In-Reply-To "a\"b@x" HEADER References "a\"b@x" NOT FROM "o\"dd@x.com"{AUTO}"#))
         );
     }
 
     #[test]
+    fn the_auto_reply_terms_can_be_left_out_for_a_server_that_refuses_them() {
+        assert_eq!(
+            reply_search_criteria("<m@x>", &["me@x.com".to_string()], false).as_deref(),
+            Some(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x" NOT FROM "me@x.com""#)
+        );
+    }
+
+    #[test]
     fn an_empty_message_id_has_no_criteria() {
-        assert_eq!(reply_search_criteria(" <> ", &["me@x.com".to_string()]), None);
+        assert_eq!(reply_search_criteria(" <> ", &["me@x.com".to_string()], true), None);
     }
 
     #[test]
     fn no_own_address_drops_only_the_not_from() {
         assert_eq!(
-            reply_search_criteria("<m@x>", &["  ".to_string()]),
+            reply_search_criteria("<m@x>", &["  ".to_string()], true),
             Some(format!(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x"{AUTO}"#))
         );
     }
