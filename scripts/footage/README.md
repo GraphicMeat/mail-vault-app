@@ -16,8 +16,8 @@ checks and the `actions.json` schema are documented in
 | `scenes/boot-a.js` | S1, S2, S4, S5, S6a, S6b, S6c in one boot (server untouched after setup). |
 | `scenes/s3-archive.js` | S3 in its own boot (it deletes 2022 from the mock server). |
 | `scenes/s4-search.js` | The original S4 spike, standalone. |
-| `scenes/web-clips.js` | The short website feature-card takes (about 5 s each): batch 1 (boots A-C) and batch 2 (boots D-G). |
-| `web-clips.sh` | Website clips per locale: `record` (boots A-G; `WEBCLIP_ONLY=clip,clip` re-takes just those clips of a boot), `encode` (re-cut collected takes, no boot), `hero` (the 16:10 montage from collected takes, no boot), `publish` (`WEBCLIP_HOLD=clip:reason` routes a clip to `_needs-decision`). |
+| `scenes/web-clips.js` | The short website feature-card takes (about 5 s each): batch 1 (boots A-C), batch 2 (boots D-G), batch 3 (boot H, plus the tagging-rules retake in G). |
+| `web-clips.sh` | Website clips per locale: `record` (boots A-H; `WEBCLIP_ONLY=clip,clip` re-takes just those clips of a boot), `encode` (re-cut collected takes, no boot), `hero` (the 16:10 montage from collected takes, no boot), `publish` (`WEBCLIP_HOLD=clip:reason` routes a clip to `_needs-decision`; never over a published file unless `WEBCLIP_REPLACE=clip`; `WEBCLIP_ONLY` publishes just those). |
 | `hero-montage.json` | The homepage hero: which take, which seconds and which 16:10 crop per cut (1440x900, at most 1.6 MB, poster at most 150 KB). |
 | `webclip-encode.sh` | Takes to 960x660 H.264 web clips + posters with `video/capture/tools/webclip.swift` (no ffmpeg on the runners); a spec whose segments name their own takes (`src`) is a montage. |
 | `web-clips.crops.json` | Reviewed crop / trim / poster overrides per web clip (window points). |

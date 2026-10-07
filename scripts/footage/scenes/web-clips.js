@@ -14,6 +14,16 @@
  *   D  views, sender-verification, chat-view, scheduled-send   (batch 2; server untouched)
  *   E  email-cleanup, search-local, insights   (batch 2; archives the Newsletter
  *      group, then the whole INBOX, so search and Insights read the vault)
+ *   F  privacy-mode, layouts, manual-backup, custom-fields; G ai-writing, tagging-rules
+ *   H  quick-actions, explorer-view, column-layout, shortcuts, notification-rules,
+ *      templates, tags, radial-menu, snooze, focus-session   (batch 3)
+ *
+ * Batch 3 STAGED (disclose): quick-actions, column-layout and shortcuts open
+ * Settings mid-take and cut the navigation out; templates' template is saved
+ * through the settings store; tags' reader button is added through Settings >
+ * Quick actions off camera and moved first in the list through the store;
+ * shortcuts presses the keys as KeyboardEvents (no on-screen key display);
+ * tagging-rules makes its rule off camera and cuts the wait for the verdict.
  *
  * Batch 2 STAGED (disclose): chat-view switches Mail view to Chat through the
  * settings store before the take; scheduled-send's reply is typed and its
@@ -49,12 +59,14 @@
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
+import { execFileSync } from 'node:child_process';
 import { ImapFlow } from 'imapflow';
 import { Take, pointer, OUT_DIR } from '../lib/footage.js';
 import {
   L, SEL, probe, quiet, clickSel, bootToInbox, resetView, beforeTake,
   waitPage, since, openWorkInbox, dismissBulkBubble, setSetting,
 } from '../lib/scene.js';
+import { closeSettings } from '../../../tests/e2e/helpers.js';
 import { footageMarkers } from '../lib/mailbox.js';
 import { APP_LOCALE } from '../lib/locale.js';
 
@@ -65,6 +77,7 @@ const MARK = footageMarkers(APP_LOCALE);
 const facts = { locale: APP_LOCALE, markers: MARK };
 
 const ASPECT = 960 / 660;
+const CLOSE_SETTINGS = `[data-testid="settings-page"] button[aria-label="${L('common.close')}"]`;
 const settingsOpen = () => !!document.querySelector('[data-testid="settings-page"]')?.offsetHeight;
 const bubbleText = () => {
   for (const el of document.querySelectorAll('.fixed.bottom-4.right-4')) {
@@ -1649,71 +1662,6 @@ describe('footage: website feature clips', function () {
     }
   });
 
-  // 19. Quick actions: pick a preset for the reader's toolbar; the toolbar follows.
-  it('quick-actions', async function () {
-    const BAR = '.email-action-bar';
-    const PRESET = '.quick-actions-presets .choice-card-button';
-    const CLOSE = `[data-testid="settings-page"] button[aria-label="${L('common.close')}"]`;
-    const barText = () => (document.querySelector('.email-action-bar')?.innerText || '').replace(/\s+/g, ' ').trim();
-    await shoot(this, 'quick-actions', async (take, scan) => {
-      const presets = await boxOf('.quick-actions-presets');
-      const list = await boxOf('.quick-actions-entry-list');
-      const cropSettings = await fitCrop(union(presets, list && { ...list, h: Math.min(list.h, 300) }), { minW: 760 });
-      await scan.at(take, 'settings', cropSettings);
-      await take.hold(800);
-      await take.click(PRESET, 'preset-outlook', { text: L('quickActions.preset.outlook'), dur: 500 });
-      const tPreset = take.events.at(-1).t;
-      await take.hold(1300);
-      facts.quickActionsEntries = await browser.execute(() => [...document.querySelectorAll('.quick-actions-entry-list .quick-actions-entry-name')].map((e) => (e.textContent || '').trim()));
-      await take.click(CLOSE, 'close-settings', { dur: 450 });
-      const tClose = take.events.at(-1).t;
-      await take.waitFor(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, 'settings closed', 8000);
-      await take.hold(300);
-      facts.quickActionsBarAfter = await browser.execute(barText);
-      const bar = await boxOf(BAR);
-      const head = await boxOf('[data-testid="sender-header"]');
-      const cropBar = await fitCrop(union(bar, head), { minW: 760 });
-      await scan.at(take, 'toolbar', cropBar);
-      await take.hold(2200);
-      const end = take.t(Date.now());
-      console.log(`[footage] quick-actions ${JSON.stringify({ before: facts.quickActionsBarBefore, after: facts.quickActionsBarAfter, entries: facts.quickActionsEntries })}`);
-      if (facts.quickActionsBarAfter === facts.quickActionsBarBefore) throw new Error('the reader toolbar did not change with the preset');
-      return {
-        crop: cropSettings,
-        segments: [
-          { t0: Math.max(0.2, tPreset - 1.0), t1: tClose + 0.03, crop: cropSettings, label: 'preset' },
-          { t0: tClose + 0.35, t1: end, crop: cropBar, label: 'toolbar' },
-        ],
-        boxes: { presets, list, bar },
-      };
-    }, {
-      prepare: async () => {
-        // A message open behind Settings, so closing it shows the reader's toolbar.
-        if (!(await tagRow('Priya Raines', 'qa-row'))) throw new Error('no row from Priya Raines on screen');
-        await clickSel('[data-footage-target="qa-row"]');
-        await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, BAR);
-        await browser.pause(600);
-        facts.quickActionsBarBefore = await browser.execute(barText);
-        await settingsSetupTab(L('settings.appearance.appearance'), L('quickActions.title'));
-        await waitPage(() => !!document.querySelector('.quick-actions-settings')?.offsetHeight, { timeout: 8000 });
-        await markExact('.quick-actions-settings', '[role="tab"]', L('quickActions.surface.reader'), 'qa-surface');
-        await clickSel('[data-footage-target="qa-surface"]');
-        await browser.pause(700);
-        await browser.execute(() => document.activeElement?.blur?.());
-      },
-      allow: (o) => o.testid === 'settings-page' || (o.box[2] >= 900 && o.box[3] >= 500),
-    });
-    // Back to the app's own preset for the reader, off camera.
-    try {
-      await settingsSetupTab(L('settings.appearance.appearance'), L('quickActions.title'));
-      await markExact('.quick-actions-settings', '[role="tab"]', L('quickActions.surface.reader'), 'qa-surface');
-      await clickSel('[data-footage-target="qa-surface"]');
-      await browser.pause(500);
-      await clickSel(PRESET, L('quickActions.preset.mailvault'));
-      await browser.pause(500);
-    } catch (e) { facts.quickActionsResetError = e.message; }
-  });
-
   // 20. Manual backup: Back up all accounts, progress, done.
   it('manual-backup', async function () {
     const ALL_BTN = '[data-testid="backup-all-button"]';
@@ -1896,7 +1844,17 @@ describe('footage: website feature clips', function () {
     });
   });
 
-  // 23. Tagging rules: a rule in plain words; new mail arrives and is tagged.
+  // 23. Tagging rules: a rule in plain words; new mail arrives while another
+  // folder is open, and the Inbox shows it already tagged.
+  //
+  // Why not the Inbox itself (batch 2 tried it): a row's tags are fetched once,
+  // when it first renders (tagStore requestRowTags skips a key it holds, and an
+  // untagged answer is stored as []), and the Auto Tags worker emits no event
+  // when it assigns. A row on screen when the mail lands keeps its empty chip
+  // strip for the session. A row rendered after the verdict shows the tag, so
+  // the take watches the arrival from another folder, waits (cut) until the
+  // daemon holds the tag, then opens the Inbox. Nothing is set through a store
+  // or a daemon write: the reads below only decide when to press.
   it('tagging-rules', async function () {
     const CARD = '[data-testid="settings-auto-tags"]';
     const NAME = `${CARD} input[aria-label="${L('autoTag.name')}"]`;
@@ -1906,93 +1864,200 @@ describe('footage: website feature clips', function () {
     const TOGGLE = '[data-testid="auto-tag-allow-remote"]';
     const CONFIRM = '[data-testid="ai-preview-confirm"]';
     const SAVE = `${CARD} .settings-editor-actions.justify-end button`;
-    const SUBJECT = 'Invoice 2026-0471 for the October print run';
-    const RULE_WORDS = 'Bank statements and invoices I need to pay or file';
+    const INBOX = '[data-testid="folder-row"][data-path="INBOX"]';
+    const TAG = process.env.FOOTAGE_TAG_NAME || 'Invoices';
+    const SUBJECT = process.env.FOOTAGE_TAG_SUBJECT || 'Invoice 2026-0471 for the October print run';
+    // Wordings tried off camera (auto_tags.preview, nothing written) before the
+    // rule is typed; the first one Apple Intelligence matches to the demo's
+    // invoice-like subjects (and not to the rest) is the one saved.
+    const WORDINGS = process.env.FOOTAGE_TAG_RULE ? [process.env.FOOTAGE_TAG_RULE]
+      : ['Invoices and bills', 'Invoices, bills and receipts from suppliers', 'Bank statements and invoices I need to pay or file'];
+    let RULE_WORDS = WORDINGS[0];
     const work = (browser.demoAccounts || [])[0];
+    const msgId = `web-tag-${Date.now()}@skewer.systems`;
+    let other = null;
     const deliver = async () => {
       const client = new ImapFlow({ host: '127.0.0.1', port: work.imapPort, secure: false, auth: { user: work.email, pass: work.password }, logger: false });
       await client.connect();
       try {
         const now = new Date();
+        // A real PDF attached (the model sees "Has attachments": batch 3's
+        // first retake sent the text alone and Apple Intelligence said no).
+        const pdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj '
+          + '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n').toString('base64');
+        const B = `mv-${now.getTime()}`;
         const raw = Buffer.from([
           'From: Skewer Print <billing@skewer.systems>', `To: ${work.name || 'Rowan Marsh'} <${work.email}>`, `Subject: ${SUBJECT}`,
-          `Date: ${now.toUTCString().replace('GMT', '+0000')}`, `Message-ID: <web-tag-${now.getTime()}@skewer.systems>`, 'MIME-Version: 1.0',
+          `Date: ${now.toUTCString().replace('GMT', '+0000')}`, `Message-ID: <${msgId}>`, 'MIME-Version: 1.0',
+          `Content-Type: multipart/mixed; boundary="${B}"`, '', `--${B}`,
           'Content-Type: text/plain; charset=utf-8', '', 'Hi Rowan,', '', 'Attached is the invoice for the October print run: 2,400 box sleeves.',
-          'Payment is due in 14 days.', '', 'Skewer Print', '',
+          'Payment is due in 14 days.', '', 'Skewer Print', '', `--${B}`,
+          'Content-Type: application/pdf; name="Invoice-2026-0471.pdf"', 'Content-Disposition: attachment; filename="Invoice-2026-0471.pdf"',
+          'Content-Transfer-Encoding: base64', '', ...pdf.match(/.{1,76}/g), `--${B}--`, '',
         ].join('\r\n'));
         return await client.append('INBOX', raw, [], now);
       } finally { await client.logout(); }
     };
+    // Read-only looks at the daemon's own files (sqlite3 -readonly), for the report.
+    const sql = (file, q) => {
+      try {
+        const db = execFileSync('/usr/bin/find', [browser.footageDataDir || process.env.FOOTAGE_DATA_DIR, '-name', file, '-not', '-path', '*/snapshots/*'], { encoding: 'utf8' }).split('\n').filter(Boolean)[0];
+        if (!db) return { error: `no ${file}` };
+        return { db, out: execFileSync('/usr/bin/sqlite3', ['-readonly', '-json', db, q], { encoding: 'utf8', timeout: 10000 }).trim() };
+      } catch (e) { return { error: String(e?.message || e).slice(0, 300) }; }
+    };
+    const daemonTags = async (uid) => {
+      const r = await rpc('tags.for_messages', { items: [{ accountId: work.id, mailbox: 'INBOX', uid, messageId: `<${msgId}>` }] });
+      return r.ok?.tags?.[0] || [];
+    };
+    const diagnose = async (uid) => {
+      facts.tagDecisions = sql('app.db', 'SELECT rule_id, account_id, msg_key, matched, at FROM auto_tag_decisions');
+      facts.tagAssignments = sql('app.db', `SELECT * FROM tag_assignments WHERE msg_key = '${msgId}'`);
+      facts.tagHeader = sql('custody.db', `SELECT uid, sort_ms, json_extract(header_json, '$.date') AS date, json_extract(header_json, '$.internalDate') AS internal, json_extract(header_json, '$.messageId') AS mid FROM header_cache WHERE mailbox_path = 'INBOX' AND uid = ${Number(uid)}`);
+      const rules = (await rpc('auto_tags.list', {})).ok || [];
+      facts.tagRuleAtProbe = rules[0] ? { enabledAt: rules[0].enabledAt, provider: rules[0].provider, allowRemote: rules[0].allowRemote } : null;
+      if (rules[0]) {
+        await browser.setTimeout({ script: 300000 });
+        const pv = await rpc('auto_tags.preview', { accountId: work.id, provider: rules[0].provider || { type: 'appleFm' }, limit: 1, ruleId: rules[0].id });
+        facts.tagPreview = pv.error ? { error: pv.error } : (pv.ok?.candidates || []).map((c) => ({ subject: c.subject, matched: c.matched, confidence: c.confidence, refused: c.refused }));
+      }
+      console.log(`[footage] tagging-rules diagnosis ${JSON.stringify({ decisions: facts.tagDecisions, assignments: facts.tagAssignments, header: facts.tagHeader, rule: facts.tagRuleAtProbe, preview: facts.tagPreview })}`);
+    };
     await shoot(this, 'tagging-rules', async (take, scan) => {
-      const rows = await rowsBox(6);
-      const crop = await fitCrop(rows, { minW: 760, pad: 8 });
-      await take.hold(1200);
+      // 1. The rule, in Settings > Auto Tags: its name and its plain words. The
+      // line under them ("Keep in Inbox · Allow a remote AI provider") stays
+      // below the crop.
+      await settingsSetup(L('autoTag.tabLabel'), null);
+      await waitPage((s) => !!document.querySelector(s), { timeout: 15000 }, CARD);
+      await browser.pause(600);
+      // Measured once the dialog has stopped scaling in (two equal reads).
+      const measure = () => browser.execute((c) => {
+        const row = [...document.querySelectorAll(`${c} .space-y-3 > div`)].find((d) => d.querySelector('button[role="switch"]'));
+        const instr = row?.querySelector('.truncate + .truncate, .text-xs.truncate');
+        const r = row?.getBoundingClientRect(), i = instr?.getBoundingClientRect();
+        return r && i ? { x: r.x, y: r.y, w: r.width, h: r.height, instrBottom: i.bottom, instr: (instr.textContent || '').slice(0, 80) } : null;
+      }, CARD);
+      let ruleBox = await measure();
+      for (let k = 0; k < 20; k++) {
+        await browser.pause(250);
+        const again = await measure();
+        if (ruleBox && again && JSON.stringify(again) === JSON.stringify(ruleBox)) break;
+        ruleBox = again;
+      }
+      if (!ruleBox) throw new Error('no rule row in Auto Tags');
+      facts.tagRuleBox = ruleBox;
+      // The row sits high in Settings: the crop runs from the top of the page
+      // down to the instruction line, so it is as tall as that and no taller.
+      const H1 = Math.min(480, ruleBox.instrBottom + 2 - 4), W1 = H1 * ASPECT;
+      const cropRule = { x: Math.round(ruleBox.x - 16), y: Math.round(ruleBox.instrBottom + 2 - H1), w: Math.round(W1), h: Math.round(H1) };
+      if (cropRule.y < 4 || W1 < 400) throw new Error(`rule crop does not fit: ${JSON.stringify(cropRule)}`);
+      // The "Allow a remote AI provider" line must sit wholly below the crop.
+      const remoteTop = await browser.execute((c, t) => {
+        const el = [...document.querySelectorAll(`${c} .space-y-3 div`)].find((d) => d.children.length === 0 && (d.textContent || '').includes(t));
+        return el ? el.getBoundingClientRect().top : null;
+      }, CARD, L('autoTag.allowRemote'));
+      facts.tagRemoteLineTop = remoteTop;
+      if (remoteTop != null && remoteTop < cropRule.y + cropRule.h) throw new Error(`remote-provider line inside the rule crop (${remoteTop} < ${cropRule.y + cropRule.h})`);
+      await scan.at(take, 'rule', cropRule);
+      const tRule0 = take.t(Date.now());
+      await take.hold(1900);
+      const tRule1 = take.t(Date.now());
+      // 2. New mail arrives while another folder is open (cut: delivery and the verdict).
       const t0 = Date.now();
-      take.note('delivered', Number(take.t(t0).toFixed(3)));
       const appended = await deliver();
-      facts.tagAppend = { uid: Number(appended?.uid ?? -1) };
-      await take.waitFor((s) => [...document.querySelectorAll('[data-testid="email-row"]')].some((r) => (r.innerText || '').includes(s)), 'new row', 15000, SUBJECT);
-      const tRow = take.t(Date.now());
-      facts.tagRowMs = Date.now() - t0;
-      // The tag chip on that row (TagChips), as the worker decides.
-      const chipped = await waitPage((s, n) => {
-        const row = [...document.querySelectorAll('[data-testid="email-row"]')].find((r) => (r.innerText || '').includes(s));
+      const uid = Number(appended?.uid ?? -1);
+      facts.tagAppend = { uid, msgId };
+      let tags = [];
+      const w0 = Date.now();
+      while (Date.now() - w0 < 120000) {
+        tags = await daemonTags(uid);
+        if (tags.length) break;
+        await browser.pause(500);
+      }
+      facts.tagAssignedMs = tags.length ? Date.now() - t0 : null;
+      if (!tags.length) {
+        await diagnose(uid);
+        throw new Error(`the daemon never tagged the arriving invoice (uid ${uid}) in ${since(w0)} s`);
+      }
+      await clickSel(CLOSE_SETTINGS);
+      await waitPage(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, { timeout: 8000 });
+      await browser.execute(() => document.activeElement?.blur?.());
+      await browser.pause(600);
+      // 3. The Inbox opens: the invoice is there, tagged.
+      const inboxRow = await boxOf(INBOX);
+      const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      const W2 = 760, H2 = W2 / ASPECT;
+      const cropSide = { x: 4, y: Math.round(Math.max(4, Math.min(inboxRow.y - H2 / 2, vp.h - 26 - H2))), w: W2, h: Math.round(H2) };
+      await scan.at(take, 'other-folder', cropSide);
+      const tSide0 = take.t(Date.now());
+      await take.hold(500);
+      await take.click(INBOX, 'open-inbox', { dur: 600 });
+      const tOpen = take.events.at(-1).t;
+      const tagged = (s, n) => {
+        const row = [...document.querySelectorAll('[data-testid="email-row"]')].find((r) => r.getBoundingClientRect().height > 0 && (r.innerText || '').includes(s));
         return !!row && (row.innerText || '').includes(n);
-      }, { timeout: 30000, interval: 150 }, SUBJECT, 'Invoices');
-      facts.tagChipMs = Date.now() - t0;
+      };
+      const shown = await waitPage(tagged, { timeout: 10000, interval: 100 }, SUBJECT, TAG);
       facts.tagRow = await browser.execute((s) => ([...document.querySelectorAll('[data-testid="email-row"]')].find((r) => (r.innerText || '').includes(s))?.innerText || '').replace(/\s+/g, ' '), SUBJECT);
-      // What the daemon holds for that message, whatever the row shows.
-      facts.tagDaemon = await browser.execute((s) => {
-        const st = window.__MAIL_STORE__?.getState?.() || {};
-        const e = [...(st.sortedEmails || []), ...(st.emails || [])].find((x) => (x.subject || '').includes(s));
-        return e ? { uid: e.uid, messageId: e.messageId || null, accountId: st.activeAccountId } : null;
-      }, SUBJECT);
-      if (facts.tagDaemon) {
-        const item = { accountId: facts.tagDaemon.accountId, mailbox: 'INBOX', uid: facts.tagDaemon.uid, ...(facts.tagDaemon.messageId ? { messageId: facts.tagDaemon.messageId } : {}) };
-        facts.tagDaemonTags = await rpc('tags.for_messages', { items: [item] });
-      }
-      facts.tagRules2 = await rpc('auto_tags.list', {});
-      // Off camera: the same rule's verdict on that invoice through Preview.
-      const rule = (facts.tagRules2.ok || [])[0];
-      if (rule && facts.tagDaemon) {
-        // A preview asks the model once per recent message: give the call time (as ph-ai.js).
-        await browser.setTimeout({ script: 900000 });
-        const pv = await rpc('auto_tags.preview', { accountId: facts.tagDaemon.accountId, provider: { type: 'appleFm' },
-          rule: { name: rule.name, instruction: rule.instruction, constraints: {}, tagId: 'probe', inboxAction: 'keep', minConfidence: rule.minConfidence, allowRemote: true, enabled: false } });
-        facts.tagPreview = pv.error ? { error: pv.error } : (pv.ok?.candidates || []).filter((c) => (c.subject || '').includes('2026-0471'))
-          .map((c) => ({ subject: c.subject, matched: c.matched, confidence: c.confidence, refused: c.refused }));
-        facts.tagPreviewCount = pv.ok?.candidates?.length ?? null;
-      }
-      console.log(`[footage] tagging-rules ${JSON.stringify({ chipped, rowMs: facts.tagRowMs, chipMs: facts.tagChipMs, row: facts.tagRow, daemon: facts.tagDaemon, daemonTags: facts.tagDaemonTags, preview: facts.tagPreview, previewCount: facts.tagPreviewCount })}`);
-      if (!chipped) throw new Error(`the arriving invoice never showed its tag (row after ${facts.tagRowMs} ms: ${facts.tagRow})`);
-      const tChip = take.t(Date.now());
-      await scan.at(take, 'tagged', crop);
-      await take.hold(2400);
+      if (!shown) { await diagnose(uid); throw new Error(`Inbox opened but the row shows no ${TAG} chip: ${facts.tagRow}`); }
+      const tShown = take.t(Date.now());
+      const cropList = await listCrop();
+      await scan.at(take, 'tagged', cropList);
+      await take.hold(2600);
       const end = take.t(Date.now());
-      return { crop, segments: tChip - tRow > 2.5
-        ? [{ t0: Math.max(0.2, tRow - 1.5), t1: tRow + 1.0, label: 'arrives' }, { t0: tChip - 0.5, t1: end, label: 'tagged' }]
-        : [{ t0: Math.max(0.2, tRow - 1.5), t1: end }], boxes: { rows } };
+      await diagnose(uid);
+      console.log(`[footage] tagging-rules ${JSON.stringify({ assignedMs: facts.tagAssignedMs, shownAfterOpen: Number((tShown - tOpen).toFixed(2)), row: facts.tagRow, other, words: facts.tagRuleWords })}`);
+      return {
+        crop: cropRule,
+        segments: [
+          { t0: tRule0 + 0.1, t1: tRule1, crop: cropRule, label: 'rule' },
+          { t0: Math.max(tSide0, tOpen - 0.7), t1: tOpen + 0.12, crop: cropSide, label: 'open-inbox' },
+          { t0: Math.max(tOpen + 0.13, tShown), t1: end, crop: cropList, label: 'tagged' },
+        ],
+        poster: 3.6,
+        boxes: { ruleBox, inboxRow },
+      };
     }, {
       prepare: async () => {
         // STAGED (disclose): the rule is made off camera through Settings >
-        // Auto Tags (name, new tag, the on-device model allowed, the rule in
-        // plain words, Enabled, Save); the take is only the arrival.
+        // Auto Tags (name, new tag, Apple Intelligence through the "remote
+        // provider" switch, the rule in plain words, Enabled, Save); then
+        // another folder is opened. The take is the arrival and the Inbox.
         await aiOn();
         await settingsSetup(L('autoTag.tabLabel'), null);
         await waitPage((s) => !!document.querySelector(s), { timeout: 15000 }, CARD);
         await clickSel(`${CARD} button`, L('autoTag.newRule'));
         await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 8000 }, NAME);
         const prep = new Take('tagging-rules-prep');
-        await prep.type(NAME, 'Invoices', 'prep', { base: 30, jitter: 5 });
-        await prep.type(NEWTAG, 'Invoices', 'prep', { base: 30, jitter: 5 });
+        await prep.type(NAME, TAG, 'prep', { base: 30, jitter: 5 });
+        await prep.type(NEWTAG, TAG, 'prep', { base: 30, jitter: 5 });
         await clickSel(`${CARD} button`, L('autoTag.newTag'));
         if (!(await waitPage((s) => document.querySelector(s)?.value === '', { timeout: 8000 }, NEWTAG))) throw new Error('tag not created');
         await clickSel(SUMMARY);
         await browser.pause(400);
+        // Without it the rule saves provider null and the worker asks the
+        // local GGUF model, which the mini does not have (AutoTagSettings.jsx:68).
         await clickSel(TOGGLE);
         if (await waitPage((c) => !!document.querySelector(c)?.offsetHeight, { timeout: 8000 }, CONFIRM)) await clickSel(CONFIRM);
         await browser.pause(600);
-        // The wording the PH preflight scored best for this model (ph-ai.js c05).
+        // Off camera: which wording the model reads as meant (preview over the
+        // newest cached headers; it writes nothing).
+        await browser.setTimeout({ script: 600000 });
+        facts.tagWordings = [];
+        for (const words of WORDINGS) {
+          const pv = await rpc('auto_tags.preview', { accountId: work.id, provider: { type: 'appleFm' }, limit: 30,
+            rule: { name: TAG, instruction: words, constraints: {}, tagId: 'probe', inboxAction: 'keep', minConfidence: 0.7, allowRemote: true, enabled: false } });
+          const rows = pv.ok?.candidates || [];
+          const bill = (c) => /invoice|bill|receipt|statement|payment/i.test(c.subject || '');
+          const r = { words, error: pv.error || null, n: rows.length,
+            hit: rows.filter((c) => bill(c) && c.matched).length, miss: rows.filter((c) => bill(c) && !c.matched).length,
+            wrong: rows.filter((c) => !bill(c) && c.matched).length, refused: rows.filter((c) => c.refused).length,
+            billSubjects: rows.filter(bill).map((c) => `${c.matched ? '+' : '-'} ${c.subject}`).slice(0, 6) };
+          facts.tagWordings.push(r);
+          console.log(`[setup] tagging wording ${JSON.stringify(r)}`);
+          if (r.hit > 0 && r.wrong <= 1) { RULE_WORDS = words; break; }
+        }
+        facts.tagRuleWords = RULE_WORDS;
         await prep.type(INSTR, RULE_WORDS, 'prep', { base: 30, jitter: 5 });
         if ((await browser.execute(() => document.querySelector('[data-testid="auto-tag-enabled-editor"]')?.getAttribute('aria-checked'))) !== 'true') {
           await clickSel('[data-testid="auto-tag-enabled-editor"]');
@@ -2003,9 +2068,620 @@ describe('footage: website feature clips', function () {
         facts.tagRules = await rpc('auto_tags.list', {});
         console.log(`[setup] tagging rule: ${JSON.stringify(facts.tagRules).slice(0, 600)}`);
         await resetView();
-        // resetView re-opened the INBOX: give the IDLE watcher time to re-arm.
+        await widenList();
+        // Another folder of the work account (Sent when there is one).
+        other = await browser.execute(() => {
+          const rows = [...document.querySelectorAll('[data-testid="folder-row"]')].filter((r) => r.offsetHeight > 0 && r.dataset.path !== 'INBOX');
+          const pick = rows.find((r) => /sent/i.test(r.dataset.path)) || rows[0];
+          if (!pick) return null;
+          pick.setAttribute('data-footage-target', 'tag-other');
+          return pick.dataset.path;
+        });
+        if (!other) throw new Error('no other folder to wait in');
+        await clickSel('[data-footage-target="tag-other"]');
+        await waitPage((p) => window.__MAIL_STORE__?.getState?.().activeMailbox === p, { timeout: 10000 }, other);
+        // The IDLE watcher re-arms on its own; give it time, as batch 2 did.
         await browser.pause(5000);
+        await browser.execute(() => document.activeElement?.blur?.());
       },
     });
+    await restoreList();
+  });
+
+  // ── Batch 3, boot H (the demo mailbox alone; "Change almost anything" and small things) ──
+
+  // List takes: the list pane widened off camera (a remembered pane size, as a
+  // drag of the divider would leave it), so a 760 pt crop holds the list and
+  // nothing of the sidebar or the empty reader; the crop starts at the list's
+  // toolbar, below the header whose date range ends today.
+  let savedListWidth = null;
+  const widenList = async () => {
+    savedListWidth = await browser.execute(() => window.__SETTINGS_STORE__.getState().listPaneSize);
+    await browser.execute(() => window.__SETTINGS_STORE__.getState().setListPaneSize(600));
+    await browser.pause(700);
+  };
+  const restoreList = async () => {
+    if (savedListWidth != null) await browser.execute((w) => window.__SETTINGS_STORE__.getState().setListPaneSize(w), savedListWidth);
+    await browser.pause(500);
+  };
+  const listCrop = async () => {
+    const tb = await boxOf('.mail-list-toolbar');
+    const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+    // The pane's own width (the list is at most 600 pt wide): no reader at the right edge.
+    const W = Math.round(Math.min(760, Math.max(560, tb.w + 14))), H = W / ASPECT;
+    return { x: Math.round(Math.max(4, Math.min(tb.x - 7, vp.w - 4 - W))), y: Math.round(tb.y - 6), w: W, h: Math.round(H) };
+  };
+
+  // 24. Quick actions (retake): the reader's toolbar, the Gmail action set, the toolbar again.
+  // The same tight crop on the toolbar before and after, the preset press in between.
+  it('quick-actions', async function () {
+    const BAR = '.email-action-bar';
+    const PRESET = '.quick-actions-presets .choice-card-button';
+    const barText = () => [...document.querySelectorAll('.email-action-bar [data-quick-action]')]
+      .filter((b) => b.offsetHeight > 0).map((b) => b.dataset.quickAction).join(',');
+    const openQuickActions = async () => {
+      await settingsSetupTab(L('settings.appearance.appearance'), L('quickActions.title'));
+      await waitPage(() => !!document.querySelector('.quick-actions-settings')?.offsetHeight, { timeout: 8000 });
+      await markExact('.quick-actions-settings', '[role="tab"]', L('quickActions.surface.reader'), 'qa-surface');
+      await clickSel('[data-footage-target="qa-surface"]');
+      await browser.pause(700);
+      await browser.execute(() => document.activeElement?.blur?.());
+    };
+    await shoot(this, 'quick-actions', async (take, scan) => {
+      const bar = await boxOf(BAR);
+      const head = await boxOf('[data-testid="sender-header"]');
+      const W = Math.min(760, Math.max(560, bar.w * 0.62)), H = W / ASPECT;
+      const vpq = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      const cropBar = { x: Math.round(Math.min(bar.x - 12, vpq.w - 4 - W)), y: Math.round(Math.max(4, bar.y - 14)), w: Math.round(W), h: Math.round(H) };
+      await scan.at(take, 'before', cropBar);
+      await take.hold(1700);
+      const tBefore = take.t(Date.now());
+      // Into Settings (cut from the clip).
+      await openQuickActions();
+      const presets = await boxOf('.quick-actions-presets');
+      const cropSettings = await fitCrop(presets, { minW: 640, pad: 16 });
+      await scan.at(take, 'settings', cropSettings);
+      await take.hold(500);
+      const tSettings = take.t(Date.now());
+      await take.click(PRESET, 'preset-gmail', { text: L('quickActions.preset.gmail'), dur: 500 });
+      const tPreset = take.events.at(-1).t;
+      await take.hold(1000);
+      await take.click(CLOSE_SETTINGS, 'close-settings', { dur: 450 });
+      const tClose = take.events.at(-1).t;
+      await take.waitFor(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, 'settings closed', 8000);
+      await take.hold(300);
+      facts.quickActionsBarAfter = await browser.execute(barText);
+      await scan.at(take, 'after', cropBar);
+      await take.hold(2100);
+      const end = take.t(Date.now());
+      console.log(`[footage] quick-actions ${JSON.stringify({ before: facts.quickActionsBarBefore, after: facts.quickActionsBarAfter })}`);
+      if (facts.quickActionsBarAfter === facts.quickActionsBarBefore) throw new Error('the reader toolbar did not change with the preset');
+      return {
+        crop: cropBar,
+        segments: [
+          { t0: 0.3, t1: tBefore, crop: cropBar, label: 'before' },
+          { t0: Math.max(tSettings, tPreset - 0.8), t1: tClose + 0.03, crop: cropSettings, label: 'preset' },
+          { t0: tClose + 0.35, t1: end, crop: cropBar, label: 'after' },
+        ],
+        poster: 4.2,
+        boxes: { bar, head, presets },
+      };
+    }, {
+      prepare: async () => {
+        if (!(await tagRow('Priya Raines', 'qa-row'))) throw new Error('no row from Priya Raines on screen');
+        await clickSel('[data-footage-target="qa-row"]');
+        await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, BAR);
+        await browser.pause(800);
+        await browser.execute(() => document.activeElement?.blur?.());
+        facts.quickActionsBarBefore = await browser.execute(barText);
+      },
+    });
+    try {
+      await openQuickActions();
+      await clickSel(PRESET, L('quickActions.preset.mailvault'));
+      await browser.pause(500);
+    } catch (e) { facts.quickActionsResetError = e.message; }
+  });
+
+  // 25. Explorer: the list switches to Explorer, the mail regroups by month; one group opens.
+  it('explorer-view', async function () {
+    const EXP = '[data-testid="explorer-view"]';
+    await shoot(this, 'explorer-view', async (take, scan) => {
+      const bar = await boxOf('.mail-list-toolbar');
+      const rows = await rowsBox(8);
+      const crop = await listCrop();
+      await scan.at(take, 'list', crop);
+      await take.hold(900);
+      await take.click(SEL.explorer, 'explorer', { dur: 550 });
+      const tExp = take.events.at(-1).t;
+      await take.waitFor((e) => !!document.querySelector(`${e} [data-testid="explorer-group-row"]`)?.offsetHeight, 'groups', 8000, EXP);
+      await take.hold(400);
+      facts.explorerGroups = await browser.execute(() => [...document.querySelectorAll('[data-testid="explorer-group-row"]')].slice(0, 8)
+        .map((r) => (r.innerText || '').replace(/\s+/g, ' ').slice(0, 60)));
+      await scan.at(take, 'groups', crop);
+      await take.hold(1300);
+      // The first group with more than one message, opened.
+      const opened = await browser.execute(() => {
+        const rows = [...document.querySelectorAll('[data-testid="explorer-group-row"]')].filter((r) => r.offsetHeight > 0);
+        const pick = rows.find((r) => /\b([2-9]|\d\d+)\b/.test(r.innerText || '')) || rows[0];
+        const btn = pick?.querySelector('[data-testid="explorer-group-open"]');
+        if (!btn) return null;
+        btn.setAttribute('data-footage-target', 'exp-group');
+        return (pick.innerText || '').replace(/\s+/g, ' ').slice(0, 60);
+      });
+      if (!opened) throw new Error('no explorer group to open');
+      facts.explorerOpened = opened;
+      await take.click('[data-footage-target="exp-group"]', 'open-group', { dur: 500 });
+      await take.waitFor(() => !!document.querySelector('[data-testid="explorer-back"]')?.offsetHeight, 'inside group', 8000);
+      await take.hold(400);
+      await scan.at(take, 'inside', crop);
+      await take.hold(1700);
+      const end = take.t(Date.now());
+      console.log(`[footage] explorer-view ${JSON.stringify({ groups: facts.explorerGroups, opened })}`);
+      return { crop, segments: [{ t0: Math.max(0.2, tExp - 1.0), t1: end }], boxes: { bar, rows } };
+    }, { prepare: widenList });
+    await browser.execute((s) => document.querySelector(s)?.click(), SEL.list);
+    await restoreList();
+    await browser.pause(800);
+  });
+
+  // 26. Column layout: three columns, Settings > Layout > "Below the list", the
+  // reader moves under the list. Whole-window crops either side of the press.
+  it('column-layout', async function () {
+    const SEG = '[data-testid="appearance-layout-section"] .settings-segments button';
+    await shoot(this, 'column-layout', async (take, scan) => {
+      const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      // The whole window from the list toolbar down (the header above carries today's date).
+      const tb = await boxOf('.mail-list-toolbar');
+      const top = Math.round(tb.y - 6), hAll = vp.h - 4 - top;
+      const cropAll = { x: 4, y: top, w: Math.round(hAll * ASPECT), h: Math.round(hAll) };
+      await scan.at(take, 'three', cropAll);
+      await take.hold(1500);
+      const tBefore = take.t(Date.now());
+      await settingsSetupTab(L('settings.appearance.appearance'), L('settings.appearance.layout'));
+      await waitPage((s) => !!document.querySelector(s), { timeout: 8000 }, SEG);
+      await browser.execute((s, t) => [...document.querySelectorAll(s)].find((b) => (b.textContent || '').includes(t))
+        ?.closest('.settings-row, [class*="setting-row"], div')?.scrollIntoView({ block: 'center' }), SEG, L('workspace.belowList'));
+      await browser.pause(700);
+      const row = await browser.execute((s, t) => {
+        const g = document.querySelector(s)?.closest('[role="group"]');
+        // The row's own label (the Mail view example above also says "Reading pane").
+        const gr = g?.getBoundingClientRect();
+        const lab = gr && [...document.querySelectorAll('[data-testid="appearance-layout-section"] *')]
+          .filter((e) => e.children.length === 0 && (e.textContent || '').trim() === t)
+          .sort((a, b) => Math.abs(a.getBoundingClientRect().y - gr.y) - Math.abs(b.getBoundingClientRect().y - gr.y))[0];
+        const rs = [g, lab].filter(Boolean).map((e) => e.getBoundingClientRect());
+        // and the row's example below the buttons (it redraws with the choice)
+        rs.push({ x: gr.x, y: gr.y, right: gr.right, bottom: gr.bottom + 150 });
+        if (!rs.length) return null;
+        const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y));
+        const x1 = Math.max(...rs.map((r) => r.right)), y1 = Math.max(...rs.map((r) => r.bottom));
+        return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      }, SEG, L('workspace.readingPane'));
+      const cropSet = await fitCrop(row, { minW: 640, pad: 24 });
+      await scan.at(take, 'setting', cropSet);
+      await take.hold(400);
+      const tSet = take.t(Date.now());
+      await take.click(SEG, 'below-list', { text: L('workspace.belowList'), dur: 500 });
+      const tPress = take.events.at(-1).t;
+      await take.waitFor(() => window.__SETTINGS_STORE__?.getState?.().layoutMode === 'two-column', 'two-column', 4000);
+      await take.hold(900);
+      await take.click(CLOSE_SETTINGS, 'close-settings', { dur: 450 });
+      const tClose = take.events.at(-1).t;
+      await take.waitFor(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, 'settings closed', 8000);
+      await take.hold(300);
+      facts.columnDivider = await browser.execute(() => document.querySelector('.mail-pane-divider')?.getAttribute('aria-orientation'));
+      await scan.at(take, 'two', cropAll);
+      await take.hold(2000);
+      const end = take.t(Date.now());
+      return {
+        crop: cropAll,
+        segments: [
+          { t0: 0.3, t1: tBefore, crop: cropAll, label: 'three' },
+          { t0: Math.max(tSet, tPress - 0.8), t1: tClose + 0.03, crop: cropSet, label: 'setting' },
+          { t0: tClose + 0.35, t1: end, crop: cropAll, label: 'two' },
+        ],
+        poster: 4.0,
+        boxes: { row },
+      };
+    }, {
+      prepare: async () => {
+        await browser.execute(() => window.__SETTINGS_STORE__.getState().setLayoutMode('three-column'));
+        if (!(await tagRow('Priya Raines', 'cl-row'))) throw new Error('no row from Priya Raines on screen');
+        await clickSel('[data-footage-target="cl-row"]');
+        await waitPage(() => !!document.querySelector('.email-action-bar')?.offsetHeight, { timeout: 10000 });
+        await browser.pause(800);
+        await browser.execute(() => document.activeElement?.blur?.());
+      },
+    });
+    await browser.execute(() => window.__SETTINGS_STORE__.getState().setLayoutMode('three-column'));
+    await browser.pause(800);
+  });
+
+  // 27. Shortcuts: Star moves from S to L in Settings, then L stars the open message.
+  // The chip's recording state ("Press key" with a literal … in en.json) is cut.
+  it('shortcuts', async function () {
+    const KEY = process.env.FOOTAGE_SHORTCUT_KEY || 'l';
+    const label = L('settings.shortcuts.toggleStar');
+    const CHIP = `[data-testid="settings-shortcuts"] button[aria-label="${label}: s"]`;
+    const STAR = '[data-footage-target="sc-row"] [data-testid="star-toggle"]';
+    const starred = () => browser.execute((s) => document.querySelector(s)?.getAttribute('aria-pressed'), STAR);
+    await shoot(this, 'shortcuts', async (take, scan) => {
+      const chipRow = await browser.execute((s) => {
+        const r = document.querySelector(s)?.parentElement?.parentElement?.getBoundingClientRect();
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      }, CHIP);
+      const cropChip = await fitCrop(chipRow, { minW: 560, pad: 20 });
+      await scan.at(take, 'chip', cropChip);
+      await take.hold(800);
+      await take.click(CHIP, 'rebind-star', { dur: 550 });
+      const tChip = take.events.at(-1).t;
+      await browser.pause(250);
+      await browser.execute((k) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })), KEY);
+      take.note('key-rebind', Number(take.t(Date.now()).toFixed(3)));
+      await take.waitFor((k) => window.__SETTINGS_STORE__?.getState?.().keyboardShortcuts?.toggleStar === k, 'rebound', 4000, KEY);
+      await take.waitFor((t, k) => [...document.querySelectorAll('[data-testid="settings-shortcuts"] button')]
+        .some((b) => (b.getAttribute('aria-label') || '') === `${t}: ${k}` && !/\\u|…/.test(b.textContent || '')), 'chip shows key', 4000, label, KEY);
+      await take.hold(150);
+      const tSaved = take.t(Date.now());
+      facts.shortcutChip = await browser.execute((t, k) => [...document.querySelectorAll('[data-testid="settings-shortcuts"] button')]
+        .find((b) => (b.getAttribute('aria-label') || '') === `${t}: ${k}`)?.textContent, label, KEY);
+      await scan.at(take, 'saved', cropChip);
+      await take.hold(1100);
+      await take.click(CLOSE_SETTINGS, 'close-settings', { dur: 450 });
+      const tClose = take.events.at(-1).t;
+      await take.waitFor(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, 'settings closed', 8000);
+      const row = await boxOf('[data-footage-target="sc-row"]');
+      const head = await boxOf('[data-testid="sender-header"]');
+      const cropRow = await listCrop();
+      await take.hold(900);
+      const before = await starred();
+      await browser.execute((k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })), KEY);
+      const tKey = take.t(Date.now());
+      take.note('key-star', Number(tKey.toFixed(3)));
+      await take.waitFor((s, b) => document.querySelector(s)?.getAttribute('aria-pressed') !== b, 'starred', 4000, STAR, before);
+      facts.shortcutStar = { before, after: await starred() };
+      await scan.at(take, 'starred', cropRow);
+      await take.hold(2000);
+      const end = take.t(Date.now());
+      console.log(`[footage] shortcuts ${JSON.stringify({ chip: facts.shortcutChip, star: facts.shortcutStar })}`);
+      return {
+        crop: cropChip,
+        segments: [
+          { t0: Math.max(0.2, tChip - 1.0), t1: tChip, crop: cropChip, label: 'chip' },
+          { t0: tSaved, t1: tClose + 0.03, crop: cropChip, label: 'saved' },
+          { t0: tClose + 0.4, t1: end, crop: cropRow, label: 'star' },
+        ],
+        poster: 4.0,
+        boxes: { chipRow, row, head },
+      };
+    }, {
+      prepare: async () => {
+        await widenList();
+        await browser.execute(() => window.__SETTINGS_STORE__.getState().setKeyboardShortcut('toggleStar', 's'));
+        // An unstarred message open in the reader.
+        const ok = await browser.execute(() => {
+          const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+            .find((r) => r.offsetHeight > 0 && r.querySelector('[data-testid="star-toggle"]')?.getAttribute('aria-pressed') === 'false' && (r.innerText || '').includes('Priya'))
+            || [...document.querySelectorAll('[data-testid="email-row"]')].find((r) => r.offsetHeight > 0 && r.querySelector('[data-testid="star-toggle"]')?.getAttribute('aria-pressed') === 'false');
+          if (!row) return false;
+          row.setAttribute('data-footage-target', 'sc-row');
+          return true;
+        });
+        if (!ok) throw new Error('no unstarred row with a star toggle');
+        await clickSel('[data-footage-target="sc-row"]');
+        await waitPage(() => !!document.querySelector('.email-action-bar')?.offsetHeight, { timeout: 10000 });
+        await browser.pause(600);
+        await settingsSetupTab(L('settings.navigation.mailPreferences'), L('settings.shortcuts.keyboardShortcuts'));
+        if (!(await waitPage((s) => !!document.querySelector(s), { timeout: 8000 }, CHIP))) throw new Error(`no chip ${CHIP}`);
+        await browser.execute((s) => document.querySelector(s)?.scrollIntoView({ block: 'center' }), CHIP);
+        await browser.pause(700);
+        await browser.execute(() => document.activeElement?.blur?.());
+      },
+    });
+    await browser.execute(() => window.__SETTINGS_STORE__.getState().setKeyboardShortcut('toggleStar', 's'));
+    if ((await starred()) === 'true') await browser.execute((s) => document.querySelector(s)?.click(), STAR);
+    await restoreList();
+  });
+
+  // 28. Notification rules: one account's folders opened, Archive added; another account off.
+  it('notification-rules', async function () {
+    const PAGE = '[data-testid="settings-notifications"]';
+    await shoot(this, 'notification-rules', async (take, scan) => {
+      const block = await browser.execute((p) => {
+        const list = document.querySelector(`${p} .space-y-1`);
+        const r = (list?.parentElement || list)?.getBoundingClientRect();
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      }, PAGE);
+      const W = 680, H = W / ASPECT;
+      const crop = { x: Math.round(block.x + block.w / 2 - W / 2), y: Math.round(block.y - 14), w: W, h: Math.round(H) };
+      await scan.at(take, 'before', crop);
+      await take.hold(800);
+      if (!(await browser.execute((p) => {
+        const btn = document.querySelector(`${p} button[title]`);
+        const all = [...document.querySelectorAll(`${p} .space-y-1 > div`)];
+        const chev = all[0]?.querySelector('button[title]');
+        if (!chev) return false;
+        chev.setAttribute('data-footage-target', 'nr-chevron');
+        return !!btn;
+      }, PAGE))) throw new Error('no Configure folders chevron');
+      await take.click('[data-footage-target="nr-chevron"]', 'configure-folders', { dur: 500 });
+      const tOpen = take.events.at(-1).t;
+      await take.waitFor((p) => !!document.querySelector(`${p} input[type="checkbox"]`)?.offsetHeight, 'folders', 4000, PAGE);
+      await take.hold(500);
+      if (!(await browser.execute((p) => {
+        const lab = [...document.querySelectorAll(`${p} .space-y-1 label`)].find((l) => (l.innerText || '').trim() === 'Archive');
+        if (!lab) return false;
+        lab.querySelector('input')?.setAttribute('data-footage-target', 'nr-archive');
+        return true;
+      }, PAGE))) throw new Error('no Archive folder checkbox');
+      await take.click('[data-footage-target="nr-archive"]', 'archive-folder', { dur: 500 });
+      await take.waitFor(() => !!document.querySelector('[data-footage-target="nr-archive"]')?.checked, 'archive checked', 3000);
+      await take.hold(700);
+      if (!(await browser.execute((p) => {
+        const cards = [...document.querySelectorAll(`${p} .space-y-1 > div`)].filter((c) => c.querySelector('button[role="switch"]'));
+        const sw = cards[Math.min(2, cards.length - 1)]?.querySelector('button[role="switch"]');
+        if (!sw || cards.length < 2) return false;
+        sw.setAttribute('data-footage-target', 'nr-toggle');
+        return true;
+      }, PAGE))) throw new Error('no second account toggle');
+      const TOG = '[data-footage-target="nr-toggle"]';
+      await take.click(TOG, 'account-off', { dur: 550 });
+      await take.waitFor((s) => document.querySelector(s)?.getAttribute('aria-checked') === 'false', 'account off', 3000, TOG);
+      await scan.at(take, 'after', crop);
+      await take.hold(1900);
+      const end = take.t(Date.now());
+      facts.notificationSettings = await browser.execute(() => JSON.stringify(window.__SETTINGS_STORE__.getState().notificationSettings?.accounts || {}).slice(0, 400));
+      return { crop, segments: [{ t0: Math.max(0.2, tOpen - 1.0), t1: end }], boxes: { block } };
+    }, {
+      prepare: async () => {
+        await browser.execute(() => window.__SETTINGS_STORE__.getState().setNotificationEnabled?.(true));
+        await settingsSetupTab(L('settings.navigation.mailPreferences'), L('settings.notifications.notifications'));
+        await waitPage((p) => !!document.querySelector(`${p} button[role="switch"]`), { timeout: 8000 }, PAGE);
+        await browser.execute((p) => document.querySelector(`${p} .space-y-1`)?.scrollIntoView({ block: 'center' }), PAGE);
+        await browser.pause(800);
+        await browser.execute(() => document.activeElement?.blur?.());
+      },
+      allow: (o) => o.testid === 'settings-page' || (o.box[2] >= 900 && o.box[3] >= 500),
+    });
+  });
+
+  // 29. Templates: in a new message, Templates, pick one, the text is in.
+  it('templates', async function () {
+    const NAME = 'Print quote';
+    const BODY = 'Thanks for the brief. For 2,400 box sleeves on 350 gsm board the price is 1,180 EUR, ready in eight working days.';
+    await shoot(this, 'templates', async (take, scan) => {
+      const compose = await boxOf(SEL.compose);
+      const crop = await fitCrop(compose, { minW: 760, pad: 8 });
+      await scan.at(take, 'empty', crop);
+      await take.hold(800);
+      await take.click('[data-testid="compose-templates-btn"]', 'templates', { dur: 550 });
+      const tBtn = take.events.at(-1).t;
+      await take.waitFor(() => !!document.querySelector('[data-testid="compose-template-item"]')?.offsetHeight, 'menu', 4000);
+      await take.hold(700);
+      await take.click('[data-testid="compose-template-item"]', 'pick', { text: NAME, dur: 500 });
+      await take.waitFor((s) => (document.querySelector(s)?.innerText || '').includes('2,400'), 'inserted', 4000, SEL.editor);
+      await take.hold(300);
+      facts.templateEditor = await browser.execute((s) => (document.querySelector(s)?.innerText || '').slice(0, 200), SEL.editor);
+      await scan.at(take, 'inserted', crop);
+      await take.hold(2100);
+      const end = take.t(Date.now());
+      return { crop, segments: [{ t0: Math.max(0.2, tBtn - 1.0), t1: end }], boxes: { compose } };
+    }, {
+      prepare: async () => {
+        // STAGED (disclose): the template saved through the settings store
+        // (the same addEmailTemplate Settings > Templates calls); the subject typed off camera.
+        await browser.execute((n, b) => {
+          const st = window.__SETTINGS_STORE__.getState();
+          if (!(st.emailTemplates || []).some((x) => x.name === n)) st.addEmailTemplate(n, b);
+        }, NAME, BODY);
+        const mode = await browser.execute(() => window.__SETTINGS_STORE__?.getState?.().composeOpenMode);
+        if (mode !== 'app') await setSetting('composeOpenMode', 'app');
+        await setSetting('composeContextVisible', false);
+        await clickSel('.mail-sidebar .sidebar-compose button');
+        await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, SEL.editor);
+        await browser.pause(600);
+        const prep = new Take('templates-prep');
+        await prep.type('[data-testid="compose-subject"]', 'Box sleeves quote', 'prep', { base: 30, jitter: 5 });
+        await clickSel(SEL.editor);
+        await browser.pause(500);
+      },
+      allow: (o) => o.testid === 'compose-modal' || (o.box[2] >= 400 && o.box[3] >= 300),
+    });
+  });
+
+  // 30. Tags: the reader's tag button; the tag lands on the message and its row.
+  it('tags', async function () {
+    const TAG = process.env.FOOTAGE_TAGS_NAME || 'Receipts';
+    const BTN = '.email-action-bar [data-quick-action="tag"]';
+    await shoot(this, 'tags', async (take, scan) => {
+      const head = await boxOf('[data-testid="sender-header"]');
+      const bar = await boxOf('.email-action-bar');
+      const row = await boxOf('[data-footage-target="tg-row"]');
+      const W = 600, H = W / ASPECT;
+      const crop = { x: Math.round(head.x - 4), y: Math.round(head.y - 92), w: W, h: Math.round(H) };
+      await scan.at(take, 'before', crop);
+      await take.hold(1400);
+      await take.click(BTN, 'tag', { dur: 650 });
+      const tTag = take.events.at(-1).t;
+      await take.waitFor((n) => [...document.querySelectorAll('.local-mail-label')].some((e) => e.offsetHeight > 0 && (e.innerText || '').includes(n)), 'chip', 5000, TAG);
+      await take.hold(300);
+      facts.tagsChips = await browser.execute(() => [...document.querySelectorAll('.local-mail-label')].filter((e) => e.offsetHeight > 0).map((e) => e.innerText.trim()));
+      await scan.at(take, 'tagged', crop);
+      await take.hold(2700);
+      const end = take.t(Date.now());
+      return { crop, segments: [{ t0: Math.max(0.2, tTag - 1.6), t1: end }], boxes: { head, bar, row } };
+    }, {
+      prepare: async () => {
+        // STAGED (disclose): a "Receipts" tag button added to the reader through
+        // Settings > Appearance > Quick actions (Apply local label, the name, Add
+        // action), then moved to the front of the reader's list through the store.
+        await settingsSetupTab(L('settings.appearance.appearance'), L('quickActions.title'));
+        await waitPage(() => !!document.querySelector('.quick-actions-settings')?.offsetHeight, { timeout: 8000 });
+        await markExact('.quick-actions-settings', '[role="tab"]', L('quickActions.surface.reader'), 'qa-surface');
+        await clickSel('[data-footage-target="qa-surface"]');
+        await browser.pause(600);
+        const sel = await browser.execute((lab) => {
+          const el = [...document.querySelectorAll(`.quick-actions-add-row select[aria-label="${lab}"]`)].find((e) => e.offsetHeight > 0);
+          if (!el) return 'no select';
+          Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, 'tag');
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return el.value;
+        }, L('quickActions.action'));
+        if (sel !== 'tag') throw new Error(`tag action not selectable: ${sel}`);
+        await waitPage(() => !!document.querySelector('.quick-actions-parameter input')?.offsetHeight, { timeout: 4000 });
+        const prep = new Take('tags-prep');
+        await prep.type('.quick-actions-parameter input', TAG, 'prep', { base: 30, jitter: 5 });
+        await clickSel(`.quick-actions-add-row button[aria-label="${L('quickActions.addAction')}"]`);
+        await browser.pause(1200);
+        const moved = await browser.execute(() => {
+          const st = window.__SETTINGS_STORE__.getState();
+          const cfg = st.quickActions?.defaults?.reader;
+          const e = cfg?.entries?.find((x) => x.action === 'tag');
+          if (!e) return false;
+          st.setQuickActionSurface('reader', null, { ...cfg, entries: [e, ...cfg.entries.filter((x) => x !== e)] });
+          return true;
+        });
+        if (!moved) throw new Error('no tag entry in the reader list after Add action');
+        await closeSettings();
+        await resetView();
+        if (!(await tagRow(MARK.invoice, 'tg-row'))) throw new Error(`invoice row not on screen: ${MARK.invoice}`);
+        await clickSel('[data-footage-target="tg-row"]');
+        if (!(await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, BTN))) throw new Error('no tag button in the reader');
+        // Opening marks it read a beat later (the toolbar's Mark read turns to Mark unread): settle first.
+        await browser.pause(3000);
+        await browser.execute(() => document.activeElement?.blur?.());
+      },
+    });
+  });
+
+  // 31. Radial menu: right-click a row, the wheel, Star; the row is starred.
+  it('radial-menu', async function () {
+    const WEDGE = '.quick-actions-radial button.quick-action-radial-item[data-quick-action="star"]';
+    const STAR = '[data-footage-target="rm-row"] [data-testid="star-toggle"]';
+    await shoot(this, 'radial-menu', async (take, scan) => {
+      const row = await boxOf('[data-footage-target="rm-row"]');
+      await take.hold(800);
+      await take.rightClick('[data-footage-target="rm-row"]', 'wheel', { dur: 550 });
+      const tWheel = take.events.at(-1).t;
+      await take.waitFor((w) => !!document.querySelector(w)?.offsetHeight, 'wheel', 4000, WEDGE);
+      await take.hold(300);
+      const wheel = await boxOf('.quick-actions-radial');
+      const crop = await listCrop();
+      await scan.at(take, 'wheel', crop);
+      await take.hold(700);
+      await take.click(WEDGE, 'star', { dur: 450 });
+      await take.waitFor((s) => document.querySelector(s)?.getAttribute('aria-pressed') === 'true', 'starred', 4000, STAR);
+      await take.hold(300);
+      await scan.at(take, 'starred', crop);
+      await take.hold(1900);
+      const end = take.t(Date.now());
+      return { crop, segments: [{ t0: Math.max(0.2, tWheel - 1.0), t1: end }], boxes: { row, wheel } };
+    }, {
+      prepare: async () => {
+        await widenList();
+        const ok = await browser.execute(() => {
+          const rows = [...document.querySelectorAll('[data-testid="email-row"]')].filter((r) => r.offsetHeight > 0);
+          const row = rows.slice(2).find((r) => r.querySelector('[data-testid="star-toggle"]')?.getAttribute('aria-pressed') === 'false');
+          if (!row) return false;
+          row.setAttribute('data-footage-target', 'rm-row');
+          return true;
+        });
+        if (!ok) throw new Error('no unstarred row');
+      },
+    });
+    await restoreList();
+    await browser.execute(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    if ((await browser.execute((s) => document.querySelector(s)?.getAttribute('aria-pressed'), STAR)) === 'true') await browser.execute((s) => document.querySelector(s)?.click(), STAR);
+    await browser.pause(500);
+  });
+
+  // 32. Snooze: right-click, Snooze, Tomorrow; the row leaves the Inbox.
+  it('snooze', async function () {
+    const WEDGE = '.quick-actions-radial button.quick-action-radial-item[data-quick-action="snooze"]';
+    await shoot(this, 'snooze', async (take, scan) => {
+      const rows = await rowsBox(7);
+      const crop = await listCrop();
+      const subject = await browser.execute(() => (document.querySelector('[data-footage-target="sn-row"]')?.innerText || '').replace(/\s+/g, ' ').slice(0, 120));
+      facts.snoozeRow = subject;
+      await take.hold(800);
+      await take.rightClick('[data-footage-target="sn-row"]', 'wheel', { dur: 550 });
+      const tWheel = take.events.at(-1).t;
+      await take.waitFor((w) => !!document.querySelector(w)?.offsetHeight, 'wheel', 4000, WEDGE);
+      await take.hold(500);
+      await take.click(WEDGE, 'snooze', { dur: 450 });
+      await take.waitFor(() => !!document.querySelector('[data-testid="snooze-picker"]')?.offsetHeight, 'picker', 4000);
+      await take.hold(500);
+      const preset = await browser.execute(() => {
+        const b = document.querySelector('[data-testid="snooze-preset-tomorrow"]') || document.querySelector('[data-testid^="snooze-preset-"]:not([data-testid="snooze-preset-custom"])');
+        return b?.dataset.testid || null;
+      });
+      if (!preset) throw new Error('no snooze preset');
+      facts.snoozePreset = preset;
+      await take.click(`[data-testid="${preset}"]`, 'tomorrow', { dur: 450 });
+      await take.waitFor(() => !document.querySelector('[data-footage-target="sn-row"]'), 'row gone', 8000);
+      await take.hold(300);
+      await scan.at(take, 'gone', crop);
+      await take.hold(1800);
+      const end = take.t(Date.now());
+      return { crop, segments: [{ t0: Math.max(0.2, tWheel - 1.0), t1: end }], boxes: { rows } };
+    }, {
+      prepare: async () => {
+        await widenList();
+        if (!(await browser.execute(() => {
+          const row = [...document.querySelectorAll('[data-testid="email-row"]')].filter((r) => r.offsetHeight > 0)[2];
+          if (!row) return false;
+          row.setAttribute('data-footage-target', 'sn-row');
+          return true;
+        }))) throw new Error('no third row');
+      },
+    });
+    await restoreList();
+  });
+
+  // 33. Focus session: the timer, 25 minutes, Start; the window locks with the countdown.
+  it('focus-session', async function () {
+    await shoot(this, 'focus-session', async (take, scan) => {
+      const btn = await boxOf('[data-testid="focus-button"]');
+      const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      const cropAll = await fitCrop({ x: 0, y: 0, w: vp.w, h: vp.h }, { pad: 0 });
+      await take.hold(800);
+      await take.click('[data-testid="focus-button"]', 'focus', { dur: 550 });
+      const tBtn = take.events.at(-1).t;
+      await take.waitFor(() => !!document.querySelector('[data-testid="focus-start"]')?.offsetHeight, 'dialog', 4000);
+      if (await browser.execute(() => !!document.querySelector('[data-testid="focus-upsell"]'))) throw new Error('focus session locked: no Premium');
+      await take.hold(300);
+      const dialog = await boxOf('[data-testid="focus-dialog"]');
+      const cropDlg = await fitCrop(union(dialog, btn), { minW: 760, pad: 16 });
+      await scan.at(take, 'dialog', cropDlg);
+      if (await browser.execute(() => !!document.querySelector('[data-testid="focus-preset-25"]'))) {
+        await take.click('[data-testid="focus-preset-25"]', 'preset-25', { dur: 450 });
+        await take.hold(400);
+      }
+      await take.click('[data-testid="focus-start"]', 'start', { dur: 450 });
+      const tStart = take.events.at(-1).t;
+      await take.waitFor(() => !!document.querySelector('[data-testid="focus-lock"]')?.offsetHeight, 'lock', 5000);
+      await take.hold(400);
+      facts.focusLock = await browser.execute(() => (document.querySelector('[data-testid="focus-lock"]')?.innerText || '').replace(/\s+/g, ' ').slice(0, 200));
+      await scan.at(take, 'lock', cropAll);
+      await take.hold(2200);
+      const end = take.t(Date.now());
+      return {
+        crop: cropDlg,
+        segments: [
+          { t0: Math.max(0.2, tBtn - 0.9), t1: tStart + 0.03, crop: cropDlg, label: 'dialog' },
+          { t0: tStart + 0.04, t1: end, crop: cropAll, label: 'lock' },
+        ],
+        poster: 3.6,
+        boxes: { btn, dialog },
+      };
+    }, { allow: (o) => o.box[2] >= 400 });
+    // Unlock early (and confirm), so the boot ends clean.
+    try {
+      await browser.execute(() => document.querySelector('[data-testid="focus-unlock-early"]')?.click());
+      await browser.pause(800);
+      await browser.execute(() => document.querySelector('[data-testid="focus-unlock-confirm"]')?.click());
+      await browser.pause(800);
+    } catch (e) { facts.focusUnlockError = e.message; }
   });
 });

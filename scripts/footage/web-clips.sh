@@ -3,13 +3,15 @@
 # three app boots on the mini, each through testq + minijob, then the web
 # clips copied to "~/Movies/MailVault Website Clips/<locale dir>/".
 #
-#   bash scripts/footage/web-clips.sh record <locale> <work dir> [A] ... [G]   # default: every boot
+#   bash scripts/footage/web-clips.sh record <locale> <work dir> [A] ... [H]   # default: every boot
 #   bash scripts/footage/web-clips.sh encode <locale> <work dir> [clip ...]    # re-cut collected takes, no boot
 #   bash scripts/footage/web-clips.sh publish <locale> <work dir>              # copy mp4 + jpg to ~/Movies
 #   bash scripts/footage/web-clips.sh hero <locale> <work dir>                 # the 16:10 hero montage, no boot
 #
 # WEBCLIP_ONLY=clip[,clip] with `record` re-takes only those clips of the boot
-# (same env; the boot's setup still runs; collect.sh replaces just those takes).
+# (same env; the boot's setup still runs; collect.sh replaces just those takes);
+# with `publish` it copies only those. `publish` never writes over a clip already
+# in ~/Movies (or _needs-decision) unless WEBCLIP_REPLACE=clip[,clip] names it.
 # <locale>: en, or a website dir (de es fr it ja ko pt-br zh); see lib/locale.js.
 # Run from the worktree. Results: <work dir>/<locale>/<boot>.tar + .log, the
 # collected takes in <work dir>/<locale>/takes/<clip>/, web clips in
@@ -31,12 +33,18 @@
 #                         lists for its Newsletter group); archives that group, then the whole
 #                         INBOX (search-local answers from the vault, Insights reads it all,
 #                         the Attachments view lists what the vault holds).
-#   F  privacy-mode layouts quick-actions manual-backup custom-fields   (batch 2)
+#   F  privacy-mode layouts manual-backup custom-fields   (batch 2)
 #                         the demo mailbox alone (no history: the manual backup takes seconds),
 #                         clocks moved -320 min; backs up to a folder in the run's HOME.
 #   G  ai-writing tagging-rules   (batch 2)
 #                         FOOTAGE_FM_HELPER=1: Apple Intelligence through the helper (the mini has
-#                         it switched on); the demo mailbox alone; one invoice appended over IMAP.
+#                         it switched on); the demo mailbox alone; one invoice appended over IMAP
+#                         while another folder is open (batch 3 retake of tagging-rules).
+#   H  quick-actions explorer-view column-layout shortcuts notification-rules templates tags
+#      radial-menu snooze focus-session   (batch 3)
+#                         the demo mailbox alone, clocks moved -320 min (as F); settings each take
+#                         changes are put back after it; snooze moves one row out of the INBOX and
+#                         focus-session ends unlocked, so they run last.
 set -euo pipefail
 cmd="${1:?record|encode|publish}"; LOC="${2:?locale}"; WORK="${3:?work dir}"; shift 3
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -56,9 +64,11 @@ boot_env() {
     E) echo FOOTAGE_ONLY=email-cleanup,search-local,insights,views \
             FOOTAGE_HISTORY=1 FOOTAGE_EXTRA_MAIL=1 FOOTAGE_UNSUB_MAIL=1 FOOTAGE_ALIGN_ALL=1 FOOTAGE_ALIGN_SHIFT_MIN=-320 \
             FOOTAGE_BODY_DELAY_MS=0 FOOTAGE_EXPECT_TOTAL=2861 ;;
-    F) echo FOOTAGE_ONLY=privacy-mode,layouts,quick-actions,manual-backup,custom-fields \
+    F) echo FOOTAGE_ONLY=privacy-mode,layouts,manual-backup,custom-fields \
             FOOTAGE_ALIGN_ALL=1 FOOTAGE_ALIGN_SHIFT_MIN=-320 FOOTAGE_BODY_DELAY_MS=0 FOOTAGE_EXPECT_TOTAL=82 ;;
     G) echo FOOTAGE_ONLY=ai-writing,tagging-rules FOOTAGE_FM_HELPER=1 \
+            FOOTAGE_ALIGN_ALL=1 FOOTAGE_ALIGN_SHIFT_MIN=-320 FOOTAGE_BODY_DELAY_MS=0 FOOTAGE_EXPECT_TOTAL=82 ;;
+    H) echo FOOTAGE_ONLY=quick-actions,explorer-view,column-layout,shortcuts,notification-rules,templates,tags,radial-menu,snooze,focus-session \
             FOOTAGE_ALIGN_ALL=1 FOOTAGE_ALIGN_SHIFT_MIN=-320 FOOTAGE_BODY_DELAY_MS=0 FOOTAGE_EXPECT_TOTAL=82 ;;
     *) echo "unknown boot $1" >&2; exit 64 ;;
   esac
@@ -66,7 +76,7 @@ boot_env() {
 
 case "$cmd" in
   record)
-    boots=("$@"); [ ${#boots[@]} -gt 0 ] || boots=(A B C D E F G)
+    boots=("$@"); [ ${#boots[@]} -gt 0 ] || boots=(A B C D E F G H)
     for b in "${boots[@]}"; do
       echo "== boot $b ($LOC) $(date +%H:%M:%S)"
       # shellcheck disable=SC2046
@@ -132,11 +142,19 @@ case "$cmd" in
     for f in "$D"/web/*.mp4; do
       n="$(basename "$f" .mp4)"
       case "$n" in *-wide) continue ;; esac
+      # WEBCLIP_ONLY=clip,clip publishes just those (the rest of web/ stays unreviewed).
+      [ -z "${WEBCLIP_ONLY:-}" ] || [[ ",$WEBCLIP_ONLY," == *",$n,"* ]] || continue
       # search-50k shows the real search time; the website wants under 15 ms
       # (en: 68 ms on the mini). It lands apart until someone decides.
       # WEBCLIP_HOLD="clip:reason,clip:reason" sends reviewed-but-not-approved clips there too
       # (a reason cannot contain a comma).
       hold="$(printf '%s' "${WEBCLIP_HOLD:-}" | tr ',' '\n' | awk -F: -v n="$n" '$1==n { sub(/^[^:]*:/, ""); print; exit }')"
+      # Never over a file already handed over (published or held): a re-take that
+      # should replace one names it in WEBCLIP_REPLACE=clip,clip after review.
+      dest="$PUB"; { [ "$n" = search-50k ] || [ -n "$hold" ]; } && dest="$PUB/_needs-decision"
+      if [ -e "$dest/$n.mp4" ] && [[ ",${WEBCLIP_REPLACE:-}," != *",$n,"* ]]; then
+        echo "skip $n: $dest/$n.mp4 exists (WEBCLIP_REPLACE=$n to replace)"; continue
+      fi
       if [ "$n" = search-50k ] || [ -n "$hold" ]; then
         mkdir -p "$PUB/_needs-decision"; cp "$f" "$D/web/$n.jpg" "$PUB/_needs-decision/"
         [ -n "$hold" ] && printf '%s\n' "$hold" > "$PUB/_needs-decision/$n.reason.txt"

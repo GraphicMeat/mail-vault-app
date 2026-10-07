@@ -57,7 +57,9 @@ finish() {
   echo "leftover processes after cleanup:"; cat "$OUT/leftover.txt"
   # Not ours, but worth knowing about (another clone's orphaned app or daemon).
   pgrep -fl "mailvault" | grep -v "$ROOT/" > "$OUT/foreign.txt" 2>&1 || true
-  find "$HOMEDIR" -name 'daemon*.log' -exec tail -300 {} \; > "$OUT/daemon-tail.log" 2>/dev/null
+  # The daemon's appender rotates daily (daemon.log.YYYY-MM-DD), never plain daemon.log.
+  find "$HOMEDIR" -name 'daemon.log*' -exec tail -600 {} \; > "$OUT/daemon-tail.log" 2>/dev/null
+  find "$HOMEDIR" -name 'daemon.log*' -exec grep -hE '\[auto-tag\]|\[idle\]|\[sync\]' {} \; > "$OUT/daemon-sync.log" 2>/dev/null
   scripts/screenshots/prepare-build.sh --revert >/dev/null 2>&1
   rm -f "$FOOTAGE_CAP"
   echo "job exit $status" > "$OUT/exit.txt"
@@ -69,7 +71,10 @@ trap finish EXIT
 step() { echo; echo "== $* ($(date +%H:%M:%S))"; }
 
 step "preflight"
-if pgrep -fl "tauri-wd|mock-imap"; then echo "a driver or mock server is live; one app instance at a time"; exit 1; fi
+# A running driver or mock server, not a queued job whose command line merely
+# names one (runjob waiting on the project lock with "-p mock-imap" in its args).
+live="$(pgrep -fl "tauri-wd|mock-imap-server" | grep -vE "runjob\.sh|lockf|minijob" || true)"
+if [ -n "$live" ]; then echo "$live"; echo "a driver or mock server is live; one app instance at a time"; exit 1; fi
 caffeinate -u -d -i -t 3600 & CAF=$!
 osascript -e 'tell application "System Events" to key code 53' 2>&1 || true
 echo "front app: $(lsappinfo front | xargs lsappinfo info -only name 2>/dev/null)"
