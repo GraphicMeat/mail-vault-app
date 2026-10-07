@@ -55,7 +55,25 @@ outputs[ICONS / 'tray-icon.png'] = glyph.resize((32, 32), resample)
 for path, image in outputs.items():
     image.save(path, **({'lossless': True} if path.suffix == '.webp' else {}))
 resized(1024).save(ICONS / 'icon.icns', format='ICNS')
-resized(256).save(ICONS / 'icon.ico', format='ICO', sizes=[(n, n) for n in (16, 24, 32, 48, 64, 128, 256)])
+def save_ico(path, sizes):
+    """An ICO of PNG entries in the order given. Pillow sorts the entries
+    smallest first; Tauri uses the FIRST entry as the Windows window and tray
+    icon, so a 16px lead left both blurry (tests/unit/windowsPackaging.test.js)."""
+    import io, struct
+    blobs = []
+    for n in sizes:
+        buf = io.BytesIO()
+        resized(n).save(buf, format='PNG')
+        blobs.append((n, buf.getvalue()))
+    head = struct.pack('<HHH', 0, 1, len(blobs))
+    offset = 6 + 16 * len(blobs)
+    entries, data = b'', b''
+    for n, blob in blobs:
+        entries += struct.pack('<BBBBHHII', n % 256, n % 256, 0, 0, 1, 32, len(blob), offset + len(data))
+        data += blob
+    path.write_bytes(head + entries + data)
+
+save_ico(ICONS / 'icon.ico', (32, 16, 24, 48, 64, 128, 256))
 resized(64).save(ROOT / 'website/favicon.ico', format='ICO', sizes=[(n, n) for n in (16, 32, 48, 64)])
 (ICONS / 'android/values/ic_launcher_background.xml').write_text('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_launcher_background">#07535c</color>\n</resources>\n')
 print(f'Generated {len(outputs) + 3} icon files from {SOURCE.name}')
