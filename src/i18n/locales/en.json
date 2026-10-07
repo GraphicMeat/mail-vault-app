@@ -204,6 +204,7 @@
   "bugReport.description": "Report something broken, or ask for something missing.",
   "bugReport.emailDeveloper": "Email the developer",
   "bugReport.followX": "Follow on X",
+  "bugReport.joinDiscord": "Join Discord",
   "bugReport.githubThreadIsPublic": "A GitHub thread is public. Keep sensitive data out of it, and never upload logs there — logs carry email addresses. If a log would help, send it over email instead.",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.openGpu": "open GPU",

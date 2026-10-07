@@ -204,6 +204,7 @@
   "bugReport.description": "Melde einen Fehler oder schlage eine fehlende Funktion vor.",
   "bugReport.emailDeveloper": "Entwickler anschreiben",
   "bugReport.followX": "Auf X folgen",
+  "bugReport.joinDiscord": "Discord beitreten",
   "bugReport.githubThreadIsPublic": "Ein GitHub-Thread ist öffentlich. Halten Sie sensible Daten heraus und laden Sie dort niemals Protokolle hoch — Protokolle enthalten E-Mail-Adressen. Wenn ein Protokoll hilft, senden Sie es stattdessen per E-Mail.",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.openGpu": "offenen GPU",

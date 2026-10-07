@@ -204,6 +204,7 @@
   "bugReport.description": "报告问题或提出功能请求。",
   "bugReport.emailDeveloper": "给开发者发邮件",
   "bugReport.followX": "在 X 上关注",
+  "bugReport.joinDiscord": "加入 Discord",
   "bugReport.githubThreadIsPublic": "GitHub 讨论是公开的。请勿写入敏感数据，也绝不要上传日志——日志中含有邮箱地址。如果日志有帮助，请改用邮件发送。",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.openGpu": "开放 GPU",

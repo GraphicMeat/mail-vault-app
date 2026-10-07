@@ -204,6 +204,7 @@
   "bugReport.description": "不具合の報告や機能のリクエストを送れます。",
   "bugReport.emailDeveloper": "開発者にメールする",
   "bugReport.followX": "X でフォロー",
+  "bugReport.joinDiscord": "Discord に参加",
   "bugReport.githubThreadIsPublic": "GitHub のスレッドは公開されます。機微な情報は書かず、ログは絶対にアップロードしないでください。ログにはメールアドレスが含まれます。ログが役立つ場合は、代わりにメールで送ってください。",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.openGpu": "オープン GPU",

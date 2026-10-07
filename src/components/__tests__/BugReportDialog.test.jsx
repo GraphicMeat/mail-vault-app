@@ -117,9 +117,12 @@ describe('BugReportDialog', () => {
     expect(note).toMatch(/email instead/i);
   });
 
-  it('links the X profile and the maker site', () => {
+  it('links the Discord server, the X profile and the maker site', () => {
     const onClose = vi.fn();
     render(<BugReportDialog open onClose={onClose} onEmail={() => {}} />);
+
+    fireEvent.click(screen.getByTestId('bug-join-discord'));
+    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/gECE37RpD');
 
     fireEvent.click(screen.getByTestId('bug-follow-x'));
     expect(openInBrowser).toHaveBeenCalledWith('https://x.com/GraphicMeat');

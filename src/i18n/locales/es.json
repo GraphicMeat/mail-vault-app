@@ -204,6 +204,7 @@
   "bugReport.description": "Informa de un problema o solicita una función que falte.",
   "bugReport.emailDeveloper": "Escribir al desarrollador",
   "bugReport.followX": "Seguir en X",
+  "bugReport.joinDiscord": "Unirse a Discord",
   "bugReport.githubThreadIsPublic": "Un hilo de GitHub es público. Mantén fuera los datos sensibles y nunca subas registros ahí: los registros llevan direcciones de correo. Si un registro ayuda, envíalo por correo.",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.openGpu": "GPU abierta",

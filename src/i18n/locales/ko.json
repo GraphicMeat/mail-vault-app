@@ -204,6 +204,7 @@
   "bugReport.description": "문제를 신고하거나 필요한 기능을 요청하세요.",
   "bugReport.emailDeveloper": "개발자에게 메일 보내기",
   "bugReport.followX": "X에서 팔로우",
+  "bugReport.joinDiscord": "Discord 참여",
   "bugReport.githubThreadIsPublic": "GitHub 스레드는 공개됩니다. 민감한 정보를 넣지 말고 로그는 절대 올리지 마세요. 로그에는 이메일 주소가 들어 있습니다. 로그가 도움이 된다면 이메일로 보내주세요.",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.openGpu": "오픈 GPU",

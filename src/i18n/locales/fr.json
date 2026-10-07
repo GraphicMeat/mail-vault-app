@@ -204,6 +204,7 @@
   "bugReport.description": "Signalez un problème ou proposez une fonctionnalité manquante.",
   "bugReport.emailDeveloper": "Écrire au développeur",
   "bugReport.followX": "Suivre sur X",
+  "bugReport.joinDiscord": "Rejoindre Discord",
   "bugReport.githubThreadIsPublic": "Un fil GitHub est public. N'y mettez aucune donnée sensible et n'y téléversez jamais de journaux — les journaux contiennent des adresses e-mail. Si un journal peut aider, envoyez-le plutôt par e-mail.",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.openGpu": "GPU ouverte",
