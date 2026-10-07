@@ -111,11 +111,17 @@ export function FocusLock() {
                   {t('focus.heldCount', { count: held.length })}
                 </p>
               )}
-              {!confirming && (
-                <button type="button" className="focus-scene-link" onClick={() => setConfirming(true)} data-testid="focus-unlock-early">
-                  {t('focus.unlockEarly')}
-                </button>
-              )}
+              {/* Hidden, never removed: dropping it shrinks the text block, and the
+                  scene insets itself from that block, so the diorama would jump up. */}
+              <button
+                type="button"
+                className="focus-scene-link"
+                style={confirming ? { visibility: 'hidden' } : undefined}
+                onClick={() => setConfirming(true)}
+                data-testid="focus-unlock-early"
+              >
+                {t('focus.unlockEarly')}
+              </button>
             </div>
             {confirming && (
               <div className="absolute inset-0 flex items-center justify-center p-4">

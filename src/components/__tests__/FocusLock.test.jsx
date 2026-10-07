@@ -175,6 +175,19 @@ describe('FocusLock — scenes', () => {
     fireEvent.click(screen.getByTestId('focus-unlock-confirm'));
     expect(useFocusStore.getState().endsAt).toBe(null);
   });
+
+  // The scene insets itself from the text block's height; removing the link
+  // on confirm shrank the block and the diorama jumped up behind the dialog.
+  it('keeps the countdown block its full height while confirming', () => {
+    lock({ scene: 'town' });
+    render(<FocusLock />);
+    fireEvent.click(screen.getByTestId('focus-unlock-early'));
+    expect(screen.getByTestId('focus-remaining')).toBeTruthy();
+    const link = screen.getByTestId('focus-unlock-early');
+    expect(link.style.visibility).toBe('hidden');
+    fireEvent.click(screen.getByText('Keep going'));
+    expect(screen.getByTestId('focus-unlock-early').style.visibility).toBe('');
+  });
 });
 
 // The plain lock is also where a failed scene lands, so its confirm step is

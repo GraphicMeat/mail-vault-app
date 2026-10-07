@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **The focus scene stays put when you click Unlock early.** The diorama no longer jumps up behind the confirm question.
+
 ## [2.19.0] - 2026-10-07
 
 ### Added
