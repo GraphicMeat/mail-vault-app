@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- **Send asks when you mention an attachment but forgot it (Premium).** A message that says "attached", "see the attachment", "im Anhang", "ci-joint", "添付" and the like in any of the app's languages, with no file attached, stops at Send and offers Attach file or Send anyway. Quoted text and your signature are not read, nor is a reply's subject. Turn it off in Settings > Behavior > Attachments.
+- **Send asks when you mention an attachment but forgot it (Premium).** A message that says "attached", "see the attachment", "im Anhang", "ci-joint", "添付" and the like in any of the app's languages, with no file attached, stops at Send and offers Attach file or Send anyway. Quoted text and your signature are not read, nor is a reply's subject. Turn it off in Settings > Mail preferences > Behavior > Attachments.
 - **Get reminded when nobody replies (Premium).** When you write an email, the bell next to Templates offers to remind you in 1 day, 3 days or a week. If nobody has answered by then, the email you sent comes back to the top of your inbox, unread, with one notification. Opening it marks it read; deleting, archiving or moving it only ends the reminder, and the copy in Sent stays where it is. Replies are looked for in every folder, Trash included. Not offered for Outlook.com accounts signed in with Microsoft.
 
 ## [2.19.1] - 2026-10-07
