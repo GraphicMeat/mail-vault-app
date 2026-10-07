@@ -53,7 +53,7 @@ export function RemindIfNoReply({ days, onChange, isPremium, onUpgrade, disabled
       </Button>
       {open && (
         <div data-testid="compose-remind-panel"
-          className="absolute bottom-full left-0 mb-1 w-64 bg-mail-surface border border-mail-border rounded-lg z-50 overflow-hidden">
+          className="absolute bottom-full -left-24 sm:left-0 mb-1 w-64 bg-mail-surface border border-mail-border rounded-lg z-50 overflow-hidden">
           <div className="px-3 pt-2 pb-1 text-sm font-medium text-mail-text">{t('compose.remind.title')}</div>
           {premium ? <>
             <div role="menu" aria-label={t('compose.remind.title')}>
