@@ -47,7 +47,7 @@ fn email_arg(id: &Value, params: &Value) -> Result<smtp::OutgoingEmail, RpcRespo
 /// Message-ID header extracted WITH its angle brackets (compare target for
 /// the optimistic Sent row against `parse_header`'s rows, which also keep
 /// `<...>` — stripping here would make the row unmatchable).
-fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Value {
+fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig, tag: &str) -> Value {
     use base64::Engine;
     let raw_base64 = base64::engine::general_purpose::STANDARD.encode(&built.raw_rfc2822);
 
@@ -60,9 +60,12 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Value {
             .filter(|s| !s.is_empty())
     };
 
+    // `tag` tells the two callers apart: compose autosaves a draft build (own
+    // Message-ID, never sent) on every pause, so one user send logs a
+    // `build_draft_mime` line seconds before its `build_mime` + `smtp_start`.
     info!(
-        "[send:build_mime] account={} bytes={} messageId={:?}",
-        account.email, built.raw_rfc2822.len(), message_id
+        "[send:{}] account={} bytes={} messageId={:?}",
+        tag, account.email, built.raw_rfc2822.len(), message_id
     );
 
     json!({
@@ -211,7 +214,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(resp) => return Some(resp),
             };
             match smtp::build_mime(&account, &email) {
-                Ok(built) => RpcResponse::success(id, built_mime_json(built, &account)),
+                Ok(built) => RpcResponse::success(id, built_mime_json(built, &account, "build_mime")),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
@@ -226,7 +229,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(resp) => return Some(resp),
             };
             match smtp::build_draft_mime(&account, &email) {
-                Ok(built) => RpcResponse::success(id, built_mime_json(built, &account)),
+                Ok(built) => RpcResponse::success(id, built_mime_json(built, &account, "build_draft_mime")),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
