@@ -6,20 +6,22 @@
 //! A check looks for a reply in two places, and either one is enough:
 //!
 //! 1. The header cache, first: no network, and it holds mail the server's
-//!    search may not reach (a folder the server will not search, a reply the
-//!    user moved anywhere). Every cached folder of the account but Sent and
-//!    Drafts, one bounded page per custody lock (`custody::cache::
-//!    reply_scan_page`), yielding to foreground reads between pages. A cached
-//!    row is no answer when it is from one of the row's own addresses, or
-//!    marked automatic (`autoReply`, fetched with the headers since this
-//!    check exists) or titled like one (`AUTO_REPLY_SUBJECT_PREFIXES`, for
-//!    rows cached before that).
+//!    search may not reach. Read once a pass for every due reminder of an
+//!    account (`cache_answers`): every cached folder but Sent and Drafts, one
+//!    bounded page per custody lock (`custody::cache::reply_scan_page_many`),
+//!    foreground reads first between pages. A cached row is no answer when it
+//!    is from one of the reminder's own addresses (folded like the app's
+//!    `normalizeEmailIdentity`), or marked automatic (`autoReply`) or titled
+//!    like an automatic reply (`AUTO_REPLY_SUBJECT_PREFIXES`). Hit, Miss, or
+//!    Unknown when the cache cannot be read or holds nothing for the account.
 //! 2. The server: `UID SEARCH` with `imap::reply_search_criteria` (names the
-//!    message, from none of the own addresses, no automatic reply) in INBOX
-//!    and the special-use `\All`, `\Archive` and `\Trash` folders that exist.
-//!    A folder or a search the server turns away is passed over: with every
-//!    one refused the cache's answer stands, rather than the row spending its
-//!    tries on a server that will not search. Offline still waits.
+//!    message, no automatic reply) in INBOX and the special-use `\All`,
+//!    `\Archive` and `\Trash` folders that exist; a hit counts once a FETCH of
+//!    its From shows it is not the sender's own (the search cannot fold
+//!    addresses). A folder other than INBOX, or criteria, the server refuses
+//!    are passed over; INBOX refused, or a refusal it marks temporary, is a
+//!    try to repeat. With every search refused only a cache Miss says "no
+//!    reply"; Unknown tries again. Offline still waits.
 //!
 //! No reply anywhere, it finds the Sent copy by Message-ID: that is the
 //! message the app pins above the inbox (`state: due`). Nothing is moved or
@@ -98,10 +100,15 @@ fn next_wait(state: &Arc<DaemonState>) -> Duration {
 /// that changed state.
 async fn pass(state: &Arc<DaemonState>) -> Vec<(String, follow_up::Outcome, String)> {
     let _held = state.follow_up.lock.lock().await;
+    let now = now_ms();
+    // One read of the header cache for every row due now, per account.
+    let due = app_db::with(&state.app_dir, |c| follow_up::due(c, now)).unwrap_or_default();
+    let answers = Arc::new(cache_answers(state, &due).await);
     let st = Arc::clone(state);
-    let results = process_due_with(&state.app_dir, now_ms(), move |row| {
+    let results = process_due_with(&state.app_dir, now, move |row| {
         let st = Arc::clone(&st);
-        async move { check_row(&st, &row).await }
+        let cached = answers.get(&row.id).copied().unwrap_or(CacheAnswer::Unknown);
+        async move { check_row_with(&st, &row, cached).await }
     })
     .await;
     for (id, _, row_state) in &results {
@@ -199,61 +206,146 @@ fn own_mail_folders(state: &Arc<DaemonState>, account_id: &str) -> Vec<String> {
         .collect()
 }
 
-/// Does the header cache already hold an answer to `message_id`? Every cached
-/// folder of the account but Sent and Drafts, page by page, one custody lock
-/// per page. A cache that cannot be read answers no: the server is asked too.
-async fn cached_reply(state: &Arc<DaemonState>, account_id: &str, message_id: &str, own: &[String]) -> bool {
+/// Pages of the header cache read so far, for the one-read-per-pass test.
+#[cfg(test)]
+pub(crate) static SCAN_PAGES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// What the header cache said about one reminder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CacheAnswer {
+    /// A cached message answers it.
+    Hit,
+    /// Every cached folder was read and none does.
+    Miss,
+    /// The cache could not be read, or holds nothing for the account: no
+    /// answer at all, which never settles a row on its own.
+    Unknown,
+}
+
+/// Ask the header cache about every reminder in `rows` at once: one walk of
+/// each account's cached folders (but Sent and Drafts), one bounded page per
+/// custody lock, foreground reads first between pages, every reminder of the
+/// account checked against each page.
+pub(crate) async fn cache_answers(state: &Arc<DaemonState>, rows: &[follow_up::FollowUp]) -> std::collections::HashMap<String, CacheAnswer> {
+    let mut answers = std::collections::HashMap::new();
+    let mut accounts: Vec<String> = rows.iter().map(|r| r.account_id.clone()).collect();
+    accounts.sort();
+    accounts.dedup();
+    for account_id in accounts {
+        // The login too, which a row written before the app named it lacks.
+        let login = credentials::resolve_account_credentials_guarded(&account_id).await.ok().map(|a| a.email);
+        let wanted: Vec<sql_cache::ReplyWanted> = rows
+            .iter()
+            .filter(|r| r.account_id == account_id)
+            .map(|r| sql_cache::ReplyWanted {
+                key: r.id.clone(),
+                message_id: r.message_id.clone(),
+                own: r.own_addresses.iter().cloned().chain(login.clone()).collect(),
+            })
+            .collect();
+        let answer = account_cache_answers(state, &account_id, wanted.clone()).await;
+        for w in wanted {
+            let a = match &answer {
+                Some(hits) if hits.contains(&w.key) => CacheAnswer::Hit,
+                Some(_) => CacheAnswer::Miss,
+                None => CacheAnswer::Unknown,
+            };
+            answers.insert(w.key, a);
+        }
+    }
+    answers
+}
+
+/// The keys of `wanted` the account's header cache answers, or `None` when it
+/// cannot say (unreadable, or no cached folder at all).
+async fn account_cache_answers(state: &Arc<DaemonState>, account_id: &str, mut wanted: Vec<sql_cache::ReplyWanted>) -> Option<Vec<String>> {
     let st = Arc::clone(state);
     let account = account_id.to_string();
     let folders = blocking(move || {
         let skip = own_mail_folders(&st, &account);
         crate::custody::with_conn(&st, |c| sql_cache::mailboxes_with_headers(c, Some(&account))).map(|all| {
-            all.into_iter()
+            let cached = !all.is_empty();
+            let folders = all
+                .into_iter()
                 .map(|(_, mailbox)| mailbox)
                 .filter(|m| !skip.contains(m) && !imap::is_own_mail_path(m))
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            (cached, folders)
         })
     })
     .await
     .and_then(|r| r);
     let folders = match folders {
-        Ok(f) => f,
+        Ok((true, f)) => f,
+        Ok((false, _)) => return None,
         Err(e) => {
-            warn!("[follow-up] header cache unreadable, asking the server alone: {e}");
-            return false;
+            warn!("[follow-up] header cache unreadable for {account_id}: {e}");
+            return None;
         }
     };
+    let mut hits = Vec::new();
     for mailbox in folders {
         let mut after = 0u32;
-        loop {
-            let (st, account, mb, id, own) = (Arc::clone(state), account_id.to_string(), mailbox.clone(), message_id.to_string(), own.to_vec());
+        while !wanted.is_empty() {
+            #[cfg(test)]
+            SCAN_PAGES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let (st, account, mb, ask) = (Arc::clone(state), account_id.to_string(), mailbox.clone(), wanted.clone());
             let page = blocking(move || {
-                crate::custody::with_conn(&st, |c| sql_cache::reply_scan_page(c, &account, &mb, &id, &own, after, REPLY_SCAN_PAGE))
+                crate::custody::with_conn(&st, |c| sql_cache::reply_scan_page_many(c, &account, &mb, &ask, after, REPLY_SCAN_PAGE))
             })
             .await
             .and_then(|r| r);
-            match page {
-                Ok(p) if p.replied => {
-                    info!("[follow-up] {message_id} has a reply cached in {mailbox}");
-                    return true;
-                }
-                Ok(p) => match p.next_after {
-                    Some(next) => after = next,
-                    None => break,
-                },
+            let page = match page {
+                Ok(p) => p,
                 Err(e) => {
-                    warn!("[follow-up] header cache unreadable in {mailbox}, asking the server: {e}");
-                    return false;
+                    warn!("[follow-up] header cache unreadable in {mailbox}: {e}");
+                    return None;
                 }
+            };
+            if !page.replied.is_empty() {
+                info!("[follow-up] {} answered in the cache ({mailbox})", page.replied.join(", "));
+                wanted.retain(|w| !page.replied.contains(&w.key));
+                hits.extend(page.replied);
+            }
+            match page.next_after {
+                Some(next) => after = next,
+                None => break,
             }
             crate::search_index::wait_foreground_quiet(&state.search_index).await;
         }
     }
-    false
+    Some(hits)
 }
 
-/// Look for a reply to one row's message, and failing that for its Sent copy.
+/// A NO or BAD the server marks temporary (RFC 5530 response codes, and
+/// Exchange's own wording): a try to repeat, never a refusal that the cache's
+/// answer can settle.
+fn temporary_refusal(why: &str) -> bool {
+    let why = why.to_ascii_lowercase();
+    ["[unavailable]", "[serverbug]", "[inuse]", "[limit]", "[expungeissued]", "server unavailable"]
+        .iter()
+        .any(|code| why.contains(code))
+}
+
+/// Of `uids` in `mailbox`, is one from someone other than the sender (`own`,
+/// folded like the app's `normalizeEmailIdentity`)? The search cannot fold a
+/// Gmail address itself, so its hits are read back (at most a few dozen).
+async fn a_hit_from_someone_else(session: &mut imap::ImapSession, mailbox: &str, uids: &[u32], own: &[String]) -> Result<bool, String> {
+    let own: Vec<String> = own.iter().map(|a| mailvault_core::notes_to_self::normalize_identity(a)).collect();
+    let newest: Vec<u32> = uids.iter().rev().take(50).copied().collect();
+    let (headers, _) = imap::fetch_headers_by_uids(session, mailbox, &newest).await?;
+    Ok(headers.iter().any(|h| !own.contains(&mailvault_core::notes_to_self::normalize_identity(&h.from.address))))
+}
+
+/// `check_row_with`, asking the header cache about this one row first.
 pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowUp) -> follow_up::Outcome {
+    let cached = cache_answers(state, std::slice::from_ref(row)).await.get(&row.id).copied().unwrap_or(CacheAnswer::Unknown);
+    check_row_with(state, row, cached).await
+}
+
+/// Look for a reply to one row's message, the header cache having answered
+/// `cached`, and failing that for its Sent copy.
+pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::FollowUp, cached: CacheAnswer) -> follow_up::Outcome {
     use follow_up::Outcome::*;
     let account = match credentials::resolve_account_credentials_guarded(&row.account_id).await {
         Ok(a) => a,
@@ -271,13 +363,13 @@ pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowU
     let mut own = row.own_addresses.clone();
     own.push(account.email.clone());
     let (Some(criteria), Some(plain)) = (
-        imap::reply_search_criteria(&row.message_id, &own, true),
-        imap::reply_search_criteria(&row.message_id, &own, false),
+        imap::reply_search_criteria(&row.message_id, true),
+        imap::reply_search_criteria(&row.message_id, false),
     ) else {
         return SentCopyGone;
     };
     // The cache first: a hit needs no connection at all.
-    if cached_reply(state, &row.account_id, &row.message_id, &own).await {
+    if cached == CacheAnswer::Hit {
         return Replied;
     }
 
@@ -297,10 +389,16 @@ pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowU
                 searched.push(path);
             }
         }
+        let mut answered = false;
         for mailbox in &searched {
             use imap::FolderSearch::*;
             selected = Some(mailbox.clone());
             let mut answer = imap::uid_search_tolerant(&mut session, mailbox, &criteria).await?;
+            if let SearchRefused(why) | FolderRefused(why) = &answer {
+                if temporary_refusal(why) {
+                    return Err(format!("{mailbox} turned the reply search away for now: {why}"));
+                }
+            }
             if let SearchRefused(why) = &answer {
                 // The auto-reply terms are the unusual part (an empty HEADER
                 // string, fields a server does not index). Without them an
@@ -309,16 +407,27 @@ pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowU
                 answer = imap::uid_search_tolerant(&mut session, mailbox, &plain).await?;
             }
             match answer {
-                Hits(found) if !found.is_empty() => return Ok::<_, String>(Replied),
-                Hits(_) => {}
-                // A label hidden from IMAP, an INBOX or a search the server
-                // turns away: no answer from that folder, not a failed check.
-                // The cache already answered for what it holds; with every
-                // folder refused, its "no" stands.
+                Hits(found) => {
+                    answered = true;
+                    if !found.is_empty() && a_hit_from_someone_else(&mut session, mailbox, &found, &own).await? {
+                        return Ok::<_, String>(Replied);
+                    }
+                }
+                // INBOX always exists: refusing it is the server's trouble.
+                FolderRefused(why) if mailbox.eq_ignore_ascii_case("INBOX") => {
+                    return Err(format!("INBOX refused the SELECT: {why}"));
+                }
+                // A label hidden from IMAP, or criteria the server will not
+                // take even without the auto-reply terms: no answer from it.
                 FolderRefused(why) | SearchRefused(why) => {
-                    info!("[follow-up] {mailbox} refused the reply search for {} ({why}); the cache's answer stands", row.id);
+                    info!("[follow-up] {mailbox} refused the reply search for {} ({why})", row.id);
                 }
             }
+        }
+        // No folder searched at all: only a cache that was read can say "no
+        // reply". One that could not be leaves the row to try again.
+        if !answered && cached != CacheAnswer::Miss {
+            return Err("every reply search was refused and the header cache could not answer".to_string());
         }
         // The folder the app filed the message in first; one that refuses
         // (renamed or removed since) or no longer holds the copy (the Sent
@@ -438,11 +547,16 @@ mod tests {
     }
 
     fn rig(server: &mock_imap::MockImap) -> (std::path::PathBuf, Arc<DaemonState>) {
+        rig_as(server, "me@example.com")
+    }
+
+    /// `rig`, signed in as `login`.
+    fn rig_as(server: &mock_imap::MockImap, login: &str) -> (std::path::PathBuf, Arc<DaemonState>) {
         let dir = app_dir();
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let creds = dir.join("credentials.json");
         let account = serde_json::json!({
-            "id": "acct", "email": "me@example.com", "password": "hunter2",
+            "id": "acct", "email": login, "password": "hunter2",
             "imapHost": server.host(), "imapPort": server.port(),
         })
         .to_string();
@@ -625,9 +739,10 @@ mod tests {
     }
 
     /// A folder other than INBOX that turns the SELECT away (a Gmail label a
-    /// user hid from IMAP) is passed over; INBOX turning it away is a failure.
+    /// user hid from IMAP) is passed over. INBOX always exists: its refusal is
+    /// the server's trouble, a try to repeat, never a settled "no reply".
     #[tokio::test]
-    async fn a_refused_folder_is_passed_over_inbox_too() {
+    async fn a_refused_folder_besides_inbox_is_skipped_and_a_refused_inbox_is_transient() {
         use mock_imap::state::{Mailbox, Message};
         use mock_imap::{Action, Trigger};
         let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
@@ -653,9 +768,7 @@ mod tests {
         let inbox = check_row(&state2, &row(&dir2, "a")).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
         assert!(matches!(skipped, Outcome::NoReply { .. }), "a refused Archive failed the check: {skipped:?}");
-        // The server's answer is missing, not wrong: the header cache decides
-        // (here it has nothing), rather than spending the row's tries.
-        assert!(matches!(inbox, Outcome::NoReply { .. }), "a refused INBOX burned a try: {inbox:?}");
+        assert!(matches!(inbox, Outcome::Transient(_) | Outcome::Wait(_)), "a refused INBOX settled the row: {inbox:?}");
     }
 
     /// A server that will not take the auto-reply terms (an empty HEADER
@@ -778,8 +891,9 @@ mod tests {
         assert!(matches!(outcome, Outcome::NoReply { .. }), "cached mail that is no answer counted: {outcome:?}");
     }
 
-    /// The server turns every reply search away: the cache decides, and a
-    /// refusal never spends the row's tries.
+    /// The server turns every reply search away for its criteria: a cache
+    /// that could be read decides, a hit or a miss; one that could not (closed
+    /// here) settles nothing, and the row tries again.
     #[tokio::test]
     async fn with_every_server_search_refused_the_cache_decides() {
         use mock_imap::state::Mailbox;
@@ -791,13 +905,19 @@ mod tests {
                 mock_imap::Scenario::new()
                     .mailbox(Mailbox::new("INBOX"))
                     .mailbox(sent_with(id))
-                    .fault(Trigger::with("SEARCH", "In-Reply-To"), Action::RefuseWith("NO".into(), "Search unavailable".into())),
+                    .fault(Trigger::with("SEARCH", "In-Reply-To"), Action::RefuseWith("BAD".into(), "Unsupported search criteria".into())),
             )
         };
         let quiet = refusing("<s1@me>");
         let (dir, state) = rig(&quiet);
+        cache(&state, &[("INBOX", vec![cached(1, "client@example.com", "Hello", json!({}))])]);
         seed(&dir, "a", "<s1@me>", 1_000);
         let no_reply = check_row(&state, &row(&dir, "a")).await;
+
+        let unread_cache = refusing("<s3@me>");
+        let (dir3, state3) = rig(&unread_cache);
+        seed(&dir3, "a", "<s3@me>", 1_000);
+        let unknown = check_row(&state3, &row(&dir3, "a")).await;
 
         let answered = refusing("<s2@me>");
         let (dir2, state2) = rig(&answered);
@@ -805,8 +925,113 @@ mod tests {
         seed(&dir2, "a", "<s2@me>", 1_000);
         let replied = check_row(&state2, &row(&dir2, "a")).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
-        assert!(matches!(no_reply, Outcome::NoReply { .. }), "refused searches with nothing cached: {no_reply:?}");
+        assert!(matches!(no_reply, Outcome::NoReply { .. }), "refused searches, cache with no answer: {no_reply:?}");
+        assert!(matches!(unknown, Outcome::Transient(_)), "refused searches, cache unreadable: {unknown:?}");
         assert_eq!(replied, Outcome::Replied);
+    }
+
+    /// A NO the server marks temporary ([UNAVAILABLE] and the like) is a try
+    /// to repeat, not a refusal the cache can settle.
+    #[tokio::test]
+    async fn a_temporary_refusal_of_the_reply_search_is_transient() {
+        use mock_imap::state::Mailbox;
+        use mock_imap::{Action, Trigger};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new()
+                .mailbox(Mailbox::new("INBOX"))
+                .mailbox(sent_with("<t@me>"))
+                .fault(Trigger::with("SEARCH", "In-Reply-To"), Action::RefuseWith("NO".into(), "[UNAVAILABLE] Backend down, try later".into())),
+        );
+        let (dir, state) = rig(&server);
+        cache(&state, &[("INBOX", vec![cached(1, "client@example.com", "Hello", json!({}))])]);
+        seed(&dir, "a", "<t@me>", 1_000);
+        let outcome = check_row(&state, &row(&dir, "a")).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(matches!(outcome, Outcome::Transient(_)), "a temporary refusal settled the row: {outcome:?}");
+    }
+
+    /// A Gmail login is one inbox however its address is spelled: a nudge
+    /// from john.doe@ or johndoe+x@ is the sender's own, in the cache and on
+    /// the server alike.
+    #[tokio::test]
+    async fn a_nudge_from_the_login_spelled_another_way_is_no_reply() {
+        use mock_imap::state::{Mailbox, Message};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new()
+                .mailbox(
+                    Mailbox::new("INBOX")
+                        .push_msg(Message::new(0, eml("<n1@me>", "John <john.doe@gmail.com>", "In-Reply-To: <gm@me>\r\n")))
+                        .push_msg(Message::new(0, eml("<n2@me>", "johndoe+x@gmail.com", "References: <gm@me>\r\n"))),
+                )
+                .mailbox(sent_with("<gm@me>")),
+        );
+        let (dir, state) = rig_as(&server, "johndoe@googlemail.com");
+        cache(&state, &[("INBOX", vec![
+            cached(7, "John.Doe@gmail.com", "Re: Quote", json!({"inReplyTo": "<gm@me>"})),
+            cached(8, "johndoe+news@googlemail.com", "Re: Quote", json!({"references": ["<gm@me>"]})),
+        ])]);
+        app_db::with(&dir, |c| follow_up::insert(c, "a", "acct", "<gm@me>", "Quote", "ana@example.com", "Sent", &[], 1_000, 1_000)).unwrap();
+        let outcome = check_row(&state, &row(&dir, "a")).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(matches!(outcome, Outcome::NoReply { .. }), "the login's own nudge counted as a reply: {outcome:?}");
+    }
+
+    /// The reply check reads the whole header cache once a pass, for every
+    /// due reminder of the account, not once per reminder.
+    #[tokio::test]
+    async fn one_cache_read_answers_every_due_reminder_of_a_pass() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let dir = app_dir();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        cache(&state, &[("INBOX", vec![
+            cached(1, "ana@example.com", "Re: one", json!({"inReplyTo": "<one@me>"})),
+            cached(2, "bo@example.com", "Re: two", json!({"inReplyTo": "<two@me>"})),
+        ])]);
+        seed(&dir, "one", "<one@me>", 1_000);
+        seed(&dir, "two", "<two@me>", 1_000);
+        seed(&dir, "none", "<none@me>", 1_000);
+        let rows: Vec<_> = ["one", "two", "none"].iter().map(|id| row(&dir, id)).collect();
+        SCAN_PAGES.store(0, std::sync::atomic::Ordering::SeqCst);
+        let answers = cache_answers(&state, &rows).await;
+        assert_eq!(SCAN_PAGES.load(std::sync::atomic::Ordering::SeqCst), 1, "one page read for the whole pass");
+        assert_eq!(answers.get("one"), Some(&CacheAnswer::Hit));
+        assert_eq!(answers.get("two"), Some(&CacheAnswer::Hit));
+        assert_eq!(answers.get("none"), Some(&CacheAnswer::Miss));
+    }
+
+    /// What the header fetch learns about an automatic reply reaches the
+    /// cached row (`autoReply`), and every newly fetched row says it, empty
+    /// when none: an older row has no such key.
+    #[tokio::test]
+    async fn a_synced_row_carries_its_auto_reply_mark() {
+        use mock_imap::state::{Mailbox, Message};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new().mailbox(
+                Mailbox::new("INBOX")
+                    .push_msg(Message::new(0, eml("<vac@ana>", "ana@example.com", "Auto-Submitted: auto-replied\r\n")))
+                    .push_msg(Message::new(0, eml("<plain@ana>", "ana@example.com", ""))),
+            ),
+        );
+        let (_dir, state) = rig(&server);
+        crate::custody::open_into(&state).expect("custody opens");
+        let sync_account: crate::sync_engine::SyncAccount = serde_json::from_value(json!({
+            "id": "acct", "email": "me@example.com",
+            "imapConfig": { "email": "me@example.com", "password": "hunter2", "imapHost": server.host(), "imapPort": server.port() },
+        }))
+        .unwrap();
+        assert!(state.sync_engine.sync_account(&sync_account, "INBOX").await.success);
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let uids: Vec<u32> = server.state().find("INBOX").unwrap().messages.iter().map(|m| m.uid).collect();
+        let rows = crate::custody::with_conn(&state, |c| sql_cache::load_by_uids(c, "acct", "INBOX", &uids)).unwrap();
+        let mark = |id: &str| rows.iter().find(|r| r["messageId"].as_str() == Some(id)).map(|r| r.get("autoReply").cloned());
+        assert_eq!(mark("<vac@ana>"), Some(Some(json!("auto-replied"))));
+        assert_eq!(mark("<plain@ana>"), Some(Some(json!(""))), "a new row says it was not automatic");
     }
 
     /// Locked keychain: the worker waits, the row is never marked failed.
