@@ -5,8 +5,8 @@
    home.css and the .mv-clip card in english-site.css. */
 
 /* Hero: badge, headline and lead centred. Below them, on desktop, the product
-   visual on the left and the price card on the right; on phones the DOM order
-   stands: card (the action) first, then the visual. */
+   clip on the left and the price card on the right; on phones the DOM order
+   stands: card (the action) first, then the clip. */
 .hm-hero { padding:56px 0 88px; }
 .hm-hero h1 { font-size:clamp(2.6rem,5vw,4.25rem); margin-bottom:1rem; }
 .hm-hero .hm-lead { max-width:42em; margin-bottom:2.4rem !important; }
@@ -19,11 +19,19 @@
   .hm-hero-media { grid-column:1; grid-row:1; }
   .hm-hero-side { grid-column:2; grid-row:1; }
 }
-.hm-hero-media .mv-demo-card { border-color:rgba(255,255,255,.12); box-shadow:0 30px 90px -30px rgba(139,92,246,.6); }
-.hm-hero-media .mv-demo-caption { padding:14px 17px; }
-/* The hero clip, once it replaces the demo figure (see the comment in index.html). */
-.hm-hero-clip { padding:10px; }
-.hm-hero-clip video { aspect-ratio:1440/900; }
+/* The hero clip: a 1440x900 montage in a dark card. home-hero.js starts it
+   after load on wider screens. The whole clip opens the live demo in a new
+   window, and the badge and the button in its corners say so. With Save-Data
+   the clip is swapped for its poster (.hm-hero-still). */
+.hm-hero-clip { padding:10px 10px 4px; border-color:rgba(255,255,255,.12); box-shadow:0 30px 90px -30px rgba(139,92,246,.6); }
+.hm-hero-clip .mv-clip-media { position:relative; }
+.hm-hero-clip video,.hm-hero-still { aspect-ratio:1440/900; }
+.hm-hero-still { display:block; width:100%; height:auto; border-radius:10px; background:#11121b; }
+.hm-hero-demo { position:absolute; inset:10px; z-index:1; border-radius:10px; color:inherit; text-decoration:none; }
+.hm-hero-demo .mv-demo-launch { left:auto; right:14px; bottom:14px; min-height:40px; padding:8px 14px; transform:none; font-size:.86rem; }
+.hm-hero-demo:hover .mv-demo-launch { background:#3e35c8; box-shadow:0 10px 26px rgba(17,18,27,.3); }
+.hm-hero-demo:focus-visible { outline:2px solid var(--mv-accent); outline-offset:3px; }
+.mv-site .hm-hero-clip figcaption { flex-direction:row; padding:12px 8px 8px; border-top:0; }
 
 .hm-offer { padding:20px 22px; border:1px solid rgba(178,173,255,.26); border-radius:18px; background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02)),var(--mv-card); box-shadow:0 30px 80px -40px rgba(99,102,241,.7); }
 .hm-offer-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 12px; margin-bottom:12px; }
@@ -58,15 +66,11 @@
 
 /* Clip groups: headline, lead, then the clips, two columns at most so a clip is
    never shrunk past legibility. An odd last card spans the row and lays its clip
-   beside its caption. A group whose clips are still to come shows its headline
-   and lead alone, in a shorter band. */
+   beside its caption. */
 .hm-clip-group .hm-center { margin-bottom:40px; }
-.hm-clip-group:not(:has(.mv-clip)) .hm-center { margin-bottom:0; }
 .hm-clip-group .hm-center .hm-body { margin-bottom:0; }
 .hm-clip-group .hm-body a { color:var(--mv-ink); text-decoration:underline; text-decoration-color:color-mix(in oklab,var(--hue) 55%,transparent); text-underline-offset:3px; }
 .hm-group-link { margin:16px 0 0; }
-.hm-clip-group:not(:has(.mv-clip)) { padding-block:80px; }
-.hm-clip-group .mv-clip-grid:not(:has(> .mv-clip)) { display:none; }
 .hm-clip-group .mv-clip-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
 .hm-clip-group .mv-clip-grid > :last-child:nth-child(odd) { grid-column:1 / -1; }
 @media (min-width:761px) {
@@ -125,7 +129,8 @@
   .hm-hero .hm-lead { font-size:.96rem; line-height:1.55; margin-bottom:1.3rem !important; }
   .hm-badge { gap:8px; margin-bottom:14px; padding:4px 10px 4px 4px; font-size:.74rem; }
   .hm-badge-tag { padding:3px 8px; font-size:.62rem; }
-  .hm-clip-group:not(:has(.mv-clip)) { padding-block:56px; }
+  .hm-hero-demo .mv-demo-badge { top:10px; left:10px; }
+  .hm-hero-demo .mv-demo-launch { right:10px; bottom:10px; min-height:34px; padding:6px 12px; font-size:.8rem; }
   .hm-offer { padding:16px; }
   .hm-offer-plan { padding:8px 12px; }
   .hm-offer-price [data-mv-price] { font-size:1.25rem; }

@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 // The homepage shows light and dark captures side by side, whatever the site
 // theme: only the hero demo follows the theme, every other shot is pinned. The
-// English homepage now shows clips instead of pillar screenshots; the rule holds
-// for the frozen snapshot the locale homepages are built from.
+// English homepage now shows clips instead of pillar screenshots and of the hero
+// demo preview; the rule holds for the frozen snapshot the locale homepages are
+// built from.
 const theme = (img) => (/-light-\d+\.webp/.test(img.getAttribute('src')) ? 'light' : 'dark');
 
 describe.each(['website/index.html', 'index.html', 'website/i18n/frozen/index.html'])('%s screenshots', (file) => {
@@ -26,7 +27,14 @@ describe.each(['website/index.html', 'index.html', 'website/i18n/frozen/index.ht
     themes.slice(1).forEach((t, i) => expect(t).not.toBe(themes[i]));
   });
 
-  it('keeps the hero demo preview following the site theme', () => {
+  // The frozen page keeps its hero demo preview, which follows the site theme.
+  // The English homepage shows the hero clip in its place, inside the dark hero.
+  it.runIf(file.includes('/frozen/'))('keeps the hero demo preview following the site theme', () => {
     expect(doc.querySelector('picture source[data-shot-dark][srcset*="/demo/assets/"]')).not.toBeNull();
+  });
+
+  it.runIf(!file.includes('/frozen/'))('shows the hero clip where the demo preview was', () => {
+    expect(doc.querySelector('picture source[srcset*="/demo/assets/"]')).toBeNull();
+    expect(doc.querySelector('.hm-hero.hm-dark .hm-hero-media video[poster="/assets/clips/en/hero-montage.jpg"]')).not.toBeNull();
   });
 });

@@ -24,10 +24,12 @@ function englishPages(dir = root) {
 }
 
 describe('homepage demo launcher', () => {
-  it('uses a separate-window live demo image with no app preload', () => {
+  // The English hero shows the hero clip; the launcher lies over it and opens the
+  // live demo in a separate window. The locale homepages keep the demo image.
+  it('uses a separate-window live demo launcher over the hero clip with no app preload', () => {
     const html = read('index.html');
     const dom = new JSDOM(html);
-    const image = dom.window.document.querySelector('.mv-hero-product .mv-shot');
+    const image = dom.window.document.querySelector('.hm-hero-clip .mv-clip-media > a.hm-hero-demo');
     expect(image?.tagName).toBe('A');
     expect(image?.getAttribute('href')).toBe('/demo/?lang=en');
     expect(image?.getAttribute('target')).toBe('_blank');
@@ -36,7 +38,7 @@ describe('homepage demo launcher', () => {
     expect(image?.querySelectorAll('a')).toHaveLength(0);
     expect(image?.querySelector('.mv-demo-badge')?.textContent).toBe('Interactive demo');
     expect(image?.querySelector('.mv-demo-launch')?.textContent).toContain('Open the demo');
-    expect(image?.querySelector('img')?.getAttribute('alt')).toMatch(/inbox/i);
+    expect(image?.parentElement.querySelector('video')?.getAttribute('aria-label')).toMatch(/inbox/i);
     // The hero has one button; the demo is a text link beside "Other platforms", under the price card.
     expect(dom.window.document.querySelector('.hm-hero .mv-actions [data-acquisition-destination="demo"]')).toBeNull();
     const demoAction = dom.window.document.querySelector('.hm-hero-links > a[data-acquisition-destination="demo"]');
@@ -47,11 +49,11 @@ describe('homepage demo launcher', () => {
     expect(dom.window.document.querySelectorAll('.hm-hero .mv-actions [data-acquisition-destination="thank_you"]')).toHaveLength(3);
     expect(dom.window.document.querySelectorAll('.hm-hero-links > a[data-acquisition-destination="setup"]')).toHaveLength(1);
     expect(html).not.toContain('See how it works');
-    expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('A real inbox. Ready to explore.');
-    expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('Search mail, switch views, and try archiving.');
-    expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('3 accounts · 300 sample emails');
-    expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('No signup. No installation.');
-    expect(dom.window.document.querySelector('.mv-hero-product figcaption a')).toBeNull();
+    expect(dom.window.document.querySelector('.hm-hero-clip figcaption')?.textContent).toContain('A real inbox. Ready to explore.');
+    expect(dom.window.document.querySelector('.hm-hero-clip figcaption')?.textContent).toContain('Search mail, switch views, and try archiving.');
+    expect(dom.window.document.querySelector('.hm-hero-clip figcaption')?.textContent).toContain('3 accounts · 300 sample emails');
+    expect(dom.window.document.querySelector('.hm-hero-clip figcaption')?.textContent).toContain('No signup. No installation.');
+    expect(dom.window.document.querySelector('.hm-hero-clip figcaption a')).toBeNull();
     expect(html).not.toMatch(/<iframe[^>]+demo|<(?:link|script)[^>]+(?:prefetch|preload|modulepreload)[^>]+demo|<script[^>]+\/demo\/assets\//i);
   });
 });

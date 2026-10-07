@@ -3,8 +3,8 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import * as i18n from '../i18n/i18n.mjs';
 
-// The English homepage, laid out as clip cards: a hero with the price card and
-// one download, four key points, three groups of clips (two columns at most),
+// The English homepage, laid out as clip cards: a hero with the price card, one
+// download and the hero clip, four key points, six groups of clips (two columns at most),
 // the small-things grid, a spec card, then the comparison, feedback and the
 // closing download. English only for now: the locale homepages are built from a
 // frozen snapshot of the previous English page and do not change.
@@ -19,6 +19,8 @@ const text = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
 // A two-line heading read as one line: the <br> becomes a space.
 const heading = (h) => h.innerHTML.replace(/<br>/g, ' ').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const before = (a, b) => Boolean(a && b && a.compareDocumentPosition(b) & 4);
+// The text of every HTML comment on the page, one entry per comment.
+const comments = [...html.matchAll(/<!--([\s\S]*?)-->/g)].map((m) => m[1]);
 const shown = (els) => [...els].filter((el) => !el.closest('[hidden]'));
 const LOCALES = ['de', 'fr', 'es', 'it', 'ja', 'ko', 'zh', 'pt-br'];
 
@@ -147,13 +149,65 @@ describe('hero', () => {
     seq.slice(1).forEach((el, i) => expect(before(seq[i], el), String(i)).toBe(true));
   });
 
-  it('keeps the product visual a media slot that can take the hero clip', () => {
+  it('fills the media slot with the hero clip: muted, lazy, its eager 1440 poster', () => {
     const media = hero.querySelector('.hm-hero-media');
     expect(media.dataset.clipSlot).toBe('hero-montage');
-    expect(media.querySelector('.mv-demo-card picture source[data-shot-dark]')).not.toBeNull();
-    // The hero clip markup waits in a comment until hero-montage.mp4 exists.
-    expect(html).toMatch(/<!--[\s\S]*data-clip="hero-montage"[\s\S]*-->/);
-    expect(hero.querySelector('video')).toBeNull();
+    const figure = media.querySelector('figure.mv-clip.hm-hero-clip');
+    expect(figure.dataset.clip).toBe('hero-montage');
+    expect(hero.querySelectorAll('video')).toHaveLength(1);
+    const video = figure.querySelector('.mv-clip-media > video');
+    for (const flag of ['muted', 'loop', 'playsinline']) expect(video.hasAttribute(flag), flag).toBe(true);
+    expect(video.hasAttribute('autoplay')).toBe(false);
+    expect(video.getAttribute('preload')).toBe('none');
+    expect(video.getAttribute('poster')).toBe('/assets/clips/en/hero-montage.jpg');
+    expect([video.getAttribute('width'), video.getAttribute('height')]).toEqual(['1440', '900']);
+    expect(video.getAttribute('aria-label').length).toBeGreaterThan(60);
+    expect(video.getAttribute('aria-label')).not.toMatch(/Describe exactly|—/);
+    const sources = video.querySelectorAll('source');
+    expect(sources).toHaveLength(1);
+    expect(sources[0].getAttribute('src')).toBe('/assets/clips/en/hero-montage.mp4');
+    expect(sources[0].getAttribute('type')).toBe('video/mp4');
+    expect(statSync('website/assets/clips/en/hero-montage.mp4').size).toBeLessThan(1.6 * 1024 * 1024);
+    expect(statSync('website/assets/clips/en/hero-montage.jpg').size).toBeLessThan(150 * 1024);
+    expect(jpegWidth('website/assets/clips/en/hero-montage.jpg')).toBe(1440);
+    // The clip replaces the old demo preview; no commented slot is left behind.
+    expect(media.querySelector('picture, img')).toBeNull();
+    expect(comments.filter((c) => c.includes('hero-montage'))).toEqual([]);
+    expect(html).not.toContain('/demo/assets/demo-preview-en-');
+  });
+
+  it('lays the demo launcher over the clip, after the text links, with its acquisition attributes', () => {
+    const media = hero.querySelector('.hm-hero-media');
+    const link = media.querySelector('.hm-hero-clip .mv-clip-media > a.hm-hero-demo');
+    expect(link.getAttribute('href')).toBe('/demo/?lang=en');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(link.getAttribute('aria-label')).toMatch(/new window/);
+    expect(link.dataset.acquisitionEvent).toBe('home_cta');
+    expect(link.dataset.acquisitionPlacement).toBe('hero_preview');
+    expect(link.dataset.acquisitionDestination).toBe('demo');
+    expect(text(link.querySelector('.mv-demo-badge'))).toBe('Interactive demo');
+    expect(text(link.querySelector('.mv-demo-launch'))).toBe('Open the demo ↗');
+    expect(link.querySelector('video, a, button')).toBeNull();
+    // The first demo CTA in the document stays the hero text link.
+    const first = doc.querySelector('[data-acquisition-destination="demo"]');
+    expect(first.closest('.hm-hero-links')).not.toBeNull();
+    expect(first.dataset.acquisitionPlacement).toBe('hero');
+    expect(before(first, link)).toBe(true);
+    // One button in the hero: the launcher is a styled span, not a .mv-button.
+    expect(media.querySelector('.mv-button')).toBeNull();
+    expect(text(media.querySelector('figcaption'))).toContain('A real inbox. Ready to explore.');
+  });
+
+  it('loads the hero starter before the clip player, on this page only', () => {
+    const scripts = [...doc.querySelectorAll('script[src]')].map((s) => s.getAttribute('src'));
+    const starter = scripts.findIndex((s) => /^\/assets\/home-hero\.js\?v=[\w-]+$/.test(s));
+    const player = scripts.findIndex((s) => s.startsWith('/assets/english-site.js?'));
+    expect(starter).toBeGreaterThan(-1);
+    expect(starter).toBeLessThan(player);
+    expect(doc.querySelector('script[src^="/assets/home-hero.js"]').hasAttribute('defer')).toBe(true);
+    for (const l of LOCALES) expect(read(`website/${l}/index.html`), l).not.toContain('home-hero.js');
+    expect(read('website/i18n/frozen/index.html')).not.toContain('home-hero.js');
   });
 
   it('lays the visual left and the card right on desktop, in DOM order on phones', () => {
@@ -186,26 +240,41 @@ describe('key points', () => {
 
 // The five long sections, each now a clip group with its headline and lead,
 // then one group for the remaining everyday clips. Only real clips render; the
-// rest wait as commented card markup.
+// clips still to be recorded wait as commented card markup.
 const GROUPS = {
-  backups: ['Free up your mailbox. Keep every message.', ['archive-delete', 'scheduled-backups', 'time-capsule']],
-  'notion-mail': ["Notion Mail is gone. Your way of working isn't.", []],
-  privacy: ["Your inbox is nobody's business. Not even ours.", []],
-  trackers: ['Read in private. Senders learn nothing.', ['trackers', 'link-safety']],
-  customize: ['Email that fits the way you work. Change almost anything.', []],
-  accounts: ['Every account. One calm window.', ['unified-inbox', 'undo-send']],
+  backups: ['Free up your mailbox. Keep every message.', ['archive-delete', 'scheduled-backups', 'time-capsule', 'manual-backup']],
+  'notion-mail': ["Notion Mail is gone. Your way of working isn't.", ['views', 'custom-fields', 'ai-writing']],
+  privacy: ["Your inbox is nobody's business. Not even ours.", ['search-local', 'sender-verification']],
+  trackers: ['Read in private. Senders learn nothing.', ['trackers', 'link-safety', 'privacy-mode']],
+  customize: ['Email that fits the way you work. Change almost anything.', ['chat-view', 'layouts']],
+  accounts: ['Every account. One calm window.', ['unified-inbox', 'undo-send', 'scheduled-send', 'insights']],
 };
-const PAGES = {
-  'archive-delete': 'archive-and-delete',
-  'scheduled-backups': 'scheduled-backups',
-  'time-capsule': 'time-capsule',
-  trackers: 'email-tracker-blocking',
-  'link-safety': 'link-safety',
-  'undo-send': 'undo-send',
-  'unified-inbox': 'unified-inbox',
+// Each clip's Learn more link. Privacy mode has no feature page of its own.
+const LINKS = {
+  'archive-delete': '/features/archive-and-delete.html',
+  'scheduled-backups': '/features/scheduled-backups.html',
+  'time-capsule': '/features/time-capsule.html',
+  'manual-backup': '/features/local-backups.html',
+  views: '/features/saved-views.html',
+  'custom-fields': '/features/custom-fields.html',
+  'ai-writing': '/features/ai-writing.html',
+  'search-local': '/features/local-vault.html',
+  'sender-verification': '/features/sender-verification.html',
+  trackers: '/features/email-tracker-blocking.html',
+  'link-safety': '/features/link-safety.html',
+  'privacy-mode': '/faq/premium.html#share-screenshots-privately',
+  'chat-view': '/features/views.html',
+  layouts: '/features/layouts.html',
+  'unified-inbox': '/features/unified-inbox.html',
+  'undo-send': '/features/undo-send.html',
+  'scheduled-send': '/features/scheduled-send.html',
+  insights: '/features/insights.html',
 };
-const PREMIUM = new Set(['archive-delete', 'scheduled-backups', 'time-capsule', 'trackers']);
-const BATCH_2 = ['manual-backup', 'views', 'custom-fields', 'tagging-rules', 'ai-writing', 'search-local', 'add-account', 'sender-verification', 'privacy-mode', 'chat-view', 'layouts', 'quick-actions', 'scheduled-send', 'email-cleanup'];
+// The English feature pages that carry their clip (and the clips tag).
+const PAGES = Object.fromEntries(Object.entries(LINKS).filter(([, href]) => href.startsWith('/features/')).map(([clip, href]) => [clip, href.slice('/features/'.length, -'.html'.length)]));
+// The Premium chip, exactly where the linked page says Premium.
+const PREMIUM = new Set(['archive-delete', 'scheduled-backups', 'time-capsule', 'trackers', 'privacy-mode', 'scheduled-send']);
+const PENDING = ['tagging-rules', 'add-account', 'quick-actions', 'email-cleanup'];
 
 describe('clip groups', () => {
   it.each(Object.entries(GROUPS))('%s: two-line gradient headline, a short lead, its real clips in order', (id, [title, clips]) => {
@@ -231,11 +300,12 @@ describe('clip groups', () => {
     expect(text(doc.getElementById('customize'))).toContain('Only the alerts you want');
   });
 
-  it('hides the grid of a group whose clips are still to come', () => {
-    expect(plain).toMatch(/\.hm-clip-group \.mv-clip-grid:not\(:has\(> \.mv-clip\)\)\s*\{\s*display\s*:\s*none/);
+  it('has no empty group left, so the rules that hid one are gone', () => {
+    for (const id of Object.keys(GROUPS)) expect(doc.getElementById(id).querySelectorAll('.mv-clip-grid > figure.mv-clip').length, id).toBeGreaterThanOrEqual(2);
+    expect(plain).not.toMatch(/:not\(:has\(/);
   });
 
-  it.each(Object.entries(PAGES))('%s: a real clip, a light poster, a title, a caption and a Learn more link', (clip, page) => {
+  it.each(Object.entries(LINKS))('%s: a real clip, a light poster, a title, a caption and a Learn more link', (clip, href) => {
     const figure = doc.querySelector(`.hm-clip-group figure[data-clip="${clip}"]`);
     const video = figure.querySelector('video');
     for (const flag of ['muted', 'loop', 'playsinline']) expect(video.hasAttribute(flag)).toBe(true);
@@ -252,21 +322,31 @@ describe('clip groups', () => {
     expect(text(figure.querySelector('.mv-clip-title')).length).toBeGreaterThan(3);
     expect(text(figure.querySelector('.mv-clip-text'))).toMatch(/\.$/);
     const link = figure.querySelector('figcaption a.mv-text-link');
-    expect(link.getAttribute('href')).toBe(`/features/${page}.html`);
+    expect(link.getAttribute('href')).toBe(href);
+    expect(existsSync('website' + href.replace(/#.*$/, '')), href).toBe(true);
     expect(text(link)).toMatch(/^Learn more/);
+    expect(text(link.querySelector('.hm-sr'))).toBe(`about ${text(figure.querySelector('.mv-clip-title')).replace(/ Premium$/, '')}`);
     expect(Boolean(figure.querySelector('.mv-clip-title .hm-chip'))).toBe(PREMIUM.has(clip));
+    const label = figure.querySelector('video').getAttribute('aria-label');
+    expect(label.length).toBeGreaterThan(40);
+    expect(label).not.toMatch(/Describe exactly/);
+    const caption = text(figure.querySelector('.mv-clip-text'));
+    expect(caption.split(/[.!?](?:\s|$)/).filter(Boolean).length, caption).toBeLessThanOrEqual(2);
     expect(figure.outerHTML).not.toMatch(/—|&mdash;/);
   });
 
-  it('ships no card without its clip, and keeps the batch-2 cards as commented markup', () => {
+  it('ships no card without its clip, and keeps the cards still to be recorded as commented markup', () => {
     for (const fig of doc.querySelectorAll('figure.mv-clip')) {
       const src = fig.querySelector('video source')?.getAttribute('src');
       expect(src && existsSync('website' + src), fig.dataset.clip).toBe(true);
     }
-    for (const clip of BATCH_2) {
+    expect([...doc.querySelectorAll('.hm-clip-group figure.mv-clip')].map((f) => f.dataset.clip).sort()).toEqual(Object.keys(LINKS).sort());
+    for (const clip of PENDING) {
       expect(doc.querySelector(`[data-clip="${clip}"]`), clip).toBeNull();
-      expect(html, clip).toMatch(new RegExp(`<!--[^]*?data-clip="${clip}"[^]*?-->`));
+      expect(comments.filter((c) => c.includes(`data-clip="${clip}"`)), clip).toHaveLength(1);
     }
+    // A shown clip leaves no commented copy of its card behind.
+    for (const clip of Object.keys(LINKS)) expect(comments.filter((c) => c.includes(`data-clip="${clip}"`)), clip).toEqual([]);
   });
 
   it('caps the grid at two columns and lets an odd last card span, never leaving a hole', () => {
@@ -288,19 +368,36 @@ describe('clip groups', () => {
 describe('small things', () => {
   const more = doc.getElementById('more');
 
-  it('is a three by three grid of icon cards that keeps the old facts', () => {
+  // Everything a clip card now shows has left the grid; the grid is the features
+  // that have no clip yet, each linking to its own page.
+  const SMALL = ['search', 'keyboard-shortcuts', 'templates', 'tags', 'tagging-rules', 'notifications', 'no-account', 'native-app', 'email-cleanup'];
+
+  it('is a full three by three grid of icon cards, one per feature page', () => {
     const cards = more.querySelectorAll('.hm-icon-grid > a');
     expect(cards).toHaveLength(9);
+    expect([...cards].map((a) => a.getAttribute('href'))).toEqual(SMALL.map((p) => `/features/${p}.html`));
     for (const a of cards) {
+      expect(existsSync('website' + a.getAttribute('href')), a.getAttribute('href')).toBe(true);
       expect(a.querySelector('.hm-icon svg[aria-hidden="true"]')).not.toBeNull();
       expect(text(a.querySelector('strong'))).not.toBe('');
       expect(text(a.querySelector('span:not(.hm-icon)'))).toMatch(/\.$/);
+      expect(a.outerHTML).not.toMatch(/—|&mdash;/);
     }
     const all = text(more);
-    for (const fact of ['50,000 messages searched in under 15 ms', 'Insights', 'Tauri', 'SPF, DKIM and DMARC']) expect(all).toContain(fact);
-    expect(more.querySelector('a[href="/features/email-cleanup.html"] .hm-chip')).not.toBeNull();
+    for (const fact of ['50,000 messages searched in under 15 ms', 'Tauri', 'rebind', 'every provider']) expect(all).toContain(fact);
+    expect([...more.querySelectorAll('.hm-chip')].map((c) => c.closest('a').getAttribute('href'))).toEqual(['/features/email-cleanup.html']);
     expect(more.querySelector('video')).toBeNull();
     expect(rulesFor(plain, '.hm-icon-grid')).toMatch(/grid-template-columns\s*:\s*repeat\(\s*3\s*,/);
+  });
+
+  it('repeats no feature a clip card already shows', () => {
+    const clipped = new Set([...doc.querySelectorAll('.hm-clip-group figure.mv-clip figcaption a')].map((a) => a.getAttribute('href').replace(/#.*$/, '')));
+    const small = [...more.querySelectorAll('.hm-icon-grid > a')].map((a) => a.getAttribute('href').replace(/#.*$/, ''));
+    expect(small.filter((h) => clipped.has(h))).toEqual([]);
+    expect(new Set(small).size).toBe(small.length);
+    for (const gone of ['Hide who you write to', 'Pick how mail reads', 'Arrange your window', 'Know who really sent it', 'Free AI writing help', 'See your mail at a glance']) {
+      expect(text(more), gone).not.toContain(gone);
+    }
   });
 });
 
@@ -349,7 +446,8 @@ describe('page order', () => {
 describe('Meatlytics tag and stylesheet', () => {
   const tagOf = (h) => (h.match(/<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="([^"]+)">\s*<\/script>/) || [])[1];
 
-  it('tags the English homepage and the seven English clip pages clips-2026-10, their locale copies conversion-2026-10', () => {
+  it('tags the English homepage and the English clip pages clips-2026-10, their locale copies conversion-2026-10', () => {
+    expect(Object.keys(PAGES)).toHaveLength(17);
     for (const f of ['website/index.html', 'index.html', ...Object.values(PAGES).map((p) => `website/features/${p}.html`)]) expect(tagOf(read(f)), f).toBe('clips-2026-10');
     for (const l of LOCALES) {
       for (const rel of ['index.html', ...Object.values(PAGES).map((p) => `features/${p}.html`)]) expect(tagOf(read(`website/${l}/${rel}`)), `${l}/${rel}`).toBe('conversion-2026-10');
