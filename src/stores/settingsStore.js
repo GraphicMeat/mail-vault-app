@@ -560,6 +560,10 @@ export const useSettingsStore = create(
       // attachment cache newest-first so they open without a round trip.
       autoDownloadAttachments: false,
 
+      // Premium: Send asks first when a message mentions an attachment and
+      // carries none (utils/missingAttachment.js).
+      attachmentReminder: true,
+
       // Layout settings
       layoutMode: 'three-column', // 'three-column' | 'two-column'
       viewStyle: 'list', // 'list' | 'chat'
@@ -1315,6 +1319,7 @@ export const useSettingsStore = create(
 
       setDaemonAlwaysOn: (on) => set({ daemonAlwaysOn: !!on }),
       setAutoDownloadAttachments: (on) => set({ autoDownloadAttachments: on }),
+      setAttachmentReminder: (on) => set({ attachmentReminder: !!on }),
 
       // Layout settings
       setLayoutMode: (mode) => set({ layoutMode: mode }),

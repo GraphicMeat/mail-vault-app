@@ -177,6 +177,7 @@ export const settingSearchGroups = [
     ['settings.behavior.refreshAppLaunch', 'sync refresh startup launch'],
     ['settings.behavior.autoRefreshInterval', 'sync refresh interval automatic check'],
     ['settings.behavior.autoDownloadAttachments', 'attachments download automatic'],
+    ['settings.behavior.attachmentReminder', 'attachment reminder forgot missing send'],
     ['settings.behavior.sendDelay', 'undo send delay sending'],
     ['settings.behavior.markEmailsRead', 'mark read unread delay'],
     ['settings.behavior.delayBeforeMarkingRead', 'mark read delay seconds'],

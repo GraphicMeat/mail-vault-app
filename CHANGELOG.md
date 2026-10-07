@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Send asks when you mention an attachment but forgot it (Premium).** A message that says "attached", "see the attachment", "im Anhang", "ci-joint", "添付" and the like in any of the app's languages, with no file attached, stops at Send and offers Attach file or Send anyway. Quoted text and your signature are not read, nor is a reply's subject. Turn it off in Settings > Behavior > Attachments.
+
 ## [2.19.1] - 2026-10-07
 
 ### Changed

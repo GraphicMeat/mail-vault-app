@@ -1,12 +1,12 @@
 import { Button } from '../ui/Button';
 import React from 'react';
-import { useSettingsStore, SWIPE_ACTIONS } from '../../stores/settingsStore';
+import { useSettingsStore, SWIPE_ACTIONS, hasPremiumAccess } from '../../stores/settingsStore';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { SettingRow } from '../ui/SettingRow';
 import { AfterDeletePreview } from './PreferencePreview';
 import { DefaultMailApp } from './DefaultMailApp';
 import { ComposeOpenMode } from './ComposeOpenMode';
-import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2, Download, MoveHorizontal } from 'lucide-react';
+import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2, Download, MoveHorizontal, Lock } from 'lucide-react';
 import { SWIPE_ACTION_LABELS } from '../SwipeBackdrop';
 import { t, useT  } from '../../i18n/index.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
@@ -34,6 +34,9 @@ export function BehaviorSettings() {
     setSwipeAction,
     autoDownloadAttachments,
     setAutoDownloadAttachments,
+    attachmentReminder,
+    setAttachmentReminder,
+    billingProfile,
     searchHistoryLimit,
     setSearchHistoryLimit,
     searchHistory,
@@ -212,6 +215,26 @@ export function BehaviorSettings() {
             onClick={() => setAutoDownloadAttachments(!autoDownloadAttachments)}
             testId="toggle-auto-download-attachments"
           />
+        </div>
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <div className="font-medium text-mail-text">{t('settings.behavior.attachmentReminder')}</div>
+            <div className="text-sm text-mail-text-muted">
+              {t('settings.behavior.attachmentReminderDesc')}
+            </div>
+          </div>
+          {hasPremiumAccess(billingProfile) ? (
+            <ToggleSwitch
+              label={t('settings.behavior.attachmentReminder')} active={attachmentReminder !== false}
+              onClick={() => setAttachmentReminder(attachmentReminder === false)}
+              testId="toggle-attachment-reminder"
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-mail-text-muted shrink-0">
+              <Lock size={13} />
+              {t('common.premium')}
+            </div>
+          )}
         </div>
       </div>
 

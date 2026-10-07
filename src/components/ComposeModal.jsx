@@ -38,6 +38,7 @@ import { withAttachmentBytes } from '../services/attachmentUtils';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 import { buildQuoteBlocks, replyWireHtml } from '../utils/replyQuote';
 import { clampComposeSize } from '../utils/composeSize';
+import { missingAttachment } from '../utils/missingAttachment';
 
 // The embedded modal and the detached window both clamp a restored/resized
 // size to whatever space is actually available right now, so a size saved on
@@ -154,6 +155,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const composeContextVisible = useSettingsStore(s => s.composeContextVisible ?? true);
+  const attachmentReminder = useSettingsStore(s => s.attachmentReminder ?? true);
   const setComposeContextVisible = useSettingsStore(s => s.setComposeContextVisible);
   const composeContextSplit = useSettingsStore(s => s.composeContextSplit ?? null);
   const setComposeContextSplit = useSettingsStore(s => s.setComposeContextSplit);
@@ -207,6 +209,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [autoDetachTick, setAutoDetachTick] = useState(0);
   const [error, setError] = useState(null);
   const [attachments, setAttachments] = useState([]);
+  const [showAttachmentReminder, setShowAttachmentReminder] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -836,11 +839,20 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   };
 
   // Send and Shift+Enter both land here; the armed plan picks the path.
-  const handleSend = async (event) => {
-    event.preventDefault();
+  // "Send anyway" on the attachment reminder comes back with `sendAnyway`.
+  const handleSend = async (event, sendAnyway = false) => {
+    event?.preventDefault();
     if (detaching) return;
     if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
     if (!selectedAccount) { setError(t("compose.noAccountSelected")); return; }
+    // Premium is read last: the cheap text check rules most sends out first.
+    // A reply draft restored as a new window still has the original's subject.
+    if (!sendAnyway && attachmentReminder
+      && missingAttachment({ mode: isForward ? 'forward' : formData.inReplyTo ? 'reply' : mode, subject: formData.subject, bodyText: htmlToText(formData.body), attachmentCount: attachments.length })
+      && hasPremiumAccess(billingProfile)) {
+      setShowAttachmentReminder(true);
+      return;
+    }
     const { delay, draft } = routeSend(sendPlan, scheduleDraft);
     // Armed a while ago, a set time can have gone by since.
     if (draft && (!draft.localTime || isPastLocalTime(draft.localTime, draft.tz))) {
@@ -1971,6 +1983,30 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             ><span aria-hidden="true">↘</span></button>
           )}
       </motion.div>
+
+      {/* Mentioned an attachment, attached nothing. */}
+      <Dialog
+        open={showAttachmentReminder}
+        onClose={() => setShowAttachmentReminder(false)}
+        role="alertdialog"
+        size="sm"
+        panelBg="bg-mail-surface"
+        data-testid="compose-attachment-reminder"
+        title={t('compose.attachmentReminder.title')}
+        description={t('compose.attachmentReminder.description')}
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="ghost" data-testid="compose-attachment-reminder-send"
+              onClick={() => { setShowAttachmentReminder(false); handleSend(null, true); }}>
+              {t('compose.attachmentReminder.sendAnyway')}
+            </Button>
+            <Button variant="primary" data-autofocus data-testid="compose-attachment-reminder-attach"
+              onClick={() => { setShowAttachmentReminder(false); fileInputRef.current?.click(); }}>
+              {t('compose.attachmentReminder.attach')}
+            </Button>
+          </div>
+        }
+      />
 
       {/* Discard confirmation. Above the compose window it belongs to. */}
       <Dialog
