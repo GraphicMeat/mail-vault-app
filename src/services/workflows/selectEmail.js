@@ -18,7 +18,6 @@ import { readIndexSnippets } from '../indexSnippet';
 import { t } from '../../i18n/index.js';
 import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity';
 import { stopThreadReadTimer, cancelThreadReadTimers } from './threadReadTimer';
-import { useFollowUpStore, followUpAt } from '../../stores/followUpStore';
 
 // Module-level mark-as-read timer, and the message it is counting down for
 // (`accountId-mailbox-uid`, the flag core's target key).
@@ -479,12 +478,6 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   if (realUid instanceof Promise) {
     realUid = await realUid;
     if (!isCurrent()) return;
-  }
-  // A follow-up reminder's row is its Sent copy, which is read already, so
-  // the mark-read below never fires for it: opening it marks the reminder.
-  const reminder = followUpAt(get(), { accountId, mailbox, uid: realUid });
-  if (reminder && !reminder.seen && useSettingsStore.getState().markAsReadMode !== 'manual') {
-    useFollowUpStore.getState().setSeen(reminder.id, true);
   }
   // A draft the user wrote here reopens in compose, not the viewer — before
   // the token refresh below, because continuing a local draft needs no server

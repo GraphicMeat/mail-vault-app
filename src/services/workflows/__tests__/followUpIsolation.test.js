@@ -1,8 +1,9 @@
-// A due follow-up reminder shows in the inbox as its SENT message, at that
-// message's own location. Every way of being done with the row there (delete,
-// bulk delete, move, archive) only ends the reminder: none of them may reach
-// the Sent copy, on the server or in the vault. In the Sent folder the same
-// message is the real one, and those actions act on it as always.
+// A due follow-up reminder is the user's SENT message brought back to their
+// attention. It must never become a row of the inbox list: every list action
+// (the bulk modal's ranges, select-all, keyboard delete, j/k) works off the
+// list's rows and their (account, folder, uid), and a reminder row there IS
+// the Sent copy's identity, so any of them can reach the real Sent message.
+// Reminders are shown pinned above the list instead (FollowUpPinnedRows).
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
@@ -26,6 +27,7 @@ const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 const mockGetLocalIndexEntry = vi.fn().mockResolvedValue(null);
 const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
+const mockBulkDeleteEmails = vi.fn().mockResolvedValue({ completed: 0 });
 // maildir_delete/local_index_remove now route through transport.js (Task
 // 2.1); each test below still supplies its own mockSend implementation.
 const mockSend = vi.fn().mockResolvedValue(undefined);
@@ -71,7 +73,11 @@ vi.mock('../../api', () => ({
   moveEmails: (...a) => mockMoveEmails(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
+  bulkDeleteEmails: (...a) => mockBulkDeleteEmails(...a),
+  savePendingOperation: vi.fn().mockResolvedValue(undefined),
+  clearPendingOperation: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock('../../authUtils', () => ({
   hasValidCredentials: () => true,
   ensureFreshToken: (a) => Promise.resolve(a),
@@ -127,6 +133,9 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { useFollowUpStore } = await import('../../../stores/followUpStore');
+const { selectionKey } = await import('../../../stores/slices/unifiedHelpers');
+const { resolvePool } = await import('../../../stores/messageRows');
+const { bulkOperationManager } = await import('../../BulkOperationManager');
 
 const ACCT_A = { id: 'acct-a', email: 'a@mock.test' };
 
@@ -139,10 +148,8 @@ const REMINDER = {
   sentAt: Date.UTC(2026, 7, 1), remindAt: Date.UTC(2026, 8, 2), state: 'due',
   sentMailbox: 'Sent', sentUid: 77, seen: false, announced: true,
 };
-// The full selection key the reminder's row has in an INBOX list.
-const REMINDER_KEY = `${ACCT_A.id}:Sent:77`;
 
-function prime({ activeMailbox = 'INBOX', emails = [row(1)], sentEmails = [] } = {}) {
+function prime({ activeMailbox = 'INBOX', emails = [row(1), row(2)], sentEmails = [] } = {}) {
   useFollowUpStore.setState({ rows: [REMINDER] });
   useMailStore.setState({
     accounts: [ACCT_A],
@@ -171,95 +178,54 @@ function prime({ activeMailbox = 'INBOX', emails = [row(1)], sentEmails = [] } =
   useMailStore.getState().updateSortedEmails();
 }
 
-const reminderRow = () => useMailStore.getState().sortedEmails.find(e => e._followUpId === 'f1');
-const dismissed = () => mockDaemonCall.mock.calls.filter(([m]) => m === 'follow_up.dismiss').map(([, p]) => p.id);
-const touchedSent = () => [
-  ...mockDeleteEmail.mock.calls.filter(([, uid]) => uid === 77),
-  ...mockMoveEmails.mock.calls.filter(([, uids]) => [].concat(uids).includes(77)),
-  ...mockSend.mock.calls.filter(([, p]) => p?.uid === 77 || [].concat(p?.uids || []).includes(77)),
-];
+const atSent77 = (e) => (e._mailbox === 'Sent' || e._fromSentFolder) && e.uid === 77;
 
-describe('a removal aimed at a follow-up reminder in the inbox', () => {
+describe('a due follow-up reminder and the inbox list', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDaemonCall.mockResolvedValue({});
     netOnline = true;
     mockDeleteEmail.mockResolvedValue(undefined);
     globalThis.window.__TAURI__ = { core: { invoke: () => {} } };
   });
 
-  it('delete from the row or the reader only dismisses the reminder', async () => {
+  it('is never a row of the list, nor of the pool a key or a range resolves against', () => {
     prime();
-    expect(reminderRow()).toBeTruthy();
-    await useMailStore.getState().deleteEmailFromServer(77, { accountId: ACCT_A.id, mailboxOverride: 'Sent' });
-
-    expect(dismissed()).toEqual(['f1']);
-    expect(touchedSent()).toEqual([]);
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockQueueOp).not.toHaveBeenCalled();
-    expect(reminderRow()).toBeUndefined();
-  });
-
-  it('a bulk delete dismisses the reminder and deletes the rest', async () => {
-    prime();
-    useMailStore.setState({ selectedEmailIds: new Set([REMINDER_KEY, 1]) });
-    await useMailStore.getState().deleteSelectedFromServer();
-
-    expect(dismissed()).toEqual(['f1']);
-    expect(touchedSent()).toEqual([]);
-    expect(mockQueueOp).not.toHaveBeenCalledWith(expect.objectContaining({ mailbox: 'Sent' }));
-    expect(mockDeleteEmail.mock.calls.map(([, uid, mailbox]) => `${mailbox}:${uid}`)).toEqual(['INBOX:1']);
-  });
-
-  it('a move only dismisses the reminder', async () => {
-    prime();
-    await useMailStore.getState().moveEmails([REMINDER_KEY], 'Archive');
-
-    expect(dismissed()).toEqual(['f1']);
-    expect(mockMoveEmails).not.toHaveBeenCalled();
-    expect(touchedSent()).toEqual([]);
-  });
-
-  it('archive only dismisses the reminder: the Sent copy is not saved or flagged', async () => {
-    prime();
-    await useMailStore.getState().saveEmailsLocally([reminderRow()]);
-
-    expect(dismissed()).toEqual(['f1']);
-    expect(touchedSent()).toEqual([]);
-  });
-
-  it('opening it marks the reminder read, never the Sent copy on the server', async () => {
-    prime();
-    const { applyFlagToTargets } = await import('../messageMutations');
-    await applyFlagToTargets([{ account: ACCT_A, accountId: ACCT_A.id, mailbox: 'Sent', uid: 77 }], '\\Seen', true, { undoable: false });
-
-    expect(mockDaemonCall).toHaveBeenCalledWith('follow_up.mark_seen', { id: 'f1', seen: true });
-    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
-    expect(mockQueueOp).not.toHaveBeenCalled();
-    expect(reminderRow().flags).toEqual(['\\Seen']);
-  });
-
-  it('opening the row marks the reminder read: its Sent copy is read already', async () => {
-    prime({ sentEmails: [row(77, { _accountId: ACCT_A.id, _mailbox: 'Sent', messageId: '<asked@me>', flags: ['\\Seen'] })] });
-    await useMailStore.getState().selectEmail(77, 'server', 'Sent', null, reminderRow()).catch(() => {});
-
-    expect(mockDaemonCall).toHaveBeenCalledWith('follow_up.mark_seen', { id: 'f1', seen: true });
-    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
-  });
-
-  it('snooze is not offered: it would move the Sent copy into Snoozed', async () => {
-    prime({ sentEmails: [row(77, { _accountId: ACCT_A.id, _mailbox: 'Sent', messageId: '<asked@me>' })] });
-    const { canSnooze } = await import('../snooze');
     const state = useMailStore.getState();
-    expect(canSnooze(reminderRow(), state)).toBe(false);
-    expect(canSnooze(state.sentEmails[0], state)).toBe(false);
+    expect(state.sortedEmails.filter(atSent77)).toEqual([]);
+    expect(state.sortedEmails.some(e => e._followUpId)).toBe(false);
+    expect(resolvePool(state).filter(atSent77)).toEqual([]);
   });
 
-  it('in the Sent folder the same message is the real one, and a delete deletes it', async () => {
-    prime({ activeMailbox: 'Sent', emails: [row(77, { messageId: '<asked@me>' })] });
-    await useMailStore.getState().deleteEmailFromServer(77);
+  // The bulk modal's "All" range ticks every row of its pool (the folder's
+  // cached rows plus the list rows the cache lacks, BulkOperationsModal
+  // emailPool), and Delete hands those keys to the bulk manager.
+  it('a bulk delete of "All" in the inbox never reaches the Sent copy', async () => {
+    prime();
+    const state = useMailStore.getState();
+    const keys = state.sortedEmails.map(e => selectionKey(e, state));
+    await bulkOperationManager.start({
+      type: 'delete', accountId: ACCT_A.id, account: ACCT_A, accounts: [ACCT_A],
+      localFolders: {}, mailbox: 'INBOX', spans: false, uids: keys,
+    });
 
-    expect(dismissed()).toEqual([]);
+    const calls = mockBulkDeleteEmails.mock.calls.map(([, accountId, mailbox, uids]) => ({ accountId, mailbox, uids }));
+    expect(calls.filter(c => c.mailbox === 'Sent')).toEqual([]);
+    expect(calls).toEqual([{ accountId: ACCT_A.id, mailbox: 'INBOX', uids: [1, 2] }]);
+  });
+
+  // App.jsx's `#`: deleteEmailFromServer(selectedEmailId). A Sent message
+  // opened from the inbox (a pinned reminder, or a merged Sent copy) has the
+  // full key as its id; read as a bare uid it journalled a delete in INBOX.
+  it('keyboard delete of the Sent message opened from the inbox acts on it in Sent, never on INBOX', async () => {
+    prime({ sentEmails: [row(77, { _accountId: ACCT_A.id, _mailbox: 'Sent', messageId: '<asked@me>', flags: ['\\Seen'] })] });
+    const key = selectionKey({ _accountId: ACCT_A.id, _mailbox: 'Sent', uid: 77 }, useMailStore.getState());
+    expect(key).toBe(`${ACCT_A.id}:Sent:77`);
+    useMailStore.setState({ selectedEmailId: key, selectedEmail: row(77, { _accountId: ACCT_A.id, _mailbox: 'Sent' }) });
+
+    await useMailStore.getState().deleteEmailFromServer(useMailStore.getState().selectedEmailId);
+
+    expect(mockQueueOp.mock.calls.filter(([op]) => op.mailbox === 'INBOX')).toEqual([]);
+    expect(mockDeleteEmail.mock.calls.filter(([, , mailbox]) => mailbox === 'INBOX')).toEqual([]);
     expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 77, 'Sent');
   });
 });

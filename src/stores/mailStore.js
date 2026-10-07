@@ -161,10 +161,9 @@ useSnoozeStore.subscribe((state, prev) => {
   if (state.rows !== prev.rows) useMailStore.getState().updateSortedEmails();
 });
 
-// A follow-up reminder that went due, was opened or was dismissed changes the
-// inbox list and its badge, whichever view is open.
+// A due follow-up reminder is pinned above the inbox list, never a row of it
+// (components/FollowUpPinnedRows.jsx), but an unread one counts in the
+// account's badge: one going due, opened or dismissed moves the number.
 useFollowUpStore.subscribe((state, prev) => {
-  if (state.rows === prev.rows) return;
-  shiftFollowUps(prev.rows, state.rows);
-  useMailStore.getState().updateSortedEmails();
+  if (state.rows !== prev.rows) shiftFollowUps(prev.rows, state.rows);
 });

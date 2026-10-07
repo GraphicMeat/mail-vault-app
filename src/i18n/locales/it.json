@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "Anteprima non disponibile",
   "followUp.notifyTitle": "Ancora nessuna risposta",
   "followUp.notifyBody": "{{subject}}, inviata a {{recipients}}",
-  "followUp.rowTitle": "Ancora nessuna risposta. Inviata {{date}}"
+  "followUp.rowTitle": "Ancora nessuna risposta. Inviata {{date}}",
+  "followUp.to": "A: {{recipients}}",
+  "followUp.dismiss": "Ignora promemoria"
 }

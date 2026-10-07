@@ -53,6 +53,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
+import { FollowUpPinnedRows } from './FollowUpPinnedRows';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
@@ -1346,6 +1347,8 @@ function EmailListComponent({ stacked = false }) {
 
       {/* Email List */}
       <div className="relative flex-1 min-h-0 flex flex-col">
+      {/* Due follow-up reminders sit above the list, never in it. */}
+      <FollowUpPinnedRows hidden={searchActive} />
       <div
         ref={scrollContainerRef}
         onTouchStart={handleTouchStart}

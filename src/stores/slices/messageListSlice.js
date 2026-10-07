@@ -22,7 +22,6 @@ import { rowVisibility } from '../../utils/rowVisibility';
 import { useTagStore, requestRowTags } from '../tagStore';
 import { useAutoTagStore } from '../autoTagStore';
 import { useSnoozeStore, localSnoozeKeys } from '../snoozeStore';
-import { useFollowUpStore, dueFollowUps, followUpEmail, showsFollowUps } from '../followUpStore';
 import { recountInbox } from '../unreadCounts';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
@@ -224,9 +223,6 @@ export function deriveDisplayRows({
   // snoozeStore's localSnoozeKeys: messages a local snooze holds out of the
   // folder they are still in.
   localSnoozes = null,
-  // Due follow-up reminders' rows (followUpStore.followUpEmail), already
-  // narrowed to this view by the caller: the Sent message, back at the top.
-  followUps = null,
 }) {
   // In unified inbox, UIDs collide across accounts — use compound key for dedup
   const uidKey = unifiedInbox
@@ -291,14 +287,6 @@ export function deriveDisplayRows({
     activeAccountId, activeMailbox, unifiedInbox, archivedEmailIds,
     deleteTombstones, hiddenTagIds, tagsByRow, localSnoozes,
   }));
-  // Not run through rowVisibility: the reminder is not the inbox's own mail,
-  // and its Sent copy's flags and tombstones belong to the Sent folder.
-  for (const e of followUps || []) {
-    e.isLocal = false;
-    e.isArchived = false;
-    e.source = 'server';
-    result.push(e);
-  }
 
   // Sort by date descending (newest first)
   for (const e of result) {
@@ -306,22 +294,6 @@ export function deriveDisplayRows({
   }
   result.sort((a, b) => b._ts - a._ts);
   return result;
-}
-
-/// The due follow-up reminders this list shows, as rows: an account's INBOX
-/// shows its own, All inboxes every visible account's. Built fresh on each
-/// derivation (a handful of rows), so the list's in-place stamping never
-/// reaches the store's copies.
-function followUpsInView(state, rows) {
-  if (!showsFollowUps(state)) return [];
-  const due = dueFollowUps(rows);
-  if (!due.length) return [];
-  const spans = state.activeMailbox === 'UNIFIED';
-  const { hiddenAccounts } = useSettingsStore.getState() || {};
-  const emailOf = id => (state.accounts || []).find(a => a.id === id)?.email || '';
-  return due
-    .filter(r => (spans ? !hiddenAccounts?.[r.accountId] : r.accountId === state.activeAccountId))
-    .map(r => followUpEmail(r, emailOf(r.accountId)));
 }
 
 export const createMessageListSlice = (set, get) => ({
@@ -431,8 +403,6 @@ export const createMessageListSlice = (set, get) => ({
     // The rows live in snoozeStore; mailStore.js re-derives when they change.
     const snoozeRows = useSnoozeStore.getState().rows;
     const localSnoozes = localSnoozeKeys(snoozeRows);
-    const followUpRows = useFollowUpStore.getState().rows;
-    const followUps = viewMode === 'local' ? [] : followUpsInView(get(), followUpRows);
     const sameInputs = _sortedInputs !== null
       && _sortedInputs.emails === emails
       && _sortedInputs.localEmails === localEmails
@@ -441,15 +411,14 @@ export const createMessageListSlice = (set, get) => ({
       && _sortedInputs.serverUids === serverUids
       && _sortedInputs.deleteTombstones === deleteTombstones
       && _sortedInputs.tagsByRow === tagsByRow
-      && _sortedInputs.snoozeRows === snoozeRows
-      && _sortedInputs.followUpRows === followUpRows;
+      && _sortedInputs.snoozeRows === snoozeRows;
     const hiddenTagKey = hiddenTagIds.size ? [...hiddenTagIds].sort().join(',') : '';
-    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}-${hiddenTagKey}-${localSnoozes.size}-${followUps.length}`;
+    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}-${hiddenTagKey}-${localSnoozes.size}`;
     if (fp === _sortedEmailsFingerprint && sameInputs) return;
 
     const result = deriveDisplayRows({
       emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids,
-      unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, hiddenTagIds, tagsByRow, localSnoozes, followUps,
+      unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, hiddenTagIds, tagsByRow, localSnoozes,
     });
 
     annotateRowAlerts(result, get(), useSettingsStore.getState());
@@ -477,7 +446,7 @@ export const createMessageListSlice = (set, get) => ({
 
     _chatEmailsFingerprint = '';
     _threadsFingerprint = '';
-    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUids, deleteTombstones, tagsByRow, snoozeRows, followUpRows };
+    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUids, deleteTombstones, tagsByRow, snoozeRows };
     set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
   },
 

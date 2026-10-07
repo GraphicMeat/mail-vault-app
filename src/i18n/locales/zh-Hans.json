@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "无法预览",
   "followUp.notifyTitle": "尚无回复",
   "followUp.notifyBody": "{{subject}}，发给 {{recipients}}",
-  "followUp.rowTitle": "尚无回复。发送于 {{date}}"
+  "followUp.rowTitle": "尚无回复。发送于 {{date}}",
+  "followUp.to": "收件人：{{recipients}}",
+  "followUp.dismiss": "关闭提醒"
 }

@@ -58,41 +58,18 @@ export function dueFollowUps(rows) {
   return (rows || []).filter(r => r.state === 'due' && r.sentMailbox && Number.isInteger(r.sentUid));
 }
 
-/// The list row a due reminder shows as: the Sent copy, placed where it lives
-/// so opening it opens that message, dated at the remind time so every
-/// ordering (flat, threads, chat) puts it at the top when it came back.
-/// `_followUpId` is what the removal workflows dismiss it by.
-export function followUpEmail(row, accountEmail) {
-  const remindedAt = new Date(row.remindAt).toISOString();
-  return {
-    uid: row.sentUid,
-    messageId: row.messageId,
-    subject: row.subject,
-    from: { address: accountEmail || '', name: '' },
-    to: row.recipients ? [{ address: row.recipients, name: '' }] : [],
-    date: remindedAt,
-    internalDate: remindedAt,
-    flags: row.seen ? ['\\Seen'] : [],
-    _accountId: row.accountId,
-    _mailbox: row.sentMailbox,
-    _followUpId: row.id,
-    _sentAt: row.sentAt,
-  };
+/// The due reminders a list view pins above its rows: an account's INBOX
+/// shows its own, All inboxes every visible account's, newest first. Never
+/// rows of the list itself (components/FollowUpPinnedRows.jsx says why).
+export function followUpsInView(view, rows, hiddenAccounts = {}) {
+  if (!showsFollowUps(view)) return [];
+  const spans = view.activeMailbox === 'UNIFIED';
+  return dueFollowUps(rows)
+    .filter(r => (spans ? !hiddenAccounts?.[r.accountId] : r.accountId === view.activeAccountId))
+    .sort((a, b) => b.remindAt - a.remindAt);
 }
 
-/// The due reminder a row action on (accountId, mailbox, uid) lands on, or
-/// null. Only in a list that shows reminders (an inbox, All inboxes): there
-/// the Sent copy of a due reminder is never listed as itself (the list's merge
-/// of Sent mail drops it by Message-ID), so that location IS the reminder. In
-/// the Sent folder it is the real message.
-export function followUpAt(view, target) {
-  if (!target || !showsFollowUps(view)) return null;
-  const rows = dueFollowUps(useFollowUpStore.getState().rows);
-  return rows.find(r => r.accountId === target.accountId && r.sentMailbox === target.mailbox
-    && r.sentUid === Number(target.uid)) || null;
-}
-
-/// Does this view list reminders: an account's INBOX or All inboxes, never a
+/// Does this view pin reminders: an account's INBOX or All inboxes, never a
 /// branch listing (its rows are a folder subtree).
 export function showsFollowUps(view) {
   if (!view || view.mailboxScope) return false;

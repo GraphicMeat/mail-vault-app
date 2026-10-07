@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "Aperçu indisponible",
   "followUp.notifyTitle": "Toujours pas de réponse",
   "followUp.notifyBody": "{{subject}}, envoyé à {{recipients}}",
-  "followUp.rowTitle": "Toujours pas de réponse. Envoyé {{date}}"
+  "followUp.rowTitle": "Toujours pas de réponse. Envoyé {{date}}",
+  "followUp.to": "À : {{recipients}}",
+  "followUp.dismiss": "Ignorer le rappel"
 }

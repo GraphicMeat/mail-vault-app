@@ -23,8 +23,7 @@ import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { moveEmails, reloadListInView } from './messageMutations';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
-import { resolveEmailLocation, selectionKey, inLocalFolder, rowIdentity } from '../../stores/slices/unifiedHelpers';
-import { followUpAt } from '../../stores/followUpStore';
+import { resolveEmailLocation, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { useSnoozeStore } from '../../stores/snoozeStore';
 import { t as tr } from '../../i18n/index.js';
@@ -38,9 +37,6 @@ export function canSnooze(email, state) {
   if (!email?.messageId || email.source === 'local-only' || email._insightsReadOnly || email._insightsNoServerActions) return false;
   // A snooze is a server move, and a vault-only folder is on no server.
   if (inLocalFolder(email, state)) return false;
-  // A follow-up reminder's row is its Sent copy: snoozing it would move the
-  // user's sent message into Snoozed. The reminder is dismissed instead.
-  if (email._followUpId || followUpAt(state, rowIdentity(email, state))) return false;
   const location = resolveEmailLocation(email, state);
   const account = location && state.accounts?.find(a => a.id === location.accountId);
   return !!account && !isGraphAccount(account);

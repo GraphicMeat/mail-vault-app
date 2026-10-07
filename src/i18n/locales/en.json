@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "Preview unavailable",
   "followUp.notifyTitle": "No reply yet",
   "followUp.notifyBody": "{{subject}}, sent to {{recipients}}",
-  "followUp.rowTitle": "No reply yet. Sent {{date}}"
+  "followUp.rowTitle": "No reply yet. Sent {{date}}",
+  "followUp.to": "To: {{recipients}}",
+  "followUp.dismiss": "Dismiss reminder"
 }

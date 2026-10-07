@@ -25,7 +25,7 @@ vi.mock('../settingsStore', () => ({
   useSettingsStore: Object.assign((s) => settingsStore(s), { getState: () => settingsStore.getState() }),
 }));
 
-const { useFollowUpStore, initFollowUp, announceDue, dueFollowUps, followUpEmail, followUpAt, _resetFollowUpForTest } =
+const { useFollowUpStore, initFollowUp, announceDue, dueFollowUps, followUpsInView, _resetFollowUpForTest } =
   await import('../followUpStore');
 
 const WAITING = { id: 'w', accountId: 'a1', messageId: '<w@me>', subject: 'Later', recipients: 'ana@x.co', sentAt: 1000, remindAt: 9e12, state: 'waiting', sentMailbox: 'Sent', sentUid: null, seen: false, announced: false };
@@ -94,29 +94,22 @@ describe('follow-up rows', () => {
   });
 });
 
-describe('the reminder as a list row', () => {
-  it('is the Sent copy, placed where it lives, dated when it came back, unread until opened', () => {
-    const row = followUpEmail(DUE, 'me@one.co');
-    expect(row).toMatchObject({
-      uid: 42, messageId: '<d@me>', subject: 'Quote', _accountId: 'a1', _mailbox: 'Sent', _followUpId: 'd',
-      from: { address: 'me@one.co' }, flags: [],
-    });
-    expect(new Date(row.date).getTime()).toBe(DUE.remindAt);
-    expect(followUpEmail({ ...DUE, seen: true }, 'me@one.co').flags).toEqual(['\\Seen']);
-  });
-
-  it('a waiting row, or one with no Sent copy found, is not in the list', () => {
+describe('the reminders a list pins above its rows', () => {
+  it('a waiting row, or one with no Sent copy found, is not shown', () => {
     expect(dueFollowUps([WAITING, { ...DUE, sentUid: null }, DUE]).map(r => r.id)).toEqual(['d']);
   });
 
-  it('owns its Sent copy location only in a list that shows reminders', () => {
-    useFollowUpStore.setState({ rows: [DUE] });
-    const target = { accountId: 'a1', mailbox: 'Sent', uid: 42 };
-    expect(followUpAt({ activeMailbox: 'INBOX' }, target)?.id).toBe('d');
-    expect(followUpAt({ activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' }, target)?.id).toBe('d');
-    expect(followUpAt({ activeMailbox: 'Sent' }, target)).toBeNull();
-    expect(followUpAt({ activeMailbox: 'UNIFIED', unifiedFolder: 'Sent' }, target)).toBeNull();
-    expect(followUpAt({ activeMailbox: 'INBOX', mailboxScope: 'INBOX' }, target)).toBeNull();
-    expect(followUpAt({ activeMailbox: 'INBOX' }, { ...target, uid: 41 })).toBeNull();
+  it('an inbox pins its own account\'s, All inboxes every visible account\'s, newest first', () => {
+    const other = { ...DUE, id: 'o', accountId: 'a2', remindAt: DUE.remindAt + 1000 };
+    const rows = [DUE, other, WAITING];
+    expect(followUpsInView({ activeMailbox: 'INBOX', activeAccountId: 'a1' }, rows).map(r => r.id)).toEqual(['d']);
+    expect(followUpsInView({ activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' }, rows).map(r => r.id)).toEqual(['o', 'd']);
+    expect(followUpsInView({ activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' }, rows, { a2: true }).map(r => r.id)).toEqual(['d']);
+  });
+
+  it('no other folder pins them', () => {
+    expect(followUpsInView({ activeMailbox: 'Sent', activeAccountId: 'a1' }, [DUE])).toEqual([]);
+    expect(followUpsInView({ activeMailbox: 'UNIFIED', unifiedFolder: 'Sent' }, [DUE])).toEqual([]);
+    expect(followUpsInView({ activeMailbox: 'INBOX', activeAccountId: 'a1', mailboxScope: 'INBOX' }, [DUE])).toEqual([]);
   });
 });

@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "Vorschau nicht verfügbar",
   "followUp.notifyTitle": "Noch keine Antwort",
   "followUp.notifyBody": "{{subject}}, gesendet an {{recipients}}",
-  "followUp.rowTitle": "Noch keine Antwort. Gesendet {{date}}"
+  "followUp.rowTitle": "Noch keine Antwort. Gesendet {{date}}",
+  "followUp.to": "An: {{recipients}}",
+  "followUp.dismiss": "Erinnerung schließen"
 }

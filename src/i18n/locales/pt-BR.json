@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "Pré-visualização indisponível",
   "followUp.notifyTitle": "Ainda sem resposta",
   "followUp.notifyBody": "{{subject}}, enviado para {{recipients}}",
-  "followUp.rowTitle": "Ainda sem resposta. Enviado {{date}}"
+  "followUp.rowTitle": "Ainda sem resposta. Enviado {{date}}",
+  "followUp.to": "Para: {{recipients}}",
+  "followUp.dismiss": "Dispensar lembrete"
 }

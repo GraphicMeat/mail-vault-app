@@ -1006,9 +1006,10 @@ describe('local snooze', () => {
   });
 });
 
-// A follow-up reminder that went due puts the SENT message back at the top
-// of the inbox, unread, until the user opens or dismisses it. Nothing moved
-// on the server: the row is the Sent copy, shown in the inbox's list.
+// A follow-up reminder that went due is pinned above the inbox list
+// (FollowUpPinnedRows), never a row of it: a row's (account, folder, uid) is
+// what every list action acts on, and the reminder's is the Sent copy's. Its
+// unread state still counts in the badge, which has to match the screen.
 describe('follow-up reminders', () => {
   const reminder = {
     id: 'f1', accountId: 'acct-1', messageId: '<asked@me>', subject: 'Quote?', recipients: 'ana@x.co',
@@ -1050,60 +1051,20 @@ describe('follow-up reminders', () => {
     mockSettingsState.setUnreadForAccount = realSetUnread;
   });
 
-  it('shows a due reminder at the top of the inbox, unread, as its Sent copy, until it ends', () => {
-    expect(keys()).toEqual(['1', '2']);
+  it('is never a row of the list, in a single inbox or All inboxes', () => {
     useFollowUpStore.setState({ rows: [reminder] });
-    expect(keys()).toEqual(['Sent77', '1', '2']);
-    const row = useMailStore.getState().sortedEmails[0];
-    expect(row).toMatchObject({ _followUpId: 'f1', _accountId: 'acct-1', messageId: '<asked@me>', flags: [] });
-    useFollowUpStore.getState().applyEvent({ id: 'f1', state: 'dismissed' });
     expect(keys()).toEqual(['1', '2']);
-  });
-
-  it('reads as read once opened, and stays', () => {
-    useFollowUpStore.setState({ rows: [{ ...reminder, seen: true }] });
-    expect(useMailStore.getState().sortedEmails[0].flags).toEqual(['\\Seen']);
-  });
-
-  it('is not shown before it is due, in another folder, or in another account\'s inbox', () => {
-    useFollowUpStore.setState({ rows: [{ ...reminder, state: 'waiting' }] });
-    expect(keys()).toEqual(['1', '2']);
-    useFollowUpStore.setState({ rows: [{ ...reminder, accountId: 'acct-2' }] });
-    expect(keys()).toEqual(['1', '2']);
-    useMailStore.setState({ activeMailbox: 'Sent', emails: [], _sortedEmailsFingerprint: '' });
-    useFollowUpStore.setState({ rows: [reminder] });
-    expect(keys()).toEqual([]);
-  });
-
-  it('shows every visible account\'s reminders in All inboxes', () => {
-    useMailStore.setState({
-      unifiedInbox: true, activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX',
-      emails: [{ uid: 1, _accountId: 'acct-2', _mailbox: 'INBOX', messageId: '<c@x>', flags: [], date: 'Mon, 05 Jan 2026 12:00:00 +0000' }],
-      _sortedEmailsFingerprint: '',
-    });
-    useFollowUpStore.setState({ rows: [reminder, { ...reminder, id: 'f2', accountId: 'acct-2', sentUid: 5, remindAt: Date.UTC(2025, 11, 1) }] });
-    const rows = useMailStore.getState().sortedEmails.map(e => `${e._accountId}:${e._mailbox}:${e.uid}`);
-    expect(rows).toEqual(['acct-1:Sent:77', 'acct-2:INBOX:1', 'acct-2:Sent:5']);
-    mockSettingsState.hiddenAccounts = { 'acct-1': true };
-    useFollowUpStore.setState({ rows: [...useFollowUpStore.getState().rows] });
-    expect(useMailStore.getState().sortedEmails.map(e => e._accountId)).not.toContain('acct-1');
-    mockSettingsState.hiddenAccounts = {};
-  });
-
-  it('is not merged a second time from Sent into the conversation view', () => {
-    useMailStore.setState({
-      sentEmails: [{ uid: 77, messageId: '<asked@me>', flags: ['\\Seen'], date: 'Thu, 01 Jan 2026 12:00:00 +0000' }],
-    });
-    useFollowUpStore.setState({ rows: [reminder] });
-    const chat = useMailStore.getState().getChatEmails();
-    expect(chat.filter(e => e.messageId === '<asked@me>')).toHaveLength(1);
-    expect(chat[0]._followUpId).toBe('f1');
+    useMailStore.setState({ unifiedInbox: true, activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX', _sortedEmailsFingerprint: '' });
+    useMailStore.getState().updateSortedEmails();
+    expect(useMailStore.getState().sortedEmails.some(e => e.uid === 77)).toBe(false);
   });
 
   it('counts in the inbox badge while unread', () => {
     const setUnread = vi.fn();
     mockSettingsState.setUnreadForAccount = setUnread;
     useFollowUpStore.setState({ rows: [reminder] });
+    useMailStore.setState({ emails: inbox(), _sortedEmailsFingerprint: '' });
+    useMailStore.getState().updateSortedEmails();
     expect(setUnread).toHaveBeenLastCalledWith('acct-1', 2);
   });
 });

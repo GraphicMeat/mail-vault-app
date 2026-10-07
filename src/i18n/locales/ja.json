@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "プレビューを表示できません",
   "followUp.notifyTitle": "まだ返信がありません",
   "followUp.notifyBody": "{{subject}}（{{recipients}} 宛て）",
-  "followUp.rowTitle": "まだ返信がありません。送信日時: {{date}}"
+  "followUp.rowTitle": "まだ返信がありません。送信日時: {{date}}",
+  "followUp.to": "宛先: {{recipients}}",
+  "followUp.dismiss": "リマインダーを閉じる"
 }

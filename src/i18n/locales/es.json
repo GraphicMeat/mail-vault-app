@@ -3672,5 +3672,7 @@
   "export.dialog.previewUnavailable": "Vista previa no disponible",
   "followUp.notifyTitle": "Aún sin respuesta",
   "followUp.notifyBody": "{{subject}}, enviado a {{recipients}}",
-  "followUp.rowTitle": "Aún sin respuesta. Enviado {{date}}"
+  "followUp.rowTitle": "Aún sin respuesta. Enviado {{date}}",
+  "followUp.to": "Para: {{recipients}}",
+  "followUp.dismiss": "Descartar recordatorio"
 }

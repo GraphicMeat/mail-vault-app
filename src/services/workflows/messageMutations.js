@@ -19,7 +19,6 @@ import {
 } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { shiftInbox, unreadEntries } from '../../stores/unreadCounts';
-import { useFollowUpStore, followUpAt } from '../../stores/followUpStore';
 import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
@@ -265,10 +264,8 @@ export async function saveEmailsLocally(rows) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const split = _splitFollowUps(state, rows || [], row => (row?.uid != null ? rowIdentity(row, state) : null));
-  await _dismissFollowUps(useMailStore, split.reminders);
   const groups = new Map();
-  for (const row of split.rest) {
+  for (const row of rows || []) {
     const loc = row?.uid != null ? resolveEmailLocation(row, state) : null;
     if (!loc) continue;
     const key = `${loc.accountId}|${loc.mailbox}`;
@@ -869,49 +866,6 @@ async function _deleteLocalOnly({ accountId, mailbox, uid }) {
   }
 }
 
-// ── follow-up reminders ──
-//
-// A due reminder is listed in the inbox as its Sent copy, at that copy's own
-// location (stores/followUpStore.js). Every way of being done with that row
-// (delete, move, archive, purge, snooze) lands here first and only ends the
-// reminder: the Sent copy is the user's record of what they sent, and nothing
-// aimed at the reminder may reach it, on the server or in the vault. Outside
-// a list that shows reminders (the Sent folder itself) followUpAt answers
-// null and the message is acted on as always.
-
-/// Split `items` into the reminders they name and the rest. `locate(item)`
-/// answers `{ accountId, mailbox, uid }`, or null for an item it cannot
-/// place (left to the caller's own handling).
-function _splitFollowUps(state, items, locate) {
-  const reminders = [];
-  const rest = [];
-  for (const item of items) {
-    let at = null;
-    try { at = locate(item); } catch { at = null; }
-    const reminder = at && followUpAt(state, at);
-    if (reminder) reminders.push({ item, reminder, at });
-    else rest.push(item);
-  }
-  return { reminders, rest };
-}
-
-/// End each reminder and take its row out of the selection and the reader.
-async function _dismissFollowUps(useMailStore, reminders) {
-  if (!reminders.length) return;
-  const ids = new Set(reminders.map(r => r.reminder.id));
-  useMailStore.setState(s => {
-    const gone = (key) => {
-      const at = typeof key === 'string' ? _parseSelKey(key) : null;
-      return reminders.some(r => (key === r.item)
-        || (at && at.accountId === r.at.accountId && at.mailbox === r.at.mailbox && Number(at.uid) === Number(r.at.uid)));
-    };
-    const selectedEmailIds = new Set([...(s.selectedEmailIds || [])].filter(k => !gone(k)));
-    const openIsReminder = s.selectedEmail && ids.has(followUpAt(s, rowIdentity(s.selectedEmail, s))?.id);
-    return { selectedEmailIds, ...(openIsReminder ? { selectedEmail: null, selectedEmailId: null } : {}) };
-  });
-  await Promise.all([...ids].map(id => useFollowUpStore.getState().dismiss(id)));
-}
-
 export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxOverride = null, accountId: explicitAccountId = null } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -930,8 +884,16 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     throw new Error(tr('errors.unresolvedUnifiedRow', { key: uid }));
   }
   const unified = !explicitScope && isUnified ? requireUnifiedContext(uid, state) : null;
-  const accountId = explicitAccountId || unified?.accountId || state.activeAccountId;
-  const rawMb = mailboxOverride || unified?.mailbox || state.activeMailbox;
+  // A single folder's list keys its own rows by bare uid and a message of
+  // another folder by its full key (selectionKey): a merged Sent copy, or a
+  // Sent message opened from a pinned follow-up reminder, whose key App.jsx's
+  // keyboard delete hands over as it is. Read as a bare uid, that key was
+  // journalled as a delete in the open folder.
+  const ownKey = !explicitScope && !isUnified ? _parseSelKey(uid) : null;
+  const keyed = ownKey?.accountId && ownKey?.mailbox
+    && state.accounts?.some(account => account.id === ownKey.accountId) ? ownKey : null;
+  const accountId = explicitAccountId || unified?.accountId || keyed?.accountId || state.activeAccountId;
+  const rawMb = mailboxOverride || unified?.mailbox || keyed?.mailbox || state.activeMailbox;
   const mailbox = rawMb === 'UNIFIED' ? 'INBOX' : rawMb;
   let account = state.accounts.find(a => a.id === accountId);
   if (!account) { console.error('[deleteEmail] No account found for', accountId); return; }
@@ -940,13 +902,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // selection key ("acct:INBOX:7"), and everything below — the row lookup, the
   // journal, the tombstone, the network call, the custody stamp — addresses a
   // message by number inside one (account, mailbox).
-  const realUid = parsedKey?.uid ?? unified?.uid ?? uid;
-
-  const reminder = followUpAt(state, { accountId, mailbox, uid: realUid });
-  if (reminder) {
-    await _dismissFollowUps(useMailStore, [{ item: uid, reminder, at: { accountId, mailbox, uid: realUid } }]);
-    return;
-  }
+  const realUid = parsedKey?.uid ?? unified?.uid ?? keyed?.uid ?? uid;
 
   // Local-only short-circuit: if this UID belongs to an email that only
   // exists in Maildir + local-index (never confirmed server-side), route to
@@ -1974,18 +1930,8 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
   if (_restoreInFlight || _restoredUids.size) {
     targets = await Promise.all(targets.map(async t => ({ ...t, uid: await keyAfterUndo(get, t.uid, t.accountId, t.mailbox) })));
   }
-  let state = get();
+  const state = get();
   if (!targets.length) return;
-
-  // A reminder's read state is the reminder's own: opening it, or marking it
-  // unread, never writes \Seen to its Sent copy (read already, on the server).
-  if (flag === '\\Seen') {
-    const split = _splitFollowUps(state, targets, t => t);
-    for (const { reminder } of split.reminders) useFollowUpStore.getState().setSeen(reminder.id, on);
-    targets = split.rest;
-    if (!targets.length) return;
-    state = get();
-  }
 
   const targetKeys = new Set(targets.map(t => `${t.accountId}-${t.mailbox}-${t.uid}`));
   const map = (flags) => withFlag(flags, flag, on);
@@ -2301,13 +2247,11 @@ export async function deleteSelectedFromServer() {
   const isUnified = spansMailboxes(state);
   if (selectedEmailIds.size === 0) return { deleted: [] };
 
+  const keys = Array.from(selectedEmailIds);
+
   const allEmails = [...(await _searchRows()), ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [selectionKey(e, state), e]));
   const contextOf = (key) => _resolveKeyContext(key, state, emailMap);
-
-  const { reminders, rest: keys } = _splitFollowUps(state, Array.from(selectedEmailIds), contextOf);
-  await _dismissFollowUps(useMailStore, reminders);
-  if (keys.length === 0) return { deleted: [] };
 
   // Journal the intent BEFORE anything else, and await it.
   //
@@ -2603,10 +2547,6 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const allEmails = [...(await _searchRows()), ...state.localEmails, ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [selectionKey(e, state), e]));
 
-  const split = _splitFollowUps(state, keys, key => _resolveKeyContext(key, state, emailMap));
-  await _dismissFollowUps(useMailStore, split.reminders);
-  keys = split.rest;
-  if (!keys.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
   const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap));
 
   // Local-only is a claim about provenance, so prove it from provenance.
@@ -2883,10 +2823,8 @@ export async function moveEmails(keys, targetMailbox) {
   // The search hits too: a hit no list holds still has to give its Message-ID,
   // which is what an undo finds the moved copy by on a server with no UIDPLUS.
   const emailMap = indexRows(resolvePool(state), e => selectionKey(e, state));
-  const split = _splitFollowUps(state, keys, key => _resolveKeyContext(key, state, emailMap, { require: false }));
-  await _dismissFollowUps(useMailStore, split.reminders);
   const groups = new Map();
-  for (const key of split.rest) {
+  for (const key of keys) {
     const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
     if (!ctx) {
       console.warn('[moveEmails] skipped a row that names no account:', key);
