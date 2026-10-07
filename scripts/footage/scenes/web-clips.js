@@ -514,6 +514,24 @@ describe('footage: website feature clips', function () {
       t.countDrop = take.t(Date.now());
       facts.archiveCountAfter = await browser.execute((s) => (document.querySelector(s)?.textContent || '').trim(), COUNT);
       console.log(`[footage] server count "${facts.archiveCountBefore}" -> "${facts.archiveCountAfter}" (${dropped ? 'changed' : 'UNCHANGED'})`);
+      // The header can pass through a partial count while the deletes land
+      // (run a2: 2,842 -> 2,554 -> 2,422 over 0.4 s). The clip cuts that
+      // transient out: it shows the count before, then the settled one.
+      const lastNumber = (txt) => Number(((txt || '').match(/\d[\d.,\u00a0\u202f']*/g) || []).pop()?.replace(/\D/g, '') || NaN);
+      const expected = lastNumber(facts.archiveCountBefore) - Number(String(facts.archiveSelected || '').replace(/\D/g, ''));
+      facts.archiveCountExpected = expected;
+      const counts = [];
+      const settleDeadline = Date.now() + 15000;
+      while (Date.now() < settleDeadline) {
+        const c = await browser.execute((sel) => (document.querySelector(sel)?.textContent || '').trim(), COUNT);
+        if (!counts.length || counts.at(-1).text !== c) counts.push({ t: Number(take.t(Date.now()).toFixed(3)), text: c });
+        if (lastNumber(c) === expected) break;
+        await browser.pause(60);
+      }
+      t.countSettled = counts.at(-1).t;
+      facts.archiveCounts = counts;
+      facts.archiveCountSettled = counts.at(-1).text;
+      if (lastNumber(counts.at(-1).text) !== expected) console.warn(`[footage] server count never settled on ${expected}: ${JSON.stringify(counts)}`);
       await take.hold(900);
       await take.click(SEL.sourceVault, 'source-vault', { dur: 500 });
       t.vault = take.events.at(-1).t;
@@ -536,7 +554,8 @@ describe('footage: website feature clips', function () {
         crop,
         segments: [
           { t0: t.confirm - 0.8, t1: t.confirm + 0.9, label: 'confirm' },
-          { t0: t.countDrop - 0.7, t1: Math.min(t.end, t.vaultShown + 1.5), label: 'count-and-vault' },
+          { t0: t.countDrop - 0.7, t1: t.countDrop - 0.03, label: 'count-before' },
+          { t0: t.countSettled + 0.03, t1: Math.min(t.end, t.vaultShown + 1.5), label: 'count-after-and-vault' },
         ],
         boxes: box,
       };
@@ -576,6 +595,8 @@ describe('footage: website feature clips', function () {
         await clickSel('[data-testid="bulk-step2-confirm"]');
         if (!(await waitPage(() => !!document.querySelector('[data-testid="bulk-delete-confirm"]'), { timeout: 8000 }))) throw new Error('no confirmation');
         facts.archiveConfirmText = await browser.execute(() => (document.querySelector('[role="dialog"]')?.innerText || '').replace(/\s+/g, ' ').slice(0, 600));
+        // How many the run will take off the server: the confirmation's own number.
+        facts.archiveSelected = (facts.archiveConfirmText.match(/\d[\d.,\u00a0\u202f']*/) || [''])[0];
         await browser.execute(() => document.activeElement?.blur?.());
         await browser.pause(800);
       },
@@ -593,23 +614,11 @@ describe('footage: website feature clips', function () {
       await take.hold(200);
       await take.type(SEL.searchInput, Q, 'search-box', { follow: true });
       await take.hold(250);
-      // Enter, then the field lets go of focus in the same task: with focus
-      // kept, the recent-searches popover (just fed by this submit) covers the
-      // result line the clip is about.
-      const r = await browser.executeAsync((sel, done) => {
-        const input = [...document.querySelectorAll(sel)].find((e) => e.offsetHeight > 0);
-        if (!input) { done({ error: `no visible ${sel}` }); return; }
-        const b = input.getBoundingClientRect();
-        const key = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
-        const at = Date.now();
-        const go = input.dispatchEvent(new KeyboardEvent('keydown', key));
-        if (go && input.form) input.form.requestSubmit();
-        input.dispatchEvent(new KeyboardEvent('keyup', key));
-        input.blur();
-        requestAnimationFrame(() => done({ at, raf: Date.now(), box: { x: b.x, y: b.y, w: b.width, h: b.height } }));
-      }, SEL.searchInput);
-      if (r.error) throw new Error(r.error);
-      take.log({ t: take.t(r.at), raf: take.t(r.raf), type: 'type', x: r.box.x + r.box.w / 2, y: r.box.y + r.box.h / 2, bbox: r.box, label: 'search-box', text: '\n', key: 'Enter' });
+      // The Search button, not Enter: Enter commits the word as a chip and
+      // keeps the box focused, and the recent-searches list (just fed by this
+      // search) then opens over the result line. A press outside the box
+      // closes that list, as it does for a user reaching for the button.
+      await take.click('#mail-search-panel form button[type="submit"]', 'search-button', { dur: 450 });
       await take.waitFor(searchDone, `results for ${Q}`, 30000, Q);
       const tResults = take.t(Date.now());
       await take.hold(400);
@@ -629,6 +638,15 @@ describe('footage: website feature clips', function () {
       prepare: async () => {
         facts.searchDry = await dryRun(Q);
         console.log(`[setup] dry run "${Q}": ${JSON.stringify(facts.searchDry)}`);
+        // For the record: what other queries show on this machine (nothing of
+        // this is filmed; the take searches Q).
+        facts.searchProbes = [];
+        for (const q of (process.env.FOOTAGE_SEARCH_PROBES || 'invoice,contract,Réunion,invoice contract,invoice shipment').split(',').map((x) => x.trim()).filter(Boolean)) {
+          const r = await dryRun(q);
+          facts.searchProbes.push({ q, results: r.results, durations: r.durations, laneMs: r.laneMs, durationMs: r.durationMs });
+        }
+        console.log(`[setup] search probes: ${JSON.stringify(facts.searchProbes)}`);
+        facts.searchDry2 = await dryRun(Q);
         await resetView();
         await scopeVault();
         // The panel open and empty before the take; the take is typing and Enter.
