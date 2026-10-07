@@ -12,7 +12,8 @@ describe('premium feature catalog', () => {
     expect(PREMIUM_FEATURES.map(f => f.id)).toEqual([
       'backup-schedule', 'backup-health', 'cleanup', 'time-capsule',
       'tracker-blocking', 'auto-cleanup', 'migration', 'server-change',
-      'export-image', 'focus-session', 'scheduled-send', 'devices', 'attachment-search',
+      'export-image', 'focus-session', 'scheduled-send', 'follow-up-reminder', 'attachment-reminder',
+      'devices', 'attachment-search',
       'fast-multi-folder-search', 'hoarder', 'portable',
     ]);
   });
