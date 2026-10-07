@@ -72,8 +72,26 @@ describe.each(['website/index.html', 'index.html', ...LOCALES.map((l) => `websit
     const link = line.querySelector('a[href$="/pricing.html"]');
     expect(link.dataset.acquisitionPlacement).toBe('hero');
     expect(link.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
+    // The standard price after early access is a plain statement, never a struck "was" price.
+    expect(link.querySelector('[data-mv-price="{standardYearly}"]').textContent).toBe('$39');
+    expect(line.querySelector('s, del, strike')).toBeNull();
     expect(line.textContent).toMatch(/14/);
+    expect(line.textContent).toMatch(/5/);
+    expect(line.textContent).not.toMatch(/—/);
     expect(doc.querySelector('script[src^="/pricing-localize.js"]')).not.toBeNull();
+  });
+
+  it('repeats the early-bird and standard price under the final download', () => {
+    const line = doc.querySelector('#download .mv-actions + .hm-send-hint + .hm-price');
+    expect(line).not.toBeNull();
+    const link = line.querySelector('a[href$="/pricing.html"]');
+    expect(link.dataset.acquisitionEvent).toBe('home_cta');
+    expect(link.dataset.acquisitionPlacement).toBe('final');
+    expect(link.dataset.acquisitionDestination).toBe('pricing');
+    expect(link.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
+    expect(link.querySelector('[data-mv-price="{standardYearly}"]').textContent).toBe('$39');
+    expect(line.querySelector('s, del, strike')).toBeNull();
+    expect(line.textContent).not.toMatch(/—/);
   });
 
   it('keeps a single, unchanged headline', () => {
@@ -89,8 +107,12 @@ describe('English hero copy', () => {
     expect(en.querySelector('h1').innerHTML).toBe('Your email.<br><span class="hm-grad">Yours to keep.</span>');
   });
 
-  it('states the free plan, the yearly price and the trial in one line', () => {
-    expect(en.querySelector('.hm-price').textContent.trim()).toBe('Free forever, with unlimited manual backups. Premium is $25/year with a 14-day free trial.');
+  it('states the free plan, the early-bird yearly price, devices, trial and standard price in one line', () => {
+    expect(en.querySelector('.hm-hero .hm-price').textContent.trim()).toBe('Free forever. Early Bird & Family Pricing: Premium $25/year, up to 5 devices, 14-day free trial. Standard price after early access: $39/year.');
+  });
+
+  it('states the early-bird and standard price under the final download', () => {
+    expect(en.querySelector('#download .hm-price').textContent.trim()).toBe('Early Bird & Family Pricing: Premium $25/year. Standard price after early access: $39/year.');
   });
 
   it('leads with daily use, then keeping your copy', () => {
@@ -107,5 +129,12 @@ describe('localized hero', () => {
   it.each(LOCALES)('%s translates the lead and every fact', (l) => {
     const ours = text(load(`website/${l}/index.html`));
     text(en).forEach((s, i) => expect(ours[i]).not.toBe(s));
+  });
+
+  it.each(LOCALES)('%s translates both early-bird price lines', (l) => {
+    const doc = load(`website/${l}/index.html`);
+    for (const sel of ['.hm-hero .hm-price', '#download .hm-price']) {
+      expect(doc.querySelector(sel).textContent).not.toBe(en.querySelector(sel).textContent);
+    }
   });
 });

@@ -89,7 +89,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261007-earlybird">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -145,6 +145,11 @@
 </section>
 <section class="mv-wrap mv-pricing-section" aria-label="요금제 비교">
 <h2 class="mv-sr-only">Free 또는 Premium 선택</h2>
+<div class="mv-yearly-saving mv-early-band"><strong>얼리버드 &amp; 가족 요금</strong><ul class="mv-checklist">
+<li>MailVault는 얼리 액세스 중입니다. 지금 할인 요금을 고정하면 구독이 유지되는 한 가격이 올라도 같은 요금이 유지됩니다.</li>
+<li>구독당 최대 5대</li>
+<li>첫 연간 구독 시 14일 무료 체험</li>
+</ul></div>
 <div class="mv-plans" id="plans">
 <article class="mv-plan mv-free-plan">
 <div class="mv-pixel-banner mv-pixel-free"><img src="/assets/pixel-free.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">계속 보관하세요</span><h3>무료. 영구적으로.</h3></div></div>
@@ -164,7 +169,7 @@
 <h3>Premium</h3><span class="mv-tag">기억할 일이 줄어듭니다</span>
 </div>
 <p class="mv-plan-intro">일정을 정하세요. 반복 작업은 MailVault에 맡기세요.</p>
-<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">갓 구운 소식</span><p>얼리버드 및 가족 요금 <span>현재 적용</span></p></div></div>
+<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">갓 구운 소식</span><p>얼리버드 &amp; 가족 요금 <span>MailVault 얼리 액세스 기간 동안</span></p></div></div>
 <fieldset class="mv-billing" hidden>
 <legend class="mv-sr-only">Premium 결제 기간</legend>
 <label><input type="radio" name="billing" value="yearly" checked><span>연간</span>
@@ -176,6 +181,7 @@
 <p class="mv-price"><span data-mv-price="{yearly}">$25</span><span>/ 년</span>
 </p>
 <p class="mv-small" data-mv-price="연간 결제 시 약 {monthlyEquivalent}/month">연간 결제 시 약 $2.08/month</p>
+<p class="mv-small" data-mv-price="얼리 액세스 이후 표준 요금: {standardYearly}/년">얼리 액세스 이후 표준 요금: $39/년</p>
 <div class="mv-yearly-saving" data-mv-saving><strong data-mv-price="연간 결제로 {savingsPercent}% 절약">연간 결제로 48% 절약</strong><span data-mv-price="월간 12회 결제 {annualMonthly}과 비교해 연간 {annualSavings} 절약.">월간 12회 결제 $48과 비교해 연간 $23 절약.</span></div>
 <p class="mv-trial">첫 연간 구독 시 14일 무료 체험</p>
 </div>
@@ -183,6 +189,7 @@
 <p class="mv-price"><span data-mv-price="{monthly}">$4</span><span>/ 월</span>
 </p>
 <p class="mv-small">매월 청구됩니다. 언제든 취소할 수 있습니다.</p>
+<p class="mv-small" data-mv-price="얼리 액세스 이후 표준 요금: {standardMonthly}/월">얼리 액세스 이후 표준 요금: $6/월</p>
 <p class="mv-trial">14일 체험은 연간 결제에서 이용할 수 있습니다.</p>
 </div>
 <noscript><p class="mv-small">월간 Premium은 $4/month이며 체험 기간이 없습니다. <a href="/ko/get-started.html?plan=monthly">월간 결제 선택</a>.</p></noscript>
@@ -210,6 +217,10 @@
 <details>
 <summary>언제 요금이 청구되나요?</summary>
 <p>연간 구독은 먼저 취소하지 않으면 체험 뒤에 요금이 청구됩니다. 월간 구독은 구독할 때 요금이 청구되며 연간 체험이 포함되지 않습니다. 확인하기 전에 결제에서 금액, 결제 정보, 갱신일을 검토하세요.</p>
+</details>
+<details id="early-access-price">
+<summary>얼리 액세스가 끝나면 제 요금은 어떻게 되나요?</summary>
+<p>MailVault는 얼리 액세스 중입니다. 지금 얼리버드 &amp; 가족 요금으로 구독하면 구독이 유지되는 한 가격이 올라도 같은 요금이 유지됩니다. 얼리 액세스 이후 표준 요금인 <span data-mv-price="{standardMonthly}">$6</span>/월 또는 <span data-mv-price="{standardYearly}">$39</span>/년은 신규 구독자에게 적용됩니다.</p>
 </details>
 <details>
 <summary>언제든 해지할 수 있습니까?</summary>
@@ -263,9 +274,9 @@
 </dialog>
 <script defer src="/assets/english-site.js?v=20261005-noph">
 </script>
-<script defer src="/pricing-localize.js?v=20260905-savings">
+<script defer src="/pricing-localize.js?v=20261007-standard">
 </script>
-<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09">
+<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/premium-features.js"></script>
 </body>

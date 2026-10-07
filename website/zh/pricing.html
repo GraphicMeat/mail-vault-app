@@ -89,7 +89,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261007-earlybird">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -145,6 +145,11 @@
 </section>
 <section class="mv-wrap mv-pricing-section" aria-label="对比方案">
 <h2 class="mv-sr-only">选择 Free 或 Premium</h2>
+<div class="mv-yearly-saving mv-early-band"><strong>早鸟与家庭定价</strong><ul class="mv-checklist">
+<li>MailVault 处于早期访问阶段。今天锁定优惠价：只要订阅有效，即使日后涨价，你的价格也保持不变。</li>
+<li>每个订阅最多 5 台设备</li>
+<li>首次年付订阅可享 14 天免费试用</li>
+</ul></div>
 <div class="mv-plans" id="plans">
 <article class="mv-plan mv-free-plan">
 <div class="mv-pixel-banner mv-pixel-free"><img src="/assets/pixel-free.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">属于你，永久保留</span><h3>免费。永久可用。</h3></div></div>
@@ -164,7 +169,7 @@
 <h3>Premium</h3><span class="mv-tag">少记一点事</span>
 </div>
 <p class="mv-plan-intro">设好例行任务。让 MailVault 处理重复工作。</p>
-<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">新鲜出炉</span><p>早鸟价与家庭价<span>目前提供</span></p></div></div>
+<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">新鲜出炉</span><p>早鸟与家庭定价<span>MailVault 早期访问期间</span></p></div></div>
 <fieldset class="mv-billing" hidden>
 <legend class="mv-sr-only">Premium 计费周期</legend>
 <label><input type="radio" name="billing" value="yearly" checked><span>年付</span>
@@ -176,6 +181,7 @@
 <p class="mv-price"><span data-mv-price="{yearly}">$25</span><span>/ 年</span>
 </p>
 <p class="mv-small" data-mv-price="约 {monthlyEquivalent}/月，按年付费">约 $2.08/月，按年付费</p>
+<p class="mv-small" data-mv-price="早期访问结束后的标准价格：{standardYearly}/年">早期访问结束后的标准价格：$39/年</p>
 <div class="mv-yearly-saving" data-mv-saving><strong data-mv-price="按年付费可节省 {savingsPercent}%">按年付费可节省 48%</strong><span data-mv-price="与 12 次月付共 {annualMonthly} 相比，每年节省 {annualSavings}。">与 12 次月付共 $48 相比，每年节省 $23。</span></div>
 <p class="mv-trial">首次年付订阅可享 14 天免费试用</p>
 </div>
@@ -183,6 +189,7 @@
 <p class="mv-price"><span data-mv-price="{monthly}">$4</span><span>/ 月</span>
 </p>
 <p class="mv-small">按月付费。可随时取消。</p>
+<p class="mv-small" data-mv-price="早期访问结束后的标准价格：{standardMonthly}/月">早期访问结束后的标准价格：$6/月</p>
 <p class="mv-trial">14 天试用仅适用于年付。</p>
 </div>
 <noscript><p class="mv-small">按月订阅 Premium 为 $4/月，不含试用期。<a href="/zh/get-started.html?plan=monthly">选择按月付费</a>。</p></noscript>
@@ -210,6 +217,10 @@
 <details>
 <summary>何时会收费？</summary>
 <p>除非你先取消，否则年付订阅会在试用后开始收费。月付订阅会在你订阅时收费，且不含年付试用。确认前请在结账页查看金额、付款详情和续费日期。</p>
+</details>
+<details id="early-access-price">
+<summary>早期访问结束后，我的价格会怎样？</summary>
+<p>MailVault 处于早期访问阶段。如果你现在以早鸟与家庭定价订阅，只要订阅有效，即使日后涨价，你的价格也保持不变。早期访问结束后的标准价格为 <span data-mv-price="{standardMonthly}">$6</span>/月或 <span data-mv-price="{standardYearly}">$39</span>/年，适用于新订阅用户。</p>
 </details>
 <details>
 <summary>我可以随时取消吗？</summary>
@@ -263,9 +274,9 @@
 </dialog>
 <script defer src="/assets/english-site.js?v=20261005-noph">
 </script>
-<script defer src="/pricing-localize.js?v=20260905-savings">
+<script defer src="/pricing-localize.js?v=20261007-standard">
 </script>
-<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09">
+<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/premium-features.js"></script>
 </body>

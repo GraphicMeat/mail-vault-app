@@ -89,7 +89,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261007-earlybird">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -145,6 +145,11 @@
 </section>
 <section class="mv-wrap mv-pricing-section" aria-label="Comparer les formules">
 <h2 class="mv-sr-only">Choisissez Free ou Premium</h2>
+<div class="mv-yearly-saving mv-early-band"><strong>Tarif lève-tôt et famille</strong><ul class="mv-checklist">
+<li>MailVault est en accès anticipé. Bloquez le tarif réduit aujourd'hui : il reste le même tant que votre abonnement est actif, même après une hausse des prix.</li>
+<li>Jusqu'à 5 appareils par abonnement</li>
+<li>Essai gratuit de 14 jours avec votre premier abonnement annuel</li>
+</ul></div>
 <div class="mv-plans" id="plans">
 <article class="mv-plan mv-free-plan">
 <div class="mv-pixel-banner mv-pixel-free"><img src="/assets/pixel-free.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">À vous de garder</span><h3>Free. Pour toujours.</h3></div></div>
@@ -164,7 +169,7 @@
 <h3>Premium</h3><span class="mv-tag">Moins de choses à retenir</span>
 </div>
 <p class="mv-plan-intro">Définissez la routine. Laissez MailVault gérer les tâches répétitives.</p>
-<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">Tout juste sorti du four</span><p>Tarifs Early Bird &amp; Family <span>pour le moment</span></p></div></div>
+<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">Tout juste sorti du four</span><p>Tarif lève-tôt et famille <span>Pendant l'accès anticipé de MailVault</span></p></div></div>
 <fieldset class="mv-billing" hidden>
 <legend class="mv-sr-only">Période de facturation Premium</legend>
 <label><input type="radio" name="billing" value="yearly" checked><span>Annuel</span>
@@ -176,6 +181,7 @@
 <p class="mv-price"><span data-mv-price="{yearly}">$25</span><span>/ an</span>
 </p>
 <p class="mv-small" data-mv-price="Environ {monthlyEquivalent}/mois, facturé annuellement">Environ $2.08/mois, facturé annuellement</p>
+<p class="mv-small" data-mv-price="Prix standard après l'accès anticipé : {standardYearly}/an">Prix standard après l'accès anticipé : $39/an</p>
 <div class="mv-yearly-saving" data-mv-saving><strong data-mv-price="Économisez {savingsPercent}% avec l’annuel">Économisez 48 % avec l’annuel</strong><span data-mv-price="Économisez {annualSavings}/an par rapport à {annualMonthly} pour 12 paiements mensuels.">Économisez $23/an par rapport à $48 pour 12 paiements mensuels.</span></div>
 <p class="mv-trial">Essai gratuit de 14 jours avec votre premier abonnement annuel</p>
 </div>
@@ -183,6 +189,7 @@
 <p class="mv-price"><span data-mv-price="{monthly}">$4</span><span>/ mois</span>
 </p>
 <p class="mv-small">Facturé chaque mois. Annulez à tout moment.</p>
+<p class="mv-small" data-mv-price="Prix standard après l'accès anticipé : {standardMonthly}/mois">Prix standard après l'accès anticipé : $6/mois</p>
 <p class="mv-trial">L’essai de 14 jours est disponible avec la facturation annuelle.</p>
 </div>
 <noscript><p class="mv-small">Premium mensuel coûte $4/mois, sans période d’essai. <a href="/fr/get-started.html?plan=monthly">Choisir la facturation mensuelle</a>.</p></noscript>
@@ -210,6 +217,10 @@
 <details>
 <summary>Quand serai-je facturé ?</summary>
 <p>L’abonnement annuel commence à être facturé après l’essai, sauf si vous annulez avant. Les abonnements mensuels sont facturés lors de l’inscription et ne comprennent pas l’essai annuel. Vérifiez le montant, les informations de paiement et la date de renouvellement au paiement avant de confirmer.</p>
+</details>
+<details id="early-access-price">
+<summary>Qu'advient-il de mon tarif à la fin de l'accès anticipé ?</summary>
+<p>MailVault est en accès anticipé. Si vous vous abonnez aujourd'hui au tarif lève-tôt et famille, votre tarif reste le même tant que votre abonnement est actif, même après une hausse des prix. Le prix standard après l'accès anticipé, <span data-mv-price="{standardMonthly}">$6</span>/mois ou <span data-mv-price="{standardYearly}">$39</span>/an, s'applique aux nouveaux abonnés.</p>
 </details>
 <details>
 <summary>Puis-je annuler à tout moment ?</summary>
@@ -263,9 +274,9 @@
 </dialog>
 <script defer src="/assets/english-site.js?v=20261005-noph">
 </script>
-<script defer src="/pricing-localize.js?v=20260905-savings">
+<script defer src="/pricing-localize.js?v=20261007-standard">
 </script>
-<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09">
+<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/premium-features.js"></script>
 </body>

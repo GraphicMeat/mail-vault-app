@@ -284,6 +284,10 @@
 .mv-yearly-saving { display:flex; flex-direction:column; gap:4px; background:var(--mv-tint); padding:14px 16px; border-radius:8px; margin:16px 0; color:var(--mv-ink); }
 .mv-yearly-saving strong { font-size:1rem; color:var(--mv-accent); }
 .mv-yearly-saving span { font-size:.82rem; line-height:1.5; }
+.mv-early-band { max-width:1000px; margin:0 auto 28px; padding:18px 22px; }
+.mv-early-band .mv-checklist { display:flex; flex-wrap:wrap; gap:6px 28px; margin:4px 0 0; }
+.mv-early-band .mv-checklist li { margin:0; font-size:.86rem; }
+.mv-early-band .mv-checklist li:first-child { flex-basis:100%; }
 .mv-currency-control { display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-size:.82rem; color:var(--mv-muted); margin:16px 0; }
 .mv-currency-control select { min-height:44px; padding:8px 32px 8px 12px; border:1px solid var(--mv-line); border-radius:8px; color:var(--mv-ink); background:var(--mv-card); font:inherit; cursor:pointer; }
 main>.mv-currency-control { max-width:1128px; margin:0 auto 24px; padding-inline:24px; }

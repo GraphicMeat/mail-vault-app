@@ -374,14 +374,32 @@ describe('English acquisition journey', () => {
   });
   it('tags the tracker on every tracked page', () => {
     const tagged = (html, tag = 'redesign-2026-09') => new RegExp('<script defer src="/gm\\.js[^"]*" data-site="mailvault" data-tag="' + tag + '">\\s*</script>').test(html);
-    for (const file of ['pricing.html','get-started.html','thank-you.html','updates-confirm.html','changelog.html','features/tags.html','blog.html','faq.html']) {
+    for (const file of ['thank-you.html','updates-confirm.html','changelog.html','blog.html','faq.html','use-cases.html','compare/mailvault-vs-apple-mail.html','de/faq.html','ja/blog.html']) {
       expect(tagged(readFileSync(resolve(root, file), 'utf8')), file).toBe(true);
     }
-    // The homepage carries its own tag so the mobile hero can be compared before and after.
-    for (const file of ['index.html', 'de/index.html', 'ja/index.html']) {
-      expect(tagged(readFileSync(resolve(root, file), 'utf8'), 'mobile-hero-2026-10'), file).toBe(true);
-    }
     expect(tagged(readFileSync(resolve('src/demo/index.html'), 'utf8').replace('src="/gm.js"', 'src="/gm.js?v=x"'))).toBe(true);
+  });
+  it('tags exactly the pages of the conversion change, in every language', () => {
+    const TAG = 'conversion-2026-10';
+    const tagOf = html => (html.match(/<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="([^"]+)">\s*<\/script>/) || [])[1];
+    const english = ['index.html', 'features.html', 'pricing.html', 'get-started.html', ...readdirSync(resolve(root, 'features')).filter(f => f.endsWith('.html')).map(f => 'features/' + f)];
+    const locales = ['de','fr','es','it','ja','ko','zh','pt-br'];
+    const expected = new Set([...english, ...locales.flatMap(l => english.map(f => l + '/' + f))]);
+    expect(english.length).toBeGreaterThan(20);
+    expect(tagOf(readFileSync(resolve('index.html'), 'utf8'))).toBe(TAG);
+    const walk = dir => readdirSync(resolve(root, dir), {withFileTypes:true}).flatMap(e => {
+      const rel = dir ? dir + '/' + e.name : e.name;
+      if (e.isDirectory()) return ['api','node_modules','i18n','demo','assets'].includes(e.name) ? [] : walk(rel);
+      return e.name.endsWith('.html') ? [rel] : [];
+    });
+    const seen = new Set();
+    for (const file of walk('')) {
+      const tag = tagOf(readFileSync(resolve(root, file), 'utf8'));
+      if (!tag) continue;
+      if (expected.has(file)) { seen.add(file); expect(tag, file).toBe(TAG); }
+      else expect(tag, file).toBe('redesign-2026-09');
+    }
+    expect([...expected].filter(f => !seen.has(f))).toEqual([]);
   });
   it('counts a download once, where the file starts, not on the button that leads there', () => {
     const gm=vi.fn();

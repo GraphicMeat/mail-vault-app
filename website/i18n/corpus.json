@@ -372,7 +372,6 @@
     "b1413383ff82": "Download and get started with MailVault",
     "f95501a39042": "Get it from the Snap Store ↗",
     "de8e2050cfd4": "Free includes reading, replying, and archiving without a subscription.",
-    "414845ab785a": "Early Bird &amp; Family Pricing for now",
     "5dccc3107761": "Change plan",
     "4db145efc728": "For Premium, choose Yearly or Monthly in Settings → Billing after installing. The first yearly subscription includes a 14-day trial; monthly billing does not.",
     "cbb4a856fdee": "Already installed? Go to the next steps ↓",
@@ -435,7 +434,6 @@
     "84609e706d7a": "Reddit · r/tauri",
     "25890566dfb1": "Reddit · r/linux",
     "cd0bd196b57d": "Start free.<br>Automate when you’re ready.",
-    "336ae67ef9de": "Early Bird &amp; Family Pricing <span>for now</span>",
     "b91cc709e220": "Monthly Premium is $4/month, without a trial. <a href=\"/get-started.html?plan=monthly\">Choose monthly billing</a>.",
     "fb951de58004": "Monthly Premium is $4/month. <a href=\"/get-started.html?plan=monthly\">Get started with monthly billing</a>.",
     "7c2daf9ba1c3": "See what Premium<br>does for you.",
@@ -3149,7 +3147,20 @@
     "3b6a7a858ca7": "<span class=\"mv-person-mark\" aria-hidden=\"true\">M</span><strong>Munk3y</strong><span>On the Snap fix for a blank window on Ubuntu 26.04</span><span>Linux user · GitHub Issues</span><a href=\"https://github.com/GraphicMeat/mail-vault-app/issues/16#issuecomment-5979989774\" target=\"_blank\" rel=\"noopener\">Read the original comment ↗</a>",
     "7dd492fcd24b": "“It's about time that we have a <strong>modern Mail Client on Linux</strong> systems that didn't have some caveat.”",
     "91d4eb3ae8a8": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>On trying MailVault on Ubuntu</span><span>Linux user · Product Hunt review, 5 of 5</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">Read the review on Product Hunt ↗</a>",
-    "012c0ed8bbc7": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Free forever, with unlimited manual backups. Premium is <span data-mv-price=\"{yearly}\">$25</span>/year with a 14-day free trial.</a>",
-    "00e2a157bf72": "A fast, private email app that keeps every message on your own computer. Search 50,000 messages in under 15 ms, and delete from the server whenever you choose: your copy stays. No ads, no MailVault account, nobody reading along."
+    "00e2a157bf72": "A fast, private email app that keeps every message on your own computer. Search 50,000 messages in under 15 ms, and delete from the server whenever you choose: your copy stays. No ads, no MailVault account, nobody reading along.",
+    "347e6a5983de": "Early Bird &amp; Family Pricing, up to 5 devices. Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year.",
+    "533891d77563": "Early Bird &amp; Family Pricing, up to 5 devices. Standard price after early access: <span data-mv-price=\"{standardMonthly}\">$6</span>/month.",
+    "93311792de5c": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Free forever. Early Bird &amp; Family Pricing: Premium <span data-mv-price=\"{yearly}\">$25</span>/year, up to 5 devices, 14-day free trial. Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year.</a>",
+    "4b87b0738987": "Early Bird &amp; Family Pricing <span>While MailVault is in early access</span>",
+    "c69aee3090fa": "MailVault is in early access. If you subscribe at today’s Early Bird &amp; Family Pricing, your rate stays the same as long as your subscription is active, even after prices increase. The standard price after early access, <span data-mv-price=\"{standardMonthly}\">$6</span>/month or <span data-mv-price=\"{standardYearly}\">$39</span>/year, applies to new subscribers.",
+    "b165a52c2694": "Early Bird &amp; Family Pricing",
+    "5ffae7ce0a0a": "MailVault is in early access. Lock in discounted pricing today: your rate stays the same as long as your subscription is active, even after prices increase.",
+    "c456e993e85f": "Up to 5 devices per subscription",
+    "4b164f3e320b": "Standard price after early access: $39/year",
+    "b51edcabd2c8": "Standard price after early access: $6/month",
+    "5328ac1d1bea": "What happens to my price when early access ends?",
+    "f58cb9a2250d": "Standard price after early access: {standardYearly}/year",
+    "7c0da8b18bf3": "Standard price after early access: {standardMonthly}/month",
+    "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Early Bird &amp; Family Pricing: Premium <span data-mv-price=\"{yearly}\">$25</span>/year. Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year.</a>"
   }
 }

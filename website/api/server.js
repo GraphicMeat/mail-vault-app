@@ -669,11 +669,12 @@ function computePremiumAccess(status, cancelAtPeriodEnd, currentPeriodEnd) {
 // ── Hybrid pricing: EUR base, manual USD/GBP, Adaptive for others ───────────
 // Two EUR-based Stripe prices with currency_options for USD and GBP.
 // Stripe Adaptive Pricing handles other eligible currencies from the EUR base.
-const BASE_CURRENCY = 'eur';
+// Amounts, currency resolution and the /pricing body live in ./pricing.js.
+const { resolvePricing, pricingBody } = require('./pricing');
 const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY_EUR || process.env.STRIPE_PRICE_MONTHLY;
 const PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY_EUR || process.env.STRIPE_PRICE_YEARLY;
 
-// Price IDs are only exercised at checkout, and /pricing serves MANUAL_AMOUNTS without
+// Price IDs are only exercised at checkout, and /pricing serves MANUAL_AMOUNTS (./pricing.js) without
 // asking Stripe — so a price belonging to another account ("No such price") advertises a
 // plan nobody can buy, silently. Retrieve both once at boot and refuse to sell if they're
 // unusable. null = not checked yet.
@@ -687,81 +688,6 @@ async function validatePrices() {
     pricesOk = false;
     console.error('[billing] configured price IDs unusable — checkout will fail:', error.message);
   }
-}
-
-// Manual currency_options amounts (in minor units). These match what's set on the Stripe price.
-const MANUAL_AMOUNTS = {
-  eur: { monthly: 400, yearly: 2500 },
-  usd: { monthly: 400, yearly: 2500 },
-  gbp: { monthly: 350, yearly: 2100 },
-};
-const MANUAL_CURRENCIES = new Set(Object.keys(MANUAL_AMOUNTS));
-
-// Currencies where Stripe Adaptive Pricing is commonly available
-const ADAPTIVE_CURRENCIES = new Set([
-  'aud', 'brl', 'cad', 'chf', 'czk', 'dkk', 'hkd', 'huf', 'inr', 'jpy',
-  'krw', 'mxn', 'nok', 'nzd', 'pln', 'ron', 'sek', 'sgd', 'thb', 'try', 'twd', 'zar',
-]);
-
-// Map country code → currency
-const COUNTRY_CURRENCY = {
-  US: 'usd', GB: 'gbp', UK: 'gbp',
-  AT: 'eur', BE: 'eur', CY: 'eur', DE: 'eur', EE: 'eur', ES: 'eur', FI: 'eur', FR: 'eur',
-  GR: 'eur', IE: 'eur', IT: 'eur', LT: 'eur', LU: 'eur', LV: 'eur', MT: 'eur', NL: 'eur',
-  PT: 'eur', SI: 'eur', SK: 'eur', HR: 'eur',
-  AU: 'aud', BR: 'brl', CA: 'cad', CH: 'chf', CZ: 'czk', DK: 'dkk', HK: 'hkd',
-  HU: 'huf', IN: 'inr', JP: 'jpy', KR: 'krw', MX: 'mxn', NO: 'nok', NZ: 'nzd',
-  PL: 'pln', RO: 'ron', SE: 'sek', SG: 'sgd', TH: 'thb', TR: 'try', TW: 'twd', ZA: 'zar',
-};
-
-function resolveCountry(reqCountry, cfCountry, acceptLanguage) {
-  if (reqCountry) return reqCountry.toUpperCase();
-  if (cfCountry) return cfCountry.toUpperCase();
-  if (acceptLanguage) {
-    const match = acceptLanguage.match(/[a-z]{2}-([A-Z]{2})/);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-/**
- * Resolve pricing for a customer.
- * Returns: { currency, pricingMode, monthly: {amount, formatted}, yearly: {amount, formatted} }
- * pricingMode: 'manual' | 'adaptive' | 'fallback'
- */
-function resolvePricing(reqCurrency, country, acceptLanguage) {
-  // 1. Determine target currency
-  let currency = reqCurrency?.toLowerCase();
-  if (!currency) {
-    const cc = resolveCountry(country, null, acceptLanguage);
-    currency = cc ? (COUNTRY_CURRENCY[cc] || null) : null;
-  }
-
-  // 2. Manual currency → exact known amounts
-  if (currency && MANUAL_CURRENCIES.has(currency)) {
-    const amounts = MANUAL_AMOUNTS[currency];
-    return { currency, pricingMode: 'manual', monthly: amounts.monthly, yearly: amounts.yearly };
-  }
-
-  // 3. Adaptive currency → Stripe will convert at checkout; show base EUR amounts as estimate
-  if (currency && ADAPTIVE_CURRENCIES.has(currency)) {
-    const base = MANUAL_AMOUNTS[BASE_CURRENCY];
-    return { currency: BASE_CURRENCY, presentmentCurrency: currency, pricingMode: 'adaptive', monthly: base.monthly, yearly: base.yearly };
-  }
-
-  // 4. Fallback → EUR
-  const base = MANUAL_AMOUNTS[BASE_CURRENCY];
-  return { currency: BASE_CURRENCY, pricingMode: currency ? 'fallback' : 'default', monthly: base.monthly, yearly: base.yearly };
-}
-
-function formatAmount(amount, currency) {
-  try {
-    // Whole amounts drop the decimals (€4, not €4.00); anything with cents keeps
-    // both digits — a flat minimumFractionDigits: 0 renders £3.50 as "£3.5".
-    const digits = amount % 100 === 0 ? 0 : 2;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase(), minimumFractionDigits: digits, maximumFractionDigits: digits })
-      .format(amount / 100);
-  } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
 }
 
 // Trial applies to the YEARLY plan only — monthly bills from day one.
@@ -811,42 +737,7 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
     }
   } catch { /* non-fatal — default to eligible */ }
 
-  const displayCur = resolved.currency;
-  const monthlyFormatted = formatAmount(resolved.monthly, displayCur);
-  const yearlyFormatted = formatAmount(resolved.yearly, displayCur);
-  const monthlyEquiv = formatAmount(Math.round(resolved.yearly / 12), displayCur);
-  const savingsPercent = resolved.monthly > 0
-    ? Math.round((1 - (resolved.yearly / 12) / resolved.monthly) * 100)
-    : 0;
-
-  res.json({
-    currency: displayCur,
-    baseCurrency: BASE_CURRENCY,
-    pricingMode: resolved.pricingMode,
-    ...(resolved.presentmentCurrency ? { presentmentCurrency: resolved.presentmentCurrency } : {}),
-    plans: [
-      {
-        planId: 'monthly',
-        interval: 'month',
-        currency: displayCur,
-        amount: resolved.monthly,
-        formattedAmount: monthlyFormatted,
-        trialDays: 0,
-        trialEligible,
-      },
-      {
-        planId: 'yearly',
-        interval: 'year',
-        currency: displayCur,
-        amount: resolved.yearly,
-        formattedAmount: yearlyFormatted,
-        monthlyEquivalent: monthlyEquiv,
-        savingsPercent,
-        trialDays: TRIAL_DAYS,
-        trialEligible,
-      },
-    ],
-  });
+  res.json(pricingBody(resolved, { trialDays: TRIAL_DAYS, trialEligible }));
 });
 
 // POST /api/billing/checkout-session
