@@ -89,9 +89,10 @@
   const heroPlatform = mobile ? 'mobile' : mac ? 'mac' : windows ? 'windows' : linux ? 'linux' : '';
   const ownPlatform = heroPlatform && document.querySelector('[data-platform="' + heroPlatform + '"]');
   if (ownPlatform) ownPlatform.parentElement.prepend(ownPlatform);
+  // Only the visitor's own action stays. The homepage hero has no fallback and
+  // shows macOS without a script, so an unknown platform keeps that default.
   if (heroPlatform && document.querySelector('[data-hero-platform="' + heroPlatform + '"]')) {
-    document.querySelectorAll('[data-hero-platform="fallback"]').forEach(el => { el.hidden = true; });
-    document.querySelectorAll('[data-hero-platform="' + heroPlatform + '"]').forEach(el => { el.hidden = false; });
+    document.querySelectorAll('[data-hero-platform]').forEach(el => { el.hidden = el.dataset.heroPlatform !== heroPlatform; });
   }
   // One .deb button for Linux: pick the ARM build when the browser says so.
   const arm = /aarch64|arm64|armv8/i.test(navigator.userAgent);
@@ -345,6 +346,15 @@
     const placement = form.dataset.sendLink;
     // The localized pages are copies of the English one, so the language comes from the path.
     form.elements.lang.value = locale.slice(1) || 'en';
+    // The hero's form is a phone's main action, so it starts open there (no
+    // focus, or the keyboard would cover the page). A computer gets a quiet link to it.
+    if (form.hasAttribute('data-send-link-primary')) {
+      if (mobile) openSendLink(form);
+      else {
+        const opener = document.querySelector('[data-send-link-open][aria-controls="' + form.id + '"]');
+        if (opener) opener.hidden = false;
+      }
+    }
     const returned = query.get('send_link');
     const returnedHere = (location.hash === '#download' ? 'final' : 'hero') === placement;
     if (mobile && returned && returnedHere) {

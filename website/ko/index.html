@@ -48,7 +48,7 @@
   "operatingSystem": "macOS, Windows, Linux",
   "applicationCategory": "CommunicationApplication",
   "applicationSubCategory": "EmailApplication",
-  "softwareVersion": "2.19.1",
+  "softwareVersion": "2.19.0",
   "datePublished": "2026-10-07",
   "offers": {
     "@type": "Offer",
@@ -142,7 +142,9 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-<link rel="stylesheet" href="/assets/home.css?v=20">
+<link rel="stylesheet" href="/assets/home.css?v=21">
+<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
+<script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
 <header class="mv-header">
@@ -192,10 +194,10 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">macOS, Windows, Linux용 무료 이메일 앱</p>
 <h1 id="hero-title">내 이메일.<br><span class="hm-grad">내 것으로 간직하세요.</span></h1>
-<p class="hm-lead">모든 메시지를 내 컴퓨터에 저장하는 프라이빗 이메일 앱입니다. 원할 때 서버에서 삭제해도 내 사본은 그대로 남습니다. 광고도, MailVault 계정도 없고, 누구도 엿보지 않습니다.</p>
+<p class="hm-lead">모든 메시지를 내 컴퓨터에 보관하는 빠르고 프라이빗한 이메일 앱입니다. 메시지 50,000개를 15ms 안에 검색하고, 원할 때 서버에서 삭제해도 내 사본은 그대로 남습니다. 광고도, MailVault 계정도 없고, 누구도 엿보지 않습니다.</p>
 <ul class="hm-facts"><li>서버 사본을 삭제하기 전에 디스크에서 확인</li><li>메시지 50,000개를 15ms 안에 검색</li><li>다른 메일 앱에서도 열리는 일반 .eml 파일</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS, Windows, Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
-<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>macOS용 다운로드</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/ko/thank-you.html?platform=windows&amp;start=1" hidden>Windows용 다운로드</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Linux용 다운로드 (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/ko/get-started.html?plan=free">무료 다운로드</a><button type="button" class="mv-button" data-hero-platform="mobile" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>다운로드 링크를 이메일로 받기</button><form id="send-link-hero" class="hm-send-link" data-send-link="hero" method="post" action="/api/send-link" hidden>
+<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">macOS용 다운로드</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/ko/thank-you.html?platform=windows&amp;start=1" hidden>Windows용 다운로드</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Linux용 다운로드 (.deb)</a><form id="send-link-hero" class="hm-send-link" data-send-link="hero" data-send-link-primary method="post" action="/api/send-link" hidden>
 <label for="send-link-hero-email">이메일 주소</label>
 <div class="mv-form-row"><input id="send-link-hero-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required placeholder="you@example.com"><button type="submit" class="mv-button">링크 보내기</button></div>
 <div class="hm-hp" aria-hidden="true"><label for="send-link-hero-website">이 칸은 비워 두세요</label><input id="send-link-hero-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
@@ -203,9 +205,10 @@
 <p class="hm-send-status" role="status" data-send-link-status></p>
 </form><p class="hm-send-done" data-send-link-done="hero" tabindex="-1" role="status" hidden>보냈습니다. 컴퓨터에서 받은편지함을 확인하세요.</p><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 라이브 데모 사용해 보기">라이브 데모 사용해 보기 ↗</a></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>Mac, Windows 또는 Linux 컴퓨터에서 여세요.</p>
+<p class="hm-proof hm-price"><a data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/ko/pricing.html">영원히 무료이며 수동 백업은 무제한입니다. Premium은 <span data-mv-price="{yearly}">$25</span>/년이며 14일 무료 체험이 있습니다.</a></p>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> 회 다운로드 (GitHub)</a></p>
-<p class="mv-small">영원히 무료: 이메일 앱 전체 기능과 무제한 수동 백업.</p>
 <a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/ko/get-started.html?plan=free#platforms">다른 플랫폼 및 형식 →</a>
+<button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>다운로드 링크를 이메일로 받기</button>
 <a class="mv-text-link hm-compare-link" href="#compare">다른 앱과 비교하기 ↓</a>
 </div>
 <div class="mv-wrap hm-hero-shot"><figure class="mv-hero-product mv-demo-card"><a class="mv-shot mv-demo-shot" data-acquisition-event="home_cta" data-acquisition-placement="hero_preview" data-acquisition-destination="demo" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 데모 열기"><span class="mv-demo-badge">인터랙티브 데모</span><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/demo/assets/demo-preview-ko-dark-compact-7eb3ba338c54.webp 720w, /demo/assets/demo-preview-ko-dark-wide-bb2b7dc974c4.webp 1440w" sizes="(max-width: 760px) 92vw, 660px"><img src="/demo/assets/demo-preview-ko-light-wide-83c5c26af6d2.webp" srcset="/demo/assets/demo-preview-ko-light-compact-c278f4fd5cb9.webp 720w, /demo/assets/demo-preview-ko-light-wide-83c5c26af6d2.webp 1440w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="789" alt="스레드 이메일 대화가 보이는 MailVault 받은편지함" fetchpriority="high" decoding="async"></picture><span class="mv-button mv-demo-launch" aria-hidden="true">데모 열기 <span aria-hidden="true">↗</span></span></a>
@@ -495,7 +498,9 @@
   "sendLinkFailed": "지금은 보낼 수 없습니다. 잠시 후 다시 시도하세요."
 }
   </script>
-<script defer src="/assets/english-site.js?v=20261005-noph">
+<script defer src="/assets/english-site.js?v=20261007-hero">
+</script>
+<script defer src="/pricing-localize.js?v=20260905-savings">
 </script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="mobile-hero-2026-10">
 </script>

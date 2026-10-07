@@ -48,7 +48,7 @@
   "operatingSystem": "macOS, Windows, Linux",
   "applicationCategory": "CommunicationApplication",
   "applicationSubCategory": "EmailApplication",
-  "softwareVersion": "2.19.1",
+  "softwareVersion": "2.19.0",
   "datePublished": "2026-10-07",
   "offers": {
     "@type": "Offer",
@@ -142,7 +142,9 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-<link rel="stylesheet" href="/assets/home.css?v=20">
+<link rel="stylesheet" href="/assets/home.css?v=21">
+<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
+<script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">本文へ移動</a>
 <header class="mv-header">
@@ -192,10 +194,10 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">macOS、Windows、Linux向けの無料メールアプリ</p>
 <h1 id="hero-title">あなたのメール。<br><span class="hm-grad">手元に残る。</span></h1>
-<p class="hm-lead">すべてのメッセージを自分のコンピューターに保存する、非公開のメールアプリ。好きなときにサーバーから削除しても、手元のコピーはそのまま残ります。広告なし、MailVaultアカウントなし、誰にも覗かれません。</p>
+<p class="hm-lead">すべてのメッセージを自分のコンピューターに保存する、速くて非公開のメールアプリ。50,000通を15ミリ秒未満で検索でき、好きなときにサーバーから削除しても手元のコピーは残ります。広告なし、MailVaultアカウントなし、誰にも覗かれません。</p>
 <ul class="hm-facts"><li>サーバー上のコピーを削除する前にディスク上で確認</li><li>50,000通を15ミリ秒未満で検索</li><li>ほかのメールアプリでも開けるシンプルな.emlファイル</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS、Windows、Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
-<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>macOS版をダウンロード</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/ja/thank-you.html?platform=windows&amp;start=1" hidden>Windows版をダウンロード</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Linux版をダウンロード (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/ja/get-started.html?plan=free">無料でダウンロード</a><button type="button" class="mv-button" data-hero-platform="mobile" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>ダウンロードリンクをメールで送る</button><form id="send-link-hero" class="hm-send-link" data-send-link="hero" method="post" action="/api/send-link" hidden>
+<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">macOS版をダウンロード</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/ja/thank-you.html?platform=windows&amp;start=1" hidden>Windows版をダウンロード</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Linux版をダウンロード (.deb)</a><form id="send-link-hero" class="hm-send-link" data-send-link="hero" data-send-link-primary method="post" action="/api/send-link" hidden>
 <label for="send-link-hero-email">メールアドレス</label>
 <div class="mv-form-row"><input id="send-link-hero-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required placeholder="you@example.com"><button type="submit" class="mv-button">リンクを送信</button></div>
 <div class="hm-hp" aria-hidden="true"><label for="send-link-hero-website">この欄は空のままにしてください</label><input id="send-link-hero-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
@@ -203,9 +205,10 @@
 <p class="hm-send-status" role="status" data-send-link-status></p>
 </form><p class="hm-send-done" data-send-link-done="hero" tabindex="-1" role="status" hidden>送信しました。パソコンで受信トレイを確認してください。</p><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでライブデモを試す">ライブデモを試す ↗</a></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>Mac、Windows、Linux のパソコンで開いてください。</p>
+<p class="hm-proof hm-price"><a data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/ja/pricing.html">ずっと無料で、手動バックアップは無制限です。Premium は <span data-mv-price="{yearly}">$25</span>/年で、14 日間の無料トライアルがあります。</a></p>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> 回のダウンロード（GitHub）</a></p>
-<p class="mv-small">ずっと無料：メールアプリの全機能と無制限の手動バックアップ。</p>
 <a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/ja/get-started.html?plan=free#platforms">他のプラットフォームと形式 →</a>
+<button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>ダウンロードリンクをメールで送る</button>
 <a class="mv-text-link hm-compare-link" href="#compare">他のアプリとの比較を見る ↓</a>
 </div>
 <div class="mv-wrap hm-hero-shot"><figure class="mv-hero-product mv-demo-card"><a class="mv-shot mv-demo-shot" data-acquisition-event="home_cta" data-acquisition-placement="hero_preview" data-acquisition-destination="demo" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでデモを開く"><span class="mv-demo-badge">インタラクティブデモ</span><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/demo/assets/demo-preview-ja-dark-compact-ab603594a101.webp 720w, /demo/assets/demo-preview-ja-dark-wide-04cfed014bf3.webp 1440w" sizes="(max-width: 760px) 92vw, 660px"><img src="/demo/assets/demo-preview-ja-light-wide-3e007da1ad1c.webp" srcset="/demo/assets/demo-preview-ja-light-compact-8cd8acd4a44b.webp 720w, /demo/assets/demo-preview-ja-light-wide-3e007da1ad1c.webp 1440w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="789" alt="スレッド化されたメールの会話を表示するMailVaultの受信トレイ" fetchpriority="high" decoding="async"></picture><span class="mv-button mv-demo-launch" aria-hidden="true">デモを開く <span aria-hidden="true">↗</span></span></a>
@@ -495,7 +498,9 @@
   "sendLinkFailed": "現在送信できませんでした。少し待ってからもう一度お試しください。"
 }
   </script>
-<script defer src="/assets/english-site.js?v=20261005-noph">
+<script defer src="/assets/english-site.js?v=20261007-hero">
+</script>
+<script defer src="/pricing-localize.js?v=20260905-savings">
 </script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="mobile-hero-2026-10">
 </script>

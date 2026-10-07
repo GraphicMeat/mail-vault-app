@@ -22,6 +22,7 @@
 .hm-proof a { color:inherit; opacity:.78; text-decoration:none; }
 .hm-proof a:hover { opacity:1; text-decoration:underline; }
 .hm-proof svg { vertical-align:-2px; margin-right:6px; }
+.hm-price { font-variant-numeric:normal; }
 .hm-hero .mv-small { margin:1rem 0 .4rem; color:var(--mv-muted); }
 .hm-hero-shot { margin-top:56px; max-width:1100px; }
 .hm-hero-shot .mv-demo-card { display:block; }
@@ -214,6 +215,11 @@
 .hm-send-hint { margin:-6px 0 0; }
 .hm-hp { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
 .hm-hero .hm-compare-link { margin-left:18px; }
+/* On a computer the email-me option is a quiet text link, not a second button. */
+.hm-hero .hm-send-open { margin-left:18px; padding:0; border:0; background:none; font-family:inherit; cursor:pointer; }
+/* Opened from that link (the phone hint is hidden), the form takes its own row
+   under the buttons instead of wedging between them. */
+.hm-hero-actions:has(+ .hm-send-hint[hidden]) .hm-send-link { order:1; max-width:none; padding-inline:max(0px, calc(50% - 230px)); }
 
 /* Phones: the product shot sits right under the headline, before the lead and
    the checklist. The inner wrapper dissolves so its children and the shot can
@@ -227,4 +233,5 @@
   .hm-hero-shot { order:2; margin-top:4px; margin-bottom:30px; }
   .hm-hero-shot .mv-demo-shot { border-radius:14px; border-bottom:1px solid rgba(255,255,255,.12); box-shadow:0 18px 60px -24px rgba(139,92,246,.6); }
   .hm-hero .hm-compare-link { margin-left:0; margin-top:4px; }
+  .hm-hero .hm-send-open { margin-left:0; margin-top:4px; }
 }

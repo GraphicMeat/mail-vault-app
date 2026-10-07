@@ -884,7 +884,6 @@
     "21939a976857": "Take your email back.<br><span class=\"hm-grad\">It's free.</span>",
     "bb44b47bf5e4": "MailVault: Private Email App That Keeps Your Mail | Mac, Windows &amp; Linux",
     "ecaed1b27b54": "Free email app for macOS, Windows and Linux",
-    "0a0476a32d41": "Free forever: the full email app and unlimited manual backups.",
     "530cc25bdc7d": "Backups",
     "4443880f6d03": "Save the mail you still need, let MailVault check each copy, then make room on the server. Your archive is plain .eml files that open in other mail apps, even if MailVault disappeared tomorrow.",
     "847a29acf12d": "Five email apps side by side. Select a feature to see how it works in MailVault.",
@@ -1563,7 +1562,6 @@
     "e3e522ffdf93": "Download MailVault for macOS, Windows and Linux: envelopes carry parcels on conveyor belts to a Mac, a Windows PC and a Linux computer",
     "68187eeb7177": "<span class=\"hm-sr\" translate=\"no\">MailVault: </span>Yes, each copy verified (one-step bulk is Premium)",
     "a081fd449947": "<span class=\"hm-sr\" translate=\"no\">MailVault: </span>Snooze",
-    "a7568f34ebc5": "A private email app that saves every message on your own computer, so you can delete it from the server whenever you choose and still keep your copy. No ads, no MailVault account, and nobody reading along.",
     "a8fb4e24821f": "Checked on disk before you delete the server copy",
     "fc9a7c52d616": "Know of a mention we're missing? <a href=\"mailto:prime@graphicmeat.com\" class=\"text-primary-500 hover:text-primary-600\">Let us know.</a>",
     "fc7a64a4b0b9": "Everything in Free, plus these 16 features. Select one to see how it works.",
@@ -3151,6 +3149,8 @@
     "1ee235a8b87d": "“I've even added a second Gmail account and <strong>everything worked as expected.</strong>”",
     "3b6a7a858ca7": "<span class=\"mv-person-mark\" aria-hidden=\"true\">M</span><strong>Munk3y</strong><span>On the Snap fix for a blank window on Ubuntu 26.04</span><span>Linux user · GitHub Issues</span><a href=\"https://github.com/GraphicMeat/mail-vault-app/issues/16#issuecomment-5979989774\" target=\"_blank\" rel=\"noopener\">Read the original comment ↗</a>",
     "7dd492fcd24b": "“It's about time that we have a <strong>modern Mail Client on Linux</strong> systems that didn't have some caveat.”",
-    "91d4eb3ae8a8": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>On trying MailVault on Ubuntu</span><span>Linux user · Product Hunt review, 5 of 5</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">Read the review on Product Hunt ↗</a>"
+    "91d4eb3ae8a8": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>On trying MailVault on Ubuntu</span><span>Linux user · Product Hunt review, 5 of 5</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">Read the review on Product Hunt ↗</a>",
+    "012c0ed8bbc7": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Free forever, with unlimited manual backups. Premium is <span data-mv-price=\"{yearly}\">$25</span>/year with a 14-day free trial.</a>",
+    "00e2a157bf72": "A fast, private email app that keeps every message on your own computer. Search 50,000 messages in under 15 ms, and delete from the server whenever you choose: your copy stays. No ads, no MailVault account, nobody reading along."
   }
 }

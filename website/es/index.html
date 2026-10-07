@@ -48,7 +48,7 @@
   "operatingSystem": "macOS, Windows, Linux",
   "applicationCategory": "CommunicationApplication",
   "applicationSubCategory": "EmailApplication",
-  "softwareVersion": "2.19.1",
+  "softwareVersion": "2.19.0",
   "datePublished": "2026-10-07",
   "offers": {
     "@type": "Offer",
@@ -142,7 +142,9 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-<link rel="stylesheet" href="/assets/home.css?v=20">
+<link rel="stylesheet" href="/assets/home.css?v=21">
+<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
+<script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Saltar al contenido</a>
 <header class="mv-header">
@@ -192,10 +194,10 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">App de correo gratis para macOS, Windows y Linux</p>
 <h1 id="hero-title">Tu correo.<br><span class="hm-grad">Tuyo para conservar.</span></h1>
-<p class="hm-lead">Una app de correo privada que guarda cada mensaje en tu propio ordenador, para que puedas borrarlo del servidor cuando quieras y conservar tu copia. Sin anuncios, sin cuenta de MailVault y sin nadie leyendo por encima de tu hombro.</p>
+<p class="hm-lead">Una app de correo rápida y privada que guarda cada mensaje en tu propio ordenador. Busca entre 50.000 mensajes en menos de 15 ms y borra del servidor cuando quieras: tu copia se queda. Sin anuncios, sin cuenta de MailVault, sin nadie leyendo por encima de tu hombro.</p>
 <ul class="hm-facts"><li>Comprobado en disco antes de que borres la copia del servidor</li><li>50.000 mensajes buscados en menos de 15 ms</li><li>Archivos .eml normales que se abren en otras apps de correo</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS, Windows y Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
-<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Descargar para macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/es/thank-you.html?platform=windows&amp;start=1" hidden>Descargar para Windows</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Descargar para Linux (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/es/get-started.html?plan=free">Descargar gratis</a><button type="button" class="mv-button" data-hero-platform="mobile" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>Envíame el enlace por correo</button><form id="send-link-hero" class="hm-send-link" data-send-link="hero" method="post" action="/api/send-link" hidden>
+<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Descargar para macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/es/thank-you.html?platform=windows&amp;start=1" hidden>Descargar para Windows</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Descargar para Linux (.deb)</a><form id="send-link-hero" class="hm-send-link" data-send-link="hero" data-send-link-primary method="post" action="/api/send-link" hidden>
 <label for="send-link-hero-email">Tu dirección de correo</label>
 <div class="mv-form-row"><input id="send-link-hero-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required placeholder="you@example.com"><button type="submit" class="mv-button">Enviar enlace</button></div>
 <div class="hm-hp" aria-hidden="true"><label for="send-link-hero-website">Deja este campo vacío</label><input id="send-link-hero-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
@@ -203,9 +205,10 @@
 <p class="hm-send-status" role="status" data-send-link-status></p>
 </form><p class="hm-send-done" data-send-link-done="hero" tabindex="-1" role="status" hidden>Enviado. Revisa tu bandeja de entrada en tu ordenador.</p><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Probar la demo en directo en una ventana nueva">Probar la demo en directo ↗</a></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>Ábrelo en tu ordenador Mac, Windows o Linux.</p>
+<p class="hm-proof hm-price"><a data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/es/pricing.html">Gratis para siempre, con copias manuales ilimitadas. Premium cuesta <span data-mv-price="{yearly}">$25</span>/año, con una prueba gratuita de 14 días.</a></p>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> descargas en GitHub</a></p>
-<p class="mv-small">Gratis para siempre: la app de correo completa y copias manuales ilimitadas.</p>
 <a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/es/get-started.html?plan=free#platforms">Otras plataformas y formatos →</a>
+<button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>Envíame el enlace por correo</button>
 <a class="mv-text-link hm-compare-link" href="#compare">Mira cómo se compara ↓</a>
 </div>
 <div class="mv-wrap hm-hero-shot"><figure class="mv-hero-product mv-demo-card"><a class="mv-shot mv-demo-shot" data-acquisition-event="home_cta" data-acquisition-placement="hero_preview" data-acquisition-destination="demo" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo en una ventana nueva"><span class="mv-demo-badge">Demo interactiva</span><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/demo/assets/demo-preview-es-dark-compact-d50c7be222e2.webp 720w, /demo/assets/demo-preview-es-dark-wide-12eee7613cfb.webp 1440w" sizes="(max-width: 760px) 92vw, 660px"><img src="/demo/assets/demo-preview-es-light-wide-890cd8bcd525.webp" srcset="/demo/assets/demo-preview-es-light-compact-70064efee2cc.webp 720w, /demo/assets/demo-preview-es-light-wide-890cd8bcd525.webp 1440w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="789" alt="Bandeja de entrada de MailVault con conversaciones agrupadas por hilo" fetchpriority="high" decoding="async"></picture><span class="mv-button mv-demo-launch" aria-hidden="true">Abrir la demo <span aria-hidden="true">↗</span></span></a>
@@ -495,7 +498,9 @@
   "sendLinkFailed": "No pudimos enviarlo ahora. Vuelve a intentarlo en un momento."
 }
   </script>
-<script defer src="/assets/english-site.js?v=20261005-noph">
+<script defer src="/assets/english-site.js?v=20261007-hero">
+</script>
+<script defer src="/pricing-localize.js?v=20260905-savings">
 </script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="mobile-hero-2026-10">
 </script>

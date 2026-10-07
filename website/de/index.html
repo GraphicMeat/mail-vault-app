@@ -48,7 +48,7 @@
   "operatingSystem": "macOS, Windows, Linux",
   "applicationCategory": "CommunicationApplication",
   "applicationSubCategory": "EmailApplication",
-  "softwareVersion": "2.19.1",
+  "softwareVersion": "2.19.0",
   "datePublished": "2026-10-07",
   "offers": {
     "@type": "Offer",
@@ -142,7 +142,9 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-<link rel="stylesheet" href="/assets/home.css?v=20">
+<link rel="stylesheet" href="/assets/home.css?v=21">
+<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
+<script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
 <header class="mv-header">
@@ -192,10 +194,10 @@
 <div class="mv-wrap hm-hero-inner">
 <p class="mv-eyebrow">Kostenlose E-Mail-App für macOS, Windows und Linux</p>
 <h1 id="hero-title">Deine E-Mail.<br><span class="hm-grad">Bleibt bei dir.</span></h1>
-<p class="hm-lead">Eine private E-Mail-App, die jede Nachricht auf deinem eigenen Computer speichert. So kannst du sie vom Server löschen, wann immer du willst, und behältst trotzdem deine Kopie. Keine Werbung, kein MailVault-Konto, und niemand liest mit.</p>
+<p class="hm-lead">Eine schnelle, private E-Mail-App, die jede Nachricht auf deinem eigenen Computer behält. Durchsuche 50.000 Nachrichten in unter 15 ms und lösche vom Server, wann immer du willst: Deine Kopie bleibt. Keine Werbung, kein MailVault-Konto, niemand liest mit.</p>
 <ul class="hm-facts"><li>Auf der Festplatte geprüft, bevor du die Server-Kopie löschst</li><li>50.000 Nachrichten in unter 15 ms durchsucht</li><li>Einfache .eml-Dateien, die sich in anderen Mail-Apps öffnen</li></ul>
 <p class="hm-platforms" role="img" aria-label="macOS, Windows und Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
-<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Download für macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/de/thank-you.html?platform=windows&amp;start=1" hidden>Für Windows herunterladen</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Für Linux herunterladen (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/de/get-started.html?plan=free">Kostenlos laden</a><button type="button" class="mv-button" data-hero-platform="mobile" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>E-Mail mir den Downloadlink</button><form id="send-link-hero" class="hm-send-link" data-send-link="hero" method="post" action="/api/send-link" hidden>
+<div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download für macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/de/thank-you.html?platform=windows&amp;start=1" hidden>Für Windows herunterladen</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Für Linux herunterladen (.deb)</a><form id="send-link-hero" class="hm-send-link" data-send-link="hero" data-send-link-primary method="post" action="/api/send-link" hidden>
 <label for="send-link-hero-email">Deine E-Mail-Adresse</label>
 <div class="mv-form-row"><input id="send-link-hero-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required placeholder="du@beispiel.com"><button type="submit" class="mv-button">Link senden</button></div>
 <div class="hm-hp" aria-hidden="true"><label for="send-link-hero-website">Dieses Feld leer lassen</label><input id="send-link-hero-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
@@ -203,9 +205,10 @@
 <p class="hm-send-status" role="status" data-send-link-status></p>
 </form><p class="hm-send-done" data-send-link-done="hero" tabindex="-1" role="status" hidden>Gesendet. Schau auf deinem Computer in dein Postfach.</p><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="Live-Demo in einem neuen Fenster ausprobieren">Live-Demo ausprobieren ↗</a></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>Öffne ihn auf deinem Mac, Windows- oder Linux-Computer.</p>
+<p class="hm-proof hm-price"><a data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/de/pricing.html">Für immer kostenlos, mit unbegrenzten manuellen Sicherungen. Premium kostet <span data-mv-price="{yearly}">$25</span>/Jahr, mit 14 Tagen kostenloser Testphase.</a></p>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> Downloads auf GitHub</a></p>
-<p class="mv-small">Für immer kostenlos: die vollständige E-Mail-App und unbegrenzte manuelle Sicherungen.</p>
 <a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/de/get-started.html?plan=free#platforms">Andere Plattformen und Formate →</a>
+<button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>E-Mail mir den Downloadlink</button>
 <a class="mv-text-link hm-compare-link" href="#compare">So schneidet MailVault ab ↓</a>
 </div>
 <div class="mv-wrap hm-hero-shot"><figure class="mv-hero-product mv-demo-card"><a class="mv-shot mv-demo-shot" data-acquisition-event="home_cta" data-acquisition-placement="hero_preview" data-acquisition-destination="demo" href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="Demo in einem neuen Fenster öffnen"><span class="mv-demo-badge">Interaktive Demo</span><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/demo/assets/demo-preview-de-dark-compact-620a2fc2facb.webp 720w, /demo/assets/demo-preview-de-dark-wide-a40ef136877a.webp 1440w" sizes="(max-width: 760px) 92vw, 660px"><img src="/demo/assets/demo-preview-de-light-wide-fe0f0083218f.webp" srcset="/demo/assets/demo-preview-de-light-compact-a1dd7d90b882.webp 720w, /demo/assets/demo-preview-de-light-wide-fe0f0083218f.webp 1440w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="789" alt="MailVault-Posteingang mit E-Mail-Konversationen in Threads" fetchpriority="high" decoding="async"></picture><span class="mv-button mv-demo-launch" aria-hidden="true">Demo öffnen <span aria-hidden="true">↗</span></span></a>
@@ -495,7 +498,9 @@
   "sendLinkFailed": "Wir konnten ihn gerade nicht senden. Bitte versuche es gleich noch einmal."
 }
   </script>
-<script defer src="/assets/english-site.js?v=20261005-noph">
+<script defer src="/assets/english-site.js?v=20261007-hero">
+</script>
+<script defer src="/pricing-localize.js?v=20260905-savings">
 </script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="mobile-hero-2026-10">
 </script>
