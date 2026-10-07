@@ -75,6 +75,9 @@ case "$cmd" in
     for f in "$D"/web/*.mp4; do
       n="$(basename "$f" .mp4)"
       case "$n" in *-wide) continue ;; esac
+      # search-50k shows the real search time; the website wants under 15 ms
+      # (en: 68 ms on the mini). It lands apart until someone decides.
+      if [ "$n" = search-50k ]; then mkdir -p "$PUB/_needs-decision"; cp "$f" "$D/web/$n.jpg" "$PUB/_needs-decision/"; echo "$PUB/_needs-decision/$n.mp4"; continue; fi
       cp "$f" "$PUB/$n.mp4"; cp "$D/web/$n.jpg" "$PUB/$n.jpg"
       echo "$PUB/$n.mp4 ($(stat -f %z "$f") B)"
     done

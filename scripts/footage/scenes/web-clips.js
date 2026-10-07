@@ -545,17 +545,22 @@ describe('footage: website feature clips', function () {
       facts.archiveTimes = t;
       facts.archiveBoxes = box;
       console.log(`[footage] archive-delete times ${JSON.stringify(t)}; vault "${facts.archiveVaultCount}"`);
-      // One crop: the list header (the count), the dialog, the sidebar's Vault
-      // button. The progress bubble (bottom right) stays out of it: the run is
-      // cut from the confirm click to just before the count changes.
-      const crop = await fitCrop(union(box.count, box.dialog, box.sources), { minW: 860, pad: 16 });
+      // The list (the count, the sidebar's Vault button) in one crop; the
+      // dialog's own crop for the confirm click; a cut-away to the progress
+      // bubble (bottom right) for the moment the run completes, which also
+      // covers the header's transient partial count.
+      const crop = await fitCrop(union(box.count, box.list, box.sources), { minW: 860, pad: 16 });
+      const cropConfirm = await fitCrop(union(box.count, box.dialog), { minW: 860, pad: 16 });
+      const cropBubble = await fitCrop(box.bubbleDone || box.bubble, { minW: 640, pad: 16 });
       await scan.at(take, 'vault', crop);
+      await scan.at(take, 'bubble', cropBubble);
       return {
         crop,
         segments: [
-          { t0: t.confirm - 0.8, t1: t.confirm + 0.9, label: 'confirm' },
-          { t0: t.countDrop - 0.7, t1: t.countDrop - 0.03, label: 'count-before' },
-          { t0: t.countSettled + 0.03, t1: Math.min(t.end, t.vaultShown + 1.5), label: 'count-after-and-vault' },
+          { t0: t.confirm - 0.8, t1: t.confirm + 0.35, crop: cropConfirm, label: 'confirm' },
+          { t0: t.complete - 0.8, t1: t.complete - 0.3, crop, label: 'count-before' },
+          { t0: t.complete - 0.3, t1: t.countSettled + 0.03, crop: cropBubble, label: 'complete' },
+          { t0: t.countSettled + 0.03, t1: Math.min(t.end, t.vaultShown + 1.5), crop, label: 'count-after-and-vault' },
         ],
         boxes: box,
       };

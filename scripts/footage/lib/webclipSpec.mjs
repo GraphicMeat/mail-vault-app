@@ -55,6 +55,9 @@ function fit([x, y, w, h], grow = 1) {
 const key = (s, i) => [String(i), s.label].filter(Boolean);
 const grow = variant === 'wide' ? 1.3 : 1;
 if (o.crop) spec.crop = o.crop;
+// "segments" (seconds of ONE take's .mov) replaces the take's own list: for
+// re-cutting a take that was recorded before its spec changed. Never commit it.
+if (o.segments) spec.segments = o.segments;
 spec.crop = fit(spec.crop, grow);
 spec.segments = spec.segments.map((s, i) => {
   const named = key(s, i).map((k) => o.segmentCrops?.[k]).find(Boolean);
