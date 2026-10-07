@@ -34,6 +34,37 @@ describe.each(['website/index.html', 'index.html', ...LOCALES.map((l) => `websit
     expect(doc.querySelector('.hm-hero a.mv-text-link[href$="/get-started.html?plan=free#platforms"]')).not.toBeNull();
   });
 
+  // Exactly one button in the hero: the demo is a text link beside the others.
+  it('keeps the demo as a text link, so the static hero shows one button', () => {
+    const inner = doc.querySelector('.hm-hero-inner');
+    expect([...inner.querySelectorAll('.mv-button')].filter((el) => !el.closest('[hidden]'))).toHaveLength(1);
+    const demo = inner.querySelector('a[data-acquisition-destination="demo"]');
+    expect(demo.classList.contains('mv-text-link')).toBe(true);
+    expect(demo.classList.contains('mv-button')).toBe(false);
+    expect(demo.dataset.acquisitionEvent).toBe('home_cta');
+    expect(demo.dataset.acquisitionPlacement).toBe('hero');
+    expect(demo.closest('.hm-hero-actions')).toBeNull();
+  });
+
+  // The closing section follows the hero: one download, macOS without a script,
+  // the rest behind a text link, and the phone's email form from the same code path.
+  it('offers one download in the static final section, macOS by default', () => {
+    const final = doc.getElementById('download');
+    const shown = [...final.querySelectorAll('.mv-button')].filter((el) => !el.closest('[hidden]'));
+    expect(shown).toHaveLength(1);
+    expect(shown[0].dataset.download).toBe('mac');
+    expect(shown[0].dataset.acquisitionPlacement).toBe('final');
+    expect(final.querySelector('[data-hero-platform="fallback"]')).toBeNull();
+    const other = final.querySelector('a.mv-text-link[href$="/get-started.html?plan=free#platforms"]');
+    expect(other).not.toBeNull();
+    expect(other.dataset.acquisitionPlacement).toBe('final');
+    expect(other.dataset.acquisitionDestination).toBe('setup');
+    expect(final.querySelector('#send-link-final').hasAttribute('data-send-link-primary')).toBe(true);
+    const opener = final.querySelector('[data-send-link-open][aria-controls="send-link-final"]');
+    expect(opener.classList.contains('mv-text-link')).toBe(true);
+    expect(opener.classList.contains('mv-button')).toBe(false);
+  });
+
   it('prices Premium under the hero download from the localized price template', () => {
     // Only the phone's "open it on your computer" hint may sit between them.
     const line = doc.querySelector('.hm-hero-actions + .hm-send-hint + .hm-price');

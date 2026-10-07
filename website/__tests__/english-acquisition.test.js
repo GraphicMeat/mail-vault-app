@@ -87,6 +87,32 @@ describe('English acquisition journey', () => {
     expect(doc.querySelector('.hm-hero [data-send-link-open]').hidden).toBe(visible === 'mobile');
     expect(doc.querySelector('.hm-hero [data-hero-platform="fallback"]')).toBeNull();
     expect(doc.querySelector('a[href="/get-started.html?plan=free#platforms"]')).not.toBeNull();
+    // The closing section makes the same choice: one button, from the same code.
+    for (const action of ['mac','windows','linux']) expect(doc.querySelector('#download [data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
+    const shown = sel => [...doc.querySelectorAll(sel + ' .mv-button')].filter(el => !el.closest('[hidden]'));
+    expect(shown('.hm-hero-inner')).toHaveLength(1);
+    expect(shown('#download')).toHaveLength(1);
+    expect(doc.getElementById('send-link-final').hidden).toBe(visible !== 'mobile');
+    expect(doc.querySelector('#download [data-hero-platform="fallback"]')).toBeNull();
+  });
+  it.each([
+    ['macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', 'mac'],
+    ['Linux', 'Mozilla/5.0 (X11; Linux x86_64)', 'linux'],
+    ['Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'windows'],
+    ['unknown desktop', 'Mozilla/5.0 (ExampleOS)', 'mac'],
+    ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)', 'mobile'],
+  ])('gives a feature page one download for %s', (_name, userAgent, visible) => {
+    const gm = vi.fn();
+    const {doc} = page('features/search.html', '', undefined, {userAgent, gm});
+    const shown = [...doc.querySelectorAll('main .mv-button')].filter(el => !el.closest('[hidden]'));
+    expect(shown).toHaveLength(1);
+    expect(shown[0].dataset.heroPlatform).toBe(visible);
+    expect(doc.querySelector('main a.mv-text-link[href="/get-started.html?plan=free#platforms"]').hidden).toBe(false);
+    // Not a homepage CTA: the click is counted by where it goes, the download on the thank-you page.
+    shown[0].addEventListener('click', e => e.preventDefault());
+    shown[0].click();
+    const target = {mac:'/thank-you.html', windows:'/thank-you.html', linux:'/thank-you.html', mobile:'/get-started.html'}[visible];
+    expect(gm.mock.calls).toEqual([['cta_click', {page_version:'homepage-en-20261002', target, placement:'page'}]]);
   });
   it('treats an iPad that reports a Mac user agent as a tablet, and a Mac as a Mac', () => {
     const ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
@@ -97,14 +123,15 @@ describe('English acquisition journey', () => {
     expect(mac.getElementById('send-link-hero').hidden).toBe(true);
     expect(mac.querySelector('.hm-hero-actions [data-hero-platform="mac"]').hidden).toBe(false);
   });
-  it('gives desktop visitors the email-me-the-link offer only as a quiet hero link, and keeps it off other pages', () => {
+  it('gives desktop visitors the email-me-the-link offer only as quiet links, one per section, and keeps it off other pages', () => {
     const desktop = page('index.html', '', undefined, {userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}).doc;
     for (const el of desktop.querySelectorAll('[data-hero-platform="mobile"], [data-send-link], [data-send-link-done]')) expect(el.hidden).toBe(true);
     const quiet = [...desktop.querySelectorAll('[data-send-link-open]')].filter(el => !el.hidden);
-    expect(quiet).toHaveLength(1);
-    expect(quiet[0].classList.contains('mv-text-link')).toBe(true);
-    expect(quiet[0].classList.contains('mv-button')).toBe(false);
-    expect(quiet[0].getAttribute('aria-controls')).toBe('send-link-hero');
+    expect(quiet.map(el => el.getAttribute('aria-controls'))).toEqual(['send-link-hero', 'send-link-final']);
+    for (const el of quiet) {
+      expect(el.classList.contains('mv-text-link')).toBe(true);
+      expect(el.classList.contains('mv-button')).toBe(false);
+    }
     // The setup page has no such offer, so a phone still gets its fallback there.
     const setup = page('get-started.html', '', undefined, {userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)'}).doc;
     expect(setup.querySelector('[data-hero-platform="fallback"]').hidden).toBe(false);
@@ -195,17 +222,17 @@ describe('English acquisition journey', () => {
       opener.click();
       return { opener, form: doc.getElementById('send-link-' + placement) };
     };
-    it('opens the hero form on a phone without stealing focus', () => {
+    it.each([['hero', '.hm-hero'], ['final', '#download']])('opens the %s form on a phone without stealing focus', (placement, section) => {
       const gm = vi.fn();
       const {doc} = page('index.html', '', undefined, {userAgent:phone, gm});
-      const form = doc.getElementById('send-link-hero');
+      const form = doc.getElementById('send-link-' + placement);
       expect(form.hidden).toBe(false);
-      expect(doc.querySelector('[data-send-link-open][aria-controls="send-link-hero"]').hidden).toBe(true);
-      expect(doc.querySelector('.hm-hero .hm-send-hint').hidden).toBe(false);
+      expect(doc.querySelector('[data-send-link-open][aria-controls="send-link-' + placement + '"]').hidden).toBe(true);
+      expect(doc.querySelector(section + ' .hm-send-hint').hidden).toBe(false);
       expect(doc.activeElement).not.toBe(form.elements.email);
       expect(gm).not.toHaveBeenCalled();
     });
-    it.each([['phone', 'final'], ['computer', 'hero']])('reveals the form in place on a %s (%s) and records the reveal as an email_link CTA', (device, placement) => {
+    it.each([['computer', 'final'], ['computer', 'hero']])('reveals the form in place on a %s (%s) and records the reveal as an email_link CTA', (device, placement) => {
       const gm = vi.fn();
       const {doc} = page('index.html', '', undefined, {userAgent:device === 'phone' ? phone : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', gm});
       const { opener, form } = open(doc, placement);
@@ -227,7 +254,9 @@ describe('English acquisition journey', () => {
       const gm = vi.fn();
       const fetch = api(200);
       const {w,doc} = page('index.html', '', fetch, {userAgent:phone, gm, path:'de/index.html'});
-      const { form } = open(doc, 'final');
+      // On a phone the closing form is already open, as in the hero.
+      const form = doc.getElementById('send-link-final');
+      expect(form.hidden).toBe(false);
       form.elements.email.value = 'reader@example.com';
       const submit = form.querySelector('[type="submit"]');
       submit.addEventListener('click', e => { e.preventDefault(); form.dispatchEvent(new w.Event('submit', {cancelable:true})); });
@@ -240,8 +269,8 @@ describe('English acquisition journey', () => {
       const done = doc.querySelector('[data-send-link-done="final"]');
       expect(done.hidden).toBe(false);
       expect(doc.activeElement).toBe(done);
-      // The reveal, then the send: no generic cta_click for the form's own button.
-      expect(gm.mock.calls.map(([name]) => name)).toEqual(['home_cta', 'send_link']);
+      // Only the send: no reveal click, and no generic cta_click for the form's own button.
+      expect(gm.mock.calls.map(([name]) => name)).toEqual(['send_link']);
       expect(gm).toHaveBeenLastCalledWith('send_link', {page_version:'homepage-en-20261002', placement:'final'});
     });
     it.each([[400,'Check the email address'],[429,'Too many tries'],[503,'could not send it']])('explains a %s and lets the visitor retry', async (status, text) => {

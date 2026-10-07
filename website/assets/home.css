@@ -178,6 +178,8 @@
 .fp-crumbs { display:flex; gap:8px; font-size:.82rem; color:var(--mv-muted); margin-bottom:24px; }
 .fp-crumbs a { color:inherit; }
 .hm .fp-lead { font-size:1.12rem; margin-bottom:24px; }
+/* One download button; the other platforms and the demo are text links under it. */
+.fp-links { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:-4px; }
 .fp-closeup { margin-top:40px; }
 .fp-closeup .mv-shot,.fp-full .mv-shot { display:block; width:100%; padding:0; border:0; background:none; cursor:zoom-in; }
 .fp-closeup img { display:block; max-width:100%; height:auto; margin-inline:auto; border-radius:14px; border:1px solid var(--mv-line); box-shadow:0 34px 80px -34px color-mix(in oklab,var(--hue) 70%,transparent); }
@@ -214,12 +216,12 @@
 .hm-send-done::before { content:'✓'; margin-right:8px; font-weight:800; color:#86efac; }
 .hm-send-hint { margin:-6px 0 0; }
 .hm-hp { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
-.hm-hero .hm-compare-link { margin-left:18px; }
+.hm-hero .hm-compare-link,.hm-hero .hm-demo-link { margin-left:18px; }
 /* On a computer the email-me option is a quiet text link, not a second button. */
-.hm-hero .hm-send-open { margin-left:18px; padding:0; border:0; background:none; font-family:inherit; cursor:pointer; }
+.hm-hero .hm-send-open,.hm-final .hm-send-open { margin-left:18px; padding:0; border:0; background:none; font-family:inherit; cursor:pointer; }
 /* Opened from that link (the phone hint is hidden), the form takes its own row
    under the buttons instead of wedging between them. */
-.hm-hero-actions:has(+ .hm-send-hint[hidden]) .hm-send-link { order:1; max-width:none; padding-inline:max(0px, calc(50% - 230px)); }
+.hm-hero-actions:has(+ .hm-send-hint[hidden]) .hm-send-link,.hm-final .mv-actions:has(+ .hm-send-hint[hidden]) .hm-send-link { order:1; max-width:none; padding-inline:max(0px, calc(50% - 230px)); }
 
 /* Phones: the product shot sits right under the headline, before the lead and
    the checklist. The inner wrapper dissolves so its children and the shot can
@@ -232,6 +234,6 @@
   .hm-hero-inner > h1 { order:2; }
   .hm-hero-shot { order:2; margin-top:4px; margin-bottom:30px; }
   .hm-hero-shot .mv-demo-shot { border-radius:14px; border-bottom:1px solid rgba(255,255,255,.12); box-shadow:0 18px 60px -24px rgba(139,92,246,.6); }
-  .hm-hero .hm-compare-link { margin-left:0; margin-top:4px; }
+  .hm-hero .hm-compare-link,.hm-hero .hm-demo-link { margin-left:0; margin-top:4px; }
   .hm-hero .hm-send-open { margin-left:0; margin-top:4px; }
 }

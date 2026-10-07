@@ -142,7 +142,7 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-<link rel="stylesheet" href="/assets/home.css?v=21">
+<link rel="stylesheet" href="/assets/home.css?v=22">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -203,11 +203,12 @@
 <div class="hm-hp" aria-hidden="true"><label for="send-link-hero-website">此栏请留空</label><input id="send-link-hero-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
 <input type="hidden" name="lang" value="en"><input type="hidden" name="placement" value="hero">
 <p class="hm-send-status" role="status" data-send-link-status></p>
-</form><p class="hm-send-done" data-send-link-done="hero" tabindex="-1" role="status" hidden>已发送。请在电脑上查看收件箱。</p><a class="mv-button mv-secondary" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中试用在线演示">试用在线演示 ↗</a></div>
+</form><p class="hm-send-done" data-send-link-done="hero" tabindex="-1" role="status" hidden>已发送。请在电脑上查看收件箱。</p></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>请在 Mac、Windows 或 Linux 电脑上打开。</p>
 <p class="hm-proof hm-price"><a data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/zh/pricing.html">永久免费，手动备份不限次数。Premium 每年 <span data-mv-price="{yearly}">$25</span>，享 14 天免费试用。</a></p>
 <p class="hm-proof" data-download-proof hidden><a href="https://github.com/GraphicMeat/mail-vault-app/releases" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-total>2,000+</span> 次下载（GitHub）</a></p>
 <a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/zh/get-started.html?plan=free#platforms">其他平台和格式 →</a>
+<a class="mv-text-link hm-demo-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="demo" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中试用在线演示">试用在线演示 ↗</a>
 <button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>通过邮件发送下载链接</button>
 <a class="mv-text-link hm-compare-link" href="#compare">看看对比 ↓</a>
 </div>
@@ -445,7 +446,7 @@
 <div class="mv-wrap hm-center">
 <h2 id="download-title">把邮件拿回自己手里。<br><span class="hm-grad">而且免费。</span></h2>
 <p class="hm-platforms" role="img" aria-label="macOS、Windows 和 Linux"><svg><use href="#os-apple"/></svg><svg><use href="#os-windows"/></svg><svg><use href="#os-linux"/></svg></p>
-<div class="mv-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>下载 macOS 版</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="thank_you" href="/zh/thank-you.html?platform=windows&amp;start=1" hidden>下载 Windows 版</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>下载 Linux 版 (.deb)</a><a class="mv-button" data-hero-platform="fallback" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="setup" href="/zh/get-started.html?plan=free">下载 MailVault</a><button type="button" class="mv-button" data-hero-platform="mobile" data-send-link-open aria-controls="send-link-final" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="email_link" hidden>通过邮件发送下载链接</button><form id="send-link-final" class="hm-send-link" data-send-link="final" method="post" action="/api/send-link" hidden>
+<div class="mv-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">下载 macOS 版</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="thank_you" href="/zh/thank-you.html?platform=windows&amp;start=1" hidden>下载 Windows 版</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>下载 Linux 版 (.deb)</a><form id="send-link-final" class="hm-send-link" data-send-link="final" data-send-link-primary method="post" action="/api/send-link" hidden>
 <label for="send-link-final-email">你的邮箱地址</label>
 <div class="mv-form-row"><input id="send-link-final-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required placeholder="you@example.com"><button type="submit" class="mv-button">发送链接</button></div>
 <div class="hm-hp" aria-hidden="true"><label for="send-link-final-website">此栏请留空</label><input id="send-link-final-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
@@ -453,6 +454,8 @@
 <p class="hm-send-status" role="status" data-send-link-status></p>
 </form><p class="hm-send-done" data-send-link-done="final" tabindex="-1" role="status" hidden>已发送。请在电脑上查看收件箱。</p></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>请在 Mac、Windows 或 Linux 电脑上打开。</p>
+<a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="setup" href="/zh/get-started.html?plan=free#platforms">其他平台和格式 →</a>
+<button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-final" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="email_link" hidden>通过邮件发送下载链接</button>
 <p class="mv-small">macOS 11+ · Windows 10+ · Ubuntu 22.04+ / Debian 12+</p>
 </div>
 </section>

@@ -37,11 +37,15 @@ describe('homepage demo launcher', () => {
     expect(image?.querySelector('.mv-demo-badge')?.textContent).toBe('Interactive demo');
     expect(image?.querySelector('.mv-demo-launch')?.textContent).toContain('Open the demo');
     expect(image?.querySelector('img')?.getAttribute('alt')).toMatch(/inbox/i);
-    const demoAction = dom.window.document.querySelector('.hm-hero .mv-actions [data-acquisition-destination="demo"]');
+    // The hero has one button; the demo is a text link beside "Other platforms".
+    expect(dom.window.document.querySelector('.hm-hero .mv-actions [data-acquisition-destination="demo"]')).toBeNull();
+    const demoAction = dom.window.document.querySelector('.hm-hero-inner > a[data-acquisition-destination="demo"]');
     expect(demoAction?.getAttribute('href')).toBe('/demo/?lang=en');
     expect(demoAction?.getAttribute('aria-label')).toBe('Try the live demo in a new window');
-    expect(demoAction?.className).toContain('mv-secondary');
-    expect(dom.window.document.querySelectorAll('.hm-hero .mv-actions [data-acquisition-destination="thank_you"], .hm-hero .mv-actions [data-acquisition-destination="store"], .hm-hero .mv-actions [data-acquisition-destination="setup"]')).toHaveLength(4);
+    expect(demoAction?.className).toContain('mv-text-link');
+    expect(demoAction?.className).not.toContain('mv-button');
+    expect(dom.window.document.querySelectorAll('.hm-hero .mv-actions [data-acquisition-destination="thank_you"]')).toHaveLength(3);
+    expect(dom.window.document.querySelectorAll('.hm-hero-inner > a[data-acquisition-destination="setup"]')).toHaveLength(1);
     expect(html).not.toContain('See how it works');
     expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('A real inbox. Ready to explore.');
     expect(dom.window.document.querySelector('.mv-hero-product figcaption')?.textContent).toContain('Search mail, switch views, and try archiving.');
