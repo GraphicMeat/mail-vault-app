@@ -186,6 +186,9 @@ struct StoredEnvelope {
     /// The follow-up reminder asked for at schedule time, in days; 0 is none.
     #[serde(default, rename = "remindDays")]
     remind_days: i64,
+    /// The addresses the message is the user's under, for that reminder.
+    #[serde(default, rename = "ownAddresses")]
+    own_addresses: Vec<String>,
 }
 
 enum Outcome {
@@ -463,12 +466,17 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
             // check for a reply with, and the app does not offer one there.
             if !account.uses_graph() {
                 let recipients = stored.envelope.to.clone();
+                let mut own = stored.own_addresses.clone();
+                if !own.iter().any(|a| a.eq_ignore_ascii_case(&stored.envelope.from)) {
+                    own.push(stored.envelope.from.clone());
+                }
                 crate::follow_up_worker::record_after_send(
                     state,
                     &row.account_id,
                     &result.raw_rfc2822,
                     &recipients,
                     stored.sent_mailbox.as_deref(),
+                    &own,
                     stored.remind_days,
                 );
             }

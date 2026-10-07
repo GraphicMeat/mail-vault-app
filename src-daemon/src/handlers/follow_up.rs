@@ -27,6 +27,16 @@ fn json_of<T: serde::Serialize>(v: T) -> Result<Value, String> {
     serde_json::to_value(v).map_err(|e| e.to_string())
 }
 
+/// `ownAddresses`: every address the send was the user's under. Anything
+/// that is not a list of strings reads as none (the worker adds the login).
+pub(crate) fn own_addresses_arg(params: &Value) -> Vec<String> {
+    params
+        .get("ownAddresses")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default()
+}
+
 fn get_row(state: &Arc<DaemonState>, row_id: &str) -> Result<follow_up::FollowUp, String> {
     app_db::with(&state.app_dir, |c| follow_up::get(c, row_id))?.ok_or_else(|| format!("No follow-up reminder {row_id}"))
 }
@@ -67,6 +77,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let subject = opt_str_arg(params, "subject").unwrap_or_default();
             let recipients = opt_str_arg(params, "recipients").unwrap_or_default();
             let sent_mailbox = opt_str_arg(params, "sentMailbox").unwrap_or_default();
+            let own_addresses = own_addresses_arg(params);
             if message_id.trim().is_empty() {
                 return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "A follow-up reminder needs a Message-ID".to_string()));
             }
@@ -75,7 +86,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 let message_id = message_id.trim();
                 let row_id = uuid::Uuid::new_v4().to_string();
                 app_db::with(&st.app_dir, |c| {
-                    follow_up::insert(c, &row_id, &account_id, message_id, &subject, &recipients, &sent_mailbox, sent_at, remind_at)?;
+                    follow_up::insert(c, &row_id, &account_id, message_id, &subject, &recipients, &sent_mailbox, &own_addresses, sent_at, remind_at)?;
                     // A retried send inserts nothing: the first row answers.
                     follow_up::get_by_message(c, &account_id, message_id)?.ok_or_else(|| "row vanished after insert".to_string())
                 })
@@ -142,6 +153,7 @@ mod tests {
             "subject": "Quote",
             "recipients": "Ana <ana@x.com>",
             "sentMailbox": "Sent",
+            "ownAddresses": ["alias@x.com", "me@x.com", 7],
             "sentAt": 1_000,
             "remindAt": 9_999_999_999_999i64,
         })
@@ -163,6 +175,7 @@ mod tests {
         assert_eq!(row["subject"], json!("Quote"));
         assert_eq!(row["recipients"], json!("Ana <ana@x.com>"));
         assert_eq!(row["sentMailbox"], json!("Sent"));
+        assert_eq!(row["ownAddresses"], json!(["alias@x.com", "me@x.com"]));
         assert_eq!(row["remindAt"], json!(9_999_999_999_999i64));
         let listed = call(&s, "follow_up.list", json!({"accountId": "acc1"})).await;
         assert_eq!(listed.as_array().unwrap().len(), 1);

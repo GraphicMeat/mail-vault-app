@@ -74,21 +74,33 @@ fn allocate_uid(root: &std::path::Path, account_id: &str) -> u32 {
 /// the Sent-folder append target and the follow-up reminder asked for at
 /// schedule time (days, 0 = none) — see `scheduled_send_worker::StoredEnvelope`,
 /// the reader.
-fn envelope_json(account: &ImapConfig, email: &OutgoingEmail, sent_mailbox: Option<&str>, remind_days: u64) -> String {
+fn envelope_json(account: &ImapConfig, email: &OutgoingEmail, sent_mailbox: Option<&str>, reminder: &Reminder) -> String {
     json!({
         "from": account.from_address(),
         "to": email.to,
         "cc": email.cc.clone().unwrap_or_default(),
         "bcc": email.bcc.clone().unwrap_or_default(),
         "sentMailbox": sent_mailbox,
-        "remindDays": remind_days,
+        "remindDays": reminder.days,
+        "ownAddresses": reminder.own_addresses,
     })
     .to_string()
 }
 
-/// `remindDays`, absent or not a number read as none.
-fn remind_days_arg(params: &Value) -> u64 {
-    params.get("remindDays").and_then(Value::as_u64).unwrap_or(0)
+/// The follow-up reminder a schedule asks for: `remindDays` (0 = none) and
+/// the addresses the message is the user's under (`follow_up.create`'s).
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Reminder {
+    days: u64,
+    own_addresses: Vec<String>,
+}
+
+/// `remindDays` (absent or not a number reads as none) and `ownAddresses`.
+fn reminder_arg(params: &Value) -> Reminder {
+    Reminder {
+        days: params.get("remindDays").and_then(Value::as_u64).unwrap_or(0),
+        own_addresses: crate::handlers::follow_up::own_addresses_arg(params),
+    }
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -112,11 +124,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let tz = req!(str_arg(&id, params, "tz"));
             let fire_at = req!(u64_arg(&id, params, "fireAt")) as i64;
             let sent_mailbox = opt_str_arg(params, "sentMailbox");
-            let remind_days = remind_days_arg(params);
+            let reminder = reminder_arg(params);
             let state = Arc::clone(state);
             done(
                 id,
-                blocking(move || create(&state, &account_id, &account, &email, &local_time, &tz, fire_at, sent_mailbox.as_deref(), remind_days))
+                blocking(move || create(&state, &account_id, &account, &email, &local_time, &tz, fire_at, sent_mailbox.as_deref(), &reminder))
                     .await
                     .and_then(|r| r),
             )
@@ -125,7 +137,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "scheduled.update" => {
             let row_id = req!(str_arg(&id, params, "id"));
             let rebuild = if params.get("account").is_some() || params.get("email").is_some() {
-                Some((req!(account_arg(&id, params)), req!(email_arg(&id, params)), opt_str_arg(params, "sentMailbox"), remind_days_arg(params)))
+                Some((req!(account_arg(&id, params)), req!(email_arg(&id, params)), opt_str_arg(params, "sentMailbox"), reminder_arg(params)))
             } else {
                 None
             };
@@ -168,7 +180,7 @@ fn create(
     tz: &str,
     fire_at: i64,
     sent_mailbox: Option<&str>,
-    remind_days: u64,
+    reminder: &Reminder,
 ) -> Result<Value, String> {
     let built = smtp::build_draft_mime(account, email)?;
 
@@ -183,7 +195,7 @@ fn create(
     })?;
 
     let row_id = uuid::Uuid::new_v4().to_string();
-    let envelope = envelope_json(account, email, sent_mailbox, remind_days);
+    let envelope = envelope_json(account, email, sent_mailbox, reminder);
     app_db::with(&state.app_dir, |c| scheduled::insert(c, &row_id, account_id, MAILBOX, uid, &envelope, local_time, tz, fire_at))?;
 
     state.scheduled_send.wake();
@@ -206,7 +218,7 @@ fn create(
 fn update(
     state: &Arc<DaemonState>,
     row_id: &str,
-    rebuild: Option<(ImapConfig, OutgoingEmail, Option<String>, u64)>,
+    rebuild: Option<(ImapConfig, OutgoingEmail, Option<String>, Reminder)>,
     reschedule: Option<(String, String, i64)>,
 ) -> Result<Value, String> {
     let _claim = if rebuild.is_some() {
@@ -220,13 +232,13 @@ fn update(
         return Err(NOT_EDITABLE.to_string());
     }
 
-    if let Some((account, email, sent_mailbox, remind_days)) = rebuild {
+    if let Some((account, email, sent_mailbox, reminder)) = rebuild {
         let built = smtp::build_draft_mime(&account, &email)?;
         with_mailbox_write(state, &existing.account_id, &existing.mailbox, |root| {
             vault_files::store(&state.vault_registry, root, &existing.account_id, &existing.mailbox, existing.uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)
                 .map(|_| ())
         })?;
-        let envelope = envelope_json(&account, &email, sent_mailbox.as_deref(), remind_days);
+        let envelope = envelope_json(&account, &email, sent_mailbox.as_deref(), &reminder);
         app_db::with(&state.app_dir, |c| {
             c.execute("UPDATE scheduled_sends SET envelope = ?2 WHERE id = ?1", rusqlite::params![row_id, envelope])
                 .map(|_| ())
@@ -522,6 +534,7 @@ mod tests {
         let mut params = create_params("acc1");
         params["sentMailbox"] = json!("Sent");
         params["remindDays"] = json!(3);
+        params["ownAddresses"] = json!(["alias@mock.test"]);
         let with = call(&s, "scheduled.create", params).await;
         let plain = call(&s, "scheduled.create", create_params("acc1")).await;
         call(&s, "scheduled.send_now", json!({"id": with["id"]})).await;
@@ -538,6 +551,7 @@ mod tests {
         assert_eq!(rows[0].subject, "Later");
         assert_eq!(rows[0].recipients, "partner@example.com");
         assert_eq!(rows[0].sent_mailbox, "Sent");
+        assert_eq!(rows[0].own_addresses, vec!["alias@mock.test", "luke@mock.test"], "the schedule's addresses and the From it went out under");
         assert_eq!(rows[0].remind_at - rows[0].sent_at, 3 * 24 * 60 * 60 * 1000);
     }
 
