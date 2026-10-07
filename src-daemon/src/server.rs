@@ -184,6 +184,9 @@ pub struct DaemonState {
     /// Snooze's wake signal and pass lock — `handlers::snooze` pokes it on
     /// create/reschedule and holds the lock for an immediate unsnooze.
     pub snooze: crate::snooze_worker::SnoozeState,
+    /// Follow-up reminders' wake signal — `handlers::follow_up` pokes it on
+    /// create, a scheduled send on a reminder it recorded.
+    pub follow_up: crate::follow_up_worker::FollowUpState,
     /// Auto Tags' wake signal — woken by the same "new mail arrived" points
     /// that already feed the classification path (`handle_sync_now`,
     /// `idle_watch`), shared with `idle` via `IdleWatchers::set_auto_tag_notify`
@@ -631,6 +634,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::snooze::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::follow_up::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
     if let Some(resp) = crate::handlers::pgp::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -679,6 +685,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
             if result["ok"] == true {
                 state.scheduled_send.wake();
                 state.snooze.wake();
+                state.follow_up.wake();
             }
             RpcResponse::success(id, result)
         }
@@ -874,6 +881,7 @@ impl DaemonState {
             insights: crate::insights::InsightsSnapshots::default(),
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
             snooze: crate::snooze_worker::SnoozeState::default(),
+            follow_up: crate::follow_up_worker::FollowUpState::default(),
             auto_tag_worker,
             eviction_worker: crate::eviction_worker::EvictionWorkerState::default(),
             hoarder_worker: crate::hoarder_worker::HoarderWorkerState::default(),

@@ -346,6 +346,16 @@ fn uid_set_key_in_search() {
 }
 
 #[test]
+fn or_matches_either_key_and_ands_with_what_follows() {
+    let server = gapped_server();
+    let mut c = Client::select(&server, "INBOX");
+    assert_eq!(c.send("UID SEARCH OR SUBJECT m10 SUBJECT m30")[0], "* SEARCH 10 30");
+    assert_eq!(c.send(r#"UID SEARCH OR HEADER Message-ID "m20@" SUBJECT nope"#)[0], "* SEARCH 20");
+    assert_eq!(c.send("UID SEARCH OR SUBJECT m10 SUBJECT m30 NOT UID 10")[0], "* SEARCH 30");
+    assert!(status(&c.send("UID SEARCH OR SUBJECT m10")).contains(" BAD "));
+}
+
+#[test]
 fn a_bare_sequence_set_matches_by_sequence_number() {
     let server = gapped_server();
     let mut c = Client::select(&server, "INBOX");

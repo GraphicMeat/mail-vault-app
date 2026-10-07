@@ -46,6 +46,7 @@ mod server;
 pub mod search_index;
 mod snapshot;
 mod snooze_worker;
+mod follow_up_worker;
 mod vault_gap;
 pub mod sync_engine;
 
@@ -496,6 +497,7 @@ async fn daemon_main() {
         insights: insights::InsightsSnapshots::default(),
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
         snooze: snooze_worker::SnoozeState::default(),
+        follow_up: follow_up_worker::FollowUpState::default(),
         auto_tag_worker,
         eviction_worker: eviction_worker::EvictionWorkerState::default(),
         hoarder_worker: hoarder_worker::HoarderWorkerState::default(),
@@ -562,6 +564,8 @@ async fn daemon_main() {
     scheduled_send_worker::start(Arc::clone(&state));
     // Snooze's worker: same catch-up-then-sleep shape.
     snooze_worker::start(Arc::clone(&state));
+    // Follow-up reminders' worker: same catch-up-then-sleep shape.
+    follow_up_worker::start(Arc::clone(&state));
     // Watches keychain access so a locked keychain is noticed without waiting
     // for something to ask for credentials; an unlock wakes the queued sends
     // and the snoozes it held back.
@@ -570,6 +574,7 @@ async fn daemon_main() {
         credentials::start_watcher(move || {
             state.scheduled_send.wake();
             state.snooze.wake();
+            state.follow_up.wake();
         });
     }
     // A portable copy watches the drive it runs from.

@@ -550,6 +550,15 @@ fn matches_one(msg: &Message, seq: u32, ctx: &SearchCtx, text: &str, key: &str, 
             let Some(inner) = next_arg(s) else { return Err("NOT needs a search key".into()) };
             !matches_one(msg, seq, ctx, text, &inner, s)?
         }
+        // `OR <key1> <key2>`: either key (RFC 3501 §6.4.4). Both are read, so
+        // their arguments are consumed whichever matches.
+        "OR" => {
+            let Some(left) = next_arg(s) else { return Err("OR needs two search keys".into()) };
+            let a = matches_one(msg, seq, ctx, text, &left, s)?;
+            let Some(right) = next_arg(s) else { return Err("OR needs two search keys".into()) };
+            let b = matches_one(msg, seq, ctx, text, &right, s)?;
+            a || b
+        }
         // Clients prepend `CHARSET <name>` for non-ASCII values; matching is
         // byte-oriented here, so consume and ignore it rather than silently
         // matching nothing.

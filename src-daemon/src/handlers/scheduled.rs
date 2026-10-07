@@ -71,17 +71,24 @@ fn allocate_uid(root: &std::path::Path, account_id: &str) -> u32 {
 
 /// What `insert`/the envelope-replace branch of `update` store in the
 /// `envelope` column: `smtp::FrozenEnvelope`'s four fields, flattened, plus
-/// the Sent-folder append target — see `scheduled_send_worker::StoredEnvelope`,
+/// the Sent-folder append target and the follow-up reminder asked for at
+/// schedule time (days, 0 = none) — see `scheduled_send_worker::StoredEnvelope`,
 /// the reader.
-fn envelope_json(account: &ImapConfig, email: &OutgoingEmail, sent_mailbox: Option<&str>) -> String {
+fn envelope_json(account: &ImapConfig, email: &OutgoingEmail, sent_mailbox: Option<&str>, remind_days: u64) -> String {
     json!({
         "from": account.from_address(),
         "to": email.to,
         "cc": email.cc.clone().unwrap_or_default(),
         "bcc": email.bcc.clone().unwrap_or_default(),
         "sentMailbox": sent_mailbox,
+        "remindDays": remind_days,
     })
     .to_string()
+}
+
+/// `remindDays`, absent or not a number read as none.
+fn remind_days_arg(params: &Value) -> u64 {
+    params.get("remindDays").and_then(Value::as_u64).unwrap_or(0)
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -105,10 +112,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let tz = req!(str_arg(&id, params, "tz"));
             let fire_at = req!(u64_arg(&id, params, "fireAt")) as i64;
             let sent_mailbox = opt_str_arg(params, "sentMailbox");
+            let remind_days = remind_days_arg(params);
             let state = Arc::clone(state);
             done(
                 id,
-                blocking(move || create(&state, &account_id, &account, &email, &local_time, &tz, fire_at, sent_mailbox.as_deref()))
+                blocking(move || create(&state, &account_id, &account, &email, &local_time, &tz, fire_at, sent_mailbox.as_deref(), remind_days))
                     .await
                     .and_then(|r| r),
             )
@@ -117,7 +125,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "scheduled.update" => {
             let row_id = req!(str_arg(&id, params, "id"));
             let rebuild = if params.get("account").is_some() || params.get("email").is_some() {
-                Some((req!(account_arg(&id, params)), req!(email_arg(&id, params)), opt_str_arg(params, "sentMailbox")))
+                Some((req!(account_arg(&id, params)), req!(email_arg(&id, params)), opt_str_arg(params, "sentMailbox"), remind_days_arg(params)))
             } else {
                 None
             };
@@ -160,6 +168,7 @@ fn create(
     tz: &str,
     fire_at: i64,
     sent_mailbox: Option<&str>,
+    remind_days: u64,
 ) -> Result<Value, String> {
     let built = smtp::build_draft_mime(account, email)?;
 
@@ -174,7 +183,7 @@ fn create(
     })?;
 
     let row_id = uuid::Uuid::new_v4().to_string();
-    let envelope = envelope_json(account, email, sent_mailbox);
+    let envelope = envelope_json(account, email, sent_mailbox, remind_days);
     app_db::with(&state.app_dir, |c| scheduled::insert(c, &row_id, account_id, MAILBOX, uid, &envelope, local_time, tz, fire_at))?;
 
     state.scheduled_send.wake();
@@ -197,7 +206,7 @@ fn create(
 fn update(
     state: &Arc<DaemonState>,
     row_id: &str,
-    rebuild: Option<(ImapConfig, OutgoingEmail, Option<String>)>,
+    rebuild: Option<(ImapConfig, OutgoingEmail, Option<String>, u64)>,
     reschedule: Option<(String, String, i64)>,
 ) -> Result<Value, String> {
     let _claim = if rebuild.is_some() {
@@ -211,13 +220,13 @@ fn update(
         return Err(NOT_EDITABLE.to_string());
     }
 
-    if let Some((account, email, sent_mailbox)) = rebuild {
+    if let Some((account, email, sent_mailbox, remind_days)) = rebuild {
         let built = smtp::build_draft_mime(&account, &email)?;
         with_mailbox_write(state, &existing.account_id, &existing.mailbox, |root| {
             vault_files::store(&state.vault_registry, root, &existing.account_id, &existing.mailbox, existing.uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)
                 .map(|_| ())
         })?;
-        let envelope = envelope_json(&account, &email, sent_mailbox.as_deref());
+        let envelope = envelope_json(&account, &email, sent_mailbox.as_deref(), remind_days);
         app_db::with(&state.app_dir, |c| {
             c.execute("UPDATE scheduled_sends SET envelope = ?2 WHERE id = ?1", rusqlite::params![row_id, envelope])
                 .map(|_| ())
@@ -500,6 +509,53 @@ mod tests {
             !mailvault_core::vault_files::exists(&s.data_dir, "acc1", "Scheduled", uid),
             "a sent row's frozen .eml must be removed"
         );
+    }
+
+    /// A reminder asked for at schedule time is recorded once the message
+    /// goes out, under the Message-ID the recipient's reply will name: the
+    /// one in the sent bytes. A schedule without one records nothing.
+    #[tokio::test]
+    async fn a_scheduled_send_with_a_reminder_records_it_when_it_goes_out() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let s = st();
+        let server = serve_acc1(&s);
+        let mut params = create_params("acc1");
+        params["sentMailbox"] = json!("Sent");
+        params["remindDays"] = json!(3);
+        let with = call(&s, "scheduled.create", params).await;
+        let plain = call(&s, "scheduled.create", create_params("acc1")).await;
+        call(&s, "scheduled.send_now", json!({"id": with["id"]})).await;
+        call(&s, "scheduled.send_now", json!({"id": plain["id"]})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let rows = mailvault_core::app_db::with(&s.app_dir, |c| mailvault_core::app_db::follow_up::list(c, None)).unwrap();
+        assert_eq!(rows.len(), 1, "only the schedule that asked for one");
+        let sent_ids: Vec<String> =
+            server.sent_messages().iter().filter_map(|m| mailvault_core::maildir::message_id_in(m)).map(|id| format!("<{id}>")).collect();
+        assert_eq!(sent_ids.len(), 2);
+        assert!(sent_ids.contains(&rows[0].message_id), "keyed on a sent id: {sent_ids:?} vs {}", rows[0].message_id);
+        assert_eq!(rows[0].account_id, "acc1");
+        assert_eq!(rows[0].subject, "Later");
+        assert_eq!(rows[0].recipients, "partner@example.com");
+        assert_eq!(rows[0].sent_mailbox, "Sent");
+        assert_eq!(rows[0].remind_at - rows[0].sent_at, 3 * 24 * 60 * 60 * 1000);
+    }
+
+    /// An edit saved over a scheduled email keeps the reminder it carries.
+    #[tokio::test]
+    async fn an_edit_carries_the_reminder_into_the_stored_envelope() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let mut edit = json!({"id": row["id"], "account": account_json(), "email": email_json(), "remindDays": 7});
+        call(&s, "scheduled.update", edit.clone()).await;
+        let stored = mailvault_core::app_db::with(&s.app_dir, |c| scheduled::get(c, row["id"].as_str().unwrap())).unwrap().unwrap();
+        let envelope: Value = serde_json::from_str(&stored.envelope).unwrap();
+        assert_eq!(envelope["remindDays"], json!(7));
+        edit.as_object_mut().unwrap().remove("remindDays");
+        call(&s, "scheduled.update", edit).await;
+        let stored = mailvault_core::app_db::with(&s.app_dir, |c| scheduled::get(c, row["id"].as_str().unwrap())).unwrap().unwrap();
+        let envelope: Value = serde_json::from_str(&stored.envelope).unwrap();
+        assert_eq!(envelope["remindDays"], json!(0), "turned off in the edit");
     }
 
     /// Retry on a row that failed by using up its tries must really try

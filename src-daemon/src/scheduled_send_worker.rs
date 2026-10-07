@@ -183,6 +183,9 @@ struct StoredEnvelope {
     envelope: FrozenEnvelope,
     #[serde(default, rename = "sentMailbox")]
     sent_mailbox: Option<String>,
+    /// The follow-up reminder asked for at schedule time, in days; 0 is none.
+    #[serde(default, rename = "remindDays")]
+    remind_days: i64,
 }
 
 enum Outcome {
@@ -456,6 +459,19 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
 
     match smtp::send_raw(&account, &stored.envelope, raw).await {
         Ok(result) => {
+            // Graph accounts get no reminder: the daemon has no token to
+            // check for a reply with, and the app does not offer one there.
+            if !account.uses_graph() {
+                let recipients = stored.envelope.to.clone();
+                crate::follow_up_worker::record_after_send(
+                    state,
+                    &row.account_id,
+                    &result.raw_rfc2822,
+                    &recipients,
+                    stored.sent_mailbox.as_deref(),
+                    stored.remind_days,
+                );
+            }
             append_to_sent(state, &account, &row.account_id, stored.sent_mailbox, &result);
             Outcome::Sent
         }
