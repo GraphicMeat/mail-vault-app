@@ -67,7 +67,9 @@ export function FollowUpPinnedRows({ hidden = false }) {
           <div key={row.id} role="listitem" data-testid="follow-up-pinned-row" data-unread={String(unread)}
             aria-current={selected ? 'true' : undefined}
             title={t('followUp.rowTitle', { date: sent })}
-            style={{ height: dense ? PIN_HEIGHT.compact : PIN_HEIGHT.comfortable }}
+            // .virtual-row is absolute (index.css) for the virtualizer's own
+            // wrappers; a pin has none, so it stays in flow.
+            style={{ position: 'relative', height: dense ? PIN_HEIGHT.compact : PIN_HEIGHT.comfortable }}
             onClick={() => open(row)}
             onKeyDown={(e) => {
               // The x's own Enter and Space are its click, not the row's.
