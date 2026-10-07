@@ -146,6 +146,20 @@ describe('demo mailbox backend', () => {
     await expect(backend.invoke('daemon_rpc', { method: 'classification.summary', params: { accountId: account.id } })).resolves.toMatchObject({ total: expect.any(Number), by_category: expect.any(Object) });
   });
 
+  it('drops deleted mail from Email Cleanup, even when the vault kept a copy', async () => {
+    const backend = createDemoBackend();
+    const account = backend.accounts[0];
+    const rpc = method => backend.invoke('daemon_rpc', { method, params: { accountId: account.id } });
+    const before = await rpc('classification.results');
+    const target = before.find(row => backend.snapshot().messages.find(m => m.messageId === row.messageId && m.accountId === account.id)?.vaultPresent) || before[0];
+    const total = (await rpc('classification.summary')).total;
+
+    await backend.invoke('bulk_delete_emails', { accountId: account.id, accountJson: JSON.stringify(account), mailbox: target.mailbox, uids: [target.uid], bin: false });
+
+    expect((await rpc('classification.results')).some(row => row.messageId === target.messageId)).toBe(false);
+    expect((await rpc('classification.summary')).total).toBe(total - 1);
+  });
+
   it('keeps cleanup, backup and learning state meaningful after a user change', async () => {
     const backend = createDemoBackend();
     const account = backend.accounts[0];

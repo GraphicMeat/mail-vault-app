@@ -158,6 +158,15 @@ async fn end_follow_ups_at(state: &Arc<DaemonState>, account_id: &str, mailbox: 
     }
 }
 
+/// Cleanup lists what is classified: a deleted message must leave that list.
+async fn forget_classifications_at(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]) {
+    if uids.is_empty() {
+        return;
+    }
+    let (app_dir, account_id, mailbox, uids) = (state.app_dir.clone(), account_id.to_string(), mailbox.to_string(), uids.to_vec());
+    let _ = blocking(move || crate::classification::forget_at(&app_dir, &account_id, &mailbox, &uids)).await;
+}
+
 async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>) {
     if uids.is_empty() {
         return;
@@ -256,6 +265,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let result = match result {
                 Ok((mut p, deleted)) => {
                     end_follow_ups_at(&state, &acct, &mb, &deleted).await;
+                    forget_classifications_at(&state, &acct, &mb, &deleted).await;
                     record_server_deleted(&state, &acct, &mb, deleted).await;
                     p.total += refused;
                     p.errors += refused;
@@ -630,6 +640,20 @@ mod tests {
         )
         .await;
         r.result.expect("bulk_delete_emails must succeed")
+    }
+
+    /// Email Cleanup: Delete on a Newsletter group finished, and every row
+    /// stayed listed. The deleted copies' classifications go with them; a uid
+    /// the server kept, and the same uid in another folder, stay.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_delete_emails_forgets_the_classification_of_a_deleted_copy() {
+        let (_v, s) = st(true);
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(inbox_with(&[7, 8])));
+        crate::classification::seed_for_test(&s.app_dir, "acc", &[("<m7>", "INBOX", 7), ("<m8>", "INBOX", 8), ("<a7>", "Archive", 7)]);
+
+        bulk_delete(&s, &server, &[7]).await;
+
+        assert_eq!(crate::classification::keys_for_test(&s.app_dir, "acc"), vec!["<a7>".to_string(), "<m8>".to_string()]);
     }
 
     /// A due follow-up reminder points at a Sent copy by uid. The bulk delete

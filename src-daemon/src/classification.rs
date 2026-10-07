@@ -109,7 +109,7 @@ pub fn save_classifications(
     account_id: &str,
     new_entries: &HashMap<String, EmailClassification>,
 ) -> Result<(), String> {
-    let mut existing = load_classifications(data_dir, account_id);
+    let existing = load_classifications(data_dir, account_id);
     // A user override already stored outranks anything automatic arriving
     // after it: the worker batches its saves, so a batch that classified the
     // message before the override landed would otherwise undo it on flush. An
@@ -122,18 +122,78 @@ pub fn save_classifications(
         })
         .map(|(mid, entry)| (mid.clone(), entry.clone()))
         .collect();
-    existing.extend(incoming);
+    // Only the incoming rows are written: rewriting the whole account would
+    // put back a row `forget_at` took out since `existing` was read.
+    let rows = encode(&incoming.into_iter().collect())?;
+    with_app_db(data_dir, |conn| store::put_many(conn, account_id, &rows))?;
 
-    let rows = encode(&existing)?;
-    with_app_db(data_dir, |conn| store::replace_account(conn, account_id, &rows))?;
-
-    info!(
-        "Saved {} classifications for {} (total: {})",
-        new_entries.len(),
-        account_id,
-        existing.len()
-    );
+    info!("Saved {} classifications for {}", rows.len(), account_id);
     Ok(())
+}
+
+/// Whether a result is stored for this message. A store that cannot be read
+/// answers no: the worst that costs is classifying the message again.
+pub fn is_classified(data_dir: &Path, account_id: &str, message_id: &str) -> bool {
+    with_app_db(data_dir, |conn| store::has(conn, account_id, message_id)).unwrap_or(false)
+}
+
+/// The server no longer has these uids in `mailbox` (deleted, archived and
+/// removed, moved out, or re-keyed), so Cleanup must stop listing them.
+pub fn forget_at(data_dir: &Path, account_id: &str, mailbox: &str, uids: &[u32]) {
+    if uids.is_empty() {
+        return;
+    }
+    match with_app_db(data_dir, |conn| store::remove_at(conn, account_id, mailbox, uids)) {
+        Ok(0) => {}
+        Ok(n) => info!("Forgot {} classifications of mail gone from {}/{}", n, account_id, mailbox),
+        Err(e) => warn!("Could not forget the classifications of mail gone from {}/{}: {}", account_id, mailbox, e),
+    }
+}
+
+/// `mailbox` changed UIDVALIDITY: every stored uid may name another message.
+pub fn forget_mailbox(data_dir: &Path, account_id: &str, mailbox: &str) {
+    match with_app_db(data_dir, |conn| store::remove_mailbox(conn, account_id, mailbox)) {
+        Ok(0) => {}
+        Ok(n) => info!("Forgot {} classifications of {}/{} (new UIDVALIDITY)", n, account_id, mailbox),
+        Err(e) => warn!("Could not forget the classifications of {}/{}: {}", account_id, mailbox, e),
+    }
+}
+
+/// Rows `(message_id, mailbox, uid)` stored as classified, for tests that
+/// need Cleanup to have something to list.
+#[cfg(test)]
+pub(crate) fn seed_for_test(data_dir: &Path, account_id: &str, rows: &[(&str, &str, u64)]) {
+    let entries = rows
+        .iter()
+        .map(|(mid, mailbox, uid)| {
+            let entry = EmailClassification {
+                category: "newsletter".into(),
+                importance: "low".into(),
+                action: "delete-from-server".into(),
+                confidence: 1.0,
+                classified_at: String::new(),
+                model_used: "test".into(),
+                source: ClassificationSource::LocalRule,
+                snapshot: Some(EmailSnapshot {
+                    uid: *uid,
+                    subject: String::new(),
+                    from: String::new(),
+                    date: String::new(),
+                    mailbox: mailbox.to_string(),
+                }),
+            };
+            (mid.to_string(), entry)
+        })
+        .collect();
+    save_classifications(data_dir, account_id, &entries).unwrap();
+}
+
+/// The stored message ids of an account, sorted.
+#[cfg(test)]
+pub(crate) fn keys_for_test(data_dir: &Path, account_id: &str) -> Vec<String> {
+    let mut keys: Vec<String> = load_classifications(data_dir, account_id).into_keys().collect();
+    keys.sort();
+    keys
 }
 
 /// Save a single classification result.

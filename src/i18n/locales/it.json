@@ -242,6 +242,7 @@
   "bulk.ops.last90Days": "Ultimi 90 giorni",
   "bulk.ops.lastWeek": "Settimana scorsa",
   "bulk.ops.lastYear": "Anno scorso",
+  "bulk.ops.all": "Tutto",
   "bulk.ops.minimizeSelectionKept": "Riduci a icona: la selezione resta",
   "bulk.ops.nothingFoundRange": "Nessun risultato per questo intervallo",
   "bulk.ops.onServerCount": "{{count}} sul server",

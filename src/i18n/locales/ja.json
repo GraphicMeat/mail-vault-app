@@ -242,6 +242,7 @@
   "bulk.ops.last90Days": "過去 90 日間",
   "bulk.ops.lastWeek": "先週",
   "bulk.ops.lastYear": "昨年",
+  "bulk.ops.all": "すべて",
   "bulk.ops.minimizeSelectionKept": "最小化：選択は保持されます",
   "bulk.ops.nothingFoundRange": "この期間に該当するメールはありません",
   "bulk.ops.onServerCount": "サーバー上 {{count}} 件",

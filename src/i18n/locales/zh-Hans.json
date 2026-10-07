@@ -242,6 +242,7 @@
   "bulk.ops.last90Days": "最近 90 天",
   "bulk.ops.lastWeek": "上周",
   "bulk.ops.lastYear": "去年",
+  "bulk.ops.all": "全部",
   "bulk.ops.minimizeSelectionKept": "最小化：选择会保留",
   "bulk.ops.nothingFoundRange": "此范围内未找到邮件",
   "bulk.ops.onServerCount": "服务器上 {{count}} 封",

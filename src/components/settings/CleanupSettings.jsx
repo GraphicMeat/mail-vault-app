@@ -692,14 +692,14 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
                 disabled={bulkRunning}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-mail-danger-tint text-mail-danger hover:bg-mail-danger/20 transition-colors disabled:opacity-50"
               >
-                <Trash2 size={13} /> Delete ({selectedIds.size})
+                <Trash2 size={13} /> {t('settings.cleanup.deleteCount', { count: selectedIds.size })}
               </button>
               <button
                 onClick={() => setBulkAction('archive')}
                 disabled={bulkRunning}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-mail-accent-tint text-mail-accent-text hover:bg-mail-accent/20 transition-colors disabled:opacity-50"
               >
-                <Archive size={13} /> Archive ({selectedIds.size})
+                <Archive size={13} /> {t('settings.cleanup.archiveCount', { count: selectedIds.size })}
               </button>
               <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-mail-text-muted hover:text-mail-text">{t('settings.cleanup.deselectAll')}</button>
             </>
@@ -779,7 +779,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
           <Button variant="ghost" icon size="sm" onClick={() => closePreview()}>
             <ChevronLeft size={18} className="text-mail-text-muted" />
           </Button>
-          <span className="text-sm font-medium text-mail-text truncate"><Private kind="text">{previewItem.subject || 'Email'}</Private></span>
+          <span className="text-sm font-medium text-mail-text truncate"><Private kind="text">{previewItem.subject || t('settings.cleanup.emailFallback')}</Private></span>
         </div>
       )}
 
