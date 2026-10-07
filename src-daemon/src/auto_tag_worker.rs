@@ -17,6 +17,7 @@
 
 use crate::handlers::auto_tags::{emit_assigned, evaluate, load_candidates, now_secs, on_device, provider_from_rule};
 use crate::handlers::common::blocking;
+use crate::llm::Provider;
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, auto_tags, tags::Target};
 use mailvault_core::custody::cache;
@@ -112,16 +113,25 @@ async fn sweep(state: &Arc<DaemonState>) {
         return;
     }
 
+    // Asked at most once a sweep, and only when a rule needs it: Apple's
+    // status spawns its helper, and with no model at all every wake would
+    // otherwise spawn it again per rule and account.
+    let mut on_device_provider = None;
     for rule in &enabled {
         for account_id in &account_ids {
-            process_rule_account(state, rule, account_id).await;
+            process_rule_account(state, rule, account_id, &mut on_device_provider).await;
         }
     }
 }
 
 /// Evaluate one rule against one account's cached headers, going forward
 /// only from `rule.enabled_at` and skipping anything already decided.
-async fn process_rule_account(state: &Arc<DaemonState>, rule: &auto_tags::Rule, account_id: &str) {
+async fn process_rule_account(
+    state: &Arc<DaemonState>,
+    rule: &auto_tags::Rule,
+    account_id: &str,
+    on_device_provider: &mut Option<Result<Provider, String>>,
+) {
     let Some(enabled_at) = rule.enabled_at else { return };
 
     let state_clone = Arc::clone(state);
@@ -163,13 +173,19 @@ async fn process_rule_account(state: &Arc<DaemonState>, rule: &auto_tags::Rule, 
     // mail is judged once a model exists.
     let provider = match provider_from_rule(rule) {
         Some(p) => p,
-        None => match on_device(state).await {
-            Ok(p) => p,
-            Err(e) => {
-                info!("[auto-tag] rule {} skipped {} message(s): {e}", rule.id, undecided.len());
-                return;
+        None => {
+            if on_device_provider.is_none() {
+                let found = on_device(state).await;
+                if let Err(e) = &found {
+                    info!("[auto-tag] rules without a provider skip this sweep: {e}");
+                }
+                *on_device_provider = Some(found);
             }
-        },
+            match on_device_provider {
+                Some(Ok(p)) => p.clone(),
+                _ => return,
+            }
+        }
     };
     // A Google account's mail never goes to a cloud endpoint. Skip the whole
     // batch with one line, not one per message; nothing is recorded as decided,
