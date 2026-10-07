@@ -294,6 +294,8 @@ CREATE INDEX net_events_at ON net_events(at_ms);
 /// Follow-up reminders (`app_db::follow_up`): one row per sent message the
 /// user asked to be reminded about if nobody answers. Keyed on the Message-ID
 /// as sent, which is all a reply names; a send retried inserts nothing twice.
+/// `own_addresses` is a JSON array of every address the send was the user's
+/// (its From, the login, aliases): a message from any of them is no reply.
 const SCHEMA_V9: &str = "
 CREATE TABLE follow_ups (
   id           TEXT PRIMARY KEY,
@@ -307,6 +309,7 @@ CREATE TABLE follow_ups (
   state        TEXT NOT NULL,
   sent_mailbox TEXT NOT NULL DEFAULT '',
   sent_uid     INTEGER,
+  own_addresses TEXT NOT NULL DEFAULT '[]',
   seen         INTEGER NOT NULL DEFAULT 0,
   announced    INTEGER NOT NULL DEFAULT 0,
   attempts     INTEGER NOT NULL DEFAULT 0,

@@ -276,56 +276,6 @@ pub fn sender_clock(conn: &Connection, address: &str) -> Result<Option<(i32, Opt
     Ok(Some((offset, at)))
 }
 
-/// Does any cached message in one mailbox of `account` answer `message_id`:
-/// its In-Reply-To or References names it, and it is not from `own_address`?
-/// Follow-up reminders ask this of each folder but Sent and Drafts before
-/// asking the server (`follow_up_worker`), one folder per call so the custody
-/// lock is let go between folders. Trash counts: a reply the user deleted was
-/// still a reply.
-///
-/// Same LIKE prefilter as `sender_clock`; the match itself is on the parsed
-/// ids, so a `_` in an id or an address that merely mentions it cannot
-/// answer yes.
-pub fn has_cached_reply(
-    conn: &Connection,
-    account: &str,
-    mailbox: &str,
-    message_id: &str,
-    own_address: &str,
-) -> Result<bool, String> {
-    let id = crate::maildir::normalize_message_id(message_id);
-    if id.is_empty() {
-        return Ok(false);
-    }
-    let names_it = |v: &Value| -> bool {
-        let ids: Vec<&str> = match v {
-            Value::String(s) => s.split_whitespace().collect(),
-            Value::Array(items) => items.iter().filter_map(Value::as_str).flat_map(str::split_whitespace).collect(),
-            _ => Vec::new(),
-        };
-        ids.iter().any(|candidate| crate::maildir::normalize_message_id(candidate) == id)
-    };
-    let mut stmt = conn
-        .prepare(
-            "SELECT header_json FROM header_cache
-             WHERE account_id = ?1 AND mailbox_path = ?2 AND header_json LIKE '%' || ?3 || '%'",
-        )
-        .map_err(err)?;
-    let mut rows = stmt.query(params![account, mailbox, id]).map_err(err)?;
-    while let Some(row) = rows.next().map_err(err)? {
-        let json: String = row.get(0).map_err(err)?;
-        let Ok(header) = serde_json::from_str::<Value>(&json) else { continue };
-        let from = header.pointer("/from/address").and_then(Value::as_str).unwrap_or("");
-        if !own_address.is_empty() && from.trim().eq_ignore_ascii_case(own_address.trim()) {
-            continue;
-        }
-        if header.get("inReplyTo").is_some_and(names_it) || header.get("references").is_some_and(names_it) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 /// How many headers this mailbox has cached. Replaces counting `<uid>.json`
 /// files in the sidecar directory — which also had to exclude `_meta.json`
 /// and the Outlook uid ledger that still live there.
@@ -954,34 +904,6 @@ mod tests {
 
     fn utc(y: i32, m: u32, d: u32, h: u32) -> i64 {
         Utc.with_ymd_and_hms(y, m, d, h, 0, 0).unwrap().timestamp_millis()
-    }
-
-    #[test]
-    fn a_cached_reply_is_someone_elses_message_naming_the_id_in_that_folder() {
-        let (_t, c) = store();
-        // My own follow-up in the thread, filed in the inbox by a rule: no answer.
-        put(&c, "a", "INBOX", 2, 2, json!({"uid": 2, "inReplyTo": "<q_1@me.x>", "from": {"address": "ME@x.com"}}));
-        // A different id that only shares the LIKE pattern (`_` is a wildcard).
-        put(&c, "a", "INBOX", 4, 4, json!({"uid": 4, "inReplyTo": "<qx1@me.x>", "from": {"address": "ana@y.com"}}));
-        // The right reply, in another account: not this account's answer.
-        put(&c, "b", "INBOX", 5, 5, json!({"uid": 5, "inReplyTo": "<q_1@me.x>", "from": {"address": "ana@y.com"}}));
-        assert!(!has_cached_reply(&c, "a", "INBOX", "<q_1@me.x>", "me@x.com").unwrap());
-
-        // Deleted, but a reply all the same; named in References only. Asked
-        // of another folder, it is not there.
-        put(&c, "a", "Trash", 6, 6, json!({"uid": 6, "references": ["<root@y.com>", "<q_1@me.x>"], "from": {"address": "ana@y.com"}}));
-        assert!(has_cached_reply(&c, "a", "Trash", "q_1@me.x", "me@x.com").unwrap());
-        assert!(!has_cached_reply(&c, "a", "INBOX", "q_1@me.x", "me@x.com").unwrap());
-    }
-
-    #[test]
-    fn a_cached_reply_without_brackets_or_in_a_reference_string_still_counts() {
-        let (_t, c) = store();
-        put(&c, "a", "INBOX", 1, 1, json!({"uid": 1, "references": "<r@y.com> <m@me.x>", "from": {"address": "ana@y.com"}}));
-        assert!(has_cached_reply(&c, "a", "INBOX", "<m@me.x>", "me@x.com").unwrap());
-        put(&c, "a", "Archive", 2, 2, json!({"uid": 2, "inReplyTo": "n@me.x", "from": {"address": "bo@y.com"}}));
-        assert!(has_cached_reply(&c, "a", "Archive", "<n@me.x>", "me@x.com").unwrap());
-        assert!(!has_cached_reply(&c, "a", "INBOX", "<>", "me@x.com").unwrap(), "an empty id answers nothing");
     }
 
     #[test]

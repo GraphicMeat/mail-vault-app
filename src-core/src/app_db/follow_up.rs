@@ -36,6 +36,9 @@ pub struct FollowUp {
     /// check; where the copy was actually found once the row went `due`.
     pub sent_mailbox: String,
     pub sent_uid: Option<u32>,
+    /// Every address the message was the user's under: its From, the login,
+    /// the account's aliases. A message from any of them is no reply.
+    pub own_addresses: Vec<String>,
     /// The user opened the resurfaced message.
     pub seen: bool,
     /// The app raised its one notification for it.
@@ -76,7 +79,7 @@ fn now_ms() -> i64 {
 }
 
 const COLUMNS: &str = "id, account_id, message_id, subject, recipients, sent_at, remind_at, created_at, state, \
-     sent_mailbox, sent_uid, seen, announced, attempts, retry_at, last_error";
+     sent_mailbox, sent_uid, seen, announced, attempts, retry_at, last_error, own_addresses";
 
 fn row_to_follow_up(r: &rusqlite::Row) -> rusqlite::Result<FollowUp> {
     Ok(FollowUp {
@@ -96,6 +99,7 @@ fn row_to_follow_up(r: &rusqlite::Row) -> rusqlite::Result<FollowUp> {
         attempts: r.get(13)?,
         retry_at: r.get(14)?,
         last_error: r.get(15)?,
+        own_addresses: serde_json::from_str(&r.get::<_, String>(16)?).unwrap_or_default(),
     })
 }
 
@@ -117,13 +121,15 @@ pub fn insert(
     subject: &str,
     recipients: &str,
     sent_mailbox: &str,
+    own_addresses: &[String],
     sent_at: i64,
     remind_at: i64,
 ) -> Result<bool, String> {
+    let own = serde_json::to_string(own_addresses).map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT OR IGNORE INTO follow_ups(id, account_id, message_id, subject, recipients, sent_mailbox, sent_at, remind_at, created_at, state)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'waiting')",
-        params![id, account_id, message_id, subject, recipients, sent_mailbox, sent_at, remind_at, now_ms()],
+        "INSERT OR IGNORE INTO follow_ups(id, account_id, message_id, subject, recipients, sent_mailbox, own_addresses, sent_at, remind_at, created_at, state)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'waiting')",
+        params![id, account_id, message_id, subject, recipients, sent_mailbox, own, sent_at, remind_at, now_ms()],
     )
     .map(|n| n > 0)
     .map_err(|e| e.to_string())
@@ -244,7 +250,7 @@ mod tests {
     }
 
     fn seed(c: &Connection, id: &str, remind_at: i64) {
-        insert(c, id, "acct", &format!("<{id}@x>"), "Quote", "Ana <ana@x.com>", "", 100, remind_at).unwrap();
+        insert(c, id, "acct", &format!("<{id}@x>"), "Quote", "Ana <ana@x.com>", "", &[], 100, remind_at).unwrap();
     }
 
     fn state_of(c: &Connection, id: &str) -> String {
@@ -254,7 +260,7 @@ mod tests {
     #[test]
     fn an_inserted_row_reads_back_waiting_with_everything_it_was_given() {
         let c = conn();
-        assert!(insert(&c, "a", "acct", "<m@x>", "Quote", "Ana <ana@x.com>", "Sent", 1_000, 5_000).unwrap());
+        assert!(insert(&c, "a", "acct", "<m@x>", "Quote", "Ana <ana@x.com>", "Sent", &["me@x.com".to_string(), "alias@x.com".to_string()], 1_000, 5_000).unwrap());
         let row = get(&c, "a").unwrap().unwrap();
         assert_eq!(row.account_id, "acct");
         assert_eq!(row.message_id, "<m@x>");
@@ -264,6 +270,7 @@ mod tests {
         assert_eq!(row.remind_at, 5_000);
         assert_eq!(row.state, "waiting");
         assert_eq!(row.sent_mailbox, "Sent", "the app's Sent folder, a hint for the check");
+        assert_eq!(row.own_addresses, vec!["me@x.com", "alias@x.com"]);
         assert_eq!(row.sent_uid, None);
         assert!(!row.seen);
         assert!(!row.announced);
@@ -277,11 +284,11 @@ mod tests {
     #[test]
     fn a_second_insert_of_the_same_message_is_ignored() {
         let c = conn();
-        assert!(insert(&c, "a", "acct", "<m@x>", "Quote", "ana@x.com", "", 1_000, 5_000).unwrap());
-        assert!(!insert(&c, "b", "acct", "<m@x>", "Quote", "ana@x.com", "", 2_000, 9_000).unwrap());
+        assert!(insert(&c, "a", "acct", "<m@x>", "Quote", "ana@x.com", "", &[], 1_000, 5_000).unwrap());
+        assert!(!insert(&c, "b", "acct", "<m@x>", "Quote", "ana@x.com", "", &[], 2_000, 9_000).unwrap());
         assert!(get(&c, "b").unwrap().is_none());
         assert_eq!(get_by_message(&c, "acct", "<m@x>").unwrap().unwrap().id, "a");
-        assert!(insert(&c, "c", "other", "<m@x>", "Quote", "ana@x.com", "", 1_000, 5_000).unwrap(), "another account is another row");
+        assert!(insert(&c, "c", "other", "<m@x>", "Quote", "ana@x.com", "", &[], 1_000, 5_000).unwrap(), "another account is another row");
     }
 
     #[test]
@@ -291,7 +298,7 @@ mod tests {
         seed(&c, "early", 1_000);
         seed(&c, "resurfaced", 2_000);
         seed(&c, "answered", 500);
-        insert(&c, "elsewhere", "acct-2", "<e@x>", "", "", "", 100, 1_500).unwrap();
+        insert(&c, "elsewhere", "acct-2", "<e@x>", "", "", "", &[], 100, 1_500).unwrap();
         record_outcome(&c, "resurfaced", &Outcome::NoReply { sent_mailbox: "Sent".into(), sent_uid: 7 }, 2_000).unwrap();
         record_outcome(&c, "answered", &Outcome::Replied, 2_000).unwrap();
         let all: Vec<_> = list(&c, None).unwrap().into_iter().map(|r| r.id).collect();

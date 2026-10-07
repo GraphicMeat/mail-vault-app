@@ -2807,19 +2807,51 @@ pub fn message_id_search_term(message_id: &str) -> String {
         .replace('"', "\\\"")
 }
 
-/// The `UID SEARCH` criteria for "a reply to `message_id` from someone else":
-/// any message whose In-Reply-To or References names it, not sent from
-/// `own_address`. The user's own follow-up in the same thread is no answer.
-/// `None` for an empty Message-ID, which would match every header.
-pub fn reply_search_criteria(message_id: &str, own_address: &str) -> Option<String> {
+/// Headers that mark a message as sent by a machine, not a person, as
+/// `(field, value)` for `NOT HEADER`: an empty value matches any message that
+/// carries the field at all (RFC 3501 §6.4.4).
+///
+/// - `Auto-Submitted`: RFC 3834; any value but "no" is automatic. Vacation
+///   responders, Gmail's included, send `auto-replied`; matching "auto"
+///   covers `auto-generated` and `auto-notified` too.
+/// - `X-Auto-Response-Suppress`: what Exchange, Outlook and Microsoft 365
+///   put on their own automatic replies (`All`, `OOF`), which do not always
+///   carry `Auto-Submitted`.
+/// - `X-Autoreply`, `X-Autorespond`: older responders' own flags.
+///
+/// Sources: RFC 3834 §5; Nylas, "Detect out-of-office and auto-replies"
+/// (developer.nylas.com/docs/cookbook/email/detect-auto-replies), which also
+/// notes some old servers send a vacation notice with none of these. Such a
+/// notice still counts as a reply: nothing in it can tell it apart.
+const AUTO_REPLY_HEADERS: [(&str, &str); 4] = [
+    ("Auto-Submitted", "auto"),
+    ("X-Auto-Response-Suppress", ""),
+    ("X-Autoreply", ""),
+    ("X-Autorespond", ""),
+];
+
+/// The `UID SEARCH` criteria for "a reply to `message_id` from a person who
+/// is not the sender": any message whose In-Reply-To or References names it,
+/// from none of `own_addresses` (the user's own follow-up, or a nudge from an
+/// alias, is no answer), and not an automatic reply. `NOT FROM` is a
+/// substring match, so an address that merely contains one of them is left
+/// out too: a reply missed, never one invented. `None` for an empty
+/// Message-ID, which would match every header.
+pub fn reply_search_criteria(message_id: &str, own_addresses: &[String]) -> Option<String> {
     let term = message_id_search_term(message_id);
     if term.is_empty() {
         return None;
     }
+    let quote = |v: &str| v.trim().replace('\\', "\\\\").replace('"', "\\\"");
     let mut criteria = format!("OR HEADER In-Reply-To \"{term}\" HEADER References \"{term}\"");
-    let own = own_address.trim().replace('\\', "\\\\").replace('"', "\\\"");
-    if !own.is_empty() {
-        criteria.push_str(&format!(" NOT FROM \"{own}\""));
+    let mut seen = std::collections::HashSet::new();
+    for own in own_addresses.iter().map(|a| quote(a)).filter(|a| !a.is_empty()) {
+        if seen.insert(own.to_lowercase()) {
+            criteria.push_str(&format!(" NOT FROM \"{own}\""));
+        }
+    }
+    for (field, value) in AUTO_REPLY_HEADERS {
+        criteria.push_str(&format!(" NOT HEADER {field} \"{value}\""));
     }
     Some(criteria)
 }
@@ -2871,6 +2903,17 @@ pub async fn message_id_uids_in(session: &mut ImapSession, mailbox: &str, messag
     search_message_id_in(session, mailbox, &term)
         .await?
         .ok_or_else(|| format!("{mailbox} refused the Message-ID search"))
+}
+
+/// `message_id_uids_in`, with a folder that refuses the SELECT or the SEARCH
+/// (a tagged NO: renamed, removed) answered as `None` rather than an error,
+/// so the caller can ask another folder. Any other failure is still an error.
+pub async fn message_id_uids_if_selectable(session: &mut ImapSession, mailbox: &str, message_id: &str) -> Result<Option<Vec<u32>>, String> {
+    let term = message_id_search_term(message_id);
+    if term.is_empty() {
+        return Err("Message-ID search: empty Message-ID".to_string());
+    }
+    search_message_id_in(session, mailbox, &term).await
 }
 
 /// Ask the server whether a Message-ID exists in ANY folder.
@@ -3997,32 +4040,35 @@ mod is_missing_mailbox_tests {
 mod reply_search_criteria_tests {
     use super::*;
 
+    const AUTO: &str = r#" NOT HEADER Auto-Submitted "auto" NOT HEADER X-Auto-Response-Suppress "" NOT HEADER X-Autoreply "" NOT HEADER X-Autorespond """#;
+
     #[test]
-    fn a_reply_is_named_by_in_reply_to_or_references_and_not_from_the_sender() {
+    fn a_reply_names_the_id_comes_from_none_of_the_senders_and_is_no_auto_reply() {
+        let own = vec!["me@x.com".to_string(), "alias@x.com".to_string(), "ME@x.com".to_string()];
         assert_eq!(
-            reply_search_criteria("<abc@mail.x>", "me@x.com").as_deref(),
-            Some(r#"OR HEADER In-Reply-To "abc@mail.x" HEADER References "abc@mail.x" NOT FROM "me@x.com""#)
+            reply_search_criteria("<abc@mail.x>", &own),
+            Some(format!(r#"OR HEADER In-Reply-To "abc@mail.x" HEADER References "abc@mail.x" NOT FROM "me@x.com" NOT FROM "alias@x.com"{AUTO}"#))
         );
     }
 
     #[test]
     fn quotes_in_either_value_are_escaped() {
         assert_eq!(
-            reply_search_criteria("<a\"b@x>", "o\"dd@x.com").as_deref(),
-            Some(r#"OR HEADER In-Reply-To "a\"b@x" HEADER References "a\"b@x" NOT FROM "o\"dd@x.com""#)
+            reply_search_criteria("<a\"b@x>", &["o\"dd@x.com".to_string()]),
+            Some(format!(r#"OR HEADER In-Reply-To "a\"b@x" HEADER References "a\"b@x" NOT FROM "o\"dd@x.com"{AUTO}"#))
         );
     }
 
     #[test]
     fn an_empty_message_id_has_no_criteria() {
-        assert_eq!(reply_search_criteria(" <> ", "me@x.com"), None);
+        assert_eq!(reply_search_criteria(" <> ", &["me@x.com".to_string()]), None);
     }
 
     #[test]
     fn no_own_address_drops_only_the_not_from() {
         assert_eq!(
-            reply_search_criteria("<m@x>", "").as_deref(),
-            Some(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x""#)
+            reply_search_criteria("<m@x>", &["  ".to_string()]),
+            Some(format!(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x"{AUTO}"#))
         );
     }
 }
