@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.19.1] - 2026-10-07
+
 ### Changed
 - **Sending a big attachment is faster.** The message was built a second time at the moment it went out; it now goes out as the copy already built for Sent, which also makes the two the very same bytes.
 

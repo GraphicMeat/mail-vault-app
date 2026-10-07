@@ -127,11 +127,56 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.19.1">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.19.1</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">October 7, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sending a big attachment is faster.</strong> The message was built a second time at the moment it went out; it now goes out as the copy already built for Sent, which also makes the two the very same bytes.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive works on Outlook.com accounts signed in with Microsoft.</strong> On a personal Microsoft account (outlook.com, hotmail, live) every message you archived failed ("Archived with 4 error(s)"), because the copy was fetched from Microsoft's IMAP server with a sign-in that only works for Microsoft Graph. Archive now downloads each message through Microsoft Graph, and a message you had already opened is replaced by its archived copy instead of kept twice. (<a href="https://github.com/GraphicMeat/mail-vault-app/discussions/23" target="_blank" rel="noopener" class="text-primary-500 hover:underline">#23</a>)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The focus scene stays put when you click Unlock early.</strong> The diorama no longer jumps up behind the confirm question.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The list toolbar stays on one row.</strong> Turning Timeline on in a saved view added a labelled Reset view button, which pushed List and Explorer onto a second row, so the toolbar grew under your pointer. Reset view is now an icon that sits beside List and Explorer from the start and lights up once the view differs from how it was saved. In a narrow list the Unread, Senders, Timeline, List and Explorer labels give way to icons (their names stay as tooltips and for screen readers), so the row holds from a 350px list up; below that the threads selector takes a row of its own.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.19.0">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.19.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">October 7, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
