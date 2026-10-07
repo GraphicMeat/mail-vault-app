@@ -404,4 +404,36 @@
       play.replaceWith(frame);
     }, { once: true });
   });
+
+  // Feature clips: muted loops with preload="none", so nothing downloads until
+  // one plays. A clip plays while at least half of it is on screen and pauses
+  // when it leaves or the tab is hidden. Nothing starts before the visitor's
+  // first scroll (no autoplay above the fold), and never with reduced motion.
+  const clips = [...document.querySelectorAll('.mv-clip video')];
+  let reducedMotion = false;
+  try { reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* treat as no preference */ }
+  clips.forEach(video => video.addEventListener('playing', () => {
+    acquisitionEvent('clip_play', { clip: video.closest('.mv-clip').dataset.clip });
+  }, { once: true }));
+  if (clips.length && !reducedMotion && 'IntersectionObserver' in window) {
+    const onScreen = new Set();
+    const play = video => {
+      if (document.hidden) return;
+      try { Promise.resolve(video.play()).catch(() => {}); } catch { /* the poster stays */ }
+    };
+    const pause = video => { try { video.pause(); } catch { /* already stopped */ } };
+    const watch = () => {
+      const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) { onScreen.add(entry.target); play(entry.target); }
+        else { onScreen.delete(entry.target); pause(entry.target); }
+      }), { threshold: [0, 0.5] });
+      clips.forEach(video => observer.observe(video));
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) clips.forEach(pause);
+        else onScreen.forEach(play);
+      });
+    };
+    if (window.scrollY > 0) watch();
+    else window.addEventListener('scroll', watch, { once: true, passive: true });
+  }
 })();
