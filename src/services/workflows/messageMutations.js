@@ -19,6 +19,7 @@ import {
 } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { shiftInbox, unreadEntries } from '../../stores/unreadCounts';
+import { dismissFollowUpsAt } from '../../stores/followUpStore';
 import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
@@ -1433,6 +1434,9 @@ export async function stampVaultEntry(accountId, mailbox, uid, extra) {
 
 // "This app deleted the server copy" — one of the three proofs custody accepts.
 export async function markServerDeleted(accountId, mailbox, uid) {
+  // Every server delete the app confirmed lands here (the bulk selection, a
+  // replayed journal entry, cleanup rules): a reminder on that copy ends.
+  void dismissFollowUpsAt([{ accountId, mailbox, uid }]).catch(() => {});
   return stampVaultEntry(accountId, mailbox, uid, { serverDeleted: true });
 }
 
@@ -1526,6 +1530,9 @@ export async function applyServerRemoval(uid, {
   const get = () => useMailStore.getState();
   // The server copy is gone now, not just hidden (_hideDeleted counted then).
   viewCountsStale();
+  // A follow-up reminder pinned on this Sent copy now points at nothing: a
+  // delete from the reader it opened, or an open that found it gone.
+  void dismissFollowUpsAt([{ accountId, mailbox, uid }]).catch(() => {});
 
   // Record the removal on the vault entry before touching the store: this is
   // the only durable proof that the server copy is gone by our own hand, and
@@ -2884,6 +2891,8 @@ export async function moveEmails(keys, targetMailbox) {
       }
       const res = await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
       await db.clearOps({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
+      // Moved, so the uid a follow-up reminder pinned on it names nothing now.
+      void dismissFollowUpsAt(group.uids.map(uid => ({ accountId: group.accountId, mailbox: group.mailbox, uid }))).catch(() => {});
       // Null when the server reported no COPYUID (no UIDPLUS) — never a guess.
       records.push(record(Array.isArray(res?.newUids) ? res.newUids : null));
       tally.completed += group.uids.length;

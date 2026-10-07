@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}, envoyé à {{recipients}}",
   "followUp.rowTitle": "Toujours pas de réponse. Envoyé {{date}}",
   "followUp.to": "À : {{recipients}}",
-  "followUp.dismiss": "Ignorer le rappel"
+  "followUp.dismiss": "Ignorer le rappel",
+  "followUp.notifyBodyPrivate": "Un e-mail que vous avez envoyé n'a pas encore reçu de réponse."
 }

@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}, {{recipients}}에게 보냄",
   "followUp.rowTitle": "아직 답장이 없습니다. 보낸 날짜: {{date}}",
   "followUp.to": "받는 사람: {{recipients}}",
-  "followUp.dismiss": "알림 닫기"
+  "followUp.dismiss": "알림 닫기",
+  "followUp.notifyBodyPrivate": "보낸 이메일에 아직 답장이 없습니다."
 }

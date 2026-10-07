@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}, gesendet an {{recipients}}",
   "followUp.rowTitle": "Noch keine Antwort. Gesendet {{date}}",
   "followUp.to": "An: {{recipients}}",
-  "followUp.dismiss": "Erinnerung schließen"
+  "followUp.dismiss": "Erinnerung schließen",
+  "followUp.notifyBodyPrivate": "Auf eine von dir gesendete E-Mail kam noch keine Antwort."
 }

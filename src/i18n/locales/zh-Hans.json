@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}，发给 {{recipients}}",
   "followUp.rowTitle": "尚无回复。发送于 {{date}}",
   "followUp.to": "收件人：{{recipients}}",
-  "followUp.dismiss": "关闭提醒"
+  "followUp.dismiss": "关闭提醒",
+  "followUp.notifyBodyPrivate": "你发送的一封邮件尚无回复。"
 }

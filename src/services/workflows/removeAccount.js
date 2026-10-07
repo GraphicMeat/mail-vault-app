@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { forgetAccount } from '../../stores/unreadCounts';
+import { dismissAccountFollowUps } from '../../stores/followUpStore';
 import { isGraphAccount } from '../graphConfig';
 import { unwatchAccount } from '../syncService';
 import { invalidateRestoreDescriptors as _invalidateRestore, clearGraphIdMap as _clearGraphIdMap } from '../cacheManager';
@@ -34,6 +35,10 @@ export async function removeAccount(accountId) {
 
   const newAccounts = get().accounts.filter(a => a.id !== accountId);
   forgetAccount(accountId);
+  // Its follow-up reminders end with it (snooze rows have no such rule: a
+  // removed account's snoozes are left to fail at their wake).
+  dismissAccountFollowUps(accountId)
+    .catch(err => console.warn('[removeAccount] follow-up reminders not dismissed:', err));
 
   useMailStore.setState({ accounts: newAccounts });
 

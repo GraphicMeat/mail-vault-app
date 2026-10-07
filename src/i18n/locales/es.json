@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}, enviado a {{recipients}}",
   "followUp.rowTitle": "Aún sin respuesta. Enviado {{date}}",
   "followUp.to": "Para: {{recipients}}",
-  "followUp.dismiss": "Descartar recordatorio"
+  "followUp.dismiss": "Descartar recordatorio",
+  "followUp.notifyBodyPrivate": "Un correo que enviaste aún no tiene respuesta."
 }

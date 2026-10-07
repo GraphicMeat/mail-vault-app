@@ -17,12 +17,20 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 // The states a row is still shown or still pending in; the rest are history.
 const LIVE = new Set(['waiting', 'due']);
 
+// Reads sent to the daemon and not answered yet. A list read that lands in
+// between carries the daemon's old `seen`, and would paint a reminder the
+// user just opened unread again.
+const pendingSeen = new Map();
+
 export const useFollowUpStore = create((set, get) => ({
   rows: [],
 
   loadRows: async () => {
     const rows = await daemonCall('follow_up.list', {});
-    set({ rows: Array.isArray(rows) ? rows : [] });
+    set({
+      rows: (Array.isArray(rows) ? rows : [])
+        .map(r => (pendingSeen.has(r.id) ? { ...r, seen: pendingSeen.get(r.id) } : r)),
+    });
     return get().rows;
   },
 
@@ -41,8 +49,10 @@ export const useFollowUpStore = create((set, get) => ({
     const row = get().rows.find(r => r.id === id);
     if (!row || row.seen === seen) return Promise.resolve();
     set(state => ({ rows: state.rows.map(r => (r.id === id ? { ...r, seen } : r)) }));
+    pendingSeen.set(id, seen);
     return daemonCall('follow_up.mark_seen', { id, seen })
-      .catch(err => console.warn('[followUp] could not record the read state:', err));
+      .catch(err => console.warn('[followUp] could not record the read state:', err))
+      .finally(() => { if (pendingSeen.get(id) === seen) pendingSeen.delete(id); });
   },
 
   /// Done with it: the row leaves the inbox. The Sent copy is never touched.
@@ -53,6 +63,25 @@ export const useFollowUpStore = create((set, get) => ({
   },
 }));
 
+/// The Sent copies at `targets` (`{accountId, mailbox, uid}`) were deleted
+/// or moved: a due reminder pointing at one points at nothing now, and ends.
+/// Called only after the server said yes, never instead of the action.
+export function dismissFollowUpsAt(targets) {
+  const at = new Set((targets || []).map(x => `${x.accountId}\x01${x.mailbox}\x01${Number(x.uid)}`));
+  const ended = dueFollowUps(useFollowUpStore.getState().rows)
+    .filter(r => at.has(`${r.accountId}\x01${r.sentMailbox}\x01${r.sentUid}`));
+  return Promise.all(ended.map(r => useFollowUpStore.getState().dismiss(r.id)));
+}
+
+/// A removed account's reminders, waiting or due: nothing will check them
+/// again, and nothing can open them.
+export async function dismissAccountFollowUps(accountId) {
+  const rows = await daemonCall('follow_up.list', { accountId });
+  await Promise.all((Array.isArray(rows) ? rows : [])
+    .filter(r => r.accountId === accountId)
+    .map(r => useFollowUpStore.getState().dismiss(r.id)));
+}
+
 /// Rows that are back in the inbox: due, with a Sent copy to open.
 export function dueFollowUps(rows) {
   return (rows || []).filter(r => r.state === 'due' && r.sentMailbox && Number.isInteger(r.sentUid));
@@ -61,10 +90,13 @@ export function dueFollowUps(rows) {
 /// The due reminders a list view pins above its rows: an account's INBOX
 /// shows its own, All inboxes every visible account's, newest first. Never
 /// rows of the list itself (components/FollowUpPinnedRows.jsx says why).
-export function followUpsInView(view, rows, hiddenAccounts = {}) {
+export function followUpsInView(view, rows, hiddenAccounts = {}, accounts = []) {
   if (!showsFollowUps(view)) return [];
   const spans = view.activeMailbox === 'UNIFIED';
+  // A removed account's row names a mailbox the app cannot open any more.
+  const known = new Set((accounts || []).map(a => a.id));
   return dueFollowUps(rows)
+    .filter(r => known.has(r.accountId))
     .filter(r => (spans ? !hiddenAccounts?.[r.accountId] : r.accountId === view.activeAccountId))
     .sort((a, b) => b.remindAt - a.remindAt);
 }
@@ -96,8 +128,11 @@ export async function announceDue() {
     useFollowUpStore.setState(state => ({
       rows: state.rows.map(r => (r.id === row.id ? { ...r, announced: true } : r)),
     }));
+    // useEmailScheduler's rule: with previews off a banner names no message.
     const title = t('followUp.notifyTitle');
-    const body = t('followUp.notifyBody', { subject: row.subject || t('common.noSubject'), recipients: row.recipients || '' });
+    const body = notificationSettings?.showPreview === false
+      ? t('followUp.notifyBodyPrivate')
+      : t('followUp.notifyBody', { subject: row.subject || t('common.noSubject'), recipients: row.recipients || '' });
     const target = { accountId: row.accountId, mailbox: 'INBOX' };
     const mailCtx = { accountId: row.accountId, folder: 'INBOX', from: '', domain: '', viewIds: [] };
     try {
@@ -141,5 +176,6 @@ export function initFollowUp() {
 
 export function _resetFollowUpForTest() {
   _initialized = false;
+  pendingSeen.clear();
   announcing.clear();
 }

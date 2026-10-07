@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}, inviata a {{recipients}}",
   "followUp.rowTitle": "Ancora nessuna risposta. Inviata {{date}}",
   "followUp.to": "A: {{recipients}}",
-  "followUp.dismiss": "Ignora promemoria"
+  "followUp.dismiss": "Ignora promemoria",
+  "followUp.notifyBodyPrivate": "Un'email che hai inviato non ha ancora ricevuto risposta."
 }

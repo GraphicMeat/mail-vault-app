@@ -228,4 +228,61 @@ describe('a due follow-up reminder and the inbox list', () => {
     expect(mockDeleteEmail.mock.calls.filter(([, , mailbox]) => mailbox === 'INBOX')).toEqual([]);
     expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 77, 'Sent');
   });
+
+  // ── a Sent copy deleted or moved from where it is shown ──
+  //
+  // The pin names the Sent message by its uid. Once that message is deleted
+  // or moved (from the reader the pin opened, the Sent folder, a bulk run),
+  // the reminder points at nothing: it ends AFTER the server said yes, and
+  // never instead of the action.
+
+  const dismissed = () => mockDaemonCall.mock.calls.filter(([m]) => m === 'follow_up.dismiss').map(([, p]) => p.id);
+  const sentRow = () => row(77, { _accountId: ACCT_A.id, _mailbox: 'Sent', messageId: '<asked@me>', flags: ['\\Seen'] });
+
+  it('ends the reminder once a reader delete of its Sent copy succeeds', async () => {
+    mockDaemonCall.mockClear();
+    prime({ sentEmails: [sentRow()] });
+    useMailStore.setState({ selectedEmailId: `${ACCT_A.id}:Sent:77`, selectedEmail: sentRow() });
+    await useMailStore.getState().deleteEmailFromServer(useMailStore.getState().selectedEmailId);
+    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 77, 'Sent');
+    expect(dismissed()).toEqual(['f1']);
+  });
+
+  it('keeps the reminder when the delete fails', async () => {
+    mockDaemonCall.mockClear();
+    prime({ sentEmails: [sentRow()] });
+    // Every try refused: the delete retries a refusal once (retryOnce).
+    mockDeleteEmail.mockRejectedValue(new Error('NO server says no'));
+    await useMailStore.getState().deleteEmailFromServer(`${ACCT_A.id}:Sent:77`).catch(() => {});
+    expect(mockDeleteEmail).toHaveBeenCalled();
+    expect(dismissed()).toEqual([]);
+  });
+
+  it('ends the reminder once a move of its Sent copy succeeds', async () => {
+    mockDaemonCall.mockClear();
+    prime({ activeMailbox: 'Sent', emails: [row(77, { messageId: '<asked@me>' })] });
+    mockMoveEmails.mockResolvedValueOnce({ moved: 1, newUids: [9] });
+    await useMailStore.getState().moveEmails([77], 'Archive');
+    expect(mockMoveEmails).toHaveBeenCalled();
+    expect(dismissed()).toEqual(['f1']);
+  });
+
+  it('ends the reminder once a bulk delete of the selection in Sent succeeds', async () => {
+    mockDaemonCall.mockClear();
+    prime({ activeMailbox: 'Sent', emails: [row(77, { messageId: '<asked@me>' }), row(78)] });
+    useMailStore.setState({ selectedEmailIds: new Set([77]) });
+    await useMailStore.getState().deleteSelectedFromServer();
+    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 77, 'Sent');
+    expect(dismissed()).toEqual(['f1']);
+  });
+
+  // Opening the pin answers "gone": the message was deleted from another client.
+  it('ends the reminder whose Sent copy the server proves gone', async () => {
+    mockDaemonCall.mockClear();
+    prime();
+    const { applyServerRemoval } = await import('../messageMutations');
+    await applyServerRemoval(77, { accountId: ACCT_A.id, mailbox: 'Sent', skipRefresh: true, clearSelection: false });
+    expect(dismissed()).toEqual(['f1']);
+  });
 });
+

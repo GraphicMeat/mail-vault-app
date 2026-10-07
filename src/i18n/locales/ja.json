@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}（{{recipients}} 宛て）",
   "followUp.rowTitle": "まだ返信がありません。送信日時: {{date}}",
   "followUp.to": "宛先: {{recipients}}",
-  "followUp.dismiss": "リマインダーを閉じる"
+  "followUp.dismiss": "リマインダーを閉じる",
+  "followUp.notifyBodyPrivate": "送信したメールにまだ返信がありません。"
 }

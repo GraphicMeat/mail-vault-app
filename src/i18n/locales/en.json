@@ -3674,5 +3674,6 @@
   "followUp.notifyBody": "{{subject}}, sent to {{recipients}}",
   "followUp.rowTitle": "No reply yet. Sent {{date}}",
   "followUp.to": "To: {{recipients}}",
-  "followUp.dismiss": "Dismiss reminder"
+  "followUp.dismiss": "Dismiss reminder",
+  "followUp.notifyBodyPrivate": "An email you sent has had no reply yet."
 }
