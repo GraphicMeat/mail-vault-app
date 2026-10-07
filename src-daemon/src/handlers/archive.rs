@@ -764,4 +764,123 @@ mod tests {
         }
         assert!(saw_final, "never observed the final archive-progress frame");
     }
+
+    // ── archive_emails on an Outlook.com (Graph) account ─────────────────
+    //
+    // Its token carries Graph scopes only, so the run must fetch each body
+    // from Graph by the uid's ledger id, never dial IMAP with it (discussion
+    // 23: every message failed). `imapHost` points at a port nothing listens
+    // on, so a run that still dials IMAP fails at once instead of hanging.
+
+    const GRAPH_MIME: &str = "From: sender@example.com\r\nTo: user@outlook.com\r\nSubject: hi\r\nDate: Thu, 01 Jan 2026 12:00:00 +0000\r\nMessage-ID: <g7@example.com>\r\n\r\nbody\r\n";
+
+    fn graph_account_json() -> String {
+        serde_json::json!({
+            "email": "user@outlook.com",
+            "imapHost": "127.0.0.1",
+            "imapPort": 1,
+            "authType": "oauth2",
+            "oauth2Transport": "graph",
+            "oauth2AccessToken": "tok",
+        })
+        .to_string()
+    }
+
+    fn seed_ledger(root: &std::path::Path, account: &str, mailbox: &str, ledger: Value) {
+        let dir = root.join("email_cache").join(mailvault_core::header_cache::cache_base_name(account, mailbox));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(mailvault_core::graph_ledger::LEDGER_FILE), ledger.to_string()).unwrap();
+    }
+
+    fn vault_names(root: &std::path::Path, account: &str, mailbox: &str) -> Vec<String> {
+        let cur = mailvault_core::vault_files::cur_path(root, account, mailbox);
+        std::fs::read_dir(&cur)
+            .map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+            .unwrap_or_default()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn archive_emails_fetches_a_graph_account_from_graph_not_imap() {
+        let (v, s) = st(true);
+        seed_ledger(v.path(), "acc", "INBOX", json!({"7": "gid-7"}));
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(200, GRAPH_MIME.to_string())]);
+
+        let r = call(&s, "archive_emails", json!({"accountId": "acc", "accountJson": graph_account_json(), "mailbox": "INBOX", "uids": [7]})).await;
+
+        let result = r.result.expect("archive_emails must succeed");
+        assert_eq!(result["errors"], json!(0), "{result}");
+        assert_eq!(result["completed"], json!(1), "{result}");
+        let names = vault_names(v.path(), "acc", "INBOX");
+        assert_eq!(names.len(), 1, "{names:?}");
+        assert!(mailvault_core::maildir::carries_archived(&names[0]), "stored as archived: {names:?}");
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acc", "INBOX");
+        assert_eq!(std::fs::read(cur.join(&names[0])).unwrap(), GRAPH_MIME.as_bytes());
+        let requests = crate::handlers::graph::test_graph_requests();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert!(requests[0].path.ends_with("/me/messages/gid-7/$value"), "{}", requests[0].path);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn archive_emails_replaces_the_opened_graph_copy_with_the_archived_one() {
+        let (v, s) = st(true);
+        seed_ledger(v.path(), "acc", "INBOX", json!({"7": "gid-7"}));
+        // What `graph_cache_mime` leaves when the user opened the message.
+        seed_file_with_body(v.path(), "acc", "INBOX", 7, &[], GRAPH_MIME.as_bytes());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(200, GRAPH_MIME.to_string())]);
+
+        let r = call(&s, "archive_emails", json!({"accountId": "acc", "accountJson": graph_account_json(), "mailbox": "INBOX", "uids": [7]})).await;
+
+        let result = r.result.expect("archive_emails must succeed");
+        assert_eq!(result["completed"], json!(1), "{result}");
+        let names = vault_names(v.path(), "acc", "INBOX");
+        assert_eq!(names.len(), 1, "one file per uid: {names:?}");
+        assert!(mailvault_core::maildir::carries_archived(&names[0]), "{names:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn archive_emails_fails_a_graph_uid_the_ledger_does_not_know() {
+        let (v, s) = st(true);
+        seed_ledger(v.path(), "acc", "INBOX", json!({"7": "gid-7"}));
+        let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
+
+        let r = call(&s, "archive_emails", json!({"accountId": "acc", "accountJson": graph_account_json(), "mailbox": "INBOX", "uids": [8]})).await;
+
+        let result = r.result.expect("archive_emails must reply");
+        assert_eq!(result["errors"], json!(1), "{result}");
+        let last = result["lastError"].as_str().unwrap_or_default();
+        assert!(!last.contains("IMAP"), "never dialled IMAP: {last}");
+        assert!(last.contains("UID 8"), "names the uid: {last}");
+        assert!(crate::handlers::graph::test_graph_requests().is_empty());
+        assert!(vault_names(v.path(), "acc", "INBOX").is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn archive_emails_waits_out_a_graph_429_and_stores_the_message() {
+        let (v, s) = st(true);
+        seed_ledger(v.path(), "acc", "INBOX", json!({"7": "gid-7"}));
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(429, String::new()), (200, GRAPH_MIME.to_string())]);
+
+        let r = call(&s, "archive_emails", json!({"accountId": "acc", "accountJson": graph_account_json(), "mailbox": "INBOX", "uids": [7]})).await;
+
+        let result = r.result.expect("archive_emails must succeed");
+        assert_eq!(result["completed"], json!(1), "{result}");
+        assert_eq!(crate::handlers::graph::test_graph_requests().len(), 2);
+        assert_eq!(vault_names(v.path(), "acc", "INBOX").len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn archive_emails_does_not_read_a_lasting_graph_429_as_the_daily_limit() {
+        let (v, s) = st(true);
+        seed_ledger(v.path(), "acc", "INBOX", json!({"7": "gid-7"}));
+        let throttled = r#"{"error":{"code":"ApplicationThrottled","message":"Application is over its MailboxConcurrency limit."}}"#;
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(429, throttled.to_string()); 3]);
+
+        let r = call(&s, "archive_emails", json!({"accountId": "acc", "accountJson": graph_account_json(), "mailbox": "INBOX", "uids": [7]})).await;
+
+        let result = r.result.expect("archive_emails must reply");
+        assert_eq!(result["errors"], json!(1), "{result}");
+        assert_eq!(result["bandwidthLimited"], json!(false), "{result}");
+        assert!(result["lastError"].as_str().unwrap_or_default().contains("429"), "{result}");
+        assert_eq!(crate::handlers::graph::test_graph_requests().len(), 3, "two retries, then give up");
+    }
 }

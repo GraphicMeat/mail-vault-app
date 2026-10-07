@@ -201,7 +201,15 @@ pub async fn run_with_backup(
         slow_drive_ms: None, operation, account_id: account_id.clone(), mailbox: mailbox.clone(),
     });
 
-    let sem = Arc::new(Semaphore::new(5));
+    // An Outlook.com account signed in with Microsoft: its token carries Graph
+    // scopes only, so every body comes from Graph by the uid's ledger id. IMAP
+    // with that token fails every message (discussion 23). Four at a time:
+    // Graph's per-mailbox concurrency limit, which answers a fifth with 429.
+    let graph = account.uses_graph().then(|| {
+        let token = account.access_token.clone().unwrap_or_default();
+        Arc::new(crate::graph::GraphClient::for_purpose(&token, "archive").for_account(&account.email))
+    });
+    let sem = Arc::new(Semaphore::new(if graph.is_some() { 4 } else { 5 }));
     let completed = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
     let bw_limited = Arc::new(AtomicBool::new(false));
@@ -223,8 +231,9 @@ pub async fn run_with_backup(
     // external drive the run is already struggling to keep up with.
     // ponytail: a copy another writer lands mid-run is not in the listing, and
     // this run writes its own beside it under a second flag name.
-    let (vault_listing, mirror_uids) = {
+    let (vault_listing, mirror_uids, graph_ledger) = {
         let root = ctx.root.clone();
+        let uses_graph = graph.is_some();
         let (acct, mbox) = (account_id.clone(), mailbox.clone());
         let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
             std::path::PathBuf::from(bp).join(addr).join(&mailbox).join("cur")
@@ -239,7 +248,16 @@ pub async fn run_with_backup(
             let mirror_uids: HashSet<u32> = mirror
                 .map(|dir| crate::maildir::mirror_file_map(&dir).into_keys().collect())
                 .unwrap_or_default();
-            (vault_listing, mirror_uids)
+            // Read-only: the listings allocate; a uid they never handed out
+            // has no Graph id and fails on its own.
+            let graph_ledger = uses_graph.then(|| {
+                let path = root
+                    .join("email_cache")
+                    .join(crate::header_cache::cache_base_name(&acct, &mbox))
+                    .join(crate::graph_ledger::LEDGER_FILE);
+                crate::graph_ledger::load(&path)
+            });
+            (vault_listing, mirror_uids, graph_ledger)
         })
         .await
         .map_err(|e| format!("archive listing panicked: {}", e))?
@@ -269,6 +287,16 @@ pub async fn run_with_backup(
         let started = Arc::clone(&started);
         let listed = vault_listing.get(&uid).cloned();
         let in_mirror = mirror_uids.contains(&uid);
+        let graph_source = graph.clone().map(|client| {
+            let id = match &graph_ledger {
+                Some(Ok(ledger)) => ledger.get(&uid).cloned().ok_or_else(|| {
+                    format!("Email UID {} is not in the Outlook listing; reopen the folder and try again", uid)
+                }),
+                Some(Err(e)) => Err(e.clone()),
+                None => Err(format!("Email UID {}: no Outlook listing", uid)),
+            };
+            (client, id)
+        });
 
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -318,7 +346,7 @@ pub async fn run_with_backup(
 
             match fetch_and_store(
                 &ctx, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
-                listed, in_mirror, &pace, background,
+                listed, in_mirror, &pace, background, graph_source,
             ).await {
                 Ok(index_entry) => {
                     // Track external copy failures
@@ -487,55 +515,27 @@ async fn fetch_and_store(
     in_mirror: bool,
     pace: &DrivePace,
     background: bool,
+    // A Graph account's client and this uid's Graph id (or why it has none).
+    graph: Option<(Arc<crate::graph::GraphClient>, Result<String, String>)>,
 ) -> Result<serde_json::Value, String> {
-    use base64::Engine;
-
-    // A session on the run's lane for the fetch (semaphore-guarded)
-    let mut guard = if background {
-        ctx.pool.get_background(account).await?
-    } else {
-        ctx.pool.get_priority(account).await?
+    // The body and the server's flags, with the custody entry built from them
+    // (`_external_copy_failed` is set once the copies are written).
+    let (raw_bytes, server_flags, mut index_entry) = match graph {
+        Some((client, id)) => {
+            let raw = fetch_graph_mime(&client, &id?).await?;
+            // Graph's MIME carries no flags; "archived" is added below.
+            let entry = custody_entry_from_raw(uid, &raw, &[]);
+            (raw, Vec::new(), entry)
+        }
+        None => fetch_imap(ctx, account, mailbox, uid, background).await?,
     };
-
-    // Bounded: a socket the server (or a NAT) dropped while a slow disk held
-    // this worker never answers, and an unbounded await here is what locks a
-    // whole backup up with nothing logged.
-    let email = imap::bounded(
-        &format!("UID FETCH {}", uid),
-        60,
-        imap::fetch_email_by_uid(&mut guard.session, mailbox, uid),
-    )
-        .await
-        .map_err(|e| {
-            // Don't return session on error — guard drops, semaphore permit released
-            format!("IMAP fetch failed: {}", e)
-        })?;
-
-    guard.last_selected = Some(mailbox.to_string());
-    if background {
-        ctx.pool.return_background(account, guard).await;
-    } else {
-        ctx.pool.return_priority(account, guard).await;
-    }
-
-    let email = email.ok_or_else(|| format!("Email UID {} not found", uid))?;
 
     // The server's own read state, not a hardcoded "seen": this name is what
     // restore uploads, what the mirror copies, and what a vault row reads back.
-    let flags = crate::vault_flags::store_flags(&email.flags);
+    let flags = crate::vault_flags::store_flags(&server_flags);
     // Path computation only — no disk touched, so it stays off the blocking pool.
     let cur_dir = vault_files::cur_path(&ctx.root, account_id, mailbox);
-
-    let raw_bytes = base64::engine::general_purpose::STANDARD
-        .decode(&email.raw_source)
-        .map_err(|e| format!("base64 decode: {}", e))?;
     let raw_len = raw_bytes.len();
-
-    // Parse In-Reply-To and References from raw email for threading
-    let (in_reply_to, references) = parse_threading_headers(&raw_bytes);
-
-    // Generate snippet from text body
-    let snippet = crate::vault_eml::preview_snippet(email.text.as_deref());
 
     // Every fs call below is synchronous std::fs. On a runtime worker, an
     // external drive that Time Machine is reading blocks that worker — and with
@@ -644,7 +644,61 @@ async fn fetch_and_store(
     info!("archive_emails: stored UID {} ({} bytes{})", uid, raw_len,
         if external_copy_failed { ", external copy FAILED" } else { "" });
 
-    // Build the custody entry
+    index_entry["_external_copy_failed"] = serde_json::Value::Bool(external_copy_failed);
+    Ok(index_entry)
+}
+
+/// One body over IMAP on the run's lane: the raw bytes, the server's flags,
+/// and the custody entry from the server's envelope.
+async fn fetch_imap(
+    ctx: &ArchiveCtx,
+    account: &ImapConfig,
+    mailbox: &str,
+    uid: u32,
+    background: bool,
+) -> Result<(Vec<u8>, Vec<String>, serde_json::Value), String> {
+    use base64::Engine;
+
+    // A session on the run's lane for the fetch (semaphore-guarded)
+    let mut guard = if background {
+        ctx.pool.get_background(account).await?
+    } else {
+        ctx.pool.get_priority(account).await?
+    };
+
+    // Bounded: a socket the server (or a NAT) dropped while a slow disk held
+    // this worker never answers, and an unbounded await here is what locks a
+    // whole backup up with nothing logged.
+    let email = imap::bounded(
+        &format!("UID FETCH {}", uid),
+        60,
+        imap::fetch_email_by_uid(&mut guard.session, mailbox, uid),
+    )
+        .await
+        .map_err(|e| {
+            // Don't return session on error — guard drops, semaphore permit released
+            format!("IMAP fetch failed: {}", e)
+        })?;
+
+    guard.last_selected = Some(mailbox.to_string());
+    if background {
+        ctx.pool.return_background(account, guard).await;
+    } else {
+        ctx.pool.return_priority(account, guard).await;
+    }
+
+    let email = email.ok_or_else(|| format!("Email UID {} not found", uid))?;
+
+    let raw_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&email.raw_source)
+        .map_err(|e| format!("base64 decode: {}", e))?;
+
+    // Parse In-Reply-To and References from raw email for threading
+    let (in_reply_to, references) = parse_threading_headers(&raw_bytes);
+
+    // Generate snippet from text body
+    let snippet = crate::vault_eml::preview_snippet(email.text.as_deref());
+
     let index_entry = serde_json::json!({
         "uid": email.uid,
         "from": { "address": email.from.address, "name": email.from.name },
@@ -658,10 +712,43 @@ async fn fetch_and_store(
         "references": references,
         "snippet": snippet,
         "source": "local",
-        "_external_copy_failed": external_copy_failed,
+        "_external_copy_failed": false,
     });
+    Ok((raw_bytes, email.flags, index_entry))
+}
 
-    Ok(index_entry)
+/// One body from Graph, waiting out a 429 twice: throttling is the one
+/// failure that waiting cures, and other Graph work in the app shares the
+/// mailbox's budget. The wait is clamped like `graph.rs`'s `retry_after_secs`.
+/// A 429 that outlasts the retries is reported without Graph's body: its
+/// "ApplicationThrottled" would read as the provider's daily download limit
+/// (`imap::is_bandwidth_limited`) and stop the whole run for hours over a
+/// concurrency limit that clears in seconds. Bounded like the IMAP fetch.
+async fn fetch_graph_mime(client: &crate::graph::GraphClient, id: &str) -> Result<Vec<u8>, String> {
+    let mut attempt = 0;
+    loop {
+        let result = tokio::time::timeout(std::time::Duration::from_secs(120), client.get_mime_content(id))
+            .await
+            .unwrap_or_else(|_| Err("Graph get_mime_content timed out after 120s".to_string()));
+        match result {
+            Err(e) if e.contains("(429:") => {
+                if attempt == 2 {
+                    return Err("Graph fetch failed: Microsoft asked to slow down (429); archive the rest again in a minute".to_string());
+                }
+                attempt += 1;
+                let wait = e
+                    .split("retry_after=")
+                    .nth(1)
+                    .and_then(|r| r.split(')').next())
+                    .and_then(|n| n.parse::<u64>().ok())
+                    .unwrap_or(1)
+                    .clamp(1, 5);
+                warn!("archive_emails: Graph answered 429, retrying in {}s", wait);
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            }
+            other => return other.map_err(|e| format!("Graph fetch failed: {}", e)),
+        }
+    }
 }
 
 // ── One fetched body into the vault, as archived ─────────────────────────────

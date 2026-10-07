@@ -6,6 +6,7 @@
 - **Sending a big attachment is faster.** The message was built a second time at the moment it went out; it now goes out as the copy already built for Sent, which also makes the two the very same bytes.
 
 ### Fixed
+- **Archive works on Outlook.com accounts signed in with Microsoft.** On a personal Microsoft account (outlook.com, hotmail, live) every message you archived failed ("Archived with 4 error(s)"), because the copy was fetched from Microsoft's IMAP server with a sign-in that only works for Microsoft Graph. Archive now downloads each message through Microsoft Graph, and a message you had already opened is replaced by its archived copy instead of kept twice. ([#23](https://github.com/GraphicMeat/mail-vault-app/discussions/23))
 - **The focus scene stays put when you click Unlock early.** The diorama no longer jumps up behind the confirm question.
 - **The list toolbar stays on one row.** Turning Timeline on in a saved view added a labelled Reset view button, which pushed List and Explorer onto a second row, so the toolbar grew under your pointer. Reset view is now an icon that sits beside List and Explorer from the start and lights up once the view differs from how it was saved. In a narrow list the Unread, Senders, Timeline, List and Explorer labels give way to icons (their names stay as tooltips and for screen readers), so the row holds from a 350px list up; below that the threads selector takes a row of its own.
 
