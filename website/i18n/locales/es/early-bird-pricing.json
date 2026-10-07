@@ -8,9 +8,7 @@
   "b165a52c2694": "Precio anticipado y familiar",
   "5ffae7ce0a0a": "MailVault está en acceso anticipado. Fija hoy el precio con descuento: tu tarifa se mantiene mientras la suscripción siga activa, incluso si suben los precios.",
   "c456e993e85f": "Hasta 5 dispositivos por suscripción",
-  "4b164f3e320b": "Precio estándar tras el acceso anticipado: $39/año",
-  "b51edcabd2c8": "Precio estándar tras el acceso anticipado: $6/mes",
-  "5328ac1d1bea": "¿Qué pasa con mi precio cuando termine el acceso anticipado?",
-  "f58cb9a2250d": "Precio estándar tras el acceso anticipado: {standardYearly}/año",
-  "7c0da8b18bf3": "Precio estándar tras el acceso anticipado: {standardMonthly}/mes"
+  "24e3b3bd9526": "Precio estándar tras el acceso anticipado: <span data-mv-price=\"{standardYearly}\">$39</span>/año",
+  "01a8f3db8f25": "Precio estándar tras el acceso anticipado: <span data-mv-price=\"{standardMonthly}\">$6</span>/mes",
+  "5328ac1d1bea": "¿Qué pasa con mi precio cuando termine el acceso anticipado?"
 }

@@ -84,8 +84,9 @@ describe('English pricing copy', () => {
   });
 
   it('reads the standard price as a plain statement', () => {
-    expect(doc.querySelector('[data-billing-panel="yearly"] [data-mv-price*="{standardYearly}"]').textContent).toBe('Standard price after early access: $39/year');
-    expect(doc.querySelector('[data-billing-panel="monthly"] [data-mv-price*="{standardMonthly}"]').textContent).toBe('Standard price after early access: $6/month');
+    // The line holds the sentence; only its amount is a price token, so the amount can be set in bold.
+    expect(doc.querySelector('[data-billing-panel="yearly"] [data-mv-price*="{standardYearly}"]').closest('p').textContent).toBe('Standard price after early access: $39/year');
+    expect(doc.querySelector('[data-billing-panel="monthly"] [data-mv-price*="{standardMonthly}"]').closest('p').textContent).toBe('Standard price after early access: $6/month');
     expect(doc.querySelector('#premium-plan .mv-pixel-grill').textContent).toContain('Early Bird & Family Pricing');
   });
 

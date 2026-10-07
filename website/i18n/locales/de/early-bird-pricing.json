@@ -8,9 +8,7 @@
   "b165a52c2694": "Frühbucher- und Familienpreis",
   "5ffae7ce0a0a": "MailVault ist im Early Access. Sichere dir heute den vergünstigten Preis: Er bleibt, solange dein Abo aktiv ist, auch nach Preiserhöhungen.",
   "c456e993e85f": "Bis zu 5 Geräte je Abo",
-  "4b164f3e320b": "Standardpreis nach dem Early Access: $39/Jahr",
-  "b51edcabd2c8": "Standardpreis nach dem Early Access: $6/Monat",
-  "5328ac1d1bea": "Was passiert mit meinem Preis, wenn der Early Access endet?",
-  "f58cb9a2250d": "Standardpreis nach dem Early Access: {standardYearly}/Jahr",
-  "7c0da8b18bf3": "Standardpreis nach dem Early Access: {standardMonthly}/Monat"
+  "24e3b3bd9526": "Standardpreis nach dem Early Access: <span data-mv-price=\"{standardYearly}\">$39</span>/Jahr",
+  "01a8f3db8f25": "Standardpreis nach dem Early Access: <span data-mv-price=\"{standardMonthly}\">$6</span>/Monat",
+  "5328ac1d1bea": "Was passiert mit meinem Preis, wenn der Early Access endet?"
 }

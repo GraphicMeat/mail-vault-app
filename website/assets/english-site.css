@@ -284,6 +284,9 @@
 .mv-yearly-saving { display:flex; flex-direction:column; gap:4px; background:var(--mv-tint); padding:14px 16px; border-radius:8px; margin:16px 0; color:var(--mv-ink); }
 .mv-yearly-saving strong { font-size:1rem; color:var(--mv-accent); }
 .mv-yearly-saving span { font-size:.82rem; line-height:1.5; }
+/* Standard price after early access: body text with a bold amount, clear of the saving box. */
+.mv-plan .mv-standard-price { font-size:.94rem; line-height:1.55; color:var(--mv-ink); margin:10px 0 18px; }
+.mv-standard-price [data-mv-price] { font-weight:700; }
 .mv-early-band { max-width:1000px; margin:0 auto 28px; padding:18px 22px; }
 .mv-early-band .mv-checklist { display:flex; flex-wrap:wrap; gap:6px 28px; margin:4px 0 0; }
 .mv-early-band .mv-checklist li { margin:0; font-size:.86rem; }

@@ -8,9 +8,7 @@
   "b165a52c2694": "얼리버드 &amp; 가족 요금",
   "5ffae7ce0a0a": "MailVault는 얼리 액세스 중입니다. 지금 할인 요금을 고정하면 구독이 유지되는 한 가격이 올라도 같은 요금이 유지됩니다.",
   "c456e993e85f": "구독당 최대 5대",
-  "4b164f3e320b": "얼리 액세스 이후 표준 요금: $39/년",
-  "b51edcabd2c8": "얼리 액세스 이후 표준 요금: $6/월",
-  "5328ac1d1bea": "얼리 액세스가 끝나면 제 요금은 어떻게 되나요?",
-  "f58cb9a2250d": "얼리 액세스 이후 표준 요금: {standardYearly}/년",
-  "7c0da8b18bf3": "얼리 액세스 이후 표준 요금: {standardMonthly}/월"
+  "24e3b3bd9526": "얼리 액세스 이후 표준 요금: <span data-mv-price=\"{standardYearly}\">$39</span>/년",
+  "01a8f3db8f25": "얼리 액세스 이후 표준 요금: <span data-mv-price=\"{standardMonthly}\">$6</span>/월",
+  "5328ac1d1bea": "얼리 액세스가 끝나면 제 요금은 어떻게 되나요?"
 }

@@ -8,9 +8,7 @@
   "b165a52c2694": "Tarif lève-tôt et famille",
   "5ffae7ce0a0a": "MailVault est en accès anticipé. Bloquez le tarif réduit aujourd'hui : il reste le même tant que votre abonnement est actif, même après une hausse des prix.",
   "c456e993e85f": "Jusqu'à 5 appareils par abonnement",
-  "4b164f3e320b": "Prix standard après l'accès anticipé : $39/an",
-  "b51edcabd2c8": "Prix standard après l'accès anticipé : $6/mois",
-  "5328ac1d1bea": "Qu'advient-il de mon tarif à la fin de l'accès anticipé ?",
-  "f58cb9a2250d": "Prix standard après l'accès anticipé : {standardYearly}/an",
-  "7c0da8b18bf3": "Prix standard après l'accès anticipé : {standardMonthly}/mois"
+  "24e3b3bd9526": "Prix standard après l'accès anticipé : <span data-mv-price=\"{standardYearly}\">$39</span>/an",
+  "01a8f3db8f25": "Prix standard après l'accès anticipé : <span data-mv-price=\"{standardMonthly}\">$6</span>/mois",
+  "5328ac1d1bea": "Qu'advient-il de mon tarif à la fin de l'accès anticipé ?"
 }

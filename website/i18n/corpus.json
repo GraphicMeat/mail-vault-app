@@ -3156,11 +3156,9 @@
     "b165a52c2694": "Early Bird &amp; Family Pricing",
     "5ffae7ce0a0a": "MailVault is in early access. Lock in discounted pricing today: your rate stays the same as long as your subscription is active, even after prices increase.",
     "c456e993e85f": "Up to 5 devices per subscription",
-    "4b164f3e320b": "Standard price after early access: $39/year",
-    "b51edcabd2c8": "Standard price after early access: $6/month",
+    "24e3b3bd9526": "Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year",
+    "01a8f3db8f25": "Standard price after early access: <span data-mv-price=\"{standardMonthly}\">$6</span>/month",
     "5328ac1d1bea": "What happens to my price when early access ends?",
-    "f58cb9a2250d": "Standard price after early access: {standardYearly}/year",
-    "7c0da8b18bf3": "Standard price after early access: {standardMonthly}/month",
     "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Early Bird &amp; Family Pricing: Premium <span data-mv-price=\"{yearly}\">$25</span>/year. Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year.</a>"
   }
 }

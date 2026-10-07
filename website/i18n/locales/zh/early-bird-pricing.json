@@ -8,9 +8,7 @@
   "b165a52c2694": "早鸟与家庭定价",
   "5ffae7ce0a0a": "MailVault 处于早期访问阶段。今天锁定优惠价：只要订阅有效，即使日后涨价，你的价格也保持不变。",
   "c456e993e85f": "每个订阅最多 5 台设备",
-  "4b164f3e320b": "早期访问结束后的标准价格：$39/年",
-  "b51edcabd2c8": "早期访问结束后的标准价格：$6/月",
-  "5328ac1d1bea": "早期访问结束后，我的价格会怎样？",
-  "f58cb9a2250d": "早期访问结束后的标准价格：{standardYearly}/年",
-  "7c0da8b18bf3": "早期访问结束后的标准价格：{standardMonthly}/月"
+  "24e3b3bd9526": "早期访问结束后的标准价格：<span data-mv-price=\"{standardYearly}\">$39</span>/年",
+  "01a8f3db8f25": "早期访问结束后的标准价格：<span data-mv-price=\"{standardMonthly}\">$6</span>/月",
+  "5328ac1d1bea": "早期访问结束后，我的价格会怎样？"
 }

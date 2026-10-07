@@ -22,7 +22,10 @@
 .hm-proof a { color:inherit; opacity:.78; text-decoration:none; }
 .hm-proof a:hover { opacity:1; text-decoration:underline; }
 .hm-proof svg { vertical-align:-2px; margin-right:6px; }
-.hm-price { font-variant-numeric:normal; }
+/* The price line reads as body text, not a caption, with the amounts in bold. */
+.hm-price { font-size:1rem; line-height:1.55; font-variant-numeric:normal; }
+.hm-price a { opacity:1; color:var(--mv-ink); }
+.hm-price [data-mv-price] { font-weight:750; }
 .hm-hero .mv-small { margin:1rem 0 .4rem; color:var(--mv-muted); }
 .hm-hero-shot { margin-top:56px; max-width:1100px; }
 .hm-hero-shot .mv-demo-card { display:block; }
@@ -223,16 +226,14 @@
    under the buttons instead of wedging between them. */
 .hm-hero-actions:has(+ .hm-send-hint[hidden]) .hm-send-link,.hm-final .mv-actions:has(+ .hm-send-hint[hidden]) .hm-send-link { order:1; max-width:none; padding-inline:max(0px, calc(50% - 230px)); }
 
-/* Phones: the product shot sits right under the headline, before the lead and
-   the checklist. The inner wrapper dissolves so its children and the shot can
-   be reordered in one column; desktop keeps the original two-block layout. */
+/* Phones: only the main elements lead (headline, lead, the email form, the
+   price line, the text links), in DOM order like every other width. The proof
+   chips and platform icons stay in the HTML but are hidden here; the product
+   shot follows the links. */
 @media (max-width:760px) {
-  .hm-hero { display:flex; flex-direction:column; padding-bottom:44px; }
-  .hm-hero-inner { display:contents; }
-  .hm-hero-inner > * { order:3; padding-inline:inherit; }
-  .hm-hero-inner > .mv-eyebrow { order:1; }
-  .hm-hero-inner > h1 { order:2; }
-  .hm-hero-shot { order:2; margin-top:4px; margin-bottom:30px; }
+  .hm-hero { padding-bottom:44px; }
+  .hm-facts,.hm-platforms { display:none; }
+  .hm-hero-shot { margin-top:36px; }
   .hm-hero-shot .mv-demo-shot { border-radius:14px; border-bottom:1px solid rgba(255,255,255,.12); box-shadow:0 18px 60px -24px rgba(139,92,246,.6); }
   .hm-hero .hm-compare-link,.hm-hero .hm-demo-link { margin-left:0; margin-top:4px; }
   .hm-hero .hm-send-open { margin-left:0; margin-top:4px; }
