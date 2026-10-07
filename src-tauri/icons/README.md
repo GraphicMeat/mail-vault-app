@@ -1,22 +1,17 @@
 # MailVault Icons
 
-Place your app icons here:
+The master artwork is `src/assets/mailvault-icon-teal-concept.png`.
 
-- `icon.png` - 512x512 PNG (used as base for generating others)
-- `icon.icns` - macOS icon bundle
-- `icon.ico` - Windows icon
-- `32x32.png` - 32x32 PNG
-- `128x128.png` - 128x128 PNG
-- `128x128@2x.png` - 256x256 PNG (Retina)
-- `tray-icon.png` - macOS menu bar template glyph (black, 32x32)
-- `tray-icon-color.png` - Windows/Linux tray icon: `icon.png` cropped to its artwork (no margin), 64x64. Regenerate it when `icon.png` changes.
-
-## Generate Icons
-
-You can use the Tauri CLI to generate icons from a single 512x512 PNG:
+Regenerate all desktop, mobile, tray, in-app, and website icons with Pillow:
 
 ```bash
-npm run tauri icon path/to/icon.png
+python3 scripts/generate-icons.py
 ```
 
-Or use an online tool like https://icon.kitchen/
+- `icon.png`: 512×512 desktop base; `icon.icns`: macOS multi-resolution bundle; `icon.ico`: Windows multi-resolution bundle.
+- Size-specific PNGs and Windows Store logos preserve their required dimensions.
+- `tray-icon.png`: 32×32 black macOS template glyph; `tray-icon-color.png`: 64×64 cropped Windows/Linux artwork.
+- iOS icons use opaque teal backgrounds. Android includes legacy, round, and adaptive icons with safe foreground margins.
+- Website assets include PNG/WebP branding, multi-resolution favicons, and a 180×180 Apple touch icon.
+
+The generator preserves `dmg-background.png`, which is installer artwork rather than an app icon.
