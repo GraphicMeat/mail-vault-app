@@ -7,14 +7,18 @@
 // would: read the HEVC take, crop each segment's rectangle out of it, Lanczos-
 // scale it to the output size, keep 30 fps, write H.264 High 4:2:0 with BT.709
 // tags, no audio, `moov` before `mdat` (shouldOptimizeForNetworkUse, the
-// +faststart equivalent). VideoToolbox has no CRF, so the size is hit with an
-// average-bitrate loop: encode, measure, scale the bitrate, up to --passes,
-// keeping the best result at or under maxBytes.
+// +faststart equivalent). VideoToolbox has no CRF; its constant-quality mode
+// (kVTCompressionPropertyKey_Quality, media engine only) is the nearest, and the
+// size is hit by bisecting that quality: the highest whose file is at most
+// maxBytes. ("rate": "bitrate" falls back to an average-bitrate loop, which at
+// these sizes left a cross-fade's residue as doubled text in later frames.)
 //
 // spec.json (window POINTS, like actions.json; the source is points x scale):
 //   { "scale": 2, "size": [960, 660], "fps": 30, "maxBytes": 250000,
 //     "crop": [x, y, w, h],                       // default for every segment
 //     "segments": [ { "t0": 1.2, "t1": 3.0, "crop": [x, y, w, h]? }, ... ],
+//     "keyframes": [1.6, 3.1],                    // output seconds: forced keyframes
+//     "rate": "quality" | "bitrate",              // default quality
 //     "poster": 4.2,                              // output seconds
 //     "frames": [0.2, 1.5, 3.0, 4.8] }            // output seconds, JPGs to inspect
 //
@@ -26,6 +30,7 @@ import CoreVideo
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
+import VideoToolbox
 
 setvbuf(stdout, nil, _IOLBF, 0)
 func log(_ s: String) { FileHandle.standardError.write(("webclip: " + s + "\n").data(using: .utf8)!) }
@@ -85,40 +90,56 @@ func pixelRect(_ r: CGRect) -> CGRect {
 
 let outDuration = segments.reduce(0) { $0 + ($1.t1 - $1.t0) }
 
-/** One encode at `bitrate`; returns bytes written. */
-func encode(bitrate: Int) -> Int {
+var lastKeyframeCount = 0
+let rateMode = (spec["rate"] as? String) ?? "quality"
+/** "software": true asks for Apple's software H.264 encoder instead of the media engine. */
+let encoderSpec: [CFString: Any]? = (spec["software"] as? Bool) == true
+    ? [kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: false] : nil
+
+/** Output frame indices that are forced to be keyframes (spec "keyframes", output seconds). */
+let keyframes: Set<Int> = Set(((spec["keyframes"] as? [Any]) ?? []).compactMap { num($0) }.map { Int(($0 * fps).rounded()) })
+
+/**
+ * One encode at `bitrate`; returns bytes written. VideoToolbox directly (not
+ * AVAssetWriter's own compressor) so a keyframe can be forced where the picture
+ * has just changed: at a low average bitrate the encoder otherwise carries a
+ * cross-fade's residue (doubled text) into the static frames after it.
+ */
+func encode(bitrate: Int, quality: Double? = nil) -> Int {
     try? FileManager.default.removeItem(at: outURL)
-    guard let writer = try? AVAssetWriter(outputURL: outURL, fileType: .mp4) else { fail("cannot create writer") }
-    writer.shouldOptimizeForNetworkUse = true
-    let settings: [String: Any] = [
-        AVVideoCodecKey: AVVideoCodecType.h264,
-        AVVideoWidthKey: outW,
-        AVVideoHeightKey: outH,
-        AVVideoColorPropertiesKey: [
-            AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
-            AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-            AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
-        ],
-        AVVideoCompressionPropertiesKey: [
-            AVVideoAverageBitRateKey: bitrate,
-            AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-            AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCABAC,
-            AVVideoMaxKeyFrameIntervalKey: 600,
-            AVVideoMaxKeyFrameIntervalDurationKey: 20,
-            AVVideoAllowFrameReorderingKey: true,
-            AVVideoExpectedSourceFrameRateKey: Int(fps),
-        ],
-    ]
-    let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
-    input.expectsMediaDataInRealTime = false
-    let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+    var sessionOut: VTCompressionSession?
+    let attrs: [String: Any] = [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
         kCVPixelBufferWidthKey as String: outW,
         kCVPixelBufferHeightKey as String: outH,
-    ])
-    writer.add(input)
-    guard writer.startWriting() else { fail("writer: \(writer.error.map { "\($0)" } ?? "?")") }
-    writer.startSession(atSourceTime: .zero)
+    ]
+    let st = VTCompressionSessionCreate(allocator: nil, width: Int32(outW), height: Int32(outH), codecType: kCMVideoCodecType_H264,
+                                        encoderSpecification: encoderSpec as CFDictionary?, imageBufferAttributes: attrs as CFDictionary,
+                                        compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &sessionOut)
+    guard st == noErr, let session = sessionOut else { fail("VTCompressionSessionCreate \(st)") }
+    var props: [CFString: Any] = [
+        kVTCompressionPropertyKey_RealTime: false,
+        kVTCompressionPropertyKey_ProfileLevel: kVTProfileLevel_H264_High_AutoLevel,
+        kVTCompressionPropertyKey_H264EntropyMode: kVTH264EntropyMode_CABAC,
+        kVTCompressionPropertyKey_MaxKeyFrameInterval: 600,
+        kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: 20,
+        kVTCompressionPropertyKey_AllowFrameReordering: true,
+        kVTCompressionPropertyKey_ExpectedFrameRate: Int(fps),
+        kVTCompressionPropertyKey_ColorPrimaries: kCVImageBufferColorPrimaries_ITU_R_709_2,
+        kVTCompressionPropertyKey_TransferFunction: kCVImageBufferTransferFunction_ITU_R_709_2,
+        kVTCompressionPropertyKey_YCbCrMatrix: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+    ]
+    // "rate": "quality" is VideoToolbox's constant-quality mode (the nearest it
+    // has to a CRF); otherwise an average bitrate.
+    if let quality { props[kVTCompressionPropertyKey_Quality] = quality } else { props[kVTCompressionPropertyKey_AverageBitRate] = bitrate }
+    for (k, v) in props {
+        let r = VTSessionSetProperty(session, key: k, value: v as CFTypeRef)
+        if r != noErr { log("VTSessionSetProperty \(k) -> \(r)") }
+    }
+    VTCompressionSessionPrepareToEncodeFrames(session)
+    let lock = NSLock()
+    var samples: [CMSampleBuffer] = []
+    var encodeError: OSStatus = noErr
     var outIndex = 0
     for seg in segments {
         guard let reader = try? AVAssetReader(asset: asset) else { fail("cannot create reader") }
@@ -133,9 +154,9 @@ func encode(bitrate: Int) -> Int {
         let ciCrop = CGRect(x: px.minX, y: srcSize.height - px.maxY, width: px.width, height: px.height)
         let sx = Double(outW) / px.width, sy = Double(outH) / px.height
         let frames = Int((seg.t1 - seg.t0) * fps + 0.5)
+        let firstOfSegment = outIndex
         var k = 0
         var last: CVPixelBuffer?
-        // Emit output frame k (local time k/fps) from the latest source frame at or before it.
         func emit(_ buf: CVPixelBuffer) {
             var image = CIImage(cvPixelBuffer: buf).cropped(to: ciCrop)
                 .transformed(by: CGAffineTransform(translationX: -ciCrop.minX, y: -ciCrop.minY))
@@ -144,12 +165,22 @@ func encode(bitrate: Int) -> Int {
             lz.setValue(sy, forKey: kCIInputScaleKey)
             lz.setValue(sx / sy, forKey: kCIInputAspectRatioKey)
             image = lz.outputImage!.cropped(to: CGRect(x: 0, y: 0, width: outW, height: outH))
-            while !input.isReadyForMoreMediaData { usleep(1000) }
             var pb: CVPixelBuffer?
-            CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
+            if let pool = VTCompressionSessionGetPixelBufferPool(session) { CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pb) }
             guard let pb else { fail("no pixel buffer") }
             ciContext.render(image, to: pb, bounds: CGRect(x: 0, y: 0, width: outW, height: outH), colorSpace: nil)
-            adaptor.append(pb, withPresentationTime: CMTime(value: CMTimeValue(outIndex), timescale: CMTimeScale(fps)))
+            // A cut starts a segment: that frame is a keyframe too.
+            let force = keyframes.contains(outIndex) || (outIndex == firstOfSegment && outIndex > 0)
+            let frameProps = force ? [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary : nil
+            let pts = CMTime(value: CMTimeValue(outIndex), timescale: CMTimeScale(fps))
+            let r = VTCompressionSessionEncodeFrame(session, imageBuffer: pb, presentationTimeStamp: pts,
+                                                    duration: CMTime(value: 1, timescale: CMTimeScale(fps)),
+                                                    frameProperties: frameProps, infoFlagsOut: nil) { status, _, sample in
+                lock.lock(); defer { lock.unlock() }
+                if status != noErr { encodeError = status; return }
+                if let sample { samples.append(sample) }
+            }
+            if r != noErr { fail("VTCompressionSessionEncodeFrame \(r)") }
             outIndex += 1
         }
         while k < frames, let sample = out.copyNextSampleBuffer() {
@@ -162,29 +193,65 @@ func encode(bitrate: Int) -> Int {
         while k < frames, let l = last { emit(l); k += 1 }
         reader.cancelReading()
     }
+    VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
+    VTCompressionSessionInvalidate(session)
+    if encodeError != noErr { fail("encoder reported \(encodeError)") }
+    guard let first = samples.first, let fmt = CMSampleBufferGetFormatDescription(first) else { fail("encoder produced nothing") }
+
+    guard let writer = try? AVAssetWriter(outputURL: outURL, fileType: .mp4) else { fail("cannot create writer") }
+    writer.shouldOptimizeForNetworkUse = true
+    let input = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: fmt)
+    input.expectsMediaDataInRealTime = false
+    writer.add(input)
+    guard writer.startWriting() else { fail("writer: \(writer.error.map { "\($0)" } ?? "?")") }
+    writer.startSession(atSourceTime: .zero)
+    for sample in samples {
+        while !input.isReadyForMoreMediaData { usleep(1000) }
+        if !input.append(sample) { fail("append: \(writer.error.map { "\($0)" } ?? "?")") }
+    }
     input.markAsFinished()
     let done = DispatchSemaphore(value: 0)
     writer.finishWriting { done.signal() }
     done.wait()
     if writer.status != .completed { fail("writer finished \(writer.status.rawValue): \(writer.error.map { "\($0)" } ?? "?")") }
+    lastKeyframeCount = samples.filter { s in
+        let att = CMSampleBufferGetSampleAttachmentsArray(s, createIfNecessary: false) as? [[CFString: Any]]
+        return !((att?.first?[kCMSampleAttachmentKey_NotSync] as? Bool) ?? false)
+    }.count
     return (try? FileManager.default.attributesOfItem(atPath: outURL.path)[.size] as? Int) ?? 0
 }
 
 // ── Size loop ───────────────────────────────────────────────────────────────
 let target = Double(maxBytes) * 0.9
-var bitrate = Int(target * 8 / outDuration)
 var tries: [[String: Any]] = []
-var best: (bitrate: Int, bytes: Int)?
-for _ in 0..<max(1, passes) {
-    let bytes = encode(bitrate: bitrate)
-    tries.append(["bitrate": bitrate, "bytes": bytes])
-    log("bitrate \(bitrate) -> \(bytes) B")
-    if bytes <= maxBytes, bytes > (best?.bytes ?? 0) { best = (bitrate, bytes) }
-    if bytes <= maxBytes && Double(bytes) >= Double(maxBytes) * 0.8 { break }
-    bitrate = Int(Double(bitrate) * target / Double(max(bytes, 1)) * (bytes > maxBytes ? 0.97 : 1.0))
+var best: (bitrate: Int, quality: Double?, bytes: Int)?
+if rateMode == "quality" {
+    // The highest quality whose file fits: bisection on [0, 1].
+    var lo = 0.0, hi = 1.0, q = 0.5
+    for _ in 0..<max(1, passes + 2) {
+        let bytes = encode(bitrate: 0, quality: q)
+        tries.append(["quality": q, "bytes": bytes])
+        log("quality \(q) -> \(bytes) B")
+        if bytes <= maxBytes { if q > (best?.quality ?? -1) { best = (0, q, bytes) }; lo = q } else { hi = q }
+        if bytes <= maxBytes && Double(bytes) >= Double(maxBytes) * 0.9 { break }
+        q = (lo + hi) / 2
+    }
+} else {
+    var bitrate = Int(target * 8 / outDuration)
+    for _ in 0..<max(1, passes) {
+        let bytes = encode(bitrate: bitrate)
+        tries.append(["bitrate": bitrate, "bytes": bytes])
+        log("bitrate \(bitrate) -> \(bytes) B")
+        if bytes <= maxBytes, bytes > (best?.bytes ?? 0) { best = (bitrate, nil, bytes) }
+        if bytes <= maxBytes && Double(bytes) >= Double(maxBytes) * 0.8 { break }
+        bitrate = Int(Double(bitrate) * target / Double(max(bytes, 1)) * (bytes > maxBytes ? 0.97 : 1.0))
+    }
 }
 guard let best else { fail("no pass came in under \(maxBytes) B: \(tries)", 3) }
-if (tries.last?["bitrate"] as? Int) != best.bitrate { _ = encode(bitrate: best.bitrate) }
+let lastTry = tries.last ?? [:]
+if (lastTry["bitrate"] as? Int) != (best.quality == nil ? best.bitrate : nil) || (lastTry["quality"] as? Double) != best.quality {
+    _ = encode(bitrate: best.bitrate, quality: best.quality)
+}
 
 // ── Verify what was written (no ffprobe on the runners) ─────────────────────
 func atoms(_ url: URL) -> [String] {
@@ -255,7 +322,9 @@ if let framesDir {
 
 let report: [String: Any] = [
     "out": outURL.lastPathComponent,
-    "bytes": best.bytes, "maxBytes": maxBytes, "bitrate": best.bitrate, "tries": tries,
+    "bytes": best.bytes, "maxBytes": maxBytes, "bitrate": best.bitrate, "quality": best.quality.map { $0 as Any } ?? NSNull(), "rate": rateMode,
+    "software": encoderSpec != nil, "tries": tries,
+    "keyframes": lastKeyframeCount, "forcedKeyframes": keyframes.sorted(),
     "durationSeconds": outAsset.duration.seconds, "plannedSeconds": outDuration,
     "codec": codec, "size": [vt.first?.naturalSize.width ?? 0, vt.first?.naturalSize.height ?? 0],
     "fps": vt.first?.nominalFrameRate ?? 0, "frames": frameCount,

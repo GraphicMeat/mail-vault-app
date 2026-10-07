@@ -30,9 +30,11 @@ const all = existsSync(overridesPath) ? JSON.parse(readFileSync(overridesPath, '
 const o = all[clip] || {};
 
 let win = { w: 1536, h: 960 };
+let events = [];
 try {
   const a = JSON.parse(readFileSync(join(dir, `${clip}.actions.json`), 'utf-8'));
   win = { w: a.window.logicalW, h: a.window.logicalH };
+  events = a.events || [];
 } catch { /* defaults */ }
 
 const [outW, outH] = spec.size || [960, 660];
@@ -68,6 +70,23 @@ spec.segments = spec.segments.map((s, i) => {
 const dur = spec.segments.reduce((a, s) => a + s.t1 - s.t0, 0);
 if (o.poster != null) spec.poster = o.poster;
 spec.poster = Math.min(spec.poster, dur - 0.1);
+// A forced keyframe shortly after every click inside the kept time (once its
+// transition has settled): at a low average bitrate the encoder otherwise keeps
+// a cross-fade's residue in the static frames that follow (webclip.swift).
+const keyframes = [];
+let offset = 0;
+for (const s of spec.segments) {
+  for (const e of events) {
+    if (e.type !== 'click') continue;
+    const at = (e.shown ?? e.t) + 0.45;
+    if (at > s.t0 && at < s.t1 - 0.1) keyframes.push(Number((offset + at - s.t0).toFixed(3)));
+  }
+  offset += s.t1 - s.t0;
+}
+spec.keyframes = o.keyframes || keyframes;
+if (o.maxBytes) spec.maxBytes = o.maxBytes;
+if (o.rate) spec.rate = o.rate;
+if (o.software != null) spec.software = o.software;
 spec.frames = [0.1, ...[0.2, 0.4, 0.6, 0.8].map((f) => Number((dur * f).toFixed(2))), Number((dur - 0.1).toFixed(2))];
 spec.variant = variant;
 spec.overrides = Object.keys(o).length ? o : null;

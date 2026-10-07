@@ -16,6 +16,11 @@ checks and the `actions.json` schema are documented in
 | `scenes/boot-a.js` | S1, S2, S4, S5, S6a, S6b, S6c in one boot (server untouched after setup). |
 | `scenes/s3-archive.js` | S3 in its own boot (it deletes 2022 from the mock server). |
 | `scenes/s4-search.js` | The original S4 spike, standalone. |
+| `scenes/web-clips.js` | The eight short website feature-card takes (about 5 s each). |
+| `web-clips.sh` | Website clips per locale: `record` (three boots), `encode` (re-cut collected takes, no boot), `publish`. |
+| `webclip-encode.sh` | Takes to 960x660 H.264 web clips + posters with `video/capture/tools/webclip.swift` (no ffmpeg on the runners). |
+| `web-clips.crops.json` | Reviewed crop / trim / poster overrides per web clip (window points). |
+| `lib/locale.js` | `FOOTAGE_LOCALE`: UI language and demo catalog of a run. |
 
 ## The full set
 
