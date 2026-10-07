@@ -91,7 +91,7 @@ export default function BackupConfig() {
 
           <ul className="space-y-2 text-sm text-mail-text-muted pl-1">
             <li>• Save .eml files to any folder you choose</li>
-            <li>• Incremental backups — new mail only</li>
+            <li>• Incremental backups: new mail only</li>
             <li>• Works offline; no MailVault account required</li>
             <li>• One-time payment, no subscription</li>
           </ul>

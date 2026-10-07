@@ -141,7 +141,7 @@ describe('buildExplorerTree custom field grouping', () => {
     }))).toEqual([
       { kind: 'field', label: 'High', detail: 'Priority', uids: [41, 40] },
       { kind: 'field', label: 'Low', detail: 'Priority', uids: [42] },
-      { kind: 'field', label: '—', detail: 'Priority', uids: [43] },
+      { kind: 'field', label: '-', detail: 'Priority', uids: [43] },
     ]);
     expect(root.emails.map(email => email.uid)).toEqual([43, 42, 41, 40]);
   });

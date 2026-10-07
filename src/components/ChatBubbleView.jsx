@@ -812,7 +812,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                         fromUser ? 'text-white/60 hover:text-white' : 'text-mail-text-muted hover:text-mail-accent-text'
                       }`}
                     >
-                      {sigExpanded ? '\u25BE Hide signature' : '\u2014 Show signature'}
+                      {sigExpanded ? '\u25BE Hide signature' : '\u25B8 Show signature'}
                     </button>
                     {sigExpanded && (
                       <div className={`mt-1 text-xs whitespace-pre-wrap opacity-60 ${

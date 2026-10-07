@@ -216,7 +216,7 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
               <>
                 <div className="text-sm text-mail-text truncate">{envelope.to ? <Private kind="name">{envelope.to}</Private> : t('scheduled.row.noRecipient')}</div>
                 <div className="text-xs text-mail-text-muted">
-                  {pa(accountEmail(row.accountId), 'email')} — {formatWallClock(row.localTime, getLocale())} ({row.tz})
+                  {pa(accountEmail(row.accountId), 'email')}, {formatWallClock(row.localTime, getLocale())} ({row.tz})
                 </div>
               </>
             );

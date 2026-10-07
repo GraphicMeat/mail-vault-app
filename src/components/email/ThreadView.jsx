@@ -306,7 +306,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
                     onClick={() => setSigExpanded(prev => !prev)}
                     className="block mt-2 text-xs text-mail-text-muted hover:text-mail-accent-text cursor-pointer select-none"
                   >
-                    {sigExpanded ? '\u25BE Hide signature' : '\u2014 Show signature'}
+                    {sigExpanded ? '\u25BE Hide signature' : '\u25B8 Show signature'}
                   </button>
                   {sigExpanded && (
                     <div className="mt-1 text-mail-text-muted text-xs whitespace-pre-wrap opacity-60">

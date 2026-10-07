@@ -88,7 +88,7 @@ export default function RestoreModal() {
           <div className="text-sm">
             <div className="flex items-center gap-2 mb-2 text-mail-text">
               <Loader2 className="animate-spin" size={16} />
-              <span>{t('restore.uploadingFolder', { suffix: active.current_folder ? ` — ${decodeImapUtf7(active.current_folder)}` : '' })}</span>
+              <span>{t('restore.uploadingFolder', { suffix: active.current_folder ? `: ${decodeImapUtf7(active.current_folder)}` : '' })}</span>
             </div>
             <div className="text-mail-text-muted">
               {t('restore.uploadedSkippedFailed', { uploaded: active.uploaded_emails, skipped: active.skipped_emails, failed: active.failed_emails })}

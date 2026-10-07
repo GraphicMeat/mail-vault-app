@@ -211,7 +211,7 @@ export default function ChangeServerModal() {
     >
         <div className="flex items-center justify-between mb-3">
           <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
-            <Server size={18} /> Change server — <Private kind="email">{account.email}</Private>
+            <Server size={18} /> Change server: <Private kind="email">{account.email}</Private>
           </h2>
           {step === 2 && activeRestore && (
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('changeServer.minimizeRestoreContinuesBackground')}>
@@ -334,7 +334,7 @@ export default function ChangeServerModal() {
               <div>
                 <div className="flex items-center gap-2 mb-2 text-mail-text">
                   <Loader2 className="animate-spin" size={16} />
-                  <span>{tr('restore.uploadingFolder', { suffix: activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
+                  <span>{tr('restore.uploadingFolder', { suffix: activeRestore.current_folder ? `: ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
                 </div>
                 <div className="text-mail-text-muted">
                   {tr('restore.uploadedSkippedFailed', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}

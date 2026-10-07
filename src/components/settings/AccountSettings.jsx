@@ -794,12 +794,12 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-mail-text-muted space-y-0.5">
                     <div>
-                      {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code>
+                      {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '-'}:{selectedAccount.imapPort || 993}</code>
                       {selectedAccount.imapSecurity && selectedAccount.imapSecurity !== 'ssl' && (
                         <span className="ml-1">({selectedAccount.imapSecurity.toUpperCase()})</span>
                       )}
                     </div>
-                    <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
+                    <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '-'}:{selectedAccount.smtpPort || 587}</code></div>
                   </div>
                   <button
                     onClick={() => openChangeServer(selectedAccountId)}

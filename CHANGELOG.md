@@ -10,6 +10,9 @@
 ### Fixed
 - **An Auto Tag appears on new mail while you look at it.** A message that arrived with its folder open got its tag a second later, but the row showed no chip until you left the folder and came back. The chip now appears on its own, a hide-from-Inbox rule takes the row out of the Inbox the same way, and running or undoing a backfill updates the rows on screen too.
 - **Auto Tags use Apple Intelligence.** A rule without "Allow a remote AI provider" only ever asked the downloaded model, so on a Mac with Apple Intelligence and no downloaded model it never tagged anything. It now runs on Apple Intelligence when it is available, else the downloaded model, and Preview says so plainly when neither is there.
+- **Labels, hints and tooltips drop the long dash, in every language.** Text that joined two parts with an em dash now uses a colon, comma or hyphen, among them the Time Capsule header ("Snapshot: 8 Oct 2026"), the Scheduled list rows, account tooltips in the sidebar and the restore progress lines. A missing value shows "-", and a folded signature reads "▸ Show signature".
+- **The shortcut chip in Settings shows "Press key…" again.** It read "Press key\u2026", and a two-key shortcut waiting for its second key read "G + \u2026"; the same broken escape showed "provider\u2019s" and "Settings \u203a Accounts" in two English messages.
+- **Alerts break their lines again.** Eight "could not save / read / write" error alerts showed a literal "\n\nDetails:" in every language instead of putting the details on their own line, and the MBOX import summary showed a literal "\n\n" too.
 
 ## [2.19.1] - 2026-10-07
 

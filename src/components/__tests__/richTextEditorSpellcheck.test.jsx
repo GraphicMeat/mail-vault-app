@@ -133,11 +133,11 @@ describe('compose spellcheck toggle', () => {
 
   it('says what the click will do, in both states', () => {
     const { unmount } = renderEditor();
-    expect(screen.getByTitle('Spellcheck on — click to turn off')).toBeTruthy();
+    expect(screen.getByTitle('Spellcheck on, click to turn off')).toBeTruthy();
     unmount();
 
     settings.spellcheckEnabled = false;
     renderEditor();
-    expect(screen.getByTitle('Spellcheck off — click to turn on')).toBeTruthy();
+    expect(screen.getByTitle('Spellcheck off, click to turn on')).toBeTruthy();
   });
 });

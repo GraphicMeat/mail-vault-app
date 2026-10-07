@@ -97,7 +97,7 @@ describe('spellcheck button when the platform finds no dictionary', () => {
   it('stays a toggle on Linux once a dictionary is installed', () => {
     status = LINUX_WITH;
     renderEditor();
-    expect(button().getAttribute('title')).toBe('Spellcheck on — click to turn off');
+    expect(button().getAttribute('title')).toBe('Spellcheck on, click to turn off');
     fireEvent.mouseDown(button());
     expect(setSpellcheckEnabled).toHaveBeenCalledWith(false);
   });

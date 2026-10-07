@@ -36,7 +36,7 @@ const SOURCES = () => ([
 
 /** What the sender learns when that one pixel loads. */
 const LEAKED = () => ([
-  'That you opened it — and every time you re-open it',
+  'That you opened it, and every time you re-open it',
   'The minute you opened it, and your time zone',
   'Your IP address, so roughly where you were',
   'Your device and mail client, from the user agent',

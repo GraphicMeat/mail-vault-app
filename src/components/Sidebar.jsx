@@ -284,7 +284,7 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
         onDoubleClick={onActivateInbox}
         aria-label={label === account.email ? pa(label, 'email') : `${pa(label, 'name')}, ${pa(account.email, 'email')}`}
         aria-current={isActive && !unifiedInbox && !insightsOpen ? 'true' : undefined}
-        title={label === account.email ? pa(label, 'email') : `${pa(label, 'name')} — ${pa(account.email, 'email')}`}>
+        title={label === account.email ? pa(label, 'email') : `${pa(label, 'name')} - ${pa(account.email, 'email')}`}>
         <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none" style={{ backgroundColor: color }}>
           {initial}
         </span>
@@ -317,7 +317,7 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
       <button type="button" className="sidebar-account-open"
         aria-label={showAddress ? `${pa(label, 'name')}, ${pa(account.email, 'email')}` : pa(account.email, 'email')}
         aria-current={selected ? 'true' : undefined}
-        title={showAddress ? `${pa(label, 'name')} — ${pa(account.email, 'email')}` : pa(account.email, 'email')}
+        title={showAddress ? `${pa(label, 'name')} - ${pa(account.email, 'email')}` : pa(account.email, 'email')}
         onClick={onActivate} onDoubleClick={onActivateInbox}>
         <span className="sidebar-account-avatar" style={{ backgroundColor: color }} aria-hidden="true">{initial}</span>
         <span className="sidebar-account-label">
@@ -1277,7 +1277,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <div className="sidebar-account-row sidebar-switcher-row">
               <button type="button" ref={accountTriggerRef} className="sidebar-account-switcher"
                 aria-label={`${t('sidebar.switchAccount')}: ${shownAccountLabel}${!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `, ${shownAccountEmail}` : ''}`}
-                title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${shownAccountLabel} — ${shownAccountEmail}` : shownAccountLabel}
+                title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${shownAccountLabel} - ${shownAccountEmail}` : shownAccountLabel}
                 aria-haspopup="dialog" aria-expanded={!!chooserPosition}
                 onClick={chooserPosition ? closeChooser : openChooser}
                 onDoubleClick={() => { if (activeAccount && !unifiedInbox) activateInbox(activeAccount.id); }}>

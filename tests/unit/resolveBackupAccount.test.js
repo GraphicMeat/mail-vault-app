@@ -33,7 +33,7 @@ const { resolveServerAccount, resolveBackupAccount, hasValidCredentials, hasUsab
 const apiMod = await import('../../src/services/api');
 const { tokenOwner } = await import('../../src/services/tokenOwners');
 
-const EXPECTED_ERROR = 'Credentials unavailable — retry keychain access or re-enter in Settings > Accounts';
+const EXPECTED_ERROR = 'Credentials unavailable: retry keychain access or re-enter in Settings > Accounts';
 
 // ── hasUsableGraphToken ─────────────────────────────────────────────────
 

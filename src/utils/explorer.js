@@ -379,7 +379,7 @@ function buildFieldChildren(emails, { scope, context, fieldGroup }) {
     children.push(node(
       'field',
       makeId('field', scope, 'no-value'),
-      translated('fields.noValue', '—'),
+      translated('fields.noValue', '-'),
       valueless,
       [],
       context,

@@ -45,7 +45,7 @@ export function RestoreTray() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-mail-text truncate flex items-center gap-1.5">
-              <UploadCloud size={12} className="flex-shrink-0" /> Restore — <Private kind="email">{activeRestore.email}</Private>
+              <UploadCloud size={12} className="flex-shrink-0" /> Restore: <Private kind="email">{activeRestore.email}</Private>
             </p>
             <p className="text-[11px] mt-0.5 text-mail-text-muted truncate">
               {running && (

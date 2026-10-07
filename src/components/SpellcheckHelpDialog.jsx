@@ -60,7 +60,7 @@ export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
         {confined ? (
           <p className="text-mail-text-muted" data-testid="spellcheck-help-snap">
             This is the snap build. A snap cannot see dictionaries installed on the
-            host, so it carries its own — and if you are reading this, that copy is
+            host, so it carries its own, and if you are reading this, that copy is
             missing. The .deb package from mailvaultapp.com uses your system's
             dictionaries instead; the guide below has the details.
           </p>
