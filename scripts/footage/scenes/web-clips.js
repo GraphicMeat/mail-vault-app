@@ -1545,13 +1545,25 @@ describe('footage: website feature clips', function () {
           title: (document.querySelector('[data-testid="mailbox-title"]')?.textContent || '').trim(),
           rows: [...document.querySelectorAll('[data-testid="email-row"]')].slice(0, 4).map((r) => (r.innerText || '').replace(/\s+/g, ' ').slice(0, 80)),
         }));
-        await take.hold(id === 'attachments' ? 2200 : 1500);
+        await take.hold(id === 'attachments' ? 2400 : 2000);
       }
       const rows = await rowsBox(9);
       const crop = await fitCrop(union(list, rows), { minW: 760, pad: 12 });
       await scan.at(take, 'views', crop);
       const end = take.t(Date.now());
-      return { crop, segments: [{ t0: Math.max(0.2, t['needs-reply'] - 0.9), t1: end }], boxes: { list, rows } };
+      // Each switch remounts the search panel (a view is a saved search): about
+      // 0.5 s of slide and fade in which the rows pass under the box and the
+      // header shows the folder's date range. Cut: only settled states.
+      const settle = 0.52;
+      return {
+        crop,
+        segments: [
+          { t0: Math.max(0.2, t['needs-reply'] - 0.9), t1: t['needs-reply'] + 0.03, label: 'attachments' },
+          { t0: t['needs-reply'] + settle, t1: t.attachments + 0.03, label: 'needs-reply' },
+          { t0: t.attachments + settle, t1: end, label: 'attachments-again' },
+        ],
+        boxes: { list, rows },
+      };
     }, {
       prepare: async () => {
         await archiveAll();
@@ -1604,8 +1616,8 @@ describe('footage: website feature clips', function () {
 
   // 18. Light and dark: the sidebar's sun / moon flips the whole window and back.
   it('layouts', async function () {
-    const TO_LIGHT = `button[aria-label="${L('sidebar.switchLightMode')}"]`;
-    const TO_DARK = `button[aria-label="${L('sidebar.switchDarkMode')}"]`;
+    const TO_LIGHT = `button[title="${L('sidebar.switchLightMode')}"]`;
+    const TO_DARK = `button[title="${L('sidebar.switchDarkMode')}"]`;
     const themeIs = (m) => document.documentElement.dataset.theme === m;
     try {
       await shoot(this, 'layouts', async (take, scan) => {
@@ -1915,7 +1927,8 @@ describe('footage: website feature clips', function () {
       await take.hold(1200);
       const t0 = Date.now();
       take.note('delivered', Number(take.t(t0).toFixed(3)));
-      facts.tagAppend = await deliver();
+      const appended = await deliver();
+      facts.tagAppend = { uid: Number(appended?.uid ?? -1) };
       await take.waitFor((s) => [...document.querySelectorAll('[data-testid="email-row"]')].some((r) => (r.innerText || '').includes(s)), 'new row', 15000, SUBJECT);
       const tRow = take.t(Date.now());
       facts.tagRowMs = Date.now() - t0;
@@ -1926,7 +1939,18 @@ describe('footage: website feature clips', function () {
       }, { timeout: 30000, interval: 150 }, SUBJECT, 'Invoices');
       facts.tagChipMs = Date.now() - t0;
       facts.tagRow = await browser.execute((s) => ([...document.querySelectorAll('[data-testid="email-row"]')].find((r) => (r.innerText || '').includes(s))?.innerText || '').replace(/\s+/g, ' '), SUBJECT);
-      console.log(`[footage] tagging-rules ${JSON.stringify({ chipped, rowMs: facts.tagRowMs, chipMs: facts.tagChipMs, row: facts.tagRow })}`);
+      // What the daemon holds for that message, whatever the row shows.
+      facts.tagDaemon = await browser.execute((s) => {
+        const st = window.__MAIL_STORE__?.getState?.() || {};
+        const e = [...(st.sortedEmails || []), ...(st.emails || [])].find((x) => (x.subject || '').includes(s));
+        return e ? { uid: e.uid, messageId: e.messageId || null, accountId: st.activeAccountId } : null;
+      }, SUBJECT);
+      if (facts.tagDaemon) {
+        const item = { accountId: facts.tagDaemon.accountId, mailbox: 'INBOX', uid: facts.tagDaemon.uid, ...(facts.tagDaemon.messageId ? { messageId: facts.tagDaemon.messageId } : {}) };
+        facts.tagDaemonTags = await rpc('tags.for_messages', { items: [item] });
+      }
+      facts.tagRules2 = await rpc('auto_tags.list', {});
+      console.log(`[footage] tagging-rules ${JSON.stringify({ chipped, rowMs: facts.tagRowMs, chipMs: facts.tagChipMs, row: facts.tagRow, daemon: facts.tagDaemon, daemonTags: facts.tagDaemonTags })}`);
       if (!chipped) throw new Error(`the arriving invoice never showed its tag (row after ${facts.tagRowMs} ms: ${facts.tagRow})`);
       const tChip = take.t(Date.now());
       await scan.at(take, 'tagged', crop);

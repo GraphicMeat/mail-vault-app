@@ -134,7 +134,8 @@ case "$cmd" in
       case "$n" in *-wide) continue ;; esac
       # search-50k shows the real search time; the website wants under 15 ms
       # (en: 68 ms on the mini). It lands apart until someone decides.
-      # WEBCLIP_HOLD="clip:reason,clip:reason" sends reviewed-but-not-approved clips there too.
+      # WEBCLIP_HOLD="clip:reason,clip:reason" sends reviewed-but-not-approved clips there too
+      # (a reason cannot contain a comma).
       hold="$(printf '%s' "${WEBCLIP_HOLD:-}" | tr ',' '\n' | awk -F: -v n="$n" '$1==n { sub(/^[^:]*:/, ""); print; exit }')"
       if [ "$n" = search-50k ] || [ -n "$hold" ]; then
         mkdir -p "$PUB/_needs-decision"; cp "$f" "$D/web/$n.jpg" "$PUB/_needs-decision/"
