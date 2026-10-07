@@ -3,9 +3,9 @@
 //! replies.
 //!
 //! `follow_up.create` is called by the app once a send went out, keyed on the
-//! Message-ID it built the message with. `follow_up.dismiss` is every way the
-//! user can be done with a resurfaced row (delete, archive, move): it only
-//! ends the row, the real Sent copy is never touched.
+//! Message-ID it built the message with. `follow_up.dismiss` ends a row: the
+//! pinned row's x, a removed account, or the app learning its Sent copy was
+//! deleted or moved. It never touches the Sent copy itself.
 use crate::follow_up_worker;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg};
 use crate::ipc::{self, RpcResponse};

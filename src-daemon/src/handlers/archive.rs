@@ -135,6 +135,29 @@ async fn capture_all(
 /// `appRemovedSinceSync` keeps the list complete against the sync baseline),
 /// and custody learns this app deleted the server copy of any vault copy it
 /// holds, or a reopened folder lists them again as plain "archived" mail.
+/// A due follow-up reminder pinned on one of the copies the server just lost
+/// points at nothing now: it ends, and the app hears so off the `follow-up`
+/// event. Only the uids the server really removed.
+async fn end_follow_ups_at(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]) {
+    if uids.is_empty() {
+        return;
+    }
+    let (st, account_id, mailbox, uids) = (Arc::clone(state), account_id.to_string(), mailbox.to_string(), uids.to_vec());
+    let ended = blocking(move || {
+        mailvault_core::app_db::with(&st.app_dir, |c| mailvault_core::app_db::follow_up::dismiss_at(c, &account_id, &mailbox, &uids))
+    })
+    .await
+    .and_then(|r| r);
+    match ended {
+        Ok(ids) => {
+            for id in ids {
+                crate::follow_up_worker::emit(state, &id, "dismissed");
+            }
+        }
+        Err(e) => tracing::warn!("[bulk-delete] could not end the follow-up reminders of deleted copies: {e}"),
+    }
+}
+
 async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>) {
     if uids.is_empty() {
         return;
@@ -232,6 +255,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             drop(guard);
             let result = match result {
                 Ok((mut p, deleted)) => {
+                    end_follow_ups_at(&state, &acct, &mb, &deleted).await;
                     record_server_deleted(&state, &acct, &mb, deleted).await;
                     p.total += refused;
                     p.errors += refused;
@@ -606,6 +630,40 @@ mod tests {
         )
         .await;
         r.result.expect("bulk_delete_emails must succeed")
+    }
+
+    /// A due follow-up reminder points at a Sent copy by uid. The bulk delete
+    /// that removed that copy ends the reminder too, and says so; a uid the
+    /// server kept leaves its reminder alone.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_delete_emails_ends_the_reminder_of_a_deleted_copy() {
+        use mailvault_core::app_db::{self, follow_up};
+        let (_v, s) = st(true);
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(inbox_with(&[7, 8])));
+        app_db::with(&s.app_dir, |c| {
+            for (id, uid) in [("gone", 7u32), ("kept", 8u32)] {
+                follow_up::insert(c, id, "acc", &format!("<m{uid}@example.com>"), "", "", "INBOX", &[], 1, 2)?;
+                follow_up::record_outcome(c, id, &follow_up::Outcome::NoReply { sent_mailbox: "INBOX".into(), sent_uid: uid }, 3)?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let mut events = s.events.subscribe();
+
+        bulk_delete(&s, &server, &[7]).await;
+
+        let state_of = |id: &str| app_db::with(&s.app_dir, |c| follow_up::get(c, id)).unwrap().unwrap().state;
+        assert_eq!(state_of("gone"), "dismissed");
+        assert_eq!(state_of("kept"), "due");
+        let mut sent = Vec::new();
+        while let Ok(line) = events.try_recv() {
+            if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                if name == "follow-up" {
+                    sent.push(payload);
+                }
+            }
+        }
+        assert_eq!(sent, vec![json!({"id": "gone", "state": "dismissed"})]);
     }
 
     #[tokio::test(flavor = "multi_thread")]

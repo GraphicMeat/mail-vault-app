@@ -186,7 +186,10 @@ pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowU
     // written before the app knew them still names.
     let mut own = row.own_addresses.clone();
     own.push(account.email.clone());
-    let Some(criteria) = imap::reply_search_criteria(&row.message_id, &own) else {
+    let (Some(criteria), Some(plain)) = (
+        imap::reply_search_criteria(&row.message_id, &own, true),
+        imap::reply_search_criteria(&row.message_id, &own, false),
+    ) else {
         return SentCopyGone;
     };
 
@@ -207,13 +210,31 @@ pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowU
             }
         }
         for mailbox in &searched {
+            use imap::FolderSearch::*;
             selected = Some(mailbox.clone());
-            if !imap::abd_cmds::uid_search(&mut session, mailbox, &criteria).await?.is_empty() {
-                return Ok::<_, String>(Replied);
+            let mut answer = imap::uid_search_tolerant(&mut session, mailbox, &criteria).await?;
+            if let SearchRefused(why) = &answer {
+                // The auto-reply terms are the unusual part (an empty HEADER
+                // string, fields a server does not index). Without them an
+                // out-of-office could count as an answer: better than no check.
+                warn!("[follow-up] {mailbox} refused the reply search ({why}); asking again without the auto-reply terms");
+                answer = imap::uid_search_tolerant(&mut session, mailbox, &plain).await?;
+            }
+            match answer {
+                Hits(found) if !found.is_empty() => return Ok::<_, String>(Replied),
+                Hits(_) => {}
+                // A label hidden from IMAP, an Archive the server will not
+                // open: no answer from that folder, not a failed check. Only
+                // INBOX has to answer.
+                FolderRefused(why) if !mailbox.eq_ignore_ascii_case("INBOX") => {
+                    info!("[follow-up] {mailbox} refused the SELECT ({why}); not searched for {}", row.id);
+                }
+                FolderRefused(why) | SearchRefused(why) => return Err(format!("{mailbox} refused the reply search: {why}")),
             }
         }
         // The folder the app filed the message in first; one that refuses
-        // (renamed or removed since) gives way to the server's own Sent.
+        // (renamed or removed since) or no longer holds the copy (the Sent
+        // folder moved, the old one stayed) gives way to the server's own.
         let special_sent = with_role("\\Sent");
         let mut candidates: Vec<String> = Vec::new();
         for path in [Some(row.sent_mailbox.clone()).filter(|m| !m.is_empty()), special_sent].into_iter().flatten() {
@@ -221,26 +242,28 @@ pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowU
                 candidates.push(path);
             }
         }
-        let mut refused = None;
+        let (mut refused, mut answered) = (None, false);
         for sent in candidates {
             selected = Some(sent.clone());
             match imap::message_id_uids_if_selectable(&mut session, &sent, &row.message_id).await? {
-                Some(found) => {
-                    return Ok(match found.iter().copied().max() {
-                        Some(uid) => NoReply { sent_mailbox: sent, sent_uid: uid },
-                        None => SentCopyGone,
-                    })
-                }
+                Some(found) => match found.iter().copied().max() {
+                    Some(uid) => return Ok(NoReply { sent_mailbox: sent, sent_uid: uid }),
+                    None => {
+                        info!("[follow-up] {} holds no copy of {}; trying the server's Sent folder", sent, row.id);
+                        answered = true;
+                    }
+                },
                 None => {
                     info!("[follow-up] {} refused the search for {}; trying the server's Sent folder", sent, row.id);
                     refused = Some(sent);
                 }
             }
         }
-        // Every Sent folder refused: a failure to retry, not a message gone.
+        // A Sent folder answered and none holds it: gone. Every one refused:
+        // a failure to retry, not a message gone.
         match refused {
-            Some(sent) => Err(format!("{sent} refused the Message-ID search")),
-            None => Ok(SentCopyGone),
+            Some(sent) if !answered => Err(format!("{sent} refused the Message-ID search")),
+            _ => Ok(SentCopyGone),
         }
     }
     .await;
@@ -507,6 +530,81 @@ mod tests {
         );
         let (dir, state) = rig(&server);
         app_db::with(&dir, |c| follow_up::insert(c, "a", "acct", "<s@me>", "Quote", "ana@example.com", "Sent Items", &own(), 1_000, 1_000)).unwrap();
+        let outcome = check_row(&state, &row(&dir, "a")).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let uid = server.state().find("Sent").unwrap().messages[0].uid;
+        assert_eq!(outcome, Outcome::NoReply { sent_mailbox: "Sent".into(), sent_uid: uid });
+    }
+
+    /// A folder other than INBOX that turns the SELECT away (a Gmail label a
+    /// user hid from IMAP) is passed over; INBOX turning it away is a failure.
+    #[tokio::test]
+    async fn a_refused_folder_besides_inbox_is_skipped_and_a_refused_inbox_fails() {
+        use mock_imap::state::{Mailbox, Message};
+        use mock_imap::{Action, Trigger};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let scenario = |refuse: &str| {
+            mock_imap::Scenario::new()
+                .mailbox(Mailbox::new("INBOX"))
+                .mailbox(
+                    Mailbox::new("Archive")
+                        .with_attrs(&["\\HasNoChildren", "\\Archive"])
+                        .push_msg(Message::new(0, eml("<x@ana>", "ana@example.com", ""))),
+                )
+                .mailbox(sent_with("<f@me>"))
+                .fault(Trigger::with("SELECT", refuse), Action::RefuseWith("NO".into(), "[NONEXISTENT] Not here".into()))
+        };
+        let archive_refuses = mock_imap::MockImap::start(scenario("Archive"));
+        let (dir, state) = rig(&archive_refuses);
+        seed(&dir, "a", "<f@me>", 1_000);
+        let skipped = check_row(&state, &row(&dir, "a")).await;
+        let inbox_refuses = mock_imap::MockImap::start(scenario("INBOX"));
+        let (dir2, state2) = rig(&inbox_refuses);
+        seed(&dir2, "a", "<f@me>", 1_000);
+        let failed = check_row(&state2, &row(&dir2, "a")).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(matches!(skipped, Outcome::NoReply { .. }), "a refused Archive failed the check: {skipped:?}");
+        assert!(matches!(failed, Outcome::Transient(_) | Outcome::Wait(_)), "a refused INBOX passed: {failed:?}");
+    }
+
+    /// A server that will not take the auto-reply terms (an empty HEADER
+    /// string, an unknown field) is asked again without them.
+    #[tokio::test]
+    async fn a_search_refused_for_the_auto_reply_terms_is_asked_again_without_them() {
+        use mock_imap::state::{Mailbox, Message};
+        use mock_imap::{Action, Trigger};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new()
+                .mailbox(Mailbox::new("INBOX").push_msg(Message::new(0, eml("<r@ana>", "ana@example.com", "In-Reply-To: <h@me>\r\n"))))
+                .mailbox(sent_with("<h@me>"))
+                .fault(Trigger::with("SEARCH", "Auto-Submitted"), Action::RefuseWith("BAD".into(), "Unsupported search key".into())),
+        );
+        let (dir, state) = rig(&server);
+        seed(&dir, "a", "<h@me>", 1_000);
+        let outcome = check_row(&state, &row(&dir, "a")).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!(outcome, Outcome::Replied);
+    }
+
+    /// The folder the app named answers but no longer holds the message (the
+    /// account's Sent moved, the old folder stayed): the server's own \Sent
+    /// is asked before the row ends `gone`.
+    #[tokio::test]
+    async fn a_stored_sent_without_the_copy_gives_way_to_the_special_use_one() {
+        use mock_imap::state::Mailbox;
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new()
+                .mailbox(Mailbox::new("INBOX"))
+                .mailbox(Mailbox::new("Old Sent"))
+                .mailbox(sent_with("<o@me>")),
+        );
+        let (dir, state) = rig(&server);
+        app_db::with(&dir, |c| follow_up::insert(c, "a", "acct", "<o@me>", "Quote", "ana@example.com", "Old Sent", &own(), 1_000, 1_000)).unwrap();
         let outcome = check_row(&state, &row(&dir, "a")).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
         let uid = server.state().find("Sent").unwrap().messages[0].uid;
