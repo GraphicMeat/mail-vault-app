@@ -213,7 +213,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Ok(e) => e,
                 Err(resp) => return Some(resp),
             };
-            match smtp::build_mime(&account, &email) {
+            match smtp::build_mime_staged(&account, &email) {
                 Ok(built) => RpcResponse::success(id, built_mime_json(built, &account, "build_mime")),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
@@ -564,6 +564,30 @@ mod tests {
 
         let sent = server.sent_messages();
         assert_eq!(sent.len(), 1, "commands: {:?}", server.smtp_commands());
+    }
+
+    /// Compose's two calls: `smtp_build_mime` stages the local Sent copy, then
+    /// `smtp_send_email` sends under that id. The server must receive the staged
+    /// bytes, so its copy is the local copy (same Date, same everything).
+    #[tokio::test]
+    async fn send_email_after_build_mime_sends_the_staged_bytes() {
+        use base64::Engine;
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let mut email = outgoing_email("staged-partner@example.com");
+
+        let built = call(&s, "smtp_build_mime", json!({"account": account_json(&server), "email": email.clone()})).await;
+        let built = built.result.expect("build success");
+        let staged = base64::engine::general_purpose::STANDARD.decode(built["rawBase64"].as_str().unwrap()).unwrap();
+        email["messageId"] = built["messageId"].clone();
+
+        let resp = call(&s, "smtp_send_email", json!({"account": account_json(&server), "email": email})).await;
+        assert_eq!(resp.result.expect("success")["success"], json!(true));
+
+        let sent = server.sent_messages();
+        assert_eq!(sent.len(), 1, "commands: {:?}", server.smtp_commands());
+        assert_eq!(sent[0], staged);
     }
 
     #[tokio::test]

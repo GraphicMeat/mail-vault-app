@@ -72,6 +72,7 @@ pub struct SendResult {
 
 /// Built but not-yet-sent MIME — lets callers stage the raw bytes in Drafts
 /// before handing the Message to `send_built`.
+#[derive(Clone)]
 pub struct BuiltMime {
     pub message: lettre::Message,
     pub raw_rfc2822: Vec<u8>,
@@ -139,6 +140,66 @@ fn parse_address_list(raw: &str) -> Result<Vec<Mailbox>, String> {
 /// Drafts via IMAP APPEND before the SMTP submission.
 pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMime, String> {
     build_mime_opts(account, email, false)
+}
+
+/// A compose send builds its MIME twice over the wire: `smtp_build_mime` stages
+/// the local Sent copy, then `smtp_send_email` sends the same message. With a
+/// 6 MB attachment that second build is seconds of base64 decode and encode,
+/// and it re-stamps `Date:`, so the sent bytes differ from the staged copy's.
+/// `build_mime_staged` keeps the build for `send_email` to pick up instead.
+struct Staged {
+    /// Content fingerprint with the Message-ID left out: the send names the id
+    /// the build chose, the build request did not carry one.
+    key: u64,
+    message_id: String,
+    at: std::time::Instant,
+    built: BuiltMime,
+}
+
+static STAGED: std::sync::Mutex<Vec<Staged>> = std::sync::Mutex::new(Vec::new());
+/// Each entry holds the message twice (bytes and `Message`), so only a few.
+const STAGED_MAX: usize = 3;
+/// Past the longest undo-send delay (5 min), with room for a slow compose.
+const STAGED_TTL: Duration = Duration::from_secs(30 * 60);
+
+/// What the build is a function of. Anything not in here cannot change the
+/// bytes, and anything in here that differs means the staged build is stale.
+fn staging_key(account: &ImapConfig, email: &OutgoingEmail) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (&account.email, account.from_address(), &account.name).hash(&mut h);
+    (&email.to, &email.subject, &email.text, &email.html).hash(&mut h);
+    (&email.cc, &email.bcc, &email.in_reply_to, &email.references).hash(&mut h);
+    for a in email.attachments.iter().flatten() {
+        (&a.filename, &a.content, &a.content_type, &a.cid).hash(&mut h);
+    }
+    h.finish()
+}
+
+/// `build_mime`, remembering the result for the `send_email` that follows it.
+pub fn build_mime_staged(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMime, String> {
+    let built = build_mime(account, email)?;
+    if let Some(message_id) = message_id_of(&built.raw_rfc2822) {
+        let key = staging_key(account, email);
+        let mut staged = STAGED.lock().unwrap_or_else(|e| e.into_inner());
+        staged.retain(|s| s.key != key && s.at.elapsed() < STAGED_TTL);
+        staged.push(Staged { key, message_id, at: std::time::Instant::now(), built: built.clone() });
+        let over = staged.len().saturating_sub(STAGED_MAX);
+        staged.drain(..over);
+    }
+    Ok(built)
+}
+
+/// The staged build for this exact message, if there is one. Only a send that
+/// names the staged Message-ID can take it (the id is how the local copy and
+/// the server's stay one message), and it can be taken once.
+fn take_staged(account: &ImapConfig, email: &OutgoingEmail) -> Option<BuiltMime> {
+    let wanted = email.message_id.as_deref()?;
+    let key = staging_key(account, email);
+    let mut staged = STAGED.lock().unwrap_or_else(|e| e.into_inner());
+    staged.retain(|s| s.at.elapsed() < STAGED_TTL);
+    let at = staged.iter().position(|s| s.key == key && s.message_id == wanted)?;
+    Some(staged.remove(at).built)
 }
 
 /// Same bytes, for a message that is not going anywhere yet.
@@ -799,7 +860,13 @@ pub async fn send_built(
 /// Convenience: build + send in one call. Preserved for callers that don't
 /// need Drafts staging.
 pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<SendResult, String> {
-    let built = build_mime(account, email)?;
+    let built = match take_staged(account, email) {
+        Some(staged) => {
+            info!("[send:reuse_staged_mime] bytes={}", staged.raw_rfc2822.len());
+            staged
+        }
+        None => build_mime(account, email)?,
+    };
     send_built(account, email, built).await
 }
 
@@ -1219,6 +1286,64 @@ mod tests {
         }
     }
 
+    // ── staged build reuse ───────────────────────────────────────────────
+
+    /// What compose does: stage the build with no id (the request carries
+    /// none), then send the same fields under the id the build chose.
+    fn staged_pair(subject: &str) -> (ImapConfig, OutgoingEmail, OutgoingEmail, BuiltMime) {
+        let acct = account("me@x.com", None);
+        let mut staged_email = outgoing();
+        staged_email.subject = subject.to_string();
+        let built = build_mime_staged(&acct, &staged_email).expect("build_mime_staged");
+        let id = message_id_of(&built.raw_rfc2822).expect("built message has an id");
+        let mut send_email = outgoing();
+        send_email.subject = subject.to_string();
+        send_email.message_id = Some(id);
+        (acct, staged_email, send_email, built)
+    }
+
+    #[test]
+    fn a_send_under_the_staged_id_takes_the_staged_build_once() {
+        let (acct, _, send, built) = staged_pair("staged: take once");
+        let taken = take_staged(&acct, &send).expect("the staged build is there");
+        assert_eq!(taken.raw_rfc2822, built.raw_rfc2822);
+        assert!(take_staged(&acct, &send).is_none(), "a staged build goes out once");
+    }
+
+    #[test]
+    fn an_edited_message_does_not_take_the_staged_build() {
+        let (acct, _, mut send, _) = staged_pair("staged: edited body");
+        send.text = Some("a different body".to_string());
+        assert!(take_staged(&acct, &send).is_none());
+        let (acct, _, mut send, _) = staged_pair("staged: edited recipient");
+        send.to = "other@example.com".to_string();
+        assert!(take_staged(&acct, &send).is_none());
+    }
+
+    #[test]
+    fn a_different_id_or_no_id_does_not_take_the_staged_build() {
+        let (acct, _, mut send, _) = staged_pair("staged: other id");
+        send.message_id = Some("<someone.else@x.com>".to_string());
+        assert!(take_staged(&acct, &send).is_none());
+        send.message_id = None;
+        assert!(take_staged(&acct, &send).is_none());
+    }
+
+    #[test]
+    fn a_different_sender_does_not_take_the_staged_build() {
+        let (_, _, send, _) = staged_pair("staged: other sender");
+        assert!(take_staged(&account("me@x.com", Some("alias@x.com")), &send).is_none());
+    }
+
+    #[test]
+    fn the_staged_builds_are_capped() {
+        let first = staged_pair("staged: cap 0");
+        for i in 1..=STAGED_MAX {
+            staged_pair(&format!("staged: cap {i}"));
+        }
+        assert!(take_staged(&first.0, &first.2).is_none(), "the oldest staged build is dropped");
+    }
+
     #[test]
     fn from_address_helper_prefers_override() {
         assert_eq!(account("a@x.com", Some("b@x.com")).from_address(), "b@x.com");
@@ -1575,6 +1700,32 @@ mod tests {
             assert!(raw.contains("Message-ID: <staged.7@mock.test>\r\n"), "{raw}");
             // And the bytes handed back for the Sent APPEND are those same bytes.
             assert_eq!(result.raw_rfc2822, sent[0]);
+        }
+
+        /// compose stages the build (`smtp_build_mime`) and then sends: the send
+        /// goes out as those staged bytes, not as a second build. The server's
+        /// copy, the Sent APPEND and the local copy are then one message.
+        #[tokio::test]
+        async fn send_email_sends_the_staged_build_instead_of_rebuilding() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new());
+            let cfg = config_for(&server);
+            let mut email = outgoing();
+            email.to = "partner@example.com".to_string();
+            email.subject = "wire: staged reuse".to_string();
+            let built = build_mime_staged(&cfg, &email).expect("build_mime_staged");
+            email.message_id = message_id_of(&built.raw_rfc2822);
+
+            let result = send_email(&cfg, &email).await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+            let result = result.expect("send against the mock SMTP server");
+
+            assert!(take_staged(&cfg, &email).is_none(), "send_email must consume the staged build, not rebuild");
+            let sent = server.sent_messages();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0], built.raw_rfc2822);
+            assert_eq!(result.raw_rfc2822, built.raw_rfc2822);
         }
 
         /// SMTP carries Bcc on the envelope only. The Graph path puts a Bcc
