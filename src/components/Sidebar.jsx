@@ -2,6 +2,9 @@ import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from '
 import '../styles/sidebar-navigation.css';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
+import { XLogo, DiscordLogo } from './ui/BrandGlyphs';
+import { openInBrowser } from '../services/billingApi';
+import { DISCORD_INVITE, X_PROFILE } from '../utils/communityLinks';
 import { Popover } from './ui/Popover';
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import { createPortal } from 'react-dom';
@@ -1105,6 +1108,18 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           >
             <Gift size={15} className="text-mail-text-muted" />
           </Button>
+          <Button variant="ghost" icon size="sm"
+            onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})}
+            title={t('bugReport.joinDiscord')} aria-label={t('bugReport.joinDiscord')}
+          >
+            <span className="text-mail-text-muted"><DiscordLogo size={15} /></span>
+          </Button>
+          <Button variant="ghost" icon size="sm"
+            onClick={() => openInBrowser(X_PROFILE).catch(() => {})}
+            title={t('bugReport.followX')} aria-label={t('bugReport.followX')}
+          >
+            <span className="text-mail-text-muted"><XLogo size={13} /></span>
+          </Button>
           {totalEmails > 0 && (
             <div
               className="p-2"
@@ -1356,6 +1371,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <div className="sidebar-version">{t('sidebar.mailvaultVersion', { version })}</div>
             <PortableBadge onClick={() => onOpenSettings?.('portable')} />
           </div>
+          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})} title={t('bugReport.joinDiscord')} aria-label={t('bugReport.joinDiscord')}><DiscordLogo size={14} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(X_PROFILE).catch(() => {})} title={t('bugReport.followX')} aria-label={t('bugReport.followX')}><XLogo size={12} /></Button>
           <Button variant="ghost" icon size="sm" onClick={toggleTheme}
             title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}>
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}

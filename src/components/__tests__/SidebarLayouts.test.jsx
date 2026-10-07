@@ -10,6 +10,11 @@ import { t } from '../../i18n';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 vi.mock('../../services/workflows/loadSubtree', () => ({ openFolder: vi.fn() }));
+const openInBrowser = vi.fn(() => Promise.resolve(true));
+vi.mock('../../services/billingApi', async importOriginal => ({
+  ...await importOriginal(),
+  openInBrowser: url => openInBrowser(url),
+}));
 vi.mock('../../services/db', async importOriginal => ({
   ...await importOriginal(),
   readLocalEmailIndex: async () => [],
@@ -224,5 +229,14 @@ describe('Sidebar layouts', () => {
     expect(onOpenBackup).toHaveBeenCalledWith('studio');
     expect(openFolder).not.toHaveBeenCalled();
     expect(useSettingsStore.getState().backupGlobalEnabled).toBe(true);
+  });
+
+  it.each([false, true])('links Discord and X from the footer (collapsed: %s)', collapsed => {
+    useSettingsStore.setState({ sidebarCollapsed: collapsed });
+    render(<Sidebar />);
+    fireEvent.click(screen.getByRole('button', { name: t('bugReport.joinDiscord') }));
+    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/gECE37RpD');
+    fireEvent.click(screen.getByRole('button', { name: t('bugReport.followX') }));
+    expect(openInBrowser).toHaveBeenCalledWith('https://x.com/GraphicMeat');
   });
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bug, Github, HelpCircle, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
 import { Dialog, Button, XLogo, DiscordLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
+import { DISCORD_INVITE, X_PROFILE } from '../utils/communityLinks';
 import { faqUrl } from '../services/faqUrl';
 import { useSettingsStore } from '../stores/settingsStore';
 import logoUrl from '../assets/graphicmeat-logo.webp';
@@ -10,8 +11,6 @@ import { t as tr, useT  } from '../i18n/index.js';
 const GH_DISCUSSIONS = 'https://github.com/GraphicMeat/mail-vault-app/discussions';
 const GH_NEW_BUG = `${GH_DISCUSSIONS}/new?category=bug-reports`;
 const GH_NEW_IDEA = `${GH_DISCUSSIONS}/new?category=ideas`;
-const DISCORD_INVITE = 'https://discord.gg/gECE37RpD';
-const X_PROFILE = 'https://x.com/GraphicMeat';
 const MAKER_SITE = 'https://graphicmeat.com';
 
 // One emailed report every five minutes (stamped when the report is sent):

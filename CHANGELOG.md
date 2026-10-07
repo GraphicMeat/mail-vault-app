@@ -5,7 +5,7 @@
 ### Added
 - **Send asks when you mention an attachment but forgot it (Premium).** A message that says "attached", "see the attachment", "im Anhang", "ci-joint", "添付" and the like in any of the app's languages, with no file attached, stops at Send and offers Attach file or Send anyway. Quoted text and your signature are not read, nor is a reply's subject. Turn it off in Settings > Mail preferences > Behavior > Attachments.
 - **Get reminded when nobody replies (Premium).** When you write an email, the bell next to Templates offers to remind you in 1 day, 3 days or a week. If nobody has answered by then, the email you sent is pinned above your inbox, unread, with one notification. Click it to read it again, or its x to dismiss the reminder; nothing in your mailbox is moved. Replies are looked for in the mail MailVault already holds in any folder but Sent and Drafts, and on the server in your inbox, archive and Trash; mail from your own addresses and aliases does not count, and neither do automatic out-of-office replies. Not offered for Outlook.com accounts signed in with Microsoft.
-- **MailVault has a Discord server.** Report a bug now links it next to Follow on X, for questions and chat with other users.
+- **MailVault has a Discord server.** Join it, or follow MailVault on X, from the icons at the bottom of the sidebar or from Report a bug, for questions and chat with other users.
 
 ## [2.19.1] - 2026-10-07
 
