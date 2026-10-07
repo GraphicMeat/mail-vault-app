@@ -1897,7 +1897,8 @@ mod tests {
     /// used before) the request's own timeout fired first, and reqwest called
     /// that a timeout, not a connect: "may have gone out", the end of a
     /// scheduled send. The timeouts are shortened here because macOS gives up
-    /// a dropped loopback SYN by itself after about 8 seconds; the real ones
+    /// a dropped loopback SYN by itself after about 8 seconds and Windows
+    /// after about 3 (it then refuses, which is not a hang); the real ones
     /// are 20 seconds for the connect and a minute or more for the send.
     #[tokio::test]
     async fn a_send_whose_connection_never_opens_was_not_sent() {
@@ -1907,10 +1908,10 @@ mod tests {
             return;
         };
         let url = format!("http://{addr}/me/sendMail");
-        let request_timeout = std::time::Duration::from_secs(5);
+        let request_timeout = std::time::Duration::from_secs(2);
         assert!(SEND_CONNECT_TIMEOUT < std::time::Duration::from_secs(60), "the connect must give up before the send does");
 
-        let send = send_client(std::time::Duration::from_millis(1500));
+        let send = send_client(std::time::Duration::from_millis(1000));
         let err = send.send(send.post(&url).timeout(request_timeout).body("mime")).await.expect_err("nothing accepts");
         let SendMailError::Transport { maybe_sent, detail, .. } = transport_error(err) else { panic!("a transport error") };
         assert!(!maybe_sent, "nothing was written: {detail}");
