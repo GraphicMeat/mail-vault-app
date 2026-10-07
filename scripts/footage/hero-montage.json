@@ -1,0 +1,19 @@
+{
+  "about": "Homepage hero (web-clips.sh hero): hard cuts between recorded takes, in order unified inbox, link warning, undo send, archive and keep in the vault, search. Seconds are each take's own .mov time; crops are window points at 16:10, clear of the header's date line and the window's rounded bottom corners. The search cut is the search-local take's two segments: the typing ends at the press, the results are cropped below the lanes row, so no search time is in any frame.",
+  "scale": 2,
+  "size": [1440, 900],
+  "fps": 30,
+  "maxBytes": 1600000,
+  "posterMaxBytes": 150000,
+  "poster": 7.5,
+  "segments": [
+    {"take": "unified-inbox", "label": "unified", "t0": 0.5, "t1": 4.3, "crop": [4, 150, 800, 500]},
+    {"take": "link-safety", "label": "link-warning", "t0": 0.75, "t1": 5.65, "crop": [280, 190, 1120, 700]},
+    {"take": "undo-send", "label": "undo-send", "t0": 0.5, "t1": 5.0, "crop": [210, 236, 1120, 700]},
+    {"take": "archive-delete", "label": "archive-confirm", "t0": 0.45, "t1": 1.45, "crop": [288, 216, 960, 600]},
+    {"take": "archive-delete", "label": "archive-complete", "t0": 7.8, "t1": 8.6, "crop": [952, 594, 576, 360]},
+    {"take": "archive-delete", "label": "archive-vault", "t0": 9.0, "t1": 11.6, "crop": [4, 150, 800, 500]},
+    {"take": "search-local", "label": "search-typing", "t0": 0.4, "t1": 2.4, "crop": [262, 120, 800, 500]},
+    {"take": "search-local", "label": "search-results", "t0": 2.66, "t1": 5.2, "crop": [262, 330, 800, 500]}
+  ]
+}

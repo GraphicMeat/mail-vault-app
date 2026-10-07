@@ -90,7 +90,9 @@ spec.keyframes = o.keyframes || keyframes;
 if (o.maxBytes) spec.maxBytes = o.maxBytes;
 if (o.rate) spec.rate = o.rate;
 if (o.software != null) spec.software = o.software;
-spec.frames = [0.1, ...[0.2, 0.4, 0.6, 0.8].map((f) => Number((dur * f).toFixed(2))), Number((dur - 0.1).toFixed(2))];
+// "inspect": extra output seconds to look at (a montage: one per cut).
+spec.frames = [0.1, ...[0.2, 0.4, 0.6, 0.8].map((f) => Number((dur * f).toFixed(2))), Number((dur - 0.1).toFixed(2)), ...(spec.inspect || [])]
+  .sort((a, b) => a - b);
 spec.variant = variant;
 spec.overrides = Object.keys(o).length ? o : null;
 process.stdout.write(JSON.stringify(spec, null, 2));

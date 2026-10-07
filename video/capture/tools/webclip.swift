@@ -16,10 +16,13 @@
 // spec.json (window POINTS, like actions.json; the source is points x scale):
 //   { "scale": 2, "size": [960, 660], "fps": 30, "maxBytes": 250000,
 //     "crop": [x, y, w, h],                       // default for every segment
-//     "segments": [ { "t0": 1.2, "t1": 3.0, "crop": [x, y, w, h]? }, ... ],
+//     "segments": [ { "t0": 1.2, "t1": 3.0, "crop": [x, y, w, h]?, "src": "other.mov"? }, ... ],
+//                                                 // "src": another take (relative to <in.mov>'s folder)
+//                                                 // for a montage; default <in.mov>
 //     "keyframes": [1.6, 3.1],                    // output seconds: forced keyframes
 //     "rate": "quality" | "bitrate",              // default quality
 //     "poster": 4.2,                              // output seconds
+//     "posterMaxBytes": 80000,                    // the poster's JPEG quality steps down to fit
 //     "frames": [0.2, 1.5, 3.0, 4.8] }            // output seconds, JPGs to inspect
 //
 // stdout: one JSON report (passes, bitrate, bytes, verification of the file it
@@ -70,20 +73,25 @@ let outW = size.0, outH = size.1
 let fps = num(spec["fps"]) ?? 30
 let maxBytes = Int(num(spec["maxBytes"]) ?? 250_000)
 let defaultCrop = rect(spec["crop"])
-struct Segment { let t0: Double; let t1: Double; let crop: CGRect }
+struct Segment { let t0: Double; let t1: Double; let crop: CGRect; let src: URL }
 let segments: [Segment] = ((spec["segments"] as? [[String: Any]]) ?? []).compactMap { s in
     guard let t0 = num(s["t0"]), let t1 = num(s["t1"]), t1 > t0, let c = rect(s["crop"]) ?? defaultCrop else { return nil }
-    return Segment(t0: t0, t1: t1, crop: c)
+    let src = (s["src"] as? String).map { inURL.deletingLastPathComponent().appendingPathComponent($0) } ?? inURL
+    return Segment(t0: t0, t1: t1, crop: c, src: src)
 }
 guard !segments.isEmpty else { fail("spec has no usable segment (each needs t0 < t1 and a crop)") }
 
-let asset = AVURLAsset(url: inURL)
-guard let srcTrack = asset.tracks(withMediaType: .video).first else { fail("no video track in \(inURL.path)") }
-let srcSize = srcTrack.naturalSize
+/** One asset and video track per source file (a montage reads several takes). */
+var sources: [URL: (asset: AVURLAsset, track: AVAssetTrack)] = [:]
+for url in Set(segments.map { $0.src }) {
+    let a = AVURLAsset(url: url)
+    guard let t = a.tracks(withMediaType: .video).first else { fail("no video track in \(url.path)") }
+    sources[url] = (a, t)
+}
 let ciContext = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
 
 /** Crop rect in source pixels (top-left origin), clamped to the frame. */
-func pixelRect(_ r: CGRect) -> CGRect {
+func pixelRect(_ r: CGRect, _ srcSize: CGSize) -> CGRect {
     CGRect(x: r.minX * scale, y: r.minY * scale, width: r.width * scale, height: r.height * scale)
         .intersection(CGRect(origin: .zero, size: srcSize))
 }
@@ -142,15 +150,16 @@ func encode(bitrate: Int, quality: Double? = nil) -> Int {
     var encodeError: OSStatus = noErr
     var outIndex = 0
     for seg in segments {
-        guard let reader = try? AVAssetReader(asset: asset) else { fail("cannot create reader") }
-        let out = AVAssetReaderTrackOutput(track: srcTrack, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        guard let source = sources[seg.src], let reader = try? AVAssetReader(asset: source.asset) else { fail("cannot create reader") }
+        let srcSize = source.track.naturalSize
+        let out = AVAssetReaderTrackOutput(track: source.track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         out.alwaysCopiesSampleData = false
         reader.add(out)
         // A little before t0, so the frame on screen at t0 is among those read.
         reader.timeRange = CMTimeRange(start: CMTime(seconds: max(0, seg.t0 - 0.1), preferredTimescale: 600),
                                        end: CMTime(seconds: seg.t1 + 0.05, preferredTimescale: 600))
         guard reader.startReading() else { fail("reader: \(reader.error.map { "\($0)" } ?? "?")") }
-        let px = pixelRect(seg.crop)
+        let px = pixelRect(seg.crop, srcSize)
         let ciCrop = CGRect(x: px.minX, y: srcSize.height - px.maxY, width: px.width, height: px.height)
         let sx = Double(outW) / px.width, sy = Double(outH) / px.height
         let frames = Int((seg.t1 - seg.t0) * fps + 0.5)
@@ -306,7 +315,8 @@ var posterReport: [String: Any] = [:]
 if let posterPath, let t = num(spec["poster"]) ?? Optional(outDuration / 2), let img = frame(at: min(t, outDuration - 0.05)) {
     var q = 0.85
     var bytes = writeJPEG(img, posterPath, quality: q)
-    while bytes > 80_000 && q > 0.3 { q -= 0.08; bytes = writeJPEG(img, posterPath, quality: q) }
+    let posterMax = Int(num(spec["posterMaxBytes"]) ?? 80_000)
+    while bytes > posterMax && q > 0.3 { q -= 0.08; bytes = writeJPEG(img, posterPath, quality: q) }
     posterReport = ["t": t, "quality": q, "bytes": bytes]
 }
 var frameFiles: [String] = []
@@ -330,7 +340,7 @@ let report: [String: Any] = [
     "fps": vt.first?.nominalFrameRate ?? 0, "frames": frameCount,
     "audioTracks": outAsset.tracks(withMediaType: .audio).count,
     "topLevelAtoms": top, "moovBeforeMdat": moovFirst,
-    "segments": segments.map { ["t0": $0.t0, "t1": $0.t1, "crop": [$0.crop.minX, $0.crop.minY, $0.crop.width, $0.crop.height]] },
+    "segments": segments.map { ["t0": $0.t0, "t1": $0.t1, "src": $0.src.lastPathComponent, "crop": [$0.crop.minX, $0.crop.minY, $0.crop.width, $0.crop.height]] },
     "poster": posterReport, "frameFiles": frameFiles.map { ($0 as NSString).lastPathComponent },
 ]
 let json = try! JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

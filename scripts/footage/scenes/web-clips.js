@@ -11,6 +11,16 @@
  *   B  search-50k           (the 50,000-message vault is seeded before boot)
  *   C  unified-inbox, link-safety, trackers, undo-send, time-capsule,
  *      scheduled-backups    (FOOTAGE_EXTRA_MAIL=1 FOOTAGE_ALIGN_ALL=1, in this order)
+ *   D  views, sender-verification, chat-view, scheduled-send   (batch 2; server untouched)
+ *   E  email-cleanup, search-local, insights   (batch 2; archives the Newsletter
+ *      group, then the whole INBOX, so search and Insights read the vault)
+ *
+ * Batch 2 STAGED (disclose): chat-view switches Mail view to Chat through the
+ * settings store before the take; scheduled-send's reply is typed and its
+ * Later panel opened before the take; email-cleanup's classification runs
+ * and its group is selected before the take; search-local and insights cut
+ * time (search: the moment the result lines draw, so the "N ms" lane line is
+ * never in a frame; insights: the vault read between the click and the page).
  *
  * `FOOTAGE_ONLY=<clip>[,<clip>]` picks the clips; the boot's setup only does
  * what the picked clips need.
@@ -19,7 +29,10 @@
  * language (lib/mailbox.js footageMarkers), by sender names (not translated),
  * by data-testid and by app labels (L). English-only needles left: the tracker
  * newsletter (extra mail is generated in English) and the search query (the
- * 50k corpus is English with a few planted non-English words).
+ * 50k corpus is English with a few planted non-English words). Batch 2 adds
+ * none of its own: "Ana Brandt" and "Priya" are sender names; the cleanup
+ * "Archive (N)" button (hardcoded English in the app) is found by its classes,
+ * and the bulk dialog's "All" preset is a literal in the app.
  *
  * Every take writes `<clip>.webclip.json`: the crop (window points) around
  * what the clip is about, the segments of the .mov to keep (seconds, from the
@@ -36,6 +49,7 @@
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
+import { ImapFlow } from 'imapflow';
 import { Take, pointer, OUT_DIR } from '../lib/footage.js';
 import {
   L, SEL, probe, quiet, clickSel, bootToInbox, resetView, beforeTake,
@@ -267,6 +281,18 @@ async function settingsSetup(navLabel, tabLabel) {
   await browser.execute(() => document.activeElement?.blur?.());
 }
 
+/** Settings > nav > the tab whose text starts with `tabLabel` (a tab can carry a count), off camera. */
+async function settingsSetupTab(navLabel, tabLabel) {
+  await clickSel('[data-testid="open-settings"]');
+  await waitPage(settingsOpen, { timeout: 8000 });
+  await clickSel('[data-testid="settings-page"] .settings-nav-item', navLabel);
+  await waitPage((t) => [...document.querySelectorAll('[data-testid="settings-page"] [role="tab"]')]
+    .some((b) => (b.textContent || '').trim().startsWith(t)), { timeout: 8000 }, tabLabel);
+  await clickSel('[data-testid="settings-page"] [role="tab"]', tabLabel);
+  await browser.pause(900);
+  await browser.execute(() => document.activeElement?.blur?.());
+}
+
 /** A native <select> set the way React hears it; the cursor travels there first. */
 async function setSelect(take, selector, value, label) {
   await take.moveTo(selector, label);
@@ -444,6 +470,72 @@ async function dryRun(q) {
   }, { timeout: 60000, interval: 300 }, q);
   await browser.pause(600);
   return searchState();
+}
+
+// ── Batch 2 helpers ─────────────────────────────────────────────────────────
+
+/** Box (viewport CSS px) of the first `n` visible list rows. */
+const rowsBox = (n) => browser.execute((k) => {
+  const r = [...document.querySelectorAll('[data-testid="email-row"]')]
+    .map((e) => e.getBoundingClientRect()).filter((b) => b.height > 0).slice(0, k);
+  return r.length ? { x: r[0].x, y: r[0].y, w: r[0].width, h: r.at(-1).bottom - r[0].y } : null;
+}, n);
+
+/** Tag the smallest element under `root` containing `needle` (from boot-a.js). */
+function markSmallest(root, needle, tag) {
+  return browser.execute((r, n, t) => {
+    document.querySelectorAll(`[data-footage-target="${t}"]`).forEach((el) => el.removeAttribute('data-footage-target'));
+    const hit = [...document.querySelectorAll(`${r} *`)]
+      .filter((el) => el.offsetHeight > 30 && (el.innerText || '').includes(n))
+      .sort((a, b) => (a.innerText || '').length - (b.innerText || '').length)[0];
+    if (!hit) return false;
+    hit.setAttribute('data-footage-target', t);
+    return true;
+  }, root, needle, tag);
+}
+
+/**
+ * The whole work INBOX archived once (bulk dialog, All -> Archive) and the
+ * search index given time to take it in, so search answers from this computer
+ * and Insights reads a complete vault (boot-a.js archiveEverything).
+ */
+async function archiveAll() {
+  if (facts.archivedAll) return;
+  facts.archivedAll = true;
+  const t0 = Date.now();
+  try {
+    // The dialog's "All" preset is a literal in the app (not translated).
+    await bulkArchive('All');
+  } catch (e) {
+    facts.archiveAllError = e.message;
+    console.error(`[setup] archive all: ${e.message}`);
+  }
+  facts.archiveAllIndexChipGone = await waitPage(() => !document.querySelector('[data-testid="search-index-chip"]'), { timeout: 240000, interval: 1000 });
+  facts.archiveAllSeconds = Number(since(t0));
+  await openWorkInbox();
+  await quiet({ timeout: 20000 });
+  console.log(`[setup] archived everything in ${since(t0)} s (index chip gone: ${facts.archiveAllIndexChipGone})`);
+}
+
+/** resetView clicks the search toggle while a search is still active: close the panel for real. */
+async function closeSearchPanel() {
+  const open = () => browser.execute((s) => !!document.querySelector(s)?.offsetHeight, SEL.searchInput);
+  for (let i = 0; i < 3 && (await open()); i++) {
+    await browser.pause(400);
+    await clickSel(SEL.searchToggle);
+    await waitPage((s) => !document.querySelector(s)?.offsetHeight, { timeout: 2500 }, SEL.searchInput);
+  }
+  await browser.execute(() => document.activeElement?.blur?.());
+  await browser.pause(400);
+}
+
+/** AI features on with Apple Intelligence (off by default; from ph-ai.js). */
+async function aiOn() {
+  await browser.execute(() => window.__SETTINGS_STORE__.getState().setAiSettings({ enabled: true, provider: 'appleFm' }));
+  const providers = await rpc('ai.providers', {});
+  const apple = (providers.ok || []).find?.((p) => p.provider === 'appleFm');
+  facts.aiProviders = providers.ok || providers.error;
+  if (!apple?.available) throw new Error(`Apple FM not available to the daemon: ${JSON.stringify(providers)}`);
 }
 
 // ── The clips ───────────────────────────────────────────────────────────────
@@ -988,5 +1080,894 @@ describe('footage: website feature clips', function () {
     });
     // Off again, so no scheduled run starts under a later take.
     await browser.execute(() => window.__SETTINGS_STORE__.getState().setBackupGlobalEnabled?.(false));
+  });
+
+  // ── Batch 2, boot D (nothing changes on the server) ───────────────────────
+
+  // 10. Sender verification: a verified sender, then a Reply-To that goes elsewhere.
+  it('sender-verification', async function () {
+    const VERIFIED = '[data-testid="sender-verification"][data-status="verified"]';
+    const WARNING = '[data-testid="sender-verification"][data-status="warning"]';
+    const popover = () => {
+      const el = [...document.querySelectorAll('div[data-capture-overlay]')].find((d) => d.getBoundingClientRect().height > 0);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height, text: (el.innerText || '').replace(/\s+/g, ' ') };
+    };
+    const popoverShown = () => [...document.querySelectorAll('div[data-capture-overlay]')].some((d) => d.getBoundingClientRect().height > 0);
+    const header = (s) => browser.execute((sel) => {
+      const b = [...document.querySelectorAll(sel)].find((e) => e.getBoundingClientRect().height > 0);
+      const h = b?.closest('[data-testid="sender-header"]') || b?.parentElement?.parentElement;
+      const r = h?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    }, s);
+    await shoot(this, 'sender-verification', async (take, scan) => {
+      const head1 = await header(VERIFIED);
+      await take.hold(700);
+      await take.click(VERIFIED, 'badge-verified', { dur: 500 });
+      const tBadge1 = take.events.at(-1).t;
+      await take.waitFor(popoverShown, 'verified popover', 5000);
+      await take.hold(250);
+      const pop1 = await browser.execute(popover);
+      facts.senderVerifiedPopover = pop1?.text;
+      const crop1 = await fitCrop(union(head1, pop1), { minW: 760 });
+      await scan.at(take, 'verified', crop1);
+      await take.hold(1500);
+      // The row's press also closes the popover (its outside-mousedown).
+      await take.click('[data-footage-target="replyto-row"]', 'open-replyto', { dur: 550 });
+      const tRow = take.events.at(-1).t;
+      await take.waitFor((s) => [...document.querySelectorAll(s)].some((e) => e.getBoundingClientRect().height > 0), 'warning badge', 12000, WARNING);
+      await take.hold(700);
+      const head2 = await header(WARNING);
+      await take.click(WARNING, 'badge-warning', { dur: 450 });
+      const tBadge2 = take.events.at(-1).t;
+      await take.waitFor(popoverShown, 'warning popover', 5000);
+      await take.hold(250);
+      const pop2 = await browser.execute(popover);
+      facts.senderWarningPopover = pop2?.text;
+      const crop2 = await fitCrop(union(head2, pop2), { minW: 760 });
+      await scan.at(take, 'warning', crop2);
+      await take.hold(2100);
+      const end = take.t(Date.now());
+      console.log(`[footage] sender-verification ${JSON.stringify({ verified: facts.senderVerifiedPopover, warning: facts.senderWarningPopover })}`);
+      return {
+        crop: crop1,
+        segments: [
+          { t0: Math.max(0.2, tBadge1 - 1.0), t1: tRow - 0.05, crop: crop1, label: 'verified' },
+          { t0: tBadge2 - 0.9, t1: end, crop: crop2, label: 'warning' },
+        ],
+        boxes: { head1, pop1, head2, pop2 },
+      };
+    }, {
+      prepare: async () => {
+        // Ana's Rack & Rind thread (the demo's SPF/DKIM pass) open in the
+        // reader; the demo's Reply-To mismatch tagged in the list.
+        if (!(await tagRow(MARK.replyTo, 'replyto-row'))) throw new Error(`Reply-To row not on screen: "${MARK.replyTo}"`);
+        if (!(await tagRow(MARK.thread, 'ana-thread'))) throw new Error(`thread row not on screen: "${MARK.thread}"`);
+        // tagRow clears its own tag only: both stay.
+        await clickSel('[data-footage-target="ana-thread"]');
+        if (!(await waitPage((s) => [...document.querySelectorAll(s)].some((e) => e.getBoundingClientRect().height > 0), { timeout: 12000 }, VERIFIED))) {
+          throw new Error('no verified badge on the opened thread');
+        }
+        await browser.execute(() => document.activeElement?.blur?.());
+        await browser.pause(900);
+      },
+    });
+    await browser.execute(() => document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+  });
+
+  // 11. Chat view: a person, a topic, the conversation as bubbles.
+  it('chat-view', async function () {
+    const CHAT = '[data-testid="chat-view"]';
+    // Sender names are not translated; the topic is the demo's thread marker
+    // after "Rack & Rind - " (the patched dash).
+    const topic = MARK.thread.split(/\s+[-—]\s+/).pop();
+    await shoot(this, 'chat-view', async (take, scan) => {
+      const chat = await boxOf(CHAT);
+      await take.hold(700);
+      if (!(await markSmallest(CHAT, 'Ana Brandt', 'person'))) throw new Error('no Ana Brandt conversation');
+      const person = await boxOf('[data-footage-target="person"]');
+      await take.click('[data-footage-target="person"]', 'person-ana', { dur: 500 });
+      const tPerson = take.events.at(-1).t;
+      await take.waitFor((c, n) => [...document.querySelectorAll(`${c} *`)].some((e) => e.offsetHeight > 30 && (e.innerText || '').includes(n)), 'topics', 8000, CHAT, topic);
+      await take.hold(650);
+      if (!(await markSmallest(CHAT, topic, 'topic'))) throw new Error(`no topic "${topic}"`);
+      const topicBox = await boxOf('[data-footage-target="topic"]');
+      await take.click('[data-footage-target="topic"]', 'topic', { dur: 450 });
+      const tTopic = take.events.at(-1).t;
+      await take.waitFor((c, reply) => (document.querySelector(c)?.innerText || '').includes(reply), 'bubbles', 15000, CHAT, L('chat.bubble.reply'));
+      const tBubbles = take.t(Date.now());
+      await take.hold(300);
+      facts.chatView = await browser.execute((c) => (document.querySelector(c)?.innerText || '').replace(/\s+/g, ' ').slice(0, 500), CHAT);
+      const crop = await fitCrop(chat, { minW: 1000 });
+      await scan.at(take, 'bubbles', crop);
+      await take.hold(3000);
+      const end = take.t(Date.now());
+      // The bubbles sit at both edges of a 1,300 pt pane: the reviewed crops
+      // (web-clips.crops.json) show the people list, then each bubble in turn.
+      const mid = tBubbles + 0.5 + (end - tBubbles - 0.5) * 0.45;
+      return {
+        crop,
+        segments: [
+          { t0: Math.max(0.2, tPerson - 0.9), t1: tTopic + 0.03, label: 'people' },
+          { t0: tBubbles + 0.45, t1: mid, label: 'ana' },
+          { t0: mid, t1: end, label: 'rowan' },
+        ],
+        boxes: { chat, person, topic: topicBox },
+      };
+    }, {
+      prepare: async () => {
+        // STAGED (disclose): Mail view switched to Chat through the settings
+        // store (Settings > Layout > Chat), off camera.
+        await setSetting('viewStyle', 'chat');
+        if (!(await waitPage((c) => !!document.querySelector(c)?.offsetHeight, { timeout: 10000 }, CHAT))) throw new Error('chat view did not open');
+        await browser.pause(1200);
+      },
+    });
+    await setSetting('viewStyle', 'list');
+    await browser.pause(600);
+  });
+
+  // 12. Scheduled send: Tomorrow 8am, Schedule, Send; it waits in Scheduled.
+  // 12. Scheduled send: Tomorrow 8am, Schedule, Send; Scheduled counts it.
+  // Three crops: the Later panel's upper part (its last line is the E2E
+  // build's "sends the next time you open MailVault", which a release build
+  // with the background helper words differently), the compose footer with
+  // the armed plan, and the sidebar's Scheduled row once it counts the email.
+  // The Scheduled list itself is not filmed: its row joins address and time
+  // with an em dash (app copy).
+  it('scheduled-send', async function () {
+    const PANEL = '[data-testid="compose-schedule-panel"]';
+    const SCHED = '.mail-sidebar [data-testid="sidebar-scheduled-btn"]';
+    await shoot(this, 'scheduled-send', async (take, scan) => {
+      const compose = await boxOf(SEL.compose);
+      const panel = await boxOf(PANEL);
+      const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      await take.hold(700);
+      await take.click('[data-testid="compose-schedule-preset-tomorrow"]', 'tomorrow-8am', { dur: 500 });
+      const tPreset = take.events.at(-1).t;
+      await take.waitFor(() => !!(document.querySelector('[data-testid="compose-schedule-time"]')?.dataset.value), 'time picked', 3000);
+      await take.hold(300);
+      facts.schedulePicked = await browser.execute(() => ({
+        time: document.querySelector('[data-testid="compose-schedule-time"]')?.dataset.value || null,
+        tz: document.querySelector('[data-testid="compose-schedule-tz"]')?.dataset.value || null,
+        sends: document.querySelector('[data-testid="compose-schedule-sends"]')?.innerText || null,
+        panel: (document.querySelector('[data-testid="compose-schedule-panel"]')?.innerText || '').replace(/\s+/g, ' '),
+      }));
+      // The panel down to its "Sends ... your time" line, never the notice under it.
+      const sends = await boxOf('[data-testid="compose-schedule-sends"]') || await boxOf('[data-testid="compose-schedule-now"]');
+      const W1 = 540, H1 = W1 / ASPECT;
+      const cropPanel = { x: Math.round(Math.max(4, Math.min(panel.x + panel.w / 2 - W1 / 2, vp.w - 4 - W1))), y: Math.round(sends.y + sends.h + 6 - H1), w: W1, h: Math.round(H1) };
+      await scan.at(take, 'panel', cropPanel);
+      await take.hold(600);
+      await take.click('[data-testid="compose-schedule-submit"]', 'schedule', { dur: 450 });
+      const tSchedule = take.events.at(-1).t;
+      await take.waitFor((p) => !document.querySelector(p), 'panel closed', 3000, PANEL);
+      await take.hold(300);
+      facts.schedulePlan = await browser.execute(() => document.querySelector('[data-testid="compose-send-plan"]')?.innerText || null);
+      const plan = await boxOf('[data-testid="compose-send-plan"]');
+      const send = await boxOf(SEL.send);
+      // The footer out to the compose window's right edge (Schedule send and its chevron).
+      const W2 = 640, H2 = W2 / ASPECT;
+      const right = compose ? compose.x + compose.w + 8 : send.x + send.w + 60;
+      const bottom = compose ? compose.y + compose.h + 8 : send.y + send.h + 24;
+      const cropFooter = { x: Math.round(Math.max(4, Math.min(right - W2, vp.w - 4 - W2))), y: Math.round(Math.min(bottom, vp.h - 4) - H2), w: W2, h: Math.round(H2) };
+      await scan.at(take, 'plan', cropFooter);
+      await take.hold(900);
+      await take.click(SEL.send, 'send-scheduled', { dur: 450 });
+      const tSend = take.events.at(-1).t;
+      await take.waitFor((s) => !document.querySelector(s)?.offsetHeight, 'compose closed', 15000, SEL.compose);
+      const tClosed = take.t(Date.now());
+      facts.scheduleUndoToast = await browser.execute(() => !!document.querySelector('[data-testid="undo-send-toast"]'));
+      await take.waitFor((s) => /\d/.test(document.querySelector(s)?.innerText || ''), 'Scheduled count', 10000, SCHED);
+      facts.scheduledCountAt = Number(take.t(Date.now()).toFixed(3));
+      facts.scheduledSidebar = await browser.execute((s) => (document.querySelector(s)?.innerText || '').replace(/\s+/g, ' '), SCHED);
+      const btn = await boxOf(SCHED);
+      // The sidebar from the Scheduled row down: the list header above it carries today's date.
+      const cropSide = { x: 4, y: Math.round(btn.y - 2), w: 640, h: Math.round(640 / ASPECT) };
+      await scan.at(take, 'scheduled', cropSide);
+      await take.hold(1900);
+      const end = take.t(Date.now());
+      console.log(`[footage] scheduled-send ${JSON.stringify({ picked: facts.schedulePicked, plan: facts.schedulePlan, undoToast: facts.scheduleUndoToast, sidebar: facts.scheduledSidebar })}`);
+      return {
+        crop: cropPanel,
+        segments: [
+          { t0: Math.max(0.2, tPreset - 0.9), t1: tSchedule + 0.03, crop: cropPanel, label: 'panel' },
+          { t0: tSchedule + 0.3, t1: tSend + 0.03, crop: cropFooter, label: 'plan' },
+          { t0: Math.max(tSend + 0.1, tClosed - 0.05), t1: end, crop: cropSide, label: 'scheduled' },
+        ],
+        poster: 2.0,
+        boxes: { compose, panel, sends, plan, send, btn },
+      };
+    }, {
+      prepare: async () => {
+        const mode = await browser.execute(() => window.__SETTINGS_STORE__?.getState?.().composeOpenMode);
+        if (mode !== 'app') await setSetting('composeOpenMode', 'app');
+        await setSetting('composeContextVisible', false);
+        // The demo's renewal reply to Priya (as undo-send), first sentence, typed off camera.
+        const body = MARK.scheduledReplyBody.split('\n')[0].split(/(?<=[.!?。])\s*/)[0];
+        if (!(await tagRow('Priya Raines', 'priya'))) throw new Error('no row from Priya Raines on screen');
+        await clickSel('[data-footage-target="priya"]');
+        await waitPage((e) => !document.body.innerText.includes(e), { timeout: 10000 }, L('viewer.selectEmailRead'));
+        await browser.pause(800);
+        if (!(await clickSel('[data-quick-action="reply"]'))) throw new Error('no reply quick action');
+        await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, SEL.editor);
+        await browser.pause(600);
+        const prep = new Take('scheduled-send-prep');
+        const typed = await prep.typeRich(SEL.editor, body, 'prep', { base: 45, jitter: 10, caret: 'start' });
+        facts.scheduleTyped = (typed?.text || '').slice(0, 160);
+        await browser.execute(() => document.activeElement?.blur?.());
+        await browser.pause(500);
+        // The Later panel open on its date-and-time tab, before the take.
+        await clickSel('[data-testid="compose-schedule-toggle"]');
+        if (!(await waitPage((p) => !!document.querySelector(p)?.offsetHeight, { timeout: 5000 }, PANEL))) throw new Error('schedule panel did not open');
+        await clickSel('[data-testid="compose-later-tab-at"]');
+        await browser.pause(500);
+        if (await browser.execute(() => !!document.querySelector('[data-testid="compose-schedule-locked"]'))) throw new Error('Scheduled Send is locked: the Premium seed did not take');
+        if (!(await waitPage(() => !!document.querySelector('[data-testid="compose-schedule-preset-tomorrow"]')?.offsetHeight, { timeout: 5000 }))) throw new Error('no Tomorrow preset');
+        await browser.execute(() => document.activeElement?.blur?.());
+        await browser.pause(800);
+      },
+      // The compose window with its open Later panel is the first frame.
+      allow: (o) => o.box[2] >= 400 && o.box[3] >= 300,
+    });
+    // The Scheduled list is a modal: closed, so the next take starts clean.
+    await browser.execute(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await browser.pause(500);
+  });
+
+  // ── Batch 2, boot E (email-cleanup archives a group, then everything is archived) ──
+
+  // 13. Email Cleanup: the classifier's Newsletter group, archived in one go.
+  it('email-cleanup', async function () {
+    const page = '[data-testid="settings-content"][data-page="cleanup"]';
+    // "Archive (N)" is hardcoded English in the app: the selection bar's archive
+    // button is found by its classes, not its text.
+    const ARCHIVE_BTN = `${page} button.rounded-lg.bg-mail-accent-tint`;
+    const OVERLAY = `${page} .bg-black\\/40`;
+    await shoot(this, 'email-cleanup', async (take, scan) => {
+      const content = await boxOf(page);
+      const summary = await boxOf('[data-testid="cleanup-summary"]');
+      await take.hold(700);
+      await take.click(ARCHIVE_BTN, 'archive-group', { dur: 500 });
+      const tArchive = take.events.at(-1).t;
+      await take.waitFor((o) => !!document.querySelector(o)?.offsetHeight, 'confirm', 5000, OVERLAY);
+      await take.hold(700);
+      facts.cleanupConfirm = await browser.execute((o) => (document.querySelector(o)?.innerText || '').replace(/\s+/g, ' '), OVERLAY);
+      if (!(await markExact(OVERLAY, 'button', L('common.archive'), 'confirm-archive'))) throw new Error('no Archive in the confirmation');
+      await take.click('[data-footage-target="confirm-archive"]', 'confirm-archive', { dur: 450 });
+      const progress = [];
+      const t0 = Date.now();
+      while (Date.now() - t0 < 60000) {
+        const s = await browser.execute((p, o, a) => ({
+          busy: !!document.querySelector(`${p} .animate-spin`), overlay: !!document.querySelector(o),
+          selected: !!document.querySelector(a),
+        }), page, OVERLAY, ARCHIVE_BTN);
+        const tt = Number(take.t(Date.now()).toFixed(3));
+        if (!progress.length || JSON.stringify(progress.at(-1).s) !== JSON.stringify(s)) progress.push({ t: tt, s });
+        if (!s.busy && !s.overlay && !s.selected) break;
+        await browser.pause(80);
+      }
+      facts.cleanupProgress = progress;
+      const done = progress.at(-1);
+      if (done.s.busy || done.s.selected) throw new Error(`cleanup archive never finished: ${JSON.stringify(done)}`);
+      await take.hold(400);
+      facts.cleanupAfter = await browser.execute((p) => (document.querySelector(p)?.innerText || '').replace(/\s+/g, ' ').slice(0, 400), page);
+      const rows = await browser.execute((p) => {
+        const r = [...document.querySelectorAll(`${p} div[role="button"]`)].map((e) => e.getBoundingClientRect()).filter((b) => b.height > 0).slice(0, 7);
+        return r.length ? { x: r[0].x, y: r[0].y, w: r[0].width, h: r.at(-1).bottom - r[0].y } : null;
+      }, page);
+      const crop = await fitCrop(union(summary, rows), { minW: 900, pad: 12 });
+      await scan.at(take, 'after', crop);
+      await take.hold(1600);
+      const end = take.t(Date.now());
+      console.log(`[footage] email-cleanup ${JSON.stringify({ group: facts.cleanupGroup, confirm: facts.cleanupConfirm, progress: progress.slice(0, 8), after: facts.cleanupAfter })}`);
+      return { crop, segments: [{ t0: Math.max(0.2, tArchive - 1.0), t1: end }], boxes: { content, summary, rows } };
+    }, {
+      prepare: async () => {
+        const accountId = await browser.execute(() => window.__MAIL_STORE__?.getState?.().activeAccountId);
+        const t0 = Date.now();
+        facts.cleanupRun = await rpc('classification.run', { accountId });
+        let st = null;
+        while (Date.now() - t0 < 300000) {
+          await browser.pause(1500);
+          st = (await rpc('classification.status', {})).ok;
+          if (st && st.status !== 'Running' && Date.now() - t0 > 3000) break;
+        }
+        facts.cleanupStatus = st;
+        console.log(`[setup] classified in ${since(t0)} s: ${JSON.stringify(st)}`);
+        await settingsSetup(L('settings.tab.cleanup'), null);
+        if (!(await waitPage((p) => !!document.querySelector(`${p} input[type="checkbox"]`) && !!document.querySelector('[data-testid="cleanup-summary"]'), { timeout: 30000 }, page))) {
+          throw new Error('cleanup results never showed');
+        }
+        facts.cleanupChips = await browser.execute((p) => [...document.querySelectorAll(`${p} button.rounded-full.border`)].map((b) => b.innerText.trim()), page);
+        // The Newsletter group (Promotional when the demo has none), all of it selected.
+        let chip = null;
+        for (const k of ['newsletter', 'promotional']) {
+          const w = `${L(`settings.cleanup.${k}`)} (`;
+          if (await clickSel(`${page} button.rounded-full.border`, w)) { chip = w; break; }
+        }
+        if (!chip) throw new Error(`no newsletter or promotional group: ${JSON.stringify(facts.cleanupChips)}`);
+        facts.cleanupGroup = chip;
+        await browser.pause(600);
+        const selectAll = L('settings.cleanup.selectAllCount').split('(')[0].trim();
+        if (!(await clickSel(`${page} button`, selectAll))) throw new Error('no Select All');
+        if (!(await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 5000 }, ARCHIVE_BTN))) throw new Error('no archive button after Select All');
+        await browser.execute(() => document.activeElement?.blur?.());
+        await browser.pause(800);
+      },
+      allow: (o) => o.role === 'dialog' || (o.box[2] >= 900 && o.box[3] >= 500),
+    });
+    await dismissBulkBubble();
+  });
+
+  // 14. Search on this computer: type, results. The search time ("N ms") is
+  // never in the picture: the typing segment ends at the press, before any
+  // result line draws, and the results segment is cropped below the lanes row
+  // (the take throws if its crop would touch any box that carries a time).
+  it('search-local', async function () {
+    const Q = process.env.FOOTAGE_LOCAL_QUERY || 'Priya';
+    await shoot(this, 'search-local', async (take, scan) => {
+      const panel0 = await boxOf('#mail-search-panel');
+      const rows0 = await rowsBox(6);
+      const cropType = await fitCrop(union(panel0, rows0), { minW: 760 });
+      await scan.at(take, 'typing', cropType);
+      await take.hold(500);
+      await take.click(SEL.searchInput, 'search-box', { dur: 450 });
+      const tBox = take.events.at(-1).t;
+      await take.hold(200);
+      await take.type(SEL.searchInput, Q, 'search-box', { follow: true });
+      await take.hold(250);
+      // The Search button, not Enter (see search-50k).
+      await take.click('#mail-search-panel form button[type="submit"]', 'search-button', { dur: 450 });
+      const tSubmit = take.events.at(-1).t;
+      await take.waitFor(searchDone, `results for ${Q}`, 30000, Q);
+      const tResults = take.t(Date.now());
+      await take.hold(350);
+      facts.searchLocal = await searchState();
+      const timing = await browser.execute(() => {
+        const out = [];
+        for (const el of document.querySelectorAll('[data-testid="search-lanes"], [data-testid^="search-lane-"], [data-testid="search-duration"]')) {
+          const r = el.getBoundingClientRect();
+          if (r.height > 0) out.push({ x: r.x, y: r.y, w: r.width, h: r.height });
+        }
+        return out;
+      });
+      const panel = await boxOf('#mail-search-panel');
+      const rows = await rowsBox(9);
+      if (!rows) throw new Error('no result rows');
+      const floor = Math.max(0, ...timing.map((b) => b.y + b.h), panel ? panel.y + panel.h : 0) + 4;
+      const top = Math.max(rows.y, floor);
+      const cropResults = await fitCrop({ x: rows.x, y: top, w: rows.w, h: rows.y + rows.h - top }, { minW: 760, pad: 0 });
+      if (cropResults.y < floor) cropResults.y = Math.ceil(floor);
+      const hits = timing.filter((b) => b.y + b.h > cropResults.y && b.y < cropResults.y + cropResults.h && b.x + b.w > cropResults.x && b.x < cropResults.x + cropResults.w);
+      if (hits.length) throw new Error(`results crop would show the search time: ${JSON.stringify({ cropResults, hits })}`);
+      facts.searchLocalTiming = { timing, floor, cropResults };
+      await scan.at(take, 'results', cropResults);
+      await take.hold(2300);
+      const end = take.t(Date.now());
+      console.log(`[fact] search-local on screen: ${JSON.stringify(facts.searchLocal)} timing ${JSON.stringify(facts.searchLocalTiming)}`);
+      const typing = { t0: Math.max(0.2, tBox - 0.8), t1: tSubmit + 0.02 };
+      return {
+        crop: cropResults,
+        segments: [
+          { ...typing, crop: cropType, label: 'typing' },
+          { t0: tResults + 0.12, t1: end, crop: cropResults, label: 'results' },
+        ],
+        poster: typing.t1 - typing.t0 + 1.2,
+        boxes: { panel0, rows0, panel, rows },
+      };
+    }, {
+      prepare: async () => {
+        await archiveAll();
+        facts.searchLocalDry = await dryRun(Q);
+        console.log(`[setup] dry run "${Q}": ${JSON.stringify(facts.searchLocalDry)}`);
+        await resetView();
+        await closeSearchPanel();
+        await scopeVault();
+        await clickSel(SEL.searchToggle);
+        await waitPage((x) => !!document.querySelector(x)?.offsetHeight, { timeout: 5000 }, SEL.searchInput);
+        await browser.execute(() => document.activeElement?.blur?.());
+        await scopeVault();
+        await browser.pause(600);
+      },
+    });
+  });
+
+  // 15. Insights: the vault read into a picture (the read itself is cut).
+  it('insights', async function () {
+    const PAGE = '[data-testid="insights-page"]';
+    const busy = [L('insights.loading').split('{{')[0].trim(), L('insights.querying').replace('…', '').trim()];
+    await shoot(this, 'insights', async (take, scan) => {
+      const btn = await boxOf(SEL.insights);
+      await take.hold(800);
+      await take.click(SEL.insights, 'insights', { dur: 500 });
+      const tClick = take.events.at(-1).t;
+      await take.waitFor((p, words) => {
+        const page = document.querySelector(p);
+        return page?.dataset.status === 'ready' && !words.some((w) => (page.innerText || '').includes(w));
+      }, 'insights ready', 90000, PAGE, busy);
+      let tShow = take.t(Date.now());
+      // The Sender map's caption carries today's date; Activity does not.
+      if ((await browser.execute(() => document.querySelector('[data-testid="insights-tab-activity"]')?.getAttribute('aria-selected'))) !== 'true') {
+        await take.click('[data-testid="insights-tab-activity"]', 'tab-activity', { move: false });
+        tShow = take.events.at(-1).t;
+        await take.waitFor(() => !!document.querySelector('#insights-panel-activity')?.offsetHeight, 'activity panel', 5000);
+      }
+      await take.hold(400);
+      const total = await boxOf('[data-testid="insights-total"]');
+      const tabs = await boxOf('.insights-tabs');
+      const grid = await boxOf('#insights-panel-activity');
+      facts.insights = await browser.execute((p) => {
+        const page = document.querySelector(p);
+        const txt = (sel) => (page?.querySelector(sel)?.innerText || '').replace(/\s+/g, ' ').trim();
+        return { total: txt('[data-testid="insights-total"]'), counts: txt('[data-testid="insights-counts"]'), coverage: txt('[data-testid="insights-coverage"]').slice(0, 300), activity: txt('#insights-panel-activity').slice(0, 300) };
+      }, PAGE);
+      const cropSide = await fitCrop({ x: btn.x, y: btn.y - 200, w: btn.w, h: btn.h + 400 }, { minW: 760 });
+      const crop = await fitCrop(union(total, tabs, grid && { ...grid, h: Math.min(grid.h, 480) }), { minW: 860, pad: 16 });
+      await scan.at(take, 'activity', crop);
+      await take.hold(2600);
+      const end = take.t(Date.now());
+      take.note('insights', { click: tClick, shown: tShow, why: 'Insights reads the whole vault on every open; the busy panel between the click and the drawn page is cut.' });
+      console.log(`[footage] insights ${JSON.stringify(facts.insights)}`);
+      return {
+        crop,
+        segments: [
+          { t0: Math.max(0.2, tClick - 1.0), t1: tClick + 0.03, crop: cropSide, label: 'click' },
+          { t0: tShow + 0.25, t1: end, crop, label: 'activity' },
+        ],
+        boxes: { btn, total, tabs, grid },
+      };
+    }, {
+      prepare: async () => {
+        await archiveAll();
+        await closeSearchPanel();
+      },
+    });
+  });
+
+  // 16. Views: the sidebar's built-in views, each one a different list (boot E,
+  // after the whole INBOX is in the vault, so Attachments lists what it holds).
+  it('views', async function () {
+    const view = (id) => `[data-testid="view-row-builtin-${id}"]`;
+    const rowsShown = () => [...document.querySelectorAll('[data-testid="email-row"]')].some((r) => r.getBoundingClientRect().height > 0);
+    await shoot(this, 'views', async (take, scan) => {
+      const list = await boxOf('.sidebar-views-section');
+      const t = {};
+      await take.hold(700);
+      // From Attachments (opened before the take) to Needs reply and back: the
+      // loop ends where it starts. Starred is empty on this mailbox.
+      for (const id of ['needs-reply', 'attachments']) {
+        await take.click(view(id), `view-${id}`, { dur: 450 });
+        t[id] = take.events.at(-1).t;
+        await take.waitFor(rowsShown, `${id} rows`, 15000);
+        facts[`views_${id}`] = await browser.execute(() => ({
+          title: (document.querySelector('[data-testid="mailbox-title"]')?.textContent || '').trim(),
+          rows: [...document.querySelectorAll('[data-testid="email-row"]')].slice(0, 4).map((r) => (r.innerText || '').replace(/\s+/g, ' ').slice(0, 80)),
+        }));
+        await take.hold(id === 'attachments' ? 2200 : 1500);
+      }
+      const rows = await rowsBox(9);
+      const crop = await fitCrop(union(list, rows), { minW: 760, pad: 12 });
+      await scan.at(take, 'views', crop);
+      const end = take.t(Date.now());
+      return { crop, segments: [{ t0: Math.max(0.2, t['needs-reply'] - 0.9), t1: end }], boxes: { list, rows } };
+    }, {
+      prepare: async () => {
+        await archiveAll();
+        await closeSearchPanel();
+        if (!(await browser.execute((s) => !!document.querySelector(s), view('needs-reply')))) throw new Error('no built-in views in the sidebar');
+        // The view counts read the search index: let it finish first.
+        facts.viewsIndex = await waitForIndex(240000);
+        // A view opens the search panel (a view is a saved search): one view open
+        // before the take, so the panel is already there and only the list changes.
+        await clickSel(view('attachments'));
+        await waitPage(() => [...document.querySelectorAll('[data-testid="email-row"]')].some((r) => r.getBoundingClientRect().height > 0), { timeout: 15000 });
+        await browser.pause(1500);
+        await browser.execute(() => document.activeElement?.blur?.());
+        facts.viewsStart = await browser.execute(() => (document.querySelector('[data-testid="mailbox-title"]')?.textContent || '').trim());
+      },
+    });
+  });
+  // ── Batch 2, boot F (the demo mailbox without history; nothing deleted) ───
+
+  // 17. Privacy mode: one press and names and addresses are masked.
+  it('privacy-mode', async function () {
+    const BTN = '.sidebar-footer [data-testid="privacy-button"]';
+    const pressed = () => browser.execute((s) => document.querySelector(s)?.getAttribute('aria-pressed'), BTN);
+    try {
+      await shoot(this, 'privacy-mode', async (take, scan) => {
+        const btn = await boxOf(BTN);
+        const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+        // The sidebar's lower half with the shield, and the list beside it; clear
+        // of the window's rounded bottom-left corner.
+        const W = 760, H = W / ASPECT;
+        const crop = { x: 24, y: Math.round(Math.min(btn.y + btn.h + 10, vp.h - 4) - H), w: W, h: Math.round(H) };
+        await scan.at(take, 'before', crop);
+        await take.hold(1000);
+        await take.click(BTN, 'privacy-on', { dur: 550 });
+        const tOn = take.events.at(-1).t;
+        await take.waitFor(() => document.querySelectorAll('.mv-private').length > 0, 'masks', 5000);
+        await take.hold(300);
+        facts.privacyMasks = await browser.execute(() => document.querySelectorAll('.mv-private').length);
+        await scan.at(take, 'masked', crop);
+        await take.hold(2700);
+        const end = take.t(Date.now());
+        return { crop, segments: [{ t0: Math.max(0.2, tOn - 1.3), t1: end }], boxes: { btn } };
+      });
+    } finally {
+      if ((await pressed()) === 'true') await browser.execute((s) => document.querySelector(s)?.click(), BTN);
+      await browser.pause(600);
+      facts.privacyAfter = await pressed();
+    }
+  });
+
+  // 18. Light and dark: the sidebar's sun / moon flips the whole window and back.
+  it('layouts', async function () {
+    const TO_LIGHT = `button[aria-label="${L('sidebar.switchLightMode')}"]`;
+    const TO_DARK = `button[aria-label="${L('sidebar.switchDarkMode')}"]`;
+    const themeIs = (m) => document.documentElement.dataset.theme === m;
+    try {
+      await shoot(this, 'layouts', async (take, scan) => {
+        const btn = await boxOf(TO_LIGHT);
+        const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+        const W = 760, H = W / ASPECT;
+        const crop = { x: 24, y: Math.round(Math.min(btn.y + btn.h + 10, vp.h - 4) - H), w: W, h: Math.round(H) };
+        await scan.at(take, 'dark', crop);
+        await take.hold(900);
+        await take.click(TO_LIGHT, 'to-light', { dur: 550 });
+        const tLight = take.events.at(-1).t;
+        await take.waitFor(themeIs, 'light', 5000, 'light');
+        await take.hold(300);
+        await scan.at(take, 'light', crop);
+        await take.hold(1700);
+        await take.click(TO_DARK, 'to-dark', { dur: 450 });
+        await take.waitFor(themeIs, 'dark', 5000, 'dark');
+        await take.hold(1300);
+        const end = take.t(Date.now());
+        return { crop, segments: [{ t0: Math.max(0.2, tLight - 1.0), t1: end }], boxes: { btn } };
+      });
+    } finally {
+      // The next take must start dark (Take.start checks FOOTAGE_THEME).
+      if (await browser.execute(() => document.documentElement.dataset.theme !== 'dark')) {
+        await browser.execute((s) => document.querySelector(s)?.click(), TO_DARK);
+        await browser.pause(800);
+      }
+    }
+  });
+
+  // 19. Quick actions: pick a preset for the reader's toolbar; the toolbar follows.
+  it('quick-actions', async function () {
+    const BAR = '.email-action-bar';
+    const PRESET = '.quick-actions-presets .choice-card-button';
+    const CLOSE = `[data-testid="settings-page"] button[aria-label="${L('common.close')}"]`;
+    const barText = () => (document.querySelector('.email-action-bar')?.innerText || '').replace(/\s+/g, ' ').trim();
+    await shoot(this, 'quick-actions', async (take, scan) => {
+      const presets = await boxOf('.quick-actions-presets');
+      const list = await boxOf('.quick-actions-entry-list');
+      const cropSettings = await fitCrop(union(presets, list && { ...list, h: Math.min(list.h, 300) }), { minW: 760 });
+      await scan.at(take, 'settings', cropSettings);
+      await take.hold(800);
+      await take.click(PRESET, 'preset-outlook', { text: L('quickActions.preset.outlook'), dur: 500 });
+      const tPreset = take.events.at(-1).t;
+      await take.hold(1300);
+      facts.quickActionsEntries = await browser.execute(() => [...document.querySelectorAll('.quick-actions-entry-list .quick-actions-entry-name')].map((e) => (e.textContent || '').trim()));
+      await take.click(CLOSE, 'close-settings', { dur: 450 });
+      const tClose = take.events.at(-1).t;
+      await take.waitFor(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, 'settings closed', 8000);
+      await take.hold(300);
+      facts.quickActionsBarAfter = await browser.execute(barText);
+      const bar = await boxOf(BAR);
+      const head = await boxOf('[data-testid="sender-header"]');
+      const cropBar = await fitCrop(union(bar, head), { minW: 760 });
+      await scan.at(take, 'toolbar', cropBar);
+      await take.hold(2200);
+      const end = take.t(Date.now());
+      console.log(`[footage] quick-actions ${JSON.stringify({ before: facts.quickActionsBarBefore, after: facts.quickActionsBarAfter, entries: facts.quickActionsEntries })}`);
+      if (facts.quickActionsBarAfter === facts.quickActionsBarBefore) throw new Error('the reader toolbar did not change with the preset');
+      return {
+        crop: cropSettings,
+        segments: [
+          { t0: Math.max(0.2, tPreset - 1.0), t1: tClose + 0.03, crop: cropSettings, label: 'preset' },
+          { t0: tClose + 0.35, t1: end, crop: cropBar, label: 'toolbar' },
+        ],
+        boxes: { presets, list, bar },
+      };
+    }, {
+      prepare: async () => {
+        // A message open behind Settings, so closing it shows the reader's toolbar.
+        if (!(await tagRow('Priya Raines', 'qa-row'))) throw new Error('no row from Priya Raines on screen');
+        await clickSel('[data-footage-target="qa-row"]');
+        await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, BAR);
+        await browser.pause(600);
+        facts.quickActionsBarBefore = await browser.execute(barText);
+        await settingsSetupTab(L('settings.appearance.appearance'), L('quickActions.title'));
+        await waitPage(() => !!document.querySelector('.quick-actions-settings')?.offsetHeight, { timeout: 8000 });
+        await markExact('.quick-actions-settings', '[role="tab"]', L('quickActions.surface.reader'), 'qa-surface');
+        await clickSel('[data-footage-target="qa-surface"]');
+        await browser.pause(700);
+        await browser.execute(() => document.activeElement?.blur?.());
+      },
+      allow: (o) => o.testid === 'settings-page' || (o.box[2] >= 900 && o.box[3] >= 500),
+    });
+    // Back to the app's own preset for the reader, off camera.
+    try {
+      await settingsSetupTab(L('settings.appearance.appearance'), L('quickActions.title'));
+      await markExact('.quick-actions-settings', '[role="tab"]', L('quickActions.surface.reader'), 'qa-surface');
+      await clickSel('[data-footage-target="qa-surface"]');
+      await browser.pause(500);
+      await clickSel(PRESET, L('quickActions.preset.mailvault'));
+      await browser.pause(500);
+    } catch (e) { facts.quickActionsResetError = e.message; }
+  });
+
+  // 20. Manual backup: Back up all accounts, progress, done.
+  it('manual-backup', async function () {
+    const ALL_BTN = '[data-testid="backup-all-button"]';
+    const PROGRESS = '[data-testid="backup-all-progress"]';
+    await shoot(this, 'manual-backup', async (take, scan) => {
+      const btn = await boxOf(ALL_BTN);
+      const page = await boxOf('[data-testid="settings-content"][data-page="backup"]');
+      await take.hold(800);
+      await take.click(ALL_BTN, 'back-up-all', { dur: 500 });
+      const tClick = take.events.at(-1).t;
+      await take.waitFor((s) => !!document.querySelector(s)?.offsetHeight, 'progress', 15000, PROGRESS);
+      const tProgress = take.t(Date.now());
+      const prog = await boxOf(PROGRESS);
+      const steps = [];
+      const t0 = Date.now();
+      while (Date.now() - t0 < 600000) {
+        const st = await browser.execute((p, b) => ({
+          progress: (document.querySelector(p)?.innerText || '').replace(/\s+/g, ' ').slice(0, 160),
+          disabled: !!document.querySelector(b)?.disabled,
+        }), PROGRESS, ALL_BTN);
+        const tt = Number(take.t(Date.now()).toFixed(3));
+        if (!steps.length || steps.at(-1).progress !== st.progress || steps.at(-1).disabled !== st.disabled) steps.push({ t: tt, ...st });
+        if (!st.progress && !st.disabled) break;
+        await browser.pause(120);
+      }
+      facts.manualBackupSteps = steps;
+      const tDone = steps.at(-1).t;
+      if (steps.at(-1).progress || steps.at(-1).disabled) throw new Error(`backup never finished: ${JSON.stringify(steps.at(-1))}`);
+      await take.hold(500);
+      facts.manualBackupAfter = await browser.execute((s) => (document.querySelector(s)?.innerText || '').replace(/\s+/g, ' ').slice(0, 600), '[data-testid="settings-content"][data-page="backup"]');
+      const crop = await fitCrop(union(btn, prog), { minW: 760 });
+      await scan.at(take, 'done', crop);
+      await take.hold(1800);
+      const end = take.t(Date.now());
+      console.log(`[footage] manual-backup ${JSON.stringify({ steps: steps.slice(0, 12), n: steps.length, after: facts.manualBackupAfter.slice(0, 300) })}`);
+      // A long run keeps its first 2 s and its last second (the wait between is cut).
+      const long = tDone - tProgress > 4;
+      return {
+        crop,
+        segments: long
+          ? [{ t0: Math.max(0.2, tClick - 0.9), t1: tProgress + 1.6, label: 'start' }, { t0: tDone - 1.0, t1: end, label: 'done' }]
+          : [{ t0: Math.max(0.2, tClick - 0.9), t1: end }],
+        boxes: { btn, prog, page },
+      };
+    }, {
+      prepare: async () => {
+        facts.manualBackupLocation = await seedBackupDrive();
+        await browser.execute(() => window.__SETTINGS_STORE__.getState().setBackupGlobalEnabled?.(false));
+        await settingsSetup(L('settings.tab.backup'), L('settings.backup.backupSchedule'));
+        await waitPage((s) => !!document.querySelector(s), { timeout: 10000 }, ALL_BTN);
+        await browser.execute((s) => document.querySelector(s)?.scrollIntoView({ block: 'center' }), ALL_BTN);
+        await browser.pause(900);
+      },
+    });
+  });
+
+  // 21. Custom fields: a message gets a stage, a tick and an owner in its field strip.
+  it('custom-fields', async function () {
+    const STAGE = 'web-stage', DONE = 'web-followup', OWNER = 'web-owner';
+    const input = (id) => `[data-testid="field-input-${id}"]`;
+    await shoot(this, 'custom-fields', async (take, scan) => {
+      await take.hold(700);
+      await take.click('[data-footage-target="cf-row"]', 'open-row', { dur: 500 });
+      const tOpen = take.events.at(-1).t;
+      await take.waitFor((s) => !!document.querySelector(s)?.offsetHeight, 'field strip', 12000, input(STAGE));
+      await take.hold(700);
+      const strip = await browser.execute((s) => {
+        const el = document.querySelector(s)?.closest('[class*="field-strip"], [data-testid="field-strip"]') || document.querySelector(s)?.parentElement?.parentElement;
+        const r = el?.getBoundingClientRect();
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      }, input(STAGE));
+      const head = await boxOf('[data-testid="sender-header"]');
+      const crop = await fitCrop(union(head, strip), { minW: 760 });
+      // A choice of the Stage field: its label, a real press.
+      if (!(await markExact(input(STAGE), 'label', 'Approved', 'cf-stage'))) throw new Error('no Approved choice');
+      await take.click('[data-footage-target="cf-stage"]', 'stage-approved', { dur: 450 });
+      await take.hold(600);
+      await take.click(input(DONE), 'follow-up', { dur: 450 });
+      await take.hold(500);
+      await take.click(input(OWNER), 'owner', { dur: 450 });
+      await take.type(input(OWNER), 'Rowan', 'owner', { base: 95, jitter: 25, seed: 4 });
+      await browser.execute((s) => document.querySelector(s)?.blur(), input(OWNER));
+      await take.hold(300);
+      facts.customFieldsAfter = await browser.execute((s) => (document.querySelector(s)?.closest('div')?.parentElement?.innerText || '').replace(/\s+/g, ' ').slice(0, 300), input(STAGE));
+      await scan.at(take, 'fields', crop);
+      await take.hold(1800);
+      const end = take.t(Date.now());
+      console.log(`[footage] custom-fields ${JSON.stringify({ after: facts.customFieldsAfter, seed: facts.customFieldsSeed })}`);
+      return { crop, segments: [{ t0: Math.max(0.2, tOpen + 0.15), t1: end }], boxes: { head, strip } };
+    }, {
+      prepare: async () => {
+        // STAGED (disclose): three fields made through the daemon (the same
+        // `fields.save` Settings > Mail preferences > Fields sends), then that
+        // page opened once so the app loads them.
+        const accountId = await browser.execute(() => window.__MAIL_STORE__?.getState?.().activeAccountId);
+        facts.customFieldsSeed = [
+          await rpc('fields.save', { field: { id: STAGE, scope: accountId, name: 'Stage', kind: 'multi_select', position: 0,
+            options: [{ id: 'review', label: 'Review', color: '#d97706' }, { id: 'approved', label: 'Approved', color: '#16a34a' }, { id: 'paid', label: 'Paid', color: '#2563eb' }] } }),
+          await rpc('fields.save', { field: { id: DONE, scope: accountId, name: 'Follow up', kind: 'checkbox', position: 1, options: [] } }),
+          await rpc('fields.save', { field: { id: OWNER, scope: accountId, name: 'Owner', kind: 'text', position: 2, options: [] } }),
+        ];
+        await settingsSetupTab(L('settings.navigation.mailPreferences'), L('fields.section'));
+        await waitPage((s) => !!document.querySelector(s), { timeout: 8000 }, `[data-testid="field-row-${STAGE}"]`);
+        await browser.pause(500);
+        await resetView();
+        if (!(await tagRow('Priya Raines', 'cf-row'))) throw new Error('no row from Priya Raines on screen');
+        await browser.pause(500);
+      },
+    });
+  });
+
+  // ── Batch 2, boot G (Apple Intelligence through the FM helper) ────────────
+
+  // 22. AI writing: a rough paragraph, Shorten, the on-device rewrite.
+  it('ai-writing', async function () {
+    const ROUGH = 'Hi Theo, just checking in to see if there is any chance at all that the box sleeves could be ready by Thursday, '
+      + 'since the client prints on Friday and we would really like to have them in hand before then. Thanks so much!';
+    const AI = '[data-testid="compose-modal"] [data-testid="ai-compose-actions"] button';
+    const CONFIRM = '[data-testid="ai-preview-confirm"]';
+    const editorText = (s) => (document.querySelector(s)?.innerText || '').trim();
+    await shoot(this, 'ai-writing', async (take, scan) => {
+      const compose = await boxOf(SEL.compose);
+      await take.hold(700);
+      await take.click(AI, 'shorten', { text: L('ai.actions.shorten'), dur: 500 });
+      const tShorten = take.events.at(-1).t;
+      await take.waitFor((c) => !!document.querySelector(c)?.offsetHeight, 'review dialog', 10000, CONFIRM);
+      await take.hold(300);
+      facts.aiDialog = await browser.execute(() => {
+        const pre = document.querySelector('[data-testid="ai-preview-text"]');
+        const box = pre?.closest('[role="dialog"], .mail-dialog') || pre?.parentElement?.parentElement;
+        return box ? (box.innerText || '').replace(/\s+/g, ' ') : null;
+      });
+      const dialog = await browser.execute((c) => {
+        const box = document.querySelector(c)?.closest('[role="dialog"], .mail-dialog');
+        const r = box?.getBoundingClientRect();
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      }, CONFIRM);
+      await take.hold(1100);
+      await take.click(CONFIRM, 'review-send', { dur: 450 });
+      const g0 = Date.now();
+      await take.waitFor((c, s, before) => !document.querySelector(c) && (document.querySelector(s)?.innerText || '').trim() !== before,
+        'rewrite in the editor', 120000, CONFIRM, SEL.editor, facts.aiTyped);
+      facts.aiGenerateSeconds = Number(since(g0));
+      const tDone = take.t(Date.now());
+      facts.aiResult = await browser.execute(editorText, SEL.editor);
+      const editor = await boxOf(SEL.editor);
+      const crop = await fitCrop(union(editor, dialog), { minW: 760 });
+      await scan.at(take, 'result', crop);
+      await take.hold(2200);
+      const end = take.t(Date.now());
+      console.log(`[footage] ai-writing ${facts.aiGenerateSeconds} s: ${JSON.stringify({ dialog: facts.aiDialog, result: facts.aiResult })}`);
+      const tSend = take.events.at(-1).t;
+      // A model slower than 1.5 s: the wait is cut.
+      const slow = tDone - tSend > 1.5;
+      return {
+        crop,
+        segments: slow
+          ? [{ t0: Math.max(0.2, tShorten - 0.9), t1: tSend + 0.6, label: 'ask' }, { t0: tDone - 0.2, t1: end, label: 'result' }]
+          : [{ t0: Math.max(0.2, tShorten - 0.9), t1: end }],
+        boxes: { compose, dialog, editor },
+      };
+    }, {
+      prepare: async () => {
+        await aiOn();
+        const mode = await browser.execute(() => window.__SETTINGS_STORE__?.getState?.().composeOpenMode);
+        if (mode !== 'app') await setSetting('composeOpenMode', 'app');
+        await clickSel('.mail-sidebar .sidebar-compose button');
+        await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, SEL.editor);
+        await browser.pause(600);
+        const prep = new Take('ai-writing-prep');
+        await prep.type('[data-testid="compose-subject"]', 'Box sleeves', 'prep', { base: 30, jitter: 5 });
+        await prep.typeRich(SEL.editor, ROUGH, 'prep', { base: 12, jitter: 4, caret: 'start' });
+        facts.aiTyped = await browser.execute(editorText, SEL.editor);
+        await browser.execute(() => document.activeElement?.blur?.());
+        await waitPage((a, t) => [...document.querySelectorAll(a)].some((b) => b.offsetHeight > 0 && !b.disabled && (b.innerText || '').includes(t)),
+          { timeout: 30000 }, AI, L('ai.actions.shorten'));
+        await browser.pause(800);
+      },
+      allow: (o) => o.testid === 'compose-modal' || (o.box[2] >= 400 && o.box[3] >= 300),
+    });
+  });
+
+  // 23. Tagging rules: a rule in plain words; new mail arrives and is tagged.
+  it('tagging-rules', async function () {
+    const CARD = '[data-testid="settings-auto-tags"]';
+    const NAME = `${CARD} input[aria-label="${L('autoTag.name')}"]`;
+    const NEWTAG = `${CARD} input[aria-label="${L('autoTag.newTagPlaceholder')}"]`;
+    const INSTR = `${CARD} textarea[aria-label="${L('autoTag.instruction')}"]`;
+    const SUMMARY = `${CARD} details.settings-editor-details > summary`;
+    const TOGGLE = '[data-testid="auto-tag-allow-remote"]';
+    const CONFIRM = '[data-testid="ai-preview-confirm"]';
+    const SAVE = `${CARD} .settings-editor-actions.justify-end button`;
+    const SUBJECT = 'Invoice 2026-0471 for the October print run';
+    const work = (browser.demoAccounts || [])[0];
+    const deliver = async () => {
+      const client = new ImapFlow({ host: '127.0.0.1', port: work.imapPort, secure: false, auth: { user: work.email, pass: work.password }, logger: false });
+      await client.connect();
+      try {
+        const now = new Date();
+        const raw = Buffer.from([
+          'From: Skewer Print <billing@skewer.systems>', `To: ${work.name || 'Rowan Marsh'} <${work.email}>`, `Subject: ${SUBJECT}`,
+          `Date: ${now.toUTCString().replace('GMT', '+0000')}`, `Message-ID: <web-tag-${now.getTime()}@skewer.systems>`, 'MIME-Version: 1.0',
+          'Content-Type: text/plain; charset=utf-8', '', 'Hi Rowan,', '', 'Attached is the invoice for the October print run: 2,400 box sleeves.',
+          'Payment is due in 14 days.', '', 'Skewer Print', '',
+        ].join('\r\n'));
+        return await client.append('INBOX', raw, [], now);
+      } finally { await client.logout(); }
+    };
+    await shoot(this, 'tagging-rules', async (take, scan) => {
+      const rows = await rowsBox(6);
+      const crop = await fitCrop(rows, { minW: 760, pad: 8 });
+      await take.hold(1200);
+      const t0 = Date.now();
+      take.note('delivered', Number(take.t(t0).toFixed(3)));
+      facts.tagAppend = await deliver();
+      await take.waitFor((s) => [...document.querySelectorAll('[data-testid="email-row"]')].some((r) => (r.innerText || '').includes(s)), 'new row', 15000, SUBJECT);
+      const tRow = take.t(Date.now());
+      facts.tagRowMs = Date.now() - t0;
+      // The tag chip on that row (TagChips), as the worker decides.
+      const chipped = await waitPage((s, n) => {
+        const row = [...document.querySelectorAll('[data-testid="email-row"]')].find((r) => (r.innerText || '').includes(s));
+        return !!row && (row.innerText || '').includes(n);
+      }, { timeout: 30000, interval: 150 }, SUBJECT, 'Invoices');
+      facts.tagChipMs = Date.now() - t0;
+      facts.tagRow = await browser.execute((s) => ([...document.querySelectorAll('[data-testid="email-row"]')].find((r) => (r.innerText || '').includes(s))?.innerText || '').replace(/\s+/g, ' '), SUBJECT);
+      console.log(`[footage] tagging-rules ${JSON.stringify({ chipped, rowMs: facts.tagRowMs, chipMs: facts.tagChipMs, row: facts.tagRow })}`);
+      if (!chipped) throw new Error(`the arriving invoice never showed its tag (row after ${facts.tagRowMs} ms: ${facts.tagRow})`);
+      const tChip = take.t(Date.now());
+      await scan.at(take, 'tagged', crop);
+      await take.hold(2400);
+      const end = take.t(Date.now());
+      return { crop, segments: tChip - tRow > 2.5
+        ? [{ t0: Math.max(0.2, tRow - 1.5), t1: tRow + 1.0, label: 'arrives' }, { t0: tChip - 0.5, t1: end, label: 'tagged' }]
+        : [{ t0: Math.max(0.2, tRow - 1.5), t1: end }], boxes: { rows } };
+    }, {
+      prepare: async () => {
+        // STAGED (disclose): the rule is made off camera through Settings >
+        // Auto Tags (name, new tag, the on-device model allowed, the rule in
+        // plain words, Enabled, Save); the take is only the arrival.
+        await aiOn();
+        await settingsSetup(L('autoTag.tabLabel'), null);
+        await waitPage((s) => !!document.querySelector(s), { timeout: 15000 }, CARD);
+        await clickSel(`${CARD} button`, L('autoTag.newRule'));
+        await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 8000 }, NAME);
+        const prep = new Take('tagging-rules-prep');
+        await prep.type(NAME, 'Invoices', 'prep', { base: 30, jitter: 5 });
+        await prep.type(NEWTAG, 'Invoices', 'prep', { base: 30, jitter: 5 });
+        await clickSel(`${CARD} button`, L('autoTag.newTag'));
+        if (!(await waitPage((s) => document.querySelector(s)?.value === '', { timeout: 8000 }, NEWTAG))) throw new Error('tag not created');
+        await clickSel(SUMMARY);
+        await browser.pause(400);
+        await clickSel(TOGGLE);
+        if (await waitPage((c) => !!document.querySelector(c)?.offsetHeight, { timeout: 8000 }, CONFIRM)) await clickSel(CONFIRM);
+        await browser.pause(600);
+        await prep.type(INSTR, 'Invoices and bank statements', 'prep', { base: 30, jitter: 5 });
+        if ((await browser.execute(() => document.querySelector('[data-testid="auto-tag-enabled-editor"]')?.getAttribute('aria-checked'))) !== 'true') {
+          await clickSel('[data-testid="auto-tag-enabled-editor"]');
+        }
+        await browser.pause(400);
+        await clickSel(SAVE, L('common.save'));
+        await waitPage((s) => !document.querySelector(s), { timeout: 8000 }, NAME);
+        facts.tagRules = await rpc('auto_tags.list', {});
+        console.log(`[setup] tagging rule: ${JSON.stringify(facts.tagRules).slice(0, 600)}`);
+        await resetView();
+        // resetView re-opened the INBOX: give the IDLE watcher time to re-arm.
+        await browser.pause(5000);
+      },
+    });
   });
 });
