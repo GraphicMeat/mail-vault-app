@@ -30,6 +30,8 @@ import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, formatWallClock } from '../utils/scheduledTime';
 import { routeSend, MAX_DELAY_MINUTES, FREE_DELAY_MINUTES } from '../utils/sendPlan';
 import { DelayPicker, SendPlanNote } from './scheduled/SendLater';
+import { RemindIfNoReply } from './scheduled/RemindIfNoReply';
+import { isGraphAccount } from '../services/graphConfig';
 import { firstRecipient } from '../utils/mailto';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
@@ -264,6 +266,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }));
   const [tzSuggestion, setTzSuggestion] = useState(null);
+  // "Remind me if no reply", in days (0 = off). Rides the snapshot like the
+  // send plan, so a minimize, an undo or a detach keeps it.
+  const [remindDays, setRemindDays] = useState(() => Number(initialData?._remindDays) || 0);
+  // Premium, and IMAP only: the daemon has no Graph token to look for a
+  // reply with (stores/followUpStore.js).
+  const remindOffered = !isGraphAccount(selectedAccount);
   // Only a set time and a delay past the undo window are gated: Send and a
   // short delay stay free. Subscribed, so a subscription that lapses with the
   // panel open swaps the picker for the locked panel instead of leaving a
@@ -866,7 +874,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       await saveChainRef.current.catch(() => {});
       // A copy: the route's fields must not stick to this window's snapshot
       // if the send fails and the window stays open.
-      const snapshot = { ...latestSnapshotRef.current(), _composeDelay: delay, ...(draft && { _scheduleDraft: draft }) };
+      const snapshot = {
+        ...latestSnapshotRef.current(), _composeDelay: delay, ...(draft && { _scheduleDraft: draft }),
+        // Armed on another account, or before a subscription lapsed: not sent.
+        _remindDays: remindDays > 0 && remindOffered && hasPremiumAccess(billingProfile) ? remindDays : 0,
+      };
       const settings = { displayName: senderNameFor(selectedAccount, snapshot._fromAddress) };
       if (draft) {
         if (onSchedule) await onSchedule(snapshot);
@@ -941,6 +953,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       _sendPlan: sendPlan,
       _composeSize: composeSize,
       _scheduleDraft: scheduleDraft,
+      _remindDays: remindDays,
       // Which scheduled email this window is an edit of (localDrafts.js's
       // scheduledEmlToInitialData). Carried through every snapshot like
       // `_scheduleDraft`, so a minimize, undo or detach still replaces that
@@ -950,7 +963,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         _editScheduledRow: initialData._editScheduledRow,
       }),
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft, isForward]);
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft, remindDays, isForward]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
@@ -970,7 +983,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   );
   const sessionSignature = JSON.stringify([
     formData.to, formData.cc, formData.bcc, formData.subject, formData.body,
-    attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, selectedAccountId, pickedFrom, sendPlan, composeSize, scheduleDraft,
+    attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, selectedAccountId, pickedFrom, sendPlan, composeSize, scheduleDraft, remindDays,
   ]);
 
   // Keep the UI session current independently of the vault draft write. App
@@ -1734,6 +1747,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                   </div>
                 )}
               </div>
+              {remindOffered && (
+                <RemindIfNoReply days={remindDays} onChange={setRemindDays}
+                  isPremium={() => hasPremiumAccess(billingProfile)} onUpgrade={upgrade} disabled={sending} />
+              )}
             </div>
 
             <SendPlanNote plan={sendPlan} draft={scheduleDraft} onClear={() => setSendPlan(null)} />

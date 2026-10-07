@@ -24,8 +24,8 @@ export const useScheduledStore = create((set, get) => ({
     }));
   },
 
-  create: async ({ accountId, account, email, localTime, tz, fireAt, sentMailbox }) => {
-    const row = await daemonCall('scheduled.create', { accountId, account, email, localTime, tz, fireAt, sentMailbox });
+  create: async ({ accountId, account, email, localTime, tz, fireAt, sentMailbox, remindDays }) => {
+    const row = await daemonCall('scheduled.create', { accountId, account, email, localTime, tz, fireAt, sentMailbox, remindDays });
     set(state => ({ rows: [...state.rows.filter(r => r.id !== row.id), row] }));
     return row;
   },
@@ -42,8 +42,8 @@ export const useScheduledStore = create((set, get) => ({
   /// envelope and time (composeSend.js's scheduleCompose). The daemon refuses
   /// with `E_SCHEDULED_NOT_EDITABLE` once the row is being sent, was sent or
   /// was cancelled, and then nothing here changes.
-  replace: async (id, { account, email, sentMailbox, localTime, tz, fireAt }) => {
-    const row = await daemonCall('scheduled.update', { id, account, email, sentMailbox, localTime, tz, fireAt });
+  replace: async (id, { account, email, sentMailbox, localTime, tz, fireAt, remindDays }) => {
+    const row = await daemonCall('scheduled.update', { id, account, email, sentMailbox, localTime, tz, fireAt, remindDays });
     set(state => ({ rows: state.rows.map(r => (r.id === id ? row : r)) }));
     return row;
   },

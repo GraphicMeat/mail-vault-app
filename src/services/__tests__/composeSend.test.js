@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   invoke, sendEmail, buildOutgoingMime, appendLocalIndex, deleteLocalDraft, markAnswered, markForwarded, createSchedule, ensureFreshToken,
-  replaceSchedule, cancelSchedule, billing, listeners,
+  replaceSchedule, cancelSchedule, billing, listeners, daemonCall,
 } = vi.hoisted(() => ({
+  daemonCall: vi.fn().mockResolvedValue({}),
   // Every `listen` subscription: its event name, handler, and unlisten spy.
   listeners: [],
   billing: { premium: true },
@@ -33,6 +34,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   }),
 }));
 vi.mock('../transport', () => ({ send: (...args) => invoke(...args) }));
+vi.mock('../daemonClient', () => ({ daemonCall: (...args) => daemonCall(...args) }));
 vi.mock('../api', () => ({
   sendEmail: (...args) => sendEmail(...args),
   buildOutgoingMime: (...args) => buildOutgoingMime(...args),
@@ -103,6 +105,8 @@ beforeEach(() => {
   ensureFreshToken.mockReset();
   ensureFreshToken.mockImplementation(async item => item);
   billing.premium = true;
+  daemonCall.mockReset();
+  daemonCall.mockResolvedValue({});
   const state = mailStore.useMailStore.getState();
   state.sentEmails = [];
   state.emails = [];
@@ -340,6 +344,64 @@ describe('a reply sent from an account that is not the active one', () => {
     await handler({ payload: { accountId: 'yoda@example.test', mailbox: 'Sent', ok: true, messageIdHeader: 'one@example.test' } });
 
     expect(state.loadSentHeaders).toHaveBeenCalledWith('acct-b');
+  });
+});
+
+// "Remind me if no reply": the reminder is recorded once the send is out,
+// under the Message-ID the message was built with (the SMTP reply's id is the
+// server's queue id, which no reply names). Premium, IMAP only, and never a
+// reason for a send that went out to fail.
+describe('a send with a follow-up reminder', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const created = () => daemonCall.mock.calls.filter(([method]) => method === 'follow_up.create').map(([, params]) => params);
+
+  it('records the reminder once the message is out', async () => {
+    sendEmail.mockResolvedValueOnce({ messageId: 'queued-as-1234' });
+    const before = Date.now();
+    await createComposeSend({ snapshot: { ...snapshot, _remindDays: 3 }, mode: 'new', account, settings: {} })();
+
+    expect(created()).toHaveLength(1);
+    const [params] = created();
+    expect(params).toMatchObject({
+      accountId: 'acct-1', messageId: '<one@example.test>', subject: 'A subject',
+      recipients: 'recipient@example.test', sentMailbox: 'Sent',
+    });
+    expect(params.sentAt).toBeGreaterThanOrEqual(before);
+    expect(params.remindAt - params.sentAt).toBe(3 * DAY);
+  });
+
+  it('records nothing when the send fails', async () => {
+    sendEmail.mockRejectedValueOnce(new Error('offline'));
+    await expect(createComposeSend({ snapshot: { ...snapshot, _remindDays: 3 }, mode: 'new', account, settings: {} })()).rejects.toThrow('offline');
+    expect(created()).toEqual([]);
+  });
+
+  it('records nothing without the reminder, without Premium, or on a Graph account', async () => {
+    sendEmail.mockResolvedValue({});
+    await createComposeSend({ snapshot, mode: 'new', account, settings: {} })();
+    await createComposeSend({ snapshot: { ...snapshot, _remindDays: 0 }, mode: 'new', account, settings: {} })();
+    await createComposeSend({ snapshot: { ...snapshot, _remindDays: 3 }, mode: 'new', account: { ...account, oauth2Transport: 'graph' }, settings: {} })();
+    billing.premium = false;
+    await createComposeSend({ snapshot: { ...snapshot, _remindDays: 3 }, mode: 'new', account, settings: {} })();
+    expect(created()).toEqual([]);
+  });
+
+  it('a reminder that cannot be recorded never fails a send that went out', async () => {
+    sendEmail.mockResolvedValueOnce({});
+    daemonCall.mockRejectedValueOnce(new Error('daemon down'));
+    await expect(createComposeSend({ snapshot: { ...snapshot, _remindDays: 1 }, mode: 'new', account, settings: {} })()).resolves.toBeUndefined();
+    expect(created()).toHaveLength(1);
+  });
+
+  it('a scheduled send carries the reminder to the daemon, which records it when it goes out', async () => {
+    const scheduled = { ...snapshot, _remindDays: 7, _scheduleDraft: { localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius' } };
+    await scheduleCompose({ snapshot: scheduled, account, settings: {} });
+    expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({ remindDays: 7 }));
+    await scheduleCompose({ snapshot: { ...scheduled, _remindDays: 3, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1' } }, account, settings: {} });
+    expect(replaceSchedule).toHaveBeenCalledWith('row-1', expect.objectContaining({ remindDays: 3 }));
+    await scheduleCompose({ snapshot: { ...scheduled, _remindDays: 3, _editScheduledId: 'row-2', _editScheduledRow: { accountId: 'acct-1' } }, account: { ...account, oauth2Transport: 'graph' }, settings: {} });
+    expect(replaceSchedule).toHaveBeenLastCalledWith('row-2', expect.objectContaining({ remindDays: 0 }));
+    expect(created()).toEqual([]);
   });
 });
 

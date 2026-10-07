@@ -280,6 +280,8 @@ export function scheduledEmlToInitialData({ row, eml }) {
     _accountId: row.accountId,
     _fromAddress: envelope.from || eml.from?.address || '',
     _scheduleDraft: { localTime: row.localTime, tz: row.tz },
+    // The follow-up reminder the schedule carries (handlers/scheduled.rs).
+    _remindDays: Number(envelope.remindDays) || 0,
     _editScheduledId: row.id,
     // What the row held when it was opened: the account it is bound to (the
     // daemon cannot move a row to another account's vault) and the time the

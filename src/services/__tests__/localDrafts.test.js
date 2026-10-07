@@ -406,6 +406,14 @@ describe('scheduledEmlToInitialData', () => {
     expect(data._fromAddress).toBe('alias@example.com');
   });
 
+  /// The follow-up reminder rides in the stored envelope: an edit opens
+  /// armed with it, and saving keeps it unless the user turns it off.
+  it('opens armed with the reminder the schedule carries', () => {
+    const withReminder = { ...row, envelope: JSON.stringify({ ...JSON.parse(row.envelope), remindDays: 3 }) };
+    expect(scheduledEmlToInitialData({ row: withReminder, eml })._remindDays).toBe(3);
+    expect(scheduledEmlToInitialData({ row, eml })._remindDays).toBe(0);
+  });
+
   /// Opening it is not an edit: the window must not read as dirty (and write
   /// a Drafts copy, and ask to discard) until something actually changes.
   it('opens pristine: the baseline is exactly what it opens with', () => {

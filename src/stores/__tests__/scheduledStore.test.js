@@ -52,7 +52,7 @@ describe('scheduledStore', () => {
     mockDaemonCall.mockResolvedValueOnce(ROW);
     const params = {
       accountId: 'a1', account: { email: 'a1' }, email: { to: 'x@example.com' },
-      localTime: ROW.localTime, tz: ROW.tz, fireAt: ROW.fireAt, sentMailbox: null,
+      localTime: ROW.localTime, tz: ROW.tz, fireAt: ROW.fireAt, sentMailbox: null, remindDays: 3,
     };
     const row = await useScheduledStore.getState().create(params);
     expect(mockDaemonCall).toHaveBeenCalledWith('scheduled.create', params);
@@ -79,7 +79,7 @@ describe('scheduledStore', () => {
     useScheduledStore.setState({ rows: [ROW] });
     const fields = {
       account: { email: 'a1' }, email: { to: 'y@example.com' }, sentMailbox: 'Sent',
-      localTime: '2026-11-01T09:00', tz: 'Europe/Vilnius', fireAt: 123,
+      localTime: '2026-11-01T09:00', tz: 'Europe/Vilnius', fireAt: 123, remindDays: 7,
     };
     await useScheduledStore.getState().replace('r1', fields);
     expect(mockDaemonCall).toHaveBeenCalledWith('scheduled.update', { id: 'r1', ...fields });

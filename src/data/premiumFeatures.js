@@ -1,6 +1,6 @@
 import {
   CalendarClock, ShieldCheck, Sparkles, Clock, EyeOff,
-  Trash2, ArrowLeftRight, Server, Image, Timer, AlarmClock, Monitor, FileSearch, Gauge, HardDrive, Usb, Paperclip,
+  Trash2, ArrowLeftRight, Server, Image, Timer, AlarmClock, Monitor, FileSearch, Gauge, HardDrive, Usb, Paperclip, Bell,
 } from 'lucide-react';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 
@@ -28,6 +28,7 @@ export const PREMIUM_FEATURES = Object.freeze([
   { id: 'export-image',     icon: Image,          titleKey: 'premium.exportImage.title',     blurbKey: 'premium.exportImage.blurb',     shot: 'premium-export-image',     tab: null },
   { id: 'focus-session',    icon: Timer,          titleKey: 'premium.focusSession.title',    blurbKey: 'premium.focusSession.blurb',    shot: 'premium-focus-session',    tab: null },
   { id: 'scheduled-send',   icon: AlarmClock,     titleKey: 'premium.scheduledSend.title',   blurbKey: 'premium.scheduledSend.blurb',   shot: 'premium-scheduled-send',   tab: null },
+  { id: 'follow-up-reminder', icon: Bell,       titleKey: 'premium.followUpReminder.title', blurbKey: 'premium.followUpReminder.blurb', shot: null,                    tab: null },
   { id: 'attachment-reminder', icon: Paperclip,   titleKey: 'premium.attachmentReminder.title', blurbKey: 'premium.attachmentReminder.blurb', shot: null,                    tab: 'mail-preferences' },
   { id: 'devices',          icon: Monitor,        titleKey: 'premium.devices.title',         blurbKey: 'premium.devices.blurb',         shot: null,                       tab: null },
   { id: 'attachment-search', icon: FileSearch,    titleKey: 'premium.attachmentSearch.title', blurbKey: 'premium.attachmentSearch.blurb', shot: null,                       tab: 'storage' },

@@ -15,6 +15,8 @@ import { withAttachmentBytes } from './attachmentUtils';
 import { parseReferenceList, splitRecipients } from '../utils/emailParser';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { zonedTimeToEpoch } from '../utils/scheduledTime';
+import { daemonCall } from './daemonClient';
+import { isGraphAccount } from './graphConfig';
 import { t } from '../i18n/index.js';
 
 const isTauri = () => window.__TAURI__?.core?.invoke;
@@ -114,6 +116,33 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
       attachments: emailAttachments.length ? emailAttachments : undefined,
     },
   };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/// The follow-up reminder this send asked for, in days, or 0: Premium, and
+/// never on a Graph account, whose replies the daemon cannot look for.
+function remindDaysFor(snapshot, account) {
+  const days = Number(snapshot._remindDays) || 0;
+  if (days <= 0 || isGraphAccount(account)) return 0;
+  return hasPremiumAccess(useSettingsStore.getState().billingProfile) ? days : 0;
+}
+
+/// Record "remind me if no reply" for a message that went out. Keyed on the
+/// Message-ID it was built with: that is what a reply names, never the SMTP
+/// reply's queue id. A retried send records nothing twice (the daemon keys
+/// rows on the id), and a failure here is logged, never the send's.
+async function recordFollowUp({ snapshot, account, messageId, sentMailbox, days }) {
+  if (!days || !messageId) return;
+  const sentAt = Date.now();
+  try {
+    await daemonCall('follow_up.create', {
+      accountId: account.id, messageId, subject: snapshot.subject || '', recipients: snapshot.to || '',
+      sentMailbox: sentMailbox || '', sentAt, remindAt: sentAt + days * DAY_MS,
+    });
+  } catch (err) {
+    console.warn('[composeSend] follow-up reminder not recorded:', err);
+  }
 }
 
 const parseAddresses = raw => splitRecipients(raw || '').map(address => ({ address, name: '' }));
@@ -279,6 +308,10 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
         await useScheduledStore.getState().cancel(snapshot._editScheduledId)
           .catch(err => console.warn('[composeSend] could not cancel the edited scheduled send:', err));
       }
+      await recordFollowUp({
+        snapshot, account: freshAccount, messageId: builtMime?.messageId, sentMailbox,
+        days: remindDaysFor(snapshot, freshAccount),
+      });
       const original = snapshot._replyTo || replyTo;
       if (mode === 'reply' || mode === 'replyAll') markAnswered(original).catch(err => console.warn('[composeSend] \\Answered not set:', err));
       else if (mode === 'forward') markForwarded(original).catch(err => console.warn('[composeSend] $Forwarded not set:', err));
@@ -354,6 +387,8 @@ export async function scheduleCompose({ snapshot, account, settings = {} }) {
     tz: schedule.tz,
     fireAt: zonedTimeToEpoch(schedule.localTime, schedule.tz),
     sentMailbox,
+    // The daemon records the reminder once the frozen message goes out.
+    remindDays: remindDaysFor(snapshot, freshAccount),
   };
   const store = useScheduledStore.getState();
   const editId = snapshot._editScheduledId;
