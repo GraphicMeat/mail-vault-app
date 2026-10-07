@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 8;
+pub const SCHEMA_VERSION: i64 = 9;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -291,6 +291,32 @@ CREATE TABLE net_events (
 CREATE INDEX net_events_at ON net_events(at_ms);
 ";
 
+/// Follow-up reminders (`app_db::follow_up`): one row per sent message the
+/// user asked to be reminded about if nobody answers. Keyed on the Message-ID
+/// as sent, which is all a reply names; a send retried inserts nothing twice.
+const SCHEMA_V9: &str = "
+CREATE TABLE follow_ups (
+  id           TEXT PRIMARY KEY,
+  account_id   TEXT NOT NULL,
+  message_id   TEXT NOT NULL,
+  subject      TEXT NOT NULL DEFAULT '',
+  recipients   TEXT NOT NULL DEFAULT '',
+  sent_at      INTEGER NOT NULL,
+  remind_at    INTEGER NOT NULL,
+  created_at   INTEGER NOT NULL,
+  state        TEXT NOT NULL,
+  sent_mailbox TEXT NOT NULL DEFAULT '',
+  sent_uid     INTEGER,
+  seen         INTEGER NOT NULL DEFAULT 0,
+  announced    INTEGER NOT NULL DEFAULT 0,
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  retry_at     INTEGER NOT NULL DEFAULT 0,
+  last_error   TEXT NOT NULL DEFAULT '',
+  UNIQUE (account_id, message_id)
+);
+CREATE INDEX follow_ups_due ON follow_ups(state, remind_at);
+";
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -452,6 +478,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
         if version < 8 {
             conn.execute_batch(&format!(
                 "{SCHEMA_V8} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '8');"
+            ))
+            .map_err(sql)?;
+        }
+        if version < 9 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V9} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '9');"
             ))
             .map_err(sql)?;
         }
@@ -774,13 +806,52 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("8"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM deleted_messages", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v7 row must survive the v8 migration");
         let found: i64 = conn
             .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='net_events'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(found, 1, "net_events is missing after the migration");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// v9 adds follow-up reminders on top of a v8 store without losing what
+    /// v8 held, and a second open changes nothing.
+    #[test]
+    fn a_v8_store_gains_follow_ups_and_keeps_its_rows() {
+        let dir = scratch("v8");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 {SCHEMA_V2}
+                 {SCHEMA_V3}
+                 {SCHEMA_V4}
+                 {SCHEMA_V5}
+                 {SCHEMA_V6}
+                 {SCHEMA_V7}
+                 {SCHEMA_V8}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '8');
+                 INSERT INTO net_events(at_ms, direction, process, protocol, host, port, purpose, bytes_up, bytes_down, duration_ms, result)
+                   VALUES (1, 'out', 'daemon', 'imap', 'h', 993, 'sync', 0, 0, 0, 'ok');"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("9"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM net_events", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1, "the v8 row must survive the v9 migration");
+        conn.execute(
+            "INSERT INTO follow_ups(id, account_id, message_id, sent_at, remind_at, created_at, state) VALUES ('f1', 'a', '<m@x>', 1, 2, 3, 'waiting')",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let again = open(&dir).unwrap();
+        let rows: i64 = again.query_row("SELECT COUNT(*) FROM follow_ups", [], |r| r.get(0)).unwrap();
+        assert_eq!(rows, 1, "reopening a v9 store must not rerun the step");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

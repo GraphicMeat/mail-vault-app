@@ -2807,6 +2807,23 @@ pub fn message_id_search_term(message_id: &str) -> String {
         .replace('"', "\\\"")
 }
 
+/// The `UID SEARCH` criteria for "a reply to `message_id` from someone else":
+/// any message whose In-Reply-To or References names it, not sent from
+/// `own_address`. The user's own follow-up in the same thread is no answer.
+/// `None` for an empty Message-ID, which would match every header.
+pub fn reply_search_criteria(message_id: &str, own_address: &str) -> Option<String> {
+    let term = message_id_search_term(message_id);
+    if term.is_empty() {
+        return None;
+    }
+    let mut criteria = format!("OR HEADER In-Reply-To \"{term}\" HEADER References \"{term}\"");
+    let own = own_address.trim().replace('\\', "\\\\").replace('"', "\\\"");
+    if !own.is_empty() {
+        criteria.push_str(&format!(" NOT FROM \"{own}\""));
+    }
+    Some(criteria)
+}
+
 /// SELECT + UID SEARCH one folder for a Message-ID.
 ///
 /// `Ok(None)` is a tagged NO: the folder refused, the read buffer is intact,
@@ -3973,6 +3990,40 @@ mod is_missing_mailbox_tests {
         assert!(!is_missing_mailbox(
             "TLS handshake with imap.gmail.com failed: connection closed via error"
         ));
+    }
+}
+
+#[cfg(test)]
+mod reply_search_criteria_tests {
+    use super::*;
+
+    #[test]
+    fn a_reply_is_named_by_in_reply_to_or_references_and_not_from_the_sender() {
+        assert_eq!(
+            reply_search_criteria("<abc@mail.x>", "me@x.com").as_deref(),
+            Some(r#"OR HEADER In-Reply-To "abc@mail.x" HEADER References "abc@mail.x" NOT FROM "me@x.com""#)
+        );
+    }
+
+    #[test]
+    fn quotes_in_either_value_are_escaped() {
+        assert_eq!(
+            reply_search_criteria("<a\"b@x>", "o\"dd@x.com").as_deref(),
+            Some(r#"OR HEADER In-Reply-To "a\"b@x" HEADER References "a\"b@x" NOT FROM "o\"dd@x.com""#)
+        );
+    }
+
+    #[test]
+    fn an_empty_message_id_has_no_criteria() {
+        assert_eq!(reply_search_criteria(" <> ", "me@x.com"), None);
+    }
+
+    #[test]
+    fn no_own_address_drops_only_the_not_from() {
+        assert_eq!(
+            reply_search_criteria("<m@x>", "").as_deref(),
+            Some(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x""#)
+        );
     }
 }
 

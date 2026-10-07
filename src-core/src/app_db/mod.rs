@@ -15,6 +15,7 @@ pub mod db;
 pub mod deleted;
 pub mod identity;
 pub mod fields;
+pub mod follow_up;
 pub mod import;
 pub mod locations;
 pub mod ops;
