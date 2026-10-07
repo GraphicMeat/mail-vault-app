@@ -20,7 +20,9 @@ const mockDaemonCall = vi.fn().mockResolvedValue({});
 vi.mock('../../services/daemonClient', () => ({ daemonCall: (...a) => mockDaemonCall(...a) }));
 
 const selectEmail = vi.fn().mockResolvedValue(undefined);
+const ACCOUNTS = [{ id: 'acct-1', email: 'me@one.co' }, { id: 'acct-2', email: 'me@two.co' }];
 const mail = create(() => ({
+  accounts: ACCOUNTS,
   activeAccountId: 'acct-1', activeMailbox: 'INBOX', unifiedFolder: null, mailboxScope: null,
   selectedEmailId: null, selectEmail: (...a) => selectEmail(...a),
 }));
@@ -44,7 +46,7 @@ const DUE = {
 beforeEach(() => {
   mockDaemonCall.mockClear();
   selectEmail.mockClear();
-  mail.setState({ activeAccountId: 'acct-1', activeMailbox: 'INBOX', unifiedFolder: null, mailboxScope: null, selectedEmailId: null });
+  mail.setState({ accounts: ACCOUNTS, activeAccountId: 'acct-1', activeMailbox: 'INBOX', unifiedFolder: null, mailboxScope: null, selectedEmailId: null });
   useFollowUpStore.setState({ rows: [DUE, { ...DUE, id: 'w', state: 'waiting', sentUid: null }] });
 });
 afterEach(cleanup);
@@ -92,5 +94,58 @@ describe('pinned follow-up reminders', () => {
     useFollowUpStore.setState({ rows: [DUE, { ...DUE, id: 'f2', accountId: 'acct-2', sentUid: 5 }] });
     render(<FollowUpPinnedRows />);
     expect(screen.getAllByTestId('follow-up-pinned-row')).toHaveLength(2);
+  });
+});
+
+describe('pinned rows from the keyboard', () => {
+  it('Enter or Space on the row opens the Sent message', () => {
+    for (const key of ['Enter', ' ']) {
+      selectEmail.mockClear();
+      render(<FollowUpPinnedRows />);
+      fireEvent.keyDown(screen.getByTestId('follow-up-pinned-row'), { key });
+      expect(selectEmail).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
+  });
+
+  // The x is a button inside the row: its own Enter or Space is its click
+  // (the browser's), and must not reach the row and open the message.
+  it('Enter or Space on the x does not open the message', () => {
+    render(<FollowUpPinnedRows />);
+    for (const key of ['Enter', ' ']) {
+      const event = fireEvent.keyDown(screen.getByTestId('follow-up-dismiss'), { key });
+      expect(event).toBe(true);
+    }
+    expect(selectEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('a pinned row reads like the rows under it', () => {
+  it('has two lines: who it went to and when it came back, then the subject', () => {
+    render(<FollowUpPinnedRows />);
+    const row = screen.getByTestId('follow-up-pinned-row');
+    const to = screen.getByTestId('follow-up-pinned-to');
+    const when = screen.getByTestId('follow-up-pinned-time');
+    const subject = screen.getByTestId('follow-up-pinned-subject');
+    expect(to.textContent).toContain('ana@x.co');
+    expect(subject.textContent).toBe('Quote?');
+    // Line one holds the recipient and the time; the subject is a line of its own.
+    expect(to.parentElement).toBe(when.parentElement);
+    expect(subject.parentElement).not.toBe(to.parentElement);
+    expect(row.contains(screen.getByTestId('follow-up-dismiss'))).toBe(true);
+    expect(subject.className).toContain('font-semibold');
+    fireEvent.click(row);
+    expect(screen.getByTestId('follow-up-pinned-subject').className).not.toContain('font-semibold');
+  });
+});
+
+describe('a reminder of an account that is gone', () => {
+  it('is not pinned, in its inbox or in All inboxes', () => {
+    mail.setState({ accounts: [ACCOUNTS[1]] });
+    const { rerender } = render(<FollowUpPinnedRows />);
+    expect(screen.queryByTestId('follow-up-pinned-row')).toBeNull();
+    mail.setState({ activeMailbox: 'UNIFIED', unifiedFolder: 'INBOX' });
+    rerender(<FollowUpPinnedRows />);
+    expect(screen.queryByTestId('follow-up-pinned-row')).toBeNull();
   });
 });
