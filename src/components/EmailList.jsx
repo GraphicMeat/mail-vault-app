@@ -1288,13 +1288,13 @@ function EmailListComponent({ stacked = false }) {
         <button type="button" data-testid="unread-filter-toggle" onClick={toggleUnreadOnly}
           className={`mail-toolbar-button ${unreadOnly ? 'is-active' : ''}`}
           title={unreadOnly ? t('list.showAllMessages') : t('list.showUnreadOnly')} aria-pressed={unreadOnly}>
-          <Mail size={14} /><span>{t('workspace.unread')}</span>
+          <Mail size={14} /><span className="mail-toolbar-label">{t('workspace.unread')}</span>
         </button>
         {!isExplorer && <button type="button" onClick={() => setEmailListGrouping(emailListGrouping === 'chronological' ? 'sender' : 'chronological')}
           className={`mail-toolbar-button ${emailListGrouping === 'sender' ? 'is-active' : ''}`}
           aria-pressed={emailListGrouping === 'sender'}
           title={emailListGrouping === 'sender' ? t('list.switchChronologicalView') : t('list.groupSender')}>
-          <Users size={14} /><span>{t('workspace.senders')}</span>
+          <Users size={14} /><span className="mail-toolbar-label">{t('workspace.senders')}</span>
         </button>}
         {!isExplorer && emailListGrouping !== 'sender' && (
           <select value={threadMode} onChange={e => setThreadMode(e.target.value)}
@@ -1306,20 +1306,25 @@ function EmailListComponent({ stacked = false }) {
         {!isExplorer && emailListGrouping === 'chronological' && <button type="button"
           data-testid="timeline-toggle" className={`mail-toolbar-button ${timelineVisible ? 'is-active' : ''}`}
           aria-pressed={timelineVisible} title={t('list.timelineToggle')}
-          onClick={toggleTimelineVisible}><Clock3 size={14} /><span>{t('list.timeline')}</span></button>}
+          onClick={toggleTimelineVisible}><Clock3 size={14} /><span className="mail-toolbar-label">{t('list.timeline')}</span></button>}
         {/* The switch is pinned to the right edge and always last: the controls
             before it come and go with the mode, and it must not move under the
             pointer when they do. */}
         <div className="mail-list-view-switch" role="group" aria-label={t('explorer.view')}>
           {/* Inside a view both buttons switch that view only; Reset takes it
-              back to how it was saved. */}
-          {viewConfig?.overridden && <button type="button" data-testid="view-reset-layout" className="mail-toolbar-button"
-            title={t('views.resetLayoutHint')} onClick={() => clearViewOverride(activeView.id)}>
-            <RotateCcw size={14} /><span>{t('views.resetLayout')}</span></button>}
+              back to how it was saved. It is there from the start, icon-only
+              and disabled until the view differs, so a click on Timeline or
+              List never adds a control and never reflows the toolbar. */}
+          {viewConfig && <button type="button" data-testid="view-reset-layout" className="mail-toolbar-button"
+            disabled={!viewConfig.overridden} aria-label={t('views.resetLayout')} title={t('views.resetLayoutHint')}
+            onClick={() => clearViewOverride(activeView.id)}>
+            <RotateCcw size={14} /></button>}
           <button type="button" data-testid="mail-view-list" className="mail-toolbar-button" aria-pressed={!isExplorer}
-            onClick={() => setListView('list')}><List size={14} /><span>{t('explorer.list')}</span></button>
+            title={t('explorer.list')} onClick={() => setListView('list')}>
+            <List size={14} /><span className="mail-toolbar-label">{t('explorer.list')}</span></button>
           <button type="button" data-testid="mail-view-explorer" className="mail-toolbar-button" aria-pressed={isExplorer}
-            onClick={() => { setListView('explorer'); setShowSearch(false); }}><Network size={14} /><span>{t('explorer.name')}</span></button>
+            title={t('explorer.name')} onClick={() => { setListView('explorer'); setShowSearch(false); }}>
+            <Network size={14} /><span className="mail-toolbar-label">{t('explorer.name')}</span></button>
         </div>
       </div>
 

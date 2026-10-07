@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
 - **The focus scene stays put when you click Unlock early.** The diorama no longer jumps up behind the confirm question.
+- **The list toolbar stays on one row.** Turning Timeline on in a saved view added a labelled Reset view button, which pushed List and Explorer onto a second row, so the toolbar grew under your pointer. Reset view is now an icon that sits beside List and Explorer from the start and lights up once the view differs from how it was saved. In a narrow list the Unread, Senders, Timeline, List and Explorer labels give way to icons (their names stay as tooltips and for screen readers), so the row holds from a 350px list up; below that the threads selector takes a row of its own.
 
 ## [2.19.0] - 2026-10-07
 

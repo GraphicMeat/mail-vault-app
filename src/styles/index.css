@@ -1100,9 +1100,10 @@ input[type="range"]::-moz-range-thumb:hover {
 .mail-list-custody-status { display: flex; align-items: center; gap: 8px; min-height: 16px; min-width: 0; margin-top: 8px; }
 .mail-list-date-range { display: none; }
 .mail-list-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-block: 1px solid var(--mail-border); background: var(--mail-surface); }
-.mail-toolbar-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 5px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--mail-text-muted); transition: background-color 150ms, color 150ms; }
+.mail-toolbar-button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 5px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--mail-text-muted); transition: background-color 150ms, color 150ms; }
 .mail-toolbar-button svg { flex-shrink: 0; }
-.mail-toolbar-button:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
+.mail-toolbar-button:hover:not(:disabled) { background: var(--mail-surface-hover); color: var(--mail-text); }
+.mail-toolbar-button:disabled { opacity: .4; cursor: default; }
 .mail-toolbar-button.is-active { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
 .mail-thread-select { flex: 1; min-width: 80px; max-width: 160px; padding: 5px 4px; min-height: 30px; border: 0; border-radius: 6px; background: var(--mail-surface); color: var(--mail-text-muted); font-size: 12px; cursor: pointer; }
 .mail-thread-select:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
@@ -1114,11 +1115,23 @@ input[type="range"]::-moz-range-thumb:hover {
 .reader-key { min-width: 22px; padding: 2px 5px; border: 1px solid var(--mail-border); border-radius: 4px; background: var(--mail-surface); font: inherit; }
 [role="button"]:focus-visible, [role="separator"]:focus-visible, select:focus-visible { outline: 2px solid var(--mail-accent); outline-offset: 2px; }
 @container mail-list (min-width: 480px) { .mail-list-date-range { display: inline; } }
+/* One row at every width: the labelled controls need ~600px, so below that
+   the words go (the buttons keep their names and tooltips) rather than a
+   second row appearing. */
+@container mail-list (max-width: 640px) {
+  .mail-toolbar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .mail-toolbar-button { min-width: 30px; }
+}
+/* Icon-only, the row needs ~342px and the pane can be dragged to 300px: the
+   select takes a row of its own for that whole range instead of the switch
+   wrapping a few pixels at a time. */
+@container mail-list (max-width: 350px) {
+  .mail-thread-select { order: 1; max-width: none; width: 100%; margin: 0 4px; }
+}
 @container mail-list (max-width: 300px) {
   .mail-list-header { padding-inline: 12px; }
   .mail-list-toolbar { gap: 2px; padding-inline: 6px; }
   .mail-toolbar-button { gap: 4px; padding-inline: 6px; }
-  .mail-thread-select { order: 1; max-width: none; width: 100%; margin: 0 4px; }
   .mail-state-legend { column-gap: 12px; padding-inline: 12px; }
 }
 

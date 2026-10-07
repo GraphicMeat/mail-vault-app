@@ -1957,34 +1957,96 @@ describe('a saved view drives the grouping', () => {
     expect(container.querySelector('[data-testid="mail-view-list"]').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('Reset takes the view back to how it was saved, and only shows once something changed', async () => {
+  it('Reset takes the view back to how it was saved, and is only enabled once something changed', async () => {
     const { container } = await mount({ def: { group: 'sender' } });
     const { useSettingsStore } = await import('../../stores/settingsStore');
-    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    const reset = () => container.querySelector('[data-testid="view-reset-layout"]');
+    expect(reset().disabled).toBe(true);
     fireEvent.click(container.querySelector('[data-testid="mail-view-list"]'));
     await settle();
-    fireEvent.click(container.querySelector('[data-testid="view-reset-layout"]'));
+    expect(reset().disabled).toBe(false);
+    fireEvent.click(reset());
     await settle();
     expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('sender');
-    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    expect(reset().disabled).toBe(true);
     expect(useSettingsStore.getState().viewOverrides.v1).toBeUndefined();
+  });
+
+  // Reset used to appear, labelled, the moment a click made the view differ
+  // from its saved layout. That label is ~100px in a right-pinned group, so
+  // clicking Timeline pushed List and Explorer onto a second line and the
+  // toolbar grew a row under the pointer. The button is part of the switch
+  // from the start, icon-only, and a click only changes whether it is enabled.
+  describe('the toolbar a click cannot reshape', () => {
+    const reset = container => container.querySelector('[data-testid="view-reset-layout"]');
+    const shape = container => [...container.querySelector('[role="toolbar"]').querySelectorAll('button, select')]
+      .map(node => [node.tagName, node.dataset.testid || '', node.textContent].join('|'));
+
+    it('has Reset in the view switch from the start, icon-only, named for assistive tech', async () => {
+      const { container } = await mount({ def: {} });
+      expect(reset(container).parentElement).toBe(container.querySelector('.mail-list-view-switch'));
+      expect(reset(container).disabled).toBe(true);
+      expect(reset(container).getAttribute('aria-label')).toBe('Reset view');
+      expect(reset(container).textContent).toBe('');
+    });
+
+    it('lists the same controls before and after Timeline is toggled in a view', async () => {
+      const { container } = await mount({ def: {} });
+      const before = shape(container);
+      fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
+      await settle();
+      expect(shape(container)).toEqual(before);
+      expect(reset(container).disabled).toBe(false);
+    });
+
+    it('lists the same controls before and after the mode is switched in a view', async () => {
+      const { container } = await mount({ def: {} });
+      fireEvent.click(container.querySelector('[data-testid="mail-view-explorer"]'));
+      await settle();
+      const inExplorer = shape(container);
+      expect(inExplorer).toContain('BUTTON|view-reset-layout|');
+      fireEvent.click(container.querySelector('[data-testid="mail-view-list"]'));
+      await settle();
+      expect(shape(container)).toContain('BUTTON|view-reset-layout|');
+    });
+
+    it('offers no Reset when no view is open', async () => {
+      const { container } = await mount();
+      expect(reset(container)).toBeNull();
+    });
+
+    // Below a pane width the labels are hidden so the toolbar stays one row.
+    // Each label is a span of its own so CSS can hide it without removing it
+    // from the accessibility tree, and every button that can lose its label
+    // names itself on hover.
+    it('puts every toolbar label in its own span and gives each icon-only button a tooltip', async () => {
+      const { container } = await mount({ def: {} });
+      const toolbar = container.querySelector('[role="toolbar"]');
+      const labelled = [...toolbar.querySelectorAll('button')].filter(button => button.querySelector('.mail-toolbar-label'));
+      expect(labelled.map(button => button.querySelector('.mail-toolbar-label').textContent))
+        .toEqual(['Unread', 'Senders', 'Timeline', 'List', 'Explorer']);
+      for (const button of labelled) {
+        expect(button.getAttribute('title'), button.textContent).toBeTruthy();
+      }
+    });
   });
 
   // Switching away and back again leaves the view exactly as it was saved:
   // Reset view has nothing to reset.
-  it('hides Reset view when the layout is back to how the view was saved', async () => {
+  it('disables Reset view when the layout is back to how the view was saved', async () => {
     const { container } = await mount({ def: {} });
+    const reset = () => container.querySelector('[data-testid="view-reset-layout"]');
     fireEvent.click(container.querySelector('[data-testid="mail-view-explorer"]'));
     await settle();
-    expect(container.querySelector('[data-testid="view-reset-layout"]')).not.toBeNull();
+    expect(reset().disabled).toBe(false);
     fireEvent.click(container.querySelector('[data-testid="mail-view-list"]'));
     await settle();
-    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    expect(reset().disabled).toBe(true);
     fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
     await settle();
     fireEvent.click(container.querySelector('[data-testid="timeline-toggle"]'));
     await settle();
-    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    expect(reset().disabled).toBe(true);
   });
 
   it('browsing a view by something else is kept for the view, not the global explorer grouping', async () => {
@@ -2017,7 +2079,7 @@ describe('a saved view drives the grouping', () => {
     act(() => { useViewStore.setState({ views: [{ id: 'v1', name: 'Saved', def: { group: 'date' } }] }); });
     await settle();
     expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('date');
-    expect(container.querySelector('[data-testid="view-reset-layout"]')).toBeNull();
+    expect(container.querySelector('[data-testid="view-reset-layout"]').disabled).toBe(true);
   });
 
   // The switch sat mid-toolbar in list mode and jumped to the right edge in

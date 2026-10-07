@@ -27,7 +27,7 @@
 .explorer-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 16px; border-top: 1px solid var(--mail-border); background: var(--mail-surface); color: var(--mail-text-muted); font-size: 12px; }
 .explorer-empty { padding: 28px 16px; color: var(--mail-text-muted); font-size: 14px; text-align: center; }
 .mail-list-view-switch { display: flex; margin-left: auto; border: 1px solid var(--mail-border); border-radius: 6px; padding: 2px; gap: 2px; }
-.mail-list-view-switch .mail-toolbar-button { min-height: 26px; }
+.mail-list-view-switch .mail-toolbar-button { min-height: 28px; }
 .mail-list-view-switch [aria-pressed="true"] { color: var(--mail-accent-text); background: var(--mail-accent-tint); }
 @container (max-width: 400px) {
   .explorer-controls, .explorer-search, .explorer-summary, .explorer-group-row, .explorer-footer { padding-inline: 10px; }
