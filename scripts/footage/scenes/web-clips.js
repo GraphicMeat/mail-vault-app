@@ -2393,8 +2393,8 @@ describe('footage: website feature clips', function () {
         const r = (list?.parentElement || list)?.getBoundingClientRect();
         return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
       }, PAGE);
-      const W = 680, H = W / ASPECT;
-      const crop = { x: Math.round(block.x + block.w / 2 - W / 2), y: Math.round(block.y - 14), w: W, h: Math.round(H) };
+      // The crop of the published take (H1); a tighter one tried later lost the left third.
+      const crop = await fitCrop({ ...block, h: block.h + 190 }, { minW: 700, pad: 16 });
       await scan.at(take, 'before', crop);
       await take.hold(800);
       if (!(await browser.execute((p) => {
