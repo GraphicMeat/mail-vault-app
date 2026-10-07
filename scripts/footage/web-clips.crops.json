@@ -8,7 +8,7 @@
   "unified-inbox": {"crop": [4, 180, 795, 547]},
   "sender-verification": {"crop": [762, 36, 760, 522.5]},
   "chat-view": {"crop": [410, 36, 980, 673.75], "segmentCrops": {"ana": [262, 40, 760, 522.5], "rowan": [800, 250, 732, 503.25]}},
-  "search-local": {"segmentCrops": {"typing": [262, 118, 700, 481.25], "results": [262, 323.5, 700, 481.25]}, "poster": 2.1},
+  "search-local": {"segmentCrops": {"typing": [262, 118, 700, 481.25]}, "poster": 2.1},
   "insights": {"segmentCrops": {"activity": [270, 339, 900, 618.75]}},
   "views": {"crop": [4, 36, 800, 550]},
   "privacy-mode": {"crop": [4, 394, 760, 522.5]},

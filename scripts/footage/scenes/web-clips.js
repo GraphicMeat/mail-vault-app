@@ -1437,9 +1437,10 @@ describe('footage: website feature clips', function () {
       const rows = await rowsBox(9);
       if (!rows) throw new Error('no result rows');
       const floor = Math.max(0, ...timing.map((b) => b.y + b.h), panel ? panel.y + panel.h : 0) + 4;
-      const top = Math.max(rows.y, floor);
-      const cropResults = await fitCrop({ x: rows.x, y: top, w: rows.w, h: rows.y + rows.h - top }, { minW: 760, pad: 0 });
-      if (cropResults.y < floor) cropResults.y = Math.ceil(floor);
+      // The list column only (no reader beside it), its top at the floor: the
+      // floor is measured here, so a locale whose lines wrap moves it down.
+      const RW = 700;
+      const cropResults = { x: Math.round(Math.max(4, rows.x - 4)), y: Math.ceil(floor), w: RW, h: Math.round(RW / ASPECT * 4) / 4 };
       const hits = timing.filter((b) => b.y + b.h > cropResults.y && b.y < cropResults.y + cropResults.h && b.x + b.w > cropResults.x && b.x < cropResults.x + cropResults.w);
       if (hits.length) throw new Error(`results crop would show the search time: ${JSON.stringify({ cropResults, hits })}`);
       facts.searchLocalTiming = { timing, floor, cropResults };
@@ -1906,6 +1907,7 @@ describe('footage: website feature clips', function () {
     const CONFIRM = '[data-testid="ai-preview-confirm"]';
     const SAVE = `${CARD} .settings-editor-actions.justify-end button`;
     const SUBJECT = 'Invoice 2026-0471 for the October print run';
+    const RULE_WORDS = 'Bank statements and invoices I need to pay or file';
     const work = (browser.demoAccounts || [])[0];
     const deliver = async () => {
       const client = new ImapFlow({ host: '127.0.0.1', port: work.imapPort, secure: false, auth: { user: work.email, pass: work.password }, logger: false });
@@ -1950,7 +1952,18 @@ describe('footage: website feature clips', function () {
         facts.tagDaemonTags = await rpc('tags.for_messages', { items: [item] });
       }
       facts.tagRules2 = await rpc('auto_tags.list', {});
-      console.log(`[footage] tagging-rules ${JSON.stringify({ chipped, rowMs: facts.tagRowMs, chipMs: facts.tagChipMs, row: facts.tagRow, daemon: facts.tagDaemon, daemonTags: facts.tagDaemonTags })}`);
+      // Off camera: the same rule's verdict on that invoice through Preview.
+      const rule = (facts.tagRules2.ok || [])[0];
+      if (rule && facts.tagDaemon) {
+        // A preview asks the model once per recent message: give the call time (as ph-ai.js).
+        await browser.setTimeout({ script: 900000 });
+        const pv = await rpc('auto_tags.preview', { accountId: facts.tagDaemon.accountId, provider: { type: 'appleFm' },
+          rule: { name: rule.name, instruction: rule.instruction, constraints: {}, tagId: 'probe', inboxAction: 'keep', minConfidence: rule.minConfidence, allowRemote: true, enabled: false } });
+        facts.tagPreview = pv.error ? { error: pv.error } : (pv.ok?.candidates || []).filter((c) => (c.subject || '').includes('2026-0471'))
+          .map((c) => ({ subject: c.subject, matched: c.matched, confidence: c.confidence, refused: c.refused }));
+        facts.tagPreviewCount = pv.ok?.candidates?.length ?? null;
+      }
+      console.log(`[footage] tagging-rules ${JSON.stringify({ chipped, rowMs: facts.tagRowMs, chipMs: facts.tagChipMs, row: facts.tagRow, daemon: facts.tagDaemon, daemonTags: facts.tagDaemonTags, preview: facts.tagPreview, previewCount: facts.tagPreviewCount })}`);
       if (!chipped) throw new Error(`the arriving invoice never showed its tag (row after ${facts.tagRowMs} ms: ${facts.tagRow})`);
       const tChip = take.t(Date.now());
       await scan.at(take, 'tagged', crop);
@@ -1979,7 +1992,8 @@ describe('footage: website feature clips', function () {
         await clickSel(TOGGLE);
         if (await waitPage((c) => !!document.querySelector(c)?.offsetHeight, { timeout: 8000 }, CONFIRM)) await clickSel(CONFIRM);
         await browser.pause(600);
-        await prep.type(INSTR, 'Invoices and bank statements', 'prep', { base: 30, jitter: 5 });
+        // The wording the PH preflight scored best for this model (ph-ai.js c05).
+        await prep.type(INSTR, RULE_WORDS, 'prep', { base: 30, jitter: 5 });
         if ((await browser.execute(() => document.querySelector('[data-testid="auto-tag-enabled-editor"]')?.getAttribute('aria-checked'))) !== 'true') {
           await clickSel('[data-testid="auto-tag-enabled-editor"]');
         }
