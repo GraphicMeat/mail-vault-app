@@ -70,6 +70,7 @@
   "ai.actions.tone.friendly": "友好",
   "ai.actions.useInReply": "用于回复",
   "ai.googleMailOnDeviceOnly": "Gmail 邮件只会由设备端 AI 处理。请在设置中选择 Apple Intelligence、已下载的模型或本地 Ollama。",
+  "ai.noOnDeviceModel": "没有可用的设备端 AI。请打开 Apple Intelligence,或在设置中下载模型,或为此规则允许远程 AI 服务。",
   "ai.preview.destination": "发送至: {{destination}}",
   "ai.preview.destinationDevice": "此设备",
   "ai.preview.leavesDevice": "此文本将离开您的设备。",

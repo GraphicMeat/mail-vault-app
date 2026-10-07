@@ -70,6 +70,7 @@
   "ai.actions.tone.friendly": "フレンドリー",
   "ai.actions.useInReply": "返信に使用",
   "ai.googleMailOnDeviceOnly": "Gmailのメッセージは端末内のAIでのみ処理されます。設定でApple Intelligence、ダウンロード済みのモデル、またはローカルのOllamaを選択してください。",
+  "ai.noOnDeviceModel": "利用できる端末内のAIがありません。Apple Intelligenceをオンにするか、設定でモデルをダウンロードするか、このルールでリモートのAIプロバイダを許可してください。",
   "ai.preview.destination": "送信先: {{destination}}",
   "ai.preview.destinationDevice": "この端末",
   "ai.preview.leavesDevice": "このテキストは端末の外部に送信されます。",

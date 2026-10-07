@@ -49,6 +49,11 @@ pub fn parse_chat_response(body: &Value) -> Result<String, String> {
 /// provider. The app maps it to the `ai.googleMailOnDeviceOnly` catalog key.
 pub const GOOGLE_MAIL_ON_DEVICE_ONLY: &str = "E_GOOGLE_MAIL_ON_DEVICE_ONLY";
 
+/// Stable error code the daemon answers when a job wants an on-device model
+/// and none is available (no Apple Intelligence, no downloaded GGUF). The app
+/// maps it to the `ai.noOnDeviceModel` catalog key.
+pub const NO_ON_DEVICE_MODEL: &str = "E_NO_ON_DEVICE_MODEL";
+
 /// Whether an OpenAI-compatible endpoint URL points at this computer: the host
 /// is `localhost`, an address in `127.0.0.0/8`, or `::1`. Parsed, not
 /// pattern-matched, so `http://localhost.evil.com` and
@@ -173,6 +178,16 @@ pub fn endpoint_status(url: Option<&str>) -> ProviderStatus {
 /// `helper_found` is whether the sidecar binary exists on disk at all;
 /// `availability` is what it answered to an `{"op":"availability"}` request,
 /// when it was asked (`None` when it wasn't reachable or timed out).
+/// The on-device provider to use when the user has not picked one for a job
+/// (an Auto Tag rule without "Allow a remote AI provider"): Apple's model when
+/// it is available, else the downloaded GGUF, else none. Same order as the
+/// app's `availableOnDeviceProvider`.
+pub fn on_device_provider(statuses: &[ProviderStatus]) -> Option<&'static str> {
+    ["appleFm", "localGguf"]
+        .into_iter()
+        .find(|name| statuses.iter().any(|s| s.provider == *name && s.available))
+}
+
 pub fn apple_fm_status(helper_found: bool, availability: Option<&FmResponse>) -> ProviderStatus {
     if !helper_found {
         return ProviderStatus { provider: "appleFm".to_string(), available: false, reason: "helper not found".to_string() };
@@ -348,5 +363,19 @@ mod tests {
         assert!(!is_google_account(&json!({"imapHost": "imap.gmail.com.evil.com"})));
         assert!(!is_google_account(&json!({})));
         assert!(!is_google_account(&json!(null)));
+    }
+
+    fn status(provider: &str, available: bool) -> ProviderStatus {
+        ProviderStatus { provider: provider.to_string(), available, reason: String::new() }
+    }
+
+    #[test]
+    fn the_on_device_default_prefers_apple_intelligence_then_the_downloaded_model() {
+        let all = |apple, gguf, endpoint| vec![status("localGguf", gguf), status("endpoint", endpoint), status("appleFm", apple)];
+        assert_eq!(on_device_provider(&all(true, false, false)), Some("appleFm"), "a Mac with Apple Intelligence and no GGUF");
+        assert_eq!(on_device_provider(&all(true, true, false)), Some("appleFm"));
+        assert_eq!(on_device_provider(&all(false, true, false)), Some("localGguf"));
+        assert_eq!(on_device_provider(&all(false, false, true)), None, "an endpoint is never the on-device default");
+        assert_eq!(on_device_provider(&all(false, false, false)), None);
     }
 }

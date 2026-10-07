@@ -177,6 +177,7 @@ describe('aiErrorText', () => {
   const t = key => `<${key}>`;
   it('maps the daemon refusal code to its catalog key, and leaves other errors alone', () => {
     expect(aiErrorText(new Error('E_GOOGLE_MAIL_ON_DEVICE_ONLY: Gmail messages are only processed by on-device AI.'), t)).toBe('<ai.googleMailOnDeviceOnly>');
+    expect(aiErrorText(new Error('E_NO_ON_DEVICE_MODEL: no on-device AI is available'), t)).toBe('<ai.noOnDeviceModel>');
     expect(aiErrorText(new Error('boom'), t)).toBe('boom');
     expect(aiErrorText(new Error('boom'), t, 'fallback')).toBe('fallback');
   });

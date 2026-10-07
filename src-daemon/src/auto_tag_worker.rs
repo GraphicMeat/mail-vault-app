@@ -15,7 +15,7 @@
 //! function `.preview`/`.backfill` use — so the `allow_remote` privacy gate
 //! lives in exactly one place no matter which of the three calls it.
 
-use crate::handlers::auto_tags::{evaluate, load_candidates, now_secs, provider_from_rule};
+use crate::handlers::auto_tags::{emit_assigned, evaluate, load_candidates, now_secs, on_device, provider_from_rule};
 use crate::handlers::common::blocking;
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, auto_tags, tags::Target};
@@ -157,7 +157,20 @@ async fn process_rule_account(state: &Arc<DaemonState>, rule: &auto_tags::Rule, 
         return;
     }
 
-    let provider = provider_from_rule(rule);
+    // A rule without a remote provider runs on whatever on-device model this
+    // computer has: Apple Intelligence counts, not only a downloaded GGUF.
+    // None at all is not a verdict either, so nothing is recorded and the
+    // mail is judged once a model exists.
+    let provider = match provider_from_rule(rule) {
+        Some(p) => p,
+        None => match on_device(state).await {
+            Ok(p) => p,
+            Err(e) => {
+                info!("[auto-tag] rule {} skipped {} message(s): {e}", rule.id, undecided.len());
+                return;
+            }
+        },
+    };
     // A Google account's mail never goes to a cloud endpoint. Skip the whole
     // batch with one line, not one per message; nothing is recorded as decided,
     // so switching the rule to an on-device provider picks the mail up again.
@@ -199,8 +212,12 @@ async fn process_rule_account(state: &Arc<DaemonState>, rule: &auto_tags::Rule, 
             })
         })
         .await;
-        if let Err(e) = write.unwrap_or_else(|e| Err(e.to_string())) {
-            warn!("[auto-tag] could not record a decision for rule {}: {e}", rule.id);
+        match write.unwrap_or_else(|e| Err(e.to_string())) {
+            Err(e) => warn!("[auto-tag] could not record a decision for rule {}: {e}", rule.id),
+            // Per message, as it lands: the chip on a row already on screen
+            // follows its arrival by the one verdict, not the whole sweep.
+            Ok(()) if matched => emit_assigned(state, &rule.tag_id, &[&c.msg_ref]),
+            Ok(()) => {}
         }
     }
 }
@@ -270,6 +287,78 @@ mod tests {
 
     async fn tag_named(s: &Arc<DaemonState>, name: &str) -> String {
         tags_rpc(s, "tags.ensure", json!({"name": name, "color": ""})).await["id"].as_str().unwrap().to_string()
+    }
+
+    /// A loopback `/chat/completions` answering every request with `reply`.
+    /// Loopback counts as on-device, so no account setup is needed.
+    fn loopback_mock(reply: &str) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        let reply = reply.to_string();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut buf = [0u8; 8192];
+                let _ = stream.read(&mut buf);
+                let body = json!({"choices": [{"message": {"content": reply}}]}).to_string();
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        url
+    }
+
+    fn assigned_events(events: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<serde_json::Value> {
+        let mut sent = Vec::new();
+        while let Ok(line) = events.try_recv() {
+            if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                if name == crate::handlers::auto_tags::TAGS_ASSIGNED {
+                    sent.push(payload);
+                }
+            }
+        }
+        sent
+    }
+
+    /// The row is on screen when the mail lands and the app has already
+    /// cached its empty tag list; only this event puts the chip on it.
+    #[tokio::test]
+    async fn a_sweep_that_assigns_a_tag_tells_the_app_which_row_carries_it() {
+        let s = st();
+        seed_header(&s, "a", "INBOX", 7, "Your receipt", "billing@shop.example");
+        let tag = tag_named(&s, "Receipts").await;
+        let provider = json!({"type": "endpoint", "url": loopback_mock("MATCH: yes\nCONFIDENCE: 0.9"), "model": "m"});
+        let rule = create_rule(&s, &tag, true, provider).await;
+        backdate(&s, &rule.id).await;
+        let mut events = s.events.subscribe();
+
+        sweep(&s).await;
+
+        assert_eq!(tag_count(&s).await, 1);
+        assert_eq!(
+            assigned_events(&mut events),
+            vec![json!({"tagId": tag, "items": [{"accountId": "a", "mailbox": "INBOX", "uid": 7}]})]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_sweep_that_assigns_nothing_sends_no_event() {
+        let s = st();
+        seed_header(&s, "a", "INBOX", 7, "Lunch?", "friend@example.com");
+        let tag = tag_named(&s, "Receipts").await;
+        let provider = json!({"type": "endpoint", "url": loopback_mock("MATCH: no\nCONFIDENCE: 0.9"), "model": "m"});
+        let rule = create_rule(&s, &tag, true, provider).await;
+        backdate(&s, &rule.id).await;
+        let mut events = s.events.subscribe();
+
+        sweep(&s).await;
+
+        assert_eq!(tag_count(&s).await, 0);
+        assert!(assigned_events(&mut events).is_empty());
     }
 
     #[tokio::test]
@@ -387,9 +476,8 @@ mod tests {
         sweep(&s).await;
         sweep(&s).await;
 
-        // `LocalGguf` with no model downloaded fails instantly and
-        // deterministically (see `llm.rs`'s own tests) — the state a fresh
-        // install is in. Nothing may be assigned, and nothing may be written
+        // No model downloaded and no Apple helper in a test build: no
+        // on-device provider at all, the state a fresh install is in. Nothing may be assigned, and nothing may be written
         // down: a message judged "no" because there was no model to ask would
         // never be reconsidered once one is installed.
         assert_eq!(tag_count(&s).await, 0, "no model means no assignment");

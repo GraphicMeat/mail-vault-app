@@ -70,6 +70,7 @@
   "ai.actions.tone.friendly": "Friendly",
   "ai.actions.useInReply": "Use in reply",
   "ai.googleMailOnDeviceOnly": "Gmail messages are only processed by on-device AI. Choose Apple Intelligence, the downloaded model, or a local Ollama in Settings.",
+  "ai.noOnDeviceModel": "No on-device AI is available. Turn on Apple Intelligence or download a model in Settings, or allow a remote AI provider for this rule.",
   "ai.preview.destination": "Sent to: {{destination}}",
   "ai.preview.destinationDevice": "This device",
   "ai.preview.leavesDevice": "This text will leave your device.",

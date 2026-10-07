@@ -7,6 +7,10 @@
 - **Get reminded when nobody replies (Premium).** When you write an email, the bell next to Templates offers to remind you in 1 day, 3 days or a week. If nobody has answered by then, the email you sent is pinned above your inbox, unread, with one notification. Click it to read it again, or its x to dismiss the reminder; nothing in your mailbox is moved. Replies are looked for in the mail MailVault already holds in any folder but Sent and Drafts, and on the server in your inbox, archive and Trash; mail from your own addresses and aliases does not count, and neither do automatic out-of-office replies. Not offered for Outlook.com accounts signed in with Microsoft.
 - **MailVault has a Discord server.** Join it, or follow MailVault on X, from the icons at the bottom of the sidebar or from Report a bug, for questions and chat with other users.
 
+### Fixed
+- **An Auto Tag appears on new mail while you look at it.** A message that arrived with its folder open got its tag a second later, but the row showed no chip until you left the folder and came back. The chip now appears on its own, a hide-from-Inbox rule takes the row out of the Inbox the same way, and running or undoing a backfill updates the rows on screen too.
+- **Auto Tags use Apple Intelligence.** A rule without "Allow a remote AI provider" only ever asked the downloaded model, so on a Mac with Apple Intelligence and no downloaded model it never tagged anything. It now runs on Apple Intelligence when it is available, else the downloaded model, and Preview says so plainly when neither is there.
+
 ## [2.19.1] - 2026-10-07
 
 ### Changed

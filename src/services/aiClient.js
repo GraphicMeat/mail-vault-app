@@ -39,6 +39,9 @@ export function isNonLocal(provider) {
 /** The daemon's refusal code (src-core ai::GOOGLE_MAIL_ON_DEVICE_ONLY). */
 export const E_GOOGLE_MAIL_ON_DEVICE_ONLY = 'E_GOOGLE_MAIL_ON_DEVICE_ONLY';
 const GOOGLE_MAIL_KEY = 'ai.googleMailOnDeviceOnly';
+const NO_ON_DEVICE_MODEL_KEY = 'ai.noOnDeviceModel';
+/** The daemon's code when a job wants an on-device model and none is available (src-core ai::NO_ON_DEVICE_MODEL). */
+export const E_NO_ON_DEVICE_MODEL = 'E_NO_ON_DEVICE_MODEL';
 
 /** Mirror of src-core `ai::is_google_account`: Google OAuth, or IMAP on one of Gmail's hosts. */
 export function isGoogleAccount(account) {
@@ -132,6 +135,7 @@ export function googleMailRefusal() {
 export function aiErrorText(error, t, fallback) {
   const message = String(error?.message ?? error ?? '');
   if (message.startsWith(E_GOOGLE_MAIL_ON_DEVICE_ONLY)) return t(GOOGLE_MAIL_KEY);
+  if (message.startsWith(E_NO_ON_DEVICE_MODEL)) return t(NO_ON_DEVICE_MODEL_KEY);
   return fallback ?? message;
 }
 

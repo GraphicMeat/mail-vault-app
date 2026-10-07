@@ -70,6 +70,7 @@
   "ai.actions.tone.friendly": "Amichevole",
   "ai.actions.useInReply": "Usa nella risposta",
   "ai.googleMailOnDeviceOnly": "I messaggi di Gmail vengono elaborati solo da un'IA sul dispositivo. Scegli Apple Intelligence, il modello scaricato o un Ollama locale nelle Impostazioni.",
+  "ai.noOnDeviceModel": "Nessuna IA sul dispositivo disponibile. Attiva Apple Intelligence o scarica un modello nelle Impostazioni, oppure consenti un provider IA remoto per questa regola.",
   "ai.preview.destination": "Verrà inviato a: {{destination}}",
   "ai.preview.destinationDevice": "Questo dispositivo",
   "ai.preview.leavesDevice": "Questo testo lascerà il tuo dispositivo.",

@@ -70,6 +70,7 @@
   "ai.actions.tone.friendly": "Freundlich",
   "ai.actions.useInReply": "In Antwort verwenden",
   "ai.googleMailOnDeviceOnly": "Gmail-Nachrichten werden nur von On-Device-KI verarbeitet. Wähle in den Einstellungen Apple Intelligence, das heruntergeladene Modell oder ein lokales Ollama.",
+  "ai.noOnDeviceModel": "Keine On-Device-KI verfügbar. Aktiviere Apple Intelligence oder lade in den Einstellungen ein Modell herunter, oder erlaube für diese Regel einen externen KI-Anbieter.",
   "ai.preview.destination": "Wird gesendet an: {{destination}}",
   "ai.preview.destinationDevice": "Dieses Gerät",
   "ai.preview.leavesDevice": "Dieser Text verlässt dein Gerät.",

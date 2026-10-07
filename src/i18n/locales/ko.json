@@ -70,6 +70,7 @@
   "ai.actions.tone.friendly": "친근하게",
   "ai.actions.useInReply": "답장에 사용",
   "ai.googleMailOnDeviceOnly": "Gmail 메시지는 온디바이스 AI로만 처리됩니다. 설정에서 Apple Intelligence, 다운로드한 모델 또는 로컬 Ollama를 선택하세요.",
+  "ai.noOnDeviceModel": "사용할 수 있는 온디바이스 AI가 없습니다. Apple Intelligence를 켜거나 설정에서 모델을 다운로드하거나, 이 규칙에 원격 AI 제공자를 허용하세요.",
   "ai.preview.destination": "전송 대상: {{destination}}",
   "ai.preview.destinationDevice": "이 기기",
   "ai.preview.leavesDevice": "이 텍스트는 기기 밖으로 전송됩니다.",

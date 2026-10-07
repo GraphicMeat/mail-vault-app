@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
+import { useTagStore } from './tagStore';
 
 // Auto Tags (Phase 4) — natural-language rules that assign an existing tag.
 // Modeled on scheduledStore.js: one flat list, refetched on mount, patched
@@ -46,7 +47,8 @@ export const useAutoTagStore = create((set, get) => ({
   /// so a rule is previewable before it is ever created) picks which the
   /// daemon evaluates. See `rule_for_eval` in auto_tags.rs.
   preview: async ({ ruleId, rule, accountId, provider, limit }) => {
-    const params = { accountId, provider: provider || { type: 'localGguf' }, limit: limit || 200 };
+    // No provider: the daemon picks this computer's on-device model.
+    const params = { accountId, provider: provider ?? null, limit: limit || 200 };
     if (ruleId) params.ruleId = ruleId; else params.rule = rule;
     const reply = await daemonCall('auto_tags.preview', params);
     return Array.isArray(reply?.candidates) ? reply.candidates : [];
@@ -55,7 +57,7 @@ export const useAutoTagStore = create((set, get) => ({
   /// Only a saved rule can be backfilled — undo has to point at a real row.
   backfill: async ({ ruleId, accountId, provider, limit }) => {
     set(state => ({ backfills: { ...state.backfills, [ruleId]: { processed: 0, total: 0, matched: 0, done: false } } }));
-    const reply = await daemonCall('auto_tags.backfill', { ruleId, accountId, provider: provider || { type: 'localGguf' }, limit: limit || 200 });
+    const reply = await daemonCall('auto_tags.backfill', { ruleId, accountId, provider: provider ?? null, limit: limit || 200 });
     set(state => ({ backfills: { ...state.backfills, [ruleId]: { ...reply, done: true } } }));
     return reply;
   },
@@ -78,6 +80,7 @@ export const useAutoTagStore = create((set, get) => ({
   /// failed retry.
   undoBackfill: async (ruleId, batchId) => {
     const reply = await daemonCall('auto_tags.undo_backfill', { batchId });
+    if (reply?.tagId) useTagStore.getState().forgetRowsWithTag(reply.tagId);
     set(state => {
       const current = state.backfills[ruleId];
       if (!current || current.batchId !== batchId) return state;
