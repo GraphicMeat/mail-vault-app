@@ -90,7 +90,7 @@ describe('English acquisition journey', () => {
     // The closing section makes the same choice: one button, from the same code.
     for (const action of ['mac','windows','linux']) expect(doc.querySelector('#download [data-hero-platform="'+action+'"]').hidden).toBe(action !== visible);
     const shown = sel => [...doc.querySelectorAll(sel + ' .mv-button')].filter(el => !el.closest('[hidden]'));
-    expect(shown('.hm-hero-inner')).toHaveLength(1);
+    expect(shown('.hm-hero-side')).toHaveLength(1);
     expect(shown('#download')).toHaveLength(1);
     expect(doc.getElementById('send-link-final').hidden).toBe(visible !== 'mobile');
     expect(doc.querySelector('#download [data-hero-platform="fallback"]')).toBeNull();
@@ -379,14 +379,18 @@ describe('English acquisition journey', () => {
     }
     expect(tagged(readFileSync(resolve('src/demo/index.html'), 'utf8').replace('src="/gm.js"', 'src="/gm.js?v=x"'))).toBe(true);
   });
-  it('tags exactly the pages of the conversion change, in every language', () => {
+  // The clips change: the English homepage and the seven English pages with a
+  // clip. Their locale copies have no clips and keep the conversion tag.
+  it('tags exactly the pages of the conversion and clips changes, in every language', () => {
     const TAG = 'conversion-2026-10';
+    const CLIPS_TAG = 'clips-2026-10';
+    const clipPages = new Set(['index.html', ...['archive-and-delete', 'scheduled-backups', 'time-capsule', 'email-tracker-blocking', 'link-safety', 'undo-send', 'unified-inbox'].map(p => 'features/' + p + '.html')]);
     const tagOf = html => (html.match(/<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="([^"]+)">\s*<\/script>/) || [])[1];
     const english = ['index.html', 'features.html', 'pricing.html', 'get-started.html', ...readdirSync(resolve(root, 'features')).filter(f => f.endsWith('.html')).map(f => 'features/' + f)];
     const locales = ['de','fr','es','it','ja','ko','zh','pt-br'];
     const expected = new Set([...english, ...locales.flatMap(l => english.map(f => l + '/' + f))]);
     expect(english.length).toBeGreaterThan(20);
-    expect(tagOf(readFileSync(resolve('index.html'), 'utf8'))).toBe(TAG);
+    expect(tagOf(readFileSync(resolve('index.html'), 'utf8'))).toBe(CLIPS_TAG);
     const walk = dir => readdirSync(resolve(root, dir), {withFileTypes:true}).flatMap(e => {
       const rel = dir ? dir + '/' + e.name : e.name;
       if (e.isDirectory()) return ['api','node_modules','i18n','demo','assets'].includes(e.name) ? [] : walk(rel);
@@ -396,7 +400,7 @@ describe('English acquisition journey', () => {
     for (const file of walk('')) {
       const tag = tagOf(readFileSync(resolve(root, file), 'utf8'));
       if (!tag) continue;
-      if (expected.has(file)) { seen.add(file); expect(tag, file).toBe(TAG); }
+      if (expected.has(file)) { seen.add(file); expect(tag, file).toBe(clipPages.has(file) ? CLIPS_TAG : TAG); }
       else expect(tag, file).toBe('redesign-2026-09');
     }
     expect([...expected].filter(f => !seen.has(f))).toEqual([]);

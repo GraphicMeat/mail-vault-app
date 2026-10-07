@@ -2,13 +2,16 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-// The homepage leads with the vault, backs the hero with three checkable facts,
-// and reaches the comparison table before the grab-bag of small features.
+// The locale homepages (built from the frozen English snapshot until the clips
+// layout is localized) lead with the vault, back the hero with three checkable
+// facts, and reach the comparison table before the grab-bag of small features.
+// The English homepage's own layout is in homepage-clips-layout.test.js.
 const LOCALES = ['de', 'fr', 'es', 'it', 'ja', 'ko', 'zh', 'pt-br'];
 const load = (file) => new JSDOM(readFileSync(file, 'utf8')).window.document;
 const ids = (doc) => [...doc.querySelectorAll('main section[id]')].map((s) => s.id);
+const FROZEN = 'website/i18n/frozen/index.html';
 
-describe.each(['website/index.html', 'index.html', ...LOCALES.map((l) => `website/${l}/index.html`)])('%s', (file) => {
+describe.each([FROZEN, ...LOCALES.map((l) => `website/${l}/index.html`)])('%s', (file) => {
   const doc = load(file);
 
   it('opens the pillars with the vault', () => {
@@ -107,23 +110,27 @@ describe('English hero copy', () => {
     expect(en.querySelector('h1').innerHTML).toBe('Your email.<br><span class="hm-grad">Yours to keep.</span>');
   });
 
-  it('states the free plan, the early-bird yearly price, devices, trial and standard price in one line', () => {
-    expect(en.querySelector('.hm-hero .hm-price').textContent.trim()).toBe('Free forever. Early Bird & Family Pricing: Premium $25/year, up to 5 devices, 14-day free trial. Standard price after early access: $39/year.');
+  it('leads with daily use, then keeping your copy', () => {
+    const lead = en.querySelector('.hm-lead').textContent;
+    expect(lead.startsWith('A fast, private email app')).toBe(true);
+    expect(lead.indexOf('Search 50,000 messages')).toBeLessThan(lead.indexOf('your copy stays'));
   });
 
   it('states the early-bird and standard price under the final download', () => {
     expect(en.querySelector('#download .hm-price').textContent.trim()).toBe('Early Bird & Family Pricing: Premium $25/year. Standard price after early access: $39/year.');
   });
 
-  it('leads with daily use, then keeping your copy', () => {
-    const lead = en.querySelector('.hm-lead').textContent;
-    expect(lead.startsWith('A fast, private email app')).toBe(true);
-    expect(lead.indexOf('Search 50,000 messages')).toBeLessThan(lead.indexOf('your copy stays'));
+  it('prices the final download the same way as the locale pages', () => {
+    const line = en.querySelector('#download .mv-actions + .hm-send-hint + .hm-price');
+    const link = line.querySelector('a[href$="/pricing.html"]');
+    expect(link.dataset.acquisitionPlacement).toBe('final');
+    expect(link.dataset.acquisitionDestination).toBe('pricing');
+    expect(line.querySelector('s, del, strike')).toBeNull();
   });
 });
 
 describe('localized hero', () => {
-  const en = load('website/index.html');
+  const en = load(FROZEN);
   const text = (doc) => [doc.querySelector('.hm-lead'), ...doc.querySelectorAll('.hm-facts li')].map((n) => n.textContent);
 
   it.each(LOCALES)('%s translates the lead and every fact', (l) => {

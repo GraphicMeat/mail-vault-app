@@ -123,6 +123,6 @@ describe('English setup copy', () => {
 describe('homepage price lines', () => {
   it.each(['website/index.html', 'index.html', ...LOCALES.map((l) => `website/${l}/index.html`)])('%s adds no end date, "for life" or em dash', (file) => {
     const doc = load(file);
-    for (const line of doc.querySelectorAll('.hm-price')) expect(line.textContent).not.toMatch(FORBIDDEN);
+    for (const line of doc.querySelectorAll('.hm-price, .hm-badge, .hm-offer')) expect(line.textContent).not.toMatch(FORBIDDEN);
   });
 });

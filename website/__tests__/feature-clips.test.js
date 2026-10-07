@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { LOCALES, render, loadDict } from '../i18n/i18n.mjs';
+import { LOCALES, render, loadDict, sourceHtml } from '../i18n/i18n.mjs';
 
 // Seven short muted clips recorded in the app. English only until the owner
-// approves them: the homepage section and each feature page's figure carry
-// data-i18n-en-only, so no locale page gets an untranslated caption.
+// approves them: each feature page's figure carries data-i18n-en-only, and the
+// locale homepages are built from a frozen snapshot of the English homepage
+// from before the clips, so no locale page gets an untranslated caption.
 const CLIPS = {
   'archive-delete': 'archive-and-delete',
   'scheduled-backups': 'scheduled-backups',
@@ -15,12 +16,12 @@ const CLIPS = {
   'undo-send': 'undo-send',
   'unified-inbox': 'unified-inbox',
 };
-const GROUPS = [['archive-delete', 'scheduled-backups', 'time-capsule'], ['trackers', 'link-safety', 'undo-send', 'unified-inbox']];
+const GROUPS = [['archive-delete', 'scheduled-backups', 'time-capsule'], [], [], ['trackers', 'link-safety'], [], ['unified-inbox', 'undo-send']];
 const load = (file) => new JSDOM(readFileSync(file, 'utf8')).window.document;
 const home = load('website/index.html');
 const visible = (els) => [...els].filter((el) => !el.closest('[hidden]'));
 
-function checkFigure(figure, clip) {
+function checkFigure(figure, clip, poster = `${clip}.jpg`) {
   expect(figure.dataset.clip).toBe(clip);
   const video = figure.querySelector('video');
   expect(video, clip).not.toBeNull();
@@ -28,7 +29,7 @@ function checkFigure(figure, clip) {
   // No autoplay attribute: english-site.js starts a clip only once it is on screen.
   expect(video.hasAttribute('autoplay')).toBe(false);
   expect(video.getAttribute('preload')).toBe('none');
-  expect(video.getAttribute('poster')).toBe(`/assets/clips/en/${clip}.jpg`);
+  expect(video.getAttribute('poster')).toBe(`/assets/clips/en/${poster}`);
   expect(video.getAttribute('width')).toBe('960');
   expect(video.getAttribute('height')).toBe('660');
   expect(video.getAttribute('aria-label').length).toBeGreaterThan(30);
@@ -36,8 +37,8 @@ function checkFigure(figure, clip) {
   expect(sources).toHaveLength(1);
   expect(sources[0].getAttribute('src')).toBe(`/assets/clips/en/${clip}.mp4`);
   expect(sources[0].getAttribute('type')).toBe('video/mp4');
-  for (const ext of ['mp4', 'jpg']) {
-    const file = `website/assets/clips/en/${clip}.${ext}`;
+  for (const name of [`${clip}.mp4`, poster]) {
+    const file = `website/assets/clips/en/${name}`;
     expect(existsSync(file), file).toBe(true);
     expect(statSync(file).size, file).toBeLessThan(260 * 1024);
   }
@@ -48,57 +49,46 @@ function checkFigure(figure, clip) {
   expect(figure.querySelector('.mv-button')).toBeNull();
 }
 
+// The homepage shows the clips in three groups (see homepage-clips-layout.test.js
+// for the layout); here, each card against the same rules as the feature pages.
 describe('homepage clips', () => {
-  const section = home.getElementById('clips');
+  const groups = [...home.querySelectorAll('main > section.hm-clip-group')];
 
-  it('sits directly after the hero', () => {
-    expect(section).not.toBeNull();
-    expect(home.querySelector('.hm-hero').nextElementSibling).toBe(section);
-  });
-
-  it('uses the two-line gradient heading', () => {
-    const h2 = section.querySelector('h2');
-    expect(h2.querySelector('br')).not.toBeNull();
-    expect(h2.querySelector('.hm-grad')).not.toBeNull();
-  });
-
-  it('shows seven clips in two labelled groups', () => {
-    expect(section.querySelectorAll('figure.mv-clip')).toHaveLength(7);
-    const groups = section.querySelectorAll('.mv-clip-group');
-    expect([...groups].map((g) => [...g.querySelectorAll('figure.mv-clip')].map((f) => f.dataset.clip))).toEqual(GROUPS);
+  it('shows seven clips in six headed groups, after the key points', () => {
+    expect(groups.map((g) => [...g.querySelectorAll('figure.mv-clip')].map((f) => f.dataset.clip))).toEqual(GROUPS);
+    expect(home.getElementById('key-points').nextElementSibling).toBe(groups[0]);
     for (const g of groups) {
-      expect(g.querySelector('.mv-eyebrow').textContent.trim()).not.toBe('');
-      expect(g.querySelector('h3').textContent.trim()).not.toBe('');
+      expect(g.querySelector('.hm-body').textContent.trim()).not.toBe('');
+      expect(g.querySelector('h2').textContent.trim()).not.toBe('');
     }
   });
 
-  it.each(Object.keys(CLIPS))('%s is a muted, lazy clip with a caption', (clip) => {
-    checkFigure(section.querySelector(`figure[data-clip="${clip}"]`), clip);
+  it.each(Object.keys(CLIPS))('%s is a muted, lazy clip with a light poster and a caption', (clip) => {
+    checkFigure(home.querySelector(`.hm-clip-group figure[data-clip="${clip}"]`), clip, `${clip}-poster.jpg`);
   });
 
   it.each(Object.entries(CLIPS))('%s links to /features/%s.html with its own accessible name', (clip, page) => {
-    const link = section.querySelector(`figure[data-clip="${clip}"] figcaption a`);
+    const link = home.querySelector(`.hm-clip-group figure[data-clip="${clip}"] figcaption a`);
     expect(link.getAttribute('href')).toBe(`/features/${page}.html`);
     expect(link.classList.contains('mv-text-link')).toBe(true);
     expect(link.textContent).toMatch(/^Learn more/);
   });
 
   it('gives every Learn more link a distinct accessible name', () => {
-    const names = [...section.querySelectorAll('figcaption a')].map((a) => a.textContent.trim());
+    const names = groups.flatMap((g) => [...g.querySelectorAll('figcaption a')].map((a) => a.textContent.trim()));
+    expect(names).toHaveLength(7);
     expect(new Set(names).size).toBe(7);
   });
 
   it('adds no button, and no download', () => {
-    expect(section.querySelector('.mv-button, button, [data-download], [data-acquisition-download]')).toBeNull();
-    expect(section.textContent).not.toMatch(/—/);
+    for (const g of groups) {
+      expect(g.querySelector('.mv-button, button, [data-download], [data-acquisition-download]')).toBeNull();
+      expect(g.textContent).not.toMatch(/—/);
+    }
   });
 
   it('keeps the root copy of the homepage identical', () => {
     expect(readFileSync('index.html', 'utf8')).toBe(readFileSync('website/index.html', 'utf8'));
-  });
-
-  it('marks the whole section English-only', () => {
-    expect(section.hasAttribute('data-i18n-en-only')).toBe(true);
   });
 });
 
@@ -129,13 +119,13 @@ describe.each(Object.entries(CLIPS))('feature page for %s', (clip, page) => {
 
 describe('locale pages stay free of the English clips', () => {
   const pages = ['index.html', ...Object.values(CLIPS).map((p) => `features/${p}.html`)];
-  const english = [...home.querySelectorAll('#clips figcaption, #clips h2, #clips h3, #clips .mv-eyebrow')].map((n) => n.textContent.replace(/\s+/g, ' ').trim());
+  const english = [...home.querySelectorAll('.hm-clip-group figcaption')].map((n) => n.textContent.replace(/\s+/g, ' ').trim());
 
   it.each(LOCALES.map((l) => l.dir))('%s renders no clip, no marker and no clip caption', (dir) => {
     const loc = LOCALES.find((l) => l.dir === dir);
     const dict = loadDict(loc);
     for (const rel of pages) {
-      const out = render(readFileSync(`website/${rel}`, 'utf8'), rel, loc, dict);
+      const out = render(sourceHtml(rel), rel, loc, dict);
       expect(out, `${dir}/${rel}`).not.toMatch(/mv-clip|data-i18n-en-only|\/assets\/clips\//);
       const text = new JSDOM(out).window.document.body.textContent.replace(/\s+/g, ' ');
       for (const s of english) expect(text, `${dir}/${rel}`).not.toContain(s);

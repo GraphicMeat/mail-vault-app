@@ -43,7 +43,19 @@ function ruleFor(css, selector) {
 const PHONE = '@media (max-width:760px)';
 const phoneCss = mediaBlocks(homeCss, PHONE).join('\n');
 
-describe.each(['website/index.html', 'index.html', ...LOCALES.map((l) => `website/${l}/index.html`)])('%s phone order', (file) => {
+// The English homepage's phone order (badge, headline, lead, price card with the
+// form, links, then the visual) is in homepage-clips-layout.test.js; the locale
+// homepages are still built from the frozen snapshot of the previous layout.
+describe('website/index.html final section on phones', () => {
+  it('opens the final section with the form, then the price line', () => {
+    const final = load('website/index.html').getElementById('download');
+    const form = final.querySelector('#send-link-final');
+    expect(before(final.querySelector('h2'), form)).toBe(true);
+    expect(before(form, final.querySelector('.hm-price'))).toBe(true);
+  });
+});
+
+describe.each(['website/i18n/frozen/index.html', ...LOCALES.map((l) => `website/${l}/index.html`)])('%s phone order', (file) => {
   const doc = load(file);
 
   it('puts the hero form, price line and text links before the product shot', () => {
