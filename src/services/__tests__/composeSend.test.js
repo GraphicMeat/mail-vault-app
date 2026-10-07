@@ -368,6 +368,19 @@ describe('a send with a follow-up reminder', () => {
     });
     expect(params.sentAt).toBeGreaterThanOrEqual(before);
     expect(params.remindAt - params.sentAt).toBe(3 * DAY);
+    // Every address that is the sender: a message from any of them is no reply.
+    expect(params.ownAddresses).toEqual(expect.arrayContaining(['alias@example.test', 'me@example.test']));
+  });
+
+  // The local archive, the Sent row and the staged copy's cleanup must not
+  // wait on the daemon: a reminder is never worth a slower send.
+  it('does not hold up the send while the reminder is recorded', async () => {
+    sendEmail.mockResolvedValueOnce({});
+    daemonCall.mockImplementation((method) => (method === 'follow_up.create' ? new Promise(() => {}) : Promise.resolve({})));
+    const sent = createComposeSend({ snapshot: { ...snapshot, _remindDays: 3 }, mode: 'new', account, settings: {} })();
+    const outcome = await Promise.race([sent.then(() => 'sent'), new Promise(r => setTimeout(() => r('held'), 500))]);
+    expect(outcome).toBe('sent');
+    expect(mailStore.useMailStore.getState().sentEmails).toHaveLength(1);
   });
 
   it('records nothing when the send fails', async () => {
@@ -396,7 +409,9 @@ describe('a send with a follow-up reminder', () => {
   it('a scheduled send carries the reminder to the daemon, which records it when it goes out', async () => {
     const scheduled = { ...snapshot, _remindDays: 7, _scheduleDraft: { localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius' } };
     await scheduleCompose({ snapshot: scheduled, account, settings: {} });
-    expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({ remindDays: 7 }));
+    expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      remindDays: 7, ownAddresses: expect.arrayContaining(['alias@example.test', 'me@example.test']),
+    }));
     await scheduleCompose({ snapshot: { ...scheduled, _remindDays: 3, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1' } }, account, settings: {} });
     expect(replaceSchedule).toHaveBeenCalledWith('row-1', expect.objectContaining({ remindDays: 3 }));
     await scheduleCompose({ snapshot: { ...scheduled, _remindDays: 3, _editScheduledId: 'row-2', _editScheduledRow: { accountId: 'acct-1' } }, account: { ...account, oauth2Transport: 'graph' }, settings: {} });
