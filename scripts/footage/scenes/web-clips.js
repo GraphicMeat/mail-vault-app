@@ -69,6 +69,7 @@ import {
 import { closeSettings } from '../../../tests/e2e/helpers.js';
 import { footageMarkers } from '../lib/mailbox.js';
 import { APP_LOCALE } from '../lib/locale.js';
+import { webclipContent, todayPatterns } from '../lib/webclipContent.js';
 
 const ONLY = (process.env.FOOTAGE_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
 const want = (clip) => !ONLY.length || ONLY.includes(clip);
@@ -77,6 +78,8 @@ const want = (clip) => !ONLY.length || ONLY.includes(clip);
 const results = {};
 const EXPECT_TOTAL = Number(process.env.FOOTAGE_EXPECT_TOTAL || 0);
 const MARK = footageMarkers(APP_LOCALE);
+// What the clips type and seed that is their own content (lib/webclipContent.js), in the run's language.
+const C = webclipContent(APP_LOCALE);
 const facts = { locale: APP_LOCALE, markers: MARK };
 
 const ASPECT = 960 / 660;
@@ -179,20 +182,11 @@ function scanText(crop, dates = []) {
 }
 
 /**
- * The run's own date as the app could print it (English formats; a website
- * clip must not carry the day it was shot). Regex sources for scanText.
+ * The run's own date as the app prints it in the run's language (a website clip
+ * must not carry the day it was shot), plus "N days ago" in that language.
+ * Regex sources for scanText.
  */
-const TODAY_PATTERNS = (() => {
-  const d = new Date();
-  const mon = d.toLocaleString('en-US', { month: 'long' });
-  const m3 = mon.slice(0, 3);
-  const day = d.getDate(), y = d.getFullYear(), mm = d.getMonth() + 1;
-  const p2 = (n) => String(n).padStart(2, '0');
-  return [
-    `\\b${m3}[a-z]*\\.?\\s+${day}\\b(?!:)`, `\\b${day}\\.?\\s+${m3}[a-z]*\\b`,
-    `\\b${y}-${p2(mm)}-${p2(day)}\\b`, `\\b${mm}/${day}/(${y}|${String(y).slice(2)})\\b`, `\\b${p2(day)}\\.${p2(mm)}\\.${y}\\b`,
-  ];
-})();
+const TODAY_PATTERNS = todayPatterns(APP_LOCALE);
 
 /** Reviewed crop overrides (window points) for one clip, as the encoder will apply them. */
 function overrideCrops(clip) {
@@ -1946,7 +1940,7 @@ describe('footage: website feature clips', function () {
       const head = await boxOf('[data-testid="sender-header"]');
       const crop = await fitCrop(union(head, strip), { minW: 760 });
       // A choice of the Stage field: its label, a real press.
-      if (!(await markExact(input(STAGE), 'label', 'Approved', 'cf-stage'))) throw new Error('no Approved choice');
+      if (!(await markExact(input(STAGE), 'label', C.customFields.approved, 'cf-stage'))) throw new Error('no Approved choice');
       await take.click('[data-footage-target="cf-stage"]', 'stage-approved', { dur: 450 });
       await take.hold(600);
       await take.click(input(DONE), 'follow-up', { dur: 450 });
@@ -1975,10 +1969,10 @@ describe('footage: website feature clips', function () {
         // page opened once so the app loads them.
         const accountId = await browser.execute(() => window.__MAIL_STORE__?.getState?.().activeAccountId);
         facts.customFieldsSeed = [
-          await rpc('fields.save', { field: { id: STAGE, scope: accountId, name: 'Stage', kind: 'multi_select', position: 0,
-            options: [{ id: 'review', label: 'Review', color: '#d97706' }, { id: 'approved', label: 'Approved', color: '#16a34a' }, { id: 'paid', label: 'Paid', color: '#2563eb' }] } }),
-          await rpc('fields.save', { field: { id: DONE, scope: accountId, name: 'Follow up', kind: 'checkbox', position: 1, options: [] } }),
-          await rpc('fields.save', { field: { id: OWNER, scope: accountId, name: 'Owner', kind: 'text', position: 2, options: [] } }),
+          await rpc('fields.save', { field: { id: STAGE, scope: accountId, name: C.customFields.stage, kind: 'multi_select', position: 0,
+            options: [{ id: 'review', label: C.customFields.review, color: '#d97706' }, { id: 'approved', label: C.customFields.approved, color: '#16a34a' }, { id: 'paid', label: C.customFields.paid, color: '#2563eb' }] } }),
+          await rpc('fields.save', { field: { id: DONE, scope: accountId, name: C.customFields.followUp, kind: 'checkbox', position: 1, options: [] } }),
+          await rpc('fields.save', { field: { id: OWNER, scope: accountId, name: C.customFields.owner, kind: 'text', position: 2, options: [] } }),
         ];
         await settingsSetupTab(L('settings.navigation.mailPreferences'), L('fields.section'));
         await waitPage((s) => !!document.querySelector(s), { timeout: 8000 }, `[data-testid="field-row-${STAGE}"]`);
@@ -1994,8 +1988,7 @@ describe('footage: website feature clips', function () {
 
   // 22. AI writing: a rough paragraph, Shorten, the on-device rewrite.
   defineClip('ai-writing', async function () {
-    const ROUGH = 'Hi Theo, just checking in to see if there is any chance at all that the box sleeves could be ready by Thursday, '
-      + 'since the client prints on Friday and we would really like to have them in hand before then. Thanks so much!';
+    const ROUGH = C.aiWriting.rough;
     const AI = '[data-testid="compose-modal"] [data-testid="ai-compose-actions"] button';
     const CONFIRM = '[data-testid="ai-preview-confirm"]';
     const editorText = (s) => (document.querySelector(s)?.innerText || '').trim();
@@ -2051,7 +2044,7 @@ describe('footage: website feature clips', function () {
         await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, SEL.editor);
         await browser.pause(600);
         const prep = new Take('ai-writing-prep');
-        await prep.type('[data-testid="compose-subject"]', 'Box sleeves', 'prep', { base: 30, jitter: 5 });
+        await prep.type('[data-testid="compose-subject"]', C.aiWriting.subject, 'prep', { base: 30, jitter: 5 });
         await prep.typeRich(SEL.editor, ROUGH, 'prep', { base: 12, jitter: 4, caret: 'start' });
         facts.aiTyped = await browser.execute(editorText, SEL.editor);
         await browser.execute(() => document.activeElement?.blur?.());
@@ -2087,13 +2080,13 @@ describe('footage: website feature clips', function () {
     const CONFIRM = '[data-testid="ai-preview-confirm"]';
     const SAVE = `${CARD} .settings-editor-actions.justify-end button`;
     const INBOX = '[data-testid="folder-row"][data-path="INBOX"]';
-    const TAG = process.env.FOOTAGE_TAG_NAME || 'Invoices';
-    const SUBJECT = process.env.FOOTAGE_TAG_SUBJECT || 'Invoice 2026-0471 for the October print run';
+    const TAG = process.env.FOOTAGE_TAG_NAME || C.tagging.tag;
+    const SUBJECT = process.env.FOOTAGE_TAG_SUBJECT || C.tagging.subject;
     // Wordings tried off camera (auto_tags.preview, nothing written) before the
     // rule is typed; the first one Apple Intelligence matches to the demo's
     // invoice-like subjects (and not to the rest) is the one saved.
     const WORDINGS = process.env.FOOTAGE_TAG_RULE ? [process.env.FOOTAGE_TAG_RULE]
-      : ['Invoices and bills', 'Invoices, bills and receipts from suppliers', 'Bank statements and invoices I need to pay or file'];
+      : C.tagging.wordings;
     let RULE_WORDS = WORDINGS[0];
     const work = (browser.demoAccounts || [])[0];
     // FOOTAGE_TAG_ATTEMPTS: Apple Intelligence's verdict on the same invoice is
@@ -2117,11 +2110,11 @@ describe('footage: website feature clips', function () {
           + '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n').toString('base64');
         const B = `mv-${now.getTime()}`;
         const raw = Buffer.from([
-          'From: Skewer Print <billing@skewer.systems>', `To: ${work.name || 'Rowan Marsh'} <${work.email}>`, `Subject: ${SUBJECT}`,
+          'From: Skewer Print <billing@skewer.systems>', `To: ${work.name || 'Rowan Marsh'} <${work.email}>`, `Subject: =?UTF-8?B?${Buffer.from(SUBJECT, 'utf8').toString('base64')}?=`,
           `Date: ${now.toUTCString().replace('GMT', '+0000')}`, `Message-ID: <${msgId}>`, 'MIME-Version: 1.0',
           `Content-Type: multipart/mixed; boundary="${B}"`, '', `--${B}`,
-          'Content-Type: text/plain; charset=utf-8', '', 'Hi Rowan,', '', 'Attached is the invoice for the October print run: 2,400 box sleeves.',
-          'Payment is due in 14 days.', '', 'Skewer Print', '', `--${B}`,
+          'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: base64', '',
+          ...Buffer.from(C.tagging.body.join('\r\n'), 'utf8').toString('base64').match(/.{1,76}/g), '', `--${B}`,
           'Content-Type: application/pdf; name="Invoice-2026-0471.pdf"', 'Content-Disposition: attachment; filename="Invoice-2026-0471.pdf"',
           'Content-Transfer-Encoding: base64', '', ...pdf.match(/.{1,76}/g), `--${B}--`, '',
         ].join('\r\n'));
@@ -2277,7 +2270,7 @@ describe('footage: website feature clips', function () {
           const pv = await rpc('auto_tags.preview', { accountId: work.id, provider: { type: 'appleFm' }, limit: 30,
             rule: { name: TAG, instruction: words, constraints: {}, tagId: 'probe', inboxAction: 'keep', minConfidence: 0.7, allowRemote: true, enabled: false } });
           const rows = pv.ok?.candidates || [];
-          const bill = (c) => /invoice|bill|receipt|statement|payment/i.test(c.subject || '');
+          const bill = (c) => new RegExp(`invoice|bill|receipt|statement|payment|${C.tagging.billWords}`, 'i').test(c.subject || '');
           const r = { words, error: pv.error || null, n: rows.length,
             hit: rows.filter((c) => bill(c) && c.matched).length, miss: rows.filter((c) => bill(c) && !c.matched).length,
             wrong: rows.filter((c) => !bill(c) && c.matched).length, refused: rows.filter((c) => c.refused).length,
@@ -2745,8 +2738,8 @@ describe('footage: website feature clips', function () {
 
   // 29. Templates: in a new message, Templates, pick one, the text is in.
   defineClip('templates', async function () {
-    const NAME = 'Print quote';
-    const BODY = 'Thanks for the brief. For 2,400 box sleeves on 350 gsm board the price is 1,180 EUR, ready in eight working days.';
+    const NAME = C.templates.name;
+    const BODY = C.templates.body;
     await shoot(this, 'templates', async (take, scan) => {
       const compose = await boxOf(SEL.compose);
       // The compose window, right-aligned in the crop: whatever width the 960:660
@@ -2764,7 +2757,7 @@ describe('footage: website feature clips', function () {
       await take.waitFor(() => !!document.querySelector('[data-testid="compose-template-item"]')?.offsetHeight, 'menu', 4000);
       await take.hold(700);
       await take.click('[data-testid="compose-template-item"]', 'pick', { text: NAME, dur: 500 });
-      await take.waitFor((s) => (document.querySelector(s)?.innerText || '').includes('2,400'), 'inserted', 4000, SEL.editor);
+      await take.waitFor((s, m) => (document.querySelector(s)?.innerText || '').includes(m), 'inserted', 4000, SEL.editor, BODY.slice(0, 8));
       await take.hold(300);
       facts.templateEditor = await browser.execute((s) => (document.querySelector(s)?.innerText || '').slice(0, 200), SEL.editor);
       check('the template text is in the editor', facts.templateEditor.includes(BODY.slice(0, 30)), facts.templateEditor);
@@ -2787,7 +2780,7 @@ describe('footage: website feature clips', function () {
         await waitPage((s) => !!document.querySelector(s)?.offsetHeight, { timeout: 10000 }, SEL.editor);
         await browser.pause(600);
         const prep = new Take('templates-prep');
-        await prep.type('[data-testid="compose-subject"]', 'Box sleeves quote', 'prep', { base: 30, jitter: 5 });
+        await prep.type('[data-testid="compose-subject"]', C.templates.subject, 'prep', { base: 30, jitter: 5 });
         await clickSel(SEL.editor);
         await browser.pause(500);
       },
@@ -2797,7 +2790,7 @@ describe('footage: website feature clips', function () {
 
   // 30. Tags: the reader's tag button; the tag lands on the message and its row.
   defineClip('tags', async function () {
-    const TAG = process.env.FOOTAGE_TAGS_NAME || 'Receipts';
+    const TAG = process.env.FOOTAGE_TAGS_NAME || C.tags.tag;
     const BTN = '.email-action-bar [data-quick-action="tag"]';
     await shoot(this, 'tags', async (take, scan) => {
       const head = await boxOf('[data-testid="sender-header"]');
