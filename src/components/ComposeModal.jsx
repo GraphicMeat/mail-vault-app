@@ -69,7 +69,7 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
           className={`${privateInput} flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
                     outline-none text-sm py-1`}
         />
-        <ContactsPickerButton value={value} onChange={setValue} fieldName={name.toUpperCase()} boostAccountId={boostAccountId} />
+        <ContactsPickerButton value={value} onChange={setValue} fieldName={label} boostAccountId={boostAccountId} />
       </div>
       <ContactsAutocomplete value={value} onChange={setValue} inputRef={inputRef} boostAccountId={boostAccountId} />
     </div>
@@ -1478,7 +1478,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             {/* To */}
             <RecipientField
               name="to"
-              label="To:"
+              label={t('compose.to')}
               placeholder={t('compose.recipientExampleCom')}
               value={formData.to}
               onChange={handleChange}
@@ -1494,7 +1494,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             {/* CC */}
             <RecipientField
               name="cc"
-              label="Cc:"
+              label={t('compose.cc')}
               placeholder={t('compose.ccExampleCom')}
               value={formData.cc}
               onChange={handleChange}
@@ -1506,7 +1506,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             {/* BCC */}
             <RecipientField
               name="bcc"
-              label="Bcc:"
+              label={t('compose.bcc')}
               placeholder={t('compose.bccExampleCom')}
               value={formData.bcc}
               onChange={handleChange}
