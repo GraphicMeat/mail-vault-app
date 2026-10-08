@@ -160,7 +160,11 @@ jobs:
 
       - name: Rsync static files (excluding api/)
         run: |
+          # Localized clips (de, es, ...) are uploaded by scripts/website-clips-upload.sh,
+          # not kept in git: this delete must not take them. English ships from git.
           rsync -avz --delete \
+            --include='/assets/clips/en/' \
+            --exclude='/assets/clips/*/' \
             --exclude='api/' \
             --exclude='demo/assets/' \
             --exclude='demo-preview-manifest.json' \
