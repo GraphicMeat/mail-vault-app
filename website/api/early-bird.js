@@ -11,7 +11,7 @@
 const EARLY_BIRD_CAP = 100;
 const HOLDING_STATUSES = ['active', 'trialing', 'past_due'];
 const HOLDING = new Set(HOLDING_STATUSES);
-const CACHE_TTL_MS = 10 * 60_000;      // a Stripe count
+const CACHE_TTL_MS = 60 * 60_000;      // a Stripe count, hourly; subscription webhooks clear it sooner
 const FALLBACK_TTL_MS = 60_000;        // a database count: ask Stripe again soon
 const GUARD_MAX_AGE_MS = 60_000;       // checkout never trusts an older count
 const EARLY_BIRD_FULL_MESSAGE = 'Early Bird spots are taken; standard pricing opens soon.';

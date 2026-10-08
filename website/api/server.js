@@ -675,7 +675,7 @@ const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY_EUR || process.env.STRIPE
 const PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY_EUR || process.env.STRIPE_PRICE_YEARLY;
 
 // ── Early Bird spots: the first 100 subscribers (./early-bird.js) ──────────
-// The count comes from Stripe (cached 10 min), else from billing_subscriptions.
+// The count comes from Stripe (cached an hour, cleared by subscription webhooks), else from billing_subscriptions.
 // Once every spot is taken, checkout sells the standard prices when
 // STRIPE_PRICE_*_STANDARD(_EUR) are set and refuses early bird otherwise.
 const {

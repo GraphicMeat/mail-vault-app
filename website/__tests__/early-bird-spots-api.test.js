@@ -117,12 +117,12 @@ describe('early-bird spot counter', () => {
     expect(await counter({ stripe: fakeStripe(subs) }).status()).toMatchObject({ cap: 100, taken: 103, remaining: 0 });
   });
 
-  it('caches the Stripe count for 10 minutes', async () => {
+  it('caches the Stripe count for an hour', async () => {
     const t = clock();
     const stripe = fakeStripe([sub('a', 'active', EARLY.monthly)]);
     const c = counter({ stripe, now: t.now });
     await c.status();
-    t.advance(9 * 60_000);
+    t.advance(59 * 60_000);
     await c.status();
     expect(stripe.calls).toHaveLength(2);
     t.advance(60_001);
