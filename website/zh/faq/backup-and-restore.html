@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/backup-and-restore.html">
   <meta property="og:title" content="备份与恢复 — MailVault 常见问题">
   <meta property="og:description" content="MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么、自动备份在什么时候运行，以及如何导出并重新导入你的保险库。">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="备份与恢复 — MailVault 常见问题">
   <meta name="twitter:description" content="MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么、自动备份在什么时候运行，以及如何导出并重新导入你的保险库。">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,7 +60,7 @@
       "name": "MailVault 如何备份邮件？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault connects to your email server (over IMAP, or Microsoft Graph for personal Outlook.com accounts) and downloads each email into your vault as a standard .eml file in Maildir format. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected."
+        "text": "MailVault 连接你的邮件服务器（通过 IMAP，个人 Outlook.com 账户则通过 Microsoft Graph），把每封邮件作为标准的 .eml 文件、以 Maildir 格式下载进你的保险库。每封邮件就是磁盘上的一个文件——人类可读、可迁移，任何邮件客户端都能打开。邮件进入保险库之后，你就可以删除服务器上的副本来腾出空间，本地这一份不受影响。"
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": "归档并从服务器删除时会发生什么？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Archive & Delete, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached. Archive, Back up & Delete, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first; if the drive cannot be reached, nothing is deleted. Two jobs in Settings > Backup & Restore > Archive & delete, both Premium, do the same for a whole account instead of selected messages: Archive, back up & delete from server saves the mail you scope to your vault and your backup folder, and Archive & delete from server saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail's own limits instead of failing."
+        "text": "「归档并删除」是一项 Premium 功能，按顺序执行三步：把邮件以 .eml 文件复制进你的保险库，检查副本确实存在，然后才从服务器删除。任何没有通过检查的邮件都会留在服务器上。完成后，这一行会显示唯一副本状态 — 你的保险库是这封邮件仅存的地方，这也是在提醒你接好备份盘。「归档、备份并删除」同样是 Premium 功能，它会再多做一份副本：把每封邮件也复制到你的备份文件夹，检查两份副本，只从服务器移除两份都确认无误的邮件。使用前需要先选择备份文件夹；如果无法访问备份盘，就不会删除任何邮件。「设置 > 备份与恢复 > 归档并删除」中的两项任务（均为 Premium）对整个账户做同样的事，而不只是选中的邮件：「归档、备份并从服务器删除」把你划定范围的邮件保存到保险库和备份文件夹，「归档并从服务器删除」则只保存到保险库。你可以选择文件夹和日期（所有日期、今年、去年、2 年以前，或你挑选的年份），选择在全部保存完毕后再删除还是每保存一封就删除一封，以及是移到废纸篓还是移到废纸篓并清空；确认之前，会有一份摘要列出将被移除的内容。每封邮件在移除前都会先检查副本，任务会在后台持续运行，重启后也会继续，遇到你的每日下载限额或 Gmail 自身的限制时会等待，而不是直接失败。"
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "如果我从服务器删除邮件会怎样？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete (Premium), which copies each message into your vault and verifies it there before removing it from the server."
+        "text": "你先归档的任何邮件都会留在你的保险库里，不受服务器之后任何操作的影响 — 这正是这个产品存在的意义。你没有归档的邮件会随服务器副本一起消失，所以在你删除之前，MailVault 会在每封邮件自己那一行显示它的状态：在服务器上、在你的保险库中，或者两处都有。稳妥的做法是使用归档并删除（Premium），它会把每封邮件复制进你的保险库并在那里核验，然后才从服务器移除。"
       }
     },
     {
@@ -216,7 +216,7 @@
         <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 如何备份邮件？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault connects to your email server (over IMAP, or Microsoft Graph for personal Outlook.com accounts) and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
+              MailVault 连接你的邮件服务器（通过 IMAP，个人 Outlook.com 账户则通过 Microsoft Graph），把每封邮件下载为一个标准的 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a>，以 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式存放在你的电脑上。每封邮件就是磁盘上的一个文件——人类可读、可迁移，任何邮件客户端都能打开。邮件进入保险库之后，你就可以删除服务器上的副本来腾出空间，本地这一份不受影响。
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/archive-progress-720.webp 720w, /screenshots/zh/archive-progress-1440.webp 1440w, /screenshots/zh/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/archive-progress-light-1440.webp" srcset="/screenshots/zh/archive-progress-light-720.webp 720w, /screenshots/zh/archive-progress-light-1440.webp 1440w, /screenshots/zh/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 归档进度条，显示批量邮件备份正在进行" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
@@ -233,19 +233,19 @@
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">归档并从服务器删除时会发生什么？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive &amp; Delete</strong>, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.</p>
+              <strong>归档并删除</strong>是一项 Premium 功能，按顺序执行三步：把邮件以 .eml 文件复制进你的保险库，检查副本确实存在，然后才从服务器删除。任何没有通过检查的邮件都会留在服务器上 &mdash; 复制失败永远不会让你失去原件。完成后，这一行会显示<strong>你唯一的副本</strong>：保险库是这封邮件仅存的地方，这也是在提醒你接好备份盘。</p>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive, Back up &amp; Delete</strong>, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first. If the drive cannot be reached, or a copy does not match, nothing is deleted for those messages and the result tells you how many stayed on the server.
+              <strong>归档、备份并删除</strong>同样是 Premium 功能，它会再多做一份副本：把每封邮件也复制到你的备份文件夹，检查两份副本，只从服务器移除两份都确认无误的邮件。使用前需要先选择备份文件夹。如果无法访问备份盘，或者某份副本不一致，相应的邮件就一封也不会删除，结果会告诉你有多少封留在了服务器上。
             </p>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Two jobs in <strong>Settings &rarr; Backup &amp; Restore &rarr; Archive &amp; delete</strong>, both Premium, do the same for a whole account instead of selected messages. <strong>Archive, back up &amp; delete from server</strong> saves the mail you scope to your vault and your backup folder, and <strong>Archive &amp; delete from server</strong> saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail&rsquo;s own limits instead of failing.
+              <strong>设置 &rarr; 备份与恢复 &rarr; 归档并删除</strong>中的两项任务（均为 Premium）对整个账户做同样的事，而不只是选中的邮件。<strong>归档、备份并从服务器删除</strong>把你划定范围的邮件保存到保险库和备份文件夹，<strong>归档并从服务器删除</strong>则只保存到保险库。你可以选择文件夹和日期（所有日期、今年、去年、2 年以前，或你挑选的年份），选择在全部保存完毕后再删除还是每保存一封就删除一封，以及是移到废纸篓还是移到废纸篓并清空；确认之前，会有一份摘要列出将被移除的内容。每封邮件在移除前都会先检查副本，任务会在后台持续运行，重启后也会继续，遇到你的每日下载限额或 Gmail 自身的限制时会等待，而不是直接失败。
             </p>
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如果我从服务器删除邮件会怎样？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong> (Premium), which copies each message into your vault and verifies it there before removing it from the server.
+              你先归档的任何邮件都会留在你的保险库里，不受服务器之后任何操作的影响 &mdash; 这正是这个产品存在的意义。你<em>没有</em>归档的邮件会随服务器副本一起消失，所以在你删除之前，MailVault 会在每封邮件自己那一行显示它的状态：在服务器上、在你的保险库中，或者两处都有。稳妥的做法是使用<strong>归档并删除</strong>（Premium），它会把每封邮件复制进你的保险库并在那里核验，然后才从服务器移除。
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w, /screenshots/zh/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w, /screenshots/zh/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 收件箱，逐封显示仅在服务器、已归档到本地、仅在本地的状态图标" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>

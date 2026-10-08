@@ -13,7 +13,7 @@
   <meta property="og:title" content="Cercare tra 50.000 email in millisecondi: come funziona l’indice locale di MailVault">
   <meta property="og:description" content="Abbiamo misurato la ricerca di MailVault su una casella da 50.000 messaggi: da 7 a 14 millisecondi a query. I risultati, la tecnologia SQLite che c’è dietro e come Premium aggiunge la ricerca negli allegati e nelle immagini con Vision.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta property="og:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare.">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="MailVault">
@@ -22,7 +22,7 @@
   <meta name="twitter:title" content="Cercare tra 50.000 email in millisecondi: come funziona l’indice locale di MailVault">
   <meta name="twitter:description" content="50.000 email, cercate in un tempo da 7 a 14 ms. I risultati reali del test e l’indice SQLite che li rende possibili.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta name="twitter:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare.">
   <meta name="twitter:site" content="@GraphicMeat">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -198,9 +198,9 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La tecnologia: un database SQL molto veloce e molto semplice</h3>
           <p>Non c’è alcun server di ricerca e nessun servizio cloud. L’indice è un unico file SQLite dentro il tuo vault, e SQLite è probabilmente il database più diffuso al mondo. MailVault usa il suo motore di ricerca full-text, FTS5, con un tokenizzatore <strong>trigram</strong>: ogni parola viene memorizzata come pezzetti sovrapposti di tre lettere. Ecco perché puoi digitare «voic» e trovare «invoice», senza caratteri jolly e senza regole sulla parola esatta. Gli accenti vengono ignorati, quindi «reunion» trova «Réunion». Giapponese e cinese, che non usano spazi tra le parole, passano per una seconda tabella pensata apposta.</p>
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Local search flow: saved messages feed a SQLite index; a query returns results, and opening a result reads the saved original."><figcaption>The result list comes from the index. The original message remains available for reading and verification.</figcaption></figure>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Flusso della ricerca locale: i messaggi salvati alimentano un indice SQLite; una query restituisce risultati e aprire un risultato legge l'originale salvato."><figcaption>L'elenco dei risultati viene dall'indice. Il messaggio originale resta disponibile per la lettura e la verifica.</figcaption></figure>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice splits into inv, nvo, voi, oic, and ice. The query voic shares the voi and oic pieces."><figcaption>Overlapping three-character pieces make substring matching possible. This illustrates tokenization, not a complete query execution trace.</figcaption></figure>
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice si divide in inv, nvo, voi, oic e ice. La query voic condivide i frammenti voi e oic."><figcaption>Frammenti sovrapposti di tre caratteri rendono possibile la ricerca di sottostringhe. È un'illustrazione della tokenizzazione, non una traccia completa dell'esecuzione di una query.</figcaption></figure>
 
           <p>La velocità nasce da tre scelte semplici:</p>
           <ul>

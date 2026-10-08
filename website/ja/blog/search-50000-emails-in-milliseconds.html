@@ -13,7 +13,7 @@
   <meta property="og:title" content="50,000 通のメールをミリ秒で検索：MailVault のローカルインデックスの仕組み">
   <meta property="og:description" content="50,000 通のメールボックスで MailVault の検索時間を測りました。1 クエリあたり 7〜14 ミリ秒です。測定結果、その裏にある SQLite の技術、そして Premium で使える添付ファイル検索と Vision による画像検索を紹介します。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="MailVault">
@@ -22,7 +22,7 @@
   <meta name="twitter:title" content="50,000 通のメールをミリ秒で検索：MailVault のローカルインデックスの仕組み">
   <meta name="twitter:description" content="50,000 通のメールを 7〜14 ms で検索。実際のテスト結果と、それを支える SQLite インデックス。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。">
   <meta name="twitter:site" content="@GraphicMeat">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -198,9 +198,9 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">技術: とても速く、とてもシンプルな SQL データベース</h3>
           <p>検索サーバーもクラウドサービスもありません。インデックスは保管庫の中にある 1 つの SQLite ファイルで、SQLite はおそらく世界で最も広く使われているデータベースです。MailVault は SQLite の全文検索エンジン FTS5 を <strong>trigram</strong> トークナイザーとともに使います。すべての単語が、重なり合う 3 文字の断片として保存されます。だから「voic」と入力すれば「invoice」が見つかり、ワイルドカードも単語全体の一致も要りません。アクセント記号は正規化されるので、「reunion」で「Réunion」も見つかります。単語の間にスペースを置かない日本語や中国語は、そのために作られた別のテーブルで処理されます。</p>
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Local search flow: saved messages feed a SQLite index; a query returns results, and opening a result reads the saved original."><figcaption>The result list comes from the index. The original message remains available for reading and verification.</figcaption></figure>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="ローカル検索の流れ：保存されたメッセージが SQLite のインデックスに入り、クエリが結果を返し、結果を開くと保存された原本が読み込まれます。"><figcaption>結果の一覧はインデックスから来ます。元のメッセージは、読んで確かめるためにそのまま残っています。</figcaption></figure>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice splits into inv, nvo, voi, oic, and ice. The query voic shares the voi and oic pieces."><figcaption>Overlapping three-character pieces make substring matching possible. This illustrates tokenization, not a complete query execution trace.</figcaption></figure>
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice は inv、nvo、voi、oic、ice に分かれます。クエリ voic は voi と oic の断片を共有します。"><figcaption>3 文字ずつ重なり合う断片によって、部分一致の検索が可能になります。これはトークン化の説明で、クエリ実行の完全な追跡ではありません。</figcaption></figure>
 
           <p>速さは、3 つの素朴な判断から生まれています。</p>
           <ul>

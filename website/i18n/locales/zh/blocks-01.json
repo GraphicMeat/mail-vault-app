@@ -91,8 +91,6 @@
   "cb355bfda381": "<strong>SMTP 服务器</strong>：<code>smtp.mail.me.com</code>，端口 587，SSL/TLS，需要身份验证。",
   "f975c4c71cc9": "<strong>用户名</strong>：你完整的 iCloud 邮箱地址（含 @icloud.com、@me.com 或 @mac.com）。",
   "2865fa02672b": "延伸阅读：<a href=\"/guides/imap-backup-tool-checklist.html\" class=\"text-primary-500 hover:text-primary-600 underline\">挑选 IMAP 备份工具该看什么</a>、<a href=\"/guides/archive-imap-emails-locally.html\" class=\"text-primary-500 hover:text-primary-600 underline\">本地 IMAP 归档是怎么运作的</a>，以及 <a href=\"/compare/mailvault-vs-apple-mail.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailVault 对比 Apple Mail</a>。",
-  "132c03343e8f": "某天早上你打开邮箱，看到那条警告：<strong>“你的邮箱快满了。”</strong>Gmail 给你 15 GB，由 Gmail、Google Drive 和 Google Photos 共用。Outlook 给你 15 GB。一旦触到上限，你就收不到新邮件了。这不是假设的情形 &mdash; 它每天都发生在几百万人身上，而通行的建议要么很糟，要么很贵。",
-  "4efa37c4f4f7": "<strong>花钱买更多空间</strong> &mdash; Google One 100 GB 起步 $1.99/月，Microsoft 365 $6.99/月。这管用，但你是在永远租用空间。邮件在涨，账单也跟着涨。你治的是症状，不是病根。",
   "0c04301db277": "<strong>随手删旧邮件</strong> &mdash; 按大小排序，删掉最大的几封，清空回收站。快，但有风险。三年前那个附件，可能是某份重要合同的唯一副本。删掉并彻底清除之后，它就没了。",
   "5a893f3f38e9": "<strong>手动导出成 .mbox</strong> &mdash; Google Takeout 能让你把整个 Gmail 下载成一个 .mbox 文件。问题在于：.mbox 是个整块文件，难搜索，而且多数邮件客户端应付不了太大的。它是一份备份，不是一份能用的归档。",
   "166699b0835e": "<strong>干脆不用邮件了</strong> &mdash; 这算不上一个选项。",

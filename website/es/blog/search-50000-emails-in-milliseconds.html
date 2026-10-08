@@ -13,7 +13,7 @@
   <meta property="og:title" content="Buscar entre 50.000 correos en milisegundos: cómo funciona el índice local de MailVault">
   <meta property="og:description" content="Medimos la búsqueda de MailVault en un buzón de 50.000 mensajes: de 7 a 14 milisegundos por consulta. Los resultados, la tecnología SQLite que hay detrás y cómo Premium añade la búsqueda en adjuntos y en imágenes con Vision.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta property="og:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre.">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="MailVault">
@@ -22,7 +22,7 @@
   <meta name="twitter:title" content="Buscar entre 50.000 correos en milisegundos: cómo funciona el índice local de MailVault">
   <meta name="twitter:description" content="50.000 correos buscados en un tiempo de 7 a 14 ms. Los resultados reales de la prueba y el índice SQLite que los hace posibles.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta name="twitter:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre.">
   <meta name="twitter:site" content="@GraphicMeat">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -198,9 +198,9 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La tecnología: una base de datos SQL muy rápida y muy simple</h3>
           <p>No hay servidor de búsqueda ni servicio en la nube. El índice es un único archivo SQLite dentro de tu bóveda, y SQLite es probablemente la base de datos más extendida del mundo. MailVault usa su motor de búsqueda de texto completo, FTS5, con un tokenizador <strong>trigram</strong>: cada palabra se guarda como fragmentos solapados de tres letras. Por eso puedes escribir «voic» y encontrar «invoice», sin comodines ni reglas de palabra exacta. Los acentos se normalizan, así que «reunion» encuentra «Réunion». El japonés y el chino, que no usan espacios entre palabras, pasan por una segunda tabla creada para ellos.</p>
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Local search flow: saved messages feed a SQLite index; a query returns results, and opening a result reads the saved original."><figcaption>The result list comes from the index. The original message remains available for reading and verification.</figcaption></figure>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Flujo de la búsqueda local: los mensajes guardados alimentan un índice SQLite; una consulta devuelve resultados, y al abrir un resultado se lee el original guardado."><figcaption>La lista de resultados sale del índice. El mensaje original sigue disponible para leerlo y verificarlo.</figcaption></figure>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice splits into inv, nvo, voi, oic, and ice. The query voic shares the voi and oic pieces."><figcaption>Overlapping three-character pieces make substring matching possible. This illustrates tokenization, not a complete query execution trace.</figcaption></figure>
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice se divide en inv, nvo, voi, oic e ice. La consulta voic comparte los fragmentos voi y oic."><figcaption>Los fragmentos solapados de tres caracteres permiten buscar subcadenas. Esto ilustra la tokenización, no el recorrido completo de ejecución de una consulta.</figcaption></figure>
 
           <p>La velocidad viene de tres decisiones sencillas:</p>
           <ul>

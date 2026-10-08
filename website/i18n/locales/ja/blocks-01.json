@@ -91,8 +91,6 @@
   "cb355bfda381": "<strong>SMTPのサーバー</strong>: <code>smtp.mail.me.com</code>、ポート587、SSL/TLS、認証が必要です。",
   "f975c4c71cc9": "<strong>ユーザー名</strong>: iCloudのメールアドレス全体（@icloud.com、@me.com、@mac.comを含みます）。",
   "2865fa02672b": "関連する記事: <a href=\"/guides/imap-backup-tool-checklist.html\" class=\"text-primary-500 hover:text-primary-600 underline\">IMAPのバックアップのツールで見るべき点</a>、<a href=\"/guides/archive-imap-emails-locally.html\" class=\"text-primary-500 hover:text-primary-600 underline\">ローカルでのIMAPのアーカイブの仕組み</a>、<a href=\"/compare/mailvault-vs-apple-mail.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailVaultとApple Mailの比較</a>。",
-  "132c03343e8f": "ある朝メールを開くと、警告が出ています。<strong>「メールボックスがもうすぐいっぱいです」</strong>。GmailはGmail、Google Drive、Google Photosで共有の15 GBを、Outlookは15 GBを与えます。その上限に達すると、新しいメールが届かなくなります。これは仮定の話ではありません &mdash; 何百万もの人に起きていることで、よく言われる対処は、まずいか高くつくかのどちらかです。",
-  "4efa37c4f4f7": "<strong>容量を買い足す</strong> &mdash; Google Oneは100 GBで$1.99/月から、Microsoft 365は$6.99/月からです。これで解決はしますが、その場所を永久に借り続けることになります。メールは増え続け、請求額も増え続けます。原因ではなく、症状に手当てをしているのです。",
   "0c04301db277": "<strong>古いメールを手当たり次第に削除する</strong> &mdash; サイズで並べ替え、大きいものを削除し、ゴミ箱を空にします。速いですが危険です。3年前のあの添付ファイルが、大事な契約書の唯一の控えかもしれません。削除して完全に消してしまえば、もう戻りません。",
   "5a893f3f38e9": "<strong>手作業で.mboxに書き出す</strong> &mdash; Google Takeoutを使えば、Gmail全体を1つの.mboxのファイルとしてダウンロードできます。問題は、.mboxのファイルが一枚岩で、検索しにくく、大きなものはたいていのメールクライアントが持て余すことです。これはバックアップであって、使えるアーカイブではありません。",
   "166699b0835e": "<strong>メールを使うのをやめる</strong> &mdash; 現実的な選択肢ではありません。",

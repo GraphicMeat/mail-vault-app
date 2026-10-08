@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/providers.html">
   <meta property="og:title" content="邮件服务商 — MailVault 常见问题">
   <meta property="og:description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="邮件服务商 — MailVault 常见问题">
   <meta name="twitter:description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,15 +60,15 @@
       "name": "MailVault 支持 Gmail 和 Outlook 吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com, Hotmail and Live.com accounts connect through the Microsoft Graph API."
+        "text": "可以。MailVault 适用于 Gmail、Outlook 以及任何支持 IMAP 的邮件服务。对于 Gmail，直接用你的 Google 账户通过 OAuth2 登录 — 无需手动填写 IMAP 设置。Microsoft 365 商业版和企业版账户可以直接用你的 Microsoft 账户通过 OAuth2 登录。个人 Outlook.com、Hotmail 和 Live.com 账户通过 Microsoft Graph API 连接。"
       }
     },
     {
       "@type": "Question",
-      "name": "How do I connect my Outlook.com account?",
+      "name": "如何连接我的 Outlook.com 账户？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the Microsoft Graph API. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter. It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts. A few things that rely on IMAP are not available on Graph accounts yet: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits."
+        "text": "MailVault 通过 Microsoft Graph API 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。少数依赖 IMAP 的功能在 Graph 账户上暂不支持：稍后提醒；把 MBOX 文件恢复到服务器；对已删除邮件使用「恢复到服务器」（「恢复到本地」可以使用，适用于已经在这台电脑上的邮件）；以及添加账户时报告收件箱数量的那一行。Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。"
       }
     },
     {
@@ -208,23 +208,23 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 支持 Gmail 和 Outlook 吗？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com, Hotmail and Live.com accounts <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">connect through the Microsoft Graph API</a>.
+              可以。MailVault 适用于 Gmail、Outlook 以及任何支持 IMAP 的邮件服务。对于 Gmail，直接用你的 Google 账户通过 OAuth2 登录 — 无需手动填写 IMAP 设置。Microsoft 365 商业版和企业版账户可以直接用你的 Microsoft 账户通过 OAuth2 登录，与双重身份验证也能无缝配合。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">通过 Microsoft Graph API 连接</a>。
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How do I connect my Outlook.com account?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何连接我的 Outlook.com 账户？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the <strong>Microsoft Graph API</strong>. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter.</p>
-              <p class="mb-4">It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Not available on Graph accounts yet:</p>
+              <p class="mb-4">MailVault 通过 <strong>Microsoft Graph API</strong> 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。</p>
+              <p class="mb-4">它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Graph 账户暂不支持：</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Snooze</strong></li>
-                <li><strong>Restoring an MBOX file to the server</strong></li>
-                <li><strong>Recover to server</strong> for deleted emails. Recover locally works, for mail already on this computer</li>
-                <li><strong>The Inbox count</strong> that the add-account window reports after the connection test</li>
+                <li><strong>稍后提醒</strong></li>
+                <li><strong>把 MBOX 文件恢复到服务器</strong></li>
+                <li>对已删除邮件使用<strong>恢复到服务器</strong>。「恢复到本地」可以使用，适用于已经在这台电脑上的邮件</li>
+                <li>添加账户窗口在连接测试后报告的<strong>收件箱数量</strong></li>
               </ul>
-              <p>Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits. That sign-in follows the same approach as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, with PKCE and XOAUTH2 authentication.</p>
+              <p>Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。这种登录方式与 <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a> 的做法相同，使用 PKCE 和 XOAUTH2 身份验证。</p>
             </div>
         </article>
 

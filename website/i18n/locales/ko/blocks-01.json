@@ -91,8 +91,6 @@
   "cb355bfda381": "<strong>SMTP 서버</strong>: <code>smtp.mail.me.com</code>, 포트 587, SSL/TLS, 인증 필요.",
   "f975c4c71cc9": "<strong>사용자 이름</strong>: 전체 iCloud 이메일 주소(@icloud.com, @me.com, @mac.com 포함).",
   "2865fa02672b": "함께 읽기: <a href=\"/guides/imap-backup-tool-checklist.html\" class=\"text-primary-500 hover:text-primary-600 underline\">IMAP 백업 도구에서 살펴볼 것</a>, <a href=\"/guides/archive-imap-emails-locally.html\" class=\"text-primary-500 hover:text-primary-600 underline\">로컬 IMAP 보관이 작동하는 방식</a>, <a href=\"/compare/mailvault-vs-apple-mail.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailVault와 Apple Mail 비교</a>.",
-  "132c03343e8f": "어느 날 아침 메일을 열었더니 <strong>\"메일함이 거의 가득 찼습니다\"</strong>라는 경고가 보입니다. Gmail은 Gmail, Google Drive, Google Photos가 함께 쓰는 15 GB를 줍니다. Outlook은 15 GB를 줍니다. 그 한도에 닿으면 새 메일을 받지 못합니다. 이것은 가상의 상황이 아닙니다 &mdash; 수백만 명에게 실제로 일어나는 일이고, 흔히 듣는 조언은 나쁘거나 비쌉니다.",
-  "4efa37c4f4f7": "<strong>저장 공간을 더 사기</strong> &mdash; Google One은 100 GB에 $1.99/월부터, Microsoft 365는 $6.99/월부터입니다. 되기는 하지만 공간을 영원히 빌리는 셈입니다. 메일은 계속 늘고 청구서도 함께 늡니다. 원인이 아니라 증상을 다루는 것입니다.",
   "0c04301db277": "<strong>오래된 메일을 닥치는 대로 지우기</strong> &mdash; 크기순으로 정렬해 큰 것부터 지우고 휴지통을 비웁니다. 빠르지만 위험합니다. 3년 전의 그 첨부파일이 중요한 계약서의 유일한 사본일 수도 있습니다. 지우고 비워 버리면 끝입니다.",
   "5a893f3f38e9": "<strong>수동으로 .mbox 내보내기</strong> &mdash; Google Takeout으로 Gmail 전체를 .mbox 파일 하나로 내려받을 수 있습니다. 문제는 .mbox 파일이 통짜라 검색하기 어렵고, 큰 파일은 대부분의 메일 클라이언트가 버거워한다는 점입니다. 백업이지 쓸 만한 보관본은 아닙니다.",
   "166699b0835e": "<strong>메일을 그냥 안 쓰기</strong> &mdash; 현실적인 선택지가 아닙니다.",
