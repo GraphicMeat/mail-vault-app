@@ -91,7 +91,7 @@ function activate(node, onToggle, onSelect) {
   else onSelect(node.path);
 }
 
-function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact, counts, onContextMenu }) {
+function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact, counts, onContextMenu, flash, onFlashEnd }) {
   const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.path);
@@ -127,6 +127,9 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
         )}
         <Icon size={compact ? 14 : 16} className="shrink-0" />
         {!compact && <span className="text-sm flex-1 truncate">{label}</span>}
+        {isActive && flash?.path === node.path && (
+          <span key={flash.n} data-testid="folder-flash" className="folder-flash" aria-hidden="true" onAnimationEnd={onFlashEnd} />
+        )}
         {showCount && (
           <span
             data-testid="folder-unseen"
@@ -153,6 +156,8 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
           compact={compact}
           counts={counts}
           onContextMenu={onContextMenu}
+          flash={flash}
+          onFlashEnd={onFlashEnd}
         />
       ))}
     </>
@@ -214,6 +219,7 @@ function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onC
  */
 export function FolderTree({
   mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts, onContextMenu, searchQuery = '',
+  flash, onFlashEnd,
 }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
   const local = useMemo(() => localNodes(mailboxes), [mailboxes]);
@@ -232,6 +238,8 @@ export function FolderTree({
       compact={compact}
       counts={counts}
       onContextMenu={onContextMenu}
+      flash={flash}
+      onFlashEnd={onFlashEnd}
     />
   );
   return <>

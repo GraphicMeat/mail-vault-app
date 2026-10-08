@@ -605,6 +605,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const setViewMode = useUiStore(s => s.setViewMode);
   const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
+  const unreadFlash = useUiStore(s => s.unreadFlash);
+  const clearUnreadFlash = useUiStore(s => s.clearUnreadFlash);
   const transferHoverEnabled = useSettingsStore(s => s.transferHoverEnabled);
 
   // Only the local cache lagging the mailbox is real, user-visible progress.
@@ -1343,7 +1345,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} /> : (
               <Folders mailboxes={shownMailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
-                onContextMenu={onFolderContextMenu} searchQuery={folderQuery} />
+                onContextMenu={onFolderContextMenu} searchQuery={folderQuery}
+                flash={unreadFlash} onFlashEnd={clearUnreadFlash} />
             )}
           </div>
         </section>

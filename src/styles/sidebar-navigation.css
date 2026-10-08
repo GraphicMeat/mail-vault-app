@@ -157,3 +157,19 @@
 @media (max-height: 520px) {
   [data-sidebar-density="compact"] .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 8px; }
 }
+
+/* The unread filter went on in a folder that holds no unread mail: the open
+   folder's row flashes twice. The overlay clears itself on animationend. */
+.folder-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--color-mail-accent, currentColor);
+  opacity: 0;
+  animation: folder-flash 0.5s ease-in-out 2;
+}
+@keyframes folder-flash {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.35; }
+}
