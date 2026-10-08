@@ -130,10 +130,10 @@ describe('homepage clips', () => {
     expect(new Set(names).size).toBe(26);
   });
 
-  it('adds no download, and no button but the two carousel arrows', () => {
+  it('adds no download and no button', () => {
     for (const g of groups) {
       expect(g.querySelector('.mv-button, [data-download], [data-acquisition-download], [data-acquisition-event]')).toBeNull();
-      expect([...g.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Previous clip', 'Next clip']);
+      expect(g.querySelectorAll('button')).toHaveLength(0);
       expect(g.textContent).not.toMatch(/—/);
     }
   });

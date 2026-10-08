@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import * as i18n from '../i18n/i18n.mjs';
 
 // The English homepage, laid out as clip cards: a hero with the price card, one
-// download and the hero clip, four key points, six carousels of clips, the
-// small-things carousel and its row of links, a spec card, then the comparison, feedback and the
+// download and the hero clip, four key points, six groups of clip cards, the
+// small-things group and its row of links, a spec card, then the comparison, feedback and the
 // closing download. English only for now: the locale homepages are built from a
 // frozen snapshot of the previous English page and do not change.
 const read = (f) => readFileSync(f, 'utf8');
@@ -239,8 +239,8 @@ describe('key points', () => {
 });
 
 // The five long sections, each now a clip group with its headline and lead,
-// then the small things, also a clip group. Every group is a carousel of large
-// clip cards. Only real clips render; the clips still to be recorded wait as
+// then the small things, also a clip group. Every group shows its clip cards in
+// plain rows (see homepage-clip-rows.test.js). Only real clips render; the clips still to be recorded wait as
 // commented card markup.
 const GROUPS = {
   backups: ['Free up your mailbox. Keep every message.', ['archive-delete', 'scheduled-backups', 'time-capsule', 'manual-backup']],
@@ -301,11 +301,12 @@ describe('clip groups', () => {
     expect(h2.querySelector('br')).not.toBeNull();
     expect(h2.querySelector('.hm-grad')).not.toBeNull();
     expect(heading(h2)).toBe(title);
-    const lead = text(group.querySelector('.hm-carousel-intro .hm-body'));
+    const lead = text(group.querySelector('.hm-center .hm-body'));
     expect(lead).not.toBe('');
     expect(lead.split(/[.!?](?:\s|$)/).filter(Boolean).length, lead).toBeLessThanOrEqual(2);
     expect([...group.querySelectorAll('figure.mv-clip')].map((f) => f.dataset.clip)).toEqual(clips);
-    expect(group.querySelector('.mv-clip-grid, .mv-clip-grid-3')).toBeNull();
+    expect(group.querySelectorAll('.mv-clip-grid')).toHaveLength(1);
+    expect(group.querySelector('.mv-clip-grid-3')).toBeNull();
     expect(group.querySelector('.mv-button, [data-download], [data-acquisition-download]')).toBeNull();
   });
 
@@ -359,16 +360,15 @@ describe('clip groups', () => {
     if (UNLINKED.includes(clip)) {
       expect(LINKS[clip]).toBeUndefined();
       expect(figure.querySelector('a')).toBeNull();
-      // With no link inside, the card itself takes a tab stop.
-      expect(figure.getAttribute('tabindex')).toBe('0');
     } else {
       const href = LINKS[clip];
       expect(link.getAttribute('href')).toBe(href);
       expect(existsSync('website' + href.replace(/#.*$/, '')), href).toBe(true);
       expect(text(link)).toMatch(/^Learn more/);
       expect(text(link.querySelector('.hm-sr'))).toBe(`about ${text(figure.querySelector('.mv-clip-title')).replace(/ Premium$/, '')}`);
-      expect(figure.hasAttribute('tabindex')).toBe(false);
     }
+    // A card is no tab stop of its own: nothing scrolls it into view.
+    expect(figure.hasAttribute('tabindex')).toBe(false);
     expect(Boolean(figure.querySelector('.mv-clip-title .hm-chip'))).toBe(PREMIUM.has(clip));
     const label = video.getAttribute('aria-label');
     expect(label.length).toBeGreaterThan(40);
@@ -417,119 +417,19 @@ describe('clip groups', () => {
   });
 });
 
-// Every group is a horizontal carousel: native scroll-snap, no library, no
-// auto-advance. Arrows beside the heading, hidden until the script runs.
-describe('clip carousels', () => {
-  const groups = Object.keys(GROUPS).map((id) => doc.getElementById(id));
-
-  it.each(Object.keys(GROUPS))('%s: a labelled, focusable carousel region holding its cards', (id) => {
-    const group = doc.getElementById(id);
-    const tracks = group.querySelectorAll('.hm-carousel-track');
-    expect(tracks).toHaveLength(1);
-    const track = tracks[0];
-    expect(track.getAttribute('role')).toBe('region');
-    expect(track.getAttribute('aria-roledescription')).toBe('carousel');
-    expect(track.getAttribute('aria-label')).toMatch(/\w{3,}/);
-    expect(track.getAttribute('tabindex')).toBe('0');
-    expect(track.id).toBe(`${id}-track`);
-    expect([...track.children].every((c) => c.matches('figure.mv-clip'))).toBe(true);
-    expect(track.children.length).toBe(GROUPS[id][1].length);
-  });
-
-  it.each(Object.keys(GROUPS))('%s: previous and next are real buttons beside the heading, hidden without a script', (id) => {
-    const group = doc.getElementById(id);
-    const head = group.querySelector('.hm-carousel-head');
-    expect(head.querySelector('h2')).not.toBeNull();
-    const nav = head.querySelector('.hm-carousel-nav');
-    expect(nav.hasAttribute('hidden')).toBe(true);
-    const buttons = [...nav.querySelectorAll('button')];
-    expect(buttons).toHaveLength(2);
-    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Previous clip', 'Next clip']);
-    for (const b of buttons) {
-      expect(b.getAttribute('type')).toBe('button');
-      expect(b.getAttribute('aria-controls')).toBe(`${id}-track`);
-      expect(b.classList.contains('mv-button')).toBe(false);
-      expect(b.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
-    }
-    expect(buttons[0].hasAttribute('disabled')).toBe(true);
-    expect(before(head, group.querySelector('.hm-carousel-track'))).toBe(true);
-  });
-
-  it('gives the carousels distinct names', () => {
-    const names = groups.map((g) => g.querySelector('.hm-carousel-track').getAttribute('aria-label'));
-    expect(new Set(names).size).toBe(names.length);
-  });
-
-  it('scrolls natively with mandatory snapping, one large card and a peek of the next', () => {
-    const track = rulesFor(plain, '.hm-carousel-track');
-    expect(track).toMatch(/overflow-x\s*:\s*auto/);
-    expect(track).toMatch(/scroll-snap-type\s*:\s*x\s+mandatory/);
-    expect(track).toMatch(/display\s*:\s*flex/);
-    expect(track).not.toMatch(/scroll-behavior\s*:\s*smooth/);
-    // The row contains its absolutely positioned screen-reader text, so cards
-    // scrolled out of it never widen the page.
-    expect(track).toMatch(/position\s*:\s*relative/);
-    const card = rulesFor(plain, '.hm-carousel-track > .mv-clip');
-    expect(card).toMatch(/scroll-snap-align\s*:\s*start/);
-    // The card stays wide enough that less than half of the next one shows, so
-    // only one clip plays at a time.
-    expect(card).toMatch(/flex\s*:\s*0 0 min\(\s*780px\s*,\s*78%\s*\)/);
-    const phone = mediaBlocks(plain, '@media (max-width:760px)').join('\n');
-    expect(rulesFor(phone, '.hm-carousel-track > .mv-clip')).toMatch(/flex-basis\s*:\s*86%/);
-    expect(rulesFor(phone, '.hm-carousel-nav')).toMatch(/display\s*:\s*none/);
-    // The old two-column grid rules are gone.
-    expect(plain).not.toMatch(/\.mv-clip-grid/);
-  });
-
-  it('layers the clip over its poster, shown only once it plays, never with display:none', () => {
-    expect(rulesFor(plain, '.hm-carousel-track .mv-clip-media')).toMatch(/position\s*:\s*relative/);
-    const video = rulesFor(plain, '.hm-carousel-track .mv-clip video');
-    expect(video).toMatch(/position\s*:\s*absolute/);
-    expect(video).toMatch(/opacity\s*:\s*0\b/);
-    expect(video).toMatch(/background\s*:\s*transparent/);
-    expect(video).not.toMatch(/display\s*:\s*none|visibility\s*:\s*hidden/);
-    expect(rulesFor(plain, '.hm-carousel-track .mv-clip.is-live video')).toMatch(/opacity\s*:\s*1/);
-    expect(rulesFor(plain, '.mv-clip-poster')).toMatch(/aspect-ratio\s*:\s*960\s*\/\s*660/);
-    const reduce = mediaBlocks(plain, '@media (prefers-reduced-motion:reduce)').join('\n');
-    expect(reduce).toMatch(/\.hm-carousel-track \.mv-clip video\s*\{[^}]*transition\s*:\s*none/);
-  });
-
-  it('keeps a focus ring inside the scroller for a card that takes focus', () => {
-    expect(rulesFor(plain, '.hm-carousel-track > .mv-clip:focus-visible')).toMatch(/outline-offset\s*:\s*-/);
-  });
-
-  it('loads the carousel script on this page only, deferred, before the clip player', () => {
-    const scripts = [...doc.querySelectorAll('script[src]')].map((s) => s.getAttribute('src'));
-    const carousel = scripts.findIndex((s) => /^\/assets\/home-clips\.js\?v=[\w-]+$/.test(s));
-    const player = scripts.findIndex((s) => s.startsWith('/assets/english-site.js?'));
-    expect(carousel).toBeGreaterThan(-1);
-    expect(carousel).toBeLessThan(player);
-    expect(doc.querySelector('script[src^="/assets/home-clips.js"]').hasAttribute('defer')).toBe(true);
-    expect(existsSync('website/assets/home-clips.js')).toBe(true);
-    for (const l of LOCALES) expect(read(`website/${l}/index.html`), l).not.toContain('home-clips.js');
-  });
-
-  it('keeps the hero clip as it was: eager poster attribute, no lazy image', () => {
-    const hero = doc.querySelector('.hm-hero-clip');
-    expect(hero.querySelector('video').getAttribute('poster')).toBe('/assets/clips/en/hero-montage.jpg');
-    expect(hero.querySelector('img')).toBeNull();
-    expect(hero.closest('.hm-carousel-track')).toBeNull();
-  });
-});
-
 describe('small things', () => {
   const more = doc.getElementById('more');
 
-  // The features with no clip yet: one compact row of links under the carousel.
+  // The features with no clip yet: one compact row of links under the clips.
   // Search has a clip card in #privacy, and the shortcuts and notification
   // features have theirs in #customize, so none of them is repeated here.
   const ROW = ['no-account', 'native-app', 'email-cleanup'];
 
-  it('lists the features with no clip as a compact row of links under the carousel', () => {
+  it('lists the features with no clip as a compact row of links under the clips', () => {
     expect(more.querySelector('.hm-icon-grid')).toBeNull();
     const row = more.querySelector('ul.hm-more-links');
     expect(row).not.toBeNull();
-    expect(before(more.querySelector('.hm-carousel-track'), row)).toBe(true);
+    expect(before(more.querySelector('.mv-clip-grid'), row)).toBe(true);
     const links = [...row.querySelectorAll('li > a')];
     expect(links.map((a) => a.getAttribute('href'))).toEqual(ROW.map((p) => `/features/${p}.html`));
     for (const a of links) {
@@ -612,7 +512,7 @@ describe('Meatlytics tag and stylesheet', () => {
 
   it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
-    expect(html).not.toContain('home-sections.css?v=2"');
+    expect(html).not.toContain('home-sections.css?v=3"');
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
   });
 
