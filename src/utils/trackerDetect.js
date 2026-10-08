@@ -20,7 +20,7 @@
 
 import { bodyStamp } from './linkSafety';
 import { TRACKER_PATTERNS } from './trackerList';
-import { t as tr } from '../i18n/index.js';
+import { t as tr, getLocale } from '../i18n/index.js';
 
 /** Path segments that only ever belong to a beacon, not to artwork. */
 const BEACON_PATH = /\/(open|opens|beacon|pixel|track|tracking|trk|impression)(\.(gif|png|jpg|jpeg|webp))?(\/|\?|$)|\/o\/|\/q\/|\/wf\/open|open\.(gif|png|aspx|php)/i;
@@ -97,7 +97,8 @@ const MARKER_STYLE = 'display:inline-block;margin:2px 0;padding:0 6px;border-rad
 export function scanTrackers(bodyHtml, key) {
   if (!bodyHtml) return { trackers: [], cleanedBodyHtml: bodyHtml, count: 0, https: 0 };
 
-  const stamp = key ? bodyStamp(bodyHtml) : null;
+  // The reasons are written in the UI language, so a language change is a different scan.
+  const stamp = key ? `${bodyStamp(bodyHtml)}:${getLocale()}` : null;
   if (stamp) {
     const hit = _scanCache.get(key);
     if (hit && hit.stamp === stamp) return hit.result;
@@ -122,7 +123,7 @@ export function scanTrackers(bodyHtml, key) {
     let reason = '';
 
     for (const [label, re] of TRACKER_PATTERNS) {
-      if (re.test(url)) { vendor = label; reason = `${label} open-tracking beacon`; break; }
+      if (re.test(url)) { vendor = label; reason = tr('util.trackerDetect.vendorBeacon', { vendor: label }); break; }
     }
 
     if (!vendor) {
@@ -134,7 +135,7 @@ export function scanTrackers(bodyHtml, key) {
       if (shape) {
         reason = shape;
       } else if (domain && BEACON_PATH.test(url)) {
-        reason = 'Request path is an open-tracking endpoint';
+        reason = tr('util.trackerDetect.beaconPath');
       } else {
         continue;
       }
