@@ -51,7 +51,7 @@
 .hm-offer .hm-hero-actions > .mv-button { flex:1 1 100%; }
 .hm-offer .hm-send-link { max-width:none; }
 .hm-offer .hm-send-hint,.hm-offer .hm-mobile-soon { margin:8px 0 0; }
-.hm-offer-free-line { margin:14px 0 0; font-size:.92rem; line-height:1.5; color:var(--mv-ink); }
+.hm-offer .hm-offer-free-line { margin:18px 0 0; font-size:.92rem; line-height:1.5; color:var(--mv-ink); }
 .hm-offer-free-line strong { font-weight:650; color:#86efac; }
 .hm-offer .hm-hero-links { display:flex; flex-wrap:wrap; gap:4px 18px; margin:6px 0 0; font-size:.86rem; }
 .hm-hero .hm-hero-links .hm-send-open { margin:0; }

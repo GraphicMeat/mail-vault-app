@@ -527,6 +527,14 @@ describe('clip groups', () => {
   });
 });
 
+describe('search card', () => {
+  it('carries the measured search speed, worded as on the search feature page', () => {
+    const caption = text(doc.querySelector('figure.mv-clip[data-clip="search-local"] .mv-clip-text'));
+    expect(caption).toContain('In our test, 50,000 messages searched in under 15 ms.');
+    expect(read('website/features/search.html')).toContain('In our test, 50,000 messages searched in under 15 ms.');
+  });
+});
+
 describe('small things', () => {
   const more = doc.getElementById('more');
 
@@ -622,7 +630,7 @@ describe('Meatlytics tag and stylesheet', () => {
 
   it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
-    expect(html).not.toMatch(/home-sections\.css\?v=[3-7]"/);
+    expect(html).not.toMatch(/home-sections\.css\?v=[3-8]"/);
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
   });
 
