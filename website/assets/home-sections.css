@@ -6,8 +6,10 @@
 
 /* Hero: the free label, then the early access badge on its own line, the
    headline and lead, all centred. Below them, on desktop, the product
-   clip on the left and the price card on the right; on phones the DOM order
-   stands: card (the action) first, then the clip. */
+   clip on the left and the card on the right; on phones the DOM order
+   stands: card (the action) first, then the clip. The card has two tiers:
+   the free download on top, then a quiet line and the optional Premium
+   prices under it. */
 .hm-hero { padding:56px 0 88px; }
 .hm-hero h1 { font-size:clamp(2.6rem,5vw,4.25rem); margin-bottom:1rem; }
 .hm-hero .hm-lead { max-width:42em; margin-bottom:2.4rem !important; }
@@ -30,7 +32,7 @@
 }
 /* The hero clip: a 1440x900 montage in a dark card. home-hero.js starts it
    after load on wider screens. The whole clip opens the live demo in a new
-   window, and the badge and the button in its corners say so. With Save-Data
+   window, and the button in its corner says so. With Save-Data
    the clip is swapped for its poster (.hm-hero-still). */
 .hm-hero-clip { padding:10px 10px 4px; border-color:rgba(255,255,255,.12); box-shadow:0 30px 90px -30px rgba(139,92,246,.6); }
 .hm-hero-clip .mv-clip-media { position:relative; }
@@ -41,29 +43,37 @@
 .hm-hero-demo:hover .mv-demo-launch { background:#3e35c8; box-shadow:0 10px 26px rgba(17,18,27,.3); }
 .hm-hero-demo:focus-visible { outline:2px solid var(--mv-accent); outline-offset:3px; }
 .mv-site .hm-hero-clip figcaption { flex-direction:row; padding:12px 8px 8px; border-top:0; }
+.hm-hero-clip .mv-demo-meta { font-size:.84rem; }
 
-.hm-offer { padding:20px 22px; border:1px solid rgba(178,173,255,.26); border-radius:18px; background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02)),var(--mv-card); box-shadow:0 30px 80px -40px rgba(99,102,241,.7); }
-.hm-offer-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 12px; margin-bottom:12px; }
-.hm-offer-title { margin:0; font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#c9c6ff; }
-.hm-offer .hm-offer-limit { margin:-6px 0 12px; font-size:.84rem; line-height:1.45; color:var(--mv-muted); }
-.hm-offer-plans { display:grid; gap:8px; margin:0; }
-.hm-offer-plan { display:grid; grid-template-columns:1fr auto; align-items:baseline; gap:0 12px; padding:10px 14px; border:1px solid var(--mv-line); border-radius:12px; background:rgba(255,255,255,.03); }
-.hm-offer-plan dt { font-weight:650; }
-.hm-offer-off { display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; background:rgba(134,239,172,.14); color:#86efac; font-size:.72rem; font-weight:700; letter-spacing:.01em; vertical-align:2px; white-space:nowrap; }
-.hm-offer-plan dd { margin:0; }
-.hm-offer-price { font-size:.95rem; color:var(--mv-muted); white-space:nowrap; }
-.hm-offer-price [data-mv-price] { font-size:1.45rem; font-weight:750; letter-spacing:-.02em; color:var(--mv-ink); }
-.hm-offer-standard { grid-column:1 / -1; font-size:.8rem; line-height:1.45; color:var(--mv-muted); }
-.hm-offer .hm-hero-actions { margin:16px 0 0; }
+.hm-offer { padding:20px 22px; border:1px solid rgba(178,173,255,.26); border-radius:18px; background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02)),var(--mv-card); }
+/* Tier one, the free download: the button (or the phone's form), what is free, and the other ways to get it. */
+.hm-offer .hm-hero-actions { margin:0; }
 .hm-offer .hm-hero-actions > .mv-button { flex:1 1 100%; }
 .hm-offer .hm-send-link { max-width:none; }
 .hm-offer .hm-send-hint,.hm-offer .hm-mobile-soon { margin:8px 0 0; }
-.hm-offer-checks { list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin:16px 0 0; padding:0; font-size:.84rem; line-height:1.4; color:var(--mv-ink); }
-.hm-offer-checks li { position:relative; padding-left:20px; }
-.hm-offer-checks li::before { content:'✓'; position:absolute; left:0; font-weight:800; color:#86efac; }
-.hm-offer-more { font-size:.84rem; }
-.hm-hero-links { display:flex; flex-wrap:wrap; justify-content:center; gap:6px 18px; margin-top:14px; }
+.hm-offer-free-line { margin:14px 0 0; font-size:.92rem; line-height:1.5; color:var(--mv-ink); }
+.hm-offer-free-line strong { font-weight:650; color:#86efac; }
+.hm-offer .hm-hero-links { display:flex; flex-wrap:wrap; gap:4px 18px; margin:6px 0 0; font-size:.86rem; }
 .hm-hero .hm-hero-links .hm-send-open { margin:0; }
+/* Tier two, Premium: optional, so smaller and quieter, under a hairline. */
+.hm-offer-premium { margin-top:18px; padding-top:16px; border-top:1px solid var(--mv-line); }
+.hm-offer-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:2px 12px; margin-bottom:6px; }
+.hm-offer-title { margin:0; font-size:.86rem; font-weight:650; color:var(--mv-ink); }
+.hm-offer-title span { font-weight:500; color:var(--mv-muted); }
+.hm-offer-more { font-size:.84rem; }
+/* The two rows share their columns (subgrid), so a longer amount such as £3.50/month never meets the struck price. */
+.hm-offer-plans { display:grid; grid-template-columns:auto auto minmax(0,1fr); column-gap:14px; margin:0; font-size:.9rem; }
+.hm-offer-plan { display:grid; grid-column:1 / -1; grid-template-columns:4.8em 7.6em minmax(0,1fr); grid-template-columns:subgrid; align-items:baseline; padding:3px 0; }
+.hm-offer-plan dt { color:var(--mv-muted); }
+.hm-offer-plan dd { margin:0; }
+.hm-offer-price { color:var(--mv-muted); white-space:nowrap; }
+.hm-offer-price [data-mv-price] { font-size:1.12rem; font-weight:700; letter-spacing:-.01em; color:var(--mv-ink); }
+.hm-offer-deal { white-space:nowrap; }
+/* The standard price after early access, struck, here and in the closing price line. */
+.hm-offer-was, .hm-offer-was [data-mv-price], .hm-price .hm-offer-was [data-mv-price] { font-weight:500; color:var(--mv-muted); }
+.hm-offer-was { text-decoration-thickness:1.5px; }
+.hm-offer-off { display:inline-block; margin-left:4px; padding:1px 8px; border-radius:999px; background:rgba(134,239,172,.14); color:#86efac; font-size:.75rem; font-weight:700; letter-spacing:.01em; white-space:nowrap; }
+.hm-offer-terms { margin:8px 0 0; font-size:.8rem; line-height:1.5; color:var(--mv-muted); }
 .hm-hero-proof { text-align:center; }
 
 /* Key points: icon, bold word, one line. */
@@ -150,11 +160,8 @@
   .hm-badge-line { gap:8px; }
   .hm-badge-spots { font-size:.72rem; }
   .hm-badge-tag { padding:3px 8px; font-size:.62rem; }
-  .hm-hero-demo .mv-demo-badge { top:10px; left:10px; }
   .hm-hero-demo .mv-demo-launch { right:10px; bottom:10px; min-height:34px; padding:6px 12px; font-size:.8rem; }
   .hm-offer { padding:16px; }
-  .hm-offer-plan { padding:8px 12px; }
-  .hm-offer-price [data-mv-price] { font-size:1.25rem; }
   .hm-clip-group .mv-clip-grid { grid-template-columns:1fr; }
   .hm-clip-group .hm-center { margin-bottom:28px; }
   .hm-keys { padding:32px 0; }
@@ -163,7 +170,6 @@
 @media (max-width:560px) {
   .hm-keys-list { grid-template-columns:1fr; }
   .hm-keys-list { gap:20px; }
-  .hm-offer-checks { grid-template-columns:1fr; gap:6px; }
   .hm-spec { padding:24px 20px; border-radius:18px; }
   .hm-spec-list > div { grid-template-columns:1fr; gap:2px; }
 }

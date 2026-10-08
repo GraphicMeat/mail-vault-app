@@ -341,10 +341,10 @@ describe('English acquisition journey', () => {
     const link = doc.querySelector('[data-acquisition-destination="demo"]');
     link.addEventListener('click', e => e.preventDefault());
     link.click();
-    expect(w.gm.q).toEqual([['home_cta', {page_version:'homepage-en-20261002',placement:'hero',destination:'demo'}]]);
+    expect(w.gm.q).toEqual([['home_cta', {page_version:'homepage-en-20261002',placement:'hero_preview',destination:'demo'}]]);
     const tracker = vi.fn();
     w.gm.q.forEach(args => tracker(...args));
-    expect(tracker).toHaveBeenCalledExactlyOnceWith('home_cta', {page_version:'homepage-en-20261002',placement:'hero',destination:'demo'});
+    expect(tracker).toHaveBeenCalledExactlyOnceWith('home_cta', {page_version:'homepage-en-20261002',placement:'hero_preview',destination:'demo'});
 
     const local = page('index.html', '', undefined, {hostname:'127.0.0.1'});
     const localLink = local.doc.querySelector('[data-acquisition-destination="demo"]');

@@ -111,26 +111,29 @@ describe('English hero copy', () => {
   });
 
   it('leads with daily use, then keeping your copy', () => {
-    const lead = en.querySelector('.hm-lead').textContent;
-    expect(lead.startsWith('A fast, private email app')).toBe(true);
-    expect(lead.indexOf('Search 50,000 messages')).toBeLessThan(lead.indexOf('your copy stays'));
+    expect(en.querySelector('.hm-lead').textContent).toBe('A fast, private email app that keeps your mail on your computer. Delete it from the server whenever you like: your copy stays.');
   });
 
-  it('states the early-bird and standard price under the final download', () => {
+  it('states the early-bird price under the final download, the standard price struck beside it', () => {
     const line = en.querySelector('#download .hm-price');
-    expect(line.textContent.trim()).toBe('Early Bird & Family Pricing: Premium $25/year, 36% below the standard price after early access: $39/year.');
-    expect(line.querySelector('[data-mv-price="{earlyBirdSavingsPercent}%"]').textContent).toBe('36%');
-    // Once every spot is taken only "Premium {yearly}/year." stays.
+    expect(line.textContent.trim()).toBe('Early Bird & Family Pricing: Premium $25/year Standard price after early access: $39/year 36% off');
+    expect(line.textContent).not.toMatch(/below the standard price/);
+    const was = line.querySelectorAll('s');
+    expect(was).toHaveLength(1);
+    expect(was[0].querySelector('.mv-sr-only').textContent).toBe('Standard price after early access: ');
+    expect(was[0].querySelector('[data-mv-price="{standardYearly}"]').textContent).toBe('$39');
+    expect(line.querySelector('.hm-offer-off').dataset.mvPrice).toBe('{earlyBirdSavingsPercent}% off');
+    // Once every spot is taken only "Premium {yearly}/year" stays.
     const early = [...line.querySelectorAll('[data-mv-early]')].map((el) => el.textContent).join('|');
-    expect(early).toBe('Early Bird & Family Pricing: |, 36% below the standard price after early access: $39/year');
+    expect(early).toBe('Early Bird & Family Pricing: |Standard price after early access: $39/year|36% off');
   });
 
-  it('prices the final download the same way as the locale pages', () => {
+  it('links the final price line to pricing', () => {
     const line = en.querySelector('#download .mv-actions + .hm-send-hint + .hm-price');
     const link = line.querySelector('a[href$="/pricing.html"]');
     expect(link.dataset.acquisitionPlacement).toBe('final');
     expect(link.dataset.acquisitionDestination).toBe('pricing');
-    expect(line.querySelector('s, del, strike')).toBeNull();
+    expect(link.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
   });
 });
 

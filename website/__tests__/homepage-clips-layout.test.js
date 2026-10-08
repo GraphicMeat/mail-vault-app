@@ -114,13 +114,86 @@ describe('hero', () => {
     expect(rulesFor(plain, '.hm-hero .hm-free-label')).toMatch(/display\s*:\s*flex/);
   });
 
-  it('states the 100-spot limit in the badge and under the card title, counting spots taken, never spots left', () => {
+  it('leads with the app and keeping your copy, in two sentences', () => {
+    expect(text(hero.querySelector('.hm-lead'))).toBe('A fast, private email app that keeps your mail on your computer. Delete it from the server whenever you like: your copy stays.');
+  });
+
+  it('splits the card into two tiers: the free download first, then the optional Premium prices', () => {
+    expect([...card.children].map((el) => el.className)).toEqual(['hm-offer-free', 'hm-offer-premium']);
+    const [free, premium] = card.children;
+    expect(free.querySelector('.hm-hero-actions')).not.toBeNull();
+    expect(premium.querySelector('.hm-hero-actions, [data-download], form')).toBeNull();
+    expect(free.querySelector('.hm-offer-plans, [data-mv-price]')).toBeNull();
+    // The free tier says what is free, once, right under the download.
+    const line = free.querySelector('.hm-hero-actions ~ .hm-offer-free-line');
+    expect(text(line)).toBe('Free forever: the full app and unlimited manual backups. No account.');
+    // A quiet line between the tiers, no second card.
+    expect(rulesFor(plain, '.hm-offer-premium')).toMatch(/border-top\s*:\s*1px solid/);
+    expect(plain).not.toMatch(/\.hm-offer-plan\s*\{[^}]*(?:border|background)\s*:/);
+  });
+
+  it('heads the Premium tier with its name, the Early Bird wording stepping aside once sold out', () => {
+    const title = card.querySelector('.hm-offer-premium .hm-offer-head .hm-offer-title');
+    expect(text(title)).toBe('Premium · Early Bird & Family Pricing');
+    expect(title.hasAttribute('data-mv-early')).toBe(false);
+    expect(text(title.querySelector('[data-mv-early]'))).toBe('· Early Bird & Family Pricing');
+  });
+
+  it('shows each plan on one row: price, the struck standard price and the discount', () => {
+    const rows = card.querySelectorAll('.hm-offer-premium .hm-offer-plan');
+    expect([...rows].map((r) => r.dataset.plan)).toEqual(['yearly', 'monthly']);
+    const cases = [
+      [rows[0], 'Yearly', '{yearly}', '$25', '/year', '{standardYearly}', '$39', '{earlyBirdSavingsPercent}% off', '36% off'],
+      [rows[1], 'Monthly', '{monthly}', '$4', '/month', '{standardMonthly}', '$6', '{earlyBirdMonthlySavingsPercent}% off', '33% off'],
+    ];
+    for (const [row, name, token, amount, per, stdToken, std, offToken, off] of cases) {
+      expect(text(row.querySelector('dt'))).toBe(name);
+      expect(text(row.querySelector('.hm-offer-price'))).toBe(amount + per);
+      expect(row.querySelector(`.hm-offer-price [data-mv-price="${token}"]`).textContent).toBe(amount);
+      const was = row.querySelectorAll('s');
+      expect(was).toHaveLength(1);
+      expect(was[0].closest('.hm-offer-price')).toBeNull();
+      expect(was[0].querySelector(`[data-mv-price="${stdToken}"]`).textContent).toBe(std);
+      expect(text(was[0].querySelector('.mv-sr-only'))).toBe('Standard price after early access:');
+      const chip = row.querySelector('.hm-offer-off');
+      expect(chip.dataset.mvPrice).toBe(offToken);
+      expect(text(chip)).toBe(off);
+      // Both go with the early bird price once every spot is taken; the price stays.
+      expect(was[0].hasAttribute('data-mv-early')).toBe(true);
+      expect(chip.hasAttribute('data-mv-early')).toBe(true);
+      expect(row.querySelector('.hm-offer-price').closest('[data-mv-early]')).toBeNull();
+      expect([...row.children].map(text).join(' ')).toBe(`${name} ${amount}${per} Standard price after early access: ${std} ${off}`);
+    }
+    expect(card.querySelector('.hm-offer-plans input, .hm-offer-plans select, .hm-offer-plans button, .hm-offer-plans form')).toBeNull();
+    // The struck prices in the hero: the badge's and one per plan row, nothing else.
+    expect([...hero.querySelectorAll('s, del, strike')].map((el) => el.className)).toEqual(['hm-badge-was', 'hm-offer-was', 'hm-offer-was']);
+    expect(rulesFor(plain, '.hm-offer-off')).toMatch(/border-radius/);
+    expect(text(hero)).not.toMatch(/limited time|lifetime|for life|—/i);
+  });
+
+  it('says the discount once per place: no "below the standard price" lines on the homepage', () => {
+    expect(text(doc.querySelector('main'))).not.toMatch(/below the standard price/i);
+    expect(card.querySelector('.hm-offer-standard, .hm-offer-limit, .hm-offer-checks')).toBeNull();
+    expect(text(card).match(/% off/g)).toHaveLength(2);
+  });
+
+  it('puts the Premium terms on one line, swapped for the sold-out line once every spot is taken', () => {
+    const lines = card.querySelectorAll('.hm-offer-premium .hm-offer-terms');
+    expect(lines).toHaveLength(1);
+    const terms = lines[0];
+    const copy = 'First 100 subscribers · up to 5 devices · 14-day free trial on yearly · your price stays the same while you stay subscribed.';
+    expect(text(terms)).toBe(copy);
+    expect(terms.children).toHaveLength(0);
+    // The live count is the badge's job; this line keeps its words until the spots run out.
+    expect(terms.dataset.mvSpots).toBe(copy);
+    expect(terms.dataset.mvSpotsFull).toBe('All {cap} Early Bird spots are taken. Premium is now at the standard price. Up to 5 devices · 14-day free trial on yearly.');
+    expect(before(card.querySelector('.hm-offer-plans'), terms)).toBe(true);
+  });
+
+  it('states the 100-spot limit in the badge and the Premium terms, counting spots taken, never spots left', () => {
     expect(text(hero.querySelector('.hm-badge'))).toContain('Only 100 spots in total');
-    const limit = card.querySelector('.hm-offer-head + .hm-offer-limit');
-    expect(text(limit)).toBe('Limited to the first 100 subscribers.');
-    // One line at phone width too, so the count never pushes the card down.
-    expect(limit.dataset.mvSpots).toBe('{taken} of {cap} Early Bird spots taken.');
-    expect(limit.dataset.mvSpotsFull).toBe('All {cap} Early Bird spots are taken. Premium is now at the standard price.');
+    expect(text(card)).not.toContain('Limited to the first 100 subscribers');
+    expect(text(card.querySelector('.hm-offer-terms'))).toMatch(/^First 100 subscribers/);
     expect(text(hero)).not.toMatch(/\b\d+ (spots )?left\b|selling fast|hurry|countdown/i);
     for (const el of hero.querySelectorAll('[data-mv-spots]')) {
       expect(el.dataset.mvSpots + el.dataset.mvSpotsFull).not.toMatch(/\bleft\b|—/);
@@ -132,49 +205,13 @@ describe('hero', () => {
     expect(soon).not.toBeNull();
     expect(soon.hidden).toBe(true);
     expect(soon.closest('.hm-hero-actions')).toBeNull();
+    expect(soon.closest('.hm-offer-free')).not.toBeNull();
     expect(text(soon)).toBe('A mobile app is coming soon. Until then, MailVault runs on your computer.');
   });
 
-  it('shows the plans as display rows in a card, early bird and standard price, nothing struck', () => {
-    expect(card).not.toBeNull();
-    expect(text(card.querySelector('.hm-offer-title'))).toBe('Early Bird & Family Pricing');
-    const rows = card.querySelectorAll('.hm-offer-plan');
-    expect([...rows].map((r) => r.dataset.plan)).toEqual(['yearly', 'monthly']);
-    const [yearly, monthly] = rows;
-    expect(yearly.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
-    expect(text(yearly)).toContain('$25/year');
-    expect(text(yearly.querySelector('.hm-offer-standard'))).toBe('36% below the standard price after early access: $39/year');
-    expect(yearly.querySelector('[data-mv-price="{standardYearly}"]').textContent).toBe('$39');
-    expect(monthly.querySelector('[data-mv-price="{monthly}"]').textContent).toBe('$4');
-    expect(text(monthly)).toContain('$4/month');
-    expect(text(monthly.querySelector('.hm-offer-standard'))).toBe('33% below the standard price after early access: $6/month');
-    expect(monthly.querySelector('[data-mv-price="{standardMonthly}"]').textContent).toBe('$6');
-    expect(card.querySelector('.hm-offer-plans input, .hm-offer-plans select, .hm-offer-plans button, .hm-offer-plans form')).toBeNull();
-    // The only struck price in the hero is the badge's standard price.
-    expect([...hero.querySelectorAll('s, del, strike')].map((el) => el.className)).toEqual(['hm-badge-was']);
-    expect(text(hero)).not.toMatch(/limited time|lifetime|for life|—/i);
-  });
-
-  it('marks each plan with its discount off the standard price, computed per currency', () => {
-    const [yearly, monthly] = card.querySelectorAll('.hm-offer-plan');
-    const chipY = yearly.querySelector('dt .hm-offer-off');
-    const chipM = monthly.querySelector('dt .hm-offer-off');
-    expect(text(chipY)).toBe('36% off');
-    expect(text(chipM)).toBe('33% off');
-    expect(chipY.dataset.mvPrice).toBe('{earlyBirdSavingsPercent}% off');
-    expect(chipM.dataset.mvPrice).toBe('{earlyBirdMonthlySavingsPercent}% off');
-    expect(yearly.querySelector('.hm-offer-standard [data-mv-price="{earlyBirdSavingsPercent}%"]').textContent).toBe('36%');
-    expect(monthly.querySelector('.hm-offer-standard [data-mv-price="{earlyBirdMonthlySavingsPercent}%"]').textContent).toBe('33%');
-    // Early-bird-only copy steps aside once every spot is taken.
-    for (const el of [chipY, chipM, ...card.querySelectorAll('.hm-offer-standard'), card.querySelector('.hm-offer-title')]) {
-      expect(el.hasAttribute('data-mv-early'), el.outerHTML.slice(0, 60)).toBe(true);
-    }
-    expect(rulesFor(plain, '.hm-offer-off')).toMatch(/border-radius/);
-  });
-
-  it('holds the one OS-detected download, and the phone form, in the card', () => {
+  it('holds the one OS-detected download, and the phone form, at the top of the card', () => {
     const actions = card.querySelector('.hm-hero-actions');
-    expect(actions).not.toBeNull();
+    expect(card.querySelector('.hm-offer-free').firstElementChild).toBe(actions);
     expect([...actions.querySelectorAll('[data-hero-platform]')].map((el) => el.dataset.heroPlatform)).toEqual(['mac', 'windows', 'linux']);
     expect(actions.querySelector('#send-link-hero[data-send-link-primary]')).not.toBeNull();
     expect(card.querySelector('.hm-send-hint[data-hero-platform="mobile"]')).not.toBeNull();
@@ -185,35 +222,27 @@ describe('hero', () => {
     expect(hero.querySelectorAll('[data-acquisition-destination="thank_you"]')).toHaveLength(3);
   });
 
-  it('lists the four promises as checks under the button', () => {
-    expect([...card.querySelectorAll('.hm-offer-checks li')].map(text)).toEqual([
-      'Free forever, unlimited manual backups',
-      'Up to 5 devices per subscription',
-      '14-day free trial on yearly',
-      'No MailVault account',
-    ]);
-    expect(before(card.querySelector('.hm-hero-actions'), card.querySelector('.hm-offer-checks'))).toBe(true);
-  });
-
-  it('links the card to pricing as a hero CTA', () => {
-    const link = card.querySelector('a[href="/pricing.html"]');
+  it('links the Premium tier to pricing as a hero CTA', () => {
+    const link = card.querySelector('.hm-offer-premium .hm-offer-head a[href="/pricing.html"]');
+    expect(text(link)).toBe('What Premium adds →');
     expect(link.dataset.acquisitionEvent).toBe('home_cta');
     expect(link.dataset.acquisitionPlacement).toBe('hero');
     expect(link.dataset.acquisitionDestination).toBe('pricing');
   });
 
-  it('keeps the text links under the card', () => {
-    const links = hero.querySelector('.hm-hero-links');
-    expect(before(card, links)).toBe(true);
-    const platforms = links.querySelector('a.mv-text-link[href="/get-started.html?plan=free#platforms"]');
+  it('keeps the other ways to download in the free tier, and no demo link beside them', () => {
+    const links = card.querySelector('.hm-offer-free .hm-hero-links');
+    expect(hero.querySelectorAll('.hm-hero-links')).toHaveLength(1);
+    expect(before(card.querySelector('.hm-hero-actions'), links)).toBe(true);
+    const platforms = links.querySelector(':scope > a.mv-text-link[href="/get-started.html?plan=free#platforms"]');
     expect(platforms.dataset.acquisitionDestination).toBe('setup');
-    const demo = links.querySelector('a.mv-text-link[data-acquisition-destination="demo"]');
-    expect(demo.getAttribute('href')).toBe('/demo/?lang=en');
+    expect(platforms.dataset.acquisitionPlacement).toBe('hero');
     const opener = links.querySelector('button.mv-text-link[data-send-link-open][aria-controls="send-link-hero"]');
     expect(opener.dataset.acquisitionDestination).toBe('email_link');
+    expect(links.querySelector('[data-acquisition-destination="demo"]')).toBeNull();
   });
 
-  it('drops the old price line and proof chips, keeping the download count under the links', () => {
+  it('drops the old price line and proof chips, keeping the download count under the card', () => {
     expect(hero.querySelector('.hm-price, .hm-facts')).toBeNull();
     const proof = hero.querySelector('[data-download-proof]');
     expect(proof.hidden).toBe(true);
@@ -221,8 +250,8 @@ describe('hero', () => {
     expect(proof.closest('.hm-offer')).toBeNull();
   });
 
-  it('reads badge, headline, lead, card, links, then the product visual', () => {
-    const seq = ['.hm-free-label', '.hm-badge', 'h1', '.hm-lead', '.hm-offer', '#send-link-hero', '.hm-hero-links', '.hm-hero-media'].map((s) => hero.querySelector(s));
+  it('reads label, badge, headline, lead, card, links, then the product visual', () => {
+    const seq = ['.hm-free-label', '.hm-badge', 'h1', '.hm-lead', '.hm-offer', '#send-link-hero', '.hm-offer-free-line', '.hm-hero-links', '.hm-offer-premium', '.hm-hero-media'].map((s) => hero.querySelector(s));
     seq.forEach((el, i) => expect(el, String(i)).not.toBeNull());
     seq.slice(1).forEach((el, i) => expect(before(seq[i], el), String(i)).toBe(true));
   });
@@ -254,7 +283,7 @@ describe('hero', () => {
     expect(html).not.toContain('/demo/assets/demo-preview-en-');
   });
 
-  it('lays the demo launcher over the clip, after the text links, with its acquisition attributes', () => {
+  it('opens the demo from one place: the launcher over the clip, with its acquisition attributes', () => {
     const media = hero.querySelector('.hm-hero-media');
     const link = media.querySelector('.hm-hero-clip .mv-clip-media > a.hm-hero-demo');
     expect(link.getAttribute('href')).toBe('/demo/?lang=en');
@@ -264,17 +293,19 @@ describe('hero', () => {
     expect(link.dataset.acquisitionEvent).toBe('home_cta');
     expect(link.dataset.acquisitionPlacement).toBe('hero_preview');
     expect(link.dataset.acquisitionDestination).toBe('demo');
-    expect(text(link.querySelector('.mv-demo-badge'))).toBe('Interactive demo');
     expect(text(link.querySelector('.mv-demo-launch'))).toBe('Open the demo ↗');
+    // No corner badge restating it.
+    expect(link.querySelector('.mv-demo-badge')).toBeNull();
     expect(link.querySelector('video, a, button')).toBeNull();
-    // The first demo CTA in the document stays the hero text link.
-    const first = doc.querySelector('[data-acquisition-destination="demo"]');
-    expect(first.closest('.hm-hero-links')).not.toBeNull();
-    expect(first.dataset.acquisitionPlacement).toBe('hero');
-    expect(before(first, link)).toBe(true);
+    // The only demo CTA in the hero, and the first one in the document.
+    expect(hero.querySelectorAll('[href^="/demo/"]')).toHaveLength(1);
+    expect(doc.querySelector('[data-acquisition-destination="demo"]')).toBe(link);
     // One button in the hero: the launcher is a styled span, not a .mv-button.
     expect(media.querySelector('.mv-button')).toBeNull();
-    expect(text(media.querySelector('figcaption'))).toContain('A real inbox. Ready to explore.');
+    // A one-line caption under the clip.
+    const caption = media.querySelector('figcaption');
+    expect(text(caption)).toBe('A real inbox with 300 sample emails. No signup.');
+    expect(caption.querySelector('br, a')).toBeNull();
   });
 
   it('loads the hero starter before the clip player, on this page only', () => {
@@ -591,7 +622,7 @@ describe('Meatlytics tag and stylesheet', () => {
 
   it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
-    expect(html).not.toMatch(/home-sections\.css\?v=[3-6]"/);
+    expect(html).not.toMatch(/home-sections\.css\?v=[3-7]"/);
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
   });
 
