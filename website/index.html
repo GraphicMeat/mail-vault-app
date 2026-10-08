@@ -141,7 +141,7 @@
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261007-clips">
 <link rel="stylesheet" href="/assets/home.css?v=23">
-<link rel="stylesheet" href="/assets/home-sections.css?v=9">
+<link rel="stylesheet" href="/assets/home-sections.css?v=10">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -208,8 +208,9 @@
 </form><p class="hm-send-done" data-send-link-done="hero" tabindex="-1" role="status" hidden>Sent. Check your inbox on your computer.</p></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>Open it on your Mac, Windows or Linux computer.</p>
 <p class="mv-small hm-mobile-soon" data-hero-platform="mobile" hidden>A mobile app is coming soon. Until then, MailVault runs on your computer.</p>
-<p class="hm-offer-free-line"><strong>Free forever:</strong> the full app and unlimited manual backups. No account.</p>
-<div class="hm-hero-links"><a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/get-started.html?plan=free#platforms">Other platforms and formats →</a><button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>Email me the download link</button></div>
+<p class="hm-offer-free-title">Free forever</p>
+<p class="hm-offer-free-line">The full app and unlimited manual backups. No account.</p>
+<div class="hm-hero-links"><ul class="hm-os-links"><li><a data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" aria-label="Download for macOS"><svg width="16" height="16" aria-hidden="true"><use href="#os-apple"/></svg>macOS</a></li><li><a data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/thank-you.html?platform=windows&amp;start=1" aria-label="Download for Windows"><svg width="16" height="16" aria-hidden="true"><use href="#os-windows"/></svg>Windows</a></li><li><a data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" aria-label="Download for Linux"><svg width="16" height="16" aria-hidden="true"><use href="#os-linux"/></svg>Linux</a></li></ul><a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="setup" href="/get-started.html?plan=free#platforms">All formats →</a><button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-hero" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="email_link" hidden>Email me the download link</button></div>
 </div>
 <div class="hm-offer-premium">
 <div class="hm-offer-head"><p class="hm-offer-title">Premium<span data-mv-early> · Early Bird &amp; Family Pricing</span></p><a class="mv-text-link hm-offer-more" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/pricing.html">What Premium adds →</a></div>
@@ -387,10 +388,31 @@
 <div class="hm-more-row">
 <ul class="hm-more-links">
 <li><a href="/features/no-account.html">No account with us</a></li>
-<li><a href="/features/native-app.html">Light on your computer</a></li>
 <li><a href="/features/email-cleanup.html">A tidier inbox <em class="hm-chip">Premium</em></a></li>
 </ul>
 <a class="mv-text-link" href="/features.html">All features →</a>
+</div>
+</div>
+</section>
+
+<section id="native" class="mv-section hm-spec-band hm-native-band" aria-labelledby="native-title">
+<div class="mv-wrap">
+<div class="hm-spec hm-spec-flip hm-dark">
+<div class="hm-spec-copy">
+<h2 id="native-title">Built in Rust.<br><span class="hm-grad">Fast on your computer.</span></h2>
+<p>MailVault's core and its background helper are written in Rust. Sync, backups and search indexing run in that helper, a separate process, each job on its own thread, so the window stays responsive while they run. The window uses your system's own web engine instead of shipping a whole browser.</p>
+<a class="mv-text-link" href="/features/native-app.html">How the native app works →</a>
+</div>
+<dl class="hm-spec-list">
+<div><dt>Core</dt><dd>Rust</dd></div>
+<div><dt>App shell</dt><dd>Tauri</dd></div>
+<div><dt>Web engine</dt><dd>WebKit on macOS and Linux, Microsoft WebView2 on Windows</dd></div>
+<div><dt>Bundled browser</dt><dd>None</dd></div>
+<div><dt>Search index</dt><dd>SQLite full-text, on your computer</dd></div>
+<div><dt>Startup</dt><dd>Under a second</dd></div>
+<div><dt>Search</dt><dd>50,000 messages searched in under 15 ms in our test</dd></div>
+<div><dt>Long lists</dt><dd>Comfortable past 17,000 messages</dd></div>
+</dl>
 </div>
 </div>
 </section>

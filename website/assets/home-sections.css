@@ -46,14 +46,21 @@
 .hm-hero-clip .mv-demo-meta { font-size:.84rem; }
 
 .hm-offer { padding:20px 22px; border:1px solid rgba(178,173,255,.26); border-radius:18px; background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02)),var(--mv-card); }
-/* Tier one, the free download: the button (or the phone's form), what is free, and the other ways to get it. */
+/* Tier one, the free download: the button (or the phone's form), "Free
+   forever" large right under it, what is free in a smaller line, then the
+   other platforms as icon links (links, not buttons: the card keeps one). */
 .hm-offer .hm-hero-actions { margin:0; }
 .hm-offer .hm-hero-actions > .mv-button { flex:1 1 100%; }
 .hm-offer .hm-send-link { max-width:none; }
 .hm-offer .hm-send-hint,.hm-offer .hm-mobile-soon { margin:8px 0 0; }
-.hm-offer .hm-offer-free-line { margin:18px 0 0; font-size:.92rem; line-height:1.5; color:var(--mv-ink); }
-.hm-offer-free-line strong { font-weight:650; color:#86efac; }
-.hm-offer .hm-hero-links { display:flex; flex-wrap:wrap; gap:4px 18px; margin:6px 0 0; font-size:.86rem; }
+.hm-offer .hm-offer-free-title { margin:16px 0 0; font-size:1.3rem; font-weight:700; line-height:1.2; letter-spacing:-.015em; color:#86efac; }
+.hm-offer .hm-offer-free-line { margin:4px 0 0; font-size:.92rem; line-height:1.5; color:var(--mv-muted); text-wrap:pretty; }
+.hm-offer .hm-hero-links { display:flex; flex-wrap:wrap; align-items:center; gap:2px 18px; margin:12px 0 0; font-size:.86rem; }
+.hm-os-links { list-style:none; display:flex; flex-wrap:wrap; gap:0 16px; margin:0; padding:0; }
+.hm-os-links a { display:inline-flex; align-items:center; gap:6px; min-height:32px; color:#c9c6ff; font-weight:550; text-decoration:underline; text-decoration-color:transparent; text-underline-offset:3px; transition:text-decoration-color .15s cubic-bezier(.16,1,.3,1); }
+.hm-os-links a:hover { text-decoration-color:currentColor; }
+.hm-os-links a:focus-visible { outline:2px solid var(--mv-accent); outline-offset:2px; border-radius:4px; }
+.hm-os-links svg { flex-shrink:0; width:16px; height:16px; fill:currentColor; }
 .hm-hero .hm-hero-links .hm-send-open { margin:0; }
 /* Tier two, Premium: optional, so smaller and quieter, under a hairline. */
 .hm-offer-premium { margin-top:18px; padding-top:16px; border-top:1px solid var(--mv-line); }
@@ -118,16 +125,19 @@
 .hm-more-links a { display:inline-flex; align-items:center; gap:8px; font-weight:600; color:var(--mv-ink); text-decoration:underline; text-decoration-color:color-mix(in oklab,var(--hue) 45%,transparent); text-underline-offset:4px; }
 .hm-more-links a:hover { text-decoration-color:currentColor; }
 
-/* Spec card: always dark, like the hero. */
+/* Spec cards: always dark, like the hero. "Built in Rust" comes first and
+   mirrors the spec card on wider screens (its list on the left), so the two
+   read as a pair rather than one card twice. */
 .hm-spec-band { padding-block:24px 96px; }
+.hm-spec-band.hm-native-band { padding-bottom:0; }
 .hm-spec { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); align-items:center; gap:48px; padding:48px; border:1px solid #2b2d45; border-radius:24px; background:radial-gradient(70% 90% at 0% 0%,rgba(99,102,241,.3),transparent 70%),linear-gradient(160deg,#0d0d1c,#16132e); }
 .hm-spec h2 { margin-bottom:1rem; }
-.hm-spec .mv-eyebrow { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.74rem; color:#c9c6ff; }
+.hm-spec .mv-eyebrow { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.75rem; color:#c9c6ff; }
 .hm-spec-copy > p:not(.mv-eyebrow) { max-width:52ch; color:var(--mv-muted); font-size:1.02rem; }
 .hm-spec-list { display:grid; margin:0; border:1px solid var(--mv-line); border-radius:14px; background:rgba(255,255,255,.03); }
 .hm-spec-list > div { display:grid; grid-template-columns:8.5em 1fr; gap:16px; padding:14px 18px; border-top:1px solid var(--mv-line); }
 .hm-spec-list > div:first-child { border-top:0; }
-.hm-spec-list dt { padding-top:2px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.74rem; letter-spacing:.06em; text-transform:uppercase; color:var(--mv-muted); }
+.hm-spec-list dt { padding-top:2px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; color:var(--mv-muted); }
 .hm-spec-list dd { margin:0; font-weight:600; color:var(--mv-ink); }
 
 /* Community: one line, the newsletter beside it. */
@@ -146,6 +156,11 @@
 }
 @media (max-width:1000px) {
   .hm-keys-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (min-width:901px) {
+  .hm-spec-flip { grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); background:radial-gradient(70% 90% at 100% 0%,rgba(99,102,241,.3),transparent 70%),linear-gradient(200deg,#0d0d1c,#16132e); }
+  .hm-spec-flip .hm-spec-list { grid-column:1; grid-row:1; }
+  .hm-spec-flip .hm-spec-copy { grid-column:2; grid-row:1; }
 }
 @media (max-width:900px) {
   .hm-spec { grid-template-columns:1fr; gap:28px; padding:32px; }
@@ -173,4 +188,4 @@
   .hm-spec { padding:24px 20px; border-radius:18px; }
   .hm-spec-list > div { grid-template-columns:1fr; gap:2px; }
 }
-@media (prefers-reduced-motion:reduce) { .hm-clip-group .mv-clip video { transition:none; } }
+@media (prefers-reduced-motion:reduce) { .hm-clip-group .mv-clip video { transition:none; } .hm-os-links a { transition:none; } }

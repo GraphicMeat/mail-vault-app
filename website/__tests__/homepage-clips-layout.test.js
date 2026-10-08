@@ -126,10 +126,35 @@ describe('hero', () => {
     expect(free.querySelector('.hm-offer-plans, [data-mv-price]')).toBeNull();
     // The free tier says what is free, once, right under the download.
     const line = free.querySelector('.hm-hero-actions ~ .hm-offer-free-line');
-    expect(text(line)).toBe('Free forever: the full app and unlimited manual backups. No account.');
+    expect(text(line)).toBe('The full app and unlimited manual backups. No account.');
     // A quiet line between the tiers, no second card.
     expect(rulesFor(plain, '.hm-offer-premium')).toMatch(/border-top\s*:\s*1px solid/);
     expect(plain).not.toMatch(/\.hm-offer-plan\s*\{[^}]*(?:border|background)\s*:/);
+  });
+
+  // Owner's call: "Free forever" reads at a glance next to the download, large
+  // and green, with what is free in a smaller line under it.
+  it('says "Free forever" large and green right under the download, then what is free in a smaller line', () => {
+    const free = card.querySelector('.hm-offer-free');
+    const title = free.querySelectorAll('.hm-offer-free-title');
+    expect(title).toHaveLength(1);
+    expect(text(title[0])).toBe('Free forever');
+    // Directly under the button: only the phone-only lines (hidden on a computer) may sit between.
+    let prev = title[0].previousElementSibling;
+    while (prev && prev.matches('[data-hero-platform="mobile"]')) prev = prev.previousElementSibling;
+    expect(prev).toBe(free.querySelector('.hm-hero-actions'));
+    expect(title[0].nextElementSibling).toBe(free.querySelector('.hm-offer-free-line'));
+    // A label, not a second button.
+    expect(title[0].closest('.mv-button, .hm-hero-actions, a, button')).toBeNull();
+    const size = (sel) => Number((rulesFor(plain, sel).match(/font-size\s*:\s*([\d.]+)rem/) || [])[1]);
+    const rule = rulesFor(plain, '.hm-offer .hm-offer-free-title');
+    expect(size('.hm-offer .hm-offer-free-title')).toBeGreaterThanOrEqual(1.25);
+    expect(size('.hm-offer .hm-offer-free-title')).toBeLessThanOrEqual(1.4);
+    expect(size('.hm-offer .hm-offer-free-title')).toBeGreaterThan(size('.hm-offer .hm-offer-free-line') * 1.3);
+    expect(rule).toMatch(/font-weight\s*:\s*7\d\d/);
+    expect(rule).toMatch(/color\s*:\s*#86efac/);
+    // The old inline "Free forever:" lead-in is gone from the small line.
+    expect(free.querySelector('.hm-offer-free-line strong')).toBeNull();
   });
 
   it('heads the Premium tier with its name, the Early Bird wording stepping aside once sold out', () => {
@@ -219,7 +244,10 @@ describe('hero', () => {
     expect(downloads).toHaveLength(1);
     expect(downloads[0].dataset.download).toBe('mac');
     expect(downloads[0].dataset.acquisitionPlacement).toBe('hero');
-    expect(hero.querySelectorAll('[data-acquisition-destination="thank_you"]')).toHaveLength(3);
+    // Three OS-detected buttons, plus one icon link per platform under them.
+    expect(hero.querySelectorAll('[data-acquisition-destination="thank_you"]')).toHaveLength(6);
+    expect(hero.querySelectorAll('.hm-hero-actions [data-acquisition-destination="thank_you"]')).toHaveLength(3);
+    expect(hero.querySelectorAll('.hm-os-links [data-acquisition-destination="thank_you"]')).toHaveLength(3);
   });
 
   it('links the Premium tier to pricing as a hero CTA', () => {
@@ -242,6 +270,47 @@ describe('hero', () => {
     expect(links.querySelector('[data-acquisition-destination="demo"]')).toBeNull();
   });
 
+  // Owner's call: the other platforms as icons with links, not one text link.
+  // Each icon goes where that platform's own button goes, with the same
+  // download and acquisition attributes; "All formats" keeps the setup page.
+  it('offers every platform as an icon link with its name, to the same target as its button', () => {
+    const links = card.querySelector('.hm-offer-free .hm-hero-links');
+    expect(hero.querySelectorAll('.hm-os-links')).toHaveLength(1);
+    const row = links.querySelector(':scope > ul.hm-os-links');
+    expect(row).not.toBeNull();
+    const items = [...row.querySelectorAll(':scope > li > a')];
+    const OS = [['mac', 'macOS', 'os-apple'], ['windows', 'Windows', 'os-windows'], ['linux', 'Linux', 'os-linux']];
+    expect(items).toHaveLength(OS.length);
+    OS.forEach(([platform, name, icon], i) => {
+      const a = items[i];
+      const button = card.querySelector(`.hm-hero-actions .mv-button[data-hero-platform="${platform}"]`);
+      // A link, never a second button, and never hidden by the platform swap.
+      expect(a.className).not.toMatch(/mv-button/);
+      expect(a.hasAttribute('data-hero-platform')).toBe(false);
+      expect(a.closest('[hidden]')).toBeNull();
+      // Its accessible name says what it does and contains the visible name.
+      expect(a.getAttribute('aria-label')).toBe(`Download for ${name}`);
+      expect(text(a)).toBe(name);
+      expect(a.querySelector(`svg[aria-hidden="true"] > use[href="#${icon}"]`), platform).not.toBeNull();
+      expect(doc.getElementById(icon)?.tagName.toLowerCase()).toBe('symbol');
+      expect(a.getAttribute('href')).toBe(button.getAttribute('href'));
+      for (const attr of ['data-download', 'data-download-page', 'data-linux-deb', 'data-acquisition-download', 'data-acquisition-event', 'data-acquisition-placement', 'data-acquisition-destination']) {
+        expect(a.getAttribute(attr), `${platform} ${attr}`).toBe(button.getAttribute(attr));
+      }
+      expect(a.dataset.acquisitionPlacement).toBe('hero');
+      // After the buttons, so a first-match lookup still finds the button.
+      expect(before(button, a)).toBe(true);
+    });
+    expect(text(card)).not.toContain('Other platforms and formats');
+    const all = links.querySelector(':scope > a.mv-text-link[href="/get-started.html?plan=free#platforms"]');
+    expect(text(all)).toBe('All formats →');
+    expect(all.dataset.acquisitionEvent).toBe('home_cta');
+    expect(before(row, all)).toBe(true);
+    // The row stays on phones: it is not the final section's .hm-platforms, which phones hide.
+    expect(row.classList.contains('hm-platforms')).toBe(false);
+    expect(rulesFor(plain, '.hm-os-links svg')).toMatch(/fill\s*:\s*currentColor/);
+  });
+
   it('drops the old price line and proof chips, keeping the download count under the card', () => {
     expect(hero.querySelector('.hm-price, .hm-facts')).toBeNull();
     const proof = hero.querySelector('[data-download-proof]');
@@ -251,7 +320,7 @@ describe('hero', () => {
   });
 
   it('reads label, badge, headline, lead, card, links, then the product visual', () => {
-    const seq = ['.hm-free-label', '.hm-badge', 'h1', '.hm-lead', '.hm-offer', '#send-link-hero', '.hm-offer-free-line', '.hm-hero-links', '.hm-offer-premium', '.hm-hero-media'].map((s) => hero.querySelector(s));
+    const seq = ['.hm-free-label', '.hm-badge', 'h1', '.hm-lead', '.hm-offer', '#send-link-hero', '.hm-offer-free-title', '.hm-offer-free-line', '.hm-hero-links', '.hm-offer-premium', '.hm-hero-media'].map((s) => hero.querySelector(s));
     seq.forEach((el, i) => expect(el, String(i)).not.toBeNull());
     seq.slice(1).forEach((el, i) => expect(before(seq[i], el), String(i)).toBe(true));
   });
@@ -540,8 +609,9 @@ describe('small things', () => {
 
   // The features with no clip yet: one compact row of links under the clips.
   // Search has a clip card in #privacy, and the shortcuts and notification
-  // features have theirs in #customize, so none of them is repeated here.
-  const ROW = ['no-account', 'native-app', 'email-cleanup'];
+  // features have theirs in #customize, so none of them is repeated here. The
+  // native app has its own section (#native), so it left the row.
+  const ROW = ['no-account', 'email-cleanup'];
 
   it('lists the features with no clip as a compact row of links under the clips', () => {
     expect(more.querySelector('.hm-icon-grid')).toBeNull();
@@ -555,7 +625,10 @@ describe('small things', () => {
       expect(text(a).length).toBeGreaterThan(3);
       expect(a.outerHTML).not.toMatch(/—|&mdash;/);
     }
-    expect(links.map((a) => text(a))).toEqual(['No account with us', 'Light on your computer', 'A tidier inbox Premium']);
+    expect(links.map((a) => text(a))).toEqual(['No account with us', 'A tidier inbox Premium']);
+    // Linked once on the page, from its own section.
+    expect([...doc.querySelectorAll('main a[href="/features/native-app.html"]')].map((a) => a.closest('section').id)).toEqual(['native']);
+    expect(text(more)).not.toContain('Light on your computer');
     expect([...row.querySelectorAll('.hm-chip')].map((c) => c.closest('a').getAttribute('href'))).toEqual(['/features/email-cleanup.html']);
     expect(more.querySelector('a[href="/features.html"]')).not.toBeNull();
   });
@@ -594,11 +667,78 @@ describe('spec card', () => {
   });
 });
 
+// Owner's call: why MailVault is fast, as a card of its own right before the
+// spec card. Every line is checked against its source: the README's measured
+// figures, the native app and search feature pages, and the build itself.
+describe('built in Rust', () => {
+  const sec = doc.getElementById('native');
+  const readme = read('README.md');
+  const rows = () => [...sec.querySelectorAll('dl.hm-spec-list > div')].map((d) => [text(d.querySelector('dt')), text(d.querySelector('dd'))]);
+
+  it('sits right before the spec card, a dark card with a two-line heading and no eyebrow', () => {
+    expect(sec?.tagName).toBe('SECTION');
+    expect(sec.previousElementSibling).toBe(doc.getElementById('more'));
+    expect(sec.nextElementSibling).toBe(doc.getElementById('spec'));
+    expect(sec.querySelector('.hm-spec.hm-dark')).not.toBeNull();
+    expect(sec.querySelector('.mv-eyebrow')).toBeNull();
+    const h2 = sec.querySelector('h2');
+    expect(sec.getAttribute('aria-labelledby')).toBe(h2.id);
+    expect(h2.innerHTML).toBe('Built in Rust.<br><span class="hm-grad">Fast on your computer.</span>');
+    expect(sec.querySelector('.mv-button, [data-download], form')).toBeNull();
+  });
+
+  it('says why, in the words of the native app page, and links to it', () => {
+    const copy = text(sec.querySelector('.hm-spec-copy > p'));
+    expect(copy).toBe("MailVault's core and its background helper are written in Rust. Sync, backups and search indexing run in that helper, a separate process, each job on its own thread, so the window stays responsive while they run. The window uses your system's own web engine instead of shipping a whole browser.");
+    const native = read('website/features/native-app.html');
+    for (const source of ['built with Rust and Tauri instead of shipping a whole browser', 'so the window stays responsive', 'Sync, backup and indexing run in a helper process, each job on its own thread.', 'Uses the system web view instead of bundling a browser.']) {
+      expect(native, source).toContain(source);
+    }
+    const link = sec.querySelector('.hm-spec-copy a.mv-text-link[href="/features/native-app.html"]');
+    expect(text(link)).toBe('How the native app works →');
+  });
+
+  it('lists the build: Rust, Tauri, the system web engine per platform, no bundled browser', () => {
+    const value = Object.fromEntries(rows());
+    expect(value.Core).toBe('Rust');
+    expect(value['App shell']).toBe('Tauri');
+    expect(value['Web engine']).toBe('WebKit on macOS and Linux, Microsoft WebView2 on Windows');
+    expect(value['Bundled browser']).toBe('None');
+    expect(value['Search index']).toBe('SQLite full-text, on your computer');
+    // WebKit is never claimed for Windows: the Windows part of the line names WebView2 alone.
+    const windows = value['Web engine'].split(',').filter((part) => /Windows/.test(part));
+    expect(windows).toEqual([' Microsoft WebView2 on Windows']);
+    expect(text(sec)).not.toMatch(/WebKit (?:on|for|\()\s*Windows/);
+    // What the build says: Tauri 2 through wry, WKWebView, WebKitGTK and WebView2.
+    expect(read('src-tauri/Cargo.toml')).toMatch(/^tauri = \{ version = "2"/m);
+    const lock = read('Cargo.lock');
+    for (const crate of ['wry', 'objc2-web-kit', 'webkit2gtk', 'webview2-com']) expect(lock, crate).toContain(`name = "${crate}"`);
+    // The Windows installer fetches WebView2 when missing; no browser ships with the app.
+    expect(read('src-tauri/tauri.conf.json')).toMatch(/"webviewInstallMode"\s*:\s*\{\s*"type"\s*:\s*"downloadBootstrapper"/);
+    expect(read('src-core/src/search_index/db.rs')).toContain('USING fts5(');
+  });
+
+  it('quotes only measured figures, worded and qualified as the README states them', () => {
+    const value = Object.fromEntries(rows());
+    expect(rows().map((r) => r[0])).toEqual(['Core', 'App shell', 'Web engine', 'Bundled browser', 'Search index', 'Startup', 'Search', 'Long lists']);
+    expect(value.Startup).toBe('Under a second');
+    expect(readme).toMatch(/\| Startup \| under a second \|/);
+    expect(value.Search).toBe('50,000 messages searched in under 15 ms in our test');
+    expect(readme).toContain('50,000 messages searched in under 15 ms in our test');
+    expect(read('website/features/search.html')).toContain('In our test, 50,000 messages searched in under 15 ms.');
+    expect(value['Long lists']).toBe('Comfortable past 17,000 messages');
+    expect(readme).toContain('comfortable past 17,000 messages');
+    // No other number, no size or memory figure, no hype.
+    expect(text(sec).replace(/WebView2/g, '').match(/\d[\d,]*/g)).toEqual(['50,000', '15', '17,000']);
+    expect(text(sec)).not.toMatch(/\bMB\b|super fast|blazing|lightning|instant|—/i);
+  });
+});
+
 describe('page order', () => {
-  it('runs hero, key points, the six groups, small things, spec, comparison, feedback, download', () => {
+  it('runs hero, key points, the six groups, small things, built in Rust, spec, comparison, feedback, download', () => {
     const ids = [...doc.querySelectorAll('main > section[id]')].map((s) => s.id);
     expect(Object.keys(GROUPS).at(-1)).toBe('more');
-    expect(ids).toEqual(['key-points', ...Object.keys(GROUPS), 'spec', 'compare', 'feedback', 'newsletter', 'download']);
+    expect(ids).toEqual(['key-points', ...Object.keys(GROUPS), 'native', 'spec', 'compare', 'feedback', 'newsletter', 'download']);
   });
 
   it('retires the free section and the old clips section', () => {
@@ -630,7 +770,7 @@ describe('Meatlytics tag and stylesheet', () => {
 
   it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
-    expect(html).not.toMatch(/home-sections\.css\?v=[3-8]"/);
+    expect(html).not.toMatch(/home-sections\.css\?v=[3-9]"/);
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
   });
 

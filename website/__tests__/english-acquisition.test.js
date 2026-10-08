@@ -114,6 +114,21 @@ describe('English acquisition journey', () => {
     const target = {mac:'/thank-you.html', windows:'/thank-you.html', linux:'/thank-you.html', mobile:'/get-started.html'}[visible];
     expect(gm.mock.calls).toEqual([['cta_click', {page_version:'homepage-en-20261002', target, placement:'page'}]]);
   });
+  it.each([
+    ['macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', 'amd64'],
+    ['Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'amd64'],
+    ['ARM Linux', 'Mozilla/5.0 (X11; Linux aarch64)', 'arm64'],
+    ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)', 'amd64'],
+  ])('keeps all three platform icon links in the hero for %s, each to its own thank-you page', (_name, userAgent, linux) => {
+    const {doc} = page('index.html', '', undefined, {userAgent});
+    const links = [...doc.querySelectorAll('.hm-hero .hm-os-links a')];
+    expect(links.map(a => a.hidden || Boolean(a.closest('[hidden]')))).toEqual([false, false, false]);
+    expect(links.map(a => a.getAttribute('href'))).toEqual(['/thank-you.html?platform=mac&start=1', '/thank-you.html?platform=windows&start=1', '/thank-you.html?platform=' + linux + '&start=1']);
+    expect(links.map(a => a.dataset.acquisitionDownload)).toEqual(['mac', 'windows', linux]);
+    expect(links.map(a => a.getAttribute('aria-label'))).toEqual(['Download for macOS', 'Download for Windows', 'Download for Linux']);
+    // Still one button in the hero.
+    expect([...doc.querySelectorAll('.hm-hero .mv-button')].filter(el => !el.hidden && !el.closest('[hidden]'))).toHaveLength(1);
+  });
   it('treats an iPad that reports a Mac user agent as a tablet, and a Mac as a Mac', () => {
     const ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
     const ipad = page('index.html', '', undefined, {userAgent:ua, touchPoints:5}).doc;
