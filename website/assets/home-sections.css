@@ -14,11 +14,14 @@
 .hm-hero .hm-free-label { display:flex; justify-content:center; align-items:center; gap:6px; margin:0 0 10px; font-size:.9rem; font-weight:650; letter-spacing:.01em; color:#86efac; }
 .hm-free-label svg { flex-shrink:0; }
 /* Two lines: the tag and price, then the Early Bird spots (static, or the live count). */
-.hm-badge { display:inline-flex; flex-direction:column; align-items:center; gap:4px; margin:0 0 22px; padding:5px 14px 7px 5px; border:1px solid rgba(178,173,255,.3); border-radius:18px; background:rgba(255,255,255,.05); font-size:.86rem; font-weight:550; line-height:1.3; color:var(--mv-muted); }
+.hm-badge { display:inline-flex; flex-direction:column; align-items:center; gap:5px; margin:0 0 22px; padding:6px 16px 8px; border:1px solid rgba(178,173,255,.3); border-radius:18px; background:rgba(255,255,255,.05); font-size:.86rem; font-weight:550; line-height:1.3; color:var(--mv-muted); }
 .hm-badge-line { display:inline-flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:6px 10px; }
-.hm-badge-spots { padding-left:9px; font-size:.8rem; font-weight:600; color:#c9c6ff; }
+.hm-badge-spots { font-size:.8rem; font-weight:600; color:#c9c6ff; }
 .hm-badge-tag { padding:4px 10px; border-radius:999px; background:#4f46df; color:#fff; font-size:.7rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }
 .hm-badge [data-mv-price] { color:var(--mv-ink); font-weight:700; }
+.hm-badge .hm-badge-was, .hm-badge .hm-badge-was [data-mv-price] { color:var(--mv-muted); font-weight:500; }
+.hm-badge-was { text-decoration-thickness:1.5px; }
+.hm-badge .hm-badge-off { padding:2px 8px; border-radius:999px; background:rgba(134,239,172,.16); color:#86efac; font-size:.74rem; font-weight:700; }
 .hm-hero-row { display:grid; gap:24px; text-align:left; }
 @media (min-width:761px) {
   .hm-hero-row { grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr); gap:36px; align-items:center; }
@@ -143,9 +146,9 @@
   .hm-hero h1 { font-size:clamp(2.3rem,10.5vw,3.2rem); margin-bottom:.8rem; }
   .hm-hero .hm-lead { font-size:.96rem; line-height:1.55; margin-bottom:1.3rem !important; }
   .hm-hero .hm-free-label { margin-bottom:8px; font-size:.8rem; }
-  .hm-badge { gap:3px; margin-bottom:14px; padding:4px 10px 6px 4px; font-size:.74rem; }
+  .hm-badge { gap:4px; margin-bottom:14px; padding:5px 12px 7px; font-size:.74rem; }
   .hm-badge-line { gap:8px; }
-  .hm-badge-spots { padding-left:6px; font-size:.72rem; }
+  .hm-badge-spots { font-size:.72rem; }
   .hm-badge-tag { padding:3px 8px; font-size:.62rem; }
   .hm-hero-demo .mv-demo-badge { top:10px; left:10px; }
   .hm-hero-demo .mv-demo-launch { right:10px; bottom:10px; min-height:34px; padding:6px 12px; font-size:.8rem; }

@@ -74,17 +74,30 @@ describe('hero', () => {
     expect(badge.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
   });
 
-  it('sets the early access badge on two lines: the price, then the spots', () => {
+  it('sets the early access badge on three lines: the tag, the price with its discount, then the spots', () => {
     const badge = hero.querySelector('.hm-badge');
     const lines = [...badge.children];
-    expect(lines.map((el) => el.className)).toEqual(['hm-badge-line', 'hm-badge-spots']);
-    expect(text(lines[0])).toBe('Early access Premium from $25/yr');
-    expect(lines[0].querySelector('.hm-badge-tag')).not.toBeNull();
+    expect(lines.map((el) => el.className)).toEqual(['hm-badge-tag', 'hm-badge-line', 'hm-badge-spots']);
+    expect(text(lines[0])).toBe('Early access');
+    // Owner's call: the standard price after early access is struck through next to
+    // the early bird price, with the discount in percent. Screen readers hear what it is.
+    const price = lines[1];
+    expect(price.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
+    const was = price.querySelector('s.hm-badge-was');
+    expect(was).not.toBeNull();
+    expect(was.querySelector('[data-mv-price="{standardYearly}"]').textContent).toBe('$39');
+    expect(text(was.querySelector('.mv-sr-only'))).toBe('Standard price after early access:');
+    const off = price.querySelector('.hm-badge-off');
+    expect(off.dataset.mvPrice).toBe('{earlyBirdSavingsPercent}% off');
+    expect(text(off)).toBe('36% off');
+    // Both disappear with the early bird price once every spot is taken.
+    expect(was.hasAttribute('data-mv-early')).toBe(true);
+    expect(off.hasAttribute('data-mv-early')).toBe(true);
     // Static until the count answers: no number of spots taken without JavaScript.
-    expect(text(lines[1])).toBe('Only 100 spots in total');
-    expect(lines[1].dataset.mvSpots).toBe('{taken} of {cap} spots taken');
-    expect(lines[1].dataset.mvSpotsFull).toBe('All {cap} spots are taken');
-    // The second line always breaks below the first.
+    expect(text(lines[2])).toBe('Only 100 spots in total');
+    expect(lines[2].dataset.mvSpots).toBe('{taken} of {cap} spots taken');
+    expect(lines[2].dataset.mvSpotsFull).toBe('All {cap} spots are taken');
+    // Each part breaks onto its own line.
     expect(rulesFor(plain, '.hm-badge')).toMatch(/flex-direction\s*:\s*column/);
   });
 
@@ -137,7 +150,8 @@ describe('hero', () => {
     expect(text(monthly.querySelector('.hm-offer-standard'))).toBe('33% below the standard price after early access: $6/month');
     expect(monthly.querySelector('[data-mv-price="{standardMonthly}"]').textContent).toBe('$6');
     expect(card.querySelector('.hm-offer-plans input, .hm-offer-plans select, .hm-offer-plans button, .hm-offer-plans form')).toBeNull();
-    expect(hero.querySelector('s, del, strike')).toBeNull();
+    // The only struck price in the hero is the badge's standard price.
+    expect([...hero.querySelectorAll('s, del, strike')].map((el) => el.className)).toEqual(['hm-badge-was']);
     expect(text(hero)).not.toMatch(/limited time|lifetime|for life|—/i);
   });
 
@@ -577,7 +591,7 @@ describe('Meatlytics tag and stylesheet', () => {
 
   it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
-    expect(html).not.toMatch(/home-sections\.css\?v=[34]"/);
+    expect(html).not.toMatch(/home-sections\.css\?v=[3-6]"/);
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
   });
 
