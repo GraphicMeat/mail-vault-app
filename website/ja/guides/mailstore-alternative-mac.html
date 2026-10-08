@@ -243,26 +243,6 @@
                   <td class="py-3 px-4">IMAP, Gmail, Microsoft 365, Outlook.com (Microsoft Graph)</td>
                 </tr>
                 <tr class="border-b border-slate-200 dark:border-slate-700">
-                  <td class="py-3 px-4 font-medium">OAuth2（Google、Microsoft）</td>
-                  <td class="py-3 px-4">Google sign-in in your browser</td>
-                  <td class="py-3 px-4">Yes (Google, Microsoft)</td>
-                </tr>
-                <tr class="border-b border-slate-200 dark:border-slate-700">
-                  <td class="py-3 px-4 font-medium">メールの検索</td>
-                  <td class="py-3 px-4">Full-text indexed search, including attachments</td>
-                  <td class="py-3 px-4">Local full-text index, offline; attachment search is Premium</td>
-                </tr>
-                <tr class="border-b border-slate-200 dark:border-slate-700">
-                  <td class="py-3 px-4 font-medium">メールの送信・返信</td>
-                  <td class="py-3 px-4">非対応（アーカイブのみ）</td>
-                  <td class="py-3 px-4">対応</td>
-                </tr>
-                <tr class="border-b border-slate-200 dark:border-slate-700">
-                  <td class="py-3 px-4 font-medium">複数アカウント</td>
-                  <td class="py-3 px-4">対応</td>
-                  <td class="py-3 px-4">対応</td>
-                </tr>
-                <tr class="border-b border-slate-200 dark:border-slate-700">
                   <td class="py-3 px-4 font-medium">PST/Exchangeの取り込み</td>
                   <td class="py-3 px-4">対応</td>
                   <td class="py-3 px-4">No PST; MBOX import instead</td>
@@ -272,16 +252,13 @@
                   <td class="py-3 px-4">対応（Server版、有料）</td>
                   <td class="py-3 px-4">非対応</td>
                 </tr>
-                <tr class="border-b border-slate-200 dark:border-slate-700">
-                  <td class="py-3 px-4 font-medium">オフラインでのアクセス</td>
-                  <td class="py-3 px-4">対応</td>
-                  <td class="py-3 px-4">対応</td>
-                </tr>
-              </tbody>
+                </tbody>
             </table>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400">Last checked: October 2026, on mailstore.com and help.mailstore.com.</p>
+
+          <p>For a full row-by-row comparison, including search, delete rules and sources, see <a href="/ja/compare/mailvault-vs-mailstore-home.html" class="text-primary-500 hover:text-primary-600 underline">MailVault vs MailStore Home</a>.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVaultが優れているところ</h3>
 
@@ -328,7 +305,7 @@
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Attachment search for free</strong>: MailStore Home indexes attachments as well as messages at no cost. MailVault also has a local full-text index, but searching inside PDF and Office attachments is Premium.</li>
             <li><strong>PST and Exchange import</strong>: if you have Outlook PST files or need to archive from an Exchange server directly, MailStore supports these sources. MailVault connects over IMAP or Microsoft Graph and imports MBOX files, but it cannot read PST files.</li>
-            <li><strong>企業のコンプライアンス</strong> &mdash; MailStore Server（有料の版）は、集中的なアーカイブ、保管の方針、監査の記録、法的な保全といった、組織がコンプライアンスのために必要とする機能を備えています。MailVaultは個人と小規模な事業のために作られており、企業のコンプライアンス向けではありません。</li>
+            <li><strong>Enterprise compliance</strong>: MailStore Server (the paid edition) offers centralized archiving, retention policies, audit trails, and legal hold features that organizations need for compliance. MailVault is designed for personal and small business use, not enterprise compliance.</li>
             <li><strong>Maturity</strong>: MailStore has been on the market since 2006, about 20 years. It has handled more edge cases, more email providers, and more user scenarios than MailVault has seen yet.</li>
           </ul>
 
