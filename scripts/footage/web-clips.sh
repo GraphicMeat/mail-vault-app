@@ -45,12 +45,55 @@
 #                         the demo mailbox alone, clocks moved -320 min (as F); settings each take
 #                         changes are put back after it; snooze moves one row out of the INBOX and
 #                         focus-session ends unlocked, so they run last.
+#
+# THE WAY NOW (one build, every clip; web-clips-job.sh, groups in web-clips.groups.json):
+#   bash scripts/footage/web-clips.sh verify <locales> <work dir>   # every take's steps + assertions, no recording
+#   bash scripts/footage/web-clips.sh all <locales> <work dir>      # verify, then record + encode + hero + check
+#   WEBCLIP_PUB=en-v2 bash scripts/footage/web-clips.sh publish en <work dir>/<run dir>
+# <locales>: "en" or a list ("en de fr" / "en,de,fr"): one build, one launch per
+# group per locale. Each call gets its own <work dir>/<mode>-<stamp>/ (job.tar,
+# job.log, the unpacked results); nothing is merged with an earlier run.
+# all refuses to record when a take fails verify (WEBCLIP_FORCE=1 records anyway;
+# the failing clips are then held at publish). WEBCLIP_ONLY=clip,clip runs just those.
+# `record`, `encode` and `hero` below are the older per-boot path.
 set -euo pipefail
-cmd="${1:?record|encode|publish}"; LOC="${2:?locale}"; WORK="${3:?work dir}"; shift 3
+cmd="${1:?verify|all|record|encode|publish}"; LOC="${2:?locale}"; WORK="${3:?work dir}"; shift 3
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+
+case "$cmd" in
+  verify|all)
+    locs="$(printf '%s' "$LOC" | tr ',' ' ')"
+    RUN="$WORK/$cmd-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$RUN"
+    ~/.claude/bin/testq --status 2>&1 | tail -5 || true
+    echo "== $cmd ($locs) -> $RUN  $(date +%H:%M:%S)"
+    t0=$(date +%s)
+    rc=0
+    # verify: about 25 min per locale; all: about 80 min per locale (one build either way).
+    TESTQ_TIMEOUT="${TESTQ_TIMEOUT:-21600}" ~/.claude/bin/testq --lane mini-e2e ~/.claude/bin/minijob \
+      env WEBCLIP_MODE="$cmd" WEBCLIP_LOCALES="$locs" ${WEBCLIP_GROUPS:+WEBCLIP_GROUPS="$WEBCLIP_GROUPS"} \
+      ${WEBCLIP_ONLY:+WEBCLIP_ONLY="$WEBCLIP_ONLY"} ${WEBCLIP_FORCE:+WEBCLIP_FORCE="$WEBCLIP_FORCE"} ${WEBCLIP_SHIFT_MIN:+WEBCLIP_SHIFT_MIN="$WEBCLIP_SHIFT_MIN"} ${WEBCLIP_ENV:+WEBCLIP_ENV="$WEBCLIP_ENV"} \
+      bash scripts/footage/web-clips-job.sh > "$RUN/job.tar" 2> "$RUN/job.log" || rc=$?
+    echo "== job exit $rc after $(( $(date +%s) - t0 )) s (log $RUN/job.log)"
+    tar -xf "$RUN/job.tar" -C "$RUN" 2>/dev/null || { echo "no tar from the job"; tail -40 "$RUN/job.log"; exit 1; }
+    node -e 'const j=require(process.argv[1]); console.log(`builds ${j.builds}, wall ${j.wallSeconds} s, phases ${JSON.stringify(j.phases)}`)' "$RUN/job.json" || true
+    for l in $locs; do
+      for ph in verify record; do
+        [ -f "$RUN/$l/$ph/verify.json" ] || continue
+        echo "-- $l $ph"
+        node -e 'for (const c of require(process.argv[1]).clips) console.log(`${c.pass ? "PASS" : "FAIL"} ${c.clip.padEnd(20)} ${(c.checks||[]).filter((x)=>x.ok).length}/${(c.checks||[]).length} checks${c.pass ? "" : "  " + (c.error || (c.checks||[]).filter((x) => !x.ok).map((x) => x.name).join("; ")).slice(0, 160)}${c.scanOk === false ? "  [text scan: " + (c.textScan||[]).map((h) => h.text).join(" / ").slice(0, 120) + "]" : ""}`)' "$RUN/$l/$ph/verify.json"
+      done
+      [ -d "$RUN/$l/web" ] && node scripts/footage/lib/webclipCheck.mjs "$RUN/$l" || true
+    done
+    echo "results: $RUN"
+    exit $rc
+    ;;
+esac
+
 D="$WORK/$LOC"; mkdir -p "$D"
-PUB="$HOME/Movies/MailVault Website Clips/$LOC"
+# WEBCLIP_PUB: the folder under ~/Movies/MailVault Website Clips/ to publish to
+# (default the locale). A v2 set goes to its own folder (en-v2); the site copies from en/.
+PUB="$HOME/Movies/MailVault Website Clips/${WEBCLIP_PUB:-$LOC}"
 
 COMMON=(FOOTAGE_SPEC=web-clips FOOTAGE_THEME=dark FOOTAGE_LOCALE="$LOC" FOOTAGE_WEBCLIP=1 FOOTAGE_BITRATE=20)
 boot_env() {
@@ -138,6 +181,8 @@ case "$cmd" in
     echo "hero -> $D/web/hero-montage.mp4 (log $D/hero-$stamp.log)"
     ;;
   publish)
+    [ "${WEBCLIP_PUB:-$LOC}" != "$LOC" ] || [ -n "${WEBCLIP_PUB_SAME:-}" ] || [ ! -d "$PUB" ] || [ -z "$(ls -A "$PUB")" ] \
+      || { echo "publish: $PUB already holds a set; publish a new set with WEBCLIP_PUB=<new folder> (WEBCLIP_PUB_SAME=1 adds to it)"; exit 1; }
     mkdir -p "$PUB"
     for f in "$D"/web/*.mp4; do
       n="$(basename "$f" .mp4)"
@@ -149,6 +194,10 @@ case "$cmd" in
       # WEBCLIP_HOLD="clip:reason,clip:reason" sends reviewed-but-not-approved clips there too
       # (a reason cannot contain a comma).
       hold="$(printf '%s' "${WEBCLIP_HOLD:-}" | tr ',' '\n' | awk -F: -v n="$n" '$1==n { sub(/^[^:]*:/, ""); print; exit }')"
+      # A clip the output check failed (lib/webclipCheck.mjs, check.json of this run) is held with its reasons.
+      if [ -z "$hold" ] && [ -f "$D/check.json" ]; then
+        hold="$(node -e 'const c=require(process.argv[1]).clips.find((x)=>x.clip===process.argv[2]); if (c && !c.ok) console.log("output check: " + c.reasons.join(" | "))' "$D/check.json" "$n")"
+      fi
       # Never over a file already handed over (published or held): a re-take that
       # should replace one names it in WEBCLIP_REPLACE=clip,clip after review.
       dest="$PUB"; { [ "$n" = search-50k ] || [ -n "$hold" ]; } && dest="$PUB/_needs-decision"

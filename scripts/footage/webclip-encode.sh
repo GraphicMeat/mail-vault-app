@@ -34,7 +34,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-swiftc -O "$ROOT/video/capture/tools/webclip.swift" -o "$BINDIR/webclip" 2>"$BINDIR/swiftc.log" || { cat "$BINDIR/swiftc.log"; exit 1; }
+# WEBCLIP_BIN: an encoder the caller already compiled (web-clips-job.sh builds it once).
+if [ -n "${WEBCLIP_BIN:-}" ] && [ -x "$WEBCLIP_BIN" ]; then
+  cp "$WEBCLIP_BIN" "$BINDIR/webclip"
+else
+  swiftc -O "$ROOT/video/capture/tools/webclip.swift" -o "$BINDIR/webclip" 2>"$BINDIR/swiftc.log" || { cat "$BINDIR/swiftc.log"; exit 1; }
+fi
 
 only=",${FOOTAGE_WEBCLIP_ONLY:-},"
 status=0

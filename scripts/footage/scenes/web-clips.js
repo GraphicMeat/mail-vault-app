@@ -61,7 +61,7 @@ import { join } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { ImapFlow } from 'imapflow';
-import { Take, pointer, OUT_DIR } from '../lib/footage.js';
+import { Take, pointer, OUT_DIR, VERIFY } from '../lib/footage.js';
 import {
   L, SEL, probe, quiet, clickSel, bootToInbox, resetView, beforeTake,
   waitPage, since, openWorkInbox, dismissBulkBubble, setSetting,
@@ -72,6 +72,9 @@ import { APP_LOCALE } from '../lib/locale.js';
 
 const ONLY = (process.env.FOOTAGE_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
 const want = (clip) => !ONLY.length || ONLY.includes(clip);
+// Per take: every assertion it made, pass or fail (web-clips.verify.json; the
+// job's verify phase gates the recording on it).
+const results = {};
 const EXPECT_TOTAL = Number(process.env.FOOTAGE_EXPECT_TOTAL || 0);
 const MARK = footageMarkers(APP_LOCALE);
 const facts = { locale: APP_LOCALE, markers: MARK };
@@ -126,10 +129,11 @@ async function toWindow(r) {
 }
 
 /** Visible text inside `crop` (viewport CSS px) that must not ship: em dashes, versions, relative dates. */
-function scanText(crop) {
+function scanText(crop, dates = []) {
   const hits = [];
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  const re = [/—/, /\bv?\d+\.\d+\.\d+\b/, /\bv\d+(\.\d+)?\b/i, /\b\d+\s*(days?|weeks?|months?|years?)\s+ago\b/i];
+  const re = [/—/, /\bv?\d+\.\d+\.\d+\b/, /\bv\d+(\.\d+)?\b/i, /\b\d+\s*(days?|weeks?|months?|years?)\s+ago\b/i,
+    ...dates.map((d) => new RegExp(d, 'i'))];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const s = n.textContent || '';
     if (!s.trim() || !re.some((r) => r.test(s))) continue;
@@ -141,6 +145,23 @@ function scanText(crop) {
     range.selectNodeContents(n);
     const r = range.getBoundingClientRect();
     if (r.width === 0 || r.right < crop.x || r.x > crop.x + crop.w || r.bottom < crop.y || r.y > crop.y + crop.h) continue;
+    // Under the focus lock (it takes no pointer events, so elementFromPoint sees through it).
+    const lock = document.querySelector('[data-testid="focus-lock"]');
+    const lr = lock && !lock.contains(el) ? lock.getBoundingClientRect() : null;
+    if (lr && lr.width > 0 && r.x >= lr.x && r.right <= lr.right && r.y >= lr.y && r.bottom <= lr.bottom) continue;
+    // Under an opaque layer (a dialog's solid card): not in the picture.
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    if (top && top !== el && !el.contains(top) && !top.contains(el)) {
+      let solid = false;
+      for (let c = top; c && !c.contains(el); c = c.parentElement) {
+        const st = getComputedStyle(c);
+        const a = (st.backgroundColor.match(/[\d.]+/g) || []).map(Number);
+        // A painted layer (canvas, image), an opaque fill or a blur over what is behind.
+        if (['CANVAS', 'IMG', 'VIDEO'].includes(c.tagName) || st.backgroundImage !== 'none' || (st.backdropFilter && st.backdropFilter !== 'none')
+          || a.length === 3 || (a.length === 4 && a[3] >= 0.85)) { solid = true; break; }
+      }
+      if (solid) continue;
+    }
     hits.push({ text: s.trim().slice(0, 120), box: [r.x, r.y, r.width, r.height].map(Math.round) });
   }
   // Text in same-origin iframes (mail bodies).
@@ -157,19 +178,56 @@ function scanText(crop) {
   return hits;
 }
 
+/**
+ * The run's own date as the app could print it (English formats; a website
+ * clip must not carry the day it was shot). Regex sources for scanText.
+ */
+const TODAY_PATTERNS = (() => {
+  const d = new Date();
+  const mon = d.toLocaleString('en-US', { month: 'long' });
+  const m3 = mon.slice(0, 3);
+  const day = d.getDate(), y = d.getFullYear(), mm = d.getMonth() + 1;
+  const p2 = (n) => String(n).padStart(2, '0');
+  return [
+    `\\b${m3}[a-z]*\\.?\\s+${day}\\b(?!:)`, `\\b${day}\\.?\\s+${m3}[a-z]*\\b`,
+    `\\b${y}-${p2(mm)}-${p2(day)}\\b`, `\\b${mm}/${day}/(${y}|${String(y).slice(2)})\\b`, `\\b${p2(day)}\\.${p2(mm)}\\.${y}\\b`,
+  ];
+})();
+
+/** Reviewed crop overrides (window points) for one clip, as the encoder will apply them. */
+function overrideCrops(clip) {
+  try {
+    const o = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'web-clips.crops.json'), 'utf8'))[clip] || {};
+    return [o.crop, ...Object.values(o.segmentCrops || {})].filter(Boolean);
+  } catch { return []; }
+}
+
 /** Collects text-scan samples for one clip. */
 class Scan {
-  constructor(clip) { this.clip = clip; this.samples = []; }
+  constructor(clip) {
+    this.clip = clip; this.samples = []; this.overrides = overrideCrops(clip);
+    // A reviewed whole-clip crop replaces the take's own: only it is in the picture.
+    try { this.replaced = !!JSON.parse(readFileSync(join(import.meta.dirname, '..', 'web-clips.crops.json'), 'utf8'))[clip]?.crop; } catch { this.replaced = false; }
+  }
 
   async at(take, label, crop) {
     if (!crop) return;
-    const hits = await browser.execute(scanText, crop);
-    this.samples.push({ t: Number(take.t(Date.now()).toFixed(2)), label, hits });
+    const t = Number(take.t(Date.now()).toFixed(2));
+    const hits = this.replaced ? [] : await browser.execute(scanText, crop, TODAY_PATTERNS);
+    this.samples.push({ t, label, hits });
+    // The crops the encoder will really use when web-clips.crops.json names
+    // this clip (window points -> viewport px, below the 32 pt title bar).
+    for (const [i, [x, y, w, h]] of this.overrides.entries()) {
+      const oh = await browser.execute(scanText, { x, y: y - 32, w, h }, TODAY_PATTERNS);
+      if (oh.length) this.samples.push({ t, label: `${label}@override${i}`, hits: oh });
+    }
   }
 
+  hits() { return this.samples.flatMap((s) => s.hits.map((h) => ({ ...h, t: s.t, at: s.label }))); }
+
   write(crop) {
-    const all = this.samples.flatMap((s) => s.hits.map((h) => ({ ...h, t: s.t, at: s.label })));
-    writeFileSync(join(OUT_DIR, `${this.clip}.textscan.json`), JSON.stringify({ crop, samples: this.samples, hits: all.length }, null, 2));
+    const all = this.hits();
+    writeFileSync(join(OUT_DIR, `${this.clip}.textscan.json`), JSON.stringify({ crop, samples: this.samples, hits: all.length, todayPatterns: TODAY_PATTERNS }, null, 2));
     console.log(`[webclip] ${this.clip} text scan: ${all.length} hit(s) ${JSON.stringify(all.slice(0, 6))}`);
   }
 }
@@ -216,7 +274,7 @@ async function writeWebclip(clip, { crop, segments, poster, boxes = {} }) {
 
 async function finish(take, clip) {
   const rec = await take.stop();
-  if (rec.delivered < 10) throw new Error(`${clip}: only ${rec.delivered} pictures delivered in ${rec.seconds}s`);
+  if (!rec.verify && rec.delivered < 10) throw new Error(`${clip}: only ${rec.delivered} pictures delivered in ${rec.seconds}s`);
   console.log(`[footage] ${clip}: ${rec.seconds.toFixed(2)} s, pointer ${pointer()}`);
   facts[`${clip}Seconds`] = rec.seconds;
   return rec;
@@ -226,24 +284,104 @@ async function finish(take, clip) {
  * One clip: back to the plain inbox, `prepare` (off camera), a quiet frame,
  * `body(take, scan)` returns what writeWebclip needs.
  */
+/**
+ * One named assertion of the take running now: recorded for the verify
+ * report, and a failure throws (the take aborts instead of recording a wrong
+ * clip). `actual` is what was seen.
+ */
+let current = null;
+function check(name, ok, actual) {
+  const r = { name, ok: !!ok, actual: actual === undefined ? null : actual };
+  current?.checks.push(r);
+  console.log(`[check] ${current?.clip}: ${r.ok ? 'PASS' : 'FAIL'} ${name} ${JSON.stringify(r.actual)?.slice(0, 300)}`);
+  if (!r.ok) throw new Error(`check failed: ${name} (${JSON.stringify(r.actual)?.slice(0, 300)})`);
+  return r.actual;
+}
+
+/** No list row in its hover / focus state (the row's own action overlay and a clipped date). */
+const rowHover = () => browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')]
+  .filter((r) => r.matches(':hover') || r.matches(':focus-within'))
+  .map((r) => (r.innerText || '').replace(/\s+/g, ' ').slice(0, 60)));
+
+/** The pointer leaves every row (synthetic, as Take.click's own events), and focus goes to the body. */
+const clearRowHover = () => browser.execute(() => {
+  document.activeElement?.blur?.();
+  const base = { bubbles: true, cancelable: true, composed: true, relatedTarget: document.body, view: window };
+  for (const r of document.querySelectorAll('[data-testid="email-row"]')) {
+    r.dispatchEvent(new PointerEvent('pointerout', { ...base, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
+    r.dispatchEvent(new MouseEvent('mouseout', base));
+    r.dispatchEvent(new PointerEvent('pointerleave', { ...base, bubbles: false, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
+    r.dispatchEvent(new MouseEvent('mouseleave', { ...base, bubbles: false }));
+  }
+});
+
+/**
+ * Visible text inside `crop` (viewport px) that is neither inside `keep` nor
+ * left of `minX`: what of a pane behind a dialog would show at the crop's edge.
+ */
+const strayText = (crop, keep, minX) => browser.execute((c, k, mx) => {
+  const keepEl = document.querySelector(k);
+  const out = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!(n.textContent || '').trim() || keepEl?.contains(n)) continue;
+    const el = n.parentElement;
+    const cs = el && getComputedStyle(el);
+    if (!cs || cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    const r = rg.getBoundingClientRect();
+    if (r.width === 0 || r.x < mx) continue;
+    if (r.right <= c.x || r.x >= c.x + c.w || r.bottom <= c.y || r.y >= c.y + c.h) continue;
+    // The part of the text inside the crop, less what the dialog (keep) covers.
+    const ix0 = Math.max(r.x, c.x), ix1 = Math.min(r.right, c.x + c.w), iy0 = Math.max(r.y, c.y), iy1 = Math.min(r.bottom, c.y + c.h);
+    const k = keepEl?.getBoundingClientRect();
+    if (k && ix0 >= k.x - 0.5 && ix1 <= k.right + 0.5 && iy0 >= k.y - 0.5 && iy1 <= k.bottom + 0.5) continue;
+    out.push({ text: n.textContent.trim().slice(0, 40), box: [r.x, r.y, r.width, r.height].map(Math.round) });
+  }
+  return out;
+}, crop, keep, minX);
+
 async function shoot(ctx, clip, body, { prepare, onError, allow } = {}) {
   if (!want(clip)) ctx.skip();
-  await resetView();
-  if (prepare) await prepare();
-  await beforeTake(clip, { allow });
+  const t0 = Date.now();
+  current = { clip, checks: [], verify: VERIFY };
+  results[clip] = current;
   const take = new Take(clip);
+  try {
+    await resetView();
+    if (prepare) await prepare();
+    await beforeTake(clip, { allow });
+  } catch (e) {
+    current.pass = false; current.error = `prepare: ${String(e?.message || e)}`; current.seconds = Number(since(t0));
+    facts[`${clip}Error`] = current.error;
+    throw e;
+  }
   const scan = new Scan(clip);
   await take.start();
   try {
     const web = await body(take, scan);
     await finish(take, clip);
-    await writeWebclip(clip, web);
+    const spec = await writeWebclip(clip, web);
     scan.write(web.crop);
+    current.durationSeconds = spec.durationSeconds;
+    // Every crop the encoder will cut, inside the webview.
+    const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+    const crops = [spec.crop, ...spec.segments.map((x) => x.crop).filter(Boolean)];
+    check('crops inside the window', crops.every(([x, y, w, h]) => x >= 0 && y >= 30 && x + w <= vp.w + 1 && y + h <= vp.h + 33), crops);
+    const hits = scan.hits();
+    // The scan does not fail the take (a date in the picture is not a broken
+    // UI): the output check holds the encoded clip, and verify reports it.
+    current.textScan = hits.slice(0, 8);
+    current.scanOk = hits.length === 0;
+    current.pass = current.checks.every((c) => c.ok);
   } catch (e) {
-    facts[`${clip}Error`] = String(e?.message || e);
+    current.pass = false; current.error = String(e?.message || e);
+    facts[`${clip}Error`] = current.error;
     if (onError) { try { await onError(); } catch (e2) { facts[`${clip}OnError`] = String(e2?.message || e2); } }
     await take.abort();
     throw e;
+  } finally {
+    current.seconds = Number(since(t0));
   }
 }
 
@@ -556,6 +694,11 @@ async function aiOn() {
 describe('footage: website feature clips', function () {
   this.timeout(3600000);
 
+  // Clips are defined below in file order and run in FOOTAGE_ONLY's order (the
+  // job's group table decides what runs after what in one launch).
+  const CLIPS = new Map();
+  const defineClip = (name, fn) => CLIPS.set(name, fn);
+
   before(async function () {
     mkdirSync(OUT_DIR, { recursive: true });
     const t0 = Date.now();
@@ -577,10 +720,15 @@ describe('footage: website feature clips', function () {
 
   after(function () {
     writeFileSync(join(OUT_DIR, 'web-clips.facts.json'), JSON.stringify(facts, null, 2));
+    // Every clip this group asked for, in order; one that never ran is a failure.
+    const report = (ONLY.length ? ONLY : Object.keys(results)).map((c) => results[c]
+      || { clip: c, pass: false, error: 'did not run (an earlier step or the boot failed)', checks: [] });
+    writeFileSync(join(OUT_DIR, 'web-clips.verify.json'), JSON.stringify({ verify: VERIFY, locale: APP_LOCALE, clips: report }, null, 2));
+    for (const r of report) console.log(`[verify] ${r.pass ? 'PASS' : 'FAIL'} ${r.clip} ${r.error || ''} (${r.checks.length} checks, ${r.seconds ?? '-'} s)${r.scanOk === false ? ` text scan: ${JSON.stringify(r.textScan.map((h) => h.text))}` : ''}`);
   });
 
   // 1. Archive & delete: the server loses a year, the vault keeps it.
-  it('archive-delete', async function () {
+  defineClip('archive-delete', async function () {
     const COUNT = '[data-testid="email-list-count"]';
     const t = {};
     const box = {};
@@ -636,13 +784,18 @@ describe('footage: website feature clips', function () {
       t.countSettled = counts.at(-1).t;
       facts.archiveCounts = counts;
       facts.archiveCountSettled = counts.at(-1).text;
-      if (lastNumber(counts.at(-1).text) !== expected) console.warn(`[footage] server count never settled on ${expected}: ${JSON.stringify(counts)}`);
+      check('archive run reached complete', finished, progress.at(-1)?.text);
+      check(`server count settles on before - archived (${expected})`, lastNumber(counts.at(-1).text) === expected, counts.map((c) => c.text));
       await take.hold(900);
       await take.click(SEL.sourceVault, 'source-vault', { dur: 500 });
       t.vault = take.events.at(-1).t;
       await take.waitFor(() => document.querySelectorAll('[data-testid="email-row"]').length > 3, 'vault rows', 10000);
       await take.hold(300);
       facts.archiveVaultCount = await browser.execute((s) => (document.querySelector(s)?.textContent || '').trim(), COUNT);
+      // The Vault source reads "<in the vault> of <total>": the year the server lost is all there.
+      const firstNumber = (txt) => Number(((txt || '').match(/\d[\d.,\u00a0\u202f']*/) || [''])[0].replace(/\D/g, '') || NaN);
+      check('the vault holds what the server lost', firstNumber(facts.archiveVaultCount) >= Number(String(facts.archiveSelected || '').replace(/\D/g, '')),
+        { selected: facts.archiveSelected, before: facts.archiveCountBefore, vault: facts.archiveVaultCount });
       t.vaultShown = take.t(Date.now());
       box.list = await boxOf('[data-testid="email-row"]');
       await take.hold(1500);
@@ -716,7 +869,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 2. Search 50,000 messages: the count and the time it took.
-  it('search-50k', async function () {
+  defineClip('search-50k', async function () {
     const Q = process.env.FOOTAGE_QUERY || 'invoice';
     await shoot(this, 'search-50k', async (take, scan) => {
       await take.hold(500);
@@ -771,7 +924,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 8. Unified inbox: All Inboxes mixes the accounts, each with its dot.
-  it('unified-inbox', async function () {
+  defineClip('unified-inbox', async function () {
     const ALL = '.mail-sidebar [data-testid="all-inboxes-btn"]';
     const dots = () => {
       const seen = {};
@@ -801,7 +954,7 @@ describe('footage: website feature clips', function () {
       await scan.at(take, 'unified', crop);
       await take.hold(2600);
       const end = take.t(Date.now());
-      if (Object.keys(facts.unifiedDots || {}).length < 2) throw new Error(`unified list shows ${Object.keys(facts.unifiedDots || {}).length} account colour(s)`);
+      check('All Inboxes mixes at least two account colours', Object.keys(facts.unifiedDots || {}).length >= 2, facts.unifiedDots);
       return { crop, segments: [{ t0: Math.max(0.2, tClick - 1.6), t1: end }], boxes: { all, accounts, rows } };
     }, {
       prepare: async () => {
@@ -817,7 +970,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 6. Link safety: the link says one place and goes to another.
-  it('link-safety', async function () {
+  defineClip('link-safety', async function () {
     await shoot(this, 'link-safety', async (take, scan) => {
       const row = await boxOf('[data-footage-target="phish-row"]');
       await take.hold(600);
@@ -849,6 +1002,7 @@ describe('footage: website feature clips', function () {
       await take.hold(300);
       const dialog = await boxOf('.mail-dialog');
       facts.linkDialog = await browser.execute(() => (document.querySelector('.mail-dialog')?.innerText || '').replace(/\s+/g, ' '));
+      check('link warning names where the link really goes', facts.linkDialog.includes(L('linkSafety.linkTextSays')) && facts.linkDialog.length > 40, facts.linkDialog.slice(0, 200));
       const crop = await fitCrop(union(link, dialog), { minW: 760 });
       await scan.at(take, 'dialog', crop);
       await take.hold(2600);
@@ -869,7 +1023,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 5. Trackers: the newsletter's beacon is blocked; the reader eye names it.
-  it('trackers', async function () {
+  defineClip('trackers', async function () {
     // English only: the extra mail (lib/mailbox.js) is not translated.
     const needle = '#214';
     const rowSel = '[data-testid="email-row"][data-footage-target="tracker-row"]';
@@ -902,6 +1056,7 @@ describe('footage: website feature clips', function () {
       await take.hold(300);
       const dialog = await boxOf('[role="alertdialog"]');
       facts.trackerDialog = await browser.execute(() => (document.querySelector('[role="alertdialog"]')?.innerText || '').replace(/\s+/g, ' '));
+      check('tracker dialog names the blocked host', /letterpour/i.test(facts.trackerDialog), facts.trackerDialog.slice(0, 200));
       const crop = await fitCrop(union(eye, dialog, reader), { minW: 760 });
       await scan.at(take, 'dialog', crop);
       await take.hold(2400);
@@ -935,7 +1090,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 4. Undo send: Send, the countdown toast, Undo, the draft is back.
-  it('undo-send', async function () {
+  defineClip('undo-send', async function () {
     const TOAST = '[data-testid="undo-send-toast"]';
     // The demo's own reply to Priya, first sentence only: typing an address
     // ("accounts@...") fast let the editor's autolink move the caret.
@@ -950,6 +1105,7 @@ describe('footage: website feature clips', function () {
       await take.hold(200);
       const toast = await boxOf(TOAST);
       facts.undoToast = await browser.execute((s) => (document.querySelector(s)?.innerText || '').replace(/\s+/g, ' '), TOAST);
+      check('undo toast counts down after Send', /\d/.test(facts.undoToast || ''), facts.undoToast);
       const crop = await fitCrop(union(compose, toast), { minW: 760 });
       await scan.at(take, 'toast', crop);
       await take.hold(900);
@@ -960,6 +1116,8 @@ describe('footage: website feature clips', function () {
       await scan.at(take, 'back', crop);
       facts.undoAfter = await browser.execute((e) => ({ editor: (document.querySelector(e)?.innerText || '').slice(0, 160),
         subject: document.querySelector('[data-testid="compose-subject"]')?.value || null }), SEL.editor);
+      check('Undo puts the reply back in compose, toast gone', facts.undoAfter.editor.includes(body.slice(0, 20))
+        && !(await browser.execute((s) => !!document.querySelector(s), TOAST)), facts.undoAfter);
       await take.hold(1500);
       const end = take.t(Date.now());
       console.log(`[footage] undo-send ${JSON.stringify({ toast: facts.undoToast, after: facts.undoAfter })}`);
@@ -996,7 +1154,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 7. Time Capsule: take a snapshot, open an older one (read-only).
-  it('time-capsule', async function () {
+  defineClip('time-capsule', async function () {
     const page = '[data-testid="settings-content"][data-page="time-capsule"]';
     const card = `${page} div[role="button"]`;
     const browserRows = '.snapshot-browser > .overflow-y-auto button';
@@ -1027,6 +1185,8 @@ describe('footage: website feature clips', function () {
         return el ? (el.parentElement.innerText || '').replace(/\s+/g, ' ') : null;
       }, L('timeCapsule.readOnly'));
       facts.tcBrowserHeader = header;
+      check('a new snapshot card appeared', facts.tcCardsAfter.length === n + 1, { before: n, after: facts.tcCardsAfter.length });
+      check('the older snapshot opens read-only with rows', !!header, header);
       const rows = await boxOf('.snapshot-browser');
       const crop = await fitCrop(union(content), { minW: 760 });
       await scan.at(take, 'browser', crop);
@@ -1038,7 +1198,10 @@ describe('footage: website feature clips', function () {
         // The vault needs mail for a snapshot to hold anything: the last 90 days, archived.
         if (!facts.tcArchived) {
           facts.tcArchived = true;
-          try { await bulkArchive(L('bulk.ops.last90Days')); } catch (e) { facts.tcArchiveError = e.message; console.error(`[setup] archive: ${e.message}`); }
+          // search-local's archiveAll already put the whole INBOX in the vault in this launch.
+          if (!facts.archivedAll) {
+            try { await bulkArchive(L('bulk.ops.last90Days')); } catch (e) { facts.tcArchiveError = e.message; console.error(`[setup] archive: ${e.message}`); }
+          }
           await openWorkInbox();
           await stageSnapshots();
         }
@@ -1050,7 +1213,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 3. Scheduled backups: switch it on, pick when.
-  it('scheduled-backups', async function () {
+  defineClip('scheduled-backups', async function () {
     const SWITCH = `[role="switch"][aria-label="${L('settings.backup.schedule.automaticBackup')}"]`;
     const FREQ = `select[aria-label="${L('settings.backup.schedule.backupFrequency')}"]`;
     const hour = (h) => `[data-testid="backup-hours-picker"] [data-hour="${h}"]`;
@@ -1074,6 +1237,11 @@ describe('footage: website feature clips', function () {
         await take.hold(200);
       }
       facts.backupConfig = await browser.execute(() => window.__SETTINGS_STORE__?.getState?.().backupGlobalConfig);
+      const picked = await browser.execute(() => [...document.querySelectorAll('[data-testid="backup-hours-picker"] [data-hour]')]
+        .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => Number(b.dataset.hour)));
+      check('automatic backup on', (await browser.execute((sw) => document.querySelector(sw)?.getAttribute('aria-checked'), SWITCH)) === 'true', facts.backupConfig);
+      check('frequency is hours, 07 13 22 picked', (await browser.execute((f) => document.querySelector(f)?.value, FREQ)) === 'hours'
+        && [7, 13, 22].every((h) => picked.includes(h)), picked);
       const freq = await boxOf(FREQ);
       const picker = await boxOf('[data-testid="backup-hours-picker"]');
       const crop = await fitCrop(union(sw, freq, picker), { minW: 760 });
@@ -1098,7 +1266,7 @@ describe('footage: website feature clips', function () {
   // ── Batch 2, boot D (nothing changes on the server) ───────────────────────
 
   // 10. Sender verification: a verified sender, then a Reply-To that goes elsewhere.
-  it('sender-verification', async function () {
+  defineClip('sender-verification', async function () {
     const VERIFIED = '[data-testid="sender-verification"][data-status="verified"]';
     const WARNING = '[data-testid="sender-verification"][data-status="warning"]';
     const popover = () => {
@@ -1143,6 +1311,8 @@ describe('footage: website feature clips', function () {
       await take.hold(2100);
       const end = take.t(Date.now());
       console.log(`[footage] sender-verification ${JSON.stringify({ verified: facts.senderVerifiedPopover, warning: facts.senderWarningPopover })}`);
+      check('verified and Reply-To popovers both show and differ', !!facts.senderVerifiedPopover && !!facts.senderWarningPopover
+        && facts.senderVerifiedPopover !== facts.senderWarningPopover, { verified: facts.senderVerifiedPopover?.slice(0, 120), warning: facts.senderWarningPopover?.slice(0, 120) });
       return {
         crop: crop1,
         segments: [
@@ -1170,7 +1340,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 11. Chat view: a person, a topic, the conversation as bubbles.
-  it('chat-view', async function () {
+  defineClip('chat-view', async function () {
     const CHAT = '[data-testid="chat-view"]';
     // Sender names are not translated; the topic is the demo's thread marker
     // after "Rack & Rind - " (the patched dash).
@@ -1192,6 +1362,10 @@ describe('footage: website feature clips', function () {
       const tBubbles = take.t(Date.now());
       await take.hold(300);
       facts.chatView = await browser.execute((c) => (document.querySelector(c)?.innerText || '').replace(/\s+/g, ' ').slice(0, 500), CHAT);
+      check('the topic opens as bubbles', await browser.execute((c, tp, reply) => {
+        const t = document.querySelector(c)?.innerText || '';
+        return t.includes(tp) && t.includes(reply);
+      }, CHAT, topic, L('chat.bubble.reply')), facts.chatView.slice(0, 200));
       const crop = await fitCrop(chat, { minW: 1000 });
       await scan.at(take, 'bubbles', crop);
       await take.hold(3000);
@@ -1229,7 +1403,7 @@ describe('footage: website feature clips', function () {
   // the armed plan, and the sidebar's Scheduled row once it counts the email.
   // The Scheduled list itself is not filmed: its row joins address and time
   // with an em dash (app copy).
-  it('scheduled-send', async function () {
+  defineClip('scheduled-send', async function () {
     const PANEL = '[data-testid="compose-schedule-panel"]';
     const SCHED = '.mail-sidebar [data-testid="sidebar-scheduled-btn"]';
     await shoot(this, 'scheduled-send', async (take, scan) => {
@@ -1275,6 +1449,8 @@ describe('footage: website feature clips', function () {
       await take.waitFor((s) => /\d/.test(document.querySelector(s)?.innerText || ''), 'Scheduled count', 10000, SCHED);
       facts.scheduledCountAt = Number(take.t(Date.now()).toFixed(3));
       facts.scheduledSidebar = await browser.execute((s) => (document.querySelector(s)?.innerText || '').replace(/\s+/g, ' '), SCHED);
+      check('the plan reads tomorrow 8 am', !!facts.schedulePicked?.time && !!facts.schedulePlan, { picked: facts.schedulePicked, plan: facts.schedulePlan });
+      check('Scheduled counts exactly 1', (facts.scheduledSidebar.match(/\d+/g) || []).join(',') === '1', facts.scheduledSidebar);
       const btn = await boxOf(SCHED);
       // The sidebar from the Scheduled row down: the list header above it carries today's date.
       const cropSide = { x: 4, y: Math.round(btn.y - 2), w: 640, h: Math.round(640 / ASPECT) };
@@ -1332,7 +1508,7 @@ describe('footage: website feature clips', function () {
   // ── Batch 2, boot E (email-cleanup archives a group, then everything is archived) ──
 
   // 13. Email Cleanup: the classifier's Newsletter group, archived in one go.
-  it('email-cleanup', async function () {
+  defineClip('email-cleanup', async function () {
     const page = '[data-testid="settings-content"][data-page="cleanup"]';
     // "Archive (N)" is hardcoded English in the app: the selection bar's archive
     // button is found by its classes, not its text.
@@ -1418,7 +1594,7 @@ describe('footage: website feature clips', function () {
   // never in the picture: the typing segment ends at the press, before any
   // result line draws, and the results segment is cropped below the lanes row
   // (the take throws if its crop would touch any box that carries a time).
-  it('search-local', async function () {
+  defineClip('search-local', async function () {
     const Q = process.env.FOOTAGE_LOCAL_QUERY || 'Priya';
     await shoot(this, 'search-local', async (take, scan) => {
       const panel0 = await boxOf('#mail-search-panel');
@@ -1438,6 +1614,7 @@ describe('footage: website feature clips', function () {
       const tResults = take.t(Date.now());
       await take.hold(350);
       facts.searchLocal = await searchState();
+      check(`results for "${Q}"`, facts.searchLocal.query === Q && facts.searchLocal.results > 0 && facts.searchLocal.rows > 0, facts.searchLocal);
       const timing = await browser.execute(() => {
         const out = [];
         for (const el of document.querySelectorAll('[data-testid="search-lanes"], [data-testid^="search-lane-"], [data-testid="search-duration"]')) {
@@ -1489,7 +1666,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 15. Insights: the vault read into a picture (the read itself is cut).
-  it('insights', async function () {
+  defineClip('insights', async function () {
     const PAGE = '[data-testid="insights-page"]';
     const busy = [L('insights.loading').split('{{')[0].trim(), L('insights.querying').replace('…', '').trim()];
     await shoot(this, 'insights', async (take, scan) => {
@@ -1524,6 +1701,7 @@ describe('footage: website feature clips', function () {
       const end = take.t(Date.now());
       take.note('insights', { click: tClick, shown: tShow, why: 'Insights reads the whole vault on every open; the busy panel between the click and the drawn page is cut.' });
       console.log(`[footage] insights ${JSON.stringify(facts.insights)}`);
+      check('Insights drew a total and the Activity panel', /\d/.test(facts.insights.total) && facts.insights.activity.length > 0, facts.insights);
       return {
         crop,
         segments: [
@@ -1542,7 +1720,7 @@ describe('footage: website feature clips', function () {
 
   // 16. Views: the sidebar's built-in views, each one a different list (boot E,
   // after the whole INBOX is in the vault, so Attachments lists what it holds).
-  it('views', async function () {
+  defineClip('views', async function () {
     const view = (id) => `[data-testid="view-row-builtin-${id}"]`;
     const rowsShown = () => [...document.querySelectorAll('[data-testid="email-row"]')].some((r) => r.getBoundingClientRect().height > 0);
     await shoot(this, 'views', async (take, scan) => {
@@ -1551,10 +1729,16 @@ describe('footage: website feature clips', function () {
       await take.hold(700);
       // From Attachments (opened before the take) to Needs reply and back: the
       // loop ends where it starts. Starred is empty on this mailbox.
+      const sig = () => browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')].filter((r) => r.offsetHeight > 0)
+        .slice(0, 4).map((r) => (r.innerText || '').replace(/\s+/g, ' ')).join('|'));
       for (const id of ['needs-reply', 'attachments']) {
+        const was = await sig();
         await take.click(view(id), `view-${id}`, { dur: 450 });
         t[id] = take.events.at(-1).t;
         await take.waitFor(rowsShown, `${id} rows`, 15000);
+        // The rows of the view itself, not the list it replaces.
+        await take.waitFor((w) => [...document.querySelectorAll('[data-testid="email-row"]')].filter((r) => r.offsetHeight > 0)
+          .slice(0, 4).map((r) => (r.innerText || '').replace(/\s+/g, ' ')).join('|') !== w, `${id} list changed`, 15000, was);
         facts[`views_${id}`] = await browser.execute(() => ({
           title: (document.querySelector('[data-testid="mailbox-title"]')?.textContent || '').trim(),
           rows: [...document.querySelectorAll('[data-testid="email-row"]')].slice(0, 4).map((r) => (r.innerText || '').replace(/\s+/g, ' ').slice(0, 80)),
@@ -1562,6 +1746,8 @@ describe('footage: website feature clips', function () {
         await take.hold(id === 'attachments' ? 2400 : 2000);
       }
       const rows = await rowsBox(9);
+      check('Needs reply and Attachments are different lists', facts['views_needs-reply'].rows.length > 0 && facts.views_attachments.rows.length > 0
+        && JSON.stringify(facts['views_needs-reply'].rows) !== JSON.stringify(facts.views_attachments.rows), { nr: facts['views_needs-reply'], at: facts.views_attachments });
       const crop = await fitCrop(union(list, rows), { minW: 760, pad: 12 });
       await scan.at(take, 'views', crop);
       const end = take.t(Date.now());
@@ -1598,7 +1784,7 @@ describe('footage: website feature clips', function () {
   // ── Batch 2, boot F (the demo mailbox without history; nothing deleted) ───
 
   // 17. Privacy mode: one press and names and addresses are masked.
-  it('privacy-mode', async function () {
+  defineClip('privacy-mode', async function () {
     const BTN = '.sidebar-footer [data-testid="privacy-button"]';
     const pressed = () => browser.execute((s) => document.querySelector(s)?.getAttribute('aria-pressed'), BTN);
     try {
@@ -1616,6 +1802,7 @@ describe('footage: website feature clips', function () {
         await take.waitFor(() => document.querySelectorAll('.mv-private').length > 0, 'masks', 5000);
         await take.hold(300);
         facts.privacyMasks = await browser.execute(() => document.querySelectorAll('.mv-private').length);
+        check('privacy on masks names', (await pressed()) === 'true' && facts.privacyMasks > 3, { pressed: await pressed(), masks: facts.privacyMasks });
         await scan.at(take, 'masked', crop);
         await take.hold(2700);
         const end = take.t(Date.now());
@@ -1629,7 +1816,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 18. Light and dark: the sidebar's sun / moon flips the whole window and back.
-  it('layouts', async function () {
+  defineClip('layouts', async function () {
     const TO_LIGHT = `button[title="${L('sidebar.switchLightMode')}"]`;
     const TO_DARK = `button[title="${L('sidebar.switchDarkMode')}"]`;
     const themeIs = (m) => document.documentElement.dataset.theme === m;
@@ -1649,6 +1836,7 @@ describe('footage: website feature clips', function () {
         await take.hold(1700);
         await take.click(TO_DARK, 'to-dark', { dur: 450 });
         await take.waitFor(themeIs, 'dark', 5000, 'dark');
+        check('data-theme went dark -> light -> dark', await browser.execute(() => document.documentElement.dataset.theme) === 'dark', 'dark');
         await take.hold(1300);
         const end = take.t(Date.now());
         return { crop, segments: [{ t0: Math.max(0.2, tLight - 1.0), t1: end }], boxes: { btn } };
@@ -1663,7 +1851,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 20. Manual backup: Back up all accounts, progress, done.
-  it('manual-backup', async function () {
+  defineClip('manual-backup', async function () {
     const ALL_BTN = '[data-testid="backup-all-button"]';
     const PROGRESS = '[data-testid="backup-all-progress"]';
     await shoot(this, 'manual-backup', async (take, scan) => {
@@ -1692,6 +1880,10 @@ describe('footage: website feature clips', function () {
       if (steps.at(-1).progress || steps.at(-1).disabled) throw new Error(`backup never finished: ${JSON.stringify(steps.at(-1))}`);
       await take.hold(500);
       facts.manualBackupAfter = await browser.execute((s) => (document.querySelector(s)?.innerText || '').replace(/\s+/g, ' ').slice(0, 600), '[data-testid="settings-content"][data-page="backup"]');
+      check('progress showed folders done and the run finished', steps.some((x) => /\(\d+\/\d+\)/.test(x.progress)) && !steps.at(-1).disabled && !steps.at(-1).progress,
+        steps.map((x) => x.progress).filter(Boolean).slice(-3));
+      const files = Number(execFileSync('/bin/sh', ['-c', `find "${join(browser.footageDataDir, 'BackupDrive')}" -type f | wc -l`], { encoding: 'utf8' }).trim());
+      check('the backup drive holds the mail afterwards', files > 20, files);
       const crop = await fitCrop(union(btn, prog), { minW: 760 });
       await scan.at(take, 'done', crop);
       await take.hold(1800);
@@ -1719,7 +1911,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 21. Custom fields: a message gets a stage, a tick and an owner in its field strip.
-  it('custom-fields', async function () {
+  defineClip('custom-fields', async function () {
     const STAGE = 'web-stage', DONE = 'web-followup', OWNER = 'web-owner';
     const input = (id) => `[data-testid="field-input-${id}"]`;
     await shoot(this, 'custom-fields', async (take, scan) => {
@@ -1746,6 +1938,13 @@ describe('footage: website feature clips', function () {
       await browser.execute((s) => document.querySelector(s)?.blur(), input(OWNER));
       await take.hold(300);
       facts.customFieldsAfter = await browser.execute((s) => (document.querySelector(s)?.closest('div')?.parentElement?.innerText || '').replace(/\s+/g, ' ').slice(0, 300), input(STAGE));
+      const cf = await browser.execute((st, dn, ow) => ({
+        approved: !!document.querySelector('[data-footage-target="cf-stage"] input')?.checked
+          || !!document.querySelector('[data-footage-target="cf-stage"]')?.classList.contains('is-chosen'),
+        followUp: !!document.querySelector(dn)?.checked || document.querySelector(dn)?.getAttribute('aria-checked') === 'true',
+        owner: document.querySelector(ow)?.value ?? null,
+      }), input(STAGE), input(DONE), input(OWNER));
+      check('Stage Approved, Follow up ticked, Owner Rowan', cf.approved && cf.followUp && cf.owner === 'Rowan', cf);
       await scan.at(take, 'fields', crop);
       await take.hold(1800);
       const end = take.t(Date.now());
@@ -1776,7 +1975,7 @@ describe('footage: website feature clips', function () {
   // ── Batch 2, boot G (Apple Intelligence through the FM helper) ────────────
 
   // 22. AI writing: a rough paragraph, Shorten, the on-device rewrite.
-  it('ai-writing', async function () {
+  defineClip('ai-writing', async function () {
     const ROUGH = 'Hi Theo, just checking in to see if there is any chance at all that the box sleeves could be ready by Thursday, '
       + 'since the client prints on Friday and we would really like to have them in hand before then. Thanks so much!';
     const AI = '[data-testid="compose-modal"] [data-testid="ai-compose-actions"] button';
@@ -1807,6 +2006,8 @@ describe('footage: website feature clips', function () {
       facts.aiGenerateSeconds = Number(since(g0));
       const tDone = take.t(Date.now());
       facts.aiResult = await browser.execute(editorText, SEL.editor);
+      check('the rewrite is in the editor and shorter', !!facts.aiResult && facts.aiResult !== facts.aiTyped && facts.aiResult.length < facts.aiTyped.length,
+        { before: facts.aiTyped?.length, after: facts.aiResult?.length, text: facts.aiResult?.slice(0, 160) });
       const editor = await boxOf(SEL.editor);
       const crop = await fitCrop(union(editor, dialog), { minW: 760 });
       await scan.at(take, 'result', crop);
@@ -1842,6 +2043,9 @@ describe('footage: website feature clips', function () {
       },
       allow: (o) => o.testid === 'compose-modal' || (o.box[2] >= 400 && o.box[3] >= 300),
     });
+    await resetView();
+    // AI off again (tagging-rules turns it on for itself).
+    await browser.execute(() => window.__SETTINGS_STORE__.getState().setAiSettings({ enabled: false }));
   });
 
   // 23. Tagging rules: a rule in plain words; new mail arrives while another
@@ -1855,7 +2059,7 @@ describe('footage: website feature clips', function () {
   // the take watches the arrival from another folder, waits (cut) until the
   // daemon holds the tag, then opens the Inbox. Nothing is set through a store
   // or a daemon write: the reads below only decide when to press.
-  it('tagging-rules', async function () {
+  defineClip('tagging-rules', async function () {
     const CARD = '[data-testid="settings-auto-tags"]';
     const NAME = `${CARD} input[aria-label="${L('autoTag.name')}"]`;
     const NEWTAG = `${CARD} input[aria-label="${L('autoTag.newTagPlaceholder')}"]`;
@@ -1874,10 +2078,18 @@ describe('footage: website feature clips', function () {
       : ['Invoices and bills', 'Invoices, bills and receipts from suppliers', 'Bank statements and invoices I need to pay or file'];
     let RULE_WORDS = WORDINGS[0];
     const work = (browser.demoAccounts || [])[0];
-    const msgId = `web-tag-${Date.now()}@skewer.systems`;
+    // FOOTAGE_TAG_ATTEMPTS: Apple Intelligence's verdict on the same invoice is
+    // not deterministic (batch 3: tagged in 4 of 5 runs). An attempt that is
+    // not tagged is deleted from the server and a fresh copy (new Message-ID)
+    // is delivered, up to this many times; the report names the attempts used.
+    const ATTEMPTS = Number(process.env.FOOTAGE_TAG_ATTEMPTS || 3);
+    let msgId = null;
+    let uid = -1;
     let other = null;
+    const imap = () => new ImapFlow({ host: '127.0.0.1', port: work.imapPort, secure: false, auth: { user: work.email, pass: work.password }, logger: false });
     const deliver = async () => {
-      const client = new ImapFlow({ host: '127.0.0.1', port: work.imapPort, secure: false, auth: { user: work.email, pass: work.password }, logger: false });
+      msgId = `web-tag-${Date.now()}@skewer.systems`;
+      const client = imap();
       await client.connect();
       try {
         const now = new Date();
@@ -1905,6 +2117,14 @@ describe('footage: website feature clips', function () {
         if (!db) return { error: `no ${file}` };
         return { db, out: execFileSync('/usr/bin/sqlite3', ['-readonly', '-json', db, q], { encoding: 'utf8', timeout: 10000 }).trim() };
       } catch (e) { return { error: String(e?.message || e).slice(0, 300) }; }
+    };
+    const removeFromServer = async (u) => {
+      const client = imap();
+      await client.connect();
+      try {
+        const lock = await client.getMailboxLock('INBOX');
+        try { return await client.messageDelete(String(u), { uid: true }); } finally { lock.release(); }
+      } finally { await client.logout(); }
     };
     const daemonTags = async (uid) => {
       const r = await rpc('tags.for_messages', { items: [{ accountId: work.id, mailbox: 'INBOX', uid, messageId: `<${msgId}>` }] });
@@ -1962,23 +2182,11 @@ describe('footage: website feature clips', function () {
       const tRule0 = take.t(Date.now());
       await take.hold(1900);
       const tRule1 = take.t(Date.now());
-      // 2. New mail arrives while another folder is open (cut: delivery and the verdict).
-      const t0 = Date.now();
-      const appended = await deliver();
-      const uid = Number(appended?.uid ?? -1);
-      facts.tagAppend = { uid, msgId };
-      let tags = [];
-      const w0 = Date.now();
-      while (Date.now() - w0 < 120000) {
-        tags = await daemonTags(uid);
-        if (tags.length) break;
-        await browser.pause(500);
-      }
-      facts.tagAssignedMs = tags.length ? Date.now() - t0 : null;
-      if (!tags.length) {
-        await diagnose(uid);
-        throw new Error(`the daemon never tagged the arriving invoice (uid ${uid}) in ${since(w0)} s`);
-      }
+      // 2. The invoice arrived while another folder was open and the daemon
+      // tagged it (prepare, off camera; the clip cut that wait in v1 too).
+      current.attempts = (facts.tagAttempts || []).length;
+      current.attemptLog = facts.tagAttempts;
+      check('the daemon tagged the arriving invoice', facts.tagAssigned === true, { attempts: facts.tagAttempts, uid });
       await clickSel(CLOSE_SETTINGS);
       await waitPage(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, { timeout: 8000 });
       await browser.execute(() => document.activeElement?.blur?.());
@@ -1999,14 +2207,17 @@ describe('footage: website feature clips', function () {
       };
       const shown = await waitPage(tagged, { timeout: 10000, interval: 100 }, SUBJECT, TAG);
       facts.tagRow = await browser.execute((s) => ([...document.querySelectorAll('[data-testid="email-row"]')].find((r) => (r.innerText || '').includes(s))?.innerText || '').replace(/\s+/g, ' '), SUBJECT);
-      if (!shown) { await diagnose(uid); throw new Error(`Inbox opened but the row shows no ${TAG} chip: ${facts.tagRow}`); }
+      if (!shown) await diagnose(uid);
+      check(`the Inbox row shows the ${TAG} chip`, shown, facts.tagRow);
+      check('one invoice row only (no untagged attempt left)', (await browser.execute((sub) => [...document.querySelectorAll('[data-testid="email-row"]')]
+        .filter((r) => r.offsetHeight > 0 && (r.innerText || '').includes(sub)).length, SUBJECT)) === 1, facts.tagAttempts);
       const tShown = take.t(Date.now());
       const cropList = await listCrop();
       await scan.at(take, 'tagged', cropList);
       await take.hold(2600);
       const end = take.t(Date.now());
       await diagnose(uid);
-      console.log(`[footage] tagging-rules ${JSON.stringify({ assignedMs: facts.tagAssignedMs, shownAfterOpen: Number((tShown - tOpen).toFixed(2)), row: facts.tagRow, other, words: facts.tagRuleWords })}`);
+      console.log(`[footage] tagging-rules ${JSON.stringify({ attempts: facts.tagAttempts, shownAfterOpen: Number((tShown - tOpen).toFixed(2)), row: facts.tagRow, other, words: facts.tagRuleWords })}`);
       return {
         crop: cropRule,
         segments: [
@@ -2082,10 +2293,48 @@ describe('footage: website feature clips', function () {
         await waitPage((p) => window.__MAIL_STORE__?.getState?.().activeMailbox === p, { timeout: 10000 }, other);
         // The IDLE watcher re-arms on its own; give it time, as batch 2 did.
         await browser.pause(5000);
+        // The invoice arrives; the model's verdict, retried with a fresh copy.
+        facts.tagAttempts = [];
+        facts.tagAssigned = false;
+        for (let a = 1; a <= ATTEMPTS && !facts.tagAssigned; a++) {
+          const t0 = Date.now();
+          const appended = await deliver();
+          uid = Number(appended?.uid ?? -1);
+          let tags = [];
+          let verdict = null;
+          while (Date.now() - t0 < 90000) {
+            tags = await daemonTags(uid);
+            if (tags.length) break;
+            // The worker's own decision row (read-only): a "no" ends the wait early.
+            const d = sql('app.db', `SELECT matched FROM auto_tag_decisions WHERE msg_key = '${msgId}'`);
+            if (!d.error && d.out) { verdict = JSON.parse(d.out)[0]?.matched; if (verdict === 0) { await browser.pause(1500); tags = await daemonTags(uid); break; } }
+            await browser.pause(500);
+          }
+          const attempt = { attempt: a, uid, msgId, tagged: tags.length > 0, verdict, ms: Date.now() - t0 };
+          facts.tagAttempts.push(attempt);
+          console.log(`[setup] tagging attempt ${JSON.stringify(attempt)}`);
+          if (tags.length) { facts.tagAssigned = true; break; }
+          await diagnose(uid);
+          // Untagged: off the server, and out of the daemon's cache, before the next copy.
+          attempt.deleted = await removeFromServer(uid).catch((e) => `delete failed: ${e.message}`);
+          // The expunge reaches the daemon over IDLE; the take's own check fails
+          // if a second invoice row is still listed when the Inbox opens.
+          const g0 = Date.now();
+          await browser.pause(4000);
+          while (Date.now() - g0 < 30000) {
+            const left = sql('custody.db', `SELECT uid FROM header_cache WHERE mailbox_path = 'INBOX' AND uid = ${uid}`);
+            if (left.error) { attempt.goneCheck = left.error.slice(0, 160); break; }
+            if (!left.out) break;
+            await browser.pause(1000);
+          }
+          attempt.goneAfterMs = Date.now() - g0;
+        }
         await browser.execute(() => document.activeElement?.blur?.());
       },
     });
     await restoreList();
+    // AI off again, so the takes after this one look like the ones recorded without it.
+    await browser.execute(() => window.__SETTINGS_STORE__.getState().setAiSettings({ enabled: false }));
   });
 
   // ── Batch 3, boot H (the demo mailbox alone; "Change almost anything" and small things) ──
@@ -2114,7 +2363,7 @@ describe('footage: website feature clips', function () {
 
   // 24. Quick actions (retake): the reader's toolbar, the Gmail action set, the toolbar again.
   // The same tight crop on the toolbar before and after, the preset press in between.
-  it('quick-actions', async function () {
+  defineClip('quick-actions', async function () {
     const BAR = '.email-action-bar';
     const PRESET = '.quick-actions-presets .choice-card-button';
     const barText = () => [...document.querySelectorAll('.email-action-bar [data-quick-action]')]
@@ -2155,7 +2404,8 @@ describe('footage: website feature clips', function () {
       await take.hold(2100);
       const end = take.t(Date.now());
       console.log(`[footage] quick-actions ${JSON.stringify({ before: facts.quickActionsBarBefore, after: facts.quickActionsBarAfter })}`);
-      if (facts.quickActionsBarAfter === facts.quickActionsBarBefore) throw new Error('the reader toolbar did not change with the preset');
+      check('the reader toolbar changed with the preset', !!facts.quickActionsBarAfter && facts.quickActionsBarAfter !== facts.quickActionsBarBefore,
+        { before: facts.quickActionsBarBefore, after: facts.quickActionsBarAfter });
       return {
         crop: cropBar,
         segments: [
@@ -2184,7 +2434,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 25. Explorer: the list switches to Explorer, the mail regroups by month; one group opens.
-  it('explorer-view', async function () {
+  defineClip('explorer-view', async function () {
     const EXP = '[data-testid="explorer-view"]';
     await shoot(this, 'explorer-view', async (take, scan) => {
       const bar = await boxOf('.mail-list-toolbar');
@@ -2218,6 +2468,8 @@ describe('footage: website feature clips', function () {
       await take.hold(1700);
       const end = take.t(Date.now());
       console.log(`[footage] explorer-view ${JSON.stringify({ groups: facts.explorerGroups, opened })}`);
+      check('Explorer shows groups and one group opens', facts.explorerGroups.length >= 1
+        && (await browser.execute(() => !!document.querySelector('[data-testid="explorer-back"]')?.offsetHeight)), { groups: facts.explorerGroups, opened });
       return { crop, segments: [{ t0: Math.max(0.2, tExp - 1.0), t1: end }], boxes: { bar, rows } };
     }, { prepare: widenList });
     await browser.execute((s) => document.querySelector(s)?.click(), SEL.list);
@@ -2227,7 +2479,7 @@ describe('footage: website feature clips', function () {
 
   // 26. Column layout: three columns, Settings > Layout > "Below the list", the
   // reader moves under the list. Whole-window crops either side of the press.
-  it('column-layout', async function () {
+  defineClip('column-layout', async function () {
     const SEG = '[data-testid="appearance-layout-section"] .settings-segments button';
     await shoot(this, 'column-layout', async (take, scan) => {
       const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
@@ -2235,6 +2487,13 @@ describe('footage: website feature clips', function () {
       const tb = await boxOf('.mail-list-toolbar');
       const top = Math.round(tb.y - 6), hAll = vp.h - 4 - top;
       const cropAll = { x: 4, y: top, w: Math.round(hAll * ASPECT), h: Math.round(hAll) };
+      const panes = () => browser.execute(() => {
+        const l = document.querySelector('.mail-list-toolbar')?.getBoundingClientRect();
+        const r = document.querySelector('.email-action-bar')?.getBoundingClientRect();
+        return l && r ? { list: [l.x, l.y, l.width], reader: [r.x, r.y, r.width] } : null;
+      });
+      const before3 = await panes();
+      check('three columns: the reader sits beside the list', !!before3 && before3.reader[0] >= before3.list[0] + before3.list[2] - 2, before3);
       await scan.at(take, 'three', cropAll);
       await take.hold(1500);
       const tBefore = take.t(Date.now());
@@ -2271,6 +2530,8 @@ describe('footage: website feature clips', function () {
       await take.waitFor(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, 'settings closed', 8000);
       await take.hold(300);
       facts.columnDivider = await browser.execute(() => document.querySelector('.mail-pane-divider')?.getAttribute('aria-orientation'));
+      const after2 = await panes();
+      check('Below the list: the reader sits under the list', !!after2 && after2.reader[1] > after2.list[1] + 100, after2);
       await scan.at(take, 'two', cropAll);
       await take.hold(2000);
       const end = take.t(Date.now());
@@ -2300,7 +2561,7 @@ describe('footage: website feature clips', function () {
 
   // 27. Shortcuts: Star moves from S to L in Settings, then L stars the open message.
   // The chip's recording state ("Press key" with a literal … in en.json) is cut.
-  it('shortcuts', async function () {
+  defineClip('shortcuts', async function () {
     const KEY = process.env.FOOTAGE_SHORTCUT_KEY || 'l';
     const label = L('settings.shortcuts.toggleStar');
     const CHIP = `[data-testid="settings-shortcuts"] button[aria-label="${label}: s"]`;
@@ -2331,16 +2592,24 @@ describe('footage: website feature clips', function () {
       await take.click(CLOSE_SETTINGS, 'close-settings', { dur: 450 });
       const tClose = take.events.at(-1).t;
       await take.waitFor(() => !document.querySelector('[data-testid="settings-page"]')?.offsetHeight, 'settings closed', 8000);
+      // Closing Settings left a row in its hover / focus state (v1: "Tu" and the
+      // row's action overlay on the row under the old click): the pointer leaves.
+      await clearRowHover();
       const row = await boxOf('[data-footage-target="sc-row"]');
       const head = await boxOf('[data-testid="sender-header"]');
       const cropRow = await listCrop();
       await take.hold(900);
+      check('no row in hover or focus before the key', (await rowHover()).length === 0, await rowHover());
       const before = await starred();
       await browser.execute((k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })), KEY);
       const tKey = take.t(Date.now());
       take.note('key-star', Number(tKey.toFixed(3)));
       await take.waitFor((s, b) => document.querySelector(s)?.getAttribute('aria-pressed') !== b, 'starred', 4000, STAR, before);
       facts.shortcutStar = { before, after: await starred() };
+      await clearRowHover();
+      check('no row in hover or focus after the key', (await rowHover()).length === 0, await rowHover());
+      check('the rebound key L stars the open message', (await browser.execute((k) => window.__SETTINGS_STORE__?.getState?.().keyboardShortcuts?.toggleStar, KEY)) === KEY
+        && before === 'false' && facts.shortcutStar.after === 'true', { key: KEY, ...facts.shortcutStar });
       await scan.at(take, 'starred', cropRow);
       await take.hold(2000);
       const end = take.t(Date.now());
@@ -2385,8 +2654,14 @@ describe('footage: website feature clips', function () {
   });
 
   // 28. Notification rules: one account's folders opened, Archive added; another account off.
-  it('notification-rules', async function () {
+  defineClip('notification-rules', async function () {
     const PAGE = '[data-testid="settings-notifications"]';
+    // Put back after the take: later takes in the same launch (new mail in
+    // tagging-rules) must not raise notifications this take switched on.
+    const savedNotifications = await browser.execute(() => {
+      const st = window.__SETTINGS_STORE__.getState();
+      return JSON.stringify({ notificationSettings: st.notificationSettings ?? null });
+    });
     await shoot(this, 'notification-rules', async (take, scan) => {
       const block = await browser.execute((p) => {
         const list = document.querySelector(`${p} .space-y-1`);
@@ -2432,6 +2707,8 @@ describe('footage: website feature clips', function () {
       await take.hold(1900);
       const end = take.t(Date.now());
       facts.notificationSettings = await browser.execute(() => JSON.stringify(window.__SETTINGS_STORE__.getState().notificationSettings?.accounts || {}).slice(0, 400));
+      check('Archive folder ticked and the other account off', await browser.execute(() => !!document.querySelector('[data-footage-target="nr-archive"]')?.checked
+        && document.querySelector('[data-footage-target="nr-toggle"]')?.getAttribute('aria-checked') === 'false'), facts.notificationSettings);
       return { crop, segments: [{ t0: Math.max(0.2, tOpen - 1.0), t1: end }], boxes: { block } };
     }, {
       prepare: async () => {
@@ -2444,15 +2721,24 @@ describe('footage: website feature clips', function () {
       },
       allow: (o) => o.testid === 'settings-page' || (o.box[2] >= 900 && o.box[3] >= 500),
     });
+    await closeSettings();
+    await browser.execute((j) => window.__SETTINGS_STORE__.setState(JSON.parse(j)), savedNotifications);
   });
 
   // 29. Templates: in a new message, Templates, pick one, the text is in.
-  it('templates', async function () {
+  defineClip('templates', async function () {
     const NAME = 'Print quote';
     const BODY = 'Thanks for the brief. For 2,400 box sleeves on 350 gsm board the price is 1,180 EUR, ready in eight working days.';
     await shoot(this, 'templates', async (take, scan) => {
       const compose = await boxOf(SEL.compose);
-      const crop = await fitCrop(compose, { minW: 760, pad: 8 });
+      // The compose window, right-aligned in the crop: whatever width the 960:660
+      // frame needs beyond it comes from the list on the left, never from the
+      // empty reader on the right (v1 showed its words at the right edge).
+      const fit = await fitCrop(compose, { minW: 760, pad: 8 });
+      const vpT = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      const crop = { ...fit, x: Math.round(Math.max(4, Math.min(Math.floor(compose.x + compose.w) - fit.w, vpT.w - 4 - fit.w))) };
+      check('no reader text beside the compose window inside the crop', (await strayText(crop, SEL.compose, compose.x)).length === 0,
+        await strayText(crop, SEL.compose, compose.x));
       await scan.at(take, 'empty', crop);
       await take.hold(800);
       await take.click('[data-testid="compose-templates-btn"]', 'templates', { dur: 550 });
@@ -2463,6 +2749,7 @@ describe('footage: website feature clips', function () {
       await take.waitFor((s) => (document.querySelector(s)?.innerText || '').includes('2,400'), 'inserted', 4000, SEL.editor);
       await take.hold(300);
       facts.templateEditor = await browser.execute((s) => (document.querySelector(s)?.innerText || '').slice(0, 200), SEL.editor);
+      check('the template text is in the editor', facts.templateEditor.includes(BODY.slice(0, 30)), facts.templateEditor);
       await scan.at(take, 'inserted', crop);
       await take.hold(2100);
       const end = take.t(Date.now());
@@ -2491,7 +2778,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 30. Tags: the reader's tag button; the tag lands on the message and its row.
-  it('tags', async function () {
+  defineClip('tags', async function () {
     const TAG = process.env.FOOTAGE_TAGS_NAME || 'Receipts';
     const BTN = '.email-action-bar [data-quick-action="tag"]';
     await shoot(this, 'tags', async (take, scan) => {
@@ -2507,6 +2794,7 @@ describe('footage: website feature clips', function () {
       await take.waitFor((n) => [...document.querySelectorAll('.local-mail-label')].some((e) => e.offsetHeight > 0 && (e.innerText || '').includes(n)), 'chip', 5000, TAG);
       await take.hold(300);
       facts.tagsChips = await browser.execute(() => [...document.querySelectorAll('.local-mail-label')].filter((e) => e.offsetHeight > 0).map((e) => e.innerText.trim()));
+      check(`the ${TAG} chip is on the message`, facts.tagsChips.some((c) => c.includes(TAG)), facts.tagsChips);
       await scan.at(take, 'tagged', crop);
       await take.hold(2700);
       const end = take.t(Date.now());
@@ -2556,7 +2844,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 31. Radial menu: right-click a row, the wheel, Star; the row is starred.
-  it('radial-menu', async function () {
+  defineClip('radial-menu', async function () {
     const WEDGE = '.quick-actions-radial button.quick-action-radial-item[data-quick-action="star"]';
     const STAR = '[data-footage-target="rm-row"] [data-testid="star-toggle"]';
     await shoot(this, 'radial-menu', async (take, scan) => {
@@ -2572,6 +2860,7 @@ describe('footage: website feature clips', function () {
       await take.hold(700);
       await take.click(WEDGE, 'star', { dur: 450 });
       await take.waitFor((s) => document.querySelector(s)?.getAttribute('aria-pressed') === 'true', 'starred', 4000, STAR);
+      check('the row is starred from the wheel', (await browser.execute((s) => document.querySelector(s)?.getAttribute('aria-pressed'), STAR)) === 'true', 'starred');
       await take.hold(300);
       await scan.at(take, 'starred', crop);
       await take.hold(1900);
@@ -2597,11 +2886,17 @@ describe('footage: website feature clips', function () {
   });
 
   // 32. Snooze: right-click, Snooze, Tomorrow; the row leaves the Inbox.
-  it('snooze', async function () {
+  defineClip('snooze', async function () {
     const WEDGE = '.quick-actions-radial button.quick-action-radial-item[data-quick-action="snooze"]';
     await shoot(this, 'snooze', async (take, scan) => {
       const rows = await rowsBox(7);
+      // From the list toolbar down, the list's full width (v1's reviewed crop
+      // started mid-row and cut the top row in half; a crop narrower than the
+      // list cut the dates). The top edge must not fall inside a row.
       const crop = await listCrop();
+      const cut = await browser.execute((c) => [...document.querySelectorAll('[data-testid="email-row"]')].filter((r) => r.offsetHeight > 0)
+        .map((r) => r.getBoundingClientRect()).filter((b) => c.y > b.y + 2 && c.y < b.bottom - 2).length, crop);
+      check('snooze crop starts at the toolbar, no half row at the top', cut === 0, { crop, cut });
       const subject = await browser.execute(() => (document.querySelector('[data-footage-target="sn-row"]')?.innerText || '').replace(/\s+/g, ' ').slice(0, 120));
       facts.snoozeRow = subject;
       await take.hold(800);
@@ -2620,6 +2915,8 @@ describe('footage: website feature clips', function () {
       facts.snoozePreset = preset;
       await take.click(`[data-testid="${preset}"]`, 'tomorrow', { dur: 450 });
       await take.waitFor(() => !document.querySelector('[data-footage-target="sn-row"]'), 'row gone', 8000);
+      check('the snoozed row left the Inbox', await browser.execute((t) => ![...document.querySelectorAll('[data-testid="email-row"]')]
+        .some((r) => r.offsetHeight > 0 && (r.innerText || '').replace(/\s+/g, ' ').slice(0, 120) === t), subject), subject);
       await take.hold(300);
       await scan.at(take, 'gone', crop);
       await take.hold(1800);
@@ -2640,7 +2937,7 @@ describe('footage: website feature clips', function () {
   });
 
   // 33. Focus session: the timer, 25 minutes, Start; the window locks with the countdown.
-  it('focus-session', async function () {
+  defineClip('focus-session', async function () {
     await shoot(this, 'focus-session', async (take, scan) => {
       const btn = await boxOf('[data-testid="focus-button"]');
       const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
@@ -2663,6 +2960,7 @@ describe('footage: website feature clips', function () {
       await take.waitFor(() => !!document.querySelector('[data-testid="focus-lock"]')?.offsetHeight, 'lock', 5000);
       await take.hold(400);
       facts.focusLock = await browser.execute(() => (document.querySelector('[data-testid="focus-lock"]')?.innerText || '').replace(/\s+/g, ' ').slice(0, 200));
+      check('the window locks with a countdown', /\d{1,2}:\d{2}/.test(facts.focusLock), facts.focusLock);
       await scan.at(take, 'lock', cropAll);
       await take.hold(2200);
       const end = take.t(Date.now());
@@ -2684,4 +2982,9 @@ describe('footage: website feature clips', function () {
       await browser.pause(800);
     } catch (e) { facts.focusUnlockError = e.message; }
   });
+
+  for (const name of ONLY.length ? ONLY : [...CLIPS.keys()]) {
+    const fn = CLIPS.get(name);
+    it(name, fn || (() => { throw new Error(`no clip named ${name} in web-clips.js`); }));
+  }
 });

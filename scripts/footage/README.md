@@ -17,11 +17,80 @@ checks and the `actions.json` schema are documented in
 | `scenes/s3-archive.js` | S3 in its own boot (it deletes 2022 from the mock server). |
 | `scenes/s4-search.js` | The original S4 spike, standalone. |
 | `scenes/web-clips.js` | The short website feature-card takes (about 5 s each): batch 1 (boots A-C), batch 2 (boots D-G), batch 3 (boot H, plus the tagging-rules retake in G). |
-| `web-clips.sh` | Website clips per locale: `record` (boots A-H; `WEBCLIP_ONLY=clip,clip` re-takes just those clips of a boot), `encode` (re-cut collected takes, no boot), `hero` (the 16:10 montage from collected takes, no boot), `publish` (`WEBCLIP_HOLD=clip:reason` routes a clip to `_needs-decision`; never over a published file unless `WEBCLIP_REPLACE=clip`; `WEBCLIP_ONLY` publishes just those). |
+| `web-clips.sh` | Website clips: `verify` / `all` (one build, every clip; below), and the older per-boot path: `record` (boots A-H; `WEBCLIP_ONLY=clip,clip` re-takes just those clips of a boot), `encode` (re-cut collected takes, no boot), `hero` (the 16:10 montage from collected takes, no boot), `publish` (`WEBCLIP_HOLD=clip:reason` routes a clip to `_needs-decision`; never over a published file unless `WEBCLIP_REPLACE=clip`; `WEBCLIP_ONLY` publishes just those). |
+| `web-clips-job.sh` | The single-build mini job behind `web-clips.sh verify` and `all`. |
+| `web-clips.groups.json` | Launch groups of that job: clips in run order and seed env per group. |
+| `lib/heroSpec.mjs` | The hero's encoder spec from `hero-montage.json` and this run's takes. |
+| `lib/webclipCheck.mjs` | Output check of every encoded clip (`check.json`). |
 | `hero-montage.json` | The homepage hero: which take, which seconds and which 16:10 crop per cut (1440x900, at most 1.6 MB, poster at most 150 KB). |
 | `webclip-encode.sh` | Takes to 960x660 H.264 web clips + posters with `video/capture/tools/webclip.swift` (no ffmpeg on the runners); a spec whose segments name their own takes (`src`) is a montage. |
 | `web-clips.crops.json` | Reviewed crop / trim / poster overrides per web clip (window points). |
 | `lib/locale.js` | `FOOTAGE_LOCALE`: UI language and demo catalog of a run. |
+
+## Website clips: one build, every clip
+
+```bash
+W=<work dir>
+bash scripts/footage/web-clips.sh verify en $W     # every take's steps and assertions, nothing recorded
+bash scripts/footage/web-clips.sh all en $W        # verify, then record, encode, hero montage, output check
+WEBCLIP_PUB=en-v2 bash scripts/footage/web-clips.sh publish en $W/all-<stamp>
+```
+
+Both are ONE minijob (`web-clips-job.sh`): the Swift tools, prepare-build,
+`build:e2e`, mock IMAP and the FM helper are built once (`job.json` `builds: 1`),
+then every launch group runs in its own fresh short HOME with its own seed env,
+and the app, its daemon and the mock servers are stopped before the next. A
+locale list (`"en de fr"`) reuses the build: one launch per group per locale.
+Each call unpacks into its own `<work dir>/<mode>-<stamp>/`; nothing is merged
+with an earlier run, so no stale encode can be published.
+
+| Group | Clips, in run order | Seed (on top of dark, `FOOTAGE_ALIGN_ALL=1 FOOTAGE_ALIGN_SHIFT_MIN=-1760`) |
+| --- | --- | --- |
+| history | sender-verification, chat-view, archive-delete, scheduled-send | `FOOTAGE_HISTORY=1`, body fetch 65 ms, 2842 total; archive-delete deletes 2022 from the server, scheduled-send after it (its Scheduled count stays out of the archive clip) |
+| mail | unified-inbox, link-safety, trackers, search-local, insights, views, undo-send, time-capsule, scheduled-backups | history + `FOOTAGE_EXTRA_MAIL=1` (tracker newsletter), 2852 total; undo-send after the search and list takes (its reply draft stays out of their lists) |
+| settings | privacy-mode, layouts, manual-backup, custom-fields, ai-writing, tagging-rules | the demo mailbox alone, 82 total; the FM helper for the AI takes; the backup and the field strip stay out of the list and reader takes |
+| demo | quick-actions, explorer-view, column-layout, shortcuts, notification-rules, templates, tags, radial-menu, snooze, focus-session | the demo mailbox alone, 82 total; snooze takes a row out, focus-session locks the window, so they run last |
+
+`search50k` and `cleanup` (held clips) are groups too, outside the default set
+(`WEBCLIP_GROUPS="search50k"`). The table lives in `web-clips.groups.json`.
+
+The clock: one fixed shift for every group, so every clip shows the same
+times and weekday labels. `-1760` (web-clips.groups.json) puts the newest demo
+message at 05:52 yesterday (the personal account's at 09:45 yesterday): valid
+at any hour, and no list header, date range or reader date ends on the day of
+the run (v1's `-320` showed today's date in the archive header and the tracker
+newsletter's reader, and with every account aligned it is refused before
+09:45 local). A recording job never falls back to "now"
+(`FOOTAGE_ALIGN_STRICT=1`), and a group that would start after local midnight
+refuses. The tracker newsletter and the newest subscription note sit at fixed
+distances from the shifted newest message. Inherent dates stay: the snapshot
+time-capsule takes is stamped now, and Scheduled send's "Tomorrow" is a real
+date (run after 07:00 local so New York's tomorrow is not today).
+
+Verify and the take assertions: every take calls `check(name, ok, actual)`
+for its cause and effect (the chip after the rule, the row gone after snooze,
+the toolbar before and after the preset, the theme flip, the backup's files,
+three columns then the reader below, the rebound key starring, Scheduled 1, ...);
+a failed check aborts the take. `FOOTAGE_VERIFY=1` runs the same steps and
+holds without a recorder. Each group writes `web-clips.verify.json`; the job
+merges them into `<locale>/verify/verify.json` and `all` records only when
+every take passed (`WEBCLIP_FORCE=1` records anyway). The in-page text scan
+(em dash, version label, "N days ago", today's date) runs on the take's crop
+and on the reviewed override crops in `web-clips.crops.json` (an override's
+whole-clip crop replaces the take's own); text under an opaque or painted layer
+(the focus lock) is not counted. A scan hit does not fail verify (the UI is not
+broken); verify reports it and the output check holds that clip.
+`lib/webclipCheck.mjs` then checks each encoded file from its own bytes
+(960x660 or 1440x900 for the hero, H.264, no audio, moov first, duration,
+250 KB / 1.6 MB, poster size and 80 KB / 150 KB) plus the scan and the record
+run's assertions; `publish` holds every clip that fails it in
+`_needs-decision/` with the reasons. tagging-rules retries the arrival up to
+`FOOTAGE_TAG_ATTEMPTS` (3) times with a fresh copy (the untagged one is
+deleted from the server) and reports the attempts.
+
+The hero (`hero-montage.json`) places each cut on a segment of its take
+(`seg` + `[start|end, offset]`), resolved against this run's takes by
+`lib/heroSpec.mjs`.
 
 ## The full set
 

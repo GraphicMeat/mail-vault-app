@@ -1,5 +1,5 @@
 {
-  "about": "Homepage hero (web-clips.sh hero): hard cuts between recorded takes, in order unified inbox, link warning, undo send, archive and keep in the vault, search. Seconds are each take's own .mov time; crops are window points at 16:10, clear of the header's date line and the window's rounded bottom corners. The search cut is the search-local take's two segments: the typing ends at the press, the results are cropped below the lanes row, so no search time is in any frame.",
+  "about": "Homepage hero (lib/heroSpec.mjs; web-clips.sh all|hero): hard cuts between recorded takes, in order unified inbox, link warning, undo send, archive and keep in the vault, search. Each cut is placed on one of its take's own segments (`seg`, from <take>.webclip.json): [start|end, offset] seconds, so a re-take whose timing moved still cuts at the same moment (the v1 cuts, re-expressed). Crops are window points at 16:10, clear of the header's date line and the window's rounded bottom corners. The search cut is the search-local take's two segments: the typing ends at the press, the results are cropped below the lanes row, so no search time is in any frame.",
   "scale": 2,
   "size": [1440, 900],
   "fps": 30,
@@ -7,13 +7,13 @@
   "posterMaxBytes": 150000,
   "poster": 7.5,
   "segments": [
-    {"take": "unified-inbox", "label": "unified", "t0": 0.5, "t1": 4.3, "crop": [4, 150, 800, 500]},
-    {"take": "link-safety", "label": "link-warning", "t0": 0.75, "t1": 5.65, "crop": [280, 190, 1120, 700]},
-    {"take": "undo-send", "label": "undo-send", "t0": 0.5, "t1": 5.0, "crop": [210, 252, 1120, 700]},
-    {"take": "archive-delete", "label": "archive-confirm", "t0": 0.45, "t1": 1.45, "crop": [288, 216, 960, 600]},
-    {"take": "archive-delete", "label": "archive-complete", "t0": 7.8, "t1": 8.6, "crop": [952, 594, 576, 360]},
-    {"take": "archive-delete", "label": "archive-vault", "t0": 9.0, "t1": 11.6, "crop": [4, 150, 800, 500]},
-    {"take": "search-local", "label": "search-typing", "t0": 0.4, "t1": 2.4, "crop": [262, 120, 700, 437.5]},
-    {"take": "search-local", "label": "search-results", "t0": 2.66, "t1": 5.2, "crop": [262, 330, 700, 437.5]}
+    {"take": "unified-inbox", "seg": 0, "label": "unified", "t0": ["start", 0.3], "t1": ["end", -0.02], "crop": [4, 150, 800, 500]},
+    {"take": "link-safety", "seg": 0, "label": "link-warning", "t0": ["start", 0.07], "t1": ["end", -0.05], "crop": [280, 190, 1120, 700]},
+    {"take": "undo-send", "seg": 0, "label": "undo-send", "t0": ["start", 0.27], "t1": ["end", -0.04], "crop": [210, 252, 1120, 700]},
+    {"take": "archive-delete", "seg": "confirm", "label": "archive-confirm", "t0": ["start", 0.015], "t1": ["start", 1.015], "crop": [288, 216, 960, 600]},
+    {"take": "archive-delete", "seg": "complete", "label": "archive-complete", "t0": ["end", -0.45], "t1": ["end", 0.35], "crop": [952, 594, 576, 360]},
+    {"take": "archive-delete", "seg": "count-after-and-vault", "label": "archive-vault", "t0": ["start", 0.75], "t1": ["end", 0], "crop": [4, 150, 800, 500]},
+    {"take": "search-local", "seg": "typing", "label": "search-typing", "t0": ["start", 0.2], "t1": ["end", 0], "crop": [262, 120, 700, 437.5]},
+    {"take": "search-local", "seg": "results", "label": "search-results", "t0": ["start", 0], "t1": ["end", -0.01], "crop": [262, 330, 700, 437.5]}
   ]
 }

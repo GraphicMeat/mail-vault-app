@@ -386,16 +386,34 @@ function alignDelta(scenarios) {
   // re-take whose clock must match an earlier run's clips (each run logs its
   // "demo clock moved N min"). Refused, falling back to the computed shift,
   // when it would leave the newest message in the future.
+  // FOOTAGE_ALIGN_STRICT=1 makes a refusal fatal (the website clip job: every
+  // group must show the same clock, never a quiet fallback to "now").
   const fixed = process.env.FOOTAGE_ALIGN_SHIFT_MIN;
   if (fixed !== undefined && fixed !== '' && Number.isFinite(newest)) {
     const ms = Math.round(Number(fixed)) * 60000;
-    if (Number.isFinite(ms) && ms <= 0 && newest + ms <= Date.now()) return ms;
-    console.warn(`[footage] FOOTAGE_ALIGN_SHIFT_MIN=${fixed} refused (newest message would be in the future); aligning to now instead`);
+    if (Number.isFinite(ms) && ms <= 0 && newest + ms <= Date.now()) {
+      // The clock the extra mail's recent rows are placed against: the run
+      // "happens" 35 min after the newest demo message, whatever the real hour.
+      virtualNow = newest + ms + 35 * 60000;
+      return ms;
+    }
+    const why = `FOOTAGE_ALIGN_SHIFT_MIN=${fixed} refused (newest message would be in the future at ${new Date().toString()})`;
+    if (process.env.FOOTAGE_ALIGN_STRICT === '1') throw new Error(`[footage] ${why}; FOOTAGE_ALIGN_STRICT=1`);
+    console.warn(`[footage] ${why}; aligning to now instead`);
   }
   const target = Date.now() - 35 * 60000;
   // Whole minutes, so every shifted stamp still reads hh:mm:00.
   return Number.isFinite(newest) ? Math.min(0, Math.floor((target - newest) / 60000) * 60000) : 0;
 }
+
+/**
+ * "Now" for mail placed relative to the run (the tracker newsletter, the
+ * newest subscription note): the real clock, or with a fixed
+ * FOOTAGE_ALIGN_SHIFT_MIN 35 min after the shifted newest demo message, so
+ * those rows keep their place among the demo's rows at any hour.
+ */
+let virtualNow = null;
+const footageNow = () => virtualNow ?? Date.now();
 
 // ── 3b. Extra mail (FOOTAGE_EXTRA_MAIL=1) ───────────────────────────────────
 //
@@ -530,7 +548,7 @@ function extraMessages() {
     return { ...extraMime({ id: n.id, from: me, to: me, subject: n.subject, header: s.header, text: n.text, attachment: n.attachment }), internal_date: s.internal_date, date: s };
   });
   // Two and a half hours before the run, so the row sits near the top of the inbox.
-  const at = new Date(Math.floor((Date.now() - 150 * 60000) / 60000) * 60000);
+  const at = new Date(Math.floor((footageNow() - 150 * 60000) / 60000) * 60000);
   const t = stampOf(at);
   out.push({
     ...extraMime({
@@ -605,7 +623,7 @@ function unsubMessages() {
   const out = [];
   for (const list of lists) {
     for (const n of list.issues) {
-      const s = n.recentMin ? stampOf(new Date(Math.floor((Date.now() - n.recentMin * 60000) / 60000) * 60000)) : extraStamp(n.d, n.h, n.m);
+      const s = n.recentMin ? stampOf(new Date(Math.floor((footageNow() - n.recentMin * 60000) / 60000) * 60000)) : extraStamp(n.d, n.h, n.m);
       const msg = extraMime({
         id: n.id, from: list.from, to: me, subject: n.subject, header: s.header, seen: n.seen !== false,
         html: listHtml(list.kicker, n.subject.replace(/^[^:]*: /, ''), n.lines, list.color), text: n.lines.join('\n\n'),

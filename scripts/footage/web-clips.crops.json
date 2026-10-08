@@ -17,6 +17,5 @@
   "custom-fields": {"crop": [768, 56, 500, 343.75]},
   "ai-writing": {"crop": [326, 230, 860, 591.25]},
   "layouts": {"crop": [24, 435, 760, 522.5]},
-  "column-layout": {"segmentCrops": {"setting": [468, 378, 836, 574.75]}},
-  "snooze": {"crop": [249, 262, 613, 421.5]}
+  "column-layout": {"segmentCrops": {"setting": [468, 378, 836, 574.75]}}
 }

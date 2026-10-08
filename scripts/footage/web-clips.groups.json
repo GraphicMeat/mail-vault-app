@@ -1,0 +1,110 @@
+{
+  "clock": "-1760 min: the newest demo message (work account) lands at 05:52 YESTERDAY, the personal account's at 09:45 yesterday. Valid at any hour (-320, the v1 shift, is refused before 09:45 local once every account is aligned), and no list header, reader date or range ends on the day of the run.",
+  "about": "Launch groups of the single-build website clip job (web-clips-job.sh). One build, then one app launch per group per locale, each with a fresh HOME and the env below on top of `common`. Clips run in the listed order inside a launch. Groups whose seeds differ visually stay apart; `default` is what `web-clips.sh all|verify` runs.",
+  "common": {
+    "FOOTAGE_SPEC": "web-clips",
+    "FOOTAGE_THEME": "dark",
+    "FOOTAGE_WEBCLIP": "1",
+    "FOOTAGE_BITRATE": "20",
+    "FOOTAGE_ALIGN_ALL": "1",
+    "FOOTAGE_ALIGN_SHIFT_MIN": "-1760",
+    "FOOTAGE_BODY_DELAY_MS": "0"
+  },
+  "default": [
+    "history",
+    "mail",
+    "settings",
+    "demo"
+  ],
+  "groups": {
+    "history": {
+      "why": "Multi-year history, nothing extra (v1 boots D and A). archive-delete deletes 2022 from the mock server (its 65 ms body fetch shows about 6 s of progress); scheduled-send runs after it so its Scheduled count is not in the archive clip's sidebar.",
+      "clips": [
+        "sender-verification",
+        "chat-view",
+        "archive-delete",
+        "scheduled-send"
+      ],
+      "env": {
+        "FOOTAGE_HISTORY": "1",
+        "FOOTAGE_BODY_DELAY_MS": "65",
+        "FOOTAGE_EXPECT_TOTAL": "2842"
+      }
+    },
+    "mail": {
+      "why": "History plus the extra mail (the tracker newsletter; v1 boots C and E). search-local archives the whole INBOX for search, Insights and Views; undo-send runs after them so its reply draft is not in their lists; time-capsule then snapshots the vault.",
+      "clips": [
+        "unified-inbox",
+        "link-safety",
+        "trackers",
+        "search-local",
+        "insights",
+        "views",
+        "undo-send",
+        "time-capsule",
+        "scheduled-backups"
+      ],
+      "env": {
+        "FOOTAGE_HISTORY": "1",
+        "FOOTAGE_EXTRA_MAIL": "1",
+        "FOOTAGE_EXPECT_TOTAL": "2852"
+      }
+    },
+    "settings": {
+      "why": "The demo mailbox alone (v1 boots F and G). manual-backup leaves the vault and backup drive full and custom-fields adds a field strip to every message, so the list and reader takes do not share this launch; tagging-rules appends an invoice. Apple Intelligence through the FM helper (built once).",
+      "clips": [
+        "privacy-mode",
+        "layouts",
+        "manual-backup",
+        "custom-fields",
+        "ai-writing",
+        "tagging-rules"
+      ],
+      "env": {
+        "FOOTAGE_EXPECT_TOTAL": "82"
+      },
+      "fmHelper": true
+    },
+    "demo": {
+      "why": "The demo mailbox alone (v1 boot H): reader, list and settings takes. tags adds a Receipts chip to the Cleaver Cloud invoice, radial-menu and snooze follow it as in v1 (snooze takes that third row out of the Inbox), focus-session last (it locks the window).",
+      "clips": [
+        "quick-actions",
+        "explorer-view",
+        "column-layout",
+        "shortcuts",
+        "notification-rules",
+        "templates",
+        "tags",
+        "radial-menu",
+        "snooze",
+        "focus-session"
+      ],
+      "env": {
+        "FOOTAGE_EXPECT_TOTAL": "82"
+      }
+    },
+    "search50k": {
+      "why": "Not in the default set (held: it shows the real search time). The 50,000-message vault seeded before boot. The single build is a plain debug build (v1 compiled this boot at opt-level 3), so its search time reads slower.",
+      "clips": [
+        "search-50k"
+      ],
+      "env": {
+        "FOOTAGE_CORPUS_50K": "1",
+        "FOOTAGE_CORPUS_N": "49932",
+        "FOOTAGE_EXPECT_TOTAL": "82"
+      }
+    },
+    "cleanup": {
+      "why": "Not in the default set (held). History, extra and subscription mail for the cleanup classifier.",
+      "clips": [
+        "email-cleanup"
+      ],
+      "env": {
+        "FOOTAGE_HISTORY": "1",
+        "FOOTAGE_EXTRA_MAIL": "1",
+        "FOOTAGE_UNSUB_MAIL": "1",
+        "FOOTAGE_EXPECT_TOTAL": "2861"
+      }
+    }
+  }
+}

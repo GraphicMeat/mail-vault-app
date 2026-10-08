@@ -34,6 +34,11 @@ const CODEC = process.env.FOOTAGE_CODEC || 'hevc';
 const BITRATE = process.env.FOOTAGE_BITRATE || '80';
 // window | display: see the --mode note in video/capture/recorder.swift.
 const MODE = process.env.FOOTAGE_CAPTURE || 'app';
+// FOOTAGE_VERIFY=1: every take runs its steps and assertions with the same
+// holds, but no recorder starts and nothing is written for the encoder
+// (scripts/footage/web-clips-job.sh verify). The theme, scale and window
+// checks still run.
+export const VERIFY = process.env.FOOTAGE_VERIFY === '1';
 
 /**
  * Size the footage is shot at, "WxH" in points: the web content (Tauri's inner
@@ -421,7 +426,7 @@ export class Take {
   }
 
   async start({ startTimeoutMs = 15000 } = {}) {
-    if (!RECORDER || !existsSync(RECORDER)) throw new Error(`FOOTAGE_RECORDER not set or missing: "${RECORDER}"`);
+    if (!VERIFY && (!RECORDER || !existsSync(RECORDER))) throw new Error(`FOOTAGE_RECORDER not set or missing: "${RECORDER}"`);
     mkdirSync(OUT_DIR, { recursive: true });
     this.viewport = await browser.execute(() => ({
       innerWidth: window.innerWidth, innerHeight: window.innerHeight, dpr: window.devicePixelRatio,
@@ -441,6 +446,11 @@ export class Take {
     // been 1x before; a 1x session would quietly shoot a whole batch at half size.
     const scale = Number(process.env.FOOTAGE_EXPECT_SCALE || 2);
     if (this.viewport.dpr !== scale) throw new Error(`devicePixelRatio is ${this.viewport.dpr}, expected ${scale}: the display is not HiDPI`);
+    if (VERIFY) {
+      this.startEpochMs = Date.now();
+      console.log(`[take] VERIFY ${this.name}: no recorder`);
+      return this.startEpochMs;
+    }
     this.proc = spawn(RECORDER, [wid, this.clip, '--fps', String(FPS), '--codec', CODEC, '--bitrate', BITRATE, '--mode', MODE],
       { stdio: ['ignore', 'pipe', 'pipe'] });
     this.proc.stderr.on('data', (d) => { this.stderr += d; process.stderr.write(`[recorder] ${d}`); });
@@ -623,6 +633,7 @@ export class Take {
    * written, so run.sh skips it).
    */
   async abort() {
+    if (VERIFY) return;
     if (!this.proc || this.proc.exitCode !== null) return;
     this.proc.kill('SIGINT');
     await Promise.race([this.exited, new Promise((res) => setTimeout(res, 15000))]);
@@ -630,6 +641,10 @@ export class Take {
   }
 
   async stop() {
+    if (VERIFY) {
+      const seconds = this.t(Date.now());
+      return { verify: true, seconds, delivered: Math.round(seconds * FPS), fps: FPS };
+    }
     this.proc.kill('SIGINT');
     const { code, sig } = await Promise.race([
       this.exited,

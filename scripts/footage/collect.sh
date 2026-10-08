@@ -18,6 +18,9 @@ tar_file="$1"; dest="$2"; name="${3:-$(basename "$tar_file" .tar)}"; s7="${4:-}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 tar -xf "$tar_file" -C "$tmp"
+# A run name already collected is replaced whole: copying over it kept the
+# earlier run's web/ files, and web-clips.sh then published those stale encodes.
+rm -rf "${dest:?}/_runs/$name"
 mkdir -p "$dest" "$dest/_runs/$name"
 for mov in "$tmp"/*.mov; do
   [ -e "$mov" ] || continue
