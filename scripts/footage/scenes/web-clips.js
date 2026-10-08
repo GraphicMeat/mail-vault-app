@@ -301,19 +301,31 @@ function check(name, ok, actual) {
 /** No list row in its hover / focus state (the row's own action overlay and a clipped date). */
 const rowHover = () => browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')]
   .filter((r) => r.matches(':hover') || r.matches(':focus-within'))
-  .map((r) => (r.innerText || '').replace(/\s+/g, ' ').slice(0, 60)));
+  .map((r) => `${r.matches(':hover') ? 'hover' : 'focus'}: ${(r.innerText || '').replace(/\s+/g, ' ').slice(0, 60)}`));
 
-/** The pointer leaves every row (synthetic, as Take.click's own events), and focus goes to the body. */
-const clearRowHover = () => browser.execute(() => {
-  document.activeElement?.blur?.();
-  const base = { bubbles: true, cancelable: true, composed: true, relatedTarget: document.body, view: window };
-  for (const r of document.querySelectorAll('[data-testid="email-row"]')) {
-    r.dispatchEvent(new PointerEvent('pointerout', { ...base, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
-    r.dispatchEvent(new MouseEvent('mouseout', base));
-    r.dispatchEvent(new PointerEvent('pointerleave', { ...base, bubbles: false, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
-    r.dispatchEvent(new MouseEvent('mouseleave', { ...base, bubbles: false }));
-  }
-});
+/** The real pointer back on the title bar, where prepareWindow parked it: synthetic events cannot clear a real :hover. */
+const parkPointer = () => {
+  try {
+    const g = JSON.parse(readFileSync(join(OUT_DIR, 'geometry.json'), 'utf8')).geometry;
+    if (g?.pos && g?.outer) { const sc = g.scale || 2; pointer(g.pos[0] / sc + g.outer[0] / sc / 2, g.pos[1] / sc + 16); }
+  } catch { /* no geometry yet: the synthetic leave below is all there is */ }
+};
+
+/** The pointer leaves every row (real one parked, plus synthetic events as Take.click's own), and focus goes to the body. */
+const clearRowHover = async () => {
+  parkPointer();
+  await browser.pause(150);
+  await browser.execute(() => {
+    document.activeElement?.blur?.();
+    const base = { bubbles: true, cancelable: true, composed: true, relatedTarget: document.body, view: window };
+    for (const r of document.querySelectorAll('[data-testid="email-row"]')) {
+      r.dispatchEvent(new PointerEvent('pointerout', { ...base, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
+      r.dispatchEvent(new MouseEvent('mouseout', base));
+      r.dispatchEvent(new PointerEvent('pointerleave', { ...base, bubbles: false, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
+      r.dispatchEvent(new MouseEvent('mouseleave', { ...base, bubbles: false }));
+    }
+  });
+};
 
 /**
  * Visible text inside `crop` (viewport px) that is neither inside `keep` nor

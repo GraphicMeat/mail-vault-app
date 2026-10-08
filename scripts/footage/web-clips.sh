@@ -68,7 +68,7 @@ case "$cmd" in
   verify|all)
     locs="$(printf '%s' "$LOC" | tr ',' ' ')"
     variants=""
-    for l in $locs; do for th in $(printf '%s' "${WEBCLIP_THEMES:-dark}" | tr ',' ' '); do variants="$variants $l$([ "$th" = light ] && echo .light)"; done; done
+    for l in $locs; do for th in $(printf '%s' "${WEBCLIP_THEMES:-dark}" | tr ',' ' '); do if [ "$th" = light ]; then variants="$variants $l.light"; else variants="$variants $l"; fi; done; done
     RUN="$WORK/$cmd-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$RUN"
     ~/.claude/bin/testq --status 2>&1 | tail -5 || true
     echo "== $cmd ($locs) -> $RUN  $(date +%H:%M:%S)"

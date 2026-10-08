@@ -410,6 +410,39 @@
   // when it leaves or the tab is hidden. Nothing starts before the visitor's
   // first scroll (no autoplay above the fold), and never with reduced motion.
   const clips = [...document.querySelectorAll('.mv-clip video')];
+  // Each clip has a dark cut and a light one beside it: <clip>.mp4 and <clip>.light.mp4,
+  // posters <clip>-poster.jpg / <clip>.jpg and their .light twins. The theme is the
+  // `dark` class on <html>, so watch it rather than a media query. The hero sits on a
+  // dark band in either theme and keeps its clip.
+  const cut = (url, light) => {
+    const base = url.replace(/\.light(\.\w+)$/, '$1');
+    return light ? base.replace(/(\.\w+)$/, '.light$1') : base;
+  };
+  const swapAttr = (el, name, light) => {
+    const now = el.getAttribute(name);
+    if (now && cut(now, light) !== now) el.setAttribute(name, cut(now, light));
+  };
+  function syncClips() {
+    const light = !html.classList.contains('dark');
+    clips.filter(video => !video.closest('.hm-hero-clip')).forEach(video => {
+      const card = video.closest('.mv-clip');
+      const still = card.querySelector('.mv-clip-poster');
+      if (still) swapAttr(still, 'src', light);
+      swapAttr(video, 'poster', light);
+      const file = video.querySelector('source');
+      if (!file || cut(file.getAttribute('src'), light) === file.getAttribute('src')) return;
+      const running = !video.paused;
+      swapAttr(file, 'src', light);
+      try { video.load(); } catch { /* the poster stays */ }
+      if (card.classList.contains('is-live')) {
+        card.classList.remove('is-live');
+        video.addEventListener('playing', () => card.classList.add('is-live'), { once: true });
+      }
+      if (running) { try { Promise.resolve(video.play()).catch(() => {}); } catch { /* the poster stays */ } }
+    });
+  }
+  syncClips();
+  try { new MutationObserver(syncClips).observe(html, { attributes: true, attributeFilter: ['class'] }); } catch { /* the first cut stays */ }
   let reducedMotion = false;
   try { reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* treat as no preference */ }
   clips.forEach(video => video.addEventListener('playing', () => {

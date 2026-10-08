@@ -39,7 +39,7 @@ THEMES="$(printf '%s' "${WEBCLIP_THEMES:-dark}" | tr ',' ' ')"
 for th in $THEMES; do case "$th" in dark|light) ;; *) echo "WEBCLIP_THEMES: dark or light, not '$th'"; exit 64 ;; esac; done
 # One variant per locale and theme: "en" (dark) and "en.light".
 VARIANTS=""
-for l in $LOCALES; do for th in $THEMES; do VARIANTS="$VARIANTS $l$([ "$th" = light ] && echo .light)"; done; done
+for l in $LOCALES; do for th in $THEMES; do if [ "$th" = light ]; then VARIANTS="$VARIANTS $l.light"; else VARIANTS="$VARIANTS $l"; fi; done; done
 GROUPS_JSON="$ROOT/scripts/footage/web-clips.groups.json"
 CLIP_GROUPS="${WEBCLIP_GROUPS:-$(node -e 'console.log(require(process.argv[1]).default.join(" "))' "$GROUPS_JSON")}"
 CLIP_GROUPS="$(printf '%s' "$CLIP_GROUPS" | tr ',' ' ')"
