@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook Storage Full? What to Do, Step by Step | MailVault</title>
+  <meta name="description" content="Outlook says your storage is full? Find out which limit is full, run the 5-minute checks, then choose: clean up, keep old mail on your computer, or buy storage.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/es/guides/outlook-storage-full-what-to-do.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/es/guides/outlook-storage-full-what-to-do.html">
+  <meta property="og:title" content="Outlook Storage Full? What to Do, Step by Step | MailVault">
+  <meta property="og:description" content="Outlook says your storage is full? Find out which limit is full, run the 5-minute checks, then choose: clean up, keep old mail on your computer, or buy storage.">
+  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="es_ES">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Outlook Storage Full? What to Do, Step by Step | MailVault">
+  <meta name="twitter:description" content="Outlook says your storage is full? Find out which limit is full, run the 5-minute checks, then choose: clean up, keep old mail on your computer, or buy storage.">
+  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Outlook storage full: find out what is full, then fix it",
+  "description": "Outlook says your storage is full? Find out which limit is full, run the 5-minute checks, then choose: clean up, keep old mail on your computer, or buy storage.",
+  "url": "https://mailvaultapp.com/es/guides/outlook-storage-full-what-to-do.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How much free storage does Outlook.com have?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A free Outlook.com account has 15 GB for email and 5 GB of Microsoft cloud storage. The cloud storage is shared by your OneDrive files and photos, your Outlook.com attachments and your Microsoft 365 apps."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I still receive email when my Outlook storage is full?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. When your Outlook.com mailbox or your Microsoft cloud storage is full, you cannot send or receive email. Messages sent to you are returned to the sender, who must send them again after you free up space."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How long does it take for Outlook to show the space I freed?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Microsoft says changes can take up to 24 hours to apply. Emails in Deleted Items still count until you empty the folder, so empty it first."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Will buying Microsoft 365 fix a full Outlook mailbox?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Microsoft 365 Basic, Personal and Family include 100 GB of email storage, so the limit stops being a problem for now. The 100 GB mailbox is not available during a Microsoft 365 trial. If your mail keeps growing, the bigger limit can fill up too."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my mail safe after I delete it from Outlook.com?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Only if you have a copy somewhere else. Items in Deleted Items are removed after 30 days. Save a copy of old mail on your computer first, and check that the copy opens, before you delete anything."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/outlook-storage-full-what-to-do.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/es/" aria-label="Inicio de MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">por Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Navegación principal"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Dar una estrella a MailVault en GitHub" title="Dar una estrella a MailVault en GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Enviar un corazón a MailVault" title="Enviar un corazón a MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Seleccionar idioma"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Español</span><span class="mv-language-code" aria-hidden="true">ES</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/outlook-storage-full-what-to-do.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/outlook-storage-full-what-to-do.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/outlook-storage-full-what-to-do.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/outlook-storage-full-what-to-do.html" lang="es" hreflang="es" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/outlook-storage-full-what-to-do.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/outlook-storage-full-what-to-do.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/outlook-storage-full-what-to-do.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/outlook-storage-full-what-to-do.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/outlook-storage-full-what-to-do.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Cambiar tema de color" title="Cambiar tema de color"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Demo</a><a class="mv-button mv-nav-download" href="/es/get-started.html?plan=free">Descargar</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menú</span></summary>
+<nav aria-label="Navegación móvil"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a><a href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Probar la demo</a><a href="/es/get-started.html?plan=free">Descargar gratis</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Cambiar tema de color</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Volver al inicio
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook storage full: find out what is full, then fix it</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 min de lectura</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>Updated October 8, 2026</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>
+            When Outlook says your storage is full, first find out <strong>which</strong> storage is full. A free Outlook.com account (this includes Hotmail and Live.com addresses) has two limits: 15 GB for email, and 5 GB of Microsoft cloud storage that OneDrive and Outlook.com attachments share. A work or school account has a mailbox limit that your organization sets. When a free limit is reached, Outlook.com stops sending and receiving email. This page helps you find what is full and choose a fix. For the hands-on cleanup steps, read <a href="/es/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">how to free up space in Hotmail and Outlook.com</a>. For a short overview, see <a href="/es/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com or Hotmail mailbox full</a>.
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Quick answer</p>
+            <ol class="list-decimal pl-6 space-y-1">
+              <li>In Outlook.com, open <strong>Settings</strong> &gt; <strong>Account</strong> &gt; <strong>Storage</strong> to see your email storage. Then check your Microsoft cloud storage too.</li>
+              <li>Empty <strong>Deleted Items</strong>. It counts against your storage until you empty it.</li>
+              <li>Still full? Save a copy of your old mail on your computer, check the copy, then delete that mail from Outlook.com.</li>
+              <li>Buy more storage only if you need all of your old mail online, on every device.</li>
+            </ol>
+            <p class="text-sm mt-3">Changes can take up to 24 hours to show.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">What happens when Outlook storage is full</h2>
+
+          <p>Microsoft describes three situations. All of them stop your email, so it is worth acting the same day.</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Your Outlook.com mailbox is full.</strong> You cannot send or receive email in Outlook.com. Emails that people send to you are returned to them. They must send the email again after you have space.</li>
+            <li><strong>Your Microsoft cloud storage is full.</strong> You also cannot send or receive email in Outlook.com, even when your mailbox still has room. Your OneDrive files become read-only, and new files do not upload or sync. Microsoft says that after 6 months it might delete your OneDrive and the files in it.</li>
+            <li><strong>Your work or school mailbox is full.</strong> You cannot send or receive messages, and people who email you get an error message that says your mailbox is full. Before that, Microsoft sends warning emails and in-app messages as the mailbox gets close to full.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Step 1: Find out what kind of account you have</h2>
+
+          <p>The fix depends on who sets the limit. Use the table to find your row.</p>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">Account</th>
+                  <th class="py-3 pr-4 font-semibold">What sets the limit</th>
+                  <th class="py-3 pr-4 font-semibold">Where to check</th>
+                  <th class="py-3 font-semibold">Who can raise it</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Free Outlook.com, Hotmail or Live.com</td>
+                  <td class="py-3 pr-4">15 GB for email, plus 5 GB of Microsoft cloud storage</td>
+                  <td class="py-3 pr-4">Outlook.com: Settings &gt; Account &gt; Storage. Cloud storage: the Microsoft storage page of your Microsoft account</td>
+                  <td class="py-3">You: clean up, archive, or buy Microsoft 365</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Outlook.com with Microsoft 365 Basic, Personal or Family</td>
+                  <td class="py-3 pr-4">100 GB for email. Cloud storage is 100 GB (Basic) or 1 TB (Personal and Family)</td>
+                  <td class="py-3 pr-4">The same pages as a free account</td>
+                  <td class="py-3">You, but personal mailboxes stop at 100 GB</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Work or school account (Microsoft 365 or Exchange)</td>
+                  <td class="py-3 pr-4">Up to 100 GB per mailbox. Your administrator can set a lower limit</td>
+                  <td class="py-3 pr-4">New Outlook: Settings &gt; Accounts &gt; Storage. Outlook on the web: Settings &gt; Account &gt; Storage</td>
+                  <td class="py-3">Your IT administrator</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Classic Outlook for Windows data file (.pst or .ost)</td>
+                  <td class="py-3 pr-4">A size limit on the file on your PC. Microsoft documents a default of 50 GB</td>
+                  <td class="py-3 pr-4">File &gt; Tools &gt; Mailbox Cleanup</td>
+                  <td class="py-3">You or your IT administrator</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            The Outlook app on your Mac, PC or phone usually shows the same mailbox as the website. If Outlook.com says the mailbox is full, the app says so too, and space you free in one place is freed everywhere.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Step 2: Mailbox or cloud storage?</h2>
+
+          <p>
+            On a personal account, the two limits fill up for different reasons. Your <strong>mailbox</strong> holds your emails, contacts and calendar. Your <strong>Microsoft cloud storage</strong> holds OneDrive files and photos, the OneDrive recycle bin, and, according to Microsoft, your Outlook.com attachments. So a OneDrive full of photos can stop your email, even if you never touch your inbox.
+          </p>
+
+          <p>
+            Microsoft's own help pages do not all describe this split in the same way. Do not guess. Look at both numbers before you delete anything.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">The 5-minute checks</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>Check your email storage.</strong> Sign in to Outlook.com and select <strong>Settings</strong> &gt; <strong>Account</strong> &gt; <strong>Storage</strong>. You see how much space each folder uses. (One Microsoft page points to <strong>Settings</strong> &gt; <strong>Subscription</strong> instead. Your account may show either one.)</li>
+            <li><strong>Check your cloud storage.</strong> Sign in to your Microsoft account and open the Microsoft storage page. Microsoft links to it from its <a href="https://support.microsoft.com/en-us/office/microsoft-storage-2a261b34-421c-4a47-9901-74ef5bd0c426" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">What is Microsoft cloud storage?</a> help page.</li>
+            <li><strong>Look at Deleted Items.</strong> It counts against your storage until you empty it, or until each item is removed after 30 days.</li>
+            <li><strong>Did you use Sweep?</strong> Emails removed with Sweep do not reduce your storage until they are also deleted from Deleted Items.</li>
+            <li><strong>Look at Junk Email.</strong> Outlook.com deletes Junk Email items after 10 days, so this folder is rarely the problem.</li>
+            <li><strong>Check the OneDrive recycle bin</strong> if cloud storage is the full one. It counts too.</li>
+          </ol>
+
+          <p>
+            The Storage page can also permanently delete all items in a folder, or only items older than 3, 6 or 12 months. That is fast, but it is permanent. Use it only on folders you do not need, or that you have already copied.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Your three options, in order</h2>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Clean up</h3>
+
+          <p>
+            Empty Deleted Items, delete newsletters you do not read, and find the largest emails with <strong>Filter</strong> &gt; <strong>Sort by</strong> &gt; <strong>Size</strong>. This is free and often enough when you are only a little over the limit. The full step list, with what to keep, is in <a href="/es/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">free up space in Hotmail and Outlook.com</a>.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Keep old mail on your computer, then delete it online</h3>
+
+          <p>
+            Most full mailboxes are full of old mail that you rarely open but do not want to lose. You can download a copy of that mail to your computer, check the copy, and then delete the mail from Outlook.com. The space comes back, and the mail is still there when you need it.
+          </p>
+
+          <p>
+            MailVault is a free desktop app for macOS, Windows and Linux that does this. It saves each email as a standard <code>.eml</code> file on your computer. With the free app you do it in two steps: <strong>Archive</strong> copies the mail into your vault, then <strong>Delete from Server</strong> removes it from Outlook.com. The one-step <strong>Archive &amp; Delete</strong>, which checks each copy before it removes the server copy, is part of Premium. See <a href="/es/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">how Archive &amp; delete works</a>.
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/selection-dialog-archive-720.webp 720w, /screenshots/es/selection-dialog-archive-1440.webp 1440w, /screenshots/es/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/es/selection-dialog-archive-light-1440.webp" srcset="/screenshots/es/selection-dialog-archive-light-720.webp 720w, /screenshots/es/selection-dialog-archive-light-1440.webp 1440w, /screenshots/es/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault's Choose Action for 67 Emails dialog. It lists Archive, Unarchive, Delete from Server, Archive and Delete, and Delete Everywhere, each with a one-line explanation, above a note that 33 of the emails are already archived." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">After you select messages, MailVault asks what to do with them. Archive keeps the server copy. Delete from Server removes only the server copy. Archive &amp; Delete (Premium) does both and checks each copy first.</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Buy more storage</h3>
+
+          <p>
+            Microsoft 365 Basic, Personal and Family raise your email storage to 100 GB. The 100 GB mailbox is not part of a Microsoft 365 trial. Prices change by country, so check them on Microsoft's site. This is the right choice when you need every old email on your phone and on the web. It does not stop your mailbox from growing. We compare the two approaches in <a href="/es/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">archiving locally vs paying for more storage</a>.
+          </p>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">Option</th>
+                  <th class="py-3 pr-4 font-semibold">Coste</th>
+                  <th class="py-3 pr-4 font-semibold">Old mail after</th>
+                  <th class="py-3 font-semibold">Good when</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Clean up</td>
+                  <td class="py-3 pr-4">Gratis</td>
+                  <td class="py-3 pr-4">What you delete is gone</td>
+                  <td class="py-3">You are a little over the limit, or Deleted Items is large</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Archive locally, then delete</td>
+                  <td class="py-3 pr-4">Free with MailVault (two steps); one-step Archive &amp; Delete is Premium</td>
+                  <td class="py-3 pr-4">On your computer, readable and searchable offline</td>
+                  <td class="py-3">Years of old mail that you rarely open</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Buy Microsoft 365</td>
+                  <td class="py-3 pr-4">A subscription; see Microsoft's prices</td>
+                  <td class="py-3 pr-4">Online, on every device</td>
+                  <td class="py-3">You need all old mail on your phone and the web</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">When to pick which</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Mail is bouncing right now.</strong> Empty Deleted Items first. It is quick, and it removes only mail you already deleted. Then plan a longer fix this week.</li>
+            <li><strong>The mailbox is full of old mail.</strong> Archive it locally, then delete it from Outlook.com. This can free a lot of space without losing anything.</li>
+            <li><strong>Cloud storage is full, and OneDrive holds most of it.</strong> Deleting email helps only a little. Move or delete OneDrive files, empty the OneDrive recycle bin, or buy storage. Removing old emails with large attachments helps too.</li>
+            <li><strong>It is a work or school account.</strong> Ask your IT administrator first. Your organization may have an archive mailbox for you. Do not copy work mail to a personal tool if your company rules do not allow it.</li>
+            <li><strong>You need everything online.</strong> Buy storage, and accept that the bill continues.</li>
+          </ul>
+
+          <p>
+            If you choose to archive, make the copy first and delete second. Our guide to <a href="/es/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">backing up Outlook.com email to a Mac</a> compares the ways to make that copy, and <a href="/es/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">freeing up email storage without losing old emails</a> explains the same idea for any provider.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Notes for the Outlook desktop app</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Classic Outlook for Windows</strong> has <strong>File</strong> &gt; <strong>Tools</strong> &gt; <strong>Mailbox Cleanup</strong>. It shows the size of your mailbox and its folders, finds items older than a date or larger than a size, and empties Deleted Items.</li>
+            <li><strong>A .pst or .ost file</strong> lives on your PC. Microsoft documents a default size limit of 50 GB for these files. This limit is separate from your Outlook.com or work mailbox limit.</li>
+          </ul>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/local-vault-720.webp 720w, /screenshots/es/local-vault-1440.webp 1440w, /screenshots/es/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/es/local-vault-light-1440.webp" srcset="/screenshots/es/local-vault-light-720.webp 720w, /screenshots/es/local-vault-light-1440.webp 1440w, /screenshots/es/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault with the Vault filter selected in the sidebar. The inbox header reads In your vault: 79 of 79, and each message row has a vault icon. A legend under the list explains Server only, In your vault, Only copy and On backup drive." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">The Vault filter shows the mail that is saved on your computer. The header line In your vault: 79 of 79 tells you how much of this folder has a copy there. The progress card in the corner belongs to a different job.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Frequently asked questions</h2>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">How much free storage does Outlook.com have?</h3>
+            <p>A free Outlook.com account has 15 GB for email and 5 GB of Microsoft cloud storage. The cloud storage is shared by your OneDrive files and photos, your Outlook.com attachments and your Microsoft 365 apps.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Can I still receive email when my Outlook storage is full?</h3>
+            <p>No. When your Outlook.com mailbox or your Microsoft cloud storage is full, you cannot send or receive email. Messages sent to you are returned to the sender, who must send them again after you free up space.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">How long does it take for Outlook to show the space I freed?</h3>
+            <p>Microsoft says changes can take up to 24 hours to apply. Emails in Deleted Items still count until you empty the folder, so empty it first.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Will buying Microsoft 365 fix a full Outlook mailbox?</h3>
+            <p>Microsoft 365 Basic, Personal and Family include 100 GB of email storage, so the limit stops being a problem for now. The 100 GB mailbox is not available during a Microsoft 365 trial. If your mail keeps growing, the bigger limit can fill up too.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Is my mail safe after I delete it from Outlook.com?</h3>
+            <p>Only if you have a copy somewhere else. Items in Deleted Items are removed after 30 days. Save a copy of old mail on your computer first, and check that the copy opens, before you delete anything.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">What to do next</h2>
+
+          <p>
+            Run the 5-minute checks today, so mail stops bouncing. Then decide what to do with your old mail. If you want to keep it without paying for more online storage, MailVault keeps a copy on your own computer as plain <code>.eml</code> files, and the free app can archive and delete from the server in two steps. There is no MailVault account, and your mail does not pass through a MailVault server.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Keep your old Outlook mail on your computer</p>
+            <p class="text-sm mb-4">Free for macOS, Windows and Linux. Source code on GitHub. Premium adds one-step Archive &amp; Delete and scheduled backups.</p>
+            <a href="/es/get-started.html" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Download MailVault free
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Sources: Microsoft Support, <a href="https://support.microsoft.com/en-us/outlook/storage-limits-in-outlook-com" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Storage limits in Outlook.com</a>, <a href="https://support.microsoft.com/en-us/outlook/check-email-and-cloud-storage" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Check email and cloud storage</a> and <a href="https://support.microsoft.com/en-us/outlook/mailbox-storage-limits-in-outlook" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Mailbox storage limits in Outlook</a> (work or school accounts). Last checked: October 2026.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creación de Graphic Meat</p><h2 id="studio-title">Conoce a las personas detrás de MailVault.</h2><p>Somos Graphic Meat, un estudio de productos independiente que crea software útil desde 2013. MailVault es una de las cosas que hacemos. Ven a conocernos y descubre en qué más estamos trabajando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conoce Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, el estudio detrás de MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Más de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Convierte tus fotos en un libro listo para imprimir.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espacio de trabajo local para notas y código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mueve tu correo a un proveedor nuevo.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/es/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Lee tu correo. Conserva tu correo.</p>
+</div>
+<nav aria-label="Explora MailVault"><a href="/es/use-cases.html">Casos de uso</a><a href="/es/blog.html">Blog</a><a href="/changelog.html">Novedades</a><a href="/es/mentioned-in.html">Menciones</a><a href="/es/faq.html">FAQ</a><a href="/es/docs.html">Ayuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código en GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidad ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contacta con el equipo ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Creado por <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

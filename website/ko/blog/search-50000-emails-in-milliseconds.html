@@ -30,7 +30,7 @@
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=11">
   <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
-  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/search-50000-emails-in-milliseconds.html">
@@ -198,6 +198,10 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">기술: 아주 빠르고 아주 단순한 SQL 데이터베이스</h3>
           <p>검색 서버도, 클라우드 서비스도 없습니다. 인덱스는 볼트 안에 있는 SQLite 파일 하나이며, SQLite는 아마 세계에서 가장 널리 배포된 데이터베이스일 것입니다. MailVault는 SQLite의 전문 검색 엔진인 FTS5를 <strong>trigram</strong> 토크나이저와 함께 사용합니다. 모든 단어가 세 글자씩 겹치는 조각으로 저장됩니다. 그래서 "voic"을 입력하면 "invoice"를 찾을 수 있고, 와일드카드도 정확한 단어 규칙도 필요 없습니다. 악센트는 무시되므로 "reunion"으로 "Réunion"도 찾을 수 있습니다. 단어 사이에 띄어쓰기를 쓰지 않는 일본어와 중국어는 이를 위해 만든 두 번째 테이블을 거칩니다.</p>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Local search flow: saved messages feed a SQLite index; a query returns results, and opening a result reads the saved original."><figcaption>The result list comes from the index. The original message remains available for reading and verification.</figcaption></figure>
+
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice splits into inv, nvo, voi, oic, and ice. The query voic shares the voi and oic pieces."><figcaption>Overlapping three-character pieces make substring matching possible. This illustrates tokenization, not a complete query execution trace.</figcaption></figure>
+
           <p>속도는 세 가지 평범한 결정에서 나옵니다.</p>
           <ul>
             <li><strong>검색은 메시지 파일을 열지 않습니다.</strong> 목록에 필요한 모든 정보(보낸 사람, 제목, 날짜, 폴더, 플래그)가 인덱스 행에 저장되어 있습니다. 메시지 50,000개 테스트에서 결과를 만드는 동안 메일 파서는 한 번도 호출되지 않았습니다.</li>

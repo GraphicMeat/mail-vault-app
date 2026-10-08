@@ -66,7 +66,7 @@
       "name": "Combien de stockage gratuit Outlook.com offre-t-il ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "15 Go, partagés entre le courrier et OneDrive. Vous pouvez voir la répartition dans Paramètres → Général → Stockage."
+        "text": "15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage."
       }
     },
     {
@@ -74,7 +74,7 @@
       "name": "Vider les Éléments supprimés dans Outlook.com libère-t-il de l'espace tout de suite ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Oui. Contrairement à certains fournisseurs qui attendent un nombre de jours donné, vider à la main les dossiers Éléments supprimés et Courrier indésirable d'Outlook.com libère cet espace immédiatement."
+        "text": "Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "Puis-je archiver mon courrier Outlook.com sans payer Microsoft 365 ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Oui. Outlook.com prend en charge l'accès IMAP standard : n'importe quel outil d'archivage IMAP, y compris l'offre gratuite de MailVault, peut télécharger votre courrier en local sans aucun abonnement Microsoft 365."
+        "text": "Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription."
       }
     }
   ]
@@ -219,19 +219,19 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            Outlook.com (le nom actuel de ce qui s'appelait Hotmail) donne 15 Go de stockage aux comptes gratuits, partagés avec OneDrive. Une fois plein, le courrier entrant est rejeté et des avertissements de stockage apparaissent dans l'interface web comme dans les applications Outlook de bureau et mobiles. Le remède proposé par Microsoft est de vous vendre plus de stockage via un abonnement Microsoft 365 &mdash; mais si vous préférez régler le problème plutôt que louer de l'espace indéfiniment, voici le tableau complet.
+            Outlook.com (the modern name for what used to be Hotmail) gives free accounts 15 GB of email storage, plus 5 GB of cloud storage that OneDrive, Outlook.com attachments and Microsoft 365 apps share. When either one is full, you can no longer send or receive mail, and incoming mail bounces and you'll see storage warnings in the web interface and in Outlook desktop or mobile apps. Microsoft's own fix is to sell you more storage through a Microsoft 365 subscription &mdash; but if you'd rather actually solve the problem instead of renting more space indefinitely, here's the full picture.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Regardez où est passé votre stockage</h3>
 
           <p>
-            Dans Outlook.com, allez dans Paramètres &rarr; Général &rarr; Stockage pour voir la répartition entre Courrier et OneDrive. Si OneDrive est le plus gros consommateur, faire le ménage dans le courrier n'aidera pas beaucoup &mdash; il faudra traiter les fichiers OneDrive à part. Si c'est le courrier, ce sont presque toujours les pièces jointes qui sont en cause, pas le texte des messages.
+            In Outlook.com, go to Settings &rarr; Account &rarr; Storage to see a breakdown between email and cloud storage. If OneDrive is the bigger consumer, clearing out mail won't help much &mdash; you'll want to deal with OneDrive files separately. If Mail is the bulk of it, attachments are almost always the reason, not the text of the emails themselves.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Videz les Éléments supprimés et le Courrier indésirable</h3>
 
           <p>
-            Comme la plupart des fournisseurs, Outlook.com garde les messages supprimés dans le dossier Éléments supprimés jusqu'à ce que vous le vidiez, et ils comptent dans votre quota jusque-là. Faites un clic droit sur Éléments supprimés et Courrier indésirable dans la liste des dossiers et choisissez « Vider le dossier » pour récupérer cet espace immédiatement.
+            Like most providers, Outlook.com keeps deleted messages in the Deleted Items folder until you empty it, and they still count against your quota until you do. Right-click Deleted Items and Junk Email in the folder list and choose "Empty folder" to reclaim that space. Microsoft says the new total can take up to 24 hours to show.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Triez par taille et évacuez les vieux messages lourds en pièces jointes</h3>
@@ -253,7 +253,7 @@
           </p>
 
           <p>
-            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free, open-source option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's OAuth sign-in (no password fiddling), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
+            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's sign-in (no password fiddling; MailVault uses Microsoft Graph for personal Outlook.com accounts), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
           </p>
 
           <p>
@@ -277,12 +277,12 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Combien de stockage gratuit Outlook.com offre-t-il ?</p>
-            <p>15 Go, partagés entre le courrier et OneDrive. Vous pouvez voir la répartition dans Paramètres → Général → Stockage.</p>
+            <p>15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Vider les Éléments supprimés dans Outlook.com libère-t-il de l'espace tout de suite ?</p>
-            <p>Oui. Contrairement à certains fournisseurs qui attendent un nombre de jours donné, vider à la main les dossiers Éléments supprimés et Courrier indésirable d'Outlook.com libère cet espace immédiatement.</p>
+            <p>Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show.</p>
           </div>
 
           <div class="pt-2">
@@ -292,7 +292,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Puis-je archiver mon courrier Outlook.com sans payer Microsoft 365 ?</p>
-            <p>Oui. Outlook.com prend en charge l'accès IMAP standard : n'importe quel outil d'archivage IMAP, y compris l'offre gratuite de MailVault, peut télécharger votre courrier en local sans aucun abonnement Microsoft 365.</p>
+            <p>Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription.</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">

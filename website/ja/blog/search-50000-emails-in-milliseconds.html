@@ -30,7 +30,7 @@
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=11">
   <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
-  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/search-50000-emails-in-milliseconds.html">
@@ -198,6 +198,10 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">技術: とても速く、とてもシンプルな SQL データベース</h3>
           <p>検索サーバーもクラウドサービスもありません。インデックスは保管庫の中にある 1 つの SQLite ファイルで、SQLite はおそらく世界で最も広く使われているデータベースです。MailVault は SQLite の全文検索エンジン FTS5 を <strong>trigram</strong> トークナイザーとともに使います。すべての単語が、重なり合う 3 文字の断片として保存されます。だから「voic」と入力すれば「invoice」が見つかり、ワイルドカードも単語全体の一致も要りません。アクセント記号は正規化されるので、「reunion」で「Réunion」も見つかります。単語の間にスペースを置かない日本語や中国語は、そのために作られた別のテーブルで処理されます。</p>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Local search flow: saved messages feed a SQLite index; a query returns results, and opening a result reads the saved original."><figcaption>The result list comes from the index. The original message remains available for reading and verification.</figcaption></figure>
+
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice splits into inv, nvo, voi, oic, and ice. The query voic shares the voi and oic pieces."><figcaption>Overlapping three-character pieces make substring matching possible. This illustrates tokenization, not a complete query execution trace.</figcaption></figure>
+
           <p>速さは、3 つの素朴な判断から生まれています。</p>
           <ul>
             <li><strong>検索でメッセージファイルを開くことはありません。</strong>一覧に必要な情報(差出人、件名、日付、フォルダー、フラグ)は、インデックスの行にそのまま保存されています。50,000 通のテストでは、結果を組み立てる間にメールパーサーが呼ばれた回数はゼロでした。</li>

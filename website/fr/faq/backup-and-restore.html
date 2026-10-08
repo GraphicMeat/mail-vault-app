@@ -60,7 +60,7 @@
       "name": "Comment MailVault sauvegarde-t-il les e-mails ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault se connecte à votre serveur de messagerie avec le protocole IMAP et télécharge chaque e-mail dans votre coffre sous forme de fichier .eml standard au format Maildir. Chaque e-mail est un fichier sur le disque — lisible, portable et compatible avec n'importe quel client de messagerie. Une fois qu'un message est dans votre coffre, vous pouvez supprimer la copie du serveur pour libérer de l'espace ; la copie locale n'est pas touchée."
+        "text": "MailVault connects to your email server (over IMAP, or Microsoft Graph for personal Outlook.com accounts) and downloads each email into your vault as a standard .eml file in Maildir format. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected."
       }
     },
     {
@@ -216,7 +216,7 @@
         <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Comment MailVault sauvegarde-t-il les e-mails ?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
+              MailVault connects to your email server (over IMAP, or Microsoft Graph for personal Outlook.com accounts) and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/archive-progress-720.webp 720w, /screenshots/fr/archive-progress-1440.webp 1440w, /screenshots/fr/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/archive-progress-light-1440.webp" srcset="/screenshots/fr/archive-progress-light-720.webp 720w, /screenshots/fr/archive-progress-light-1440.webp 1440w, /screenshots/fr/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Barre de progression de l'archivage MailVault pendant une sauvegarde groupée d'e-mails" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>

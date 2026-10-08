@@ -66,7 +66,7 @@
       "name": "Outlook.comの無料の保存容量はどれくらいですか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "15 GBで、メールとOneDriveで共有します。内訳は 設定 → 全般 → ストレージ で確認できます。"
+        "text": "15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage."
       }
     },
     {
@@ -74,7 +74,7 @@
       "name": "Outlook.comで「削除済みアイテム」を空にすると、すぐに容量が空きますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。決まった日数を待つプロバイダーもありますが、Outlook.comでは「削除済みアイテム」と「迷惑メール」のフォルダを手動で空にすれば、その容量はすぐに解放されます。"
+        "text": "Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "Microsoft 365に課金せずにOutlook.comのメールをアーカイブできますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。Outlook.comは標準のIMAPアクセスに対応しているので、MailVaultの無料の範囲を含め、どのIMAPのアーカイブツールでも、Microsoft 365のサブスクリプションなしでメールをローカルにダウンロードできます。"
+        "text": "Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription."
       }
     }
   ]
@@ -219,19 +219,19 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            Outlook.com（かつてHotmailと呼ばれていたものの現在の名前）は、無料のアカウントにOneDriveと共有で15 GBの容量を与えます。いっぱいになると受信したメールが弾かれ、ウェブの画面やOutlookのデスクトップ・モバイルのアプリに容量の警告が出ます。Microsoft自身の対処法は、Microsoft 365のサブスクリプションで容量を売ることです &mdash; しかし、場所を無期限に借り続けるのではなく本当に問題を解決したいなら、全体像は次のとおりです。
+            Outlook.com (the modern name for what used to be Hotmail) gives free accounts 15 GB of email storage, plus 5 GB of cloud storage that OneDrive, Outlook.com attachments and Microsoft 365 apps share. When either one is full, you can no longer send or receive mail, and incoming mail bounces and you'll see storage warnings in the web interface and in Outlook desktop or mobile apps. Microsoft's own fix is to sell you more storage through a Microsoft 365 subscription &mdash; but if you'd rather actually solve the problem instead of renting more space indefinitely, here's the full picture.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 容量が実際どこへ消えたのかを確かめる</h3>
 
           <p>
-            Outlook.comで、設定 &rarr; 全般 &rarr; ストレージ を開くと、メールとOneDriveの内訳が見えます。OneDriveのほうが多いなら、メールを片づけてもあまり効きません &mdash; OneDriveのファイルは別に対処することになります。メールが大半なら、原因はほぼ必ず添付ファイルであって、メールの文面ではありません。
+            In Outlook.com, go to Settings &rarr; Account &rarr; Storage to see a breakdown between email and cloud storage. If OneDrive is the bigger consumer, clearing out mail won't help much &mdash; you'll want to deal with OneDrive files separately. If Mail is the bulk of it, attachments are almost always the reason, not the text of the emails themselves.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 「削除済みアイテム」と「迷惑メール」を空にする</h3>
 
           <p>
-            多くのプロバイダーと同じく、Outlook.comは削除したメッセージを、空にするまで「削除済みアイテム」のフォルダに置き、その間も容量に数えます。フォルダの一覧で「削除済みアイテム」と「迷惑メール」を右クリックし、「フォルダーを空にする」を選べば、その分の容量をすぐに取り戻せます。
+            Like most providers, Outlook.com keeps deleted messages in the Deleted Items folder until you empty it, and they still count against your quota until you do. Right-click Deleted Items and Junk Email in the folder list and choose "Empty folder" to reclaim that space. Microsoft says the new total can take up to 24 hours to show.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. サイズで並べ替えて、添付ファイルの多い古いメールを片づける</h3>
@@ -253,7 +253,7 @@
           </p>
 
           <p>
-            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free, open-source option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's OAuth sign-in (no password fiddling), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
+            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's sign-in (no password fiddling; MailVault uses Microsoft Graph for personal Outlook.com accounts), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
           </p>
 
           <p>
@@ -277,12 +277,12 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.comの無料の保存容量はどれくらいですか？</p>
-            <p>15 GBで、メールとOneDriveで共有します。内訳は 設定 → 全般 → ストレージ で確認できます。</p>
+            <p>15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.comで「削除済みアイテム」を空にすると、すぐに容量が空きますか？</p>
-            <p>はい。決まった日数を待つプロバイダーもありますが、Outlook.comでは「削除済みアイテム」と「迷惑メール」のフォルダを手動で空にすれば、その容量はすぐに解放されます。</p>
+            <p>Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show.</p>
           </div>
 
           <div class="pt-2">
@@ -292,7 +292,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Microsoft 365に課金せずにOutlook.comのメールをアーカイブできますか？</p>
-            <p>はい。Outlook.comは標準のIMAPアクセスに対応しているので、MailVaultの無料の範囲を含め、どのIMAPのアーカイブツールでも、Microsoft 365のサブスクリプションなしでメールをローカルにダウンロードできます。</p>
+            <p>Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription.</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">

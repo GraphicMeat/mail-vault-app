@@ -30,7 +30,7 @@
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=11">
   <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
-  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/search-50000-emails-in-milliseconds.html">
@@ -198,6 +198,10 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">技术：一个非常快、非常简单的 SQL 数据库</h3>
           <p>没有搜索服务器，也没有云服务。索引就是保险库里的一个 SQLite 文件，而 SQLite 大概是全世界部署最广泛的数据库。MailVault 使用它的全文搜索引擎 FTS5，并配上 <strong>trigram</strong> 分词器：每个词都会被存成相互重叠的三字母片段。所以你输入“voic”就能找到“invoice”，无需通配符，也没有整词匹配的限制。重音符号会被折叠，因此搜索“reunion”也能找到“Réunion”。日语和中文的词与词之间没有空格，它们会走另一张专门为此建立的表。</p>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Local search flow: saved messages feed a SQLite index; a query returns results, and opening a result reads the saved original."><figcaption>The result list comes from the index. The original message remains available for reading and verification.</figcaption></figure>
+
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice splits into inv, nvo, voi, oic, and ice. The query voic shares the voi and oic pieces."><figcaption>Overlapping three-character pieces make substring matching possible. This illustrates tokenization, not a complete query execution trace.</figcaption></figure>
+
           <p>速度来自三个朴素的决定：</p>
           <ul>
             <li><strong>搜索从不打开邮件文件。</strong>列表所需的一切（发件人、主题、日期、文件夹、标记）都存放在索引行里。在 50,000 封邮件的测试中，构建结果期间邮件解析器被调用了零次。</li>

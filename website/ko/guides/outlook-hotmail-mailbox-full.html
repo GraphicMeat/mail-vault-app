@@ -66,7 +66,7 @@
       "name": "Outlook.com은 무료 저장 공간을 얼마나 줍니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "메일과 OneDrive가 함께 쓰는 15 GB입니다. 설정 → 일반 → 저장소에서 사용량 분석을 볼 수 있습니다."
+        "text": "15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage."
       }
     },
     {
@@ -74,7 +74,7 @@
       "name": "Outlook.com에서 지운 편지함을 비우면 공간이 바로 확보됩니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "그렇습니다. 정해진 기간을 기다리는 일부 제공업체와 달리, Outlook.com에서 지운 편지함과 정크 메일 폴더를 직접 비우면 그 저장 공간이 즉시 확보됩니다."
+        "text": "Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "Microsoft 365 없이도 Outlook.com 메일을 보관할 수 있습니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "가능합니다. Outlook.com은 표준 IMAP 접근을 지원하므로 MailVault의 무료 등급을 포함해 어떤 IMAP 보관 도구든 Microsoft 365 구독 없이 메일을 로컬에 내려받을 수 있습니다."
+        "text": "Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription."
       }
     }
   ]
@@ -219,19 +219,19 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            Outlook.com(예전 Hotmail의 현재 이름)은 무료 계정에 OneDrive와 함께 쓰는 15 GB의 저장 공간을 줍니다. 이를 다 채우면 들어오는 메일이 반송되고, 웹 화면과 Outlook 데스크톱·모바일 앱에서 저장 공간 경고가 뜹니다. Microsoft의 해결책은 Microsoft 365 구독으로 저장 공간을 더 파는 것입니다 &mdash; 하지만 공간을 무기한 빌리는 대신 문제를 실제로 풀고 싶다면, 전체 그림은 이렇습니다.
+            Outlook.com (the modern name for what used to be Hotmail) gives free accounts 15 GB of email storage, plus 5 GB of cloud storage that OneDrive, Outlook.com attachments and Microsoft 365 apps share. When either one is full, you can no longer send or receive mail, and incoming mail bounces and you'll see storage warnings in the web interface and in Outlook desktop or mobile apps. Microsoft's own fix is to sell you more storage through a Microsoft 365 subscription &mdash; but if you'd rather actually solve the problem instead of renting more space indefinitely, here's the full picture.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 저장 공간이 실제로 어디에 쓰였는지 확인하십시오</h3>
 
           <p>
-            Outlook.com에서 설정 &rarr; 일반 &rarr; 저장소로 가면 메일과 OneDrive의 사용량 분석을 볼 수 있습니다. OneDrive가 더 많이 쓰고 있다면 메일을 정리해도 큰 도움이 되지 않습니다 &mdash; OneDrive 파일을 따로 손봐야 합니다. 메일이 대부분이라면 원인은 거의 언제나 메일 본문이 아니라 첨부파일입니다.
+            In Outlook.com, go to Settings &rarr; Account &rarr; Storage to see a breakdown between email and cloud storage. If OneDrive is the bigger consumer, clearing out mail won't help much &mdash; you'll want to deal with OneDrive files separately. If Mail is the bulk of it, attachments are almost always the reason, not the text of the emails themselves.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 지운 편지함과 정크 메일을 비우십시오</h3>
 
           <p>
-            대부분의 제공업체처럼 Outlook.com도 직접 비우기 전까지 지운 메시지를 지운 편지함에 두며, 그때까지는 할당량에 계속 잡힙니다. 폴더 목록에서 지운 편지함과 정크 메일을 마우스 오른쪽 버튼으로 눌러 "폴더 비우기"를 선택하면 그 공간을 즉시 되찾습니다.
+            Like most providers, Outlook.com keeps deleted messages in the Deleted Items folder until you empty it, and they still count against your quota until you do. Right-click Deleted Items and Junk Email in the folder list and choose "Empty folder" to reclaim that space. Microsoft says the new total can take up to 24 hours to show.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 크기순으로 정렬해 첨부가 많은 오래된 메일을 치우십시오</h3>
@@ -253,7 +253,7 @@
           </p>
 
           <p>
-            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free, open-source option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's OAuth sign-in (no password fiddling), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
+            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's sign-in (no password fiddling; MailVault uses Microsoft Graph for personal Outlook.com accounts), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
           </p>
 
           <p>
@@ -277,12 +277,12 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com은 무료 저장 공간을 얼마나 줍니까?</p>
-            <p>메일과 OneDrive가 함께 쓰는 15 GB입니다. 설정 → 일반 → 저장소에서 사용량 분석을 볼 수 있습니다.</p>
+            <p>15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com에서 지운 편지함을 비우면 공간이 바로 확보됩니까?</p>
-            <p>그렇습니다. 정해진 기간을 기다리는 일부 제공업체와 달리, Outlook.com에서 지운 편지함과 정크 메일 폴더를 직접 비우면 그 저장 공간이 즉시 확보됩니다.</p>
+            <p>Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show.</p>
           </div>
 
           <div class="pt-2">
@@ -292,7 +292,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Microsoft 365 없이도 Outlook.com 메일을 보관할 수 있습니까?</p>
-            <p>가능합니다. Outlook.com은 표준 IMAP 접근을 지원하므로 MailVault의 무료 등급을 포함해 어떤 IMAP 보관 도구든 Microsoft 365 구독 없이 메일을 로컬에 내려받을 수 있습니다.</p>
+            <p>Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription.</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">

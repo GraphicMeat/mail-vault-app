@@ -60,7 +60,7 @@
       "name": "Wie sichert MailVault E-Mails?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault verbindet sich über das IMAP-Protokoll mit deinem E-Mail-Server und lädt jede E-Mail als standardisierte .eml-Datei im Maildir-Format in deinen Vault. Jede E-Mail ist eine Datei auf der Festplatte — menschenlesbar, portabel und mit jedem Mailclient kompatibel. Sobald eine Nachricht in deinem Vault liegt, kannst du die Serverkopie löschen, um Platz zu schaffen; die lokale bleibt davon unberührt."
+        "text": "MailVault connects to your email server (over IMAP, or Microsoft Graph for personal Outlook.com accounts) and downloads each email into your vault as a standard .eml file in Maildir format. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected."
       }
     },
     {
@@ -216,7 +216,7 @@
         <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Wie sichert MailVault E-Mails?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
+              MailVault connects to your email server (over IMAP, or Microsoft Graph for personal Outlook.com accounts) and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/archive-progress-720.webp 720w, /screenshots/de/archive-progress-1440.webp 1440w, /screenshots/de/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/archive-progress-light-1440.webp" srcset="/screenshots/de/archive-progress-light-720.webp 720w, /screenshots/de/archive-progress-light-1440.webp 1440w, /screenshots/de/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Fortschrittsbalken beim stapelweisen E-Mail-Backup" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>

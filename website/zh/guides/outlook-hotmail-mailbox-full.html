@@ -66,7 +66,7 @@
       "name": "Outlook.com 提供多少免费存储？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "15 GB，由邮件和 OneDrive 共用。你可以在 设置 → 常规 → 存储 里看到各自的占用。"
+        "text": "15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage."
       }
     },
     {
@@ -74,7 +74,7 @@
       "name": "在 Outlook.com 清空「已删除邮件」会立刻腾出空间吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "会。与某些要等固定天数的服务商不同，在 Outlook.com 手动清空「已删除邮件」和「垃圾邮件」文件夹，会立刻释放那部分存储。"
+        "text": "Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "不买 Microsoft 365，我能归档 Outlook.com 的邮件吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "能。Outlook.com 支持标准 IMAP 访问，所以任何 IMAP 归档工具，包括 MailVault 的免费版，都能在没有 Microsoft 365 订阅的情况下把你的邮件下载到本地。"
+        "text": "Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription."
       }
     }
   ]
@@ -219,19 +219,19 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            Outlook.com（也就是当年 Hotmail 的现名）给免费账户 15 GB 存储，与 OneDrive 共用。装满之后，新邮件会退信，你会在网页端以及 Outlook 桌面或手机应用里看到存储警告。Microsoft 自己的解法是通过 Microsoft 365 订阅卖给你更多存储 &mdash; 但如果你更想真正解决问题，而不是无限期地租下去，下面是完整的图景。
+            Outlook.com (the modern name for what used to be Hotmail) gives free accounts 15 GB of email storage, plus 5 GB of cloud storage that OneDrive, Outlook.com attachments and Microsoft 365 apps share. When either one is full, you can no longer send or receive mail, and incoming mail bounces and you'll see storage warnings in the web interface and in Outlook desktop or mobile apps. Microsoft's own fix is to sell you more storage through a Microsoft 365 subscription &mdash; but if you'd rather actually solve the problem instead of renting more space indefinitely, here's the full picture.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 先看看存储到底花在哪了</h3>
 
           <p>
-            在 Outlook.com 里，打开 设置 &rarr; 常规 &rarr; 存储，可以看到邮件和 OneDrive 各占多少。如果 OneDrive 是大头，清邮件帮助不大 &mdash; 你得单独处理 OneDrive 文件。如果邮件是大头，那原因几乎总是附件，而不是邮件正文本身。
+            In Outlook.com, go to Settings &rarr; Account &rarr; Storage to see a breakdown between email and cloud storage. If OneDrive is the bigger consumer, clearing out mail won't help much &mdash; you'll want to deal with OneDrive files separately. If Mail is the bulk of it, attachments are almost always the reason, not the text of the emails themselves.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 清空「已删除邮件」和「垃圾邮件」</h3>
 
           <p>
-            和多数服务商一样，Outlook.com 会把删除的邮件留在「已删除邮件」文件夹里，直到你清空为止，在那之前它们仍然占用你的配额。在文件夹列表里右键点击「已删除邮件」和「垃圾邮件」，选择「清空文件夹」，就能立刻拿回这部分空间。
+            Like most providers, Outlook.com keeps deleted messages in the Deleted Items folder until you empty it, and they still count against your quota until you do. Right-click Deleted Items and Junk Email in the folder list and choose "Empty folder" to reclaim that space. Microsoft says the new total can take up to 24 hours to show.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 按大小排序，清掉附件很重的旧邮件</h3>
@@ -253,7 +253,7 @@
           </p>
 
           <p>
-            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free, open-source option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's OAuth sign-in (no password fiddling), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
+            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's sign-in (no password fiddling; MailVault uses Microsoft Graph for personal Outlook.com accounts), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
           </p>
 
           <p>
@@ -277,12 +277,12 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com 提供多少免费存储？</p>
-            <p>15 GB，由邮件和 OneDrive 共用。你可以在 设置 → 常规 → 存储 里看到各自的占用。</p>
+            <p>15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">在 Outlook.com 清空「已删除邮件」会立刻腾出空间吗？</p>
-            <p>会。与某些要等固定天数的服务商不同，在 Outlook.com 手动清空「已删除邮件」和「垃圾邮件」文件夹，会立刻释放那部分存储。</p>
+            <p>Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage. Microsoft says the new total can take up to 24 hours to show.</p>
           </div>
 
           <div class="pt-2">
@@ -292,7 +292,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">不买 Microsoft 365，我能归档 Outlook.com 的邮件吗？</p>
-            <p>能。Outlook.com 支持标准 IMAP 访问，所以任何 IMAP 归档工具，包括 MailVault 的免费版，都能在没有 Microsoft 365 订阅的情况下把你的邮件下载到本地。</p>
+            <p>Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription.</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
