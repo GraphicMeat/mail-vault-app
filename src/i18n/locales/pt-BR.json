@@ -762,6 +762,7 @@
   "export.social.custom": "Personalizado",
   "export.social.customFrom": "Cor inicial",
   "export.social.customTo": "Cor final",
+  "export.social.emailTheme": "E-mail",
   "export.social.formatHint": "Uma imagem estilizada para postar",
   "export.social.formatLabel": "Redes sociais",
   "export.social.image": "Imagem…",

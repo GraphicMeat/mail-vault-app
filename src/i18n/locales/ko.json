@@ -762,6 +762,7 @@
   "export.social.custom": "사용자 지정",
   "export.social.customFrom": "시작 색상",
   "export.social.customTo": "끝 색상",
+  "export.social.emailTheme": "이메일",
   "export.social.formatHint": "게시용으로 꾸민 이미지",
   "export.social.formatLabel": "소셜",
   "export.social.image": "이미지…",

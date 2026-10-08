@@ -762,6 +762,7 @@
   "export.social.custom": "カスタム",
   "export.social.customFrom": "開始色",
   "export.social.customTo": "終了色",
+  "export.social.emailTheme": "メール",
   "export.social.formatHint": "投稿用のデザイン画像",
   "export.social.formatLabel": "SNS",
   "export.social.image": "画像…",

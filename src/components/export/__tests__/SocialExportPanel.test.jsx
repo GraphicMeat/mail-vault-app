@@ -154,6 +154,29 @@ describe('SocialExportPanel', () => {
     expect(screen.getByTestId('social-mail-theme')).toBeTruthy();
   });
 
+  it('an Email Light/Dark row sets the mail theme, the same as the sun/moon', async () => {
+    useThemeStore.setState({ theme: 'light' });
+    renderPanel();
+    await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
+    const email = screen.getByRole('group', { name: /^email$/i });
+    expect(email.querySelectorAll('button')).toHaveLength(2);
+    expect(email.querySelector('[aria-pressed="true"]').textContent).toBe('Light'); // follows the Appearance
+    fireEvent.click(within(email).getByRole('button', { name: /^dark$/i }));
+    expect(setSocialExport).toHaveBeenCalledWith({ mailTheme: 'dark' });
+    await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toMatchObject({ theme: 'light', mailTheme: 'dark' }));
+    expect(email.querySelector('[aria-pressed="true"]').textContent).toBe('Dark');
+    expect(screen.getByTestId('social-mail-theme').getAttribute('aria-pressed')).toBe('true');
+    // The Appearance row is untouched.
+    expect(within(screen.getByRole('group', { name: /appearance/i })).getByRole('button', { name: /^light$/i }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('leaves room around the swatches for the selection ring', async () => {
+    renderPanel();
+    const swatch = await screen.findByRole('button', { name: 'Sunset' });
+    expect(swatch.parentElement.className).toMatch(/\bp-1\b/);
+    expect(swatch.parentElement.className).toMatch(/-m-1\b/);
+  });
+
   it('pins the sun/moon to the preview box, outside the part that scrolls', async () => {
     renderPanel();
     const toggle = screen.getByTestId('social-mail-theme');
@@ -212,7 +235,7 @@ describe('SocialExportPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /app window/i }));
     await waitFor(() => expect(buildSocialContent.mock.calls.at(-1)[1]).toMatchObject({ content: 'app', theme: 'dark' }));
     const before = buildSocialContent.mock.calls.length;
-    fireEvent.click(screen.getByRole('button', { name: /^light$/i }));
+    fireEvent.click(within(screen.getByRole('group', { name: /appearance/i })).getByRole('button', { name: /^light$/i }));
     await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(before + 1));
     expect(buildSocialContent.mock.calls.at(-1)[1]).toEqual({ content: 'app', redact: true, theme: 'light', mailTheme: 'light' });
     expect(setSocialExport).toHaveBeenCalledWith({ appTheme: 'light' });

@@ -762,6 +762,7 @@
   "export.social.custom": "Eigener",
   "export.social.customFrom": "Startfarbe",
   "export.social.customTo": "Endfarbe",
+  "export.social.emailTheme": "E-Mail",
   "export.social.formatHint": "Ein gestaltetes Bild zum Posten",
   "export.social.formatLabel": "Social Media",
   "export.social.image": "Bild…",
