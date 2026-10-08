@@ -7,6 +7,7 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useLearningStore } from '../../stores/learningStore';
 import * as classificationService from '../../services/classificationService';
 import { bulkOperationManager } from '../../services/BulkOperationManager';
+import { PHASE_LABELS } from '../BulkOperationProgress';
 import { ensureFreshToken } from '../../services/authUtils';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
@@ -383,18 +384,20 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
 
     setBulkRunning(true);
     setBulkAction(null);
-    setBulkProgress({ total: uids.length, completed: 0, status: action === 'delete' ? 'deleting' : 'archiving' });
+    setBulkProgress({ total: uids.length, completed: 0, phase: action === 'delete' ? 'delete' : 'archive' });
 
     try {
       const freshAccount = await ensureFreshToken(account);
       await bulkOperationManager.start({
-        type: action,
+        // Cleanup clears the server: Archive keeps a verified vault copy and
+        // then deletes the server one, so the message leaves this list.
+        type: action === 'archive' ? 'archive_and_delete' : action,
         accountId: activeAccountId,
         account: freshAccount,
         mailbox: activeMailbox || 'INBOX',
         uids,
         onProgress: (op) => {
-          setBulkProgress({ total: op.total, completed: op.completed, status: op.status });
+          setBulkProgress({ total: op.total, completed: op.completed, phase: op.currentPhase });
           if (op.status === 'complete' || op.status === 'error' || op.status === 'cancelled') {
             setBulkRunning(false);
             setBulkProgress(null);
@@ -671,7 +674,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
         {bulkProgress && (
           <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-surface border border-mail-accent/30">
             <Loader size={14} className="animate-spin text-mail-accent-text shrink-0" />
-            <span className="text-sm text-mail-text capitalize">{bulkProgress.status}...</span>
+            <span className="text-sm text-mail-text">{PHASE_LABELS()[bulkProgress.phase]}…</span>
             <div className="flex-1 h-1.5 bg-mail-border rounded-full overflow-hidden">
               <div
                 className="h-full bg-mail-accent rounded-full transition-all"
@@ -811,7 +814,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
               <p className="text-sm text-mail-text-muted mb-4">
                 {bulkAction === 'delete'
                   ? t('settings.cleanup.willDeleteFromServer', { count: selectedIds.size })
-                  : t('settings.cleanup.willSaveToArchive', { count: selectedIds.size })}
+                  : t('settings.cleanup.willArchiveThenDelete', { count: selectedIds.size })}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" className="bg-mail-bg"

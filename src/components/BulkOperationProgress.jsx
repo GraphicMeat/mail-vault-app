@@ -7,7 +7,7 @@ import {
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
 
-const PHASE_LABELS = () => ({
+export const PHASE_LABELS = () => ({
   archive: tr('bulk.progress.downloading'),
   verify: tr('bulk.progress.verifying'),
   copy: tr('bulk.progress.backingUp'),

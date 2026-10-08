@@ -140,18 +140,25 @@ describe('Cleanup account reads', () => {
     expect(onDetailChange).toHaveBeenLastCalledWith(false);
   });
 
-  it.each(['Archive', 'Delete'])('confirms and starts a selected %s operation', async action => {
+  // Cleanup is for clearing the server: Archive keeps a verified local copy
+  // and then deletes the server one, so the message leaves the list.
+  it.each([
+    ['Archive', 'archive_and_delete', '1 email will be saved to your local archive, then deleted from the server.', 'Downloading…'],
+    ['Delete', 'delete', '1 email will be permanently deleted from the server.', 'Deleting…'],
+  ])('confirms and starts a selected %s operation', async (action, type, says, phase) => {
     render(<CleanupView />);
     await screen.findByText(item.subject);
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: `${action} (1)` }));
     const confirmation = screen.getByRole('heading', { name: `${action} emails?` }).parentElement;
+    expect(within(confirmation).getByText(says)).toBeTruthy();
     fireEvent.click(within(confirmation).getByRole('button', { name: action, exact: true }));
     await waitFor(() => expect(bulkOperationManager.start).toHaveBeenCalledWith({
-      type: action.toLowerCase(), accountId: account.id,
+      type, accountId: account.id,
       account: { ...account, accessToken: 'refreshed-token' },
       mailbox: 'INBOX', uids: [42], onProgress: expect.any(Function),
     }));
     expect(ensureFreshToken).toHaveBeenCalledWith(account);
+    expect(screen.getByText(phase)).toBeTruthy();
   });
 });
