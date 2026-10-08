@@ -9,7 +9,11 @@
   "b165a52c2694": "Precio anticipado y familiar",
   "5ffae7ce0a0a": "MailVault está en acceso anticipado. Fija hoy el precio con descuento: tu tarifa se mantiene mientras la suscripción siga activa, incluso si suben los precios.",
   "c456e993e85f": "Hasta 5 dispositivos por suscripción",
-  "24e3b3bd9526": "Precio estándar tras el acceso anticipado: <span data-mv-price=\"{standardYearly}\">$39</span>/año",
-  "01a8f3db8f25": "Precio estándar tras el acceso anticipado: <span data-mv-price=\"{standardMonthly}\">$6</span>/mes",
-  "5328ac1d1bea": "¿Qué pasa con mi precio cuando termine el acceso anticipado?"
+  "5328ac1d1bea": "¿Qué pasa con mi precio cuando termine el acceso anticipado?",
+  "ca975ed49493": "<span data-mv-price=\"{yearly}\">$25</span><span>/ año</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdSavingsPercent}% de descuento\">36% de descuento</span>",
+  "e6ab8b62b31b": "<span data-mv-price=\"{monthly}\">$4</span><span>/ mes</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdMonthlySavingsPercent}% de descuento\">33% de descuento</span>",
+  "afcfdfb278e6": "Un <span data-mv-price=\"{earlyBirdSavingsPercent}%\">36%</span> por debajo del precio estándar tras el acceso anticipado: <span data-mv-price=\"{standardYearly}\">$39</span>/año",
+  "cca45ed84541": "Un <span data-mv-price=\"{earlyBirdMonthlySavingsPercent}%\">33%</span> por debajo del precio estándar tras el acceso anticipado: <span data-mv-price=\"{standardMonthly}\">$6</span>/mes",
+  "c3c58b94d797": "{taken} de {cap} plazas con precio anticipado ocupadas.",
+  "1ce2c687bdd4": "Las {cap} plazas con precio anticipado están ocupadas. Premium ya tiene el precio estándar."
 }

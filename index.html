@@ -141,7 +141,7 @@
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261007-clips">
 <link rel="stylesheet" href="/assets/home.css?v=23">
-<link rel="stylesheet" href="/assets/home-sections.css?v=5">
+<link rel="stylesheet" href="/assets/home-sections.css?v=6">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -192,17 +192,17 @@
 <section class="hm-hero hm-dark" aria-labelledby="hero-title">
 <div class="mv-wrap hm-hero-inner">
 <p class="hm-free-label"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Free forever</p>
-<p class="hm-badge"><span class="hm-badge-tag">Early access</span> <span>Premium from <span data-mv-price="{yearly}">$25</span>/yr · only 100 spots in total</span></p>
+<p class="hm-badge"><span class="hm-badge-line"><span class="hm-badge-tag">Early access</span> <span>Premium from <span data-mv-price="{yearly}">$25</span>/yr</span></span><span class="hm-badge-spots" data-mv-spots="{taken} of {cap} spots taken" data-mv-spots-full="All {cap} spots are taken">Only 100 spots in total</span></p>
 <h1 id="hero-title">Your email.<br><span class="hm-grad">Yours to keep.</span></h1>
 <p class="hm-lead">A fast, private email app that keeps your mail on your own computer. Search 50,000 messages in under 15 ms, and delete from the server whenever you choose: your copy stays. No ads, no MailVault account, nobody reading along.</p>
 <div class="hm-hero-row">
 <div class="hm-hero-side">
 <div class="hm-offer">
-<div class="hm-offer-head"><p class="hm-offer-title">Early Bird &amp; Family Pricing</p><a class="mv-text-link hm-offer-more" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/pricing.html">What Premium adds →</a></div>
-<p class="hm-offer-limit">Limited to the first 100 subscribers.</p>
+<div class="hm-offer-head"><p class="hm-offer-title" data-mv-early>Early Bird &amp; Family Pricing</p><a class="mv-text-link hm-offer-more" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="pricing" href="/pricing.html">What Premium adds →</a></div>
+<p class="hm-offer-limit" data-mv-spots="{taken} of {cap} Early Bird spots taken." data-mv-spots-full="All {cap} Early Bird spots are taken. Premium is now at the standard price.">Limited to the first 100 subscribers.</p>
 <dl class="hm-offer-plans">
-<div class="hm-offer-plan" data-plan="yearly"><dt>Yearly</dt><dd class="hm-offer-price"><span data-mv-price="{yearly}">$25</span>/year</dd><dd class="hm-offer-standard">Standard price after early access: <span data-mv-price="{standardYearly}">$39</span>/year</dd></div>
-<div class="hm-offer-plan" data-plan="monthly"><dt>Monthly</dt><dd class="hm-offer-price"><span data-mv-price="{monthly}">$4</span>/month</dd><dd class="hm-offer-standard">Standard price after early access: <span data-mv-price="{standardMonthly}">$6</span>/month</dd></div>
+<div class="hm-offer-plan" data-plan="yearly"><dt>Yearly <span class="hm-offer-off" data-mv-early data-mv-price="{earlyBirdSavingsPercent}% off">36% off</span></dt><dd class="hm-offer-price"><span data-mv-price="{yearly}">$25</span>/year</dd><dd class="hm-offer-standard" data-mv-early><span data-mv-price="{earlyBirdSavingsPercent}%">36%</span> below the standard price after early access: <span data-mv-price="{standardYearly}">$39</span>/year</dd></div>
+<div class="hm-offer-plan" data-plan="monthly"><dt>Monthly <span class="hm-offer-off" data-mv-early data-mv-price="{earlyBirdMonthlySavingsPercent}% off">33% off</span></dt><dd class="hm-offer-price"><span data-mv-price="{monthly}">$4</span>/month</dd><dd class="hm-offer-standard" data-mv-early><span data-mv-price="{earlyBirdMonthlySavingsPercent}%">33%</span> below the standard price after early access: <span data-mv-price="{standardMonthly}">$6</span>/month</dd></div>
 </dl>
 <div class="mv-actions hm-hero-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" data-acquisition-download="mac" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Download for macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page data-acquisition-download="windows" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="/thank-you.html?platform=windows&amp;start=1" hidden>Download for Windows</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb data-acquisition-download="amd64" data-acquisition-event="home_cta" data-acquisition-placement="hero" data-acquisition-destination="thank_you" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Download for Linux (.deb)</a><form id="send-link-hero" class="hm-send-link" data-send-link="hero" data-send-link-primary method="post" action="/api/send-link" hidden>
 <label for="send-link-hero-email">Your email address</label>
@@ -522,7 +522,7 @@
 <p class="hm-send-status" role="status" data-send-link-status></p>
 </form><p class="hm-send-done" data-send-link-done="final" tabindex="-1" role="status" hidden>Sent. Check your inbox on your computer.</p></div>
 <p class="mv-small hm-send-hint" data-hero-platform="mobile" hidden>Open it on your Mac, Windows or Linux computer.</p>
-<p class="hm-proof hm-price"><a data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="pricing" href="/pricing.html">Early Bird &amp; Family Pricing: Premium <span data-mv-price="{yearly}">$25</span>/year. Standard price after early access: <span data-mv-price="{standardYearly}">$39</span>/year.</a></p>
+<p class="hm-proof hm-price"><a data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="pricing" href="/pricing.html"><span data-mv-early>Early Bird &amp; Family Pricing: </span>Premium <span data-mv-price="{yearly}">$25</span>/year<span data-mv-early>, <span data-mv-price="{earlyBirdSavingsPercent}%">36%</span> below the standard price after early access: <span data-mv-price="{standardYearly}">$39</span>/year</span>.</a></p>
 <a class="mv-text-link" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="setup" href="/get-started.html?plan=free#platforms">Other platforms and formats →</a>
 <button type="button" class="mv-text-link hm-send-open" data-send-link-open aria-controls="send-link-final" aria-expanded="false" data-acquisition-event="home_cta" data-acquisition-placement="final" data-acquisition-destination="email_link" hidden>Email me the download link</button>
 <p class="mv-small">macOS 11+ · Windows 10+ · Ubuntu 22.04+ / Debian 12+</p>
@@ -556,7 +556,7 @@
 <script defer src="/assets/home-clips.js?v=2"></script>
 <script defer src="/assets/english-site.js?v=20261007-clips">
 </script>
-<script defer src="/pricing-localize.js?v=20261007-standard">
+<script defer src="/pricing-localize.js?v=20261008-spots">
 </script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="clips-2026-10">
 </script>

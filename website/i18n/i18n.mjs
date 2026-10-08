@@ -296,7 +296,7 @@ export function scan(html) {
 
 // ------------------------------------------------------------ string picking
 
-const TRANSLATABLE_ATTRS = new Set(['alt', 'title', 'placeholder', 'aria-label', 'data-mv-price']);
+const TRANSLATABLE_ATTRS = new Set(['alt', 'title', 'placeholder', 'aria-label', 'data-mv-price', 'data-mv-spots', 'data-mv-spots-full']);
 const META_KEYS = new Set(['description', 'og:title', 'og:description', 'og:image:alt',
   'twitter:title', 'twitter:description', 'twitter:image:alt', 'apple-mobile-web-app-title']);
 

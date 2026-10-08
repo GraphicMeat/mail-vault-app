@@ -457,12 +457,10 @@
     "3294d7942a45": "Set the routine. Let MailVault handle the repeat work.",
     "6991752a90cd": "Fresh off the grill",
     "fcc91623d1a1": "Premium billing period",
-    "416b18b45426": "/ year",
     "44d2ad25dc02": "About $2.08/month, billed yearly",
     "d215fcf28b3e": "Save 48% with yearly",
     "37e163fe7795": "Save $23/year compared with $48 for 12 monthly payments.",
     "922cf0717ac4": "14-day free trial on your first yearly subscription",
-    "f7fa5df80f7e": "/ month",
     "399fb888d9ba": "Billed monthly. Cancel anytime.",
     "4e2de8354a30": "The 14-day trial is available on yearly billing.",
     "6c59ef97ffe8": "Scheduled automatic backups",
@@ -2256,8 +2254,6 @@
     "7622eb5aa42d": "Yearly",
     "d31edb7b8a94": "Monthly",
     "d45da845adcd": "{zero}",
-    "a0bf4e5e0e1a": "{yearly}",
-    "2500ab206ad1": "{monthly}",
     "6cc3364a242c": "Open source",
     "5397e0583f14": "Yes",
     "816c52fd2bdd": "No",
@@ -3157,9 +3153,13 @@
     "b165a52c2694": "Early Bird &amp; Family Pricing",
     "5ffae7ce0a0a": "MailVault is in early access. Lock in discounted pricing today: your rate stays the same as long as your subscription is active, even after prices increase.",
     "c456e993e85f": "Up to 5 devices per subscription",
-    "24e3b3bd9526": "Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year",
-    "01a8f3db8f25": "Standard price after early access: <span data-mv-price=\"{standardMonthly}\">$6</span>/month",
     "5328ac1d1bea": "What happens to my price when early access ends?",
-    "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Early Bird &amp; Family Pricing: Premium <span data-mv-price=\"{yearly}\">$25</span>/year. Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year.</a>"
+    "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Early Bird &amp; Family Pricing: Premium <span data-mv-price=\"{yearly}\">$25</span>/year. Standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year.</a>",
+    "ca975ed49493": "<span data-mv-price=\"{yearly}\">$25</span><span>/ year</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdSavingsPercent}% off\">36% off</span>",
+    "afcfdfb278e6": "<span data-mv-price=\"{earlyBirdSavingsPercent}%\">36%</span> below the standard price after early access: <span data-mv-price=\"{standardYearly}\">$39</span>/year",
+    "e6ab8b62b31b": "<span data-mv-price=\"{monthly}\">$4</span><span>/ month</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdMonthlySavingsPercent}% off\">33% off</span>",
+    "cca45ed84541": "<span data-mv-price=\"{earlyBirdMonthlySavingsPercent}%\">33%</span> below the standard price after early access: <span data-mv-price=\"{standardMonthly}\">$6</span>/month",
+    "c3c58b94d797": "{taken} of {cap} Early Bird spots taken.",
+    "1ce2c687bdd4": "All {cap} Early Bird spots are taken. Premium is now at the standard price."
   }
 }

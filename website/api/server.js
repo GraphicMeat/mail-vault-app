@@ -674,6 +674,45 @@ const { resolvePricing, pricingBody } = require('./pricing');
 const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY_EUR || process.env.STRIPE_PRICE_MONTHLY;
 const PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY_EUR || process.env.STRIPE_PRICE_YEARLY;
 
+// ── Early Bird spots: the first 100 subscribers (./early-bird.js) ──────────
+// The count comes from Stripe (cached 10 min), else from billing_subscriptions.
+// Once every spot is taken, checkout sells the standard prices when
+// STRIPE_PRICE_*_STANDARD(_EUR) are set and refuses early bird otherwise.
+const {
+  createEarlyBirdCounter, publicBody: earlyBirdBody, isEarlyBirdFull, checkoutPrice, pricingFor,
+  earlyBirdPrices, standardPrices, parseIdList,
+} = require('./early-bird');
+const EARLY_BIRD_PRICES = earlyBirdPrices(process.env);
+const STANDARD_PRICES = standardPrices(process.env);
+const earlyBirdCounter = createEarlyBirdCounter({
+  stripe,
+  getDb: () => (dbError ? null : getPool()),
+  priceIds: [EARLY_BIRD_PRICES.monthly, EARLY_BIRD_PRICES.yearly],
+  excludeCustomers: parseIdList(process.env.EARLY_BIRD_EXCLUDE_CUSTOMERS),
+});
+// Its own counter with the status limits: the homepage already spends statusLimiter
+// on latest-version, downloads and pricing.
+const earlyBirdLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many status checks. Please try again shortly.' },
+});
+
+// GET /api/billing/early-bird → { cap, taken, remaining }. Counts only, never customer data.
+app.get('/api/billing/early-bird', earlyBirdLimiter, async (req, res) => {
+  try {
+    const status = await earlyBirdCounter.status();
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(earlyBirdBody(status));
+  } catch (err) {
+    // No count: the pages keep their static "100 spots" line.
+    console.error('early-bird:', err.message);
+    res.status(503).json({ error: 'unavailable' });
+  }
+});
+
 // Price IDs are only exercised at checkout, and /pricing serves MANUAL_AMOUNTS (./pricing.js) without
 // asking Stripe — so a price belonging to another account ("No such price") advertises a
 // plan nobody can buy, silently. Retrieve both once at boot and refuse to sell if they're
@@ -687,6 +726,14 @@ async function validatePrices() {
   } catch (error) {
     pricesOk = false;
     console.error('[billing] configured price IDs unusable — checkout will fail:', error.message);
+  }
+  // The standard prices are only sold once every early-bird spot is taken. A bad id is
+  // logged, never folded into pricesOk: the deploy health check reads that flag.
+  const standardIds = [STANDARD_PRICES.monthly, STANDARD_PRICES.yearly].filter(Boolean);
+  if (stripe && standardIds.length) {
+    try { await Promise.all(standardIds.map((id) => stripe.prices.retrieve(id))); } catch (error) {
+      console.error('[billing] standard price IDs unusable: checkout will fail once the early-bird spots are taken:', error.message);
+    }
   }
 }
 
@@ -711,11 +758,17 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
 
   const { currency: reqCurrency, country, email, customerId } = req.query;
   const cfCountry = req.headers['cf-ipcountry'];
-  const resolved = resolvePricing(
+  // Once checkout sells the standard prices, quote them. Only a count already cached
+  // decides this: /pricing never waits on Stripe.
+  const earlyBirdNow = earlyBirdCounter.peek();
+  // Nothing cached (cold start, or a subscription webhook just cleared it): count in
+  // the background so the next request knows, without delaying this one.
+  if (!earlyBirdNow) earlyBirdCounter.status().catch(() => {});
+  const resolved = pricingFor(resolvePricing(
     reqCurrency,
     country || cfCountry,
     req.headers['accept-language']
-  );
+  ), { full: !!earlyBirdNow && earlyBirdNow.taken >= earlyBirdNow.cap, standard: STANDARD_PRICES });
 
   // Determine trial eligibility: one free yearly trial per customer, never used before
   let trialEligible = true; // default for unknown/new users
@@ -748,7 +801,15 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
 
     // Always use the EUR-based prices — Stripe handles currency via currency_options + adaptive
     const interval = planId === 'yearly' || priceType === 'yearly' ? 'yearly' : 'monthly';
-    const priceId = interval === 'yearly' ? PRICE_YEARLY : PRICE_MONTHLY;
+    // Early bird while spots remain; once all are taken, the standard price or a refusal.
+    const choice = checkoutPrice({
+      interval,
+      full: await isEarlyBirdFull(earlyBirdCounter),
+      earlyBird: { monthly: PRICE_MONTHLY, yearly: PRICE_YEARLY },
+      standard: STANDARD_PRICES,
+    });
+    if (choice.error) return res.status(409).json({ error: choice.error, message: choice.message });
+    const priceId = choice.priceId;
     if (!priceId) return res.status(503).json({ error: 'billing_unavailable', message: 'Price not configured.' });
 
     const db = getPool();
@@ -1230,6 +1291,11 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
         }
         break;
       }
+    }
+
+    // A subscription came, changed or went: the next spot count asks Stripe again.
+    if (event.type === 'checkout.session.completed' || event.type.startsWith('customer.subscription.')) {
+      earlyBirdCounter.invalidate();
     }
 
     // Record event as processed

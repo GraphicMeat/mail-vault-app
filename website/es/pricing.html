@@ -90,7 +90,7 @@
   <!-- /i18n:alternates -->
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261007-clips">
-<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
+<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}.mv-price>.mv-tag{align-self:center;font-size:.78rem;font-weight:700;color:var(--mv-accent)}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -145,8 +145,8 @@
 </section>
 <section class="mv-wrap mv-pricing-section" aria-label="Comparar planes">
 <h2 class="mv-sr-only">Elige Gratis o Premium</h2>
-<div class="mv-yearly-saving mv-early-band"><strong>Precio anticipado y familiar</strong><span>Limitado a los primeros 100 suscriptores.</span><ul class="mv-checklist">
-<li>MailVault está en acceso anticipado. Fija hoy el precio con descuento: tu tarifa se mantiene mientras la suscripción siga activa, incluso si suben los precios.</li>
+<div class="mv-yearly-saving mv-early-band"><strong>Precio anticipado y familiar</strong><span data-mv-spots="{taken} de {cap} plazas con precio anticipado ocupadas." data-mv-spots-full="Las {cap} plazas con precio anticipado están ocupadas. Premium ya tiene el precio estándar.">Limitado a los primeros 100 suscriptores.</span><ul class="mv-checklist">
+<li data-mv-early>MailVault está en acceso anticipado. Fija hoy el precio con descuento: tu tarifa se mantiene mientras la suscripción siga activa, incluso si suben los precios.</li>
 <li>Hasta 5 dispositivos por suscripción</li>
 <li>Prueba gratuita de 14 días en tu primera suscripción anual</li>
 </ul></div>
@@ -169,7 +169,7 @@
 <h3>Premium</h3><span class="mv-tag">Menos que recordar</span>
 </div>
 <p class="mv-plan-intro">Establece la rutina. Deja que MailVault se ocupe del trabajo repetitivo.</p>
-<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">Recién salido de la parrilla</span><p>Precio anticipado y familiar <span>Mientras MailVault esté en acceso anticipado</span><span>Limitado a los primeros 100 suscriptores</span></p></div></div>
+<div class="mv-pixel-banner mv-pixel-grill" data-mv-early><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">Recién salido de la parrilla</span><p>Precio anticipado y familiar <span>Mientras MailVault esté en acceso anticipado</span><span>Limitado a los primeros 100 suscriptores</span></p></div></div>
 <fieldset class="mv-billing" hidden>
 <legend class="mv-sr-only">Periodo de facturación Premium</legend>
 <label><input type="radio" name="billing" value="yearly" checked><span>Anual</span>
@@ -178,18 +178,18 @@
 </label>
 </fieldset>
 <div data-billing-panel="yearly">
-<p class="mv-price"><span data-mv-price="{yearly}">$25</span><span>/ año</span>
+<p class="mv-price"><span data-mv-price="{yearly}">$25</span><span>/ año</span><span class="mv-tag" data-mv-early data-mv-price="{earlyBirdSavingsPercent}% de descuento">36% de descuento</span>
 </p>
 <p class="mv-small" data-mv-price="Unos {monthlyEquivalent}/mes, facturados anualmente">Unos $2.08/mes, facturados anualmente</p>
-<p class="mv-standard-price">Precio estándar tras el acceso anticipado: <span data-mv-price="{standardYearly}">$39</span>/año</p>
+<p class="mv-standard-price" data-mv-early>Un <span data-mv-price="{earlyBirdSavingsPercent}%">36%</span> por debajo del precio estándar tras el acceso anticipado: <span data-mv-price="{standardYearly}">$39</span>/año</p>
 <div class="mv-yearly-saving" data-mv-saving><strong data-mv-price="Ahorra un {savingsPercent}% con el plan anual">Ahorra un 48% con el plan anual</strong><span data-mv-price="Ahorra {annualSavings}/año frente a {annualMonthly} por 12 pagos mensuales.">Ahorra $23/año frente a $48 por 12 pagos mensuales.</span></div>
 <p class="mv-trial">Prueba gratuita de 14 días en tu primera suscripción anual</p>
 </div>
 <div data-billing-panel="monthly" hidden>
-<p class="mv-price"><span data-mv-price="{monthly}">$4</span><span>/ mes</span>
+<p class="mv-price"><span data-mv-price="{monthly}">$4</span><span>/ mes</span><span class="mv-tag" data-mv-early data-mv-price="{earlyBirdMonthlySavingsPercent}% de descuento">33% de descuento</span>
 </p>
 <p class="mv-small">Facturación mensual. Cancela cuando quieras.</p>
-<p class="mv-standard-price">Precio estándar tras el acceso anticipado: <span data-mv-price="{standardMonthly}">$6</span>/mes</p>
+<p class="mv-standard-price" data-mv-early>Un <span data-mv-price="{earlyBirdMonthlySavingsPercent}%">33%</span> por debajo del precio estándar tras el acceso anticipado: <span data-mv-price="{standardMonthly}">$6</span>/mes</p>
 <p class="mv-trial">La prueba de 14 días está disponible con la facturación anual.</p>
 </div>
 <noscript><p class="mv-small">Premium mensual cuesta $4/mes, sin periodo de prueba. <a href="/es/get-started.html?plan=monthly">Elige la facturación mensual</a>.</p></noscript>
@@ -274,7 +274,7 @@
 </dialog>
 <script defer src="/assets/english-site.js?v=20261007-clips">
 </script>
-<script defer src="/pricing-localize.js?v=20261007-standard">
+<script defer src="/pricing-localize.js?v=20261008-spots">
 </script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>

@@ -71,8 +71,21 @@ describe('hero', () => {
     const badge = hero.querySelector('.hm-badge');
     expect(badge).not.toBeNull();
     expect(before(badge, h1)).toBe(true);
-    expect(text(badge)).toBe('Early access Premium from $25/yr · only 100 spots in total');
     expect(badge.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
+  });
+
+  it('sets the early access badge on two lines: the price, then the spots', () => {
+    const badge = hero.querySelector('.hm-badge');
+    const lines = [...badge.children];
+    expect(lines.map((el) => el.className)).toEqual(['hm-badge-line', 'hm-badge-spots']);
+    expect(text(lines[0])).toBe('Early access Premium from $25/yr');
+    expect(lines[0].querySelector('.hm-badge-tag')).not.toBeNull();
+    // Static until the count answers: no number of spots taken without JavaScript.
+    expect(text(lines[1])).toBe('Only 100 spots in total');
+    expect(lines[1].dataset.mvSpots).toBe('{taken} of {cap} spots taken');
+    expect(lines[1].dataset.mvSpotsFull).toBe('All {cap} spots are taken');
+    // The second line always breaks below the first.
+    expect(rulesFor(plain, '.hm-badge')).toMatch(/flex-direction\s*:\s*column/);
   });
 
   it('puts "Free forever" on its own line above the early access badge, not inside it', () => {
@@ -88,11 +101,17 @@ describe('hero', () => {
     expect(rulesFor(plain, '.hm-hero .hm-free-label')).toMatch(/display\s*:\s*flex/);
   });
 
-  it('states the 100-spot limit in the badge and under the card title, with no count of spots left', () => {
-    expect(text(hero.querySelector('.hm-badge'))).toContain('only 100 spots in total');
+  it('states the 100-spot limit in the badge and under the card title, counting spots taken, never spots left', () => {
+    expect(text(hero.querySelector('.hm-badge'))).toContain('Only 100 spots in total');
     const limit = card.querySelector('.hm-offer-head + .hm-offer-limit');
     expect(text(limit)).toBe('Limited to the first 100 subscribers.');
+    // One line at phone width too, so the count never pushes the card down.
+    expect(limit.dataset.mvSpots).toBe('{taken} of {cap} Early Bird spots taken.');
+    expect(limit.dataset.mvSpotsFull).toBe('All {cap} Early Bird spots are taken. Premium is now at the standard price.');
     expect(text(hero)).not.toMatch(/\b\d+ (spots )?left\b|selling fast|hurry|countdown/i);
+    for (const el of hero.querySelectorAll('[data-mv-spots]')) {
+      expect(el.dataset.mvSpots + el.dataset.mvSpotsFull).not.toMatch(/\bleft\b|—/);
+    }
   });
 
   it('tells phone visitors a mobile app is coming, beside the email-me-the-link form', () => {
@@ -111,15 +130,32 @@ describe('hero', () => {
     const [yearly, monthly] = rows;
     expect(yearly.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
     expect(text(yearly)).toContain('$25/year');
-    expect(text(yearly.querySelector('.hm-offer-standard'))).toBe('Standard price after early access: $39/year');
+    expect(text(yearly.querySelector('.hm-offer-standard'))).toBe('36% below the standard price after early access: $39/year');
     expect(yearly.querySelector('[data-mv-price="{standardYearly}"]').textContent).toBe('$39');
     expect(monthly.querySelector('[data-mv-price="{monthly}"]').textContent).toBe('$4');
     expect(text(monthly)).toContain('$4/month');
-    expect(text(monthly.querySelector('.hm-offer-standard'))).toBe('Standard price after early access: $6/month');
+    expect(text(monthly.querySelector('.hm-offer-standard'))).toBe('33% below the standard price after early access: $6/month');
     expect(monthly.querySelector('[data-mv-price="{standardMonthly}"]').textContent).toBe('$6');
     expect(card.querySelector('.hm-offer-plans input, .hm-offer-plans select, .hm-offer-plans button, .hm-offer-plans form')).toBeNull();
     expect(hero.querySelector('s, del, strike')).toBeNull();
     expect(text(hero)).not.toMatch(/limited time|lifetime|for life|—/i);
+  });
+
+  it('marks each plan with its discount off the standard price, computed per currency', () => {
+    const [yearly, monthly] = card.querySelectorAll('.hm-offer-plan');
+    const chipY = yearly.querySelector('dt .hm-offer-off');
+    const chipM = monthly.querySelector('dt .hm-offer-off');
+    expect(text(chipY)).toBe('36% off');
+    expect(text(chipM)).toBe('33% off');
+    expect(chipY.dataset.mvPrice).toBe('{earlyBirdSavingsPercent}% off');
+    expect(chipM.dataset.mvPrice).toBe('{earlyBirdMonthlySavingsPercent}% off');
+    expect(yearly.querySelector('.hm-offer-standard [data-mv-price="{earlyBirdSavingsPercent}%"]').textContent).toBe('36%');
+    expect(monthly.querySelector('.hm-offer-standard [data-mv-price="{earlyBirdMonthlySavingsPercent}%"]').textContent).toBe('33%');
+    // Early-bird-only copy steps aside once every spot is taken.
+    for (const el of [chipY, chipM, ...card.querySelectorAll('.hm-offer-standard'), card.querySelector('.hm-offer-title')]) {
+      expect(el.hasAttribute('data-mv-early'), el.outerHTML.slice(0, 60)).toBe(true);
+    }
+    expect(rulesFor(plain, '.hm-offer-off')).toMatch(/border-radius/);
   });
 
   it('holds the one OS-detected download, and the phone form, in the card', () => {

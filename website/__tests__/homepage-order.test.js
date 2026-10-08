@@ -117,7 +117,12 @@ describe('English hero copy', () => {
   });
 
   it('states the early-bird and standard price under the final download', () => {
-    expect(en.querySelector('#download .hm-price').textContent.trim()).toBe('Early Bird & Family Pricing: Premium $25/year. Standard price after early access: $39/year.');
+    const line = en.querySelector('#download .hm-price');
+    expect(line.textContent.trim()).toBe('Early Bird & Family Pricing: Premium $25/year, 36% below the standard price after early access: $39/year.');
+    expect(line.querySelector('[data-mv-price="{earlyBirdSavingsPercent}%"]').textContent).toBe('36%');
+    // Once every spot is taken only "Premium {yearly}/year." stays.
+    const early = [...line.querySelectorAll('[data-mv-early]')].map((el) => el.textContent).join('|');
+    expect(early).toBe('Early Bird & Family Pricing: |, 36% below the standard price after early access: $39/year');
   });
 
   it('prices the final download the same way as the locale pages', () => {

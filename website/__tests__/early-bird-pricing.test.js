@@ -12,7 +12,8 @@ const load = (file) => new JSDOM(readFileSync(file, 'utf8')).window.document;
 const pages = (name) => [`website/${name}`, ...LOCALES.map((l) => `website/${l}/${name}`)];
 const FORBIDDEN = /limited time|lifetime|for life|for now|—/i;
 // Early Bird & Family Pricing is capped at the first 100 subscribers. The cap is
-// stated as a fixed number, never as a countdown or a count of spots left.
+// stated as a fixed number; pricing-localize.js may add the live count of spots
+// taken from /api/billing/early-bird, but the page never counts down spots left.
 const SCARCITY = /\b\d+ (spots |places )?left\b|selling fast|hurry|countdown/i;
 
 const newCopy = (doc) => [
@@ -42,6 +43,42 @@ describe.each(pages('pricing.html'))('%s', (file) => {
       expect(limit.textContent).not.toBe('Limited to the first 100 subscribers.');
       expect(badge[1].textContent).not.toBe('Limited to the first 100 subscribers');
     }
+  });
+
+  it('fills the band with the live count of spots taken, translated, and a sold-out line', () => {
+    const limit = doc.querySelector('.mv-early-band > strong + span');
+    for (const attr of ['data-mv-spots', 'data-mv-spots-full']) {
+      const tpl = limit.getAttribute(attr);
+      expect(tpl, attr).toMatch(/\{cap\}/);
+      expect(tpl, attr).not.toMatch(SCARCITY);
+      expect(tpl, attr).not.toMatch(FORBIDDEN);
+    }
+    expect(limit.getAttribute('data-mv-spots')).toMatch(/\{taken\}/);
+    if (file !== 'website/pricing.html') {
+      expect(limit.getAttribute('data-mv-spots')).not.toBe('{taken} of {cap} Early Bird spots taken.');
+      expect(limit.getAttribute('data-mv-spots-full')).not.toBe('All {cap} Early Bird spots are taken. Premium is now at the standard price.');
+    }
+  });
+
+  it('shows the early-bird discount off the standard price beside each billing period', () => {
+    for (const [panel, token, pct] of [['yearly', 'earlyBirdSavingsPercent', '36'], ['monthly', 'earlyBirdMonthlySavingsPercent', '33']]) {
+      const root = doc.querySelector(`#premium-plan [data-billing-panel="${panel}"]`);
+      const chip = root.querySelector('.mv-price > .mv-tag');
+      expect(chip.getAttribute('data-mv-price')).toContain(`{${token}}`);
+      expect(chip.textContent).toContain(pct);
+      const line = root.querySelector('.mv-standard-price');
+      expect(line.querySelector(`[data-mv-price*="{${token}}"]`).textContent).toContain(pct);
+      for (const el of [chip, line]) expect(el.hasAttribute('data-mv-early')).toBe(true);
+      // Translated chip, never the English "off" on a localized page.
+      if (file !== 'website/pricing.html') expect(chip.getAttribute('data-mv-price')).not.toBe(`{${token}}% off`);
+    }
+  });
+
+  it('drops the early-bird promise, badge and discount once every spot is taken', () => {
+    expect(doc.querySelector('#premium-plan .mv-pixel-grill').hasAttribute('data-mv-early')).toBe(true);
+    expect(doc.querySelector('.mv-early-band li').hasAttribute('data-mv-early')).toBe(true);
+    // Devices and trial stay true at the standard price.
+    expect([...doc.querySelectorAll('.mv-early-band li')].slice(1).some((li) => li.hasAttribute('data-mv-early'))).toBe(false);
   });
 
   it('badges the paid plan and prints the standard price under each billing period', () => {
@@ -104,8 +141,12 @@ describe('English pricing copy', () => {
 
   it('reads the standard price as a plain statement', () => {
     // The line holds the sentence; only its amount is a price token, so the amount can be set in bold.
-    expect(doc.querySelector('[data-billing-panel="yearly"] [data-mv-price*="{standardYearly}"]').closest('p').textContent).toBe('Standard price after early access: $39/year');
-    expect(doc.querySelector('[data-billing-panel="monthly"] [data-mv-price*="{standardMonthly}"]').closest('p').textContent).toBe('Standard price after early access: $6/month');
+    expect(doc.querySelector('[data-billing-panel="yearly"] [data-mv-price*="{standardYearly}"]').closest('p').textContent).toBe('36% below the standard price after early access: $39/year');
+    expect(doc.querySelector('[data-billing-panel="monthly"] [data-mv-price*="{standardMonthly}"]').closest('p').textContent).toBe('33% below the standard price after early access: $6/month');
+    expect(doc.querySelector('[data-billing-panel="yearly"] .mv-price').textContent.trim()).toBe('$25/ year36% off');
+    expect(doc.querySelector('[data-billing-panel="monthly"] .mv-price').textContent.trim()).toBe('$4/ month33% off');
+    expect(doc.querySelector('.mv-early-band > strong + span').dataset.mvSpots).toBe('{taken} of {cap} Early Bird spots taken.');
+    expect(doc.querySelector('.mv-early-band > strong + span').dataset.mvSpotsFull).toBe('All {cap} Early Bird spots are taken. Premium is now at the standard price.');
     expect(doc.querySelector('#premium-plan .mv-pixel-grill').textContent).toContain('Early Bird & Family Pricing');
     expect([...doc.querySelectorAll('#premium-plan .mv-pixel-grill p > span')].map((el) => el.textContent)).toEqual(['While MailVault is in early access', 'Limited to the first 100 subscribers']);
   });
@@ -129,6 +170,10 @@ describe.each(pages('get-started.html'))('%s', (file) => {
     expect(yearly.querySelector('[data-mv-price*="{standardMonthly}"]')).toBeNull();
     expect(monthly.querySelector('[data-mv-price*="{standardYearly}"]')).toBeNull();
     for (const el of newCopy(doc)) expect(el.textContent).not.toMatch(FORBIDDEN);
+  });
+
+  it('drops the early-bird lines once every spot is taken', () => {
+    for (const el of doc.querySelectorAll('.mv-early-pricing')) expect(el.hasAttribute('data-mv-early')).toBe(true);
   });
 
   it('states the 100-subscriber limit on both plans', () => {

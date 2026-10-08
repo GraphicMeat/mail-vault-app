@@ -134,8 +134,8 @@ describe.each(['website/pricing.html', ...LOCALES.map((l) => `website/${l}/prici
 describe('English standard price line', () => {
   it('keeps the copy word for word', () => {
     const doc = load('website/pricing.html');
-    expect(doc.querySelector('[data-billing-panel="yearly"] .mv-standard-price').textContent).toBe('Standard price after early access: $39/year');
-    expect(doc.querySelector('[data-billing-panel="monthly"] .mv-standard-price').textContent).toBe('Standard price after early access: $6/month');
+    expect(doc.querySelector('[data-billing-panel="yearly"] .mv-standard-price').textContent).toBe('36% below the standard price after early access: $39/year');
+    expect(doc.querySelector('[data-billing-panel="monthly"] .mv-standard-price').textContent).toBe('33% below the standard price after early access: $6/month');
   });
 
   it.each(LOCALES)('%s translates it', (l) => {
