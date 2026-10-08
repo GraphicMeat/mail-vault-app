@@ -11,10 +11,14 @@
     "8016e51f audit this list was generated from, and the parser only knew the old",
     "bare-JSON lines. None of the 82 entries listed here appear in today's audit output,",
     "so they are gone: 57 no longer exist verbatim (localized or rewritten), 7 were code",
-    "shapes today's IGNORE drops, and 18 are STILL hardcoded but invisible to today's",
-    "text pattern (after a self-closing tag, starting with punctuation, or holding an",
-    "HTML entity). Widening that pattern will surface those 18 as new findings, which",
-    "is the point. What remains below is not debt; it is text that should not be",
+    "shapes today's IGNORE drops, and 18 were STILL hardcoded but invisible to that",
+    "day's text pattern (after a",
+    "self-closing tag, starting with punctuation, or holding an HTML entity).",
+    "",
+    "2026-10-08: the pattern now sees those three shapes (and `label: 'English'` literals),",
+    "and every string it surfaced was localized through the catalogs, except one more",
+    "copy of the preview cast brand \"Prime Cut Studio\" (the third in PreferencePreview.jsx,",
+    "listed again below). What remains in this file is not debt; it is text that should not be",
     "translated:",
     "  - the preview cast (Nell Okafor, Priya Raines, Prime Cut Studio, Rowan Marsh and",
     "    their initials). src/data/previewMail.js keeps cast and brands untranslated, the",
@@ -110,6 +114,10 @@
     {
       "file": "src/components/scheduled/SchedulePicker.jsx",
       "string": "T\\d"
+    },
+    {
+      "file": "src/components/settings/PreferencePreview.jsx",
+      "string": "Prime Cut Studio"
     }
   ]
 }

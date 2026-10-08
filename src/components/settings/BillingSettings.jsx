@@ -683,7 +683,7 @@ export function BillingSettings({ onNavigate }) {
           className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-mail-accent-text border border-mail-border rounded-lg hover:border-mail-accent transition-colors"
         >
           <Gift size={15} />
-          Or unlock premium free: star &amp; share MailVault
+          {t('settings.billing.starShareUnlock')}
         </button>
       )}
 
@@ -723,8 +723,8 @@ export function BillingSettings({ onNavigate }) {
                     <Monitor size={14} className={isCurrent ? 'text-mail-accent-text flex-shrink-0' : 'text-mail-text-muted flex-shrink-0'} />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-mail-text truncate">
-                        {client.clientName || client.platform || 'Unknown device'}
-                        {isCurrent && <span className="ml-1.5 text-xs text-mail-accent-text font-semibold">(this device)</span>}
+                        {client.clientName || client.platform || t('settings.billing.unknownDevice')}
+                        {isCurrent && <span className="ml-1.5 text-xs text-mail-accent-text font-semibold">{t('settings.billing.thisDeviceParen')}</span>}
                       </p>
                       <p className="text-xs text-mail-text-muted">
                         {[client.platform, client.appVersion && `v${client.appVersion}`].filter(Boolean).join(' · ')}

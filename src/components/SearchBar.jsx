@@ -352,7 +352,7 @@ export function SearchBar({ autoFocus = false }) {
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-xs font-medium text-mail-text-muted flex items-center gap-1">
           <TrendingUp size={12} />
-          Popular filters (last {filterHistoryPeriodDays} days)
+          {t('search.popularFiltersLastDays', { days: filterHistoryPeriodDays })}
         </h4>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -533,7 +533,7 @@ export function SearchBar({ autoFocus = false }) {
                   <div>
                     <label className="text-xs text-mail-text-muted mb-1 flex items-center gap-1">
                       <User size={12} />
-                      From (sender)
+                      {t('search.fromSender')}
                     </label>
                     <input
                       type="text"

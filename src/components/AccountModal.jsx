@@ -711,7 +711,7 @@ export function AccountModal({ onClose, onSuccess }) {
                         ) : (
                           <>
                             <Shield size={18} />
-                            Sign in with {({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider')}
+                            {t('account.signInWithProvider', { provider: { google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || t('account.providerFallback') })}
                           </>
                         )}
                       </button>
@@ -758,7 +758,7 @@ export function AccountModal({ onClose, onSuccess }) {
                         className="text-xs text-mail-text-muted hover:text-mail-text flex items-center gap-1"
                       >
                         <ChevronRight size={12} className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
-                        Advanced (Corporate)
+                        {t('account.advancedCorporate')}
                       </button>
                       {showAdvanced && (
                         <div className="mt-2 space-y-2">

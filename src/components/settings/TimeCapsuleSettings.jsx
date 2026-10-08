@@ -43,7 +43,7 @@ export function TimeCapsuleSettings() {
           {t('settings.timeCapsule.timeCapsuleLetsTravelBack')}
         </p>
         <p className="text-xs text-mail-text-muted">
-          {t('settings.timeCapsule.actualEmailsAlreadyStoredLocally')} <em>{t('settings.timeCapsule.whatWasThereWhen')}</em>, so they take up very little space (a few hundred KB each). If you ever accidentally delete or lose an email, you can open a past snapshot, find it, and restore it.
+          {t('settings.timeCapsule.actualEmailsAlreadyStoredLocally')} <em>{t('settings.timeCapsule.whatWasThereWhen')}</em>{t('settings.timeCapsule.soTheyTakeLittleSpace')}
         </p>
       </div>
 

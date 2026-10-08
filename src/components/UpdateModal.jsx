@@ -335,7 +335,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                              bg-mail-accent-fill hover:bg-mail-accent-hover rounded-lg transition-colors"
                 >
                   <Download size={14} />
-                  Download v{newVersion}
+                  {t('update.downloadVersion', { version: newVersion })}
                 </a>
                 <button
                   onClick={onClose}

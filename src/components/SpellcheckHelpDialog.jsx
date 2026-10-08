@@ -59,10 +59,7 @@ export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
 
         {confined ? (
           <p className="text-mail-text-muted" data-testid="spellcheck-help-snap">
-            This is the snap build. A snap cannot see dictionaries installed on the
-            host, so it carries its own, and if you are reading this, that copy is
-            missing. The .deb package from mailvaultapp.com uses your system's
-            dictionaries instead; the guide below has the details.
+            {t('spellcheck.snapBuildNoDictionaries')}
           </p>
         ) : (
           <>
@@ -78,8 +75,7 @@ export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
             </div>
             <p className="text-mail-text-muted">
               {t('spellcheck.anotherLanguageSwapCountryCode')} <code className="font-mono text-xs">{t('spellcheck.hunspellDeDe')}</code>,{' '}
-              <code className="font-mono text-xs">{t('spellcheck.hunspellFr')}</code>, and so on. MailVault
-              picks the dictionary that matches your system language.
+              <code className="font-mono text-xs">{t('spellcheck.hunspellFr')}</code>{t('spellcheck.andSoOnPicksDictionary')}
             </p>
           </>
         )}

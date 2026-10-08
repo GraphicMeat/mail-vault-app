@@ -32,7 +32,35 @@ import { listSourceFiles } from './lib/sourceFiles.mjs';
  * shapes IGNORE names as code. A node that ends at `{` is text too —
  * "System Default ({navigator.language})" never reached a `<` at all.
  */
-const TEXT = /(?<![=!\-|&+*/])([>}])(\s*)([A-Za-z0-9][^<>{};=]*?)(\s*)([<{])/g;
+/**
+ * 2026-10-08, third pass. Three shapes were still invisible, 18 live strings
+ * among them: text after a SELF-CLOSING tag (`<Trash2 /> Delete ({n})`, the
+ * `/` before `>` was in the lookbehind), text that STARTS with punctuation
+ * (`(optional)`, `— wrote this`), and text holding an entity (`Can&rsquo;t`,
+ * the `;` in the deny-list ended the node). The first is the `/>` branch of
+ * the opener, the second a punctuation start class, the third an `&name;`
+ * alternative inside the body. A node must still hold a letter once its
+ * entities are removed (HAS_WORDS) so `) : (` between two JSX branches and a
+ * bare `&nbsp;` are not findings.
+ */
+const ENTITY = '&#?\\w+;';
+// A `;` is prose when a plain lowercase word follows ("Works offline; no account"),
+// not code (`y;\n  setPosition(`, camelCase and calls fail the word test).
+const SEMI = '(?<=[a-z]);(?=\\s+[a-z]+[\\s,.])';
+// After a tag's `>` any run of prose may open the node, `, so they...` included.
+// After a `}` the same punctuation is code (`}, ref)`, `}: isOriginalWindow ?`),
+// so only the starts that cannot open code are admitted there.
+const TEXT = new RegExp(
+  '(?:(?<![=!\\-|&+*/])|(?<=/))(?:' +
+  `(>)(\\s*)((?:${ENTITY}|[A-Za-z0-9(\\[“‘"'«¿¡·•—–…:,.+*#@-])(?:${ENTITY}|${SEMI}|[^<>{};=])*?)` +
+  '|' +
+  `(\\})(\\s*)((?:${ENTITY}|[A-Za-z0-9(·•—–…“‘«¿¡])(?:${ENTITY}|${SEMI}|[^<>{};=])*?)` +
+  ')(\\s*)([<{])', 'g');
+const HAS_WORDS = /\p{L}{2}/u;
+// A node that opens with a letter or digit and holds no entity keeps the old
+// rule (a lone "P" is a finding); every other shape must carry a real word.
+const isProse = (v) => /^[A-Za-z0-9]/.test(v) && !new RegExp(ENTITY).test(v) || HAS_WORDS.test(stripEntities(v));
+const stripEntities = (v) => v.replace(new RegExp(ENTITY, 'g'), ' ');
 const PROP = /\b(?:title|aria-label|placeholder|alt)="([A-Za-z][^"]{1,})"/g;
 
 /**
@@ -43,6 +71,19 @@ const PROP = /\b(?:title|aria-label|placeholder|alt)="([A-Za-z][^"]{1,})"/g;
  * `{` is what keeps it off `const mbox = a === 'UNIFIED' ? 'INBOX' : a` and
  * off a console.log argument — neither is rendered.
  */
+/**
+ * A `label: 'English'` property: the option arrays a component maps over
+ * (`{ type: 'all', label: 'All' }`) are rendered as `{p.label}`, so the
+ * JSX-text pattern never sees them, and LITERAL hides them from it on purpose.
+ * A label is display text by name. Only the .jsx files the audit scans are
+ * affected; a data module that exports labels is localized where it is built.
+ * A lowercase run with no space (`'workspace.readingPane'`, `'threadMode'`) is
+ * a catalog key the component resolves with t(), not English.
+ */
+const LABEL = /\blabel:\s*(['"])([A-Za-z][^'"\n]*)\1/g;
+
+const KEYLIKE = /^[a-z][\w.]*$/;
+
 const TERNARY = /\{[^{}\n]*\?\s*'([A-Z][A-Za-z0-9 ,.!?%\-—’]*)'\s*:/g;
 
 // JSX text that is markup or code, not prose for a human. The deny-list class
@@ -55,7 +96,7 @@ const TERNARY = /\{[^{}\n]*\?\s*'([A-Z][A-Za-z0-9 ,.!?%\-—’]*)'\s*:/g;
 // filter, and it silently swallowed "emails", "folders", "selected" and 35
 // other real fragments that sit after a `{count}` — the audit's own fixture
 // (`<span>up</span>`) is the guard against re-adding it.
-const IGNORE = /^(https?|www\.|[A-Za-z][\w.]*\(|\d+$)|&&|\|\||\?\.|^[A-Za-z_$][\w$.]*[)\]]|^(?:else|return|try|catch|finally|do|while|if|for|const|let|var|export|function|class|static|await|switch|case|new|typeof|async|import)\b|^\d+\s*[?)\]},]|^(?:Google|Microsoft|Yahoo|MailVault|IMAP|SMTP|OAuth2)$/;
+const IGNORE = /^(https?|www\.|[A-Za-z][\w.]*\(|\d+$)|&&|\|\||\?\.|^[A-Za-z_$][\w$.]*[)\]]|^(?:else|return|try|catch|finally|do|while|if|for|const|let|var|export|function|class|static|await|switch|case|new|typeof|async|import)\b|^\d+\s*[?)\]},]|^[:,]\s*\(?[A-Za-z_$][\w$.']*\s*[?(,]|^(?:Google|Microsoft|Yahoo|MailVault|IMAP|SMTP|OAuth2)$/;
 
 // `T.jsx` documents the `<0>…</0>` slot syntax in its own comments and JSDoc,
 // which reads as a text node to the pattern above. Excluding the file is
@@ -114,10 +155,11 @@ function jsxStrings(rawSrc) {
   const inLiteral = (i) => ranges.some(([a, b]) => i >= a && i < b);
   const out = [];
   for (const m of src.matchAll(TEXT)) {
-    const v = m[3].trim();
-    if (v && !IGNORE.test(v) && !inLiteral(m.index)) out.push({ line: lineAt(m.index), v });
+    const v = (m[3] ?? m[6]).trim();
+    if (v && isProse(v) && !IGNORE.test(v) && !inLiteral(m.index)) out.push({ line: lineAt(m.index), v });
   }
   for (const m of src.matchAll(PROP)) if (!inLiteral(m.index)) out.push({ line: lineAt(m.index), v: m[1] });
+  for (const m of src.matchAll(LABEL)) if (!KEYLIKE.test(m[2]) && !IGNORE.test(m[2])) out.push({ line: lineAt(m.index), v: m[2] });
   for (const m of src.matchAll(TERNARY)) if (!IGNORE.test(m[1])) out.push({ line: lineAt(m.index), v: m[1] });
   return out;
 }

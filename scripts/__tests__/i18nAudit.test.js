@@ -66,6 +66,79 @@ describe('i18n-audit strings mode', () => {
   });
 });
 
+/**
+ * 2026-10-08: three text shapes the pattern could not see, 18 live strings
+ * hid behind them (see audit-baseline.json's _comment), and a fourth shape,
+ * a `label:` literal in a data array a component maps over, never was a JSX
+ * text node at all (BulkOperationsModal's `{ type: 'all', label: 'All' }`).
+ */
+describe('i18n-audit strings mode, shapes that used to hide', () => {
+  it('finds text after a self-closing tag', () => {
+    const f = fixture('function X({ n }) {\n  return <button><Trash2 size={13} /> Delete ({n})</button>;\n}\n');
+    expect(run('strings', f)).toMatch(/Delete \(/);
+  });
+
+  it('finds text after a self-closing tag on the next line', () => {
+    const f = fixture('function X() {\n  return (\n    <button>\n      <Icon />\n      Save draft\n    </button>\n  );\n}\n');
+    expect(run('strings', f)).toMatch(/Save draft/);
+  });
+
+  it('finds text that starts with punctuation', () => {
+    const f = fixture('function X({ name }) {\n  return <p>{name} — wrote this</p>;\n}\n');
+    expect(run('strings', f)).toMatch(/wrote this/);
+  });
+
+  it('finds a parenthesised suffix after a closing tag', () => {
+    const f = fixture('function X() {\n  return <label><b>{t(\'a.b\')}</b> (optional)</label>;\n}\n');
+    expect(run('strings', f)).toMatch(/\(optional\)/);
+  });
+
+  it('finds text holding an HTML entity', () => {
+    const f = fixture('function X() {\n  return <p>Can&rsquo;t reach the server</p>;\n}\n');
+    expect(run('strings', f)).toMatch(/Can&rsquo;t reach the server/);
+  });
+
+  it('finds text that starts with an entity', () => {
+    const f = fixture('function X() {\n  return <p>&mdash; Not available</p>;\n}\n');
+    expect(run('strings', f)).toMatch(/Not available/);
+  });
+
+  it('leaves entity-only glyphs alone', () => {
+    const f = fixture('function X() {\n  return <span>&nbsp;</span>;\n}\n');
+    expect(run('strings', f)).toBe('');
+  });
+
+  it('leaves punctuation-only separators between JSX branches alone', () => {
+    const f = fixture('function X({ a }) {\n  return (\n    <div>\n      {a ? (\n        <A />\n      ) : (\n        <B />\n      )}\n    </div>\n  );\n}\n');
+    expect(run('strings', f)).toBe('');
+  });
+
+  it('finds prose that holds a semicolon', () => {
+    const f = fixture('function X() {\n  return <p>Works offline; no account required</p>;\n}\n');
+    expect(run('strings', f)).toMatch(/no account required/);
+  });
+
+  it('does not read a statement after a semicolon as prose', () => {
+    const f = fixture('function X({ a }) {\n  const y = a ? 1 : 2;\n  setPosition(y);\n  return <div>{y}</div>;\n}\n');
+    expect(run('strings', f)).toBe('');
+  });
+
+  it('finds a label: literal in a data array', () => {
+    const f = fixture("const PRESETS = [{ type: 'all', label: 'All' }];\nfunction X() {\n  return <ul>{PRESETS.map(p => <li key={p.type}>{p.label}</li>)}</ul>;\n}\n");
+    expect(run('strings', f)).toMatch(/"All"/);
+  });
+
+  it('finds a double-quoted label: literal', () => {
+    const f = fixture('const PRESETS = [{ type: "all", label: "Everything" }];\nfunction X() {\n  return <ul>{PRESETS.map(p => <li>{p.label}</li>)}</ul>;\n}\n');
+    expect(run('strings', f)).toMatch(/Everything/);
+  });
+
+  it('is clean when the label is a t() call', () => {
+    const f = fixture("function X() {\n  const t = useT();\n  const PRESETS = [{ type: 'all', label: t('a.all') }];\n  return <ul>{PRESETS.map(p => <li>{p.label}</li>)}</ul>;\n}\n");
+    expect(run('strings', f)).toBe('');
+  });
+});
+
 describe('i18n-audit and the extractor agree about string literals', () => {
   it('does not report HTML held in a single-quoted string', () => {
     const f = fixture("function X() {\n  const body = ['<p>Hello there</p>'].join('');\n  return <div>{body}</div>;\n}\n");

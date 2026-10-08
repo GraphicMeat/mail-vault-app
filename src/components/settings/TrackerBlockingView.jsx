@@ -69,7 +69,7 @@ function SampleMail({ blocked }) {
         ) : (
           <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
             <span className="inline-block w-[6px] h-[6px] rounded-full bg-red-500 animate-pulse" />
-            1×1 pixel loading from mailer.example.com
+            {t('settings.tracking.pixelLoadingCaption')}
           </div>
         )}
       </div>

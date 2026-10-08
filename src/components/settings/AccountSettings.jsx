@@ -1035,7 +1035,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                         {t('settings.accounts.sureRemoveAccount', { email: pa(selectedAccount.email, 'email') })}
                       </p>
                       <p className="text-sm text-mail-text-muted mb-2">
-                        Deletes this account\u2019s emails, attachments and settings from your vault. Mail still on the server is untouched; anything the server no longer has is gone for good.
+                        {t('settings.accounts.removeAccountExplanation')}
                       </p>
                       {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) && (
                         <p className="text-sm text-mail-warning mb-2">

@@ -53,6 +53,10 @@ const ALLOWLIST = new Set([
   'settings.appearance.readingAndConversations', 'settings.colors.title', 'workspace.title',
   'settings.behavior.deleting', 'settings.behavior.emailSync', 'settings.behavior.markRead', 'settings.behavior.sending',
   'settings.timeCapsule.automaticSnapshots',
+  // headings the audit could not see while they were hardcoded: Auto-Cleanup is found via
+  // storage.addCleanupRule, the other two via the settings listed right under them
+  'settings.storage.autoCleanupHeading', 'settings.backup.config.scopeStorageHeading',
+  'settings.backup.restore.mboxImportExportHeading',
   'settings.migration.selectDestinationAccount', 'settings.migration.selectFoldersMigrate',
   'settings.language.title', 'settings.logs.applicationLogs', 'settings.templates.emailTemplates',
   // duplicate labels for a setting already indexed under a different key

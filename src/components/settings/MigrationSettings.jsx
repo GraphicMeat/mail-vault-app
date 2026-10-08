@@ -572,7 +572,7 @@ export default function MigrationSettings({ onUpgrade }) {
                       <span className="text-mail-text truncate flex items-center gap-1">
                         {mapping.dest_path}
                         {mapping.auto_create && (
-                          <span className="text-mail-success text-xs">+ New</span>
+                          <span className="text-mail-success text-xs">{t('settings.migration.plusNew')}</span>
                         )}
                       </span>
                     </div>
