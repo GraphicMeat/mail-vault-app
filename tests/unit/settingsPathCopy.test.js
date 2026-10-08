@@ -119,10 +119,11 @@ describe('settings paths in user-facing copy', () => {
   });
 
   it("leaves Outlook.com's own Settings alone", () => {
-    // The mailbox-full guide walks the reader through Outlook.com's settings,
-    // where General is a real tab and Storage is a real page under it.
+    // The mailbox-full guide walks the reader through Outlook.com's settings
+    // (Microsoft's current path is Settings > Account > Storage), and that
+    // path has to stay clear of the sweep for our own dead tabs.
     const guide = readFileSync('website/guides/outlook-hotmail-mailbox-full.html', 'utf8');
-    expect(guide).toContain('Settings &rarr; General &rarr; Storage');
+    expect(guide).toContain('Settings &rarr; Account &rarr; Storage');
     expect(deadPaths(guide, catalog('en'))).toEqual([]);
   });
 
