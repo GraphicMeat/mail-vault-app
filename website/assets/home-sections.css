@@ -55,7 +55,9 @@
 .hm-offer .hm-send-hint,.hm-offer .hm-mobile-soon { margin:8px 0 0; }
 .hm-offer .hm-offer-free-title { margin:16px 0 0; font-size:1.3rem; font-weight:700; line-height:1.2; letter-spacing:-.015em; color:#86efac; }
 .hm-offer .hm-offer-free-line { margin:4px 0 0; font-size:.92rem; line-height:1.5; color:var(--mv-muted); text-wrap:pretty; }
-.hm-offer .hm-hero-links { display:flex; flex-wrap:wrap; align-items:center; gap:2px 18px; margin:12px 0 0; font-size:.86rem; }
+.hm-offer .hm-hero-links { display:flex; flex-direction:column; align-items:flex-start; gap:6px; margin:12px 0 0; font-size:.86rem; }
+.hm-hero .hm-apps-soon { margin:2px 0 0; color:var(--mv-muted); }
+@media (max-width:760px) { .hm-hero .hm-apps-soon { display:none; } }
 .hm-os-links { list-style:none; display:flex; flex-wrap:wrap; gap:0 16px; margin:0; padding:0; }
 .hm-os-links a { display:inline-flex; align-items:center; gap:6px; min-height:32px; color:#c9c6ff; font-weight:550; text-decoration:underline; text-decoration-color:transparent; text-underline-offset:3px; transition:text-decoration-color .15s cubic-bezier(.16,1,.3,1); }
 .hm-os-links a:hover { text-decoration-color:currentColor; }

@@ -258,6 +258,15 @@ describe('hero', () => {
     expect(link.dataset.acquisitionDestination).toBe('pricing');
   });
 
+  it('stacks the icons, "All formats", the email link and the mobile line, each on its own line', () => {
+    const links = card.querySelector('.hm-offer-free .hm-hero-links');
+    expect(rulesFor(plain, '.hm-offer .hm-hero-links')).toMatch(/flex-direction\s*:\s*column/);
+    const soon = links.querySelector(':scope > p.hm-apps-soon');
+    expect(text(soon)).toBe('iOS and Android apps are coming soon.');
+    expect(soon.hasAttribute('hidden')).toBe(false);
+    expect(links.lastElementChild).toBe(soon);
+  });
+
   it('keeps the other ways to download in the free tier, and no demo link beside them', () => {
     const links = card.querySelector('.hm-offer-free .hm-hero-links');
     expect(hero.querySelectorAll('.hm-hero-links')).toHaveLength(1);
@@ -294,10 +303,11 @@ describe('hero', () => {
       expect(a.querySelector(`svg[aria-hidden="true"] > use[href="#${icon}"]`), platform).not.toBeNull();
       expect(doc.getElementById(icon)?.tagName.toLowerCase()).toBe('symbol');
       expect(a.getAttribute('href')).toBe(button.getAttribute('href'));
-      for (const attr of ['data-download', 'data-download-page', 'data-linux-deb', 'data-acquisition-download', 'data-acquisition-event', 'data-acquisition-placement', 'data-acquisition-destination']) {
+      for (const attr of ['data-download', 'data-download-page', 'data-linux-deb', 'data-acquisition-download', 'data-acquisition-event', 'data-acquisition-destination']) {
         expect(a.getAttribute(attr), `${platform} ${attr}`).toBe(button.getAttribute(attr));
       }
-      expect(a.dataset.acquisitionPlacement).toBe('hero');
+      // Its own placement, so icon clicks read apart from the big button in Meatlytics.
+      expect(a.dataset.acquisitionPlacement).toBe('hero_platforms');
       // After the buttons, so a first-match lookup still finds the button.
       expect(before(button, a)).toBe(true);
     });
@@ -683,7 +693,7 @@ describe('built in Rust', () => {
     expect(sec.querySelector('.mv-eyebrow')).toBeNull();
     const h2 = sec.querySelector('h2');
     expect(sec.getAttribute('aria-labelledby')).toBe(h2.id);
-    expect(h2.innerHTML).toBe('Built in Rust.<br><span class="hm-grad">Fast on your computer.</span>');
+    expect(h2.innerHTML).toBe('Built in Rust.<br><span class="hm-grad">Light on your computer.</span>');
     expect(sec.querySelector('.mv-button, [data-download], form')).toBeNull();
   });
 
@@ -770,7 +780,7 @@ describe('Meatlytics tag and stylesheet', () => {
 
   it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
-    expect(html).not.toMatch(/home-sections\.css\?v=[3-9]"/);
+    expect(html).not.toMatch(/home-sections\.css\?v=(?:[3-9]|10)"/);
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
   });
 
