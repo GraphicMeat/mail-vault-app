@@ -229,6 +229,7 @@ describe('English acquisition journey', () => {
       expect(form.hidden).toBe(false);
       expect(doc.querySelector('[data-send-link-open][aria-controls="send-link-' + placement + '"]').hidden).toBe(true);
       expect(doc.querySelector(section + ' .hm-send-hint').hidden).toBe(false);
+      if (placement === 'hero') expect(doc.querySelector('.hm-hero .hm-mobile-soon').hidden).toBe(false);
       expect(doc.activeElement).not.toBe(form.elements.email);
       expect(gm).not.toHaveBeenCalled();
     });
@@ -238,6 +239,8 @@ describe('English acquisition journey', () => {
       const { opener, form } = open(doc, placement);
       expect(opener.hidden).toBe(true);
       expect(opener.getAttribute('aria-expanded')).toBe('true');
+      // The mobile-app note is for phones only.
+      expect(doc.querySelector('.hm-hero .hm-mobile-soon').hidden).toBe(true);
       expect(form.hidden).toBe(false);
       expect(doc.activeElement).toBe(form.elements.email);
       expect(form.elements.email.type).toBe('email');

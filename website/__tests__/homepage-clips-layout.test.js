@@ -71,8 +71,36 @@ describe('hero', () => {
     const badge = hero.querySelector('.hm-badge');
     expect(badge).not.toBeNull();
     expect(before(badge, h1)).toBe(true);
-    expect(text(badge)).toBe('Early access Free forever · Premium from $25/yr');
+    expect(text(badge)).toBe('Early access Premium from $25/yr · only 100 spots in total');
     expect(badge.querySelector('[data-mv-price="{yearly}"]').textContent).toBe('$25');
+  });
+
+  it('puts "Free forever" on its own line above the early access badge, not inside it', () => {
+    const free = hero.querySelector('.hm-free-label');
+    const badge = hero.querySelector('.hm-badge');
+    expect(free).not.toBeNull();
+    expect(text(free)).toBe('Free forever');
+    expect(free.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(free.nextElementSibling).toBe(badge);
+    expect(badge.contains(free)).toBe(false);
+    expect(text(badge)).not.toMatch(/free/i);
+    // Block level, so it never shares the inline-flex badge's line.
+    expect(rulesFor(plain, '.hm-hero .hm-free-label')).toMatch(/display\s*:\s*flex/);
+  });
+
+  it('states the 100-spot limit in the badge and under the card title, with no count of spots left', () => {
+    expect(text(hero.querySelector('.hm-badge'))).toContain('only 100 spots in total');
+    const limit = card.querySelector('.hm-offer-head + .hm-offer-limit');
+    expect(text(limit)).toBe('Limited to the first 100 subscribers.');
+    expect(text(hero)).not.toMatch(/\b\d+ (spots )?left\b|selling fast|hurry|countdown/i);
+  });
+
+  it('tells phone visitors a mobile app is coming, beside the email-me-the-link form', () => {
+    const soon = card.querySelector('.hm-send-hint + .hm-mobile-soon[data-hero-platform="mobile"]');
+    expect(soon).not.toBeNull();
+    expect(soon.hidden).toBe(true);
+    expect(soon.closest('.hm-hero-actions')).toBeNull();
+    expect(text(soon)).toBe('A mobile app is coming soon. Until then, MailVault runs on your computer.');
   });
 
   it('shows the plans as display rows in a card, early bird and standard price, nothing struck', () => {
@@ -144,7 +172,7 @@ describe('hero', () => {
   });
 
   it('reads badge, headline, lead, card, links, then the product visual', () => {
-    const seq = ['.hm-badge', 'h1', '.hm-lead', '.hm-offer', '#send-link-hero', '.hm-hero-links', '.hm-hero-media'].map((s) => hero.querySelector(s));
+    const seq = ['.hm-free-label', '.hm-badge', 'h1', '.hm-lead', '.hm-offer', '#send-link-hero', '.hm-hero-links', '.hm-hero-media'].map((s) => hero.querySelector(s));
     seq.forEach((el, i) => expect(el, String(i)).not.toBeNull());
     seq.slice(1).forEach((el, i) => expect(before(seq[i], el), String(i)).toBe(true));
   });
@@ -231,6 +259,7 @@ describe('key points', () => {
   it('names four points, each with an icon, a bold word and one line', () => {
     const items = strip.querySelectorAll('li');
     expect([...items].map((li) => text(li.querySelector('strong')))).toEqual(['Yours to keep', 'Every inbox', 'Private', 'Mac, Windows, Linux']);
+    expect(text(items[3].querySelector(':scope > span:last-child'))).toBe('One app on all three. iPhone and Android apps are coming soon.');
     for (const li of items) {
       expect(li.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
       expect(text(li.querySelector(':scope > span:last-child'))).toMatch(/\.$/);
@@ -512,8 +541,16 @@ describe('Meatlytics tag and stylesheet', () => {
 
   it('loads the section styles on the English homepage only, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
-    expect(html).not.toContain('home-sections.css?v=3"');
+    expect(html).not.toMatch(/home-sections\.css\?v=[34]"/);
     for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
+  });
+
+  it('keeps mobile out of the structured data: the apps are coming, not available', () => {
+    const ld = [...doc.querySelectorAll('script[type="application/ld+json"]')].map((s) => s.textContent);
+    expect(ld.length).toBeGreaterThan(0);
+    for (const block of ld) expect(block).not.toMatch(/iOS|iPhone|iPad|Android|mobile/i);
+    const app = ld.map((b) => JSON.parse(b)).find((d) => d.operatingSystem);
+    expect(app.operatingSystem).toBe('macOS, Windows, Linux');
   });
 
   it('keeps the root homepage identical', () => {

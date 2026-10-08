@@ -1,9 +1,10 @@
 {
-  "347e6a5983de": "早割・ファミリー価格、最大 5 台。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。",
-  "533891d77563": "早割・ファミリー価格、最大 5 台。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardMonthly}\">$6</span>/月。",
+  "f9cef652e1c8": "早割・ファミリー価格は先着 100 名の購読者までの限定で、1 契約につき最大 5 台です。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。",
+  "8a653ec70079": "早割・ファミリー価格は先着 100 名の購読者までの限定で、1 契約につき最大 5 台です。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardMonthly}\">$6</span>/月。",
   "93311792de5c": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">ずっと無料。早割・ファミリー価格：Premium は <span data-mv-price=\"{yearly}\">$25</span>/年、1 契約につき最大 5 台、14 日間の無料トライアル付き。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。</a>",
   "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">早割・ファミリー価格：Premium は <span data-mv-price=\"{yearly}\">$25</span>/年。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。</a>",
-  "4b87b0738987": "早割・ファミリー価格 <span>MailVault の早期アクセス期間中</span>",
+  "6a75808687cf": "早割・ファミリー価格 <span>MailVault の早期アクセス期間中</span><span>先着 100 名の購読者限定</span>",
+  "b2659317751b": "先着 100 名の購読者までの限定です。",
   "c69aee3090fa": "MailVault は早期アクセス中です。今の早割・ファミリー価格で登録すると、サブスクリプションが有効な限り、値上げ後も同じ料金のままです。早期アクセス終了後の通常価格は <span data-mv-price=\"{standardMonthly}\">$6</span>/月または <span data-mv-price=\"{standardYearly}\">$39</span>/年で、新規登録の方に適用されます。",
   "b165a52c2694": "早割・ファミリー価格",
   "5ffae7ce0a0a": "MailVault は早期アクセス中です。今なら割引価格を固定でき、サブスクリプションが有効な限り、値上げ後も同じ料金のままです。",

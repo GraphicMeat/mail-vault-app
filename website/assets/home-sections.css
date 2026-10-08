@@ -4,12 +4,15 @@
    built from the previous layout (i18n FROZEN) and keep home.css alone. Built on
    home.css and the .mv-clip card in english-site.css. */
 
-/* Hero: badge, headline and lead centred. Below them, on desktop, the product
+/* Hero: the free label, then the early access badge on its own line, the
+   headline and lead, all centred. Below them, on desktop, the product
    clip on the left and the price card on the right; on phones the DOM order
    stands: card (the action) first, then the clip. */
 .hm-hero { padding:56px 0 88px; }
 .hm-hero h1 { font-size:clamp(2.6rem,5vw,4.25rem); margin-bottom:1rem; }
 .hm-hero .hm-lead { max-width:42em; margin-bottom:2.4rem !important; }
+.hm-hero .hm-free-label { display:flex; justify-content:center; align-items:center; gap:6px; margin:0 0 10px; font-size:.9rem; font-weight:650; letter-spacing:.01em; color:#86efac; }
+.hm-free-label svg { flex-shrink:0; }
 .hm-badge { display:inline-flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:6px 10px; margin:0 0 22px; padding:5px 14px 5px 5px; border:1px solid rgba(178,173,255,.3); border-radius:999px; background:rgba(255,255,255,.05); font-size:.86rem; font-weight:550; line-height:1.3; color:var(--mv-muted); }
 .hm-badge-tag { padding:4px 10px; border-radius:999px; background:#4f46df; color:#fff; font-size:.7rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }
 .hm-badge [data-mv-price] { color:var(--mv-ink); font-weight:700; }
@@ -36,6 +39,7 @@
 .hm-offer { padding:20px 22px; border:1px solid rgba(178,173,255,.26); border-radius:18px; background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02)),var(--mv-card); box-shadow:0 30px 80px -40px rgba(99,102,241,.7); }
 .hm-offer-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 12px; margin-bottom:12px; }
 .hm-offer-title { margin:0; font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#c9c6ff; }
+.hm-offer .hm-offer-limit { margin:-6px 0 12px; font-size:.84rem; line-height:1.45; color:var(--mv-muted); }
 .hm-offer-plans { display:grid; gap:8px; margin:0; }
 .hm-offer-plan { display:grid; grid-template-columns:1fr auto; align-items:baseline; gap:0 12px; padding:10px 14px; border:1px solid var(--mv-line); border-radius:12px; background:rgba(255,255,255,.03); }
 .hm-offer-plan dt { font-weight:650; }
@@ -46,7 +50,7 @@
 .hm-offer .hm-hero-actions { margin:16px 0 0; }
 .hm-offer .hm-hero-actions > .mv-button { flex:1 1 100%; }
 .hm-offer .hm-send-link { max-width:none; }
-.hm-offer .hm-send-hint { margin:8px 0 0; }
+.hm-offer .hm-send-hint,.hm-offer .hm-mobile-soon { margin:8px 0 0; }
 .hm-offer-checks { list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin:16px 0 0; padding:0; font-size:.84rem; line-height:1.4; color:var(--mv-ink); }
 .hm-offer-checks li { position:relative; padding-left:20px; }
 .hm-offer-checks li::before { content:'✓'; position:absolute; left:0; font-weight:800; color:#86efac; }
@@ -134,6 +138,7 @@
   .hm-hero { padding:28px 0 48px; }
   .hm-hero h1 { font-size:clamp(2.3rem,10.5vw,3.2rem); margin-bottom:.8rem; }
   .hm-hero .hm-lead { font-size:.96rem; line-height:1.55; margin-bottom:1.3rem !important; }
+  .hm-hero .hm-free-label { margin-bottom:8px; font-size:.8rem; }
   .hm-badge { gap:8px; margin-bottom:14px; padding:4px 10px 4px 4px; font-size:.74rem; }
   .hm-badge-tag { padding:3px 8px; font-size:.62rem; }
   .hm-hero-demo .mv-demo-badge { top:10px; left:10px; }

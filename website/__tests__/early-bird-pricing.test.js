@@ -11,6 +11,9 @@ const PROMISE = 'your rate stays the same as long as your subscription is active
 const load = (file) => new JSDOM(readFileSync(file, 'utf8')).window.document;
 const pages = (name) => [`website/${name}`, ...LOCALES.map((l) => `website/${l}/${name}`)];
 const FORBIDDEN = /limited time|lifetime|for life|for now|—/i;
+// Early Bird & Family Pricing is capped at the first 100 subscribers. The cap is
+// stated as a fixed number, never as a countdown or a count of spots left.
+const SCARCITY = /\b\d+ (spots |places )?left\b|selling fast|hurry|countdown/i;
 
 const newCopy = (doc) => [
   ...doc.querySelectorAll('.mv-early-band, #premium-plan .mv-pixel-grill, [data-mv-price*="{standard"], #early-access-price, .mv-early-pricing'),
@@ -24,6 +27,21 @@ describe.each(pages('pricing.html'))('%s', (file) => {
     expect(band).not.toBeNull();
     expect(band.compareDocumentPosition(doc.getElementById('plans')) & 4).toBeTruthy();
     expect(band.querySelectorAll('li')).toHaveLength(3);
+  });
+
+  it('states the 100-subscriber limit in the band and on the paid plan badge', () => {
+    const limit = doc.querySelector('.mv-early-band > strong + span');
+    expect(limit).not.toBeNull();
+    expect(limit.textContent).toMatch(/100/);
+    const badge = [...doc.querySelectorAll('#premium-plan .mv-pixel-grill p > span')];
+    expect(badge).toHaveLength(2);
+    expect(badge[1].textContent).toMatch(/100/);
+    for (const el of [limit, ...badge]) expect(el.textContent).not.toMatch(SCARCITY);
+    // Translated, not the English fallback.
+    if (file !== 'website/pricing.html') {
+      expect(limit.textContent).not.toBe('Limited to the first 100 subscribers.');
+      expect(badge[1].textContent).not.toBe('Limited to the first 100 subscribers');
+    }
   });
 
   it('badges the paid plan and prints the standard price under each billing period', () => {
@@ -76,6 +94,7 @@ describe('English pricing copy', () => {
   it('uses the app’s promise word for word', () => {
     const items = [...doc.querySelectorAll('.mv-early-band li')].map((li) => li.textContent.trim());
     expect(doc.querySelector('.mv-early-band').textContent).toContain('Early Bird & Family Pricing');
+    expect(doc.querySelector('.mv-early-band > strong + span').textContent).toBe('Limited to the first 100 subscribers.');
     expect(items).toEqual([
       'MailVault is in early access. Lock in discounted pricing today: ' + PROMISE + '.',
       'Up to 5 devices per subscription',
@@ -88,6 +107,7 @@ describe('English pricing copy', () => {
     expect(doc.querySelector('[data-billing-panel="yearly"] [data-mv-price*="{standardYearly}"]').closest('p').textContent).toBe('Standard price after early access: $39/year');
     expect(doc.querySelector('[data-billing-panel="monthly"] [data-mv-price*="{standardMonthly}"]').closest('p').textContent).toBe('Standard price after early access: $6/month');
     expect(doc.querySelector('#premium-plan .mv-pixel-grill').textContent).toContain('Early Bird & Family Pricing');
+    expect([...doc.querySelectorAll('#premium-plan .mv-pixel-grill p > span')].map((el) => el.textContent)).toEqual(['While MailVault is in early access', 'Limited to the first 100 subscribers']);
   });
 
   it('answers the early-access question with the promise', () => {
@@ -110,13 +130,22 @@ describe.each(pages('get-started.html'))('%s', (file) => {
     expect(monthly.querySelector('[data-mv-price*="{standardYearly}"]')).toBeNull();
     for (const el of newCopy(doc)) expect(el.textContent).not.toMatch(FORBIDDEN);
   });
+
+  it('states the 100-subscriber limit on both plans', () => {
+    for (const plan of ['yearly', 'monthly']) {
+      const line = doc.querySelector(`.mv-early-pricing[data-plan-copy="${plan}"]`).textContent;
+      expect(line).toMatch(/100/);
+      expect(line).not.toMatch(SCARCITY);
+      if (file !== 'website/get-started.html') expect(line).not.toMatch(/limited to the first 100 subscribers/);
+    }
+  });
 });
 
 describe('English setup copy', () => {
   it('names the early-bird pricing and the standard price per plan', () => {
     const doc = load('website/get-started.html');
-    expect(doc.querySelector('.mv-early-pricing[data-plan-copy="yearly"]').textContent).toBe('Early Bird & Family Pricing, up to 5 devices. Standard price after early access: $39/year.');
-    expect(doc.querySelector('.mv-early-pricing[data-plan-copy="monthly"]').textContent).toBe('Early Bird & Family Pricing, up to 5 devices. Standard price after early access: $6/month.');
+    expect(doc.querySelector('.mv-early-pricing[data-plan-copy="yearly"]').textContent).toBe('Early Bird & Family Pricing is limited to the first 100 subscribers, with up to 5 devices each. Standard price after early access: $39/year.');
+    expect(doc.querySelector('.mv-early-pricing[data-plan-copy="monthly"]').textContent).toBe('Early Bird & Family Pricing is limited to the first 100 subscribers, with up to 5 devices each. Standard price after early access: $6/month.');
   });
 });
 
