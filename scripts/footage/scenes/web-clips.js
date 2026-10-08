@@ -1816,35 +1816,41 @@ describe('footage: website feature clips', function () {
   });
 
   // 18. Light and dark: the sidebar's sun / moon flips the whole window and back.
+  // A light run (FOOTAGE_THEME=light) starts light, goes dark and returns, so each
+  // variant of the site shows the clip in its own theme at frame 0 and at the loop point.
   defineClip('layouts', async function () {
+    const START = process.env.FOOTAGE_THEME === 'light' ? 'light' : 'dark';
+    const OTHER = START === 'light' ? 'dark' : 'light';
     const TO_LIGHT = `button[title="${L('sidebar.switchLightMode')}"]`;
     const TO_DARK = `button[title="${L('sidebar.switchDarkMode')}"]`;
+    const TO_OTHER = START === 'dark' ? TO_LIGHT : TO_DARK;
+    const TO_START = START === 'dark' ? TO_DARK : TO_LIGHT;
     const themeIs = (m) => document.documentElement.dataset.theme === m;
     try {
       await shoot(this, 'layouts', async (take, scan) => {
-        const btn = await boxOf(TO_LIGHT);
+        const btn = await boxOf(TO_OTHER);
         const vp = await browser.execute(() => ({ w: window.innerWidth, h: window.innerHeight }));
         const W = 760, H = W / ASPECT;
         const crop = { x: 24, y: Math.round(Math.min(btn.y + btn.h + 10, vp.h - 4) - H), w: W, h: Math.round(H) };
-        await scan.at(take, 'dark', crop);
+        await scan.at(take, START, crop);
         await take.hold(900);
-        await take.click(TO_LIGHT, 'to-light', { dur: 550 });
+        await take.click(TO_OTHER, `to-${OTHER}`, { dur: 550 });
         const tLight = take.events.at(-1).t;
-        await take.waitFor(themeIs, 'light', 5000, 'light');
+        await take.waitFor(themeIs, OTHER, 5000, OTHER);
         await take.hold(300);
-        await scan.at(take, 'light', crop);
+        await scan.at(take, OTHER, crop);
         await take.hold(1700);
-        await take.click(TO_DARK, 'to-dark', { dur: 450 });
-        await take.waitFor(themeIs, 'dark', 5000, 'dark');
-        check('data-theme went dark -> light -> dark', await browser.execute(() => document.documentElement.dataset.theme) === 'dark', 'dark');
+        await take.click(TO_START, `to-${START}`, { dur: 450 });
+        await take.waitFor(themeIs, START, 5000, START);
+        check(`data-theme went ${START} -> ${OTHER} -> ${START}`, await browser.execute(() => document.documentElement.dataset.theme) === START, START);
         await take.hold(1300);
         const end = take.t(Date.now());
         return { crop, segments: [{ t0: Math.max(0.2, tLight - 1.0), t1: end }], boxes: { btn } };
       });
     } finally {
-      // The next take must start dark (Take.start checks FOOTAGE_THEME).
-      if (await browser.execute(() => document.documentElement.dataset.theme !== 'dark')) {
-        await browser.execute((s) => document.querySelector(s)?.click(), TO_DARK);
+      // The next take must start in the run's theme (Take.start checks FOOTAGE_THEME).
+      if (await browser.execute((m) => document.documentElement.dataset.theme !== m, START)) {
+        await browser.execute((s) => document.querySelector(s)?.click(), TO_START);
         await browser.pause(800);
       }
     }

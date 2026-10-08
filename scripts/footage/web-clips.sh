@@ -50,6 +50,9 @@
 #   bash scripts/footage/web-clips.sh verify <locales> <work dir>   # every take's steps + assertions, no recording
 #   bash scripts/footage/web-clips.sh all <locales> <work dir>      # verify, then record + encode + hero + check
 #   WEBCLIP_PUB=en-v2 bash scripts/footage/web-clips.sh publish en <work dir>/<run dir>
+# WEBCLIP_THEMES="dark light" (default dark): the same single build, each locale launched once per
+# theme. A light set lands in <run dir>/<locale>.light/ and publishes with `publish en.light <work dir>/<run dir>`
+# as <clip>.light.mp4 + <clip>.light.jpg next to the dark files (WEBCLIP_PUB names the same folder).
 # <locales>: "en" or a list ("en de fr" / "en,de,fr"): one build, one launch per
 # group per locale. Each call gets its own <work dir>/<mode>-<stamp>/ (job.tar,
 # job.log, the unpacked results); nothing is merged with an earlier run.
@@ -64,20 +67,22 @@ cd "$ROOT"
 case "$cmd" in
   verify|all)
     locs="$(printf '%s' "$LOC" | tr ',' ' ')"
+    variants=""
+    for l in $locs; do for th in $(printf '%s' "${WEBCLIP_THEMES:-dark}" | tr ',' ' '); do variants="$variants $l$([ "$th" = light ] && echo .light)"; done; done
     RUN="$WORK/$cmd-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$RUN"
     ~/.claude/bin/testq --status 2>&1 | tail -5 || true
     echo "== $cmd ($locs) -> $RUN  $(date +%H:%M:%S)"
     t0=$(date +%s)
     rc=0
-    # verify: about 25 min per locale; all: about 80 min per locale (one build either way).
+    # verify: about 15 min per locale and theme; all: about 45 min (one build either way).
     TESTQ_TIMEOUT="${TESTQ_TIMEOUT:-21600}" ~/.claude/bin/testq --lane mini-e2e ~/.claude/bin/minijob \
-      env WEBCLIP_MODE="$cmd" WEBCLIP_LOCALES="$locs" ${WEBCLIP_GROUPS:+WEBCLIP_GROUPS="$WEBCLIP_GROUPS"} \
+      env WEBCLIP_MODE="$cmd" WEBCLIP_LOCALES="$locs" ${WEBCLIP_THEMES:+WEBCLIP_THEMES="$WEBCLIP_THEMES"} ${WEBCLIP_GROUPS:+WEBCLIP_GROUPS="$WEBCLIP_GROUPS"} \
       ${WEBCLIP_ONLY:+WEBCLIP_ONLY="$WEBCLIP_ONLY"} ${WEBCLIP_FORCE:+WEBCLIP_FORCE="$WEBCLIP_FORCE"} ${WEBCLIP_SHIFT_MIN:+WEBCLIP_SHIFT_MIN="$WEBCLIP_SHIFT_MIN"} ${WEBCLIP_ENV:+WEBCLIP_ENV="$WEBCLIP_ENV"} \
       bash scripts/footage/web-clips-job.sh > "$RUN/job.tar" 2> "$RUN/job.log" || rc=$?
     echo "== job exit $rc after $(( $(date +%s) - t0 )) s (log $RUN/job.log)"
     tar -xf "$RUN/job.tar" -C "$RUN" 2>/dev/null || { echo "no tar from the job"; tail -40 "$RUN/job.log"; exit 1; }
     node -e 'const j=require(process.argv[1]); console.log(`builds ${j.builds}, wall ${j.wallSeconds} s, phases ${JSON.stringify(j.phases)}`)' "$RUN/job.json" || true
-    for l in $locs; do
+    for l in $variants; do
       for ph in verify record; do
         [ -f "$RUN/$l/$ph/verify.json" ] || continue
         echo "-- $l $ph"
@@ -93,7 +98,7 @@ esac
 D="$WORK/$LOC"; mkdir -p "$D"
 # WEBCLIP_PUB: the folder under ~/Movies/MailVault Website Clips/ to publish to
 # (default the locale). A v2 set goes to its own folder (en-v2); the site copies from en/.
-PUB="$HOME/Movies/MailVault Website Clips/${WEBCLIP_PUB:-$LOC}"
+PUB="$HOME/Movies/MailVault Website Clips/${WEBCLIP_PUB:-${LOC%.light}}"
 
 COMMON=(FOOTAGE_SPEC=web-clips FOOTAGE_THEME=dark FOOTAGE_LOCALE="$LOC" FOOTAGE_WEBCLIP=1 FOOTAGE_BITRATE=20)
 boot_env() {
@@ -181,7 +186,9 @@ case "$cmd" in
     echo "hero -> $D/web/hero-montage.mp4 (log $D/hero-$stamp.log)"
     ;;
   publish)
-    [ "${WEBCLIP_PUB:-$LOC}" != "$LOC" ] || [ -n "${WEBCLIP_PUB_SAME:-}" ] || [ ! -d "$PUB" ] || [ -z "$(ls -A "$PUB")" ] \
+    # <locale>.light: the light set goes next to the dark files as <clip>.light.mp4 / .jpg
+    SUF=""; case "$LOC" in *.light) SUF=".light" ;; esac
+    [ -n "$SUF" ] || [ "${WEBCLIP_PUB:-$LOC}" != "$LOC" ] || [ -n "${WEBCLIP_PUB_SAME:-}" ] || [ ! -d "$PUB" ] || [ -z "$(ls -A "$PUB")" ] \
       || { echo "publish: $PUB already holds a set; publish a new set with WEBCLIP_PUB=<new folder> (WEBCLIP_PUB_SAME=1 adds to it)"; exit 1; }
     mkdir -p "$PUB"
     for f in "$D"/web/*.mp4; do
@@ -201,16 +208,16 @@ case "$cmd" in
       # Never over a file already handed over (published or held): a re-take that
       # should replace one names it in WEBCLIP_REPLACE=clip,clip after review.
       dest="$PUB"; { [ "$n" = search-50k ] || [ -n "$hold" ]; } && dest="$PUB/_needs-decision"
-      if [ -e "$dest/$n.mp4" ] && [[ ",${WEBCLIP_REPLACE:-}," != *",$n,"* ]]; then
-        echo "skip $n: $dest/$n.mp4 exists (WEBCLIP_REPLACE=$n to replace)"; continue
+      if [ -e "$dest/$n$SUF.mp4" ] && [[ ",${WEBCLIP_REPLACE:-}," != *",$n,"* ]]; then
+        echo "skip $n$SUF: $dest/$n$SUF.mp4 exists (WEBCLIP_REPLACE=$n to replace)"; continue
       fi
       if [ "$n" = search-50k ] || [ -n "$hold" ]; then
-        mkdir -p "$PUB/_needs-decision"; cp "$f" "$D/web/$n.jpg" "$PUB/_needs-decision/"
-        [ -n "$hold" ] && printf '%s\n' "$hold" > "$PUB/_needs-decision/$n.reason.txt"
-        echo "$PUB/_needs-decision/$n.mp4"; continue
+        mkdir -p "$PUB/_needs-decision"; cp "$f" "$PUB/_needs-decision/$n$SUF.mp4"; cp "$D/web/$n.jpg" "$PUB/_needs-decision/$n$SUF.jpg"
+        [ -n "$hold" ] && printf '%s\n' "$hold" > "$PUB/_needs-decision/$n$SUF.reason.txt"
+        echo "$PUB/_needs-decision/$n$SUF.mp4"; continue
       fi
-      cp "$f" "$PUB/$n.mp4"; cp "$D/web/$n.jpg" "$PUB/$n.jpg"
-      echo "$PUB/$n.mp4 ($(stat -f %z "$f") B)"
+      cp "$f" "$PUB/$n$SUF.mp4"; cp "$D/web/$n.jpg" "$PUB/$n$SUF.jpg"
+      echo "$PUB/$n$SUF.mp4 ($(stat -f %z "$f") B)"
     done
     ;;
   *) echo "usage: web-clips.sh record|encode|hero|publish <locale> <work dir> [...]"; exit 64 ;;

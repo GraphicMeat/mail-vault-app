@@ -7,8 +7,12 @@
 # the next launch. Started by scripts/footage/web-clips.sh (verify | all),
 # through testq + minijob; never run it on a desktop Mac.
 #
-#   WEBCLIP_MODE=verify|record|all WEBCLIP_LOCALES="en de" [WEBCLIP_GROUPS="history mail demo"] \
+#   WEBCLIP_MODE=verify|record|all WEBCLIP_LOCALES="en de" [WEBCLIP_THEMES="dark light"] [WEBCLIP_GROUPS="history mail demo"] \
 #     bash scripts/footage/web-clips-job.sh > job.tar 2> job.log
+#
+# WEBCLIP_THEMES (default "dark"): still ONE build; each locale is launched once per
+# theme. The dark set lands in <locale>/, the light set in <locale>.light/ (same file
+# names inside), so a reader of <locale>/ never sees a mix.
 #
 # verify: every take's steps and assertions, no recorder, no encode.
 # record: the takes recorded, read back (framestats), every clip and the hero
@@ -31,6 +35,11 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 MODE="${WEBCLIP_MODE:-all}"
 LOCALES="$(printf '%s' "${WEBCLIP_LOCALES:-en}" | tr ',' ' ')"
+THEMES="$(printf '%s' "${WEBCLIP_THEMES:-dark}" | tr ',' ' ')"
+for th in $THEMES; do case "$th" in dark|light) ;; *) echo "WEBCLIP_THEMES: dark or light, not '$th'"; exit 64 ;; esac; done
+# One variant per locale and theme: "en" (dark) and "en.light".
+VARIANTS=""
+for l in $LOCALES; do for th in $THEMES; do VARIANTS="$VARIANTS $l$([ "$th" = light ] && echo .light)"; done; done
 GROUPS_JSON="$ROOT/scripts/footage/web-clips.groups.json"
 CLIP_GROUPS="${WEBCLIP_GROUPS:-$(node -e 'console.log(require(process.argv[1]).default.join(" "))' "$GROUPS_JSON")}"
 CLIP_GROUPS="$(printf '%s' "$CLIP_GROUPS" | tr ',' ' ')"
@@ -70,7 +79,7 @@ write_job_json() {
     const [out, mode, locales, groups, t0, builds, ...ph] = process.argv.slice(1);
     const phases = Object.fromEntries(ph.map((l) => { const [n, s] = l.split(" "); return [n, Number(s)]; }));
     require("fs").writeFileSync(`${out}/job.json`, JSON.stringify({ mode, locales: locales.split(" "), groups: groups.split(" "),
-      builds: Number(builds), wallSeconds: Math.round(Date.now() / 1000 - Number(t0)), phases, host: require("os").hostname(),
+      themes: process.env.WEBCLIP_THEMES || "dark", builds: Number(builds), wallSeconds: Math.round(Date.now() / 1000 - Number(t0)), phases, host: require("os").hostname(),
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone, startedLocal: new Date(Number(t0) * 1000).toString() }, null, 2));
   ' "$OUT" "$MODE" "$LOCALES" "$CLIP_GROUPS" "$JOB0" "${BUILDS:-0}" "${PHASES[@]}"
 }
@@ -98,7 +107,7 @@ disk_ok() {
 }
 
 # ── Preflight ───────────────────────────────────────────────────────────────
-step "preflight: mode $MODE, locales $LOCALES, groups $CLIP_GROUPS, $(date), TZ $(date +%Z)"
+step "preflight: mode $MODE, locales $LOCALES, themes $THEMES, groups $CLIP_GROUPS, $(date), TZ $(date +%Z)"
 live="$(pgrep -fl "tauri-wd|mock-imap-server" | grep -vE "runjob\.sh|lockf|minijob" || true)"
 if [ -n "$live" ]; then echo "$live"; echo "a driver or mock server is live; one app instance at a time"; exit 1; fi
 disk_ok || exit 1
@@ -152,10 +161,12 @@ for i in $(seq 1 120); do
 done
 
 # ── One launch ──────────────────────────────────────────────────────────────
-# run_group <locale> <phase dir name> <group> <verify 0|1>
+# run_group <variant: locale or locale.light> <phase dir name> <group> <verify 0|1>
 run_group() {
-  local loc="$1" ph="$2" group="$3" verify="$4"
-  local G="$OUT/$loc/$ph/$group"
+  local v="$1" ph="$2" group="$3" verify="$4"
+  local loc="${v%%.*}" theme=dark
+  [ "$v" != "$loc" ] && theme=light
+  local G="$OUT/$v/$ph/$group"
   mkdir -p "$G"
   if [ "$(date +%F)" != "$DAY0" ] && [ "$verify" = 0 ]; then
     echo "group $group: the local date moved past midnight since the job started; its weekday and relative labels would not match the rest" | tee "$G/refused.txt"
@@ -180,11 +191,11 @@ run_group() {
     const c = require(process.argv[1]).groups[process.argv[2]].clips.filter((x) => !only.length || only.includes(x));
     console.log(c.join(","));' "$GROUPS_JSON" "$group")"
   [ -n "$clips" ] || { echo "group $group: nothing of WEBCLIP_ONLY in it"; rmdir "$G" 2>/dev/null; return 0; }
-  step "$ph $loc/$group: $clips (HOME $HOMEDIR)"
+  step "$ph $v/$group ($theme): $clips (HOME $HOMEDIR)"
   local t0; t0=$(date +%s)
   # shellcheck disable=SC2046
   env $(printf '%s\n' "$envs" | tr '\n' ' ') \
-    FOOTAGE_LOCALE="$loc" FOOTAGE_ONLY="$clips" FOOTAGE_VERIFY="$verify" \
+    FOOTAGE_LOCALE="$loc" FOOTAGE_THEME="$theme" FOOTAGE_ONLY="$clips" FOOTAGE_VERIFY="$verify" \
     FOOTAGE_ALIGN_STRICT="$([ "$verify" = 1 ] && echo 0 || echo 1)" \
     FOOTAGE_SCENE=web-clips FOOTAGE_OUT="$G" FOOTAGE_RECORDER="$BIN/recorder" FOOTAGE_DATA_DIR="$HOMEDIR" \
     npx wdio run wdio.footage.conf.js > "$G/run.log" 2>&1
@@ -194,7 +205,7 @@ run_group() {
   stop_app
   find "$HOMEDIR" -name 'daemon.log*' -exec tail -400 {} \; > "$G/daemon-tail.log" 2>/dev/null
   rm -rf "$HOMEDIR"; HOMEDIR=""
-  phase "$ph-$loc-$group" $(( $(date +%s) - t0 ))
+  phase "$ph-$v-$group" $(( $(date +%s) - t0 ))
   [ -f "$G/web-clips.verify.json" ] || echo "{\"clips\":[],\"error\":\"group $group wrote no verify report (wdio exit $rc)\"}" > "$G/web-clips.verify.json"
   return 0
 }
@@ -247,10 +258,10 @@ VERIFY_OK=1
 # ── Verify ──────────────────────────────────────────────────────────────────
 if [ "$MODE" = verify ] || [ "$MODE" = all ]; then
   t=$(date +%s)
-  for loc in $LOCALES; do
-    for group in $CLIP_GROUPS; do run_group "$loc" verify "$group" 1; done
-    step "verify $loc"
-    merge_verify "$OUT/$loc/verify" || VERIFY_OK=0
+  for v in $VARIANTS; do
+    for group in $CLIP_GROUPS; do run_group "$v" verify "$group" 1; done
+    step "verify $v"
+    merge_verify "$OUT/$v/verify" || VERIFY_OK=0
   done
   phase verify $(( $(date +%s) - t ))
 fi
@@ -262,35 +273,35 @@ fi
 
 # ── Record, read back, encode, check ────────────────────────────────────────
 t=$(date +%s)
-for loc in $LOCALES; do
-  for group in $CLIP_GROUPS; do run_group "$loc" record "$group" 0; done
-  step "record $loc: assertions"
-  merge_verify "$OUT/$loc/record"
-  T="$OUT/$loc/takes"; mkdir -p "$T/frames"
+for v in $VARIANTS; do
+  for group in $CLIP_GROUPS; do run_group "$v" record "$group" 0; done
+  step "record $v: assertions"
+  merge_verify "$OUT/$v/record"
+  T="$OUT/$v/takes"; mkdir -p "$T/frames"
   for group in $CLIP_GROUPS; do
-    G="$OUT/$loc/record/$group"
+    G="$OUT/$v/record/$group"
     for mov in "$G"/*.mov; do
       [ -e "$mov" ] || continue
       clip="$(basename "$mov" .mov)"
-      step "read back $loc/$clip"
+      step "read back $v/$clip"
       readback "$G" "$clip"
       for f in "$G/$clip".*; do mv "$f" "$T/"; done
       [ -d "$G/frames/$clip" ] && mv "$G/frames/$clip" "$T/frames/$clip"
     done
   done
-  phase "readback-$loc" $(( $(date +%s) - t ))
+  phase "readback-$v" $(( $(date +%s) - t ))
   te=$(date +%s)
-  step "encode $loc"
-  WEBCLIP_BIN="$BIN/webclip" bash scripts/footage/webclip-encode.sh "$T" "$OUT/$loc/web" || echo "encode reported a failure"
-  step "hero montage $loc"
+  step "encode $v"
+  WEBCLIP_BIN="$BIN/webclip" bash scripts/footage/webclip-encode.sh "$T" "$OUT/$v/web" || echo "encode reported a failure"
+  step "hero montage $v"
   if node scripts/footage/lib/heroSpec.mjs scripts/footage/hero-montage.json "$T" > "$T/hero-montage.webclip.json"; then
-    WEBCLIP_BIN="$BIN/webclip" FOOTAGE_WEBCLIP_ONLY=hero-montage bash scripts/footage/webclip-encode.sh "$T" "$OUT/$loc/web" || echo "hero encode failed"
+    WEBCLIP_BIN="$BIN/webclip" FOOTAGE_WEBCLIP_ONLY=hero-montage bash scripts/footage/webclip-encode.sh "$T" "$OUT/$v/web" || echo "hero encode failed"
   else
     rm -f "$T/hero-montage.webclip.json"; echo "hero: not built (a take or segment is missing)"
   fi
-  phase "encode-$loc" $(( $(date +%s) - te ))
-  step "output check $loc"
-  node scripts/footage/lib/webclipCheck.mjs "$OUT/$loc" || echo "output check: some clips fail (held at publish)"
+  phase "encode-$v" $(( $(date +%s) - te ))
+  step "output check $v"
+  node scripts/footage/lib/webclipCheck.mjs "$OUT/$v" || echo "output check: some clips fail (held at publish)"
 done
 phase record $(( $(date +%s) - t ))
 du -sh "$OUT"
