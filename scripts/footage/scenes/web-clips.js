@@ -413,8 +413,8 @@ function markExact(scope, sel, text, tag) {
 }
 
 /** Tag the first visible row whose text contains `needle`. */
-function tagRow(needle, tag) {
-  return browser.execute((n, t) => {
+async function tagRow(needle, tag) {
+  const found = await browser.execute((n, t) => {
     document.querySelectorAll(`[data-footage-target="${t}"]`).forEach((el) => el.removeAttribute('data-footage-target'));
     const row = [...document.querySelectorAll('[data-testid="email-row"]')]
       .find((r) => r.getBoundingClientRect().height > 0 && (r.innerText || '').includes(n));
@@ -422,6 +422,13 @@ function tagRow(needle, tag) {
     row.setAttribute('data-footage-target', t);
     return true;
   }, needle, tag);
+  if (!found) {
+    // What the list does show, for the run log (a missing row is a clock or a list problem, never a typo to guess at).
+    const rows = await browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')]
+      .filter((r) => r.getBoundingClientRect().height > 0).map((r) => (r.innerText || '').replace(/\s+/g, ' ').slice(0, 70)));
+    console.log(`[tagRow] "${needle}" not among ${rows.length} rows at ${new Date().toString()}: ${JSON.stringify(rows)}`);
+  }
+  return found;
 }
 
 /** Settings > nav (> tab), off camera. */
@@ -2529,7 +2536,11 @@ describe('footage: website feature clips', function () {
         const x1 = Math.max(...rs.map((r) => r.right)), y1 = Math.max(...rs.map((r) => r.bottom));
         return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
       }, SEG, L('workspace.readingPane'), L('workspace.belowList'));
-      check('the Reading pane row is found', !!row, { seg: SEG, below: L('workspace.belowList') });
+      check('the Reading pane row is found', !!row, row || await browser.execute((s, below) => ({
+        below,
+        tab: document.querySelector('[data-testid="settings-page"] [role="tab"][aria-selected="true"]')?.textContent,
+        buttons: [...document.querySelectorAll(s)].map((b) => ({ text: (b.textContent || '').trim().slice(0, 40), group: !!b.closest('[role="group"]'), visible: b.offsetHeight > 0 })),
+      }), SEG, L('workspace.belowList')));
       const cropSet = await fitCrop(row, { minW: 640, pad: 24 });
       await scan.at(take, 'setting', cropSet);
       await take.hold(400);
