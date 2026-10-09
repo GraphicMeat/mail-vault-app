@@ -1572,7 +1572,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
           {/* Attachments */}
           {attachments.length > 0 && (
-            <div data-testid="compose-attachments" className="px-5 py-3 border-b border-mail-border shrink-0 max-h-32 overflow-y-auto">
+            <div data-testid="compose-attachments" className="px-5 py-3 border-b border-mail-border shrink-0">
               <div className="flex items-center gap-2 mb-2 text-sm text-mail-text-muted">
                 <Paperclip size={14} />
                 <span>{attachments.length} Attachment(s)</span>
@@ -1589,10 +1589,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             </div>
           )}
           
-          <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
+          <div className="flex flex-1 flex-col lg:flex-row">
           {/* Body — Rich Text Editor */}
           <div
-            className={`compose-editor relative flex-1 overflow-hidden flex flex-col ${dragging ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
+            className={`compose-editor relative flex-1 flex flex-col ${dragging ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
             data-testid="compose-body"
           >
             {dragging && (
@@ -1606,6 +1606,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               </div>
             )}
             <RichTextEditor
+              autoGrow
               content={formData.body}
               editorRef={editorRef}
               onFiles={addFiles}
