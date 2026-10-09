@@ -2939,7 +2939,7 @@ describe('footage: website feature clips', function () {
       if (!preset) throw new Error('no snooze preset');
       facts.snoozePreset = preset;
       await take.click(`[data-testid="${preset}"]`, 'tomorrow', { dur: 450 });
-      await take.waitFor(() => !document.querySelector('[data-footage-target="sn-row"]'), 'row gone', 8000);
+      await take.waitFor(() => !document.querySelector('[data-footage-target="sn-row"]'), 'row gone', 15000);
       check('the snoozed row left the Inbox', await browser.execute((t) => ![...document.querySelectorAll('[data-testid="email-row"]')]
         .some((r) => r.offsetHeight > 0 && (r.innerText || '').replace(/\s+/g, ' ').slice(0, 120) === t), subject), subject);
       await take.hold(300);
