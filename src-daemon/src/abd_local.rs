@@ -271,6 +271,7 @@ impl LocalStore for DaemonLocal {
 
     async fn graph_uids(&self, folder: &str, listed: &[(String, Option<String>)]) -> Result<Vec<u32>, LocalError> {
         let root = self.vault()?;
+        // Graph-only: `graph_uids` is the Outlook allocation; a JMAP ledger is `JMAP_LEDGER_FILE`.
         let ledger = root
             .join("email_cache")
             .join(header_cache::cache_base_name(&self.account_id, folder))

@@ -22,6 +22,12 @@
 //! holds (for example an old flagless backup copy that "Clear cached emails"
 //! removed from the vault), and the next pre-sync then restores that old copy
 //! under the new message's uid, so the new message is not backed up.
+//!
+//! A JMAP mailbox keeps the same kind of ledger beside its sidecars under a
+//! second name, `jmap_id_map.json` (`JMAP_LEDGER_FILE`):
+//! `{"<uid>":"<jmap email id>"}`. Same `allocate`, same `load`, same
+//! vault-wide lock file; only the file name differs (`ledger_path`). Every
+//! clear path keeps both names (`LEDGER_FILES`).
 
 use crate::fsx;
 use crate::maildir::{mirror_filename_uid, IMPORT_UID_BASE, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
@@ -33,6 +39,20 @@ use std::time::{Duration, Instant};
 use tracing::warn;
 
 pub const LEDGER_FILE: &str = "graph_id_map.json";
+
+/// A JMAP mailbox's uid ledger: `{"<uid>":"<jmap email id>"}`, in the same
+/// `email_cache/<base>/` dir a Graph mailbox keeps `LEDGER_FILE` in.
+pub const JMAP_LEDGER_FILE: &str = "jmap_id_map.json";
+
+/// Every uid ledger file name. Each clear path keeps all of them by name, and
+/// any one of them marks a mailbox whose uids do not track arrival.
+pub const LEDGER_FILES: &[&str] = &[LEDGER_FILE, JMAP_LEDGER_FILE];
+
+/// The ledger file in a mailbox's sidecar dir (`header_cache::sidecar_dir`):
+/// `jmap_id_map.json` for a JMAP account, `graph_id_map.json` for Outlook.
+pub fn ledger_path(sidecar_dir: &Path, jmap: bool) -> PathBuf {
+    sidecar_dir.join(if jmap { JMAP_LEDGER_FILE } else { LEDGER_FILE })
+}
 
 /// The vault-wide cross-process allocation lock, one level up from every
 /// mailbox's own ledger: `<email_cache>/.graph-ledger.lock`. A top-level file,
@@ -341,6 +361,13 @@ pub fn plan_fetch(
         .collect())
 }
 
+/// Whether a mailbox cache dir entry is a uid ledger, Graph or JMAP. By name
+/// only: on a filesystem without d_type a type lookup is a stat that can fail,
+/// and a symlinked ledger is still the file `load` reads.
+fn is_ledger_name(name: &std::ffi::OsStr) -> bool {
+    LEDGER_FILES.iter().any(|f| name == std::ffi::OsStr::new(f))
+}
+
 /// Empty the header cache at `cache_dir` (`<vault>/email_cache`) but keep every
 /// mailbox's uid ledger. The vault's files and the app's in-memory map go on
 /// using the ledger's numbers after "Clear cached emails", and a ledger rebuilt
@@ -381,10 +408,9 @@ pub fn clear_cache_keeping_ledgers(cache_dir: &Path) {
         let mut kept = false;
         for child in children.flatten() {
             let child_path = child.path();
-            // By name, before any type lookup: on a filesystem without d_type
-            // the lookup is a stat that can fail, and a symlinked ledger is still
-            // the file `load` reads.
-            if child.file_name() == LEDGER_FILE {
+            // By name, before any type lookup (`is_ledger_name`): a Graph or a
+            // JMAP ledger.
+            if is_ledger_name(&child.file_name()) {
                 kept = true;
                 continue;
             }
@@ -399,7 +425,8 @@ pub fn clear_cache_keeping_ledgers(cache_dir: &Path) {
     }
 }
 
-/// Empty one mailbox's cache directory, keeping its uid ledger **by name**.
+/// Empty one mailbox's cache directory, keeping its uid ledgers (Graph and
+/// JMAP, `LEDGER_FILES`) **by name**.
 /// The whole-cache sweep above already did this per mailbox; the per-mailbox
 /// clear used to `remove_dir_all` the directory, ledger and all — and a lost
 /// ledger is a uid handed to a second message.
@@ -414,10 +441,9 @@ pub fn clear_mailbox_keeping_ledger(dir: &Path) {
     };
     let mut kept = false;
     for child in entries.flatten() {
-        // By name, before any type lookup: on a filesystem without d_type the
-        // lookup is a stat that can fail, and a symlinked ledger is still the
-        // file `load` reads.
-        if child.file_name() == LEDGER_FILE {
+        // By name, before any type lookup (`is_ledger_name`): a Graph or a
+        // JMAP ledger.
+        if is_ledger_name(&child.file_name()) {
             kept = true;
             continue;
         }
@@ -844,6 +870,64 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         clear_cache_keeping_ledgers(&tmp.path().join("email_cache"));
         assert!(!tmp.path().join("email_cache").exists());
+    }
+
+    #[test]
+    fn ledger_path_names_the_graph_or_the_jmap_file() {
+        let dir = std::path::Path::new("/vault/email_cache/acct_INBOX");
+        assert_eq!(ledger_path(dir, false), dir.join("graph_id_map.json"));
+        assert_eq!(ledger_path(dir, true), dir.join("jmap_id_map.json"));
+        assert_eq!(LEDGER_FILES, &["graph_id_map.json", "jmap_id_map.json"][..]);
+    }
+
+    #[test]
+    fn clearing_the_cache_keeps_jmap_ledgers_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = tmp.path().join("email_cache");
+        let jmap = cache.join("jacct_INBOX"); // a JMAP mailbox: its own ledger only
+        let both = cache.join("acct_Work"); // both names in one dir: each is kept
+        let imap = cache.join("iacct_INBOX"); // an IMAP mailbox: no ledger
+        fs::create_dir_all(&jmap).unwrap();
+        fs::create_dir_all(&both).unwrap();
+        fs::create_dir_all(&imap).unwrap();
+        let ledger = br#"{"1":"M-a","2":"M-b"}"#;
+        fs::write(jmap.join(JMAP_LEDGER_FILE), ledger).unwrap();
+        fs::write(jmap.join("_meta.json"), b"{}").unwrap();
+        fs::write(jmap.join("1.json"), b"{}").unwrap();
+        fs::write(both.join(LEDGER_FILE), br#"{"1":"g-a"}"#).unwrap();
+        fs::write(both.join(JMAP_LEDGER_FILE), ledger).unwrap();
+        fs::write(both.join("1.json"), b"{}").unwrap();
+        fs::write(imap.join("_meta.json"), b"{}").unwrap();
+
+        clear_cache_keeping_ledgers(&cache);
+
+        assert_eq!(fs::read(jmap.join(JMAP_LEDGER_FILE)).unwrap(), ledger);
+        let left: Vec<_> = fs::read_dir(&jmap).unwrap().flatten().map(|e| e.file_name()).collect();
+        assert_eq!(left, vec![std::ffi::OsString::from(JMAP_LEDGER_FILE)]);
+        let mut left: Vec<_> = fs::read_dir(&both).unwrap().flatten().map(|e| e.file_name()).collect();
+        left.sort();
+        assert_eq!(
+            left,
+            vec![std::ffi::OsString::from(LEDGER_FILE), std::ffi::OsString::from(JMAP_LEDGER_FILE)]
+        );
+        assert!(!imap.exists(), "a mailbox cache without a ledger is removed whole");
+    }
+
+    #[test]
+    fn clearing_one_mailbox_keeps_its_jmap_ledger() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("email_cache").join("acct_INBOX");
+        fs::create_dir_all(dir.join("nested")).unwrap();
+        let ledger = br#"{"1":"M-a"}"#;
+        fs::write(dir.join(JMAP_LEDGER_FILE), ledger).unwrap();
+        fs::write(dir.join("_meta.json"), b"{}").unwrap();
+        fs::write(dir.join("1.json"), b"{}").unwrap();
+
+        clear_mailbox_keeping_ledger(&dir);
+
+        assert_eq!(fs::read(dir.join(JMAP_LEDGER_FILE)).unwrap(), ledger);
+        let left: Vec<_> = fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name()).collect();
+        assert_eq!(left, vec![std::ffi::OsString::from(JMAP_LEDGER_FILE)]);
     }
 
     #[cfg(unix)]

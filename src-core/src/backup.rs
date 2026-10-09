@@ -782,6 +782,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         if !listed.is_empty() && !ctx.cancel.load(Ordering::Relaxed) {
             let entries: Vec<(String, Option<String>)> =
                 listed.iter().map(|m| (m.id.clone(), m.internet_message_id.clone())).collect();
+            // Graph-only: the Outlook backup listing; a JMAP mailbox's ledger is `JMAP_LEDGER_FILE`.
             let ledger_path = ctx
                 .archive_ctx
                 .root
@@ -1126,6 +1127,7 @@ async fn backup_graph_folder(
     let mut out = GraphFolderOutcome { index, mailbox: mailbox.clone(), completed: false, backed_up: 0, errors: 0, external_failures: 0, last_error: None, refused: None };
     if !listed.is_empty() && !ctx.cancel.load(Ordering::Relaxed) {
         let entries = listed.iter().map(|m| (m.id.clone(), m.internet_message_id.clone())).collect::<Vec<_>>();
+        // Graph-only: the Outlook backup listing; a JMAP mailbox's ledger is `JMAP_LEDGER_FILE`.
         let ledger = ctx.archive_ctx.root.join("email_cache")
             .join(crate::header_cache::cache_base_name(&ctx.account_id, &mailbox)).join(crate::graph_ledger::LEDGER_FILE);
         let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);

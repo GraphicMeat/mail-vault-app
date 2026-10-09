@@ -307,6 +307,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let uids = with_vault_write(&state, |root| {
+                        // Graph-only: the app's Outlook listing RPC; the frontend treats JMAP as IMAP.
                         let ledger = root
                             .join("email_cache")
                             .join(header_cache::cache_base_name(&account_id, &mailbox))
@@ -328,6 +329,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
+                    // Graph-only: the app's Outlook listing RPC; the frontend treats JMAP as IMAP.
                     let file = root
                         .join("email_cache")
                         .join(header_cache::cache_base_name(&account_id, &mailbox))

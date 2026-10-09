@@ -3,8 +3,9 @@
 //! The headers themselves live in `custody.db`'s `header_cache` table now, and
 //! so does the per-account folder list. This module keeps the parts that are
 //! still about the `email_cache/<account>_<mailbox>/` **directory**, because
-//! the Outlook uid ledger (`graph_id_map.json`) still lives in it and is not
-//! derived from anything: the directory naming (`cache_base_name`,
+//! the uid ledgers (`graph_id_map.json` for Outlook, `jmap_id_map.json` for
+//! JMAP) still live in it and are not derived from anything: the directory
+//! naming (`cache_base_name`,
 //! `sidecar_dir`), the sidecar-name parser every walker over a legacy vault
 //! still needs (`is_header_file`), and `clear`, which empties those
 //! directories while keeping the ledgers **by name**.
@@ -44,21 +45,23 @@ pub fn sidecar_dir(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
 ///
 /// True for IMAP, where the server issues uids in arrival order, so the
 /// highest uid is the newest message whatever its Date header says. False for
-/// Graph, whose uid is a listing POSITION handed out by the seed allocator —
-/// there the header date is the only age there is. `graph_id_map.json`'s
-/// presence is the marker; the same allocator writes it.
+/// Graph and JMAP, whose uid is a listing POSITION handed out by the seed
+/// allocator, so there the header date is the only age there is. Either
+/// ledger's presence (`graph_ledger::LEDGER_FILES`) is the marker; the same
+/// allocator writes it.
 ///
 /// Reads the sidecar tree, which is also the SQLite header cache's answer
 /// (`custody::cache::load_headers` takes the order from this): if that tree
-/// ever goes away, this silently answers "IMAP" for a Graph mailbox.
+/// ever goes away, this silently answers "IMAP" for a Graph or JMAP mailbox.
 pub fn uid_tracks_arrival(root: &Path, account_id: &str, mailbox: &str) -> bool {
-    !sidecar_dir(root, account_id, mailbox).join(crate::graph_ledger::LEDGER_FILE).exists()
+    let dir = sidecar_dir(root, account_id, mailbox);
+    !crate::graph_ledger::LEDGER_FILES.iter().any(|f| dir.join(f).exists())
 }
 
 /// `name` is a header sidecar (`<uid>.json`, uid fitting a `u32`) iff this
-/// returns its uid. Neither `_meta.json` nor `graph_id_map.json` parses, so
-/// every counter and lister built on this excludes both without a
-/// name-literal special case.
+/// returns its uid. Neither `_meta.json` nor a uid ledger
+/// (`graph_id_map.json`, `jmap_id_map.json`) parses, so every counter and
+/// lister built on this excludes them without a name-literal special case.
 pub fn is_header_file(name: &str) -> Option<u32> {
     name.strip_suffix(".json")?.parse::<u32>().ok()
 }
@@ -105,9 +108,10 @@ pub fn lock_mailbox(root: &Path, base: &str) -> Arc<Mutex<()>> {
 /// mailbox; `(Some(account), None)` clears every entry belonging to that
 /// account (exact sanitized-id match or `<id>_` prefix — never a bare prefix,
 /// so clearing `acc1` cannot also delete `acc10`'s cache); `(None, None)`
-/// clears everything. **Every** branch keeps the Outlook uid ledgers, by
-/// name: the vault and the app's memory still use those numbers, and a lost
-/// ledger hands a live uid to a second message.
+/// clears everything. **Every** branch keeps the uid ledgers (Outlook and
+/// JMAP, `graph_ledger::LEDGER_FILES`), by name: the vault and the app's
+/// memory still use those numbers, and a lost ledger hands a live uid to a
+/// second message.
 ///
 /// The cached headers themselves are rows in `custody.db` and are cleared by
 /// the caller alongside this (`handlers::cache`'s `clear_email_cache`).
@@ -126,7 +130,7 @@ pub fn clear(root: &Path, account_id: Option<&str>, mailbox: Option<&str>) -> Re
             // The uid ledger shares this directory and is not derived from
             // anything: dropping it hands a live uid to a second message.
             crate::graph_ledger::clear_mailbox_keeping_ledger(&dir);
-            info!("Cleared cache for {}/{} (Outlook uid ledger kept)", account_id, mailbox);
+            info!("Cleared cache for {}/{} (uid ledger kept)", account_id, mailbox);
         }
         return Ok(());
     }
@@ -154,7 +158,7 @@ pub fn clear(root: &Path, account_id: Option<&str>, mailbox: Option<&str>) -> Re
         }
     } else {
         crate::graph_ledger::clear_cache_keeping_ledgers(&cache_dir);
-        info!("Cleared all email cache (Outlook uid ledgers kept)");
+        info!("Cleared all email cache (uid ledgers kept)");
     }
 
     Ok(())
@@ -214,6 +218,7 @@ mod tests {
         assert_eq!(is_header_file("42.json"), Some(42));
         assert_eq!(is_header_file("_meta.json"), None);
         assert_eq!(is_header_file(GRAPH_ID_MAP_FILE), None);
+        assert_eq!(is_header_file(crate::graph_ledger::JMAP_LEDGER_FILE), None);
         assert_eq!(is_header_file("not_a_number.json"), None);
         assert_eq!(is_header_file("4294967296.json"), None, "a uid past u32 is not one of ours");
     }
@@ -278,6 +283,36 @@ mod tests {
         let root = scratch("clear-none");
         clear(&root, None, None).unwrap();
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn jmap_mailbox_uids_do_not_track_arrival() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = sidecar_dir(t.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(crate::graph_ledger::JMAP_LEDGER_FILE), "{}").unwrap();
+        assert!(!uid_tracks_arrival(t.path(), "acc", "INBOX"));
+    }
+
+    #[test]
+    fn clear_keeps_jmap_ledger() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = sidecar_dir(t.path(), "acc", "INBOX");
+        fs::create_dir_all(&dir).unwrap();
+        let ledger = br#"{"1":"M-a"}"#;
+        fs::write(dir.join("1.json"), br#"{"uid":1}"#).unwrap();
+        fs::write(dir.join("_meta.json"), b"{}").unwrap();
+        fs::write(dir.join(crate::graph_ledger::JMAP_LEDGER_FILE), ledger).unwrap();
+
+        clear(t.path(), Some("acc"), Some("INBOX")).unwrap();
+
+        assert_eq!(
+            fs::read(dir.join(crate::graph_ledger::JMAP_LEDGER_FILE)).unwrap(),
+            ledger,
+            "the JMAP ledger survives a per-mailbox clear"
+        );
+        assert!(!dir.join("1.json").exists(), "the header sidecar goes");
+        assert!(!dir.join("_meta.json").exists(), "the meta sidecar goes");
     }
 
     #[test]

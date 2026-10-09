@@ -348,7 +348,9 @@ pub fn rename_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> (usize, Vec<S
     let tree = header_cache::lock_tree(&from.root);
     let _tree_write = tree.write().unwrap_or_else(|e| e.into_inner());
 
-    // The sidecar dir carries `graph_id_map.json`: hold the vault-wide ledger
+    // The sidecar dir carries the uid ledger (`graph_id_map.json` or
+    // `jmap_id_map.json`; the whole dir moves, so both travel): hold the
+    // vault-wide ledger
     // lock across this one move so an in-flight `allocate` for the OLD name
     // (Task 2.9a: from another process) can never persist the ledger back
     // into the directory this just moved out from under it (2.4 review
@@ -450,7 +452,8 @@ pub fn adopt_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> Adopted {
                 if !src.exists() {
                     continue;
                 }
-                // The sidecar dir carries `graph_id_map.json`: hold the
+                // The sidecar dir carries the uid ledger (`graph_id_map.json`
+                // or `jmap_id_map.json`): hold the
                 // vault-wide ledger lock across this one move, same as
                 // `rename_dirs` (2.4 review forward constraint F2). M-3
                 // (final fix wave): the header-cache tree lock too, taken

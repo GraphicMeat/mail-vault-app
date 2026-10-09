@@ -1044,6 +1044,7 @@ async fn fill_graph_uids(state: &Arc<DaemonState>, account_id: &str, mut p: Prev
     let account = account_id.to_string();
     common::blocking(move || {
         for (info, _, msgs) in p.folders.iter_mut() {
+            // Graph-only: matches on `graph_id`, which only an Outlook listing carries.
             let path = root
                 .join("email_cache")
                 .join(header_cache::cache_base_name(&account, &info.path))

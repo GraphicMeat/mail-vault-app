@@ -251,6 +251,7 @@ pub async fn run_with_backup(
             // Read-only: the listings allocate; a uid they never handed out
             // has no Graph id and fails on its own.
             let graph_ledger = uses_graph.then(|| {
+                // Graph-only: `uses_graph` gates this; a JMAP account is never `uses_graph`.
                 let path = root
                     .join("email_cache")
                     .join(crate::header_cache::cache_base_name(&acct, &mbox))
