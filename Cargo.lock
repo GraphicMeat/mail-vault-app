@@ -4394,6 +4394,7 @@ dependencies = [
  "mailparse",
  "maxminddb",
  "mock-imap",
+ "mock-jmap",
  "oo7",
  "pgp",
  "rand 0.8.7",

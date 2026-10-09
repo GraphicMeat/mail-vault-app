@@ -37,6 +37,7 @@ pub mod mime;
 pub mod imap;
 pub mod graph;
 pub mod graph_ledger;
+pub mod jmap;
 pub mod keychain;
 #[cfg(target_os = "linux")]
 pub mod snap_keyring;
