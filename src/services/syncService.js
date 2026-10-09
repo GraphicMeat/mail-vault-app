@@ -88,6 +88,10 @@ export function toSyncAccount(account, id = account.id) {
       smtpHost: account.smtpHost, smtpPort: account.smtpPort,
       smtpSecure: account.smtpSecure, name: account.name,
       oauth2Transport: account.oauth2Transport,
+      // A JMAP account: the daemon picks the protocol off jmapSessionUrl. The
+      // token or app password stays out, like every other secret here.
+      jmapSessionUrl: account.jmapSessionUrl, jmapAuth: account.jmapAuth,
+      jmapUsername: account.jmapUsername,
     },
   };
 }

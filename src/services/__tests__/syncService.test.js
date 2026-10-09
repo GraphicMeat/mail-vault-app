@@ -41,7 +41,7 @@ describe('syncService', () => {
 });
 
 // The daemon's SyncAccount/ImapConfig deserialize is by field name — a rename
-// here and the account silently stops being watchable. The eleven names are
+// here and the account silently stops being watchable. The fourteen names are
 // pinned so `toSyncAccount` and the daemon struct can never drift apart, and
 // so the UI-only keys a store account carries never reach the socket.
 //
@@ -58,6 +58,7 @@ describe('toSyncAccount', () => {
   const IMAP_FIELDS = [
     'email', 'imapHost', 'imapPort', 'imapSecure', 'imapSecurity', 'authType',
     'smtpHost', 'smtpPort', 'smtpSecure', 'name', 'oauth2Transport',
+    'jmapSessionUrl', 'jmapAuth', 'jmapUsername',
   ];
 
   const storeAccount = {
@@ -69,7 +70,7 @@ describe('toSyncAccount', () => {
     color: '#fff', unreadCount: 3, previousImapHost: 'old.b.co', _dirty: true,
   };
 
-  it('maps the eleven IMAP fields and drops everything else', () => {
+  it('maps the fourteen account fields and drops everything else', () => {
     const sync = toSyncAccount(storeAccount);
 
     expect(sync.id).toBe('acc-1');

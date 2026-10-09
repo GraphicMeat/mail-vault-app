@@ -1073,6 +1073,9 @@ mod tests {
             name: Some("Test User".to_string()),
             oauth2_transport: None,
             from_email: from_email.map(String::from),
+            jmap_session_url: None,
+            jmap_auth: None,
+            jmap_username: None,
         }
     }
 

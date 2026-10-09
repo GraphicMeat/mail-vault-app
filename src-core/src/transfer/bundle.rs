@@ -48,4 +48,18 @@ mod tests {
     fn no_accounts_is_a_problem_free_bundle() {
         assert!(completeness_problems(&json!({})).is_empty());
     }
+
+    // A JMAP account keeps its API token (or app password) in `password`, so
+    // the transfer check treats it like any password account.
+    #[test]
+    fn jmap_token_account_counts_as_having_a_secret() {
+        let acct = serde_json::json!({"email":"a@fastmail.com","authType":"password","password":"fmu1-tok","jmapSessionUrl":"https://api.fastmail.com/jmap/session"});
+        assert!(completeness_problems(&serde_json::json!({ "accounts": [acct] })).is_empty());
+    }
+
+    #[test]
+    fn jmap_token_account_missing_its_token_is_named() {
+        let acct = json!({"email":"a@fastmail.com","authType":"password","jmapSessionUrl":"https://api.fastmail.com/jmap/session","jmapAuth":"bearer"});
+        assert_eq!(completeness_problems(&json!({ "accounts": [acct] })), vec!["a@fastmail.com"]);
+    }
 }

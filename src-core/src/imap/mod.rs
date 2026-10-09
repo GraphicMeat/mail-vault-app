@@ -49,6 +49,19 @@ pub struct ImapConfig {
     /// IMAP/SMTP still authenticate as `email`, which stays the account key.
     #[serde(rename = "fromEmail", default)]
     pub from_email: Option<String>,
+    /// JMAP session resource URL (RFC 8620 section 2). Set means the account
+    /// speaks JMAP, never IMAP or SMTP. `host` then holds the session host, so
+    /// the app's logical account key (email + host) needs no JMAP branch.
+    #[serde(rename = "jmapSessionUrl", default)]
+    pub jmap_session_url: Option<String>,
+    /// "basic" (login + app password) or "bearer" (API token). Either way the
+    /// secret lives in `password`, so the keychain record, the transfer bundle
+    /// check and credential resolution treat it like any password account.
+    #[serde(rename = "jmapAuth", default)]
+    pub jmap_auth: Option<String>,
+    /// Basic login when it is not the address (Stalwart, Cyrus).
+    #[serde(rename = "jmapUsername", default)]
+    pub jmap_username: Option<String>,
 }
 
 impl ImapConfig {
@@ -65,6 +78,43 @@ impl ImapConfig {
     /// SMTP (the app's `oauth2Transport === 'graph'`).
     pub fn uses_graph(&self) -> bool {
         self.oauth2_transport.as_deref() == Some("graph")
+    }
+
+    /// A JMAP account: its add-account flow stored a session URL. Mail goes
+    /// through JMAP, never IMAP or SMTP (the app's `isJmapAccount`).
+    pub fn uses_jmap(&self) -> bool {
+        self.jmap_session_url.as_deref().is_some_and(|u| !u.trim().is_empty())
+    }
+
+    /// What every JMAP request authenticates with, or `None` when there is
+    /// nothing safe to send:
+    /// - not a JMAP account (`uses_jmap` is false);
+    /// - no secret (`password` missing or empty);
+    /// - `jmapAuth` missing or neither "basic" nor "bearer" (refused, never
+    ///   guessed; matched case-insensitively like `imapSecurity`).
+    ///
+    /// "bearer" sends `password` as the API token. "basic" sends `password`
+    /// with `jmapUsername`, or with `email` when that is unset or blank.
+    pub fn jmap_auth(&self) -> Option<crate::jmap::JmapAuth> {
+        use crate::jmap::JmapAuth;
+        if !self.uses_jmap() {
+            return None;
+        }
+        let password = self.password.as_deref().filter(|p| !p.is_empty())?.to_string();
+        match self.jmap_auth.as_deref()?.trim().to_ascii_lowercase().as_str() {
+            "bearer" => Some(JmapAuth::Bearer(password)),
+            "basic" => {
+                let username = self
+                    .jmap_username
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|u| !u.is_empty())
+                    .unwrap_or(self.email.as_str())
+                    .to_string();
+                Some(JmapAuth::Basic { username, password })
+            }
+            _ => None,
+        }
     }
 
     /// The outgoing identity: the send-as override when set, else the login
@@ -3998,6 +4048,9 @@ mod tests {
             name: None,
             oauth2_transport: None,
             from_email: None,
+            jmap_session_url: None,
+            jmap_auth: None,
+            jmap_username: None,
         }
     }
 
@@ -4041,6 +4094,64 @@ mod tests {
     #[test]
     fn security_absent_legacy_secure_true_is_ssl() {
         assert_eq!(config_with(None, Some(true)).effective_security(), ImapSecurity::Ssl);
+    }
+
+    // ── JMAP account fields ─────────────────────────────────────────────
+
+    #[test]
+    fn jmap_account_deserializes_and_builds_auth() {
+        let c: ImapConfig = serde_json::from_value(serde_json::json!({
+            "email":"a@fastmail.com","password":"fmu1-tok","imapHost":"api.fastmail.com",
+            "authType":"password","jmapSessionUrl":"https://api.fastmail.com/jmap/session","jmapAuth":"bearer"})).unwrap();
+        assert!(c.uses_jmap());
+        assert!(!c.uses_graph());
+        assert_eq!(c.jmap_auth().unwrap().header(), "Bearer fmu1-tok");
+    }
+
+    #[test]
+    fn plain_imap_account_is_not_jmap() {
+        let c: ImapConfig = serde_json::from_value(serde_json::json!({"email":"a@b.c","imapHost":"imap.b.c"})).unwrap();
+        assert!(!c.uses_jmap());
+        assert!(c.jmap_auth().is_none());
+    }
+
+    #[test]
+    fn jmap_account_basic_auth_uses_the_username_or_the_address() {
+        use crate::jmap::JmapAuth;
+        let mut c: ImapConfig = serde_json::from_value(serde_json::json!({
+            "email":"a@example.test","password":"pw","imapHost":"mail.example.test",
+            "authType":"password","jmapSessionUrl":"https://mail.example.test/jmap/session","jmapAuth":"basic"})).unwrap();
+        // No jmapUsername: the address is the login.
+        assert_eq!(c.jmap_auth(), Some(JmapAuth::Basic { username: "a@example.test".into(), password: "pw".into() }));
+        // Stalwart / Cyrus: a login that is not the address.
+        c.jmap_username = Some("alice".into());
+        assert_eq!(c.jmap_auth(), Some(JmapAuth::Basic { username: "alice".into(), password: "pw".into() }));
+        // A blank username is no username.
+        c.jmap_username = Some("  ".into());
+        assert_eq!(c.jmap_auth(), Some(JmapAuth::Basic { username: "a@example.test".into(), password: "pw".into() }));
+        // The kind matches case-insensitively, like imapSecurity.
+        c.jmap_auth = Some("Bearer".into());
+        assert_eq!(c.jmap_auth(), Some(JmapAuth::Bearer("pw".into())));
+        // An unknown or missing kind is refused, never guessed.
+        c.jmap_auth = Some("digest".into());
+        assert_eq!(c.jmap_auth(), None);
+        c.jmap_auth = None;
+        assert_eq!(c.jmap_auth(), None);
+    }
+
+    #[test]
+    fn jmap_account_without_a_secret_or_a_url_has_no_auth() {
+        let mut c: ImapConfig = serde_json::from_value(serde_json::json!({
+            "email":"a@example.test","imapHost":"mail.example.test",
+            "jmapSessionUrl":"https://mail.example.test/jmap/session","jmapAuth":"bearer"})).unwrap();
+        assert!(c.uses_jmap());
+        assert_eq!(c.jmap_auth(), None, "no password: nothing to send");
+        c.password = Some(String::new());
+        assert_eq!(c.jmap_auth(), None, "an empty password is no password");
+        c.password = Some("tok".into());
+        c.jmap_session_url = Some("   ".into());
+        assert!(!c.uses_jmap(), "a blank session URL is not a JMAP account");
+        assert_eq!(c.jmap_auth(), None);
     }
 }
 
