@@ -106,8 +106,12 @@ const settingsStore = create(() => settingsState());
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: Object.assign((s) => settingsStore(s), { getState: () => settingsStore.getState() }),
   hasPremiumAccess: () => false,
+  selectOwnAddresses: (state, account) => ownAddresses({
+    account, sendAsAddress: state?.sendAsAddresses?.[account?.id], aliases: state?.aliases?.[account?.id],
+  }),
 }));
 
+const { ownAddresses } = await import('../../utils/ownAddresses.js');
 const { useEmailScheduler } = await import('../useEmailScheduler');
 const { useSnoozeStore } = await import('../../stores/snoozeStore');
 const { shiftInbox, selectTotalUnread } = await import('../../stores/unreadCounts');
@@ -223,17 +227,45 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       { accountId: 'a1', folder: 'INBOX', from: '', domain: '', viewIds: [] });
   });
 
+  describe('mail the user sent', () => {
+    const feed = () => [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+    const run = async (from) => {
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 9, from, subject: 'Re: plans' }] });
+      eventReplies = feed();
+      renderHook(() => useEmailScheduler());
+      await flush();
+    };
+
+    it('stays silent for your own reply that lands in the inbox thread', async () => {
+      await run({ name: 'Me', address: 'A@One.co' });
+      expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it('stays silent for one of your aliases', async () => {
+      settingsStore.setState({ aliases: { a1: [{ address: 'work@one.co' }] } });
+      await run({ address: 'work@one.co' });
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it('still notifies for someone else', async () => {
+      await run({ name: 'Ada', address: 'ada@lovelace.org' });
+      expect(mockNotify).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('notifies for an account that is not on screen without repainting the list', async () => {
     mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 12, from: { address: 'b@two.co' }, subject: 'Elsewhere' }] });
+    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 12, from: { address: 'c@three.co' }, subject: 'Elsewhere' }] });
     eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
 
     renderHook(() => useEmailScheduler());
     await flush();
 
     expect(mockLoadEmails).not.toHaveBeenCalled();
-    expect(mockNotify).toHaveBeenCalledWith('b@two.co', 'Elsewhere', undefined, { accountId: 'a2', mailbox: 'INBOX', uid: 12 },
-      { accountId: 'a2', folder: 'INBOX', from: 'b@two.co', domain: 'two.co', viewIds: [] });
+    expect(mockNotify).toHaveBeenCalledWith('c@three.co', 'Elsewhere', undefined, { accountId: 'a2', mailbox: 'INBOX', uid: 12 },
+      { accountId: 'a2', folder: 'INBOX', from: 'c@three.co', domain: 'three.co', viewIds: [] });
   });
 
   // A launch after a night closed collects every arrival at once. The preview

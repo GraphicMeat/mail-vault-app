@@ -9,6 +9,7 @@
 - **MailVault has a Discord server.** Join it, or follow MailVault on X, from the icons at the bottom of the sidebar or from Report a bug, for questions and chat with other users.
 
 ### Fixed
+- **No banner for mail you sent.** Replying in a thread that lives in your inbox no longer notifies you of your own message. Mail from your login address, default From or any alias is skipped; mail from others still notifies.
 - **A long message in the compose window no longer shows two scrollbars.** The whole window now scrolls as one, address rows, attachments and body together, with the formatting toolbar pinned at the top and Send always in reach; the attachment list no longer scrolls on its own either.
 - **Link and tracker warnings speak your language.** The sentence under "Dangerous Link Detected" ("Link text shows ... but goes to ..."), the one on a link that redirects through another site or uses a script scheme, the hover text on a flagged link and the reason a tracking pixel was blocked stayed in English in every language, and "(no text)" in the link list too. They now follow the app language, and change when you switch it.
 - **The compose window's To, Cc and Bcc follow the app's language.** They stayed English beside a translated From and Subject ("Von:" / "Betreff:" over "To:" / "Cc:" / "Bcc:"). The three captions and the contacts button next to each ("Pick To from contacts") now read in German, Spanish, French, Italian, Japanese, Korean, Portuguese and Chinese.
