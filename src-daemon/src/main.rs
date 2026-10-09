@@ -32,6 +32,7 @@ mod idle_watch;
 mod inference;
 mod insights;
 mod ipc;
+mod jmap_sessions;
 mod learning;
 mod mbox;
 mod mbox_upload;
@@ -509,6 +510,7 @@ async fn daemon_main() {
         mbox_uploads: Default::default(),
         net_log,
         abd: Default::default(),
+        jmap: Default::default(),
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.
     state.idle.set_daemon(&state);

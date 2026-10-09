@@ -35,6 +35,7 @@ pub(crate) mod fields;
 pub(crate) mod fonts;
 pub(crate) mod graph;
 pub(crate) mod imap;
+pub(crate) mod jmap_bridge;
 pub(crate) mod insights;
 pub(crate) mod journal;
 pub(crate) mod mail_search;
@@ -73,6 +74,19 @@ pub(crate) fn failed_connection_test(error: &str, host: &str, port: u16) -> Valu
         "success": false,
         "error": error,
         "errorCode": mailvault_core::net::classify_connection_error(error).code(),
+        "host": host,
+        "port": port,
+    })
+}
+
+/// `failed_connection_test` with a code the caller already knows instead of
+/// one classified from the text: a JMAP account's `JmapError::code()`
+/// (`E_JMAP_AUTH`, `E_JMAP_TRANSPORT`, ...). Same shape.
+pub(crate) fn failed_connection_test_with_code(error: &str, code: &str, host: &str, port: u16) -> Value {
+    serde_json::json!({
+        "success": false,
+        "error": error,
+        "errorCode": code,
         "host": host,
         "port": port,
     })

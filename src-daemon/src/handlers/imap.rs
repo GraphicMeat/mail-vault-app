@@ -236,7 +236,7 @@ pub(crate) fn opened_intent(params: &Value) -> bool {
 /// keyed by it); a call without one cannot be judged and goes through.
 /// Shape: `{success: false, limitReached: true, limitBytes, resumeAfterMs,
 /// uid, mailbox}`, `resumeAfterMs` being the next UTC midnight in epoch ms.
-async fn backfill_refusal(state: &Arc<DaemonState>, account_id: Option<&str>, host: &str, uid: u32, mailbox: &str) -> Option<Value> {
+pub(crate) async fn backfill_refusal(state: &Arc<DaemonState>, account_id: Option<&str>, host: &str, uid: u32, mailbox: &str) -> Option<Value> {
     let account_id = account_id?.to_string();
     let (app_dir, host, now) = (state.app_dir.clone(), host.to_string(), state.clock.now_ms());
     let status = blocking(move || mailvault_core::transfer_limits::background_status_at(&app_dir, &account_id, &host, now))
@@ -314,6 +314,7 @@ impl SearchFilters {
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
+    if let Some(resp) = crate::handlers::jmap_bridge::intercept(state, method, &id, params).await { return Some(resp); }
     Some(match method {
         "imap_get_mailboxes" => {
             let account = req!(account_arg(&id, params));

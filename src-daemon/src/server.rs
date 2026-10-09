@@ -219,6 +219,9 @@ pub struct DaemonState {
     /// folders. The work runs on the `abd-worker` thread
     /// (`abd_worker::start`), never on this runtime.
     pub abd: crate::abd_worker::AbdState,
+    /// Connected JMAP accounts (`jmap_sessions`), shared by the JMAP bridge
+    /// (`handlers::jmap_bridge`) and the JMAP sync.
+    pub(crate) jmap: crate::jmap_sessions::JmapSessions,
 }
 
 /// Opens the vault registry for the vault at `root` and points its change
@@ -895,6 +898,7 @@ impl DaemonState {
             mbox_uploads: Default::default(),
             net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
             abd: Default::default(),
+            jmap: Default::default(),
         });
         state.idle.set_daemon(&state);
         state

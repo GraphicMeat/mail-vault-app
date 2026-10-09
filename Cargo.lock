@@ -4435,6 +4435,7 @@ dependencies = [
  "mailparse",
  "mailvault-core",
  "mock-imap",
+ "mock-jmap",
  "objc2",
  "objc2-foundation",
  "objc2-pdf-kit",

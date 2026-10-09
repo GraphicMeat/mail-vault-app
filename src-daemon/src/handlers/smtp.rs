@@ -177,6 +177,7 @@ const SENT_RECHECK_SECS: u64 = 15;
 const SENT_RECHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
+    if let Some(resp) = crate::handlers::jmap_bridge::intercept(state, method, &id, params).await { return Some(resp); }
     Some(match method {
         "smtp_test_connection" => {
             let account = match account_arg(&id, params) {
