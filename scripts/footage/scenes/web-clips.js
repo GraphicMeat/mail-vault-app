@@ -2515,7 +2515,8 @@ describe('footage: website feature clips', function () {
       await scan.at(take, 'three', cropAll);
       await take.hold(1500);
       const tBefore = take.t(Date.now());
-      await settingsSetupTab(L('settings.appearance.appearance'), L('settings.appearance.layout'));
+      // The tab's own key (settings.appearance.section.layout): `settings.appearance.layout` reads the same in en, de and fr only.
+      await settingsSetupTab(L('settings.appearance.appearance'), L('settings.appearance.section.layout'));
       await waitPage((s) => !!document.querySelector(s), { timeout: 8000 }, SEG);
       await browser.execute((s, t) => [...document.querySelectorAll(s)].find((b) => (b.textContent || '').includes(t))
         ?.closest('.settings-row, [class*="setting-row"], div')?.scrollIntoView({ block: 'center' }), SEG, L('workspace.belowList'));
