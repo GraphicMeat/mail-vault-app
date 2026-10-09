@@ -13,14 +13,17 @@
 //! always 1, because ledger uids are never renumbered.
 
 use crate::handlers::common::{blocking, vault_root};
+use crate::handlers::deleted::{self, Source};
 use crate::handlers::imap::{auto_cache, backfill_refusal, email_date_ms, opened_intent, SearchFilters, BODY_FETCH_TIMEOUT};
 use crate::imap::{EmailHeader, ImapConfig, MailboxStatus, MessageIdLocation, MessageIdProbe};
 use crate::ipc::{self, RpcResponse};
-use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta};
+use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
 use crate::server::DaemonState;
+use mailvault_core::custody::cache;
 use mailvault_core::graph_ledger;
-use mailvault_core::jmap::headers::{keywords_to_flags, to_header, HEADER_PROPS};
-use mailvault_core::jmap::{JmapClient, JmapError};
+use mailvault_core::jmap::headers::{flag_to_keyword, keywords_to_flags, to_header, HEADER_PROPS};
+use mailvault_core::jmap::mailbox_map::DELIMITER;
+use mailvault_core::jmap::{remove_from, JmapClient, JmapError, RemoveOutcome, SetOutcome};
 use mailvault_core::vault_eml;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
@@ -43,19 +46,19 @@ pub const HANDLED: &[&str] = &[
     "imap_search_emails",
     "imap_find_message_id",
     "imap_disconnect",
+    "imap_set_flags",
+    "imap_move_emails",
+    "imap_delete_email",
+    "imap_create_mailbox",
+    "imap_rename_mailbox",
+    "imap_delete_mailbox",
+    "imap_ensure_sent_mailbox",
 ];
 
-/// `imap_*` RPCs a JMAP account is refused, with why. Must be empty at the
-/// end of Task 5b, or each row justified.
-pub const UNSUPPORTED: &[(&str, &str)] = &[
-    ("imap_set_flags", "not answered over JMAP yet (Task 5b)"),
-    ("imap_delete_email", "not answered over JMAP yet (Task 5b)"),
-    ("imap_move_emails", "not answered over JMAP yet (Task 5b)"),
-    ("imap_ensure_sent_mailbox", "not answered over JMAP yet (Task 5b)"),
-    ("imap_create_mailbox", "not answered over JMAP yet (Task 5b)"),
-    ("imap_rename_mailbox", "not answered over JMAP yet (Task 5b)"),
-    ("imap_delete_mailbox", "not answered over JMAP yet (Task 5b)"),
-];
+/// `imap_*` RPCs a JMAP account is refused, with why. Empty: every IMAP arm
+/// has a JMAP answer. A new arm in `imap.rs` goes into `HANDLED`, or here
+/// with its reason; the guard tests read `imap.rs` and fail until it does.
+pub const UNSUPPORTED: &[(&str, &str)] = &[];
 
 /// `Email/query` page size for whole-mailbox walks: far below the 2^53-1
 /// JMAP `UnsignedInt` ceiling a "give me everything" limit would cross.
@@ -146,7 +149,10 @@ pub async fn intercept(state: &Arc<DaemonState>, method: &str, id: &Value, param
 
 /// `answer` on the account's session; an authentication failure on a cached
 /// session (token revoked, session expired) forgets it and runs once more on
-/// a fresh connect. Every bridged read is safe to run twice.
+/// a fresh connect. Every bridged RPC is safe to run twice: a 401 or 403 means
+/// the server applied nothing, and a write logs, never returns, the failures
+/// that can follow its landed server change (the mailbox listing, a custody
+/// row), so an authentication retry never repeats a write that landed.
 async fn answer_with_retry(state: &Arc<DaemonState>, method: &str, params: &Value, account: &ImapConfig) -> Result<Value, Fail> {
     let acct = state.jmap.get(account).await?;
     match answer(state, method, params, account, &acct).await {
@@ -335,8 +341,8 @@ fn day_start(day: Option<&str>) -> Option<String> {
     Some(format!("{}T00:00:00Z", day.format("%Y-%m-%d")))
 }
 
-/// One bridged read. Returns the success payload; `E_UID_GONE:` and every
-/// other failure are `Fail`s.
+/// One bridged RPC. Returns the success payload; `E_UID_GONE:` and every
+/// other failure are `Fail`s. The write side's functions follow `answer`.
 async fn answer(
     state: &Arc<DaemonState>,
     method: &str,
@@ -586,8 +592,442 @@ async fn answer(
             serde_json::to_value(&probe).map_err(|e| Fail::Rpc(format!("Serialize probe: {e}")))
         }
 
+        "imap_set_flags" => set_flags(state, params, acct).await,
+        "imap_move_emails" => move_emails(state, params, acct).await,
+        "imap_delete_email" => delete_email(state, params, account, acct).await,
+        "imap_create_mailbox" => create_mailbox(params, acct).await,
+        "imap_rename_mailbox" => rename_mailbox(params, acct).await,
+        "imap_delete_mailbox" => delete_mailbox(params, acct).await,
+        "imap_ensure_sent_mailbox" => ensure_sent_mailbox(acct).await,
+
         other => Err(Fail::Rpc(format!("E_JMAP_UNSUPPORTED: {other}"))),
     }
+}
+
+// ── write side ──────────────────────────────────────────────────────────────
+
+/// The IMAP arms' gone answer, word for word (api.js `UID_GONE_PREFIX`).
+fn uid_gone(uid: u32, mailbox: &str) -> Fail {
+    Fail::Rpc(format!("E_UID_GONE: Message UID {} is no longer in {}", uid, mailbox))
+}
+
+/// Can `keyword` be a JMAP keyword? RFC 8621 §4.1.1: 1 to 255 printable
+/// ASCII characters, none of `( ) { ] % * " \`. So `\Deleted` and `\Recent`,
+/// which `flag_to_keyword` passes through verbatim, have none.
+fn is_keyword(keyword: &str) -> bool {
+    !keyword.is_empty()
+        && keyword.len() <= 255
+        && keyword.bytes().all(|b| (0x21..=0x7e).contains(&b) && !b"(){]%*\"\\".contains(&b))
+}
+
+/// The raw message and flags behind `uid` for the deleted-mail bin
+/// (`deleted::capture`, `Source::Jmap`): a blob download over the account's
+/// session, under the IMAP arms' body ceiling. `None`: gone (the ledger never
+/// issued the uid, the email no longer exists, or it left the mailbox).
+pub(crate) async fn fetch_for_capture(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+) -> Result<Option<(Vec<u8>, Vec<String>)>, String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    match fetch_body_timed(state, &acct, account_id, mailbox, uid).await {
+        Ok(fetched) => Ok(fetched.map(|f| (f.raw, f.flags))),
+        Err(Fail::Params(e) | Fail::Rpc(e)) => Err(e),
+    }
+}
+
+/// Take `uids`' rows off the mailbox's header cache after the server took
+/// them out of it. Their ledger rows stay: a uid is never issued twice, and
+/// a label added back gets its old uid again. The server change has already
+/// landed, so a custody failure is logged, never returned: an error would
+/// have the app put the rows back and send the change a second time.
+async fn drop_header_rows(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>) {
+    if uids.is_empty() {
+        return;
+    }
+    let (st, aid, mb) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
+    let removed = blocking(move || crate::custody::with_conn(&st, |c| cache::remove_headers(c, &aid, &mb, &uids)))
+        .await
+        .and_then(|r| r);
+    if let Err(e) = removed {
+        warn!("[jmap] {}/{}: header rows not removed: {}", account_id, mailbox, e);
+    }
+}
+
+/// The path and id of the mailbox with `role` in a fresh listing.
+fn role_mailbox(boxes: &Mailboxes, role: &str) -> Option<(String, String)> {
+    let id = &boxes.list.iter().find(|m| m.role.as_deref().is_some_and(|r| r.eq_ignore_ascii_case(role)))?.id;
+    let (path, _) = boxes.ids.iter().find(|(_, mailbox_id)| *mailbox_id == id)?;
+    Some((path.clone(), id.clone()))
+}
+
+/// `imap_set_flags`: the flags as keywords on the email behind `uid`, after
+/// a re-check that it is still in the mailbox (gone: `E_UID_GONE:`).
+/// `written` is what the server kept, as the IMAP arm's PERMANENTFLAGS
+/// answer is: a flag with no JMAP keyword is left out, and a SetError
+/// writes nothing (`[]`), a success the caller has to see, not an error.
+async fn set_flags(state: &Arc<DaemonState>, params: &Value, acct: &AccountJmap) -> Result<Value, Fail> {
+    let account_id = ledger_account(params)?;
+    let uid: u32 = param(params, "uid")?;
+    let mailbox = mailbox_param(params);
+    let flags: Vec<String> = param(params, "flags")?;
+    let add = opt_param::<String>(params, "action").as_deref().unwrap_or("add") == "add";
+    let written: Vec<String> = flags.into_iter().filter(|f| is_keyword(&flag_to_keyword(f))).collect();
+    if written.is_empty() {
+        return Ok(json!({"success": true, "written": []}));
+    }
+    let pairs = acct.uid_to_id(state, &account_id, &mailbox, &[uid], true).await?;
+    let Some(email_id) = pairs.into_iter().next().and_then(|(_, id)| id) else {
+        return Err(uid_gone(uid, &mailbox));
+    };
+    let toggles: Vec<(String, bool)> = written.iter().map(|f| (flag_to_keyword(f), add)).collect();
+    let out = acct.client.set_keywords(&[(email_id.clone(), toggles)]).await?;
+    if out.ok.contains(&email_id) {
+        return Ok(json!({"success": true, "written": written}));
+    }
+    match out.failed.iter().find(|(id, _)| *id == email_id) {
+        Some((_, kind)) => {
+            info!("[jmap] set_flags uid={} mailbox={}: {:?} not kept ({})", uid, mailbox, written, kind);
+            Ok(json!({"success": true, "written": []}))
+        }
+        None => Err(JmapError::Protocol("Email/set did not answer for the email".into()).into()),
+    }
+}
+
+/// `imap_move_emails`: one `mailboxIds` patch per email, the source label
+/// off and the target's on, after a re-check that each uid is still in the
+/// source (a gone uid moves nothing). The source ledger rows stay; only
+/// their header rows go. `newUids` are the target ledger's uids, in the
+/// order of `uids`, and null unless every uid moved: a shorter list would
+/// pair a uid with the wrong message, and the IMAP arm's rule is never a
+/// guess. A refusal other than `notFound` fails the move, as a refused
+/// UID MOVE fails the IMAP arm.
+async fn move_emails(state: &Arc<DaemonState>, params: &Value, acct: &AccountJmap) -> Result<Value, Fail> {
+    let account_id = ledger_account(params)?;
+    let uids: Vec<u32> = param(params, "uids")?;
+    let source: String = param(params, "sourceMailbox")?;
+    let target: String = param(params, "targetMailbox")?;
+    if uids.is_empty() {
+        return Ok(json!({"success": true, "moved": 0, "newUids": null}));
+    }
+    let source_id = acct.mailbox_id(&source).await?;
+    let target_id = acct.mailbox_id(&target).await?;
+    if source_id == target_id {
+        return Ok(json!({"success": true, "moved": 0, "newUids": null}));
+    }
+    let pairs = acct.uid_to_id(state, &account_id, &source, &uids, true).await?;
+    let patches: Vec<(String, Vec<(String, bool)>)> = pairs
+        .iter()
+        .filter_map(|(_, id)| id.clone())
+        .map(|id| (id, vec![(source_id.clone(), false), (target_id.clone(), true)]))
+        .collect();
+    let out = if patches.is_empty() { SetOutcome::default() } else { acct.client.set_mailboxes(&patches).await? };
+    let moved: Vec<(u32, String)> =
+        pairs.into_iter().filter_map(|(uid, id)| id.filter(|id| out.ok.contains(id)).map(|id| (uid, id))).collect();
+    drop_header_rows(state, &account_id, &source, moved.iter().map(|(uid, _)| *uid).collect()).await;
+    if let Some((id, kind)) = out.failed.iter().find(|(_, kind)| kind != "notFound") {
+        warn!("[jmap] move {} -> {}: {} refused ({})", source, target, id, kind);
+        return Err(JmapError::Method {
+            kind: kind.clone(),
+            description: Some(format!("{} of {} moved from {} to {}", moved.len(), uids.len(), source, target)),
+        }
+        .into());
+    }
+    let new_uids = if moved.len() == uids.len() {
+        let ids: Vec<String> = moved.iter().map(|(_, id)| id.clone()).collect();
+        match acct.ids_to_uids(state, &account_id, &target, &ids).await {
+            Ok(new_uids) => Some(new_uids),
+            Err(e) => {
+                warn!("[jmap] move {} -> {}: no target uids: {}", source, target, e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    Ok(json!({"success": true, "moved": moved.len(), "newUids": new_uids}))
+}
+
+/// What `remove_one` did on the server.
+struct Removed {
+    /// Where the message went, for an undo: Trash's path and its uid there.
+    trash: Option<String>,
+    trash_uid: Option<u32>,
+    /// False when nothing changed: already gone, or a plain delete from Trash.
+    changed: bool,
+}
+
+/// `imap_delete_email`, the IMAP arm's steps over JMAP:
+/// 1. Into the deleted-mail bin first (`deleted::capture`, `Source::Jmap`),
+///    unless the caller opts out (`bin: false`). A permanent delete that
+///    cannot be captured is refused (`E_BIN_CAPTURE`): the bin would be its
+///    only copy.
+/// 2. `remove_one`: the label semantics rule.
+/// 3. A capture this call made is dropped when the delete failed (not for a
+///    permanent one, whose request may have landed with its reply lost, as
+///    the IMAP arm keeps it) or changed nothing. On success the bin row
+///    learns where the message went (`deleted::landed`).
+async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapConfig, acct: &AccountJmap) -> Result<Value, Fail> {
+    let account_id = ledger_account(params)?;
+    let uid: u32 = param(params, "uid")?;
+    let mailbox = mailbox_param(params);
+    let permanent = opt_param::<bool>(params, "permanent").unwrap_or(false);
+    let binned = if opt_param::<bool>(params, "bin").unwrap_or(true) {
+        match deleted::capture(state, &account_id, &mailbox, uid, Source::Jmap { config: account }).await {
+            Ok(binned) => binned,
+            Err(e) if permanent => {
+                tracing::error!("[jmap] delete uid={} not deleted: could not keep a copy first: {}", uid, e);
+                return Err(Fail::Rpc(format!("E_BIN_CAPTURE: {e}")));
+            }
+            Err(e) => {
+                warn!("[jmap] delete uid={} goes ahead without a bin copy (the server keeps it): {}", uid, e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    match remove_one(state, acct, &account_id, &mailbox, uid, permanent).await {
+        Ok(removed) => {
+            let bin_id = match binned {
+                Some((id, true)) if !removed.changed => {
+                    deleted::forget(state, id).await;
+                    None
+                }
+                other => other.map(|(id, _)| id),
+            };
+            if let (Some(id), true) = (bin_id.clone(), removed.changed) {
+                deleted::landed(state, id, removed.trash.clone(), removed.trash_uid).await;
+            }
+            Ok(json!({"success": true, "trash": removed.trash, "trashUid": removed.trash_uid, "binId": bin_id}))
+        }
+        Err(f) => {
+            if let Some((id, true)) = binned.filter(|_| !permanent) {
+                deleted::forget(state, id).await;
+            }
+            Err(f)
+        }
+    }
+}
+
+/// Take the email behind `uid` out of `mailbox` by the label semantics rule
+/// (`jmap::ops::remove_from`, ruling R5):
+/// - A delete that needs Trash on an account without one is refused
+///   (`E_JMAP_NO_TRASH`): Trash is never created, nothing is destroyed.
+/// - A permanent delete from X treats X as Trash.
+/// - A plain delete from Trash changes nothing.
+///
+/// The header row goes whenever the email is no longer in the mailbox; the
+/// ledger row stays.
+///
+/// No `ifInState` guard on the read-then-set in `remove_from` (Task 2's
+/// deferred minor, decided here): the JMAP Email state is account-wide, so
+/// any arrival anywhere in the account would fail the guard and turn deletes
+/// on a busy account into retries. The patches are key-relative
+/// (`mailboxIds/<id>`), so a label another client adds in between survives
+/// them. Only a destroy acts on a stale read (a label added in between goes
+/// with the email), and a destroy is a permanent delete, which
+/// `delete_email` refuses to run without a bin copy.
+async fn remove_one(
+    state: &Arc<DaemonState>,
+    acct: &AccountJmap,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    permanent: bool,
+) -> Result<Removed, Fail> {
+    let boxes = acct.refresh().await?;
+    let mailbox_id = boxes
+        .ids
+        .get(mailbox)
+        .cloned()
+        .ok_or_else(|| Fail::from(JmapError::Protocol(format!("no mailbox {mailbox}"))))?;
+    let trash = role_mailbox(&boxes, "trash");
+    let trash_id = trash.as_ref().map(|(_, id)| id.as_str());
+    let pairs = acct.uid_to_id(state, account_id, mailbox, &[uid], false).await?;
+    let unchanged = Removed { trash: None, trash_uid: None, changed: false };
+    let Some(email_id) = pairs.into_iter().next().and_then(|(_, id)| id) else {
+        // The ledger never issued it: nothing on the server to delete.
+        return Ok(unchanged);
+    };
+    let outcome = match remove_from(&acct.client, &email_id, &mailbox_id, trash_id, permanent).await {
+        Ok(outcome) => outcome,
+        Err(JmapError::Protocol(m)) if trash_id.is_none() && !permanent && m.starts_with("no Trash mailbox") => {
+            return Err(Fail::Rpc(format!(
+                "E_JMAP_NO_TRASH: the account has no Trash mailbox to move UID {} from {} into",
+                uid, mailbox
+            )));
+        }
+        Err(e) => return Err(e.into()),
+    };
+    Ok(match outcome {
+        RemoveOutcome::MovedToTrash if trash_id == Some(mailbox_id.as_str()) => unchanged,
+        RemoveOutcome::Gone => {
+            drop_header_rows(state, account_id, mailbox, vec![uid]).await;
+            unchanged
+        }
+        RemoveOutcome::MovedToTrash => {
+            drop_header_rows(state, account_id, mailbox, vec![uid]).await;
+            let trash_path = trash.map(|(path, _)| path);
+            let trash_uid = match &trash_path {
+                Some(path) => match acct.ids_to_uids(state, account_id, path, &[email_id]).await {
+                    Ok(uids) => uids.first().copied(),
+                    Err(e) => {
+                        warn!("[jmap] delete uid={}: no Trash uid: {}", uid, e);
+                        None
+                    }
+                },
+                None => None,
+            };
+            Removed { trash: trash_path, trash_uid, changed: true }
+        }
+        RemoveOutcome::LabelRemoved | RemoveOutcome::Destroyed => {
+            drop_header_rows(state, account_id, mailbox, vec![uid]).await;
+            Removed { trash: None, trash_uid: None, changed: true }
+        }
+    })
+}
+
+/// A `Mailbox/set` refusal of `key` under `not` ("notCreated", "notUpdated",
+/// "notDestroyed") as an error naming its SetError type:
+/// `E_JMAP_METHOD: <type>: <what>[: <description>]`.
+fn refused(r: &Value, not: &str, key: &str, what: &str) -> Option<Fail> {
+    let e = r[not].get(key)?;
+    let kind = e["type"].as_str().unwrap_or("serverFail").to_string();
+    let description = Some(match e["description"].as_str() {
+        Some(d) => format!("{what}: {d}"),
+        None => what.to_string(),
+    });
+    Some(JmapError::Method { kind, description }.into())
+}
+
+/// After a `Mailbox/set` landed: the path -> id map from a fresh listing. A
+/// failed listing empties the map (the next lookup lists again) and is never
+/// returned: the change is made, and an error would have the app send it
+/// a second time.
+async fn refresh_after_write(acct: &AccountJmap) {
+    if let Err(e) = acct.refresh().await {
+        warn!("[jmap] mailbox list not refreshed after a change: {}", e);
+        acct.mailbox_ids.write().unwrap_or_else(|p| p.into_inner()).clear();
+    }
+}
+
+/// Where the folder at `path` goes: its parent's id (`None` at the top) and
+/// its JMAP name. A U+2215 in the last segment stands for a "/" inside the
+/// name (`mailbox_map`).
+async fn placement(acct: &AccountJmap, path: &str) -> Result<(Option<String>, String), Fail> {
+    let (parent, leaf) = match path.rsplit_once(DELIMITER) {
+        Some((parent, leaf)) => (Some(parent), leaf),
+        None => (None, path),
+    };
+    let name = leaf.replace('\u{2215}', "/");
+    if name.trim().is_empty() {
+        return Err(Fail::Params(format!("No folder name in {path}")));
+    }
+    let parent_id = match parent {
+        Some(parent) => Some(acct.mailbox_id(parent).await?),
+        None => None,
+    };
+    Ok((parent_id, name))
+}
+
+/// `imap_create_mailbox`: `Mailbox/set create` under the parent the path
+/// names, subscribed as the IMAP arm subscribes (for the account's other
+/// clients).
+async fn create_mailbox(params: &Value, acct: &AccountJmap) -> Result<Value, Fail> {
+    let path: String = param(params, "path")?;
+    let (parent_id, name) = placement(acct, &path).await?;
+    let r = acct
+        .client
+        .mailbox_set(json!({"create": {"new": {"name": name, "parentId": parent_id, "isSubscribed": true}}}))
+        .await?;
+    if let Some(f) = refused(&r, "notCreated", "new", &path) {
+        return Err(f);
+    }
+    if r["created"].get("new").is_none() {
+        return Err(JmapError::Protocol(format!("Mailbox/set did not create {path}")).into());
+    }
+    refresh_after_write(acct).await;
+    Ok(json!({"success": true}))
+}
+
+/// `imap_rename_mailbox`: a new name, and a new parent when `to` sits
+/// elsewhere (the app "deletes" a folder by renaming it under Trash).
+/// Children follow on the server, as they follow an IMAP RENAME.
+async fn rename_mailbox(params: &Value, acct: &AccountJmap) -> Result<Value, Fail> {
+    let from: String = param(params, "from")?;
+    let to: String = param(params, "to")?;
+    let id = acct.mailbox_id(&from).await?;
+    let (parent_id, name) = placement(acct, &to).await?;
+    let mut update = serde_json::Map::new();
+    update.insert(id.clone(), json!({"name": name, "parentId": parent_id}));
+    let r = acct.client.mailbox_set(json!({"update": update})).await?;
+    if let Some(f) = refused(&r, "notUpdated", &id, &from) {
+        return Err(f);
+    }
+    if r["updated"].get(&id).is_none() {
+        return Err(JmapError::Protocol(format!("Mailbox/set did not rename {from}")).into());
+    }
+    refresh_after_write(acct).await;
+    Ok(json!({"success": true}))
+}
+
+/// `imap_delete_mailbox`: every path destroyed in one `Mailbox/set`, deepest
+/// first (a mailbox cannot go before its children), with
+/// `onDestroyRemoveEmails: false`: a folder that still holds mail is refused
+/// (`mailboxHasEmail`), never emptied by the server. `deleted` counts the
+/// mailboxes destroyed.
+async fn delete_mailbox(params: &Value, acct: &AccountJmap) -> Result<Value, Fail> {
+    let mut paths: Vec<String> = param(params, "paths")?;
+    paths.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    paths.dedup();
+    if paths.is_empty() {
+        return Ok(json!({"success": true, "deleted": 0}));
+    }
+    let mut ids = Vec::with_capacity(paths.len());
+    for path in &paths {
+        ids.push(acct.mailbox_id(path).await?);
+    }
+    let r = acct.client.mailbox_set(json!({"destroy": ids, "onDestroyRemoveEmails": false})).await?;
+    let destroyed = r["destroyed"].as_array().map_or(0, Vec::len);
+    let refusal = paths.iter().zip(&ids).find_map(|(path, id)| refused(&r, "notDestroyed", id, path));
+    refresh_after_write(acct).await;
+    match refusal {
+        Some(f) => Err(f),
+        None => Ok(json!({"success": true, "deleted": destroyed})),
+    }
+}
+
+/// `imap_ensure_sent_mailbox`: the path of the role=sent mailbox, else of a
+/// top-level "Sent" with no role (a create would clash with its name), else
+/// of a new `{name: "Sent", role: "sent"}`. A bare string, as the IMAP arm
+/// answers.
+async fn ensure_sent_mailbox(acct: &AccountJmap) -> Result<Value, Fail> {
+    let boxes = acct.refresh().await?;
+    if let Some((path, _)) = role_mailbox(&boxes, "sent") {
+        return Ok(json!(path));
+    }
+    let plain = boxes.list.iter().find(|m| m.parent_id.is_none() && m.role.is_none() && m.name.eq_ignore_ascii_case("Sent"));
+    if let Some((path, _)) = plain.and_then(|m| boxes.ids.iter().find(|(_, id)| **id == m.id)) {
+        return Ok(json!(path));
+    }
+    let r = acct
+        .client
+        .mailbox_set(json!({"create": {"sent": {"name": "Sent", "role": "sent", "isSubscribed": true}}}))
+        .await?;
+    if let Some(f) = refused(&r, "notCreated", "sent", "Sent") {
+        return Err(f);
+    }
+    let created = r["created"]["sent"]["id"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| Fail::from(JmapError::Protocol("Mailbox/set did not create Sent".into())))?;
+    refresh_after_write(acct).await;
+    let path = acct.mailbox_ids.read().unwrap_or_else(|p| p.into_inner()).iter().find(|(_, id)| **id == created).map(|(p, _)| p.clone());
+    // A top-level mailbox's path is its name.
+    Ok(json!(path.unwrap_or_else(|| "Sent".to_string())))
 }
 
 #[cfg(test)]
@@ -597,6 +1037,9 @@ mod tests {
     use mailvault_core::header_cache::sidecar_dir;
     use mock_jmap::{Limits, MockJmap, Scenario, ScenarioAccount, ScenarioEmail, ScenarioMailbox};
     use mailvault_core::graph_ledger::JMAP_LEDGER_FILE;
+    use mailvault_core::app_db::{self, deleted as bin};
+    use mailvault_core::custody::cache;
+    use std::collections::BTreeSet;
 
     // ── helpers ────────────────────────────────────────────────────────────
 
@@ -786,9 +1229,11 @@ second body";
     async fn unsupported_rpc_on_a_jmap_account_is_an_error_never_imap() {
         let (state, m) = test_state_with_mock(common_scenario()).await;
         let a = jmap_account(&m);
-        let resp = call(&state, "imap_set_flags", json!({"account": a, "uid": 1, "mailbox": "INBOX", "flags": ["\\Seen"]})).await;
+        // Every real `imap_*` arm is answered since Task 5b: an arm added to
+        // `imap.rs` later, before it is bridged, takes this path.
+        let resp = call(&state, "imap_not_bridged", json!({"account": a, "uid": 1, "mailbox": "INBOX"})).await;
         let message = err(resp);
-        assert!(message.starts_with("E_JMAP_UNSUPPORTED: imap_set_flags"), "{message}");
+        assert!(message.starts_with("E_JMAP_UNSUPPORTED: imap_not_bridged"), "{message}");
         assert!(m.requests().is_empty(), "nothing may be sent for a refused RPC");
     }
 
@@ -1133,6 +1578,196 @@ second body";
         assert_eq!(session_fetches(&m), 2, "the next call connects again");
     }
 
+    // ── write side (Task 5b) ───────────────────────────────────────────────
+
+    /// The app's header rows for `mailbox`, as its list writes them: a
+    /// listing alone writes none.
+    fn seed_headers(state: &Arc<DaemonState>, mailbox: &str, listing: &Value) {
+        let rows = json!({"emails": listing["emails"]}).to_string();
+        crate::custody::with_conn(state, |c| cache::save_headers(c, "acct-1", mailbox, &rows)).unwrap();
+    }
+
+    fn header_uids(state: &Arc<DaemonState>, mailbox: &str) -> Vec<u32> {
+        let mut uids: Vec<u32> = crate::custody::with_conn(state, |c| cache::uid_set(c, "acct-1", mailbox)).unwrap().into_iter().collect();
+        uids.sort_unstable();
+        uids
+    }
+
+    /// The mailbox ids the mock has `email_id` in (empty: destroyed).
+    fn labels(m: &MockJmap, email_id: &str) -> BTreeSet<String> {
+        m.read(|s| s.email("acc1", email_id).map(|e| e.mailbox_ids.clone()).unwrap_or_default())
+    }
+
+    fn set(items: &[&str]) -> BTreeSet<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// The bytes the deleted-mail bin keeps for `bin_id`.
+    fn binned(state: &Arc<DaemonState>, bin_id: &str) -> Vec<u8> {
+        bin::read_eml(&state.app_dir, bin_id).unwrap()
+    }
+
+    #[tokio::test]
+    async fn set_flags_adds_and_removes_keywords() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let e2 = uid_in(&list(&state, &a, "INBOX").await, "<e2@x>");
+        let keywords = || m.read(|s| s.email("acc1", "e2").unwrap().keywords.clone());
+        let added = ok(call(&state, "imap_set_flags", json!({"account": a, "uid": e2, "mailbox": "INBOX", "flags": ["\\Seen", "\\Deleted"], "action": "add"})).await);
+        assert_eq!(added, json!({"success": true, "written": ["\\Seen"]}), "\\Deleted has no JMAP keyword");
+        assert_eq!(keywords(), set(&["$flagged", "$seen"]));
+        let removed = ok(call(&state, "imap_set_flags", json!({"account": a, "uid": e2, "mailbox": "INBOX", "flags": ["\\Flagged"], "action": "remove"})).await);
+        assert_eq!(removed, json!({"success": true, "written": ["\\Flagged"]}));
+        assert_eq!(keywords(), set(&["$seen"]));
+        let none = ok(call(&state, "imap_set_flags", json!({"account": a, "uid": e2, "mailbox": "INBOX", "flags": ["\\Recent"]})).await);
+        assert_eq!(none, json!({"success": true, "written": []}), "nothing writable is a success, not an error");
+        assert_eq!(m.count_calls("Email/set"), 2, "no request for nothing writable");
+    }
+
+    #[tokio::test]
+    async fn set_flags_on_a_uid_that_left_the_mailbox_answers_uid_gone() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let e1 = uid_in(&list(&state, &a, "INBOX").await, "<e1@x>");
+        m.mutate(|s| s.remove_from_mailbox("acc1", "e1", "mb-inbox"));
+        let message = err(call(&state, "imap_set_flags", json!({"account": a, "uid": e1, "mailbox": "INBOX", "flags": ["\\Flagged"]})).await);
+        assert_eq!(message, format!("E_UID_GONE: Message UID {e1} is no longer in INBOX"));
+        let never = err(call(&state, "imap_set_flags", json!({"account": a, "uid": 99, "mailbox": "INBOX", "flags": ["\\Flagged"]})).await);
+        assert!(never.starts_with("E_UID_GONE:"), "a uid the ledger never issued: {never}");
+        assert_eq!(m.count_calls("Email/set"), 0, "nothing is written for a gone uid");
+        assert!(ledger(&state, "INBOX").values().any(|id| id == "e1"), "ledger rows are never removed");
+    }
+
+    #[tokio::test]
+    async fn move_relabels_and_keeps_the_source_ledger_row() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let listing = list(&state, &a, "INBOX").await;
+        let (e1, e2) = (uid_in(&listing, "<e1@x>"), uid_in(&listing, "<e2@x>"));
+        seed_headers(&state, "INBOX", &listing);
+        assert_eq!(header_uids(&state, "INBOX"), vec![e1, e2]);
+        let r = ok(call(&state, "imap_move_emails", json!({"account": a, "uids": [e1], "sourceMailbox": "INBOX", "targetMailbox": "Work"})).await);
+        assert_eq!(r["success"], json!(true));
+        assert_eq!(r["moved"], json!(1));
+        let work_uid = r["newUids"][0].as_u64().expect("e1 has a Work uid") as u32;
+        assert_eq!(ledger(&state, "Work").get(&work_uid).map(String::as_str), Some("e1"));
+        assert_eq!(labels(&m, "e1"), set(&["mb-work"]));
+        assert_eq!(ledger(&state, "INBOX").get(&e1).map(String::as_str), Some("e1"), "the INBOX ledger row is kept");
+        assert_eq!(header_uids(&state, "INBOX"), vec![e2], "only the moved uid's header row goes");
+        let back = ok(call(&state, "imap_move_emails", json!({"account": a, "uids": [work_uid], "sourceMailbox": "Work", "targetMailbox": "INBOX"})).await);
+        assert_eq!(back["newUids"], json!([e1]), "a label added back gets its old uid");
+        let again = ok(call(&state, "imap_move_emails", json!({"account": a, "uids": [work_uid], "sourceMailbox": "Work", "targetMailbox": "INBOX"})).await);
+        assert_eq!(again, json!({"success": true, "moved": 0, "newUids": null}), "a uid no longer in the source moves nothing");
+    }
+
+    #[tokio::test]
+    async fn delete_of_an_email_with_another_label_removes_only_that_label() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let listing = list(&state, &a, "INBOX").await;
+        let (e1, e2) = (uid_in(&listing, "<e1@x>"), uid_in(&listing, "<e2@x>"));
+        seed_headers(&state, "INBOX", &listing);
+        let r = ok(call(&state, "imap_delete_email", json!({"account": a, "uid": e1, "mailbox": "INBOX", "permanent": false})).await);
+        assert_eq!(r["success"], json!(true));
+        assert_eq!((&r["trash"], &r["trashUid"]), (&Value::Null, &Value::Null), "nothing went to Trash: {r}");
+        assert_eq!(labels(&m, "e1"), set(&["mb-work"]), "still in Work, not in Trash");
+        assert_eq!(binned(&state, r["binId"].as_str().expect("captured first")), E1_RAW.as_bytes());
+        assert_eq!(ledger(&state, "INBOX").get(&e1).map(String::as_str), Some("e1"), "the ledger row is kept");
+        assert_eq!(header_uids(&state, "INBOX"), vec![e2], "the header row goes");
+    }
+
+    #[tokio::test]
+    async fn delete_of_a_lone_email_moves_it_to_trash_then_a_permanent_delete_destroys_it() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let e2 = uid_in(&list(&state, &a, "INBOX").await, "<e2@x>");
+        let r = ok(call(&state, "imap_delete_email", json!({"account": a, "uid": e2, "mailbox": "INBOX", "permanent": false})).await);
+        assert_eq!(r["trash"], json!("Trash"));
+        let trash_uid = r["trashUid"].as_u64().expect("the Trash uid, for an undo") as u32;
+        assert_eq!(ledger(&state, "Trash").get(&trash_uid).map(String::as_str), Some("e2"));
+        assert_eq!(labels(&m, "e2"), set(&["mb-trash"]));
+        assert_eq!(binned(&state, r["binId"].as_str().expect("captured first")), E2_RAW.as_bytes());
+
+        let purged = ok(call(&state, "imap_delete_email", json!({"account": a, "uid": trash_uid, "mailbox": "Trash", "permanent": true})).await);
+        assert_eq!((&purged["trash"], &purged["trashUid"]), (&Value::Null, &Value::Null));
+        assert!(m.read(|s| s.email("acc1", "e2").is_none()), "destroyed: Trash was its only mailbox");
+        assert_eq!(binned(&state, purged["binId"].as_str().expect("a permanent delete keeps a copy")), E2_RAW.as_bytes());
+        assert_eq!(ledger(&state, "Trash").get(&trash_uid).map(String::as_str), Some("e2"), "ledger rows are never removed");
+
+        let again = ok(call(&state, "imap_delete_email", json!({"account": a, "uid": trash_uid, "mailbox": "Trash", "permanent": true})).await);
+        assert_eq!(again["success"], json!(true), "deleting what is already gone is not an error");
+        assert_eq!(again["binId"], purged["binId"], "the copy the first attempt kept");
+    }
+
+    #[tokio::test]
+    async fn delete_that_needs_a_trash_the_account_lacks_is_refused() {
+        let mut s = common_scenario();
+        s.accounts[0].mailboxes.retain(|mb| mb.id != "mb-trash");
+        let (state, m) = test_state_with_mock(s).await;
+        let a = jmap_account(&m);
+        let listing = list(&state, &a, "INBOX").await;
+        let (e1, e2) = (uid_in(&listing, "<e1@x>"), uid_in(&listing, "<e2@x>"));
+        let message = err(call(&state, "imap_delete_email", json!({"account": a, "uid": e2, "mailbox": "INBOX", "permanent": false})).await);
+        assert!(message.starts_with("E_JMAP_NO_TRASH:"), "{message}");
+        assert_eq!(labels(&m, "e2"), set(&["mb-inbox"]), "untouched, never destroyed");
+        assert_eq!(m.count_calls("Email/set"), 0);
+        let kept = app_db::with(&state.app_dir, |c| bin::find(c, &state.app_dir, "acct-1", "INBOX", e2)).unwrap();
+        assert_eq!(kept, None, "the capture of a delete that did not happen is dropped");
+        // e1 has another label: taking INBOX's off needs no Trash.
+        let r = ok(call(&state, "imap_delete_email", json!({"account": a, "uid": e1, "mailbox": "INBOX", "permanent": false})).await);
+        assert_eq!(r["trash"], Value::Null);
+        assert_eq!(labels(&m, "e1"), set(&["mb-work"]));
+    }
+
+    #[tokio::test]
+    async fn create_rename_and_delete_mailbox() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let named = |name: &str| {
+            m.read(|s| s.account("acc1").mailboxes.values().find(|mb| mb.name == name).map(|mb| (mb.id.clone(), mb.parent_id.clone())))
+        };
+        assert_eq!(ok(call(&state, "imap_create_mailbox", json!({"account": a, "path": "Work/New"})).await), json!({"success": true}));
+        let (new_id, parent) = named("New").expect("created");
+        assert_eq!(parent.as_deref(), Some("mb-work"));
+
+        // The app "deletes" a folder by renaming it under Trash.
+        assert_eq!(ok(call(&state, "imap_rename_mailbox", json!({"account": a, "from": "Work/New", "to": "Trash/Old"})).await), json!({"success": true}));
+        assert_eq!(named("Old"), Some((new_id.clone(), Some("mb-trash".to_string()))));
+        let acct = state.jmap.get(&config(&a)).await.unwrap();
+        let ids = acct.mailbox_ids.read().unwrap().clone();
+        assert_eq!(ids.get("Trash/Old"), Some(&new_id), "the path map is refreshed");
+        assert!(!ids.contains_key("Work/New"));
+
+        assert_eq!(ok(call(&state, "imap_delete_mailbox", json!({"account": a, "paths": ["Trash/Old"]})).await), json!({"success": true, "deleted": 1}));
+        assert_eq!(named("Old"), None);
+        assert!(m.requests().iter().any(|r| r.body_contains("\"onDestroyRemoveEmails\":false")));
+
+        // A folder that still holds mail is refused, never emptied.
+        let refused = err(call(&state, "imap_delete_mailbox", json!({"account": a, "paths": ["Work/Sub"]})).await);
+        assert!(refused.contains("mailboxHasEmail"), "{refused}");
+        assert!(named("Sub").is_some());
+        assert!(m.read(|s| s.email("acc1", "e3").is_some()));
+    }
+
+    #[tokio::test]
+    async fn ensure_sent_mailbox_finds_or_creates_the_sent_role() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        assert_eq!(ok(call(&state, "imap_ensure_sent_mailbox", json!({"account": a})).await), json!("Sent"), "a bare path, as the IMAP arm answers");
+        assert!(m.read(|s| s.account("acc1").mailboxes.values().any(|mb| mb.name == "Sent" && mb.role.as_deref() == Some("sent"))));
+        assert_eq!(ok(call(&state, "imap_ensure_sent_mailbox", json!({"account": a})).await), json!("Sent"));
+        assert_eq!(m.count_calls("Mailbox/set"), 1, "found the second time, not created again");
+    }
+
+    #[tokio::test]
+    async fn ensure_sent_mailbox_takes_a_top_level_sent_without_a_role() {
+        let mut s = common_scenario();
+        s.accounts[0].mailboxes.push(ScenarioMailbox { id: "mb-sent".into(), name: "Sent".into(), parent_id: None, role: None, emails: vec![] });
+        let (state, m) = test_state_with_mock(s).await;
+        assert_eq!(ok(call(&state, "imap_ensure_sent_mailbox", json!({"account": jmap_account(&m)})).await), json!("Sent"));
+        assert_eq!(m.count_calls("Mailbox/set"), 0, "a create would clash with its name");
+    }
+
     // ── JmapMeta ───────────────────────────────────────────────────────────
 
     #[test]
@@ -1218,5 +1853,22 @@ second body";
         let r = ok(call(&state, "imap_fetch_changed_flags", json!({"account": a, "mailbox": "INBOX", "sinceModseq": modseq0})).await);
         assert_eq!(r["changes"], json!([{"uid": e1, "flags": ["\\Seen", "\\Flagged"]}]));
         assert!(r["highestModseq"].as_u64().unwrap() > modseq0);
+    }
+}
+
+/// Mechanism over memory: every `"imap_…" =>` arm in `handlers/imap.rs` has
+/// a JMAP decision, `HANDLED` or `UNSUPPORTED` with its reason.
+#[cfg(test)]
+mod guard {
+    #[test]
+    fn every_imap_rpc_has_a_jmap_decision() {
+        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/handlers/imap.rs")).unwrap();
+        let arms: std::collections::BTreeSet<String> = src.lines()
+            .filter_map(|l| l.trim().strip_prefix('"').and_then(|r| r.split_once("\" =>")).map(|(n, _)| n.to_string()))
+            .filter(|n| n.starts_with("imap_")).collect();
+        let decided: std::collections::BTreeSet<String> = super::HANDLED.iter().map(|s| s.to_string())
+            .chain(super::UNSUPPORTED.iter().map(|(s, _)| s.to_string())).collect();
+        let missing: Vec<_> = arms.difference(&decided).collect();
+        assert!(missing.is_empty(), "imap RPCs with no JMAP decision: {missing:?}");
     }
 }

@@ -9,7 +9,10 @@
 //! nothing else will hold them, without keeping a vault copy of a message
 //! that is about to go. A move to Trash with no local copy is recorded
 //! byte-less: Trash holds it, and a bulk delete must not become a bulk
-//! download. The bin sits beside app.db, never in the vault.
+//! download. A JMAP account's delete downloads them either way
+//! (`Source::Jmap`): its recover imports the bytes back, and a delete that
+//! only takes a label off leaves no Trash copy to find. The bin sits beside
+//! app.db, never in the vault.
 //!
 //! `deleted.recover` puts a message back on the server (moved back out of the
 //! Trash folder the delete put it in, when it is still there; else APPENDed
@@ -47,6 +50,11 @@ pub(crate) enum Source<'a> {
     /// Graph token to fetch the Deleted Items copy back, so a byte-less row
     /// could never be recovered.
     Graph,
+    /// A JMAP account (`handlers::jmap_bridge`): the bytes are downloaded
+    /// (blob download) whenever nothing local holds them, permanent or not.
+    /// Its recover imports them back (`Email/import`), and a delete that only
+    /// takes a label off leaves no Trash copy to find.
+    Jmap { config: &'a ImapConfig },
     /// Only on this computer: the vault copy is all there is.
     Local,
 }
@@ -79,6 +87,13 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
                     Err(_) => return Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
                 }
             }
+            Source::Jmap { config } => match crate::handlers::jmap_bridge::fetch_for_capture(state, config, account_id, mailbox, uid).await {
+                Ok(Some((raw, flags))) => (Some(raw), Some(flags)),
+                // Gone already: a retry of a delete that landed finds the
+                // copy its first attempt kept.
+                Ok(None) => return kept_already(state, account_id, mailbox, uid).await,
+                Err(e) => return Err(e),
+            },
             Source::Graph | Source::Local => return Ok(None),
         },
     };
