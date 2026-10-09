@@ -174,8 +174,9 @@ const BY_LOCALE = {
     customFields: { stage: 'Etapa', review: 'Revisão', approved: 'Aprovado', paid: 'Pago', followUp: 'Acompanhar', owner: 'Responsável' },
     aiWriting: {
       subject: 'Cintas para caixas',
-      rough: 'Oi Theo, só queria saber se existe alguma chance de as cintas para as caixas ficarem prontas até quinta-feira, '
-        + 'já que o cliente imprime na sexta e a gente gostaria muito de tê-las em mãos antes disso. Muito obrigado!',
+      rough: 'Oi Theo, tudo bem? Só queria saber, sem querer apressar ninguém, se existe alguma chance, por menor que seja, de as cintas para as caixas '
+        + 'ficarem prontas até quinta-feira, já que o cliente imprime na sexta e a gente gostaria muito, muito mesmo, de tê-las em mãos antes disso. '
+        + 'Se não for possível, me avisa, por favor. Muito obrigado!',
     },
     tagging: {
       tag: 'Faturas',

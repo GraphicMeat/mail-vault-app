@@ -2513,21 +2513,23 @@ describe('footage: website feature clips', function () {
       await browser.execute((s, t) => [...document.querySelectorAll(s)].find((b) => (b.textContent || '').includes(t))
         ?.closest('.settings-row, [class*="setting-row"], div')?.scrollIntoView({ block: 'center' }), SEG, L('workspace.belowList'));
       await browser.pause(700);
-      const row = await browser.execute((s, t) => {
-        const g = document.querySelector(s)?.closest('[role="group"]');
+      const row = await browser.execute((s, t, below) => {
+        // The group that holds the Below-the-list button, not whichever segmented control comes first.
+        const g = ([...document.querySelectorAll(s)].find((b) => (b.textContent || '').includes(below)) || document.querySelector(s))?.closest('[role="group"]');
         // The row's own label (the Mail view example above also says "Reading pane").
         const gr = g?.getBoundingClientRect();
         const lab = gr && [...document.querySelectorAll('[data-testid="appearance-layout-section"] *')]
           .filter((e) => e.children.length === 0 && (e.textContent || '').trim() === t)
           .sort((a, b) => Math.abs(a.getBoundingClientRect().y - gr.y) - Math.abs(b.getBoundingClientRect().y - gr.y))[0];
+        if (!gr) return null;
         const rs = [g, lab].filter(Boolean).map((e) => e.getBoundingClientRect());
         // and the row's example below the buttons (it redraws with the choice)
         rs.push({ x: gr.x, y: gr.y, right: gr.right, bottom: gr.bottom + 150 });
-        if (!rs.length) return null;
         const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y));
         const x1 = Math.max(...rs.map((r) => r.right)), y1 = Math.max(...rs.map((r) => r.bottom));
         return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-      }, SEG, L('workspace.readingPane'));
+      }, SEG, L('workspace.readingPane'), L('workspace.belowList'));
+      check('the Reading pane row is found', !!row, { seg: SEG, below: L('workspace.belowList') });
       const cropSet = await fitCrop(row, { minW: 640, pad: 24 });
       await scan.at(take, 'setting', cropSet);
       await take.hold(400);
