@@ -6,11 +6,15 @@ import { safeStorage } from './safeStorage';
 // social export shooting the app in the other theme) or the real theme.
 export const selectTheme = (s) => s.captureTheme ?? s.theme;
 
+// Every desk palette, in the order the pickers show them. Graphite stays the
+// default; Teal is an extra set, not a replacement.
+export const PALETTES = ['indigo', 'graphite', 'teal'];
+
 export const useThemeStore = create(
   persist(
     (set, get) => ({
       theme: 'dark', // 'light' | 'dark'
-      palette: 'graphite', // 'indigo' | 'graphite'; independent of light/dark
+      palette: 'graphite', // one of PALETTES; independent of light/dark
       // Transient override for a capture ('light' | 'dark' | null); never
       // persisted and kept apart from `theme` so nothing that follows the real
       // theme (other windows, settings) sees it.
@@ -42,7 +46,7 @@ export const useThemeStore = create(
       },
 
       setPalette: (palette) => {
-        if (!['indigo', 'graphite'].includes(palette)) return;
+        if (!PALETTES.includes(palette)) return;
         set({ palette });
         document.documentElement.setAttribute('data-palette', palette);
       },

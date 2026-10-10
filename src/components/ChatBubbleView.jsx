@@ -44,7 +44,7 @@ import { summarizeTrackers } from '../utils/trackerDetect';
 import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
-import { getEmailColors } from '../utils/mailChrome';
+import { getEmailColors, getChatLinkColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
@@ -495,7 +495,8 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     // variables. Resolve the active palette here so light chat bubbles keep
     // readable text after an Appearance change.
     const textColor = fromUser ? '#ffffff' : getEmailColors(theme, palette).text;
-    const linkColor = fromUser ? '#c7d2fe' : '#6366f1';
+    const chatLinks = getChatLinkColors(palette, theme);
+    const linkColor = fromUser ? chatLinks.sent : chatLinks.received;
     const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
     const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
 

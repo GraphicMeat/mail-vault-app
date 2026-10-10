@@ -14,10 +14,13 @@ function contrast(a, b) {
   return (light + .05) / (dark + .05);
 }
 for (const mode of ['dark', 'light']) {
-  for (const palette of ['indigo', 'graphite']) {
+  for (const palette of ['indigo', 'graphite', 'teal']) {
     describe(`${mode} ${palette}`, () => {
       const base = tokens(`[data-theme="${mode}"] {`);
-      const theme = { ...base, ...(palette === 'graphite' ? tokens(`[data-theme="${mode}"][data-palette="graphite"] {`) : {}) };
+      const theme = { ...base, ...(palette === 'indigo' ? {} : tokens(`[data-theme="${mode}"][data-palette="${palette}"] {`)) };
+      it('defines its own tokens instead of falling back to the base palette', () => {
+        if (palette !== 'indigo') expect(Object.keys(tokens(`[data-theme="${mode}"][data-palette="${palette}"] {`)).length).toBeGreaterThan(10);
+      });
       it('keeps text legible on ordinary, hovered, and selected surfaces', () => {
         for (const background of ['bg', 'surface', 'surface-hover', 'row-selected']) {
           for (const foreground of ['text', 'text-muted', 'accent-text']) {

@@ -65,6 +65,19 @@ it('compares unselected palettes and keeps dark email samples independent of a l
   expect(body.style.backgroundColor).toBe('rgb(255, 255, 255)');
 });
 
+it('offers Teal as a third palette, previews it, and applies it to the app', () => {
+  render(<AppearanceSettings />);
+  const paletteGroup = screen.getByRole('group', { name: 'Color palette' });
+  expect(within(paletteGroup).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Indigo', 'Graphite', 'Teal']);
+  const teal = within(paletteGroup).getByRole('button', { name: 'Teal' });
+  expect(teal.querySelector('[data-palette="teal"]')).not.toBeNull();
+  fireEvent.click(teal);
+  expect(useThemeStore.getState().palette).toBe('teal');
+  expect(document.documentElement.getAttribute('data-palette')).toBe('teal');
+  expect(teal.getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByText('Teal-tinted ink and cream paper with a deep teal accent.')).toBeTruthy();
+});
+
 it('shows workspace changes while clearly identifying saved email-only choices in Chat', () => {
   render(<AppearanceSettings initialSection="layout" />);
   fireEvent.click(screen.getByRole('button', { name: 'Below the list' }));

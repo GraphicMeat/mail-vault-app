@@ -1,7 +1,7 @@
 import React from 'react';
 import { AppIconSettings } from './AppIconSettings';
 import { Check, Moon, Sun } from 'lucide-react';
-import { useThemeStore } from '../../stores/themeStore';
+import { useThemeStore, PALETTES } from '../../stores/themeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SettingRow } from '../ui/SettingRow';
 import { ColorOptionPreview, EmailThemePreview } from './PreferencePreview';
@@ -27,7 +27,7 @@ export function ColorSchemeSettings() {
       </SettingRow>
       <SettingRow label={t('settings.colors.palette')} description={t(`settings.colors.${palette || 'indigo'}Description`)}>
         <div role="group" className="settings-visual-options">
-          {['indigo', 'graphite'].map(value => (
+          {PALETTES.map(value => (
             <button type="button" key={value} aria-label={t(`settings.colors.${value}`)}
               aria-pressed={(palette || 'indigo') === value} onClick={() => setPalette(value)}>
               <ColorOptionPreview theme={theme} palette={value} />

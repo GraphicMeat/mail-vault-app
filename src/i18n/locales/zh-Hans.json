@@ -2267,6 +2267,8 @@
   "settings.colors.indigoDescription": "冷色调搭配靛蓝点缀。",
   "settings.colors.light": "浅色",
   "settings.colors.palette": "配色方案",
+  "settings.colors.teal": "青绿",
+  "settings.colors.tealDescription": "偏青绿的墨色与奶油色纸张，搭配深青绿色点缀。",
   "settings.colors.title": "颜色与主题",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "它会在你登录时启动，并在你退出 MailVault 后继续运行。",
   "settings.daemon.alwaysOn.description": "退出应用后 MailVault 仍会继续同步，登录时后台进程会再次启动。",

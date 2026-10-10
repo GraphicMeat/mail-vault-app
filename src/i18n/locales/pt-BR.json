@@ -2267,6 +2267,8 @@
   "settings.colors.indigoDescription": "Tons frios com detalhes em índigo.",
   "settings.colors.light": "Claro",
   "settings.colors.palette": "Paleta de cores",
+  "settings.colors.teal": "Azul-petróleo",
+  "settings.colors.tealDescription": "Tons de azul-petróleo e papel creme com destaque em azul-petróleo profundo.",
   "settings.colors.title": "Cores e tema",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "Ele inicia quando você faz login e continua em execução depois que você fecha o MailVault.",
   "settings.daemon.alwaysOn.description": "O MailVault continua sincronizando depois que você fecha o aplicativo, e o processo em segundo plano inicia novamente ao fazer login.",

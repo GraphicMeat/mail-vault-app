@@ -23,6 +23,23 @@
 }
 [data-theme="dark"][data-palette="graphite"] .insights-chart { --insights-zero: #2b2b2e; }
 [data-theme="light"][data-palette="graphite"] .insights-chart { --insights-zero: #e7e7ea; }
+/* Teal charts follow the accent: activity is teal, never purple. */
+[data-theme="dark"][data-palette="teal"] .insights-chart {
+  --insights-zero: #1d2c30;
+  --insights-level-1: #14444d;
+  --insights-level-2: #1c6c7a;
+  --insights-level-3: #2fa0b2;
+  --insights-level-4: #86dfe9;
+  --insights-on-bubble: #0a1517;
+}
+[data-theme="light"][data-palette="teal"] .insights-chart {
+  --insights-zero: #e4e6dc;
+  --insights-level-1: #cde6ec;
+  --insights-level-2: #8fc9d6;
+  --insights-level-3: #26798c;
+  --insights-level-4: #0b5f72;
+  --insights-on-bubble: #fff;
+}
 .insights-chart button, .insights-chart input, .insights-chart select { font: inherit; }
 .insights-chart button { cursor: pointer; }
 .insights-chart :is(button, input, select, [tabindex]):focus-visible { outline: 2px solid var(--mail-accent); outline-offset: 2px; }

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **A Teal color palette, to go with the teal app icon.** Pick it in Settings, Appearance, Colors, beside Indigo and Graphite, in light or dark. Dark gets teal-tinted ink and light gets cream paper, and controls, Insights charts and chat bubbles follow the accent. Graphite stays the default for new installs and your saved choice is not touched.
+
 ### Fixed
 - **Delete everywhere says why it removed nothing.** From the reader, the row menu, the selection bar and the chat view, a purge that was refused by the server, or held back because the folder's UIDVALIDITY could not be trusted, showed no message and the mail simply came back. It now raises the same warning the list shows, with how many were removed and how many were not.
 

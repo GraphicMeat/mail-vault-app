@@ -133,7 +133,7 @@ const footerTabs = navEntries(['billing', 'diagnostics', 'help']);
 export const settingSearchGroups = [
   { id: 'appearance', section: 'colors', sectionKey: 'settings.appearance.section.colors', settings: [
     ['settings.appearance.theme', 'theme light dark mode'],
-    ['settings.colors.palette', 'palette color colour indigo graphite'],
+    ['settings.colors.palette', 'palette color colour indigo graphite teal'],
     ['settings.icons.title', 'app icon dock taskbar purple teal launcher'],
     ['settings.appearance.emailViewerTheme', 'email message theme light dark background'],
   ] },

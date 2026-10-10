@@ -2267,6 +2267,8 @@
   "settings.colors.indigoDescription": "인디고가 돋보이는 차분하고 시원한 색상.",
   "settings.colors.light": "라이트",
   "settings.colors.palette": "색상 팔레트",
+  "settings.colors.teal": "틸",
+  "settings.colors.tealDescription": "틸빛이 도는 잉크와 크림색 종이, 깊은 틸 포인트 색상.",
   "settings.colors.title": "색상과 테마",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "로그인할 때 시작되며 MailVault를 종료한 뒤에도 계속 실행됩니다.",
   "settings.daemon.alwaysOn.description": "앱을 종료한 뒤에도 MailVault가 계속 동기화하며, 로그인할 때 백그라운드 프로세스가 다시 시작됩니다.",

@@ -2267,6 +2267,8 @@
   "settings.colors.indigoDescription": "Toni freddi con accenti indaco.",
   "settings.colors.light": "Chiaro",
   "settings.colors.palette": "Tavolozza colori",
+  "settings.colors.teal": "Petrolio",
+  "settings.colors.tealDescription": "Toni petrolio e carta color crema con un accento petrolio intenso.",
   "settings.colors.title": "Colori e tema",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "Si avvia all'accesso e continua a funzionare dopo la chiusura di MailVault.",
   "settings.daemon.alwaysOn.description": "MailVault continua a sincronizzare dopo la chiusura dell'app e il processo in background riparte all'accesso.",

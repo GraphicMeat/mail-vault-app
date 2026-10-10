@@ -2267,6 +2267,8 @@
   "settings.colors.indigoDescription": "Kühle Töne mit indigoblauen Akzenten.",
   "settings.colors.light": "Hell",
   "settings.colors.palette": "Farbpalette",
+  "settings.colors.teal": "Petrol",
+  "settings.colors.tealDescription": "Petrolfarbene Töne und cremefarbenes Papier mit tiefem Petrol-Akzent.",
   "settings.colors.title": "Farbe & Design",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "Er startet bei der Anmeldung und läuft weiter, nachdem Sie MailVault beendet haben.",
   "settings.daemon.alwaysOn.description": "MailVault synchronisiert weiter, nachdem Sie das Programm beenden, und der Hintergrunddienst startet bei der Anmeldung erneut.",

@@ -2272,6 +2272,8 @@
   "settings.colors.indigoDescription": "Cool ink with indigo accents.",
   "settings.colors.light": "Light",
   "settings.colors.palette": "Color palette",
+  "settings.colors.teal": "Teal",
+  "settings.colors.tealDescription": "Teal-tinted ink and cream paper with a deep teal accent.",
   "settings.colors.title": "Color & theme",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "It starts when you log in and keeps running after you quit MailVault.",
   "settings.daemon.alwaysOn.description": "MailVault keeps syncing after you quit, and the background helper starts again when you log in.",

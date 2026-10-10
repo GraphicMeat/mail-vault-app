@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, Moon, Sun } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useThemeStore } from '../../stores/themeStore';
+import { useThemeStore, PALETTES } from '../../stores/themeStore';
 import { useT } from '../../i18n/index.js';
 import { Button } from '../ui/Button';
 import { SettingsTabs } from '../ui/SettingsTabs';
@@ -116,7 +116,7 @@ export function AppearanceStep({ onContinue }) {
             <fieldset data-testid="appearance-control-palette">
               <legend>{t('settings.colors.palette')}</legend>
               <div className="settings-visual-options">
-                {['indigo', 'graphite'].map(value => <Choice key={value} id={`appearance-palette-${value}`} active={palette} value={value} onPick={setPalette}>
+                {PALETTES.map(value => <Choice key={value} id={`appearance-palette-${value}`} active={palette} value={value} onPick={setPalette}>
                   <ColorOptionPreview theme={theme} palette={value} />
                   <span className="settings-visual-option-label">{t(`settings.colors.${value}`)}</span>
                 </Choice>)}

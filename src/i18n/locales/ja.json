@@ -2267,6 +2267,8 @@
   "settings.colors.indigoDescription": "インディゴを差し色にしたクールな配色。",
   "settings.colors.light": "ライト",
   "settings.colors.palette": "カラーパレット",
+  "settings.colors.teal": "ティール",
+  "settings.colors.tealDescription": "ティールがかったインクとクリーム色の紙に、深いティールのアクセント。",
   "settings.colors.title": "カラーとテーマ",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "ログイン時に起動し、MailVault を終了した後も動作し続けます。",
   "settings.daemon.alwaysOn.description": "アプリを終了した後も MailVault は同期を続け、ログイン時にバックグラウンドプロセスが再び起動します。",

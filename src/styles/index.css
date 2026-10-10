@@ -1185,6 +1185,56 @@ input[type="range"]::-moz-range-thumb:hover {
   --mail-row-related: #e7ebe2;
 }
 
+/* Teal is the third desk palette, cut from the teal app icon: ink cast toward teal in
+   dark, cream paper in light, deep-teal controls. Its accent is held a little
+   bluer than the icon's own fill so it stays clear of Vault Emerald and Server
+   Blue; paletteSeparation.test.js keeps that margin. Custody and status keep
+   their meaning. */
+[data-theme="dark"][data-palette="teal"] {
+  --mail-bg: #0a1517;
+  --mail-surface: #111f22;
+  --mail-surface-hover: #19292d;
+  --mail-border: #26393d;
+  --mail-border-strong: #5d8590;
+  --mail-input-bg: #0d191c;
+  --mail-text: #e6f1f2;
+  --mail-text-muted: #9db5b9;
+  --mail-accent: #2fb0c0;
+  --mail-accent-text: #86dfe9;
+  --mail-accent-fill: #0b6f80;
+  --mail-accent-hover: #0d7d90;
+  --mail-accent-tint: #0f3a45;
+  --mail-text-on-tint: #c7dadd;
+  --mail-row-selected: #25393d;
+  --mail-row-related: #1b2c30;
+  --chat-sent-bg: #07535c;
+  --chat-received-bg: #19292d;
+  --chat-received-text: #e6f1f2;
+  --chat-received-border: #26393d;
+}
+[data-theme="light"][data-palette="teal"] {
+  --mail-bg: #f4f1e8;
+  --mail-surface: #fffdf8;
+  --mail-surface-hover: #ebe7db;
+  --mail-border: #dbd7c9;
+  --mail-border-strong: #7a8a86;
+  --mail-input-bg: #fffdf8;
+  --mail-text: #14282b;
+  --mail-text-muted: #52666a;
+  --mail-accent: #0b7384;
+  --mail-accent-text: #08596b;
+  --mail-accent-fill: #07535c;
+  --mail-accent-hover: #064048;
+  --mail-accent-tint: #c9e3ee;
+  --mail-text-on-tint: #3f5559;
+  --mail-row-selected: #dfe2d6;
+  --mail-row-related: #e9e8dc;
+  --chat-sent-bg: #07535c;
+  --chat-received-bg: #fffdf8;
+  --chat-received-text: #14282b;
+  --chat-received-border: #dbd7c9;
+}
+
 .settings-window {
   width: 100%; max-width: 1240px; height: min(940px, 92dvh);
   display: flex; min-height: 0; overflow: hidden; border-radius: 16px;

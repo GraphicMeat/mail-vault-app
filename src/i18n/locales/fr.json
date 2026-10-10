@@ -2267,6 +2267,8 @@
   "settings.colors.indigoDescription": "Des tons froids aux accents indigo.",
   "settings.colors.light": "Clair",
   "settings.colors.palette": "Palette de couleurs",
+  "settings.colors.teal": "Sarcelle",
+  "settings.colors.tealDescription": "Des tons sarcelle et un papier crème avec un accent sarcelle profond.",
   "settings.colors.title": "Couleurs et thème",
   "settings.daemon.alwaysOn.aboutRunsAtLogin": "Il démarre à l'ouverture de session et continue de fonctionner après la fermeture de MailVault.",
   "settings.daemon.alwaysOn.description": "MailVault continue la synchronisation après la fermeture de l'application, et le processus d'arrière-plan redémarre à l'ouverture de session.",
