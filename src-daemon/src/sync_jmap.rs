@@ -798,7 +798,7 @@ mod tests {
         sync(&state, &account, "INBOX").await;
         let gen0 = state.sync_engine.change_gen();
         let raw = b"Message-ID: <mine@x>\r\nSubject: mine\r\n\r\nbody";
-        let imported = state.jmap.import_raw(&account.imap_config, raw, "mb-inbox", &["$seen".to_string()]).await.unwrap();
+        let imported = state.jmap.import_raw(&account.imap_config, raw, "mb-inbox", &["$seen".to_string()], None).await.unwrap();
         let ImportResult::Created(imported) = imported else { panic!("expected a new email, got {imported:?}") };
         assert!(state.jmap.is_own(&account.imap_config, &imported.id));
         let r = sync(&state, &account, "INBOX").await;

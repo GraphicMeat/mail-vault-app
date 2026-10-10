@@ -179,9 +179,12 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
     };
 
     // The user's daily download limit governs this run (backup is background
-    // work). Graph traffic is not wire-counted, so a Graph run has no limit.
+    // work). Graph and JMAP traffic is not wire-counted, so neither run has
+    // a limit. A JMAP account is checked first: it never reaches the IMAP
+    // runner, which would dial `imapHost` with the JMAP credentials.
+    let is_jmap = account.uses_jmap();
     let is_graph = account.oauth2_transport.as_deref() == Some("graph");
-    let limit = (!is_graph).then(|| {
+    let limit = (!is_graph && !is_jmap).then(|| {
         BackgroundLimit::for_account(state.app_dir.clone(), account_id.clone(), account.host.clone(), state.clock.clone())
     });
 
@@ -210,7 +213,13 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         // since `BackupRunGuard::drop` only removes by `Arc::ptr_eq`.
         let _guard = guard;
 
-        let result = if is_graph { backup::run_graph_account(ctx).await } else { backup::run_imap_account(ctx).await };
+        let result = if is_jmap {
+            backup::run_jmap_account(ctx).await
+        } else if is_graph {
+            backup::run_graph_account(ctx).await
+        } else {
+            backup::run_imap_account(ctx).await
+        };
 
         // `run_imap_account` emits its own terminal `backup-progress` frame
         // (`active: false`) on every path that reaches the end of its folder

@@ -19,7 +19,7 @@ use crate::net_activity::{error_chain, http_client_with, Tracked};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, LOCATION, RETRY_AFTER};
 use reqwest::redirect::Policy;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use url::Url;
 
@@ -30,6 +30,10 @@ const TRANSFER_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const PUSH_IDLE_TIMEOUT: Duration = Duration::from_secs(90);
 const MAX_REDIRECTS: usize = 5;
 const MAX_CHANGES: u64 = 500;
+/// The ids `all_email_ids` asks for per `Email/query`.
+const ID_PAGE: usize = 500;
+/// The most hits a Message-ID lookup reads back (`find_message_id_in`).
+const MESSAGE_ID_HITS: usize = 50;
 
 pub struct JmapClient {
     api: Tracked,
@@ -166,6 +170,15 @@ fn collect_set(r: &Value, out: &mut SetOutcome) {
 /// minutes (`smtp.rs`'s send sizing).
 fn transfer_timeout(bytes: usize) -> Duration {
     Duration::from_secs(60 + (bytes / 50_000) as u64).min(Duration::from_secs(600))
+}
+
+/// A message's own `Date:` as a JMAP UTCDate ("2019-03-05T08:15:00Z", RFC
+/// 8620 §1.4: `Z`, never "+00:00"): the `receivedAt` an import keeps it
+/// under, as an APPEND keeps its INTERNALDATE. `None` without a readable
+/// Date: the server then stamps the import time.
+pub fn received_at_of(raw: &[u8]) -> Option<String> {
+    let secs = crate::import_rehome::head_of(raw).date_secs?;
+    chrono::DateTime::from_timestamp(secs, 0).map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
 }
 
 impl JmapClient {
@@ -613,6 +626,73 @@ impl JmapClient {
             (Some("alreadyExists"), Some(existing)) => Ok(ImportResult::AlreadyExists { existing_id: existing.to_string() }),
             (Some(kind), _) => Err(JmapError::Method { kind: kind.to_string(), description }),
             (None, _) => Err(JmapError::Protocol("Email/import answered neither created nor notCreated".into())),
+        }
+    }
+
+    /// Upload + `Email/import` one raw message into `mailbox_id`, unless the
+    /// mailbox already holds its Message-ID (`find_message_id_in`): then
+    /// nothing is sent and the answer is `AlreadyExists` naming the copy
+    /// there, the rule `mbox_upload` applies to IMAP. A server-side dedupe
+    /// (`alreadyExists`) is `AlreadyExists` too: present, never failed.
+    ///
+    /// A server that repairs the message (different blobId/size) still
+    /// counts as imported: the server copy is the server's business, the
+    /// vault keeps our bytes. Its Message-ID is unchanged, so a second run
+    /// finds it and imports nothing.
+    pub async fn import_raw(
+        &self,
+        raw: &[u8],
+        mailbox_id: &str,
+        keywords: &[String],
+        received_at: Option<&str>,
+    ) -> Result<ImportResult, JmapError> {
+        if let Some(existing_id) = self.find_message_id_in(mailbox_id, raw).await? {
+            return Ok(ImportResult::AlreadyExists { existing_id });
+        }
+        let blob_id = self.upload(raw).await?;
+        self.import(&blob_id, &[mailbox_id.to_string()], keywords, received_at).await
+    }
+
+    /// The email in `mailbox_id` whose Message-ID is `raw`'s, exactly. The
+    /// `header` filter matches a substring (RFC 8621 §4.4.1), so each hit is
+    /// read back (`messageId`) and only an equal id counts: `<pre-e1@x>`
+    /// never stands in for `<e1@x>`. `None` for a message without one.
+    pub async fn find_message_id_in(&self, mailbox_id: &str, raw: &[u8]) -> Result<Option<String>, JmapError> {
+        let Some(wanted) = crate::maildir::message_id_in(raw) else { return Ok(None) };
+        let r = self
+            .method(
+                "Email/query",
+                json!({"filter": {"inMailbox": mailbox_id, "header": ["Message-ID", wanted]}, "limit": MESSAGE_ID_HITS}),
+            )
+            .await?;
+        let hits = strings(&r["ids"]);
+        if hits.is_empty() {
+            return Ok(None);
+        }
+        let got = self.get_emails(&hits, &["id", "messageId"]).await?;
+        Ok(got
+            .list
+            .iter()
+            .find(|e| strings(&e["messageId"]).iter().any(|m| crate::maildir::normalize_message_id(m) == wanted))
+            .and_then(|e| e["id"].as_str())
+            .map(str::to_string))
+    }
+
+    /// Every email id in `mailbox_id`, newest first: `query_mailbox`
+    /// `ID_PAGE` at a time until a short page or the total. An id a shifting
+    /// window hands out twice is kept once.
+    pub async fn all_email_ids(&self, mailbox_id: &str) -> Result<Vec<String>, JmapError> {
+        let mut ids: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut position = 0;
+        loop {
+            let (page, total) = self.query_mailbox(mailbox_id, position, ID_PAGE).await?;
+            let got = page.len();
+            position += got;
+            ids.extend(page.into_iter().filter(|id| seen.insert(id.clone())));
+            if got < ID_PAGE || total.is_some_and(|t| position >= t) {
+                return Ok(ids);
+            }
         }
     }
 

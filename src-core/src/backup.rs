@@ -22,7 +22,9 @@
 //! The Graph/Outlook backup path (`run_graph_account`, ported from
 //! `run_graph_backup`, `src-tauri/src/backup.rs:1131-1404`) followed in Task 2,
 //! reusing this file's shared uid-scanning helpers below. Its own header
-//! comment (above `run_graph_account`) covers what that port changed.
+//! comment (above `run_graph_account`) covers what that port changed. A JMAP
+//! account runs `run_jmap_account`, the same shape over the JMAP ledger and
+//! blob downloads (its header comment says what differs).
 //!
 //! The read-state catch-up this run does once per folder
 //! (`backup.rs:850-886`'s `vault_apply_flags` daemon-RPC bridge) is now an
@@ -1215,6 +1217,347 @@ fn graph_completed_folders_checkpoint(completed_folders: usize, refused: Option<
     }
 }
 
+// ── JMAP backup runner ───────────────────────────────────────────────────────
+//
+// The Graph runner's shape (`run_graph_backup_inner`): one listing per
+// folder, the uid ledger plans what is missing, each message written to the
+// vault and the mirror under the same gates (`write_backup_copy`). What
+// differs:
+// - One `JmapClient` for the whole run, connected under the "backup"
+//   purpose. The folders are `mailbox_tree`'s flat list, filed by path
+//   ("INBOX", "Work/Sub"): the paths the bridge and the sync file under.
+// - The ledger is the mailbox's JMAP ledger (`jmap_id_map.json`,
+//   `graph_ledger::ledger_path(.., true)`), handed the ids oldest first with
+//   no Message-ID adoption, as `AccountJmap::ids_to_uids` hands them: a uid
+//   names the same email here, in the bridge and in the sync.
+// - The bytes are the email's blob (`download`), with one `Email/get` per
+//   folder for the blob ids and keywords; the file name carries `archived`
+//   plus the read, flagged, answered and draft state the keywords say.
+// - Folders run one after another on the one session, whatever
+//   `mailbox_concurrency` asks: there is no parallel runner.
+// - No daily limit, as for Graph: JMAP traffic is not wire-counted.
+pub async fn run_jmap_account(ctx: BackupRunContext) -> Result<BackupResult, String> {
+    let start = std::time::Instant::now();
+
+    if let Some(ref root) = ctx.mirror_root {
+        info!("backup(jmap): using external path: {:?}", root);
+        // Same ordering rule as the other runners: drain BEFORE any mirroring
+        // work touches the files the queue is about to delete.
+        drain_purge_queue(&ctx.app_dir, Path::new(root));
+    }
+    mirror_local_folders_blocking(&ctx).await;
+
+    run_jmap_backup_inner(ctx, start).await
+}
+
+/// The account's JMAP session for a backup run or a status check, every
+/// request shown as "backup" on Network Activity. No credentials is
+/// `E_JMAP_AUTH` before anything leaves the machine.
+async fn jmap_backup_client(account: &ImapConfig) -> Result<crate::jmap::JmapClient, String> {
+    let auth = account
+        .jmap_auth()
+        .ok_or_else(|| format!("E_JMAP_AUTH: there is no password or API token for {} to back up with", account.email))?;
+    let url = account.jmap_session_url.as_deref().unwrap_or_default().trim().to_string();
+    net_activity::with_purpose("backup", crate::jmap::JmapClient::connect(&url, auth, &account.email))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// A JMAP email's backup file flags: `archived`, plus `seen`, `flagged`,
+/// `replied` and `draft` as its keywords say (any case).
+fn jmap_file_flags(email: &serde_json::Value) -> Vec<String> {
+    let on = |keyword: &str| {
+        email["keywords"]
+            .as_object()
+            .is_some_and(|m| m.iter().any(|(k, v)| k.eq_ignore_ascii_case(keyword) && v.as_bool() == Some(true)))
+    };
+    let mut flags = vec!["archived".to_string()];
+    for (keyword, word) in [("$seen", "seen"), ("$flagged", "flagged"), ("$answered", "replied"), ("$draft", "draft")] {
+        if on(keyword) {
+            flags.push(word.to_string());
+        }
+    }
+    flags
+}
+
+/// One backup copy of `uid` in `mailbox`, as the Graph runner writes it: the
+/// vault file under the mailbox lock and then the gate (lock order), its
+/// registry row right after; with `mirror_to`, the mirror file under a gate
+/// of its own outside the mailbox lock, so a slow external drive never holds
+/// up the folder's other writers. A failed vault write is `Err` and ends the
+/// run; the mirror's outcome comes back for the caller to count. Runs off the
+/// runtime workers.
+async fn write_backup_copy(
+    ctx: &BackupRunContext,
+    mailbox: &str,
+    uid: u32,
+    filename: String,
+    raw: Vec<u8>,
+    mirror_to: Option<PathBuf>,
+) -> Result<Option<Result<(), String>>, String> {
+    let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, mailbox);
+    let gate = Arc::clone(&ctx.archive_ctx.gate);
+    let registry = Arc::clone(&ctx.archive_ctx.registry);
+    let (account, mailbox) = (ctx.account_id.clone(), mailbox.to_string());
+    tokio::task::spawn_blocking(move || -> Result<Option<Result<(), String>>, String> {
+        registry.serialized(&account, &mailbox, || {
+            gate(&mut || {
+                std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {e}"))?;
+                let written = cur_dir.join(&filename);
+                if let Err(e) = std::fs::write(&written, &raw) {
+                    // A failed plain write can leave a partial file.
+                    registry.invalidate(&account, &mailbox);
+                    return Err(format!("write .eml: {e}"));
+                }
+                registry.upsert(&account, &mailbox, uid, &written);
+                Ok(())
+            })
+        })?;
+        Ok(mirror_to.as_ref().map(|dir| {
+            let mut written: Result<(), String> = Ok(());
+            let gated = gate(&mut || {
+                written = std::fs::create_dir_all(dir)
+                    .map_err(|e| format!("external mkdir failed: {e}"))
+                    .and_then(|()| std::fs::write(dir.join(&filename), &raw).map_err(|e| format!("external write failed: {e}")));
+                Ok(())
+            });
+            gated.and(written)
+        }))
+    })
+    .await
+    .map_err(|e| format!("message write panicked: {e}"))?
+}
+
+async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant) -> Result<BackupResult, String> {
+    use crate::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
+
+    let account = &ctx.account;
+    let account_id = &ctx.account_id;
+    let client = jmap_backup_client(account).await?;
+    let (list, _) = client.mailboxes().await.map_err(|e| e.to_string())?;
+    let (folders, mailbox_ids) = crate::jmap::mailbox_map::mailbox_tree(&list);
+
+    let total_folders = folders.len();
+    let mut completed_folders = 0usize;
+    let mut total_backed_up = 0usize;
+    let mut total_errors = 0usize;
+    let mut total_ext_failures = 0usize;
+    let mut last_message_error: Option<String> = None;
+    // The first folder the uid ledger refused, and why: it stored nothing,
+    // so a resumed run's checkpoint must not pass it (Graph's rule).
+    let mut refused: Option<(usize, String)> = None;
+    let mut cancelled = false;
+
+    info!(
+        "backup(jmap): starting for {} ({} folders, skipping first {})",
+        account.email, total_folders, ctx.skip_folders
+    );
+
+    for (folder_idx, folder) in folders.iter().enumerate() {
+        if ctx.cancel.load(Ordering::Relaxed) {
+            warn!("backup(jmap): cancelled for {} at folder {}/{}", account.email, completed_folders, total_folders);
+            cancelled = true;
+            break;
+        }
+        if folder_idx < ctx.skip_folders {
+            completed_folders += 1;
+            continue;
+        }
+
+        let mailbox_path = folder.path.clone();
+        let Some(mailbox_id) = mailbox_ids.get(&mailbox_path).cloned() else {
+            completed_folders += 1;
+            continue;
+        };
+        let mirror_dir = ctx
+            .mirror_root
+            .as_ref()
+            .map(|root| PathBuf::from(root).join(&account.email).join(&mailbox_path).join("cur"));
+
+        // Oldest first: the order the ledger takes a listing in.
+        let mut listed = client.all_email_ids(&mailbox_id).await.map_err(|e| e.to_string())?;
+        listed.reverse();
+
+        // Local uids after the pre-sync with the mirror, off the runtime
+        // workers, as the other runners take them.
+        let local_uids = {
+            let vault_cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let mirror_dir = mirror_dir.clone();
+            let (registry, account, mailbox) = (Arc::clone(&ctx.archive_ctx.registry), account_id.clone(), mailbox_path.clone());
+            tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account, &mailbox, &vault_cur_dir, mirror_dir.as_deref()))
+                .await
+                .map_err(|e| format!("pre-sync panicked: {}", e))??
+        };
+        let (mut in_vault, mut in_mirror) = {
+            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let mirror_dir = mirror_dir.clone();
+            tokio::task::spawn_blocking(move || {
+                let in_vault: HashSet<u32> = uid_file_map(&cur_dir).into_keys().collect();
+                let in_mirror: Option<HashSet<u32>> = mirror_dir.map(|dir| mirror_file_map(&dir).into_keys().collect());
+                (in_vault, in_mirror)
+            })
+            .await
+            .map_err(|e| format!("folder listing panicked: {}", e))?
+        };
+
+        if !listed.is_empty() && !ctx.cancel.load(Ordering::Relaxed) {
+            let entries: Vec<(String, Option<String>)> = listed.iter().map(|id| (id.clone(), None)).collect();
+            let ledger_path = crate::graph_ledger::ledger_path(
+                &crate::header_cache::sidecar_dir(&ctx.archive_ctx.root, account_id, &mailbox_path),
+                true,
+            );
+            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let local = local_uids.clone();
+            // Allocation under the vault gate, on a blocking thread, never
+            // under `with_ledger_lock` (the Graph runner's rule).
+            let gate = Arc::clone(&ctx.archive_ctx.gate);
+            let plan: Result<Vec<(usize, u32)>, String> = tokio::task::spawn_blocking(move || {
+                let mut planned: Result<Vec<(usize, u32)>, String> = Ok(Vec::new());
+                gate(&mut || {
+                    planned = crate::graph_ledger::plan_fetch(&ledger_path, &cur_dir, &entries, &local);
+                    Ok(())
+                })?;
+                planned
+            })
+            .await
+            .map_err(|e| format!("jmap ledger panicked: {}", e))?;
+
+            match plan {
+                Err(e) => {
+                    warn!("backup(jmap): {} not backed up: {}", mailbox_path, e);
+                    total_errors += 1;
+                    refused.get_or_insert((folder_idx, format!("{} was not backed up: {}", mailbox_path, e)));
+                }
+                Ok(plan) => {
+                    let wanted: Vec<String> = plan.iter().map(|(idx, _)| listed[*idx].clone()).collect();
+                    let got = client.get_emails(&wanted, &["id", "blobId", "keywords"]).await.map_err(|e| e.to_string())?;
+                    let by_id: std::collections::HashMap<String, serde_json::Value> =
+                        got.list.into_iter().filter_map(|e| e["id"].as_str().map(str::to_string).map(|id| (id, e))).collect();
+                    for (idx, uid) in plan {
+                        if ctx.cancel.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        // Gone since the listing: nothing left to keep.
+                        let Some(email) = by_id.get(&listed[idx]) else { continue };
+                        let Some(blob_id) = email["blobId"].as_str() else { continue };
+                        match client.download(blob_id).await {
+                            Ok(raw_bytes) => {
+                                let mirror_to = match copies_to_write(uid, &in_vault, in_mirror.as_ref()) {
+                                    CopiesToWrite::Nothing => continue,
+                                    CopiesToWrite::Vault => None,
+                                    CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
+                                };
+                                let filename = crate::vault_files::build_maildir_filename(uid, &jmap_file_flags(email));
+                                let mirror_write = write_backup_copy(&ctx, &mailbox_path, uid, filename, raw_bytes, mirror_to).await?;
+                                in_vault.insert(uid);
+                                match mirror_write {
+                                    Some(Ok(())) => {
+                                        if let Some(mirrored) = in_mirror.as_mut() {
+                                            mirrored.insert(uid);
+                                        }
+                                    }
+                                    Some(Err(e)) => {
+                                        warn!("backup(jmap): {}", e);
+                                        total_ext_failures += 1;
+                                    }
+                                    None => {}
+                                }
+                                total_backed_up += 1;
+                            }
+                            Err(e) => {
+                                warn!("backup(jmap): failed to fetch email {} in {}: {}", listed[idx], mailbox_path, e);
+                                total_errors += 1;
+                                last_message_error = Some(e.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // A cancel mid-folder: counting the folder would have the next run
+        // skip what it never fetched.
+        if ctx.cancel.load(Ordering::Relaxed) {
+            warn!(
+                "backup(jmap): cancelled for {} inside {} ({}/{} folders done)",
+                account.email, mailbox_path, completed_folders, total_folders
+            );
+            cancelled = true;
+            break;
+        }
+
+        completed_folders += 1;
+
+        (ctx.on_progress)(BackupProgress {
+            account_id: account_id.clone(),
+            folder: mailbox_path,
+            total_folders,
+            completed_folders,
+            total_emails: total_backed_up + total_errors,
+            completed_emails: total_backed_up,
+            errors: total_errors,
+            active: true,
+            last_error: None,
+            missing_in_folder: 0,
+            cancelled: false,
+            success: true,
+            external_copy_ok: total_ext_failures == 0,
+            external_copy_error: None,
+            external_copy_failed_count: total_ext_failures,
+            stop_reason: None,
+            limit_bytes: None,
+            resume_after_ms: None,
+        });
+    }
+
+    // One terminal frame on every path out of the loop, sharing its values
+    // with the result (the Graph runner's rule, checkpoint clamped alike).
+    let checkpoint = graph_completed_folders_checkpoint(completed_folders, refused.as_ref(), cancelled);
+    let error_message = refused
+        .as_ref()
+        .map(|(_, why)| why.clone())
+        .or_else(|| partial_error_message(total_errors, total_backed_up, last_message_error.as_deref()));
+    (ctx.on_progress)(terminal_backup_progress(
+        account_id,
+        cancelled,
+        total_folders,
+        checkpoint,
+        total_backed_up,
+        total_errors,
+        total_ext_failures,
+        error_message.clone(),
+    ));
+
+    let duration = start.elapsed().as_secs_f64();
+    info!(
+        "backup(jmap): {} for {}: {} emails backed up, {} errors, {:.1}s (folders: {}/{})",
+        if cancelled { "cancelled" } else { "completed" },
+        account.email,
+        total_backed_up,
+        total_errors,
+        duration,
+        completed_folders,
+        total_folders
+    );
+
+    Ok(BackupResult {
+        emails_backed_up: total_backed_up,
+        errors: total_errors,
+        duration_secs: duration,
+        success: !cancelled,
+        error_message,
+        cancelled,
+        completed_folders: checkpoint,
+        external_copy_ok: total_ext_failures == 0,
+        external_copy_error: if total_ext_failures > 0 {
+            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
+        } else {
+            None
+        },
+        external_copy_failed_count: total_ext_failures,
+    })
+}
+
 // ── Backup status comparison ─────────────────────────────────────────────────
 //
 // Ported from `backup.rs:59-461` (`FolderBackupStatus`/`AccountBackupStatus`,
@@ -1518,6 +1861,70 @@ async fn get_graph_backup_status(
     })
 }
 
+/// JMAP backup status: each mailbox's `totalEmails`, flat and by path
+/// (`mailbox_tree`), against the vault and mirror counts.
+async fn get_jmap_backup_status(
+    account_id: &str,
+    account: &ImapConfig,
+    vault_root: &Path,
+    mirror_root: Option<&Path>,
+) -> Result<AccountBackupStatus, String> {
+    let client = jmap_backup_client(account).await?;
+    let (list, _) = client.mailboxes().await.map_err(|e| e.to_string())?;
+    let (infos, mailbox_ids) = crate::jmap::mailbox_map::mailbox_tree(&list);
+    let counts: std::collections::HashMap<String, usize> = list.iter().map(|m| (m.id.clone(), m.total_emails as usize)).collect();
+    let email = account.email.clone();
+
+    // Every read_dir on the blocking pool, as the Graph status does.
+    let (folders, total_server, total_app, total_external) = {
+        let vault_root = vault_root.to_path_buf();
+        let account_id = account_id.to_string();
+        let mirror_root = mirror_root.map(|p| p.to_path_buf());
+        tokio::task::spawn_blocking(move || {
+            let mut folders = Vec::new();
+            let (mut total_server, mut total_app, mut total_external) = (0usize, 0usize, 0usize);
+            for info in &infos {
+                let sc = mailbox_ids.get(&info.path).and_then(|id| counts.get(id)).copied().unwrap_or(0);
+                let cur_dir = crate::vault_files::cur_path(&vault_root, &account_id, &info.path);
+                let app_count = scan_cur_uids(&cur_dir).unwrap_or_default().len();
+                let ext_count = match mirror_root.as_deref() {
+                    Some(root) => scan_external_uids(root, &email, &info.path).len(),
+                    None => 0,
+                };
+                total_server += sc;
+                total_app += app_count;
+                total_external += ext_count;
+                if sc > 0 || app_count > 0 || ext_count > 0 {
+                    folders.push(FolderBackupStatus {
+                        path: info.path.clone(),
+                        name: info.name.clone(),
+                        server_count: sc,
+                        app_count,
+                        external_count: ext_count,
+                        children: vec![],
+                        folder_alias: info.path.clone(),
+                        local_count_alias: app_count,
+                    });
+                }
+            }
+            (folders, total_server, total_app, total_external)
+        })
+        .await
+        .map_err(|e| format!("jmap folder scan panicked: {}", e))?
+    };
+
+    Ok(AccountBackupStatus {
+        folders,
+        total_server,
+        total_local: total_app,
+        total_app,
+        total_external,
+        external_available: mirror_root.is_some(),
+        external_status: None,
+        external_error: None,
+    })
+}
+
 /// Compare server email counts vs local backup counts for each folder.
 /// Ported from `backup.rs:311-363`'s `get_backup_status`, minus the bookmark
 /// resolution: `mirror_root` is already resolved by the caller, and
@@ -1535,7 +1942,9 @@ pub async fn get_backup_status(
     external_status: Option<String>,
     external_error: Option<String>,
 ) -> Result<AccountBackupStatus, String> {
-    let mut status = if account.oauth2_transport.as_deref() == Some("graph") {
+    let mut status = if account.uses_jmap() {
+        get_jmap_backup_status(account_id, account, vault_root, mirror_root).await?
+    } else if account.oauth2_transport.as_deref() == Some("graph") {
         get_graph_backup_status(account_id, account, vault_root, mirror_root).await?
     } else {
         net_activity::with_purpose("backup", get_imap_backup_status(pool, account_id, account, vault_root, mirror_root)).await?

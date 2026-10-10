@@ -26,6 +26,11 @@ use std::time::{Duration, Instant};
 /// arrival count (`JmapSessions::is_own`).
 pub const OWN_IMPORT_TTL: Duration = Duration::from_secs(10 * 60);
 
+/// `note_own` sweeps expired ids once per this many entries, not on every
+/// insert: a restore of 100k messages would otherwise rescan the whole set
+/// per message. `is_own` checks the age itself, so a stale entry is harmless.
+const OWN_SWEEP_EVERY: usize = 1024;
+
 /// Every connected JMAP account, keyed by address + session URL. One entry
 /// per account: a changed password or token replaces it (`fingerprint`).
 #[derive(Default)]
@@ -89,7 +94,9 @@ impl JmapSessions {
     /// restore, a sent copy): the sync does not announce it as an arrival.
     pub fn note_own(&self, cfg: &ImapConfig, email_id: &str) {
         let mut own = self.own.lock().unwrap_or_else(|p| p.into_inner());
-        own.retain(|_, at| at.elapsed() < OWN_IMPORT_TTL);
+        if own.len() >= OWN_SWEEP_EVERY && own.len() % OWN_SWEEP_EVERY == 0 {
+            own.retain(|_, at| at.elapsed() < OWN_IMPORT_TTL);
+        }
         own.insert(format!("{}\n{}", session_key(cfg), email_id), Instant::now());
     }
 
@@ -102,21 +109,39 @@ impl JmapSessions {
             .is_some_and(|at| at.elapsed() < OWN_IMPORT_TTL)
     }
 
-    /// Upload `raw` and `Email/import` it into `mailbox_id` with `keywords`,
-    /// recording the new id as this daemon's own (`note_own`). A server-side
-    /// dedupe (`AlreadyExists`) names an email that was already there and
-    /// records nothing.
-    #[cfg_attr(not(test), allow(dead_code))] // Task 9b's restore and upload call it.
+    /// `JmapClient::import_raw` on the account's session (the Message-ID
+    /// dedupe, then upload + `Email/import` into `mailbox_id` with
+    /// `keywords` and `received_at`), recording a new id as this daemon's
+    /// own (`note_own`) so the sync never announces it. `AlreadyExists` (the
+    /// mailbox or the server already held the message) records nothing.
+    /// Every import the daemon makes (restore, mbox upload, migration) goes
+    /// through here or `import_raw_on`.
     pub async fn import_raw(
         &self,
         cfg: &ImapConfig,
         raw: &[u8],
         mailbox_id: &str,
         keywords: &[String],
+        received_at: Option<&str>,
     ) -> Result<ImportResult, JmapError> {
         let acct = self.get(cfg).await?;
-        let blob_id = acct.client.upload(raw).await?;
-        let result = acct.client.import(&blob_id, &[mailbox_id.to_string()], keywords, None).await?;
+        self.import_raw_on(cfg, &acct, raw, mailbox_id, keywords, received_at).await
+    }
+
+    /// `import_raw` on a session the caller holds instead of the shared one:
+    /// a job on a runtime of its own (the mbox upload) keeps its own
+    /// session, so no connection of the shared one is ever bound to a
+    /// runtime that ends with the job. Records new ids exactly the same way.
+    pub async fn import_raw_on(
+        &self,
+        cfg: &ImapConfig,
+        acct: &AccountJmap,
+        raw: &[u8],
+        mailbox_id: &str,
+        keywords: &[String],
+        received_at: Option<&str>,
+    ) -> Result<ImportResult, JmapError> {
+        let result = acct.client.import_raw(raw, mailbox_id, keywords, received_at).await?;
         if let ImportResult::Created(imported) = &result {
             self.note_own(cfg, &imported.id);
         }

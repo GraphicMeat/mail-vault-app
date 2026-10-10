@@ -9,7 +9,13 @@ use tracing::{info, warn};
 
 use crate::graph::GraphClient;
 use crate::imap::{self, ImapConfig, ImapSession, MailboxInfo};
+use crate::jmap_sessions::AccountJmap;
 use crate::server::DaemonState;
+use mailvault_core::jmap::client::received_at_of;
+use mailvault_core::jmap::headers::{flags_to_keywords, keywords_to_flags};
+use mailvault_core::jmap::mailbox_map::DELIMITER;
+use mailvault_core::jmap::{ImportResult, JmapError};
+use serde_json::{json, Value};
 
 // ── Data structures ─────────────────────────────────────────────────────────
 
@@ -467,6 +473,276 @@ pub async fn migrate_email_to_graph(
     Ok(true)
 }
 
+// ── JMAP (either side) ──────────────────────────────────────────────────────
+
+/// The transport a migration side really speaks: a JMAP account is "jmap"
+/// whatever the app sent (its `getTransport` knows only "graph" and "imap"),
+/// so no IMAP path ever dials it with the JMAP credentials.
+pub fn effective_transport(config: &ImapConfig, transport: &str) -> String {
+    if config.uses_jmap() {
+        "jmap".to_string()
+    } else {
+        transport.to_string()
+    }
+}
+
+/// Ensure a JMAP destination mailbox exists at `folder_path` (a path as
+/// `mailbox_tree` gives it: "INBOX", "Work/Sub"), creating each missing
+/// level with `Mailbox/set` under its parent, subscribed. A U+2215 in a
+/// segment stands for a "/" inside that name (`mailbox_map`). Returns the
+/// mailbox id.
+pub async fn ensure_dest_folder_jmap(acct: &AccountJmap, folder_path: &str) -> Result<String, JmapError> {
+    let boxes = acct.current().await?;
+    if let Some(id) = boxes.ids.get(folder_path) {
+        return Ok(id.clone());
+    }
+    let mut parent: Option<String> = None;
+    let mut path = String::new();
+    for part in folder_path.split(DELIMITER) {
+        if !path.is_empty() {
+            path.push_str(DELIMITER);
+        }
+        path.push_str(part);
+        if let Some(id) = boxes.ids.get(&path) {
+            parent = Some(id.clone());
+            continue;
+        }
+        let name = part.replace('\u{2215}', "/");
+        if name.trim().is_empty() {
+            return Err(JmapError::Protocol(format!("no folder name in {folder_path}")));
+        }
+        let r = acct
+            .client
+            .mailbox_set(json!({"create": {"f": {"name": name, "parentId": parent, "isSubscribed": true}}}))
+            .await?;
+        let Some(id) = r["created"]["f"]["id"].as_str() else {
+            let e = &r["notCreated"]["f"];
+            return Err(JmapError::Method {
+                kind: e["type"].as_str().unwrap_or("serverFail").to_string(),
+                description: Some(format!("{path}: {}", e["description"].as_str().unwrap_or("not created"))),
+            });
+        };
+        info!("[migration] Created JMAP mailbox: {}", path);
+        parent = Some(id.to_string());
+    }
+    if let Err(e) = acct.refresh().await {
+        warn!("[migration] JMAP mailbox list not refreshed after a create: {}", e);
+    }
+    parent.ok_or_else(|| JmapError::Protocol("Empty folder path".into()))
+}
+
+/// Every Message-ID in a JMAP mailbox, bracketed as `extract_message_id`
+/// gives them, for the run's dedupe.
+pub async fn fetch_dest_message_ids_jmap(acct: &AccountJmap, mailbox_id: &str) -> Result<HashSet<String>, JmapError> {
+    let ids = acct.client.all_email_ids(mailbox_id).await?;
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let got = acct.client.get_emails(&ids, &["id", "messageId"]).await?;
+    Ok(got
+        .list
+        .iter()
+        .flat_map(|e| e["messageId"].as_array().cloned().unwrap_or_default())
+        .filter_map(|m| m.as_str().map(|m| format!("<{}>", mailvault_core::maildir::normalize_message_id(m))))
+        .collect())
+}
+
+/// A JMAP source mailbox as the run's source items, oldest first: the list
+/// index, the email id (in the Graph id slot), its read state, its bracketed
+/// Message-ID (the dedupe the Graph source gets), sender and subject.
+async fn jmap_source_items(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    mailbox: &str,
+) -> Result<Vec<(u32, Option<String>, bool, Option<String>, String, String)>, String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let mailbox_id = acct.mailbox_id(mailbox).await.map_err(|e| e.to_string())?;
+    let mut ids = acct.client.all_email_ids(&mailbox_id).await.map_err(|e| e.to_string())?;
+    ids.reverse();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let got = acct
+        .client
+        .get_emails(&ids, &["id", "keywords", "messageId", "from", "subject"])
+        .await
+        .map_err(|e| e.to_string())?;
+    let by_id: HashMap<String, Value> =
+        got.list.into_iter().filter_map(|e| e["id"].as_str().map(str::to_string).map(|id| (id, e))).collect();
+    Ok(ids
+        .iter()
+        .filter_map(|id| by_id.get(id).map(|e| (id, e)))
+        .enumerate()
+        .map(|(i, (id, e))| {
+            let is_read = keywords_to_flags(&e["keywords"]).iter().any(|f| f == "\\Seen");
+            let message_id = e["messageId"][0].as_str().map(|m| format!("<{}>", mailvault_core::maildir::normalize_message_id(m)));
+            let sender = e["from"][0]["email"].as_str().unwrap_or("unknown").to_string();
+            let subject = e["subject"].as_str().unwrap_or_default().to_string();
+            (i as u32, Some(id.clone()), is_read, message_id, sender, subject)
+        })
+        .collect())
+}
+
+/// One IMAP message for a migration: its bytes, its flags (system flags
+/// spelled `\Seen` and the like, keywords verbatim) and its INTERNALDATE. A
+/// failed fetch never goes back to the pool: it can leave unread bytes on the
+/// session.
+async fn fetch_imap_message(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    mailbox: &str,
+    uid: u32,
+) -> Result<(Vec<u8>, Vec<String>, Option<chrono::DateTime<chrono::FixedOffset>>), String> {
+    use futures::StreamExt;
+    let pool = &state.imap_pool;
+    let mut guard = pool.get_priority(config).await?;
+    let fetched = async {
+        imap::select_mailbox(&mut guard.session, mailbox).await?;
+        let stream = guard
+            .session
+            .uid_fetch(uid.to_string(), "(UID FLAGS INTERNALDATE BODY.PEEK[])")
+            .await
+            .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
+        let fetches: Vec<_> = stream.collect::<Vec<_>>().await.into_iter().filter_map(|r| r.ok()).collect();
+        let fetch = fetches.first().ok_or_else(|| format!("Email UID {} not found", uid))?;
+        let raw = fetch.body().ok_or_else(|| format!("No body for UID {}", uid))?.to_vec();
+        let flags: Vec<String> = fetch
+            .flags()
+            .filter_map(|f| {
+                use crate::imap::async_imap::types::Flag;
+                match f {
+                    Flag::Seen => Some("\\Seen".to_string()),
+                    Flag::Answered => Some("\\Answered".to_string()),
+                    Flag::Flagged => Some("\\Flagged".to_string()),
+                    Flag::Draft => Some("\\Draft".to_string()),
+                    Flag::Custom(k) => Some(k.to_string()),
+                    _ => None,
+                }
+            })
+            .collect();
+        Ok::<_, String>((raw, flags, fetch.internal_date()))
+    }
+    .await;
+    match &fetched {
+        Ok(_) => {
+            guard.last_selected = Some(mailbox.to_string());
+            pool.return_priority(config, guard).await;
+        }
+        Err(_) => pool.discard(config, guard).await,
+    }
+    fetched
+}
+
+/// One JMAP message for a migration: its blob, its keywords as IMAP flags
+/// and its `receivedAt`.
+async fn fetch_jmap_message(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    email_id: &str,
+) -> Result<(Vec<u8>, Vec<String>, Option<chrono::DateTime<chrono::FixedOffset>>), JmapError> {
+    let acct = state.jmap.get(config).await?;
+    let got = acct.client.get_emails(&[email_id.to_string()], &["id", "blobId", "keywords", "receivedAt"]).await?;
+    let email = got
+        .list
+        .into_iter()
+        .find(|e| e["id"].as_str() == Some(email_id))
+        .ok_or_else(|| JmapError::Protocol(format!("email {email_id} is gone")))?;
+    let blob_id = email["blobId"].as_str().ok_or_else(|| JmapError::Protocol(format!("email {email_id} has no blobId")))?;
+    let raw = acct.client.download(blob_id).await?;
+    let date = email["receivedAt"].as_str().and_then(|d| chrono::DateTime::parse_from_rfc3339(d).ok());
+    Ok((raw, keywords_to_flags(&email["keywords"]), date))
+}
+
+/// What `migrate_email_jmap` did with one message.
+enum JmapMoved {
+    Written,
+    /// The destination already held it (by Message-ID): nothing written.
+    Present,
+}
+
+/// One message of a migration with a JMAP account on either side. The
+/// source gives the raw message, its flags and its date (IMAP `UID FETCH`,
+/// a JMAP blob with its keywords and `receivedAt`, Graph MIME with its read
+/// state); a Message-ID `dest_ids` holds is `Present` before anything is
+/// written; else the destination writes it: IMAP APPEND with the flags and
+/// date, JMAP `import_raw` with the flags as keywords and the date as
+/// `receivedAt` (it asks the server about the Message-ID again, and the sync
+/// never announces what it imports), Graph draft-and-move with the read
+/// state. Also the sender and subject, for the log line.
+#[allow(clippy::too_many_arguments)]
+async fn migrate_email_jmap(
+    state: &Arc<DaemonState>,
+    source_config: &ImapConfig,
+    dest_config: &ImapConfig,
+    source_transport: &str,
+    dest_transport: &str,
+    src_path: &str,
+    dst_path: &str,
+    uid: u32,
+    source_id: Option<&str>,
+    is_read: bool,
+    dest_folder_id: Option<&str>,
+    dest_ids: &HashSet<String>,
+) -> Result<(JmapMoved, String, String), String> {
+    let (raw, flags, date) = match source_transport {
+        "imap" => fetch_imap_message(state, source_config, src_path, uid).await?,
+        "jmap" => {
+            let id = source_id.ok_or("No JMAP email id")?;
+            fetch_jmap_message(state, source_config, id).await.map_err(|e| e.to_string())?
+        }
+        "graph" => {
+            let gid = source_id.ok_or("No Graph message ID")?;
+            let token = source_config.access_token.as_deref().ok_or("No source access token")?;
+            let raw = GraphClient::new(token).for_account(&source_config.email).get_mime_content(gid).await?;
+            (raw, if is_read { vec!["\\Seen".to_string()] } else { Vec::new() }, None)
+        }
+        other => return Err(format!("Unsupported transport combination: {} -> {}", other, dest_transport)),
+    };
+    let (sender, subject) = extract_sender_subject(&raw);
+    if extract_message_id(&raw).is_some_and(|id| dest_ids.contains(&id)) {
+        return Ok((JmapMoved::Present, sender, subject));
+    }
+    let moved = match dest_transport {
+        "jmap" => {
+            let mailbox_id = dest_folder_id.ok_or("No destination JMAP mailbox id")?;
+            let keywords = flags_to_keywords(flags.iter().map(String::as_str));
+            let received_at = date
+                .map(|d| d.with_timezone(&chrono::Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                .or_else(|| received_at_of(&raw));
+            let imported = state
+                .jmap
+                .import_raw(dest_config, &raw, mailbox_id, &keywords, received_at.as_deref())
+                .await
+                .map_err(|e| e.to_string())?;
+            match imported {
+                ImportResult::Created(_) => JmapMoved::Written,
+                ImportResult::AlreadyExists { .. } => JmapMoved::Present,
+            }
+        }
+        "imap" => {
+            let internal_date = date.map(|d| imap::imap_date_time(&d)).or_else(|| imap::internal_date_from_raw(&raw));
+            let pool = &state.imap_pool;
+            let mut guard = pool.get_priority(dest_config).await?;
+            let appended = imap::append_email(&mut guard.session, dst_path, &raw, &flags.join(" "), internal_date.as_deref()).await;
+            match &appended {
+                Ok(_) => pool.return_priority(dest_config, guard).await,
+                Err(_) => pool.discard(dest_config, guard).await,
+            }
+            appended?;
+            JmapMoved::Written
+        }
+        "graph" => {
+            let folder_id = dest_folder_id.ok_or("No destination Graph folder ID")?;
+            let token = dest_config.access_token.as_deref().ok_or("No dest access token")?;
+            let client = GraphClient::new(token).for_account(&dest_config.email);
+            migrate_email_to_graph(&raw, &client, folder_id, flags.iter().any(|f| f.eq_ignore_ascii_case("\\Seen"))).await?;
+            JmapMoved::Written
+        }
+        other => return Err(format!("Unsupported transport combination: {} -> {}", source_transport, other)),
+    };
+    Ok((moved, sender, subject))
+}
+
 // ── Interruptible sleep & helpers ─────────────────────────────────────────────
 
 /// Interruptible async sleep. Returns true if interrupted (cancel/pause signaled), false if sleep completed normally.
@@ -547,6 +823,9 @@ pub async fn run_migration(
     let start_instant = std::time::Instant::now();
 
     let migration_id = uuid::Uuid::new_v4().to_string();
+    // A JMAP side is "jmap" whatever the app sent (`effective_transport`).
+    let source_transport = effective_transport(&source_config, &source_transport);
+    let dest_transport = effective_transport(&dest_config, &dest_transport);
 
     info!(
         "[migration] run_migration tokens: cancel={:p}, pause={:p}, notify={:p}",
@@ -725,6 +1004,19 @@ pub async fn run_migration(
             }
             guard.last_selected = None;
             pool.return_priority(&dest_config, guard).await;
+        } else if dest_transport == "jmap" {
+            let made = match state.jmap.get(&dest_config).await {
+                Ok(acct) => ensure_dest_folder_jmap(&acct, &dst_path).await,
+                Err(e) => Err(e),
+            };
+            match made {
+                Ok(mailbox_id) => folder_mappings[folder_idx].dest_folder_id = Some(mailbox_id),
+                Err(e) => {
+                    warn!("[migration] Failed to create JMAP dest mailbox {}: {}", dst_path, e);
+                    folder_mappings[folder_idx].status = "failed".to_string();
+                    continue;
+                }
+            }
         } else if dest_transport == "graph" {
             if let Some(ref token) = dest_config.access_token {
                 let client = GraphClient::new(token).for_account(&dest_email);
@@ -776,6 +1068,20 @@ pub async fn run_migration(
             } else {
                 HashSet::new()
             }
+        } else if dest_transport == "jmap" {
+            match folder_mappings[folder_idx].dest_folder_id.clone() {
+                Some(mailbox_id) => {
+                    let listed = match state.jmap.get(&dest_config).await {
+                        Ok(acct) => fetch_dest_message_ids_jmap(&acct, &mailbox_id).await,
+                        Err(e) => Err(e),
+                    };
+                    listed.unwrap_or_else(|e| {
+                        warn!("[migration] Failed to fetch dest JMAP Message-IDs for {}: {}", dst_path, e);
+                        HashSet::new()
+                    })
+                }
+                None => HashSet::new(),
+            }
         } else {
             HashSet::new()
         };
@@ -795,6 +1101,8 @@ pub async fn run_migration(
             pool.return_priority(&source_config, guard).await;
 
             source_items = uids.into_iter().map(|uid| (uid, None, false, None, String::new(), String::new())).collect();
+        } else if source_transport == "jmap" {
+            source_items = jmap_source_items(&state, &source_config, &src_path).await?;
         } else {
             // Graph source, collect internetMessageId for dedup
             if let Some(ref token) = source_config.access_token {
@@ -910,6 +1218,52 @@ pub async fn run_migration(
                 // For IMAP source: fetch MIME first to check dedup, then migrate
                 // For Graph source: dedup already checked above via internetMessageId
                 let migrate_result = match (source_transport.as_str(), dest_transport.as_str()) {
+                    (src, dst) if src == "jmap" || dst == "jmap" => {
+                        let moved = migrate_email_jmap(
+                            &state,
+                            &source_config,
+                            &dest_config,
+                            src,
+                            dst,
+                            &src_path,
+                            &dst_path,
+                            uid,
+                            graph_id.as_deref(),
+                            is_read,
+                            folder_mappings[folder_idx].dest_folder_id.as_deref(),
+                            &dest_message_ids,
+                        )
+                        .await;
+                        match moved {
+                            Ok((JmapMoved::Present, s, subj)) => {
+                                email_sender = s;
+                                email_subject = subj;
+                                folder_skipped += 1;
+                                skipped_total += 1;
+                                let skip_log = MigrationLogEntry {
+                                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                    sender: email_sender.clone(),
+                                    subject: email_subject.clone(),
+                                    status: "skipped".to_string(),
+                                };
+                                emit_progress(
+                                    "running", Some(src_path.clone()),
+                                    Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
+                                    migrated_total, skipped_total, failed_total,
+                                    &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
+                                    &source_email, &dest_email, total_emails, &state,
+                                    Some(skip_log), None,
+                                );
+                                continue;
+                            }
+                            Ok((JmapMoved::Written, s, subj)) => {
+                                email_sender = s;
+                                email_subject = subj;
+                                Ok(true)
+                            }
+                            Err(e) => Err(e),
+                        }
+                    }
                     ("imap", "imap") => {
                         let mut src_guard = pool.get_priority(&source_config).await?;
                         let mut dst_guard = pool.get_priority(&dest_config).await?;
@@ -1204,6 +1558,22 @@ pub async fn run_migration(
 
                         // Simple retry, re-run the same migration
                         let retry_result = match (source_transport.as_str(), dest_transport.as_str()) {
+                            (src, dst) if src == "jmap" || dst == "jmap" => migrate_email_jmap(
+                                &state,
+                                &source_config,
+                                &dest_config,
+                                src,
+                                dst,
+                                &src_path,
+                                &dst_path,
+                                uid,
+                                graph_id.as_deref(),
+                                is_read,
+                                folder_mappings[folder_idx].dest_folder_id.as_deref(),
+                                &dest_message_ids,
+                            )
+                            .await
+                            .map(|_| true),
                             ("imap", "imap") => {
                                 let mut sg = pool.get_priority(&source_config).await?;
                                 let mut dg = pool.get_priority(&dest_config).await?;
@@ -1461,6 +1831,7 @@ pub async fn count_migration_folders(
     source_transport: String,
     folder_mappings: Vec<FolderMapping>,
 ) -> Result<(), String> {
+    let source_transport = effective_transport(&source_config, &source_transport);
     for mapping in &folder_mappings {
         if source_transport == "imap" {
             let pool = &state.imap_pool;
@@ -1469,6 +1840,19 @@ pub async fn count_migration_folders(
             guard.last_selected = Some(mapping.source_path.clone());
             pool.return_priority(&source_config, guard).await;
             let count = uids.len() as u32;
+            state.events.emit("migration-folder-count", serde_json::json!({
+                "folder_path": mapping.source_path,
+                "count": count,
+                "counting": false,
+            }));
+        } else if source_transport == "jmap" {
+            let acct = state.jmap.get(&source_config).await.map_err(|e| e.to_string())?;
+            let boxes = acct.current().await.map_err(|e| e.to_string())?;
+            let count = boxes
+                .ids
+                .get(&mapping.source_path)
+                .and_then(|id| boxes.list.iter().find(|m| &m.id == id))
+                .map_or(0, |m| m.total_emails);
             state.events.emit("migration-folder-count", serde_json::json!({
                 "folder_path": mapping.source_path,
                 "count": count,
@@ -1521,6 +1905,10 @@ async fn list_transport_mailboxes(
     config: &ImapConfig,
     transport: &str,
 ) -> Result<Vec<MailboxInfo>, String> {
+    if transport == "jmap" {
+        let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+        return Ok(acct.current().await.map_err(|e| e.to_string())?.infos);
+    }
     if transport == "graph" {
         let token = config.access_token.as_deref().ok_or("No access token for Graph")?;
         let client = GraphClient::new(token).for_account(&config.email);
@@ -1562,8 +1950,10 @@ pub async fn get_folder_mappings(
     source_transport: &str,
     dest_transport: &str,
 ) -> Result<Vec<FolderMapping>, String> {
-    let source_folders = list_transport_mailboxes(state, source_config, source_transport).await?;
-    let dest_folders = list_transport_mailboxes(state, dest_config, dest_transport).await?;
+    let source_transport = effective_transport(source_config, source_transport);
+    let dest_transport = effective_transport(dest_config, dest_transport);
+    let source_folders = list_transport_mailboxes(state, source_config, &source_transport).await?;
+    let dest_folders = list_transport_mailboxes(state, dest_config, &dest_transport).await?;
 
     let src_delim = source_folders.first().and_then(|f| f.delimiter.as_deref()).unwrap_or("/");
     let dst_delim = dest_folders.first().and_then(|f| f.delimiter.as_deref()).unwrap_or("/");
@@ -1611,4 +2001,164 @@ pub fn clear_migration_state(app_dir: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Migrations with a JMAP account on one side (Task 9b), run straight
+    //! through `run_migration` against the mock IMAP and mock JMAP servers.
+    //! Each passes the transports the app sends today (`getTransport`:
+    //! "imap" for a JMAP account), so `effective_transport` is what routes
+    //! the JMAP side.
+
+    use super::*;
+    use crate::jmap_test_support as support;
+    use mock_imap::state::Mailbox;
+    use mock_imap::MockImap;
+    use mock_jmap::MockJmap;
+
+    fn st() -> (tempfile::TempDir, tempfile::TempDir, Arc<DaemonState>) {
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        (vault, app_dir, s)
+    }
+
+    fn imap_config(server: &MockImap, email: &str) -> ImapConfig {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        serde_json::from_value(serde_json::json!({
+            "email": email,
+            "password": "hunter2",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+            "imapSecure": true,
+        }))
+        .unwrap()
+    }
+
+    fn mapping(source: &str, dest: &str) -> FolderMapping {
+        FolderMapping {
+            source_path: source.to_string(),
+            dest_path: dest.to_string(),
+            source_special_use: None,
+            dest_folder_id: None,
+            email_count: 0,
+            status: "pending".to_string(),
+            migrated: 0,
+            skipped: 0,
+            failed: 0,
+            failed_uids: Vec::new(),
+        }
+    }
+
+    async fn migrate(s: &Arc<DaemonState>, source: &ImapConfig, dest: &ImapConfig, mappings: Vec<FolderMapping>) -> MigrationState {
+        run_migration(
+            Arc::clone(s),
+            source.clone(),
+            dest.clone(),
+            "imap".to_string(),
+            "imap".to_string(),
+            "{}".to_string(),
+            "{}".to_string(),
+            mappings,
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(tokio::sync::Notify::new()),
+        )
+        .await
+        .expect("the run finishes")
+    }
+
+    /// An IMAP INBOX: uid 1 read with an INTERNALDATE of 2019-03-05T08:15Z,
+    /// uid 2 flagged and answered.
+    fn imap_source() -> MockImap {
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(
+            mock_imap::Message::new(1, support::raw("m1", "first"))
+                .with_flags(&["\\Seen"])
+                .with_internal_date("05-Mar-2019 09:15:00 +0100"),
+        );
+        inbox.add(mock_imap::Message::new(2, support::raw("m2", "second")).with_flags(&["\\Flagged", "\\Answered"]));
+        MockImap::start(mock_imap::Scenario::new().mailbox(inbox))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_migration_from_imap_moves_two_messages_and_keeps_flags() {
+        let (_v, _a, s) = st();
+        let source = imap_source();
+        let m = MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let dest = support::config(&m, port);
+
+        let done = migrate(&s, &imap_config(&source, "source@example.com"), &dest, vec![mapping("INBOX", "Archive/2019")]).await;
+
+        assert_eq!(done.status, "completed");
+        assert_eq!((done.migrated_emails, done.skipped_emails, done.failed_emails), (2, 0, 0));
+        assert_eq!(done.dest_transport, "jmap", "the JMAP side is routed as JMAP whatever the app sent");
+        let made = support::mailbox_named(&m, Some("Archive"), "2019").expect("Archive/2019 made on the server");
+        let moved = support::emails_in(&m, &made);
+        assert_eq!(moved.len(), 2);
+        let m1 = moved.iter().find(|e| e.raw.contains("<m1@x>")).unwrap();
+        let m2 = moved.iter().find(|e| e.raw.contains("<m2@x>")).unwrap();
+        assert_eq!(m1.raw, support::raw("m1", "first"), "byte for byte");
+        assert_eq!(m1.keywords, support::set(&["$seen"]));
+        assert_eq!(m1.received_at, "2019-03-05T08:15:00Z", "the source INTERNALDATE, in UTC");
+        assert_eq!(m2.keywords, support::set(&["$answered", "$flagged"]));
+        assert!(s.jmap.is_own(&dest, &m1.id) && s.jmap.is_own(&dest, &m2.id), "never announced as arrivals");
+        assert!(trap.accept().is_err(), "the JMAP side never dials IMAP");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_migration_rerun_skips_what_the_destination_holds() {
+        let (_v, _a, s) = st();
+        let source = imap_source();
+        let m = MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        let (src, dest) = (imap_config(&source, "source@example.com"), support::config(&m, port));
+        migrate(&s, &src, &dest, vec![mapping("INBOX", "INBOX")]).await;
+        let imports = m.count_calls("Email/import");
+        assert_eq!(imports, 2);
+
+        let again = migrate(&s, &src, &dest, vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!((again.migrated_emails, again.skipped_emails, again.failed_emails), (0, 2, 0));
+        assert_eq!(m.count_calls("Email/import"), imports, "nothing imported twice");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_migration_to_imap_moves_messages_and_keeps_keywords() {
+        let (_v, _a, s) = st();
+        let m = MockJmap::start(support::scenario());
+        let dest_server = MockImap::start(mock_imap::Scenario::new().mailbox(Mailbox::new("INBOX")));
+        let (_trap, port) = support::imap_trap();
+
+        let done = migrate(&s, &support::config(&m, port), &imap_config(&dest_server, "dest@example.com"), vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!((done.migrated_emails, done.failed_emails), (2, 0));
+        assert_eq!(done.source_transport, "jmap");
+        let state = dest_server.state();
+        let inbox = state.find("INBOX").expect("INBOX");
+        assert_eq!(inbox.messages.len(), 2);
+        let e1 = inbox.messages.iter().find(|msg| String::from_utf8_lossy(&msg.raw).contains("<e1@x>")).expect("e1 appended");
+        assert!(e1.has_flag("\\Seen"), "{:?}", e1.flags);
+        let e2 = inbox.messages.iter().find(|msg| String::from_utf8_lossy(&msg.raw).contains("<e2@x>")).expect("e2 appended");
+        assert!(!e2.has_flag("\\Seen"), "{:?}", e2.flags);
+    }
+
+    #[tokio::test]
+    async fn jmap_folder_mappings_list_the_jmap_mailboxes() {
+        let (_v, _a, s) = st();
+        let m = MockJmap::start(support::scenario());
+        let dest_server = MockImap::start(mock_imap::Scenario::new().mailbox(Mailbox::new("INBOX")));
+        let (trap, port) = support::imap_trap();
+
+        let mappings =
+            get_folder_mappings(&s, &support::config(&m, port), &imap_config(&dest_server, "dest@example.com"), "imap", "imap")
+                .await
+                .unwrap();
+
+        let sources: Vec<&str> = mappings.iter().map(|f| f.source_path.as_str()).collect();
+        assert_eq!(sources, ["INBOX", "Work", "Sent", "Trash"], "mailbox_tree order: inbox, then sortOrder");
+        assert!(trap.accept().is_err());
+    }
 }

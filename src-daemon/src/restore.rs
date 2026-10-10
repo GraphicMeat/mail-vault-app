@@ -1,6 +1,9 @@
 //! Restore engine, re-upload locally-stored Maildir emails to a (new, empty)
 //! IMAP server. Source = local disk, dest = live IMAP. Reuses migration.rs
 //! helpers for folder-create, dedup, and Message-ID extraction.
+//!
+//! A JMAP account (`uses_jmap`) is restored with `import_raw` instead of
+//! APPEND (`restore_folder_jmap`): never through the IMAP pool.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -12,6 +15,9 @@ use tracing::{info, warn};
 use crate::imap::{self, ImapConfig};
 use crate::migration;
 use crate::server::DaemonState;
+use mailvault_core::jmap::client::received_at_of;
+use mailvault_core::jmap::headers::flags_to_keywords;
+use mailvault_core::jmap::ImportResult;
 use mailvault_core::maildir::{info_flags, is_info_sep};
 
 #[derive(Clone, Debug, Serialize)]
@@ -227,6 +233,9 @@ async fn restore_folder(
     cancel: &AtomicBool,
 ) -> (u32, u32, u32) {
     if cancel.load(Ordering::Relaxed) { return (0, 0, 0); }
+    if account.uses_jmap() {
+        return restore_folder_jmap(state, account, folder, msgs, cancel).await;
+    }
     let pool = &state.imap_pool;
     let mut guard = match pool.get_priority(account).await {
         Ok(g) => g,
@@ -263,6 +272,49 @@ async fn restore_folder(
         }
     }
     pool.return_priority(account, guard).await;
+    (uploaded, skipped, failed)
+}
+
+/// `restore_folder` for a JMAP account: the mailbox at `folder` (made with
+/// `Mailbox/set` when missing, `migration::ensure_dest_folder_jmap`), then
+/// each message through `JmapSessions::import_raw` with its flags as
+/// keywords and its Date as `receivedAt`. Counted as the IMAP path counts:
+/// a new email is uploaded; one the mailbox already holds by Message-ID, or
+/// that the server dedupes itself (`AlreadyExists`), is skipped, never
+/// failed. Each new id is this daemon's own, so the sync never announces it.
+async fn restore_folder_jmap(
+    state: &Arc<DaemonState>,
+    account: &ImapConfig,
+    folder: &str,
+    msgs: &[LocalMsg],
+    cancel: &AtomicBool,
+) -> (u32, u32, u32) {
+    let made = match state.jmap.get(account).await {
+        Ok(acct) => migration::ensure_dest_folder_jmap(&acct, folder).await,
+        Err(e) => Err(e),
+    };
+    let mailbox_id = match made {
+        Ok(id) => id,
+        Err(e) => {
+            warn!("[restore] JMAP mailbox {} unavailable, skipping folder: {}", folder, e);
+            return (0, 0, msgs.len() as u32);
+        }
+    };
+    let (mut uploaded, mut skipped, mut failed) = (0, 0, 0);
+    for msg in msgs {
+        if cancel.load(Ordering::Relaxed) { break; }
+        let raw = match tokio::fs::read(&msg.path).await {
+            Ok(b) => b,
+            Err(e) => { warn!("[restore] read {:?} failed: {}", msg.path, e); failed += 1; continue; }
+        };
+        let keywords = flags_to_keywords(msg.imap_flags.split_whitespace());
+        let received_at = received_at_of(&raw);
+        match state.jmap.import_raw(account, &raw, &mailbox_id, &keywords, received_at.as_deref()).await {
+            Ok(ImportResult::Created(_)) => uploaded += 1,
+            Ok(ImportResult::AlreadyExists { .. }) => skipped += 1,
+            Err(e) => { warn!("[restore] import of uid {} to {} failed: {}", msg.uid, folder, e); failed += 1; }
+        }
+    }
     (uploaded, skipped, failed)
 }
 

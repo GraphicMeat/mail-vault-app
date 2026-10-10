@@ -210,7 +210,7 @@ mod daily_limit {
     const MIB: u64 = 1024 * 1024;
 
     /// The next `backup-progress` frame with `active: false` on the bus.
-    async fn terminal_frame(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Value {
+    pub(super) async fn terminal_frame(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Value {
         loop {
             let line = tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv())
                 .await
@@ -439,4 +439,64 @@ async fn backup_copy_uids_leaves_the_runtime_thread_free() {
         ticks.load(std::sync::atomic::Ordering::SeqCst) > 1,
         "the runtime thread polled other tasks while the copy ran"
     );
+}
+
+// ── JMAP (Task 9b): the run and the status go to the JMAP runner ───────────
+
+mod jmap {
+    use super::*;
+    use crate::jmap_test_support as support;
+    use mock_jmap::MockJmap;
+
+    /// Files in `<mirror>/<email>/<mailbox>/cur`.
+    fn mirrored(mirror: &std::path::Path, mailbox: &str) -> usize {
+        std::fs::read_dir(mirror.join("alice@example.test").join(mailbox).join("cur")).map(|d| d.flatten().count()).unwrap_or(0)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_backup_run_goes_to_the_jmap_runner_and_never_dials_imap() {
+        let (_v, s) = st();
+        let m = MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let mirror = tempfile::tempdir().unwrap();
+        let mut rx = s.events.subscribe();
+
+        backup_run_account(
+            &s,
+            json!({
+                "accountId": "acct1",
+                "accountJson": support::account_json(&m, port).to_string(),
+                "mirrorRoot": mirror.path(),
+            }),
+        )
+        .await
+        .unwrap();
+        let done = super::daily_limit::terminal_frame(&mut rx).await;
+
+        assert_eq!(done["success"], json!(true), "{done}");
+        assert_eq!(done["completed_emails"], json!(3), "INBOX e1 and e2, Work e1: {done}");
+        assert_eq!(done["errors"], json!(0), "{done}");
+        assert!(done.get("stop_reason").is_none(), "no daily limit for JMAP: {done}");
+        assert_eq!((mirrored(mirror.path(), "INBOX"), mirrored(mirror.path(), "Work"), mirrored(mirror.path(), "Sent")), (2, 1, 0));
+        assert!(trap.accept().is_err(), "a JMAP backup never dials IMAP");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_backup_status_reads_each_mailboxs_count() {
+        let (_v, s) = st();
+        let m = MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+
+        let status =
+            backup_status(&s, json!({"accountId": "acct1", "accountJson": support::account_json(&m, port).to_string()})).await.unwrap();
+
+        assert_eq!(status["total_server"], json!(3), "{status}");
+        let server_count = |path: &str| {
+            status["folders"].as_array().unwrap().iter().find(|f| f["path"] == json!(path)).map(|f| f["server_count"].clone())
+        };
+        assert_eq!(server_count("INBOX"), Some(json!(2)));
+        assert_eq!(server_count("Work"), Some(json!(1)));
+        assert_eq!(server_count("Sent"), None, "an empty mailbox with nothing local is left out");
+        assert!(trap.accept().is_err(), "a JMAP status never dials IMAP");
+    }
 }

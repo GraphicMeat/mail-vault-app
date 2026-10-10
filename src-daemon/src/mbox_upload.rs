@@ -40,12 +40,19 @@
 //! it) or `SignIn` (the server refused the account: the job stops for it). Only the
 //! server's or the socket's own words are classified, never the folder name
 //! an error carries: that name is a label, and the file chose it.
+//!
+//! A JMAP account (`uses_jmap`) never opens an IMAP connection: the same
+//! home-folder rule runs over its mailboxes and `Email/import` stands in for
+//! APPEND (`upload_jmap`), its failures classified from the typed error
+//! (`jmap_fail_kind`).
 
 use crate::handlers::common::{self, blocking};
 use crate::imap::{self, pool, ImapConfig, ImapSession};
 use crate::server::DaemonState;
 use mailvault_core::custody::cache;
 use mailvault_core::import_rehome::{self, Head, ServerView};
+use crate::jmap_sessions::AccountJmap;
+use mailvault_core::jmap::{ImportResult, JmapClient, JmapError};
 use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::takeout::{self, FolderRef, Home, Role};
 use mailvault_core::{maildir, vault_files};
@@ -124,6 +131,8 @@ pub struct MboxUpload {
     append_min_rate: u64,
     /// Uploads whose other Gmail labels were not applied (`add_labels`).
     label_warnings: u64,
+    /// A JMAP account's session, this pipeline's own (`jmap_session`).
+    jmap: Option<Arc<AccountJmap>>,
 }
 
 struct Conn {
@@ -224,6 +233,7 @@ impl MboxUpload {
             append_floor_secs: APPEND_FLOOR_SECS,
             append_min_rate: APPEND_MIN_RATE,
             label_warnings: 0,
+            jmap: None,
         })
     }
 
@@ -244,6 +254,7 @@ impl MboxUpload {
     /// budget; the next message makes a new one.
     pub fn disconnect(&mut self) {
         self.conn = None;
+        self.jmap = None;
     }
 
     /// Folders this run made on the server (or found already there when it
@@ -256,6 +267,9 @@ impl MboxUpload {
     /// the mbox reader hands over).
     pub async fn upload_message(&mut self, raw: &[u8]) -> Outcome {
         let msg = crate::mbox::mbox_unescape_from(raw);
+        if self.config.uses_jmap() {
+            return self.upload_jmap(&msg).await;
+        }
         let result = match self.attempt(&msg).await {
             // Found dead before the APPEND went out: once more, on a new connection.
             Err(f) if !f.appended && pool::is_connection_lost(&f.cause) => {
@@ -276,6 +290,111 @@ impl MboxUpload {
                 Outcome::Failed(kind, f.error)
             }
         }
+    }
+
+    /// A JMAP account's upload: the same home-folder rule over its mailboxes
+    /// (`mailbox_tree` paths, delimiter `/`), a label with no mailbox made
+    /// with `Mailbox/set` (`migration::ensure_dest_folder_jmap`), and
+    /// `import_raw` in place of APPEND. The folder's own Message-ID lookup on
+    /// the server, plus what this run put there, decides what it already
+    /// holds. The message keeps its Date as `receivedAt` and, with labels,
+    /// its read and Starred state as `$seen` and `$flagged`; its new id is
+    /// this daemon's own, so the sync never announces it. The vault copy goes
+    /// under the uid the folder's JMAP ledger gives the email, where the sync
+    /// files it (`keep_copy`).
+    ///
+    /// The session is the pipeline's own (`jmap_session`), never the shared
+    /// `state.jmap` one: the job polls this on a runtime of its own that ends
+    /// with the job, and a connection the shared session opened here would
+    /// die with it.
+    async fn upload_jmap(&mut self, msg: &[u8]) -> Outcome {
+        match self.attempt_jmap(msg).await {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                let kind = jmap_fail_kind(&e);
+                warn!("[mbox_upload] {}: not uploaded ({kind:?}): {e}", self.config.email);
+                Outcome::Failed(kind, e.to_string())
+            }
+        }
+    }
+
+    /// The pipeline's JMAP session, connected on the first message and after
+    /// `disconnect`. No usable credentials is `Unauthorized` before any
+    /// request leaves the machine, as `JmapSessions::get` refuses it.
+    async fn jmap_session(&mut self) -> Result<Arc<AccountJmap>, JmapError> {
+        if let Some(acct) = &self.jmap {
+            return Ok(Arc::clone(acct));
+        }
+        let auth = self.config.jmap_auth().ok_or(JmapError::Unauthorized)?;
+        let url = self.config.jmap_session_url.as_deref().unwrap_or_default().trim().to_string();
+        let client = mailvault_core::net_activity::with_purpose(PURPOSE, JmapClient::connect(&url, auth, &self.config.email)).await?;
+        let acct = Arc::new(AccountJmap::new(client));
+        self.jmap = Some(Arc::clone(&acct));
+        Ok(acct)
+    }
+
+    async fn attempt_jmap(&mut self, msg: &[u8]) -> Result<Outcome, JmapError> {
+        let acct = self.jmap_session().await?;
+        if self.folders.is_none() {
+            let boxes = acct.current().await?;
+            self.folders = Some(takeout::folder_refs_from_listing(&json!({ "mailboxes": boxes.infos }).to_string()));
+        }
+        let labels = if self.use_labels { takeout::labels_of(msg) } else { Vec::new() };
+        let (path, mailbox_id) = match takeout::home_folder(&labels, self.folders.as_deref().unwrap_or_default(), true) {
+            Home::Folder(f) => {
+                let id = acct.mailbox_id(&f.path).await?;
+                (f.path, id)
+            }
+            Home::Create(label) => {
+                let id = crate::migration::ensure_dest_folder_jmap(&acct, &label).await?;
+                if self.created.insert(label.clone()) {
+                    info!("[mbox_upload] {}: made folder {label}", self.config.email);
+                    let folders = self.folders.get_or_insert_with(Vec::new);
+                    if !folders.iter().any(|f| f.path == label) {
+                        folders.push(FolderRef { path: label.clone(), dir: vault_dir_name(&label), role: Role::Other, delim: '/' });
+                    }
+                }
+                (label, id)
+            }
+            Home::Fallback => {
+                let id = acct.mailbox_id(&self.fallback).await?;
+                (self.fallback.clone(), id)
+            }
+        };
+        let head = import_rehome::head_of(msg);
+        let folder = self.boxes.entry(path.clone()).or_insert_with(Folder::made_again);
+        if fingerprint(&head).is_some_and(|fp| folder.uploaded.contains(&fp)) {
+            return Ok(Outcome::Skipped { mailbox: path });
+        }
+        let attrs = takeout::attrs_of(&labels);
+        let mut keywords = Vec::new();
+        if self.use_labels && !attrs.unread {
+            keywords.push("$seen".to_string());
+        }
+        if self.use_labels && attrs.flagged {
+            keywords.push("$flagged".to_string());
+        }
+        let received_at = mailvault_core::jmap::client::received_at_of(msg);
+        // Before the import: one whose answer never came may still have landed.
+        self.touched.insert(path.clone());
+        let imported = self.state.jmap.import_raw_on(&self.config, &acct, msg, &mailbox_id, &keywords, received_at.as_deref()).await?;
+        let ImportResult::Created(imported) = imported else {
+            return Ok(Outcome::Skipped { mailbox: path });
+        };
+        if let (Some(f), Some(fp)) = (self.boxes.get_mut(&path), fingerprint(&head)) {
+            f.uploaded.insert(fp);
+        }
+        let uid = match acct.ids_to_uids(&self.state, &self.account_id, &path, &[imported.id.clone()]).await {
+            Ok(uids) => uids.first().copied(),
+            Err(e) => {
+                warn!("[mbox_upload] {path}: {} is on the server, no uid was issued for its vault copy: {e}", imported.id);
+                None
+            }
+        };
+        if let Some(uid) = uid {
+            self.keep_copy(&path, uid, msg, &labels, &head).await;
+        }
+        Ok(Outcome::Uploaded { mailbox: path, uid })
     }
 
     async fn attempt(&mut self, msg: &[u8]) -> Result<Outcome, Fail> {
@@ -747,6 +866,23 @@ const ACCOUNT_CODES: [(&str, &str); 7] = [
 fn account_code(cause: &str) -> Option<&'static str> {
     let low = cause.to_ascii_lowercase();
     ACCOUNT_CODES.iter().find(|(needle, _)| low.contains(needle)).map(|(_, code)| *code)
+}
+
+/// A JMAP failure as the job reads it, from the typed error and never its
+/// text: a refused sign-in stops the job, a throttle is waited out, a lost
+/// connection or a server error (HTTP 5xx) is tried again, a quota or
+/// permission refusal is an account-level code, anything else this message
+/// refused.
+fn jmap_fail_kind(e: &JmapError) -> FailKind {
+    match e {
+        JmapError::Unauthorized => FailKind::SignIn,
+        JmapError::RateLimited { .. } => FailKind::Busy,
+        JmapError::Transport(_) => FailKind::Transient,
+        JmapError::Protocol(m) if m.starts_with("HTTP 5") => FailKind::Transient,
+        JmapError::Method { kind, .. } if kind == "overQuota" => FailKind::Refused("OVERQUOTA"),
+        JmapError::Method { kind, .. } if kind == "forbidden" => FailKind::Refused("NOPERM"),
+        _ => FailKind::Permanent,
+    }
 }
 
 /// `classify`, split finer for the job: a refused sign-in (the hoarder's
@@ -1948,5 +2084,102 @@ mod tests {
         assert_eq!(plain.upload_message(&tmsg("e@x", "five", "Inbox,Receipts")).await, uploaded("Work", 2));
         assert_eq!(server.count_commands("X-GM-LABELS"), 0);
         assert_eq!((up.label_warnings(), plain.label_warnings()), (0, 0));
+    }
+
+    // ---- a JMAP account (Task 9b) ----
+
+    use crate::jmap_test_support as jmap_support;
+    use mock_jmap::MockJmap;
+
+    fn jmap_upload(s: &Arc<DaemonState>, m: &MockJmap, imap_port: u16) -> MboxUpload {
+        MboxUpload::new(Arc::clone(s), jmap_support::config(m, imap_port), "acct1".into(), "INBOX".into(), true).unwrap()
+    }
+
+    fn uid_of(o: &Outcome) -> u32 {
+        match o {
+            Outcome::Uploaded { uid: Some(uid), .. } => *uid,
+            other => panic!("expected an upload with a uid, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn jmap_mbox_upload_of_three_messages_uploads_three() {
+        let (_v, s) = state();
+        let m = MockJmap::start(jmap_support::scenario());
+        let (trap, port) = jmap_support::imap_trap();
+        let mut up = jmap_upload(&s, &m, port);
+
+        let got = vec![
+            up.upload_message(&tmsg("a@x", "inbox one", "Inbox,Opened")).await,
+            up.upload_message(&tmsg("b@x", "work one", "Work,Starred,Unread")).await,
+            up.upload_message(&tmsg("c@x", "new one", "Projects/2026,Opened")).await,
+        ];
+
+        let homes: Vec<&str> = got
+            .iter()
+            .map(|o| match o {
+                Outcome::Uploaded { mailbox, .. } => mailbox.as_str(),
+                other => panic!("expected an upload, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(homes, ["INBOX", "Work", "Projects/2026"]);
+        assert_eq!(m.count_calls("Email/import"), 3);
+        assert!(trap.accept().is_err(), "a JMAP upload never dials IMAP");
+
+        let inbox = jmap_support::emails_in(&m, "mb-inbox");
+        let a = inbox.iter().find(|e| e.raw.contains("<a@x>")).expect("a@x in INBOX");
+        assert_eq!(a.raw.as_bytes(), stored("a@x", "inbox one", "Inbox,Opened").as_slice(), "unescaped, byte for byte");
+        assert_eq!(a.keywords, jmap_support::set(&["$seen"]));
+        assert_eq!(a.received_at, "2019-03-05T08:15:00Z", "the Date header is the receivedAt");
+        let work = jmap_support::emails_in(&m, "mb-work");
+        let b = work.iter().find(|e| e.raw.contains("<b@x>")).expect("b@x in Work");
+        assert_eq!(b.keywords, jmap_support::set(&["$flagged"]), "Starred and Unread");
+        let projects = jmap_support::mailbox_named(&m, Some("Projects"), "2026").expect("the label's mailbox was made");
+        assert!(jmap_support::emails_in(&m, &projects).iter().any(|e| e.raw.contains("<c@x>")));
+        assert!(up.created().contains("Projects/2026"));
+        assert!(up.touched().contains("INBOX") && up.touched().contains("Work"));
+
+        // Each import is the daemon's own (never an arrival), and its vault
+        // copy sits at the uid the folder's JMAP ledger gave the email.
+        let config = jmap_support::config(&m, port);
+        assert!(s.jmap.is_own(&config, &a.id) && s.jmap.is_own(&config, &b.id));
+        let root = common::vault_root(&s).unwrap();
+        let ledger = mailvault_core::graph_ledger::load(&crate::jmap_sessions::jmap_ledger_path(&root, "acct1", "INBOX")).unwrap();
+        let a_uid = uid_of(&got[0]);
+        assert_eq!(ledger.get(&a_uid), Some(&a.id));
+        let copy = maildir::find_by_uid(&vault_files::cur_path(&root, "acct1", "INBOX"), a_uid).expect("the vault copy");
+        assert_eq!(std::fs::read(copy).unwrap(), stored("a@x", "inbox one", "Inbox,Opened"));
+    }
+
+    #[tokio::test]
+    async fn jmap_mbox_upload_skips_what_the_folder_already_holds() {
+        let (_v, s) = state();
+        let m = MockJmap::start(jmap_support::scenario());
+        let (_trap, port) = jmap_support::imap_trap();
+        let mut up = jmap_upload(&s, &m, port);
+        assert!(matches!(up.upload_message(&tmsg("a@x", "one", "Inbox,Opened")).await, Outcome::Uploaded { .. }));
+
+        // The same message again in this run, then in the next one: the
+        // server's Message-ID lookup finds it.
+        assert_eq!(up.upload_message(&tmsg("a@x", "one", "Inbox,Opened")).await, skipped("INBOX"));
+        let mut next = jmap_upload(&s, &m, port);
+        assert_eq!(next.upload_message(&tmsg("a@x", "one", "Inbox,Opened")).await, skipped("INBOX"));
+        assert_eq!(m.count_calls("Email/import"), 1);
+        assert_eq!(jmap_support::emails_in(&m, "mb-inbox").iter().filter(|e| e.raw.contains("<a@x>")).count(), 1);
+    }
+
+    #[tokio::test]
+    async fn jmap_mbox_upload_without_credentials_is_a_sign_in_failure() {
+        let (_v, s) = state();
+        let m = MockJmap::start(jmap_support::scenario());
+        let mut account = jmap_support::account_json(&m, 1);
+        account.as_object_mut().unwrap().remove("password");
+        let config: ImapConfig = serde_json::from_value(account).unwrap();
+        let mut up = MboxUpload::new(Arc::clone(&s), config, "acct1".into(), "INBOX".into(), true).unwrap();
+
+        let got = up.upload_message(&tmsg("a@x", "one", "Inbox,Opened")).await;
+
+        assert!(matches!(&got, Outcome::Failed(FailKind::SignIn, e) if e.starts_with("E_JMAP_AUTH")), "{got:?}");
+        assert!(m.requests().is_empty(), "nothing leaves the machine without credentials");
     }
 }

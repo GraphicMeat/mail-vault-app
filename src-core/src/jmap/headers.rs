@@ -73,6 +73,23 @@ pub fn flag_to_keyword(flag: &str) -> String {
         .unwrap_or_else(|| flag.to_string())
 }
 
+/// IMAP flags as the keywords an `Email/import` may carry: system flags as
+/// `$seen` and the like (`flag_to_keyword`), other keywords verbatim, and
+/// anything RFC 8621 §4.1.1 refuses dropped (`\Deleted`, `\Recent`, a
+/// backslash, a bracket, a space), since one bad keyword fails the import.
+pub fn flags_to_keywords<'a>(flags: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let allowed = |k: &str| {
+        !k.is_empty() && k.len() <= 255 && k.bytes().all(|b| (0x21..=0x7e).contains(&b) && !b"(){]%*\"\\".contains(&b))
+    };
+    let mut out: Vec<String> = Vec::new();
+    for keyword in flags.into_iter().map(flag_to_keyword) {
+        if allowed(&keyword) && !out.iter().any(|k| k.eq_ignore_ascii_case(&keyword)) {
+            out.push(keyword);
+        }
+    }
+    out
+}
+
 /// A raw header value unfolded the way `imap::parse_single_header` does: each
 /// line trimmed, joined by one space. `None` when absent or blank.
 fn raw_header(email: &Value, prop: &str) -> Option<String> {

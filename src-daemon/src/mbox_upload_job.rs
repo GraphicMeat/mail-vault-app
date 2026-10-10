@@ -2897,6 +2897,59 @@ mod tests {
         assert_eq!(*lock(&the_run(&rig, &job).rehomed), ["INBOX"]);
         assert_ne!(std::fs::read(&stamp).ok().as_deref(), Some(&b"from an earlier pass"[..]), "the old stamp went (a pass that ran writes a new, empty one)");
     }
+
+    /// A JMAP account (Task 9b), end to end: a 3-message mbox goes up
+    /// through `Email/import` on the job's own runtime, nothing dials IMAP,
+    /// each vault copy is still at its ledger uid after the job's refresh
+    /// (sync, generation repair, rehome pass), and once the job's runtime is
+    /// gone the daemon's shared session still syncs, announcing nothing.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_mbox_upload_job_uploads_a_three_message_mbox() {
+        let m = mock_jmap::MockJmap::start(crate::jmap_test_support::scenario());
+        let (trap, port) = crate::jmap_test_support::imap_trap();
+        let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), crate::jmap_test_support::config(&m, port));
+        *lock(&s.mbox_uploads.tuning) = Some(fast());
+        let mut rx = s.events.subscribe();
+        let files = tempfile::tempdir().unwrap();
+        let file = files.path().join("takeout.mbox");
+        let messages = [labelled("a@x", "one", "Inbox,Opened"), labelled("b@x", "two", "Inbox,Unread"), labelled("c@x", "three", "Work,Opened")];
+        std::fs::write(&file, mbox_bytes(&messages)).unwrap();
+
+        let params = json!({
+            "sourcePath": file.to_string_lossy(), "accountId": "acct1", "mode": "server",
+            "mailbox": "INBOX", "useLabels": true, "fallbackMailbox": "INBOX",
+        });
+        assert_eq!(ok(call(&s, "import_mbox", params).await)["started"], json!(true));
+        let done = until_done(&mut rx).await.pop().unwrap();
+
+        assert_eq!(done["state"], json!(DONE), "{done}");
+        assert_eq!(counts_of(&done), (json!(3), json!(0), json!(0)));
+        assert_eq!(m.count_calls("Email/import"), 3);
+        assert!(trap.accept().is_err(), "a JMAP upload job never dials IMAP");
+        let inbox = crate::jmap_test_support::emails_in(&m, "mb-inbox");
+        let a = inbox.iter().find(|e| e.raw.contains("<a@x>")).expect("a@x in INBOX");
+        let ledger = mailvault_core::graph_ledger::load(&crate::jmap_sessions::jmap_ledger_path(vault.path(), "acct1", "INBOX")).unwrap();
+        let uid = ledger.iter().find(|(_, id)| **id == a.id).map(|(uid, _)| *uid).expect("a ledger uid for a@x");
+        let cur = mailvault_core::vault_files::cur_path(vault.path(), "acct1", "INBOX");
+        let copy = mailvault_core::maildir::find_by_uid(&cur, uid).expect("the vault copy survives the refresh");
+        assert!(std::fs::read_to_string(copy).unwrap().contains("<a@x>"));
+
+        // The job's thread and runtime end right after its last event.
+        let gone = Instant::now();
+        while s.mbox_uploads.lock().contains_key("acct1") && gone.elapsed() < Duration::from_secs(10) {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let account: crate::sync_engine::SyncAccount = serde_json::from_value(json!({
+            "id": "acct1", "email": "alice@example.test", "imapConfig": crate::jmap_test_support::account_json(&m, port),
+        }))
+        .unwrap();
+        let r = s.sync_engine.sync_account(&account, "INBOX").await;
+        assert!(r.success, "{:?}", r.error);
+        assert_eq!(r.arrivals, 0, "the uploads are the daemon's own");
+    }
 }
 
 /// What only shows across the three import modes (restore to the server,
