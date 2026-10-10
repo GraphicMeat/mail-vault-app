@@ -58,6 +58,8 @@ pub struct PushTiming {
     pub ping_secs: u32,
     /// No bytes for this long: the stream is dead.
     pub dead_after: Duration,
+    /// The server must answer the EventSource GET within this long.
+    pub open_timeout: Duration,
     /// The wait after the first failure; doubles per failure in a row.
     pub backoff_base: Duration,
     pub backoff_cap: Duration,
@@ -73,6 +75,7 @@ impl PushTiming {
     pub const PRODUCTION: PushTiming = PushTiming {
         ping_secs: 30,
         dead_after: dead_after(30),
+        open_timeout: Duration::from_secs(65),
         backoff_base: Duration::from_secs(1),
         backoff_cap: Duration::from_secs(300),
         failures_before_poll: 3,
@@ -103,6 +106,11 @@ pub struct SseParser {
     line: Vec<u8>,
     kind: String,
     data: Vec<String>,
+    /// Summed bytes of `data`: a pending event is capped at `MAX_LINE`.
+    data_bytes: usize,
+    /// The pending event outgrew the cap: its remaining lines are skipped up
+    /// to the blank line that ends it.
+    discarding: bool,
 }
 
 impl SseParser {
@@ -119,6 +127,10 @@ impl SseParser {
             let text = String::from_utf8_lossy(&raw).into_owned();
             let line = text.strip_suffix('\r').unwrap_or(text.as_str());
             if line.is_empty() {
+                self.data_bytes = 0;
+                if std::mem::take(&mut self.discarding) {
+                    continue;
+                }
                 if !self.kind.is_empty() || !self.data.is_empty() {
                     let kind = std::mem::take(&mut self.kind);
                     out.push(SseEvent {
@@ -126,6 +138,9 @@ impl SseParser {
                         data: std::mem::take(&mut self.data).join("\n"),
                     });
                 }
+                continue;
+            }
+            if self.discarding {
                 continue;
             }
             if line.starts_with(':') {
@@ -137,7 +152,19 @@ impl SseParser {
             };
             match field {
                 "event" => self.kind = value.to_string(),
-                "data" => self.data.push(value.to_string()),
+                "data" => {
+                    self.data_bytes = self.data_bytes.saturating_add(value.len());
+                    if self.data_bytes > MAX_LINE {
+                        // Endless `data:` lines with no blank line: drop the
+                        // event (never logging its content) and skip the rest.
+                        warn!("[push] an event grew past {} bytes without ending: dropped", MAX_LINE);
+                        self.data.clear();
+                        self.kind.clear();
+                        self.discarding = true;
+                    } else {
+                        self.data.push(value.to_string());
+                    }
+                }
                 _ => {}
             }
         }
@@ -149,7 +176,10 @@ impl SseParser {
 enum Ended {
     /// The session has no `eventSourceUrl`: poll only.
     NoEventSource,
-    /// Never opened, or lost. `healthy`: it delivered an event first.
+    /// Never opened, or lost. `healthy`: it delivered an event and then
+    /// lived for at least `dead_after`; a stream that hangs up sooner is a
+    /// failure however much it sent (R11), or a server that greets and
+    /// closes would reconnect and sync every second forever.
     Lost { healthy: bool, error: String },
 }
 
@@ -250,7 +280,7 @@ async fn stream_once(
     if acct.client.event_source_url().is_none() {
         return Ended::NoEventSource;
     }
-    let opened = tokio::time::timeout(timing.dead_after, acct.client.open_event_source(PUSH_TYPES, timing.ping_secs)).await;
+    let opened = tokio::time::timeout(timing.open_timeout, acct.client.open_event_source(PUSH_TYPES, timing.ping_secs)).await;
     let mut resp = match opened {
         Ok(Ok(resp)) => resp,
         Ok(Err(e)) => {
@@ -260,8 +290,9 @@ async fn stream_once(
             }
             return lost(e.to_string());
         }
-        Err(_) => return lost(format!("EventSource did not answer within {:?}", timing.dead_after)),
+        Err(_) => return lost(format!("EventSource did not answer within {:?}", timing.open_timeout)),
     };
+    let started = std::time::Instant::now();
     // The server counts changes from its answer on, so whatever changed
     // before it is found by this sync, and whatever changes during it still
     // arrives as an event.
@@ -274,16 +305,17 @@ async fn stream_once(
     }
     let jmap_account = acct.client.account_id().to_string();
     let mut parser = SseParser::default();
-    let mut healthy = false;
+    let mut got_event = false;
+    let ended = |got_event: bool, error: String| Ended::Lost { healthy: got_event && started.elapsed() >= timing.dead_after, error };
     loop {
         let chunk = match tokio::time::timeout(timing.dead_after, resp.chunk()).await {
-            Err(_) => return Ended::Lost { healthy, error: format!("EventSource silent for {:?}", timing.dead_after) },
-            Ok(Err(e)) => return Ended::Lost { healthy, error: format!("EventSource read failed: {}", e.without_url()) },
-            Ok(Ok(None)) => return Ended::Lost { healthy, error: "EventSource closed by the server".to_string() },
+            Err(_) => return ended(got_event, format!("EventSource silent for {:?}", timing.dead_after)),
+            Ok(Err(e)) => return ended(got_event, format!("EventSource read failed: {}", e.without_url())),
+            Ok(Ok(None)) => return ended(got_event, "EventSource closed by the server".to_string()),
             Ok(Ok(Some(chunk))) => chunk,
         };
         for event in parser.feed(&chunk) {
-            healthy = true;
+            got_event = true;
             if event.kind == "state" {
                 on_state(state, slot, status, &account_id, &jmap_account, &event.data).await;
             }
@@ -367,6 +399,7 @@ mod tests {
         PushTiming {
             ping_secs: 1,
             dead_after: Duration::from_millis(2_500),
+            open_timeout: Duration::from_secs(5),
             backoff_base: Duration::from_millis(50),
             backoff_cap: Duration::from_millis(400),
             failures_before_poll: 3,
@@ -669,6 +702,42 @@ mod tests {
         state.idle.shutdown().await;
     }
 
+    #[tokio::test]
+    async fn a_stream_that_greets_and_hangs_up_falls_back_to_polling() {
+        // Every attempt: one state event, then EOF, well inside `dead_after`.
+        // The event must not reset the failure count (R11).
+        let timing = PushTiming { dead_after: Duration::from_secs(3), stream_retry_every: Duration::from_secs(60), ..timing() };
+        let (_dir, state, m, account) = setup(vec![Fault::HangUpEventSourceAfterOneEvent], timing).await;
+        watch(&state, &account).await;
+
+        let s = wait_status(&state, |s| s.mode.as_deref() == Some("polling"), 10_000, "polling after three hang-ups").await;
+        assert_eq!(streams_opened(&m), 3, "three tries, then polling");
+        assert!(s.last_error.as_deref().is_some_and(|e| e.contains("closed")), "{s:?}");
+
+        // Polling syncs on the timer and opens no stream.
+        let (changes0, streams0) = (m.count_calls("Email/changes"), streams_opened(&m));
+        wait_until(|| m.count_calls("Email/changes") >= changes0 + 2, 3_000, "two polls").await;
+        assert_eq!(streams_opened(&m), streams0, "no stream attempt while polling");
+        state.idle.shutdown().await;
+    }
+
+    #[test]
+    fn sse_parser_caps_a_pending_event() {
+        let mut p = SseParser::default();
+        let line = format!("data: {}\n", "x".repeat(1000));
+        let mut got = Vec::new();
+        for _ in 0..(MAX_LINE / 1000 + 10) {
+            got.extend(p.feed(line.as_bytes()));
+        }
+        assert!(got.is_empty());
+        assert!(p.data.is_empty(), "the oversized event was dropped");
+        assert!(p.data_bytes <= MAX_LINE + 1000);
+        // Its blank line ends it without emitting; the next event is fine.
+        assert!(p.feed(b"\n").is_empty());
+        let got = p.feed(b"event: state\ndata: {}\n\n");
+        assert_eq!(got, vec![SseEvent { kind: "state".into(), data: "{}".into() }]);
+    }
+
     #[test]
     fn sse_parser_reassembles_events_across_chunks() {
         let mut p = SseParser::default();
@@ -691,6 +760,7 @@ mod tests {
         let t = PushTiming::PRODUCTION;
         assert_eq!(t.ping_secs, 30);
         assert_eq!(t.dead_after, Duration::from_secs(65), "2 x ping + 5 s");
+        assert_eq!(t.open_timeout, Duration::from_secs(65));
         assert_eq!(dead_after(1), Duration::from_secs(7));
         let waits: Vec<u64> = (1..=10).map(|n| t.backoff(n).as_secs()).collect();
         assert_eq!(waits, vec![1, 2, 4, 8, 16, 32, 64, 128, 256, 300]);

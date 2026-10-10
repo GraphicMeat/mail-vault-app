@@ -451,6 +451,10 @@ impl State {
         })
     }
 
+    pub fn hangs_up_event_source(&self) -> bool {
+        self.faults.iter().any(|f| matches!(f, Fault::HangUpEventSourceAfterOneEvent))
+    }
+
     pub fn server_fails(&self, method: &str) -> bool {
         self.faults.iter().any(|f| matches!(f, Fault::ServerFail { method: m } if m == method))
     }

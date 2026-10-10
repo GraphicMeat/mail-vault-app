@@ -454,17 +454,23 @@ fn event_source(stream: &TcpStream, shared: &Shared, auth: Option<&str>, req: &R
         Some(t) if t != "*" => Some(t.split(',').map(|s| s.trim().to_string()).collect()),
         _ => None,
     };
-    let (acc, mut seen_gen, drop_after) = {
+    let (acc, mut seen_gen, drop_after, hang_up_first) = {
         let st = shared.lock();
         let Some(acc) = st.authenticate(auth) else {
             drop(st);
             return unauthorized(stream);
         };
-        (acc, st.notify_gen, st.drop_event_source_after())
+        (acc, st.notify_gen, st.drop_event_source_after(), st.hangs_up_event_source())
     };
     let mut s = stream;
     s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n")?;
     s.flush()?;
+    if hang_up_first {
+        let data = state_change(&shared.lock(), &acc, &types);
+        s.write_all(format!("event: state\ndata: {data}\n\n").as_bytes())?;
+        s.flush()?;
+        return Ok(());
+    }
     let mut sent = 0usize;
     let mut last_event = Instant::now();
     loop {

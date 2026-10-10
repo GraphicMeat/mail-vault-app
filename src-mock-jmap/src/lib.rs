@@ -91,6 +91,8 @@ pub enum Fault {
     SubmissionRejected,
     /// After N events (state or ping) an EventSource stream goes silent but stays open: a dead proxy.
     DropEventSourceAfter { events: usize },
+    /// An EventSource stream sends one `state` event (the current state) right after its headers and closes: a proxy that hangs up after greeting.
+    HangUpEventSourceAfterOneEvent,
     /// This method name answers `["error", {"type":"serverFail"}, tag]`.
     ServerFail { method: String },
 }
