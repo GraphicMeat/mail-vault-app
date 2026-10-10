@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.19.2] - 2026-10-10
+
 ### Added
 - **The unread filter tells you when a folder cannot have unread mail.** Turn Unread on in Sent, Trash or any folder other than the inbox and that folder flashes in the sidebar: mail there was sent or filed, never received, so the empty list is right and the account's unread badge counts the inbox only.
 - **Send asks when you mention an attachment but forgot it (Premium).** A message that says "attached", "see the attachment", "im Anhang", "ci-joint", "添付" and the like in any of the app's languages, with no file attached, stops at Send and offers Attach file or Send anyway. Quoted text and your signature are not read, nor is a reply's subject. Turn it off in Settings > Mail preferences > Behavior > Attachments.
