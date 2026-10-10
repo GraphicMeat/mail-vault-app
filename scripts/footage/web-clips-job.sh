@@ -169,8 +169,10 @@ run_group() {
   local G="$OUT/$v/$ph/$group"
   mkdir -p "$G"
   if [ "$(date +%F)" != "$DAY0" ] && [ "$verify" = 0 ]; then
-    echo "group $group: the local date moved past midnight since the job started; its weekday and relative labels would not match the rest" | tee "$G/refused.txt"
-    return 1
+    # The weekday and "Yesterday" labels of a group recorded after midnight can differ from the groups before it.
+    # Allowed by default (the owner accepts that); WEBCLIP_STRICT_DAY=1 refuses instead.
+    echo "group $group: the local date moved past midnight since the job started (labels may differ from the earlier groups)" | tee "$G/midnight.txt"
+    if [ "${WEBCLIP_STRICT_DAY:-0}" = 1 ]; then echo "refused: WEBCLIP_STRICT_DAY=1" >> "$G/midnight.txt"; return 1; fi
   fi
   disk_ok || return 1
   # Short on purpose: the daemon socket is $HOME/.mailvault/mv.sock, capped at 104 bytes.
