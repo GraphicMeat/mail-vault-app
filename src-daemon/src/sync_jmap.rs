@@ -114,10 +114,10 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
     let Some((path, total)) = run.requested.clone() else {
         return failed(format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"));
     };
+    publish(engine, &account.id, &run);
     if let Err(e) = write_meta(&state, engine, &account.id, &path, total).await {
         return failed(e);
     }
-    publish(engine, &account.id, &run);
     let mine = run.touched.get(&path);
     let arrival_uids = mine.map(|t| t.arrival_uids.clone()).unwrap_or_default();
     let result = SyncResult {
@@ -595,7 +595,6 @@ async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, account_id: &
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::handlers::common::vault_root;
     use crate::jmap_sessions::{jmap_ledger_path, JmapMeta};
     use crate::server::DaemonState;

@@ -211,10 +211,18 @@ async fn announce(state: &Arc<DaemonState>, account: ImapConfig, row: &snooze::S
     let sync_account = SyncAccount { id: row.account_id.clone(), email: account.email.clone(), imap_config: account };
     let result = state.sync_engine.sync_account(&sync_account, &row.from_mailbox).await;
     if result.success {
-        state.sync_engine.note_change(&row.account_id, &row.from_mailbox, result.arrivals, result.updated_flags);
+        publish_woken(&state.sync_engine, &row.account_id, &row.from_mailbox, &result);
     } else {
         warn!("[snooze] woke {} but the sync of {} failed: {:?}", row.id, row.from_mailbox, result.error);
     }
+}
+
+/// Record a woken message's sync as a change. `sync_account` does not
+/// announce, but a JMAP sync publishes the arrivals itself (`announced`), so
+/// only the unannounced ones are noted here, as `idle_watch.rs` does.
+fn publish_woken(engine: &crate::sync_engine::SyncEngine, account_id: &str, mailbox: &str, result: &crate::sync_engine::SyncResult) {
+    let unannounced = if result.announced { 0 } else { result.arrivals };
+    engine.note_change(account_id, mailbox, unannounced, result.updated_flags);
 }
 
 #[cfg(test)]
@@ -410,5 +418,39 @@ mod tests {
         let r = row(&dir, "a");
         assert_eq!(r.state, "snoozed");
         assert_eq!(r.attempts, 0);
+    }
+
+    fn sync_result(arrivals: usize, announced: bool) -> crate::sync_engine::SyncResult {
+        crate::sync_engine::SyncResult {
+            account_id: "acct".into(),
+            mailbox: "INBOX".into(),
+            new_emails: arrivals,
+            arrivals,
+            updated_flags: 0,
+            total_emails: 10,
+            success: true,
+            error: None,
+            offline: false,
+            error_code: None,
+            arrival_uids: Vec::new(),
+            announced,
+        }
+    }
+
+    /// A JMAP sync has already published its arrivals (`announced`): the wake
+    /// must not publish them a second time. An IMAP sync (`announced` false)
+    /// still publishes them here.
+    #[tokio::test]
+    async fn a_woken_sync_publishes_each_arrival_once() {
+        let dir = app_dir();
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let gen0 = state.sync_engine.change_gen();
+        // JMAP: already published by the sync, so the wake adds no arrivals.
+        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(2, true));
+        // IMAP: the wake is the only publisher.
+        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(3, false));
+        let (_, records) = state.sync_engine.wait_changes(gen0, 0).await;
+        let announced: usize = records.iter().map(|r| r.new_emails).sum();
+        assert_eq!(announced, 3, "{records:?}");
     }
 }
