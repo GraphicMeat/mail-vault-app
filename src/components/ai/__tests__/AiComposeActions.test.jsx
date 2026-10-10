@@ -52,6 +52,19 @@ describe('AiComposeActions', () => {
     await waitFor(() => expect(onResult).toHaveBeenCalledWith('shorten', 'Shortened.'));
   });
 
+  it('tells the model to answer in the language of the mail', async () => {
+    useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false } });
+    daemonCall.mockImplementation((method) => {
+      if (method === 'ai.providers') return Promise.resolve([{ provider: 'localGguf', available: true, reason: '' }]);
+      return Promise.resolve({ text: 'Kürzer.' });
+    });
+    render(<AiComposeActions actions={['shorten']} getDraftText={() => 'Hallo Theo, ein langer Entwurf'} onResult={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText('Shorten').disabled).toBe(false));
+    fireEvent.click(screen.getByText('Shorten'));
+    expect(screen.getByTestId('ai-preview-text').textContent).toContain('Write in the same language as the email.');
+  });
+
   it('treats an empty generation as a failure — never wipes the draft', async () => {
     useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'localGguf', endpointUrl: '', endpointModel: '', endpointConsented: false } });
     daemonCall.mockImplementation((method) => {

@@ -18,18 +18,22 @@ const ACTIONS = {
   summarize: { labelKey: 'ai.actions.summarize', source: 'thread' },
 };
 
+// The model answers in the language of the prompt unless told otherwise, so every
+// instruction says to keep the language of the mail.
+const SAME_LANGUAGE = 'Write in the same language as the email.';
+
 function buildPrompt(actionId, text, tone) {
   switch (actionId) {
     case 'draftReply':
-      return `Write a short, polite email reply to the message below. Reply with only the message body.\n\n${text}`;
+      return `Write a short, polite email reply to the message below. ${SAME_LANGUAGE} Reply with only the message body.\n\n${text}`;
     case 'shorten':
-      return `Rewrite the email below to be more concise, keeping its meaning and tone. Reply with only the rewritten text.\n\n${text}`;
+      return `Rewrite the email below to be more concise, keeping its meaning and tone. ${SAME_LANGUAGE} Reply with only the rewritten text.\n\n${text}`;
     case 'tone':
-      return `Rewrite the email below in a more ${tone} tone, keeping its meaning. Reply with only the rewritten text.\n\n${text}`;
+      return `Rewrite the email below in a more ${tone} tone, keeping its meaning. ${SAME_LANGUAGE} Reply with only the rewritten text.\n\n${text}`;
     case 'actionItems':
-      return `List the action items from the email below as short lines, one per item. If there are none, say so in one line.\n\n${text}`;
+      return `List the action items from the email below as short lines, one per item. If there are none, say so in one line. ${SAME_LANGUAGE}\n\n${text}`;
     case 'summarize':
-      return `Summarize the email thread below in 2-3 short sentences.\n\n${text}`;
+      return `Summarize the email thread below in 2-3 short sentences. ${SAME_LANGUAGE}\n\n${text}`;
     default:
       return text;
   }
