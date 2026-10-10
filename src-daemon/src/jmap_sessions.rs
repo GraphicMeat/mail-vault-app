@@ -12,20 +12,30 @@ use crate::imap::ImapConfig;
 use crate::server::DaemonState;
 use mailvault_core::custody::Connection;
 use mailvault_core::jmap::mailbox_map::mailbox_tree;
-use mailvault_core::jmap::{JMailbox, JmapClient, JmapError};
+use mailvault_core::jmap::{ImportResult, JMailbox, JmapClient, JmapError};
 use mailvault_core::{graph_ledger, header_cache, vault_files};
 use mailvault_core::imap::MailboxInfo;
-use serde_json::Value;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
+
+/// How long an email id this daemon put on the server stays out of the
+/// arrival count (`JmapSessions::is_own`).
+pub const OWN_IMPORT_TTL: Duration = Duration::from_secs(10 * 60);
 
 /// Every connected JMAP account, keyed by address + session URL. One entry
 /// per account: a changed password or token replaces it (`fingerprint`).
 #[derive(Default)]
 pub struct JmapSessions {
     map: Mutex<HashMap<String, Entry>>,
+    /// Email ids this daemon put on the server itself (`import_raw`), with
+    /// when, keyed by `session_key` + "\n" + id. The sync never counts them
+    /// as arrivals (`sync_jmap`). Kept `OWN_IMPORT_TTL`; kept across a
+    /// reconnect, which replaces the account's `AccountJmap`.
+    own: Mutex<HashMap<String, Instant>>,
 }
 
 struct Entry {
@@ -74,6 +84,44 @@ impl JmapSessions {
     pub fn forget(&self, cfg: &ImapConfig) {
         self.map.lock().unwrap_or_else(|p| p.into_inner()).remove(&session_key(cfg));
     }
+
+    /// Record `email_id` as one this daemon put on the server (an import, a
+    /// restore, a sent copy): the sync does not announce it as an arrival.
+    pub fn note_own(&self, cfg: &ImapConfig, email_id: &str) {
+        let mut own = self.own.lock().unwrap_or_else(|p| p.into_inner());
+        own.retain(|_, at| at.elapsed() < OWN_IMPORT_TTL);
+        own.insert(format!("{}\n{}", session_key(cfg), email_id), Instant::now());
+    }
+
+    /// Did this daemon put `email_id` on the server in the last `OWN_IMPORT_TTL`?
+    pub fn is_own(&self, cfg: &ImapConfig, email_id: &str) -> bool {
+        self.own
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&format!("{}\n{}", session_key(cfg), email_id))
+            .is_some_and(|at| at.elapsed() < OWN_IMPORT_TTL)
+    }
+
+    /// Upload `raw` and `Email/import` it into `mailbox_id` with `keywords`,
+    /// recording the new id as this daemon's own (`note_own`). A server-side
+    /// dedupe (`AlreadyExists`) names an email that was already there and
+    /// records nothing.
+    #[cfg_attr(not(test), allow(dead_code))] // Task 9b's restore and upload call it.
+    pub async fn import_raw(
+        &self,
+        cfg: &ImapConfig,
+        raw: &[u8],
+        mailbox_id: &str,
+        keywords: &[String],
+    ) -> Result<ImportResult, JmapError> {
+        let acct = self.get(cfg).await?;
+        let blob_id = acct.client.upload(raw).await?;
+        let result = acct.client.import(&blob_id, &[mailbox_id.to_string()], keywords, None).await?;
+        if let ImportResult::Created(imported) = &result {
+            self.note_own(cfg, &imported.id);
+        }
+        Ok(result)
+    }
 }
 
 /// One connected JMAP account.
@@ -81,12 +129,16 @@ pub struct AccountJmap {
     pub client: JmapClient,
     /// Mailbox path (as `mailbox_tree` names it) -> JMAP mailbox id.
     pub mailbox_ids: RwLock<BTreeMap<String /*path*/, String /*id*/>>,
-    /// The Mailbox state of the last `refresh` (Task 6's `Mailbox/changes`).
+    /// The Mailbox state of the last `refresh`.
     pub mailbox_state: Mutex<String>,
+    /// The last `refresh`'s Mailbox state and answer, in one lock: `current`
+    /// hands the answer back while `Mailbox/changes` says the state stands.
+    listed: Mutex<Option<(String, Mailboxes)>>,
 }
 
 /// `refresh`'s answer: the app's folder list, the JMAP mailboxes with their
 /// counts, and path -> id.
+#[derive(Clone)]
 pub struct Mailboxes {
     pub infos: Vec<MailboxInfo>,
     pub list: Vec<JMailbox>,
@@ -105,17 +157,51 @@ pub fn in_mailbox(email: &Value, mailbox_id: &str) -> bool {
 
 impl AccountJmap {
     pub fn new(client: JmapClient) -> AccountJmap {
-        AccountJmap { client, mailbox_ids: RwLock::new(BTreeMap::new()), mailbox_state: Mutex::new(String::new()) }
+        AccountJmap {
+            client,
+            mailbox_ids: RwLock::new(BTreeMap::new()),
+            mailbox_state: Mutex::new(String::new()),
+            listed: Mutex::new(None),
+        }
     }
 
-    /// Every mailbox, fetched now; the path -> id map and the Mailbox state
-    /// are replaced with what the server answered.
+    /// Every mailbox, fetched now; the path -> id map, the Mailbox state and
+    /// the answer `current` reuses are replaced with what the server answered.
     pub async fn refresh(&self) -> Result<Mailboxes, JmapError> {
         let (list, state) = self.client.mailboxes().await?;
         let (infos, ids) = mailbox_tree(&list);
         *self.mailbox_ids.write().unwrap_or_else(|p| p.into_inner()) = ids.clone();
-        *self.mailbox_state.lock().unwrap_or_else(|p| p.into_inner()) = state;
-        Ok(Mailboxes { infos, list, ids })
+        *self.mailbox_state.lock().unwrap_or_else(|p| p.into_inner()) = state.clone();
+        let boxes = Mailboxes { infos, list, ids };
+        *self.listed.lock().unwrap_or_else(|p| p.into_inner()) = Some((state, boxes.clone()));
+        Ok(boxes)
+    }
+
+    /// The mailboxes with their counts, without a full `Mailbox/get` while
+    /// nothing changed: one `Mailbox/changes` from the last `refresh`'s state
+    /// (`maxChanges` 1: only "anything?" is asked). A state that moved (a
+    /// count is a change too), one the server cannot bridge, or no `refresh`
+    /// yet: `refresh`.
+    pub async fn current(&self) -> Result<Mailboxes, JmapError> {
+        let last = self.listed.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let Some((since, boxes)) = last.filter(|(state, _)| !state.is_empty()) else {
+            return self.refresh().await;
+        };
+        let args = json!({"accountId": self.client.account_id(), "sinceState": since, "maxChanges": 1});
+        let answer = match self.client.call(vec![json!(["Mailbox/changes", args, "c"])]).await {
+            Ok(answer) => answer,
+            Err(JmapError::CannotCalculateChanges) => return self.refresh().await,
+            Err(e) => return Err(e),
+        };
+        let unchanged = answer
+            .iter()
+            .find(|r| r[0] == "Mailbox/changes")
+            .is_some_and(|r| r[1]["newState"].as_str() == Some(since.as_str()));
+        if unchanged {
+            Ok(boxes)
+        } else {
+            self.refresh().await
+        }
     }
 
     fn cached_id(&self, path: &str) -> Option<String> {
@@ -240,12 +326,10 @@ fn read_log(conn: &Connection, account_id: &str, mailbox: &str) -> Option<Vec<(u
 
 impl JmapMeta {
     /// The account's last synced Email state, keyed by the JMAP accountId.
-    #[allow(dead_code)] // Task 6's delta reads it.
     pub fn email_state(conn: &Connection, account_id: &str, jmap_account: &str) -> Option<String> {
         mailvault_core::custody::db::meta_get(conn, &meta_key(account_id, jmap_account, "email_state"))
     }
 
-    #[allow(dead_code)] // Task 6's delta writes it.
     pub fn set_email_state(conn: &Connection, account_id: &str, jmap_account: &str, state: &str) -> Result<(), String> {
         mailvault_core::custody::db::meta_set(conn, &meta_key(account_id, jmap_account, "email_state"), state)
     }
@@ -259,7 +343,6 @@ impl JmapMeta {
 
     /// Advance the counter by one and log `uids` under the new value, in
     /// one transaction. No uids: nothing changed, the counter stays.
-    #[allow(dead_code)] // Task 6's delta bumps; the tests do too.
     pub fn bump(conn: &Connection, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<u64, String> {
         let current = Self::modseq(conn, account_id, mailbox);
         if uids.is_empty() {

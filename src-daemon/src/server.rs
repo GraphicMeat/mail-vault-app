@@ -901,6 +901,7 @@ impl DaemonState {
             jmap: Default::default(),
         });
         state.idle.set_daemon(&state);
+        state.sync_engine.set_daemon(&state);
         state
     }
 }

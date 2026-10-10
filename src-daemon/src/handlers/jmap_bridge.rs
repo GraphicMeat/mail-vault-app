@@ -284,9 +284,11 @@ fn by_id(list: Vec<Value>) -> HashMap<String, Value> {
     list.into_iter().filter_map(|e| e["id"].as_str().map(str::to_string).map(|id| (id, e))).collect()
 }
 
-/// The mailbox at `path`, with its counts, from a fresh `Mailbox/get`.
+/// The mailbox at `path`, with its counts: the last listing while
+/// `Mailbox/changes` says nothing moved, else a fresh `Mailbox/get`
+/// (`AccountJmap::current`).
 async fn mailbox_counts(acct: &AccountJmap, path: &str) -> Result<mailvault_core::jmap::JMailbox, Fail> {
-    let boxes = acct.refresh().await?;
+    let boxes = acct.current().await?;
     let missing = || Fail::from(JmapError::Protocol(format!("no mailbox {path}")));
     let id = boxes.ids.get(path).ok_or_else(missing)?;
     boxes.list.into_iter().find(|m| &m.id == id).ok_or_else(missing)
@@ -378,8 +380,10 @@ async fn answer(
         "imap_check_mailbox_status" => {
             let account_id = ledger_account(params)?;
             let mailbox = mailbox_param(params);
-            // Task 6: `sync_jmap::delta_only` runs here first, so the ledger
-            // and the counter below are current.
+            // The account's delta first, so the ledger and the counter below
+            // are current. A delta that fails fails the probe: the app then
+            // syncs (`syncProbe.js` "probe-failed"), never trusts stale counts.
+            crate::sync_jmap::delta_only(state, account, &account_id).await?;
             let mb = mailbox_counts(acct, &mailbox).await?;
             let uid_next = uid_next(state, &account_id, &mailbox).await?;
             let (modseq, _) = meta_read(state, &account_id, &mailbox, None).await;
@@ -389,8 +393,12 @@ async fn answer(
         "imap_folder_status" => {
             let account_id = ledger_account(params)?;
             let wanted: Vec<String> = param(params, "mailboxes")?;
-            // Task 6: `sync_jmap::delta_only` runs here first.
-            let boxes = acct.refresh().await?;
+            // The account's delta first. Badges still answer when it fails:
+            // the counts below come from the server either way.
+            if let Err(e) = crate::sync_jmap::delta_only(state, account, &account_id).await {
+                warn!("[jmap] {}: delta before folder status failed: {}", account_id, e);
+            }
+            let boxes = acct.current().await?;
             let mut statuses = Vec::new();
             for path in wanted {
                 let Some(m) = boxes.ids.get(&path).and_then(|id| boxes.list.iter().find(|m| &m.id == id)) else { continue };
@@ -1822,7 +1830,6 @@ second body";
     // ── Task 6 ─────────────────────────────────────────────────────────────
 
     #[tokio::test]
-    #[ignore = "needs Task 6 delta"]
     async fn arrival_plus_removal_in_one_interval_moves_status() {
         let (state, m) = test_state_with_mock(common_scenario()).await;
         let a = jmap_account(&m);
@@ -1842,7 +1849,6 @@ second body";
     }
 
     #[tokio::test]
-    #[ignore = "needs Task 6 delta"]
     async fn changed_flags_since_modseq() {
         let (state, m) = test_state_with_mock(common_scenario()).await;
         let a = jmap_account(&m);

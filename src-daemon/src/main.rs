@@ -52,6 +52,7 @@ mod snooze_worker;
 mod follow_up_worker;
 mod vault_gap;
 pub mod sync_engine;
+mod sync_jmap;
 
 // Note: backup, external_location modules require tauri::AppHandle for data
 // dirs and event emission (backup is Phase 3's still-open remainder, blocked
@@ -514,6 +515,8 @@ async fn daemon_main() {
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.
     state.idle.set_daemon(&state);
+    // The JMAP sync works through the state (sessions, ledgers, custody).
+    state.sync_engine.set_daemon(&state);
 
     // Custody, before the socket exists (Task 2.9b Step 1): a route that
     // reads an entry must never be served by a store that is not open yet.

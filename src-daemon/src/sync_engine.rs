@@ -162,6 +162,11 @@ pub struct SyncEngine {
     vault_closed: Arc<AtomicBool>,
     vault_gate: Arc<std::sync::RwLock<()>>,
     custody_db: std::sync::Mutex<Option<Arc<mailvault_core::custody::SharedConn>>>,
+    /// The daemon state, for the JMAP sync (`sync_jmap`), which works through
+    /// `DaemonState::jmap`, the uid ledgers and custody. Set once at startup
+    /// (`set_daemon`); weak, so the state and its engine do not keep each
+    /// other alive.
+    daemon: std::sync::OnceLock<std::sync::Weak<crate::server::DaemonState>>,
 }
 
 impl SyncEngine {
@@ -195,11 +200,32 @@ impl SyncEngine {
             vault_closed,
             vault_gate,
             custody_db: std::sync::Mutex::new(None),
+            daemon: std::sync::OnceLock::new(),
         }
     }
 
     pub fn attach_custody_db(&self, db: Arc<mailvault_core::custody::SharedConn>) {
         *self.custody_db.lock().unwrap_or_else(|p| p.into_inner()) = Some(db);
+    }
+
+    /// Hand the engine the daemon state the JMAP sync works through. Called
+    /// once, right after the state is built (`main.rs`, `DaemonState::for_test`).
+    pub fn set_daemon(&self, state: &Arc<crate::server::DaemonState>) {
+        let _ = self.daemon.set(Arc::downgrade(state));
+    }
+
+    /// The daemon state, `None` before `set_daemon` (an engine built alone,
+    /// as the IMAP tests build one) or once the state is gone.
+    pub(crate) fn daemon_state(&self) -> Option<Arc<crate::server::DaemonState>> {
+        self.daemon.get().and_then(std::sync::Weak::upgrade)
+    }
+
+    /// The lock named `key` in `sync_locks`, made on first use. The folder
+    /// locks are `<account>\x01<mailbox>`; the JMAP sync holds
+    /// `jmap\x01<account>` for a whole account-level run.
+    pub(crate) async fn lock_for(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self.sync_locks.lock().await;
+        Arc::clone(locks.entry(key.to_string()).or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))))
     }
 
     /// The attached store, for tests that assert on what a sync cached.
@@ -211,7 +237,7 @@ impl SyncEngine {
     }
 
     /// One cache step's inputs, cloned into a blocking task (`cache_io`).
-    fn cache_ctx(&self, account_id: &str, mailbox: &str) -> CacheCtx {
+    pub(crate) fn cache_ctx(&self, account_id: &str, mailbox: &str) -> CacheCtx {
         CacheCtx {
             vault_closed: Arc::clone(&self.vault_closed),
             vault_gate: Arc::clone(&self.vault_gate),
@@ -387,7 +413,8 @@ impl SyncEngine {
         // Every account that syncs teaches the gate its server, before the
         // short-circuit below: the watchdog's probe dials it too, and must
         // know it while the gate is shut and no sync gets further than here.
-        self.net.register_host(&account.imap_config.host, account.imap_config.effective_port());
+        let (gate_host, gate_port) = gate_target(&account.imap_config);
+        self.net.register_host(&gate_host, gate_port);
 
         // No connectivity: return without touching the network. This is the
         // whole point of the gate — nine accounts times one sync tick is nine
@@ -536,6 +563,13 @@ impl SyncEngine {
         mailbox: &str,
         announce: bool,
     ) -> SyncResult {
+        // A JMAP account never reaches the IMAP pool: its account-level sync
+        // runs here, inside `sync_account_with`'s gate, folder lock and
+        // `SyncState` bookkeeping, exactly where an IMAP sync would open its
+        // session.
+        if account.imap_config.uses_jmap() {
+            return crate::sync_jmap::sync_jmap(self, account, mailbox, announce).await;
+        }
         let account_id = account.id.clone();
         let outcome = retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh, announce)).await;
         match outcome {
@@ -1115,6 +1149,12 @@ impl SyncEngine {
     /// delays `sync.wait`. Writes headers chunk by chunk rather than at the end,
     /// so the app's cache-drain sees progress while this is still running.
     pub async fn backfill_mailbox(&self, account: &SyncAccount, mailbox: &str) {
+        // A JMAP account has no IMAP backfill: its older mail is listed when
+        // the app pages the mailbox (`imap_get_emails` over JMAP). This path
+        // would dial `imapHost` through the IMAP pool with the account's token.
+        if account.imap_config.uses_jmap() {
+            return;
+        }
         // Offline: return *without* marking the key as gave-up. A backfill that
         // never dialled has not been proven unfetchable, and gave-up keys last
         // the life of the process — one dropped Wi-Fi would strand the mailbox
@@ -1260,7 +1300,7 @@ impl SyncEngine {
 // the classification walk off the worker threads).
 
 #[derive(Clone)]
-struct CacheCtx {
+pub(crate) struct CacheCtx {
     vault_closed: Arc<AtomicBool>,
     vault_gate: Arc<std::sync::RwLock<()>>,
     account: String,
@@ -1297,7 +1337,7 @@ impl CacheCtx {
         read.ok().flatten().unwrap_or((None, 0))
     }
 
-    fn cached_uids(&self) -> HashSet<u32> {
+    pub(crate) fn cached_uids(&self) -> HashSet<u32> {
         self.with_db(|conn| mailvault_core::custody::cache::uid_set(conn, &self.account, &self.mailbox))
             .ok()
             .flatten()
@@ -1324,7 +1364,7 @@ impl CacheCtx {
             .ok_or_else(|| "custody store is not open — nothing to cache into".to_string())
     }
 
-    fn write_meta(
+    pub(crate) fn write_meta(
         &self,
         total: u32,
         uid_validity: Option<u32>,
@@ -1354,7 +1394,7 @@ impl CacheCtx {
 
     /// The header rows and the contacts observation — the two things that
     /// always follow a header fetch.
-    fn write_headers(&self, headers: &[ImapEmailHeader]) -> Result<(), String> {
+    pub(crate) fn write_headers(&self, headers: &[ImapEmailHeader]) -> Result<(), String> {
         self.vault_open()?;
         let value = serde_json::json!({"emails": headers});
         self.require_db(|conn| {
@@ -1385,14 +1425,14 @@ impl CacheCtx {
         Ok(restored)
     }
 
-    fn patch_flags(&self, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
+    pub(crate) fn patch_flags(&self, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
         self.vault_open()?;
         self.require_db(|conn| {
             mailvault_core::custody::cache::patch_flags(conn, &self.account, &self.mailbox, changes)
         })
     }
 
-    fn remove(&self, uids: &[u32]) -> Result<usize, String> {
+    pub(crate) fn remove(&self, uids: &[u32]) -> Result<usize, String> {
         self.vault_open()?;
         let removed =
             self.require_db(|conn| mailvault_core::custody::cache::remove_headers(conn, &self.account, &self.mailbox, uids))?;
@@ -1459,7 +1499,7 @@ fn cached_meta_from_json(text: &str) -> Option<CachedMeta> {
 
 /// Run one cache step on a blocking thread. Never call the `CacheCtx` methods
 /// directly from an async fn — that is the bug this exists to prevent.
-async fn cache_io<T: Send + 'static>(
+pub(crate) async fn cache_io<T: Send + 'static>(
     ctx: &CacheCtx,
     f: impl FnOnce(CacheCtx) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
@@ -1549,6 +1589,21 @@ fn unix_now() -> u64 {
 
 /// Finished tickets kept around so a late `sync.wait` still finds its result.
 const MAX_LIVE_TICKETS: usize = 64;
+
+/// The server the network gate learns from an account (`register_host`): a
+/// JMAP account's session host on its https port (443 unless the URL names
+/// one), else `imapHost` on the IMAP port. Never `imapHost:993` for JMAP.
+fn gate_target(config: &ImapConfig) -> (String, u16) {
+    if config.uses_jmap() {
+        let session = config.jmap_session_url.as_deref().and_then(|u| url::Url::parse(u.trim()).ok());
+        if let Some(url) = session.as_ref().filter(|u| u.host_str().is_some()) {
+            let host = url.host_str().unwrap_or_default().to_string();
+            return (host, url.port_or_known_default().unwrap_or(443));
+        }
+        return (config.host.clone(), 443);
+    }
+    (config.host.clone(), config.effective_port())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
