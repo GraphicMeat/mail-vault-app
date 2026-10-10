@@ -17,7 +17,7 @@ import {
   toggleFlagged as _toggleFlagged,
   deleteSelectedFromServer as _deleteSelectedFromServer,
   moveEmails as _moveEmails,
-  purgeEverywhere as _purgeEverywhere,
+  purgeEverywhereReporting as _purgeEverywhere,
 } from '../../services/workflows/messageMutations';
 import { t } from '../../i18n/index.js';
 

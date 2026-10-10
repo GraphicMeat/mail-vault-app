@@ -58,7 +58,7 @@ import { accountIdsOf } from '../../services/aiClient';
 import { boundedThreadText } from '../../utils/quickReplies';
 import { describePurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
-import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
+import { applyFlagToKeys, purgeEverywhereReporting } from '../../services/workflows/messageMutations';
 import { startThreadReadTimer, stopThreadReadTimer, forgetThreadReadTimer } from '../../services/workflows/threadReadTimer';
 import { ConnectedStateIcon } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
@@ -731,7 +731,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
     if (!copy) return;
     const key = selectionKey(email, state);
     setPendingDelete({
-      executor: () => purgeEverywhere([key]),
+      executor: () => purgeEverywhereReporting([key]),
       copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
     });
   }, []);

@@ -28,7 +28,7 @@ vi.mock('../../../services/workflows/messageMutations', async importOriginal => 
   const actual = await importOriginal();
   return { ...actual,
     applyFlagToKeys: (...args) => actionMutations.applyFlagToKeys(...args),
-    purgeEverywhere: (...args) => actionMutations.purgeEverywhere(...args),
+    purgeEverywhereReporting: (...args) => actionMutations.purgeEverywhere(...args),
   };
 });
 

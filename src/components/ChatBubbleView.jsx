@@ -55,7 +55,7 @@ import { useExportStore } from '../stores/exportStore';
 import { describePurge, describeReaderDelete } from '../utils/custodyCopy';
 import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
-import { applyFlagToKeys, purgeEverywhere } from '../services/workflows/messageMutations';
+import { applyFlagToKeys, purgeEverywhereReporting } from '../services/workflows/messageMutations';
 import { startThreadReadTimer, cancelThreadReadTimers } from '../services/workflows/threadReadTimer';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
@@ -393,7 +393,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     if (!copy) return;
     const key = selectionKey(scopedTarget, state);
     setPendingConfirmation({
-      executor: () => purgeEverywhere([key]),
+      executor: () => purgeEverywhereReporting([key]),
       copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
     });
   };

@@ -105,7 +105,7 @@ vi.mock('../../../stores/searchStore', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
-const { purgeEverywhere } = await import('../messageMutations');
+const { purgeEverywhere, purgeEverywhereReporting } = await import('../messageMutations');
 
 // 36-char UUID: db/emails.js parses `accountId-mailbox-uid` with a fixed-width
 // prefix and silently no-ops on anything shorter.
@@ -666,5 +666,41 @@ describe('purgeEverywhere — the view on screen', () => {
     expect(s.selectedEmailId).toBeNull();
     expect(s.selectedThread).toBeNull();
     expect(s.totalEmails).toBe(1);
+  });
+});
+
+
+// The reader, the row menu and the selection bar have no list toast of their own:
+// a purge that deleted nothing there used to look like a click that did nothing.
+describe('purgeEverywhereReporting — outcome reaches the user', () => {
+  beforeEach(() => useMailStore.setState({ error: null, errorType: undefined, errorTypeFor: undefined }));
+
+  it('a UIDVALIDITY hold-back raises a warning toast naming it', async () => {
+    prime({ emails: [serverMsg(1)] });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 2 });
+    const res = await purgeEverywhereReporting([1]);
+
+    expect(res.needsResync).toBe(1);
+    const { error, errorType, errorTypeFor } = useMailStore.getState();
+    expect(error).toBeTruthy();
+    expect(errorType).toBe('warning');
+    expect(errorTypeFor).toBe(error);
+  });
+
+  it('a server refusal raises a warning toast', async () => {
+    prime({ emails: [serverMsg(1)] });
+    mockDeleteEmail.mockRejectedValue(new Error('NO [UNAVAILABLE]'));
+    const res = await purgeEverywhereReporting([1]);
+
+    expect(res.failed).toBe(1);
+    expect(useMailStore.getState().error).toBeTruthy();
+  });
+
+  it('a clean purge stays silent', async () => {
+    prime({ emails: [serverMsg(1)] });
+    const res = await purgeEverywhereReporting([1]);
+
+    expect(res.deleted).toBe(1);
+    expect(useMailStore.getState().error).toBeNull();
   });
 });

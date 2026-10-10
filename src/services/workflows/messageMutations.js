@@ -23,6 +23,7 @@ import { dismissFollowUpsAt } from '../../stores/followUpStore';
 import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
+import { formatPurgeEverywhereOutcome } from '../../utils/purgeOutcome';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
 import { t as tr } from '../../i18n/index.js';
@@ -2791,6 +2792,22 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   if (!isUnified) get().loadEmails();
 
   return { deleted: purgeable.length, failed, queuedBackup, needsResync };
+}
+
+
+// For the callers with no list toast of their own (the reader, the row menu, the
+// selection bar): a purge that held rows back or was refused would otherwise look
+// like a click that did nothing. The bulk manager reports its own result and
+// calls purgeEverywhere directly.
+export async function purgeEverywhereReporting(keys, opts) {
+  const result = await purgeEverywhere(keys, opts);
+  const message = formatPurgeEverywhereOutcome(result);
+  if (message) {
+    const { useMailStore } = await import('../../stores/mailStore');
+    // `errorTypeFor` pins the warning tint to this exact message (utils/errorToast.js).
+    useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
+  }
+  return result;
 }
 
 

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Delete everywhere says why it removed nothing.** From the reader, the row menu, the selection bar and the chat view, a purge that was refused by the server, or held back because the folder's UIDVALIDITY could not be trusted, showed no message and the mail simply came back. It now raises the same warning the list shows, with how many were removed and how many were not.
+
 ## [2.19.2] - 2026-10-10
 
 ### Added

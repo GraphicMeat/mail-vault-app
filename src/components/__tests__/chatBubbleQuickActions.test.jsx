@@ -78,7 +78,7 @@ vi.mock('../../stores/themeStore', () => ({
 vi.mock('../../services/cacheManager', () => ({ getAccountCacheMailboxes: accountId => mocks.folders[accountId] || [] }));
 vi.mock('../../services/workflows/messageMutations', () => ({
   applyFlagToKeys: (...args) => mocks.applyFlagToKeys(...args),
-  purgeEverywhere: (...args) => mocks.purgeEverywhere(...args),
+  purgeEverywhereReporting: (...args) => mocks.purgeEverywhere(...args),
 }));
 
 let ChatBubbleView;

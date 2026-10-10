@@ -15,7 +15,7 @@ const { scrollToIndex, bodies, timers, opener, mutations } = vi.hoisted(() => ({
   bodies: new Map(),
   timers: { startThreadReadTimer: vi.fn(async () => {}), stopThreadReadTimer: vi.fn(() => false), forgetThreadReadTimer: vi.fn() },
   opener: { registerActiveReply: vi.fn(), openCompose: vi.fn() },
-  mutations: { applyFlagToKeys: vi.fn(), purgeEverywhere: vi.fn() },
+  mutations: { applyFlagToKeys: vi.fn(), purgeEverywhereReporting: vi.fn() },
 }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex, measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 144,
@@ -106,7 +106,7 @@ describe('ThreadView readOnly', () => {
     expect(timers.forgetThreadReadTimer).not.toHaveBeenCalled();
     expect(opener.registerActiveReply).not.toHaveBeenCalled();
     expect(mutations.applyFlagToKeys).not.toHaveBeenCalled();
-    expect(mutations.purgeEverywhere).not.toHaveBeenCalled();
+    expect(mutations.purgeEverywhereReporting).not.toHaveBeenCalled();
     expect(writes).toEqual([]);
   });
 
