@@ -237,6 +237,8 @@ async fn find_in_trash_keeps_a_duplicate_visible_and_present_follows_its_uids() 
     });
     let mut o = ops(&m);
     let t = trash();
+    // The job listed these (a plan seeds them); d3 and d4 it did not.
+    o.remember("INBOX", [(1, "e2".to_string()), (2, "d1".to_string()), (3, "d2".to_string())]);
     let ids = vec!["e2@x".to_string(), "dup@x".to_string(), "none@x".to_string()];
     let found = o.find_in_trash(&t, &ids).await.unwrap();
     let of = |id: &str| found.iter().filter(|(k, _)| k == id).map(|(_, u)| *u).collect::<Vec<u32>>();
@@ -360,6 +362,7 @@ async fn find_in_trash_asks_with_the_bare_message_id() {
     let m = start();
     m.mutate(|s| s.set_mailboxes("acc1", "e2", &["mb-trash"]));
     let mut o = ops(&m);
+    o.remember("INBOX", [(1, "e2".to_string())]);
     let found = o.find_in_trash(&trash(), &["<e2@x>".to_string(), "missing@x".to_string()]).await.unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].0, "<e2@x>", "answered under the id the engine asked with");
@@ -513,4 +516,67 @@ async fn archive_and_delete_of_inbox_leaves_e1_in_work_and_nowhere_else() {
     assert_eq!(labels(&m, "e2"), None, "e2 was in INBOX only: destroyed");
     assert!(m.read(|s| s.emails_in("acc1", "mb-inbox").is_empty() && s.emails_in("acc1", "mb-trash").is_empty()));
     assert_eq!(labels(&m, "e3"), Some(vec!["mb-sub".to_string()]), "another folder is never touched");
+}
+
+/// A label-only removal reports e1 moved, so the Empty phase asks Trash for
+/// e1's Message-ID. A stranger that sits alone in Trash with that same
+/// Message-ID is not the job's: it is neither found nor destroyed.
+#[tokio::test]
+async fn a_stranger_in_trash_with_a_moved_message_id_is_never_emptied() {
+    let m = start();
+    // d1 is a different email (its own id) that happens to carry e1's Message-ID.
+    m.mutate(|s| s.add_email("acc1", "mb-trash", with_message_id("d1", "e1@x")));
+    let mut o = ops(&m);
+    let f = inbox();
+    let t = o.trash().await.unwrap().expect("a Trash mailbox");
+    let page = o.list_page(&f, None).await.unwrap();
+    let msgs: Vec<ListedMsg> =
+        page.items.iter().enumerate().map(|(k, r)| ListedMsg { uid: k as u32 + 1, ..r.clone() }).collect();
+    assert_eq!(row_ids(&msgs), vec!["e2", "e1"]);
+    for msg in &msgs {
+        assert!(!o.fetch(&f, msg).await.unwrap().raw.is_empty());
+    }
+    let moved = o.move_to_trash(&f, &msgs, &t, None).await.unwrap();
+    assert_eq!(moved.moved, vec![1, 2], "e1 only lost its INBOX label, and still counts as moved");
+    let wanted: Vec<String> = msgs.iter().map(|r| r.message_id.clone().unwrap()).collect();
+    let found = o.find_in_trash(&t, &wanted).await.unwrap();
+    assert_eq!(found.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), vec!["e2@x"], "d1 is not ours");
+    let tuids: Vec<u32> = found.iter().map(|(_, u)| *u).collect();
+    let expect: Vec<(u32, String)> = found.iter().map(|(id, u)| (*u, id.clone())).collect();
+    assert_eq!(o.expunge_exact(&t, &tuids, &expect, None).await.unwrap(), tuids);
+    assert_eq!(labels(&m, "d1"), Some(vec!["mb-trash".to_string()]), "the stranger is still in Trash");
+    assert_eq!(labels(&m, "e1"), Some(vec!["mb-work".to_string()]));
+    assert_eq!(labels(&m, "e2"), None);
+}
+
+/// The ids the job knows survive a restart through `remember_plan`: a hit is
+/// ours only when its id is in a plan, in any folder.
+#[tokio::test]
+async fn find_in_trash_only_answers_for_ids_a_plan_listed() {
+    let m = start();
+    m.mutate(|s| {
+        s.add_email("acc1", "mb-trash", with_message_id("d1", "same@x"));
+        s.add_email("acc1", "mb-trash", with_message_id("d2", "same@x"));
+    });
+    let mut o = ops(&m);
+    let plan = FolderPlan {
+        version: 1,
+        path: "INBOX".into(),
+        graph_folder_id: Some("mb-inbox".into()),
+        uid_validity: None,
+        uids: vec![5],
+        internal_ms: vec![0],
+        sizes: vec![0],
+        message_ids: vec![None],
+        gm_msgids: None,
+        graph_ids: Some(vec!["d2".into()]),
+    };
+    o.remember_plan(&plan);
+    let found = o.find_in_trash(&trash(), &["same@x".to_string()]).await.unwrap();
+    assert_eq!(found.len(), 1, "d1 was never listed by this job");
+    let uid = found[0].1;
+    let expect = vec![(uid, "same@x".to_string())];
+    assert_eq!(o.expunge_exact(&trash(), &[uid], &expect, None).await.unwrap(), vec![uid]);
+    assert_eq!(labels(&m, "d2"), None);
+    assert_eq!(labels(&m, "d1"), Some(vec!["mb-trash".to_string()]));
 }

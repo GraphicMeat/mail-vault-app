@@ -393,7 +393,14 @@ impl ServerOps for JmapOps {
             self.ids.entry(folder.path.clone()).or_default().insert(m.uid, id.clone());
             match remove_from(&c, &id, &mid, Some(&tid), false).await {
                 // Out of this folder: another mailbox still holds it.
-                Ok(RemoveOutcome::LabelRemoved) | Ok(RemoveOutcome::Destroyed) => moved.push(m.uid),
+                Ok(RemoveOutcome::LabelRemoved) => moved.push(m.uid),
+                // A plain delete (`permanent` false) never destroys. If it ever
+                // reported one, the invariant is broken: stop, and let the
+                // engine keep the message instead of trusting the report.
+                Ok(RemoveOutcome::Destroyed) => {
+                    debug_assert!(false, "move_to_trash must never destroy");
+                    return Err(OpsError::Other("move_to_trash must never destroy an email".to_string()));
+                }
                 // In Trash alone now, under the same id.
                 Ok(RemoveOutcome::MovedToTrash) => {
                     moved.push(m.uid);
@@ -473,6 +480,12 @@ impl ServerOps for JmapOps {
     async fn find_in_trash(&mut self, trash: &FolderInfo, message_ids: &[String]) -> Result<Vec<(String, u32)>, OpsError> {
         let tid = Self::mailbox_id(trash)?;
         let c = self.client().await?;
+        // JMAP keeps an email's id through a move, so what is ours in Trash is
+        // an id this job listed (`remember_plan` seeds them, so a restart
+        // keeps them). A label-only removal reports its message moved, but it
+        // never reached Trash: an unrelated email in Trash with the same
+        // Message-ID is not ours and is neither found nor destroyed.
+        let ours: HashSet<String> = self.ids.values().flat_map(|m| m.values().cloned()).collect();
         let mut out = Vec::new();
         for asked in message_ids {
             let bare = crate::maildir::normalize_message_id(asked);
@@ -488,7 +501,7 @@ impl ServerOps for JmapOps {
             let got = c.get_emails(&hits, &["id", "messageId"]).await.map_err(|e| self.fail(e))?;
             for e in &got.list {
                 let (Some(id), Some(m)) = (e["id"].as_str(), first_message_id(e)) else { continue };
-                if same_message_id(&m, &bare) {
+                if same_message_id(&m, &bare) && ours.contains(id) {
                     let uid = self.synthetic_uid(&trash.path, id);
                     out.push((asked.clone(), uid));
                 }

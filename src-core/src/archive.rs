@@ -205,7 +205,9 @@ pub async fn run_with_backup(
     // scopes only, so every body comes from Graph by the uid's ledger id. IMAP
     // with that token fails every message (discussion 23). Four at a time:
     // Graph's per-mailbox concurrency limit, which answers a fifth with 429.
-    let graph = account.uses_graph().then(|| {
+    // A session URL decides first, as `abd_worker::kind_of` does: a JMAP account
+    // never takes the Graph path, whatever else its config says.
+    let graph = (account.uses_graph() && !account.uses_jmap()).then(|| {
         let token = account.access_token.clone().unwrap_or_default();
         Arc::new(crate::graph::GraphClient::for_purpose(&token, "archive").for_account(&account.email))
     });
