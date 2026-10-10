@@ -136,6 +136,17 @@ fn true_map(keys: &[String]) -> Value {
     Value::Object(keys.iter().map(|k| (k.clone(), Value::Bool(true))).collect())
 }
 
+/// A method-level `["error", {type, description}, tag]` response's arguments
+/// as an error: `cannotCalculateChanges` typed, anything else `Method`.
+fn method_error(args: &Value) -> JmapError {
+    let kind = args["type"].as_str().unwrap_or("serverFail").to_string();
+    if kind == "cannotCalculateChanges" {
+        JmapError::CannotCalculateChanges
+    } else {
+        JmapError::Method { kind, description: args["description"].as_str().map(str::to_string) }
+    }
+}
+
 /// Fold one `/set` response's update and destroy results into `out`.
 fn collect_set(r: &Value, out: &mut SetOutcome) {
     if let Some(m) = r["updated"].as_object() {
@@ -280,6 +291,17 @@ impl JmapClient {
     /// breaks `#ids` back-references. Callers that page chunk themselves.
     /// The first `["error", {type}, tag]` response fails the whole call.
     pub async fn call(&self, calls: Vec<Value>) -> Result<Vec<Value>, JmapError> {
+        let out = self.call_unchecked(calls).await?;
+        if let Some(r) = out.iter().find(|r| r[0] == "error") {
+            return Err(method_error(&r[1]));
+        }
+        Ok(out)
+    }
+
+    /// `call` without failing on `["error", ...]` responses: every response,
+    /// errors included, in order. For a caller that must read one response
+    /// whatever its neighbours say (`submit`).
+    async fn call_unchecked(&self, calls: Vec<Value>) -> Result<Vec<Value>, JmapError> {
         if calls.len() > self.limits.max_calls_in_request.max(1) {
             return Err(JmapError::Protocol("batch over maxCallsInRequest".into()));
         }
@@ -290,22 +312,10 @@ impl JmapClient {
             .json()
             .await
             .map_err(|e| JmapError::Protocol(format!("bad JMAP response: {}", error_chain(&e.without_url()))))?;
-        let responses = v["methodResponses"]
+        v["methodResponses"]
             .as_array()
-            .ok_or_else(|| JmapError::Protocol("no methodResponses".into()))?;
-        let mut out = Vec::with_capacity(responses.len());
-        for r in responses {
-            if r[0] == "error" {
-                let kind = r[1]["type"].as_str().unwrap_or("serverFail").to_string();
-                return Err(if kind == "cannotCalculateChanges" {
-                    JmapError::CannotCalculateChanges
-                } else {
-                    JmapError::Method { kind, description: r[1]["description"].as_str().map(str::to_string) }
-                });
-            }
-            out.push(r.clone());
-        }
-        Ok(out)
+            .cloned()
+            .ok_or_else(|| JmapError::Protocol("no methodResponses".into()))
     }
 
     /// One method call in its own request, `accountId` filled in; its arguments back.
@@ -627,6 +637,12 @@ impl JmapClient {
     /// `EmailSubmission/set` create for `email_id` as `identity_id`, with
     /// `on_success` (a PatchObject, or null for none) as `onSuccessUpdateEmail`.
     /// Returns the submission id.
+    ///
+    /// Reads its own response whatever follows it: once the submission is
+    /// created the message is on its way, so an error in the implicit
+    /// `Email/set` that `onSuccessUpdateEmail` runs (RFC 8621 §7.5) is logged,
+    /// never returned. Returned, it would read as a failed send, and the
+    /// caller would destroy the sent copy and the user would send again.
     pub async fn submit(
         &self,
         email_id: &str,
@@ -648,12 +664,15 @@ impl JmapClient {
         if !on_success.is_null() {
             args["onSuccessUpdateEmail"] = json!({"#s": on_success});
         }
-        let responses = self.call(vec![json!(["EmailSubmission/set", args, "s"])]).await?;
-        let sub = responses
-            .iter()
-            .find(|r| r[0] == "EmailSubmission/set")
-            .ok_or_else(|| JmapError::Protocol("no EmailSubmission/set response".into()))?;
+        let responses = self.call_unchecked(vec![json!(["EmailSubmission/set", args, "s"])]).await?;
+        let error = responses.iter().find(|r| r[0] == "error").map(|r| method_error(&r[1]));
+        let Some(sub) = responses.iter().find(|r| r[0] == "EmailSubmission/set") else {
+            return Err(error.unwrap_or_else(|| JmapError::Protocol("no EmailSubmission/set response".into())));
+        };
         if let Some(id) = sub[1]["created"]["s"]["id"].as_str() {
+            if let Some(e) = error {
+                tracing::warn!("[jmap] submission {id} created; its Email/set update failed: {e}");
+            }
             return Ok(id.to_string());
         }
         let e = &sub[1]["notCreated"]["s"];

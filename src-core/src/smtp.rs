@@ -10,7 +10,8 @@ use tracing::{info, warn};
 
 use crate::graph::{GraphClient, SendMailError};
 use crate::imap::ImapConfig;
-use crate::net_activity::{NetEvent, Pending, Protocol};
+use crate::jmap::{Identity, ImportResult, JmapClient, JmapError};
+use crate::net_activity::{with_purpose, NetEvent, Pending, Protocol};
 
 #[derive(Debug, Deserialize)]
 pub struct OutgoingAttachment {
@@ -591,16 +592,43 @@ fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) 
 }
 
 /// A send failure no retry may follow: a login the server refused, a sender
-/// it will not send as, a message over Graph's size limit, and a Graph send
-/// that may already have gone out (a retry would send it twice). Everything
-/// else (a connection that never opened, a throttle, a server fault) is worth
-/// another try. Scheduled Send's retry ladder reads this.
+/// it will not send as, a message over Graph's or a JMAP server's size limit,
+/// a JMAP account that cannot send at all or refused this message, and a
+/// Graph or JMAP send that may already have gone out (a retry would send it
+/// twice). Everything else (a connection that never opened, a throttle, a
+/// server fault) is worth another try. Scheduled Send's retry ladder reads this.
 pub fn is_terminal_send_error(msg: &str) -> bool {
     msg.contains("Authentication failed for")
         || msg.contains("refused to send as")
         || msg.contains(SIGN_IN_AGAIN)
         || msg.contains(GRAPH_SIZE_LIMIT)
         || msg.contains(MAY_HAVE_GONE_OUT)
+        || is_terminal_jmap_send_error(msg)
+}
+
+/// The JMAP codes `is_terminal_send_error` ends a send on: credentials the
+/// server refused or that are missing, no identity for the From address, no
+/// submission right, a message over `maxSizeUpload`, and a submission the
+/// server refused for the message itself (`E_JMAP_SUBMIT:<SetError type>`,
+/// RFC 8621 §7.5). A submission refused for any other reason (`serverFail`)
+/// is worth another try.
+fn is_terminal_jmap_send_error(msg: &str) -> bool {
+    const REFUSALS: [&str; 8] = [
+        "forbiddenFrom",
+        "forbiddenMailFrom",
+        "forbiddenToSend",
+        "tooManyRecipients",
+        "noRecipients",
+        "invalidRecipients",
+        "invalidEmail",
+        "tooLarge",
+    ];
+    if ["E_JMAP_AUTH:", "E_JMAP_NO_IDENTITY:", "E_JMAP_NO_SUBMISSION:", "E_JMAP_TOO_LARGE:"].iter().any(|code| msg.starts_with(code)) {
+        return true;
+    }
+    msg.strip_prefix("E_JMAP_SUBMIT:")
+        .map(|rest| rest.split(':').next().unwrap_or_default())
+        .is_some_and(|kind| REFUSALS.contains(&kind))
 }
 
 /// `raw` with a `Bcc:` header naming `bcc`, unless it already has one (then it
@@ -677,6 +705,193 @@ async fn send_via_graph(account: &ImapConfig, raw: Vec<u8>, bcc: &[Mailbox]) -> 
 
     let message_id = message_id_of(&raw).unwrap_or_default();
     info!("Email sent via Microsoft Graph: {}", message_id);
+    Ok(SendResult { message_id, raw_rfc2822: raw, server_saved_sent: true })
+}
+
+// ── JMAP (RFC 8621 §7: Identity, EmailSubmission) ───────────────────────────
+
+/// The budget for a JMAP `EmailSubmission/set`: a minute, plus a second per
+/// 50 KB, capped (the SMTP and Graph send sizing).
+fn jmap_send_timeout(bytes: usize) -> Duration {
+    Duration::from_secs(60 + (bytes / 50_000) as u64).min(Duration::from_secs(600))
+}
+
+/// A JMAP session of its own for `account` (ruling R2: core cannot reach the
+/// daemon's `JmapSessions`), every request shown in Network Activity under
+/// `purpose`. A JMAP account with no usable credentials (`jmap_auth()` is
+/// `None`) is `E_JMAP_AUTH` before any request leaves.
+async fn jmap_connect(account: &ImapConfig, purpose: &'static str) -> Result<JmapClient, String> {
+    let Some(auth) = account.jmap_auth() else {
+        return Err(format!("E_JMAP_AUTH: there is no password or API token for {} to send with", account.email));
+    };
+    let url = account.jmap_session_url.as_deref().unwrap_or_default().trim().to_string();
+    with_purpose(purpose, JmapClient::connect(&url, auth, &account.email)).await.map_err(|e| e.to_string())
+}
+
+fn jmap_no_submission(account: &ImapConfig) -> String {
+    format!(
+        "E_JMAP_NO_SUBMISSION: the server does not let {} send with these credentials (an API token needs the Submission scope)",
+        account.email
+    )
+}
+
+/// The identities `account` may send as (`Identity/get`), for the alias list.
+/// Needs the submission capability, as sending does.
+pub async fn jmap_identities(account: &ImapConfig) -> Result<Vec<Identity>, String> {
+    let client = jmap_connect(account, crate::aliases::PURPOSE).await?;
+    if !client.has_submission() {
+        return Err(jmap_no_submission(account));
+    }
+    client.identities().await.map_err(|e| e.to_string())
+}
+
+/// The identity to send `from` as: the one with exactly that address
+/// (case-insensitive), else a wildcard `*@<from's domain>`. `None` when the
+/// server lists neither: it would refuse the submission.
+///
+/// The brief's third rule (the login's identity when From is the login) is
+/// the first rule for that address, so it needs no branch of its own.
+fn pick_identity<'a>(identities: &'a [Identity], from: &str) -> Option<&'a Identity> {
+    let from = from.trim();
+    if let Some(exact) = identities.iter().find(|i| i.email.trim().eq_ignore_ascii_case(from)) {
+        return Some(exact);
+    }
+    let (_, domain) = from.rsplit_once('@')?;
+    identities
+        .iter()
+        .find(|i| i.email.trim().strip_prefix("*@").is_some_and(|d| d.eq_ignore_ascii_case(domain)))
+}
+
+/// What a failed `EmailSubmission/set` means: the error, and whether the
+/// imported copy may be destroyed. `None` is the send's own clock running out.
+///
+/// Only an answer is a refusal: a method error or SetError
+/// (`E_JMAP_SUBMIT:<type>`), or a 401/403 or 429/503 the server answered
+/// instead. No answer (a transport failure or the clock) and an answer that
+/// does not read (`Protocol`) mean the request may have reached the server and
+/// the message may be out, `onSuccessUpdateEmail` may already have filed it in
+/// Sent: worded `MAY_HAVE_GONE_OUT` (terminal, never retried) and kept.
+fn jmap_submit_failure(err: Option<&JmapError>) -> (String, bool) {
+    match err {
+        None => (
+            format!("The mail server did not confirm the send in time (timed out). Check Sent before trying again: {MAY_HAVE_GONE_OUT}."),
+            false,
+        ),
+        Some(e @ (JmapError::Transport(_) | JmapError::Protocol(_))) => (
+            format!("The mail server did not confirm the send ({e}). Check Sent before trying again: {MAY_HAVE_GONE_OUT}."),
+            false,
+        ),
+        Some(JmapError::Method { kind, description }) => (
+            format!("E_JMAP_SUBMIT:{kind}: {}", description.as_deref().unwrap_or("the server refused the message")),
+            true,
+        ),
+        Some(e) => (e.to_string(), true),
+    }
+}
+
+/// JSON Pointer escaping for a patch path segment (RFC 6901).
+fn jmap_pointer(segment: &str) -> String {
+    segment.replace('~', "~0").replace('/', "~1")
+}
+
+/// Send through JMAP instead of SMTP (RFC 8621 §7.5): a JMAP account has no
+/// SMTP server. `send_built` and `send_raw` both branch here for it.
+///
+/// 1. The identity for `account.from_address()` (`pick_identity`), else
+///    `E_JMAP_NO_IDENTITY` before anything is uploaded.
+/// 2. `bcc` written into the bytes (`with_bcc_header`, as for Graph) and no
+///    `envelope`: the server takes the recipients from To, Cc and Bcc and
+///    strips Bcc on delivery. The Sent copy keeps the Bcc line.
+/// 3. Upload, then `Email/import` into the role=drafts mailbox with `$seen`
+///    and `$draft`; with no drafts mailbox, straight into Sent with `$seen`.
+/// 4. `EmailSubmission/set` for that email, its `onSuccessUpdateEmail` moving
+///    it from Drafts to Sent and dropping `$draft`. Sent is the role=sent
+///    mailbox, else the inbox (a server with no Sent mailbox still keeps a
+///    copy); an account with neither is refused before the upload.
+///
+/// A refused submission destroys the imported copy, so a retry does not leave
+/// a second one; a submission with no answer within `timeout` may have gone
+/// out (`jmap_submit_failure`). The imported id is not recorded as the
+/// daemon's own (ruling R2): it ends in Sent, which never counts as arrival.
+pub async fn send_via_jmap(
+    account: &ImapConfig,
+    raw: Vec<u8>,
+    bcc: &[Mailbox],
+    timeout: Duration,
+) -> Result<SendResult, String> {
+    let client = jmap_connect(account, "send").await?;
+    if !client.has_submission() {
+        return Err(jmap_no_submission(account));
+    }
+    let from = account.from_address();
+    let identities = client.identities().await.map_err(|e| e.to_string())?;
+    let Some(identity) = pick_identity(&identities, from) else {
+        return Err(format!("E_JMAP_NO_IDENTITY: the server lists no identity for {from}, so it will not send as that address"));
+    };
+
+    let (boxes, _) = client.mailboxes().await.map_err(|e| e.to_string())?;
+    let role = |r: &str| {
+        boxes.iter().find(|m| m.role.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(r))).map(|m| m.id.clone())
+    };
+    let drafts = role("drafts");
+    let Some(sent) = role("sent").or_else(|| role("inbox")) else {
+        return Err("E_JMAP_PROTOCOL: the account has no Sent mailbox and no Inbox to keep the sent copy in".to_string());
+    };
+
+    let raw = with_bcc_header(raw, bcc);
+    let max_upload = client.limits().max_size_upload;
+    if raw.len() as u64 > max_upload {
+        return Err(format!(
+            "E_JMAP_TOO_LARGE: this message is {} bytes and the server takes at most {} bytes",
+            raw.len(),
+            max_upload
+        ));
+    }
+    info!("[smtp] Sending {} bytes via JMAP (EmailSubmission) as identity {}", raw.len(), identity.id);
+    let blob_id = client.upload(&raw).await.map_err(|e| e.to_string())?;
+    let (target, keywords) = match &drafts {
+        Some(d) => (d.clone(), vec!["$seen".to_string(), "$draft".to_string()]),
+        None => (sent.clone(), vec!["$seen".to_string()]),
+    };
+    let (email_id, ours) = match client.import(&blob_id, &[target], &keywords, None).await.map_err(|e| e.to_string())? {
+        ImportResult::Created(imported) => (imported.id, true),
+        // The server already holds this message (a Message-ID dedupe): send
+        // that one, and never destroy it, it is not this send's.
+        ImportResult::AlreadyExists { existing_id } => (existing_id, false),
+    };
+    let on_success = match &drafts {
+        Some(d) if *d != sent => {
+            let mut patch = serde_json::Map::new();
+            patch.insert(format!("mailboxIds/{}", jmap_pointer(d)), serde_json::Value::Null);
+            patch.insert(format!("mailboxIds/{}", jmap_pointer(&sent)), serde_json::Value::Bool(true));
+            patch.insert("keywords/$draft".to_string(), serde_json::Value::Null);
+            serde_json::Value::Object(patch)
+        }
+        Some(_) => serde_json::json!({"keywords/$draft": null}),
+        None => serde_json::Value::Null,
+    };
+
+    let failure = match tokio::time::timeout(timeout, client.submit(&email_id, &identity.id, None, on_success)).await {
+        Ok(Ok(submission_id)) => {
+            info!("[smtp] JMAP submission {} created for email {}", submission_id, email_id);
+            None
+        }
+        Ok(Err(e)) => Some(jmap_submit_failure(Some(&e))),
+        Err(_) => Some(jmap_submit_failure(None)),
+    };
+    if let Some((msg, refused)) = failure {
+        if refused && ours {
+            match client.destroy(std::slice::from_ref(&email_id)).await {
+                Ok(outcome) if outcome.failed.is_empty() => {}
+                Ok(outcome) => warn!("[smtp] could not destroy the unsent JMAP copy {}: {:?}", email_id, outcome.failed),
+                Err(e) => warn!("[smtp] could not destroy the unsent JMAP copy {}: {}", email_id, e),
+            }
+        }
+        return Err(msg);
+    }
+
+    let message_id = message_id_of(&raw).unwrap_or_default();
+    info!("Email sent via JMAP: {}", message_id);
     Ok(SendResult { message_id, raw_rfc2822: raw, server_saved_sent: true })
 }
 
@@ -816,6 +1031,11 @@ pub async fn send_built(
         // the bytes. A list that does not parse it dropped, and so does this.
         let bcc = email.bcc.as_deref().and_then(|b| parse_address_list(b).ok()).unwrap_or_default();
         return send_via_graph(account, built.raw_rfc2822, &bcc).await;
+    } else if account.uses_jmap() {
+        // Same Bcc as Graph's: JMAP also reads recipients off the headers.
+        let bcc = email.bcc.as_deref().and_then(|b| parse_address_list(b).ok()).unwrap_or_default();
+        let timeout = jmap_send_timeout(built.raw_rfc2822.len());
+        return send_via_jmap(account, built.raw_rfc2822, &bcc, timeout).await;
     }
     let smtp_host = account
         .smtp_host
@@ -899,8 +1119,9 @@ pub struct FrozenEnvelope {
 /// straight to `AsyncTransport::send_raw(envelope, bytes)` instead, so the
 /// envelope has to travel with the frozen bytes (`FrozenEnvelope`, stored
 /// alongside them) rather than being read back off a `Message`. A Graph
-/// account sends the same bytes through `send_via_graph`, the envelope's Bcc
-/// written into them.
+/// account sends the same bytes through `send_via_graph`, and a JMAP account
+/// through `send_via_jmap` as the envelope's From, the envelope's Bcc written
+/// into them either way.
 pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc2822: Vec<u8>) -> Result<SendResult, String> {
     let from: lettre::Address = envelope
         .from
@@ -925,6 +1146,14 @@ pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc28
         // The frozen bytes were built without the Bcc header; it lives in the
         // envelope, and Graph only reads headers.
         return send_via_graph(account, raw_rfc2822, &bcc).await;
+    } else if account.uses_jmap() {
+        // The identity is the frozen From's. Scheduled Send's account comes
+        // from the keychain record, without the send-as override compose
+        // adds per send, so `from_address()` alone would be the login.
+        let mut account = account.clone();
+        account.from_email = Some(from.to_string());
+        let timeout = jmap_send_timeout(raw_rfc2822.len());
+        return send_via_jmap(&account, raw_rfc2822, &bcc, timeout).await;
     }
 
     let smtp_host = account
@@ -1410,6 +1639,83 @@ mod tests {
         assert!(is_terminal_send_error(&friendly_smtp_error("smtp.x.com", 587, "me@x.com", "535 Authentication failed")));
         assert!(is_terminal_send_error(&friendly_smtp_error("smtp.x.com", 587, "me@x.com", "SendAsDenied")));
         assert!(!is_terminal_send_error(&friendly_smtp_error("smtp.x.com", 587, "me@x.com", "operation timed out")));
+    }
+
+    fn identity(id: &str, email: &str) -> Identity {
+        Identity { id: id.into(), email: email.into(), name: String::new(), may_delete: false }
+    }
+
+    /// An exact address wins over a wildcard, case-insensitively; a wildcard
+    /// covers its own domain only; nothing else is guessed.
+    #[test]
+    fn a_jmap_identity_is_picked_by_exact_address_then_by_domain_wildcard() {
+        let ids = [identity("id1", "Alice@Example.test"), identity("id2", "*@example.test"), identity("id3", "sales@example.test")];
+        assert_eq!(pick_identity(&ids, "alice@example.test").map(|i| i.id.as_str()), Some("id1"));
+        assert_eq!(pick_identity(&ids, " SALES@example.test ").map(|i| i.id.as_str()), Some("id3"), "exact beats the wildcard");
+        assert_eq!(pick_identity(&ids, "support@EXAMPLE.test").map(|i| i.id.as_str()), Some("id2"));
+        assert!(pick_identity(&ids, "alice@other.test").is_none());
+        assert!(pick_identity(&ids, "not-an-address").is_none());
+        assert!(pick_identity(&[], "alice@example.test").is_none());
+    }
+
+    /// A refusal destroys the unsent copy and says which refusal; no answer
+    /// keeps it and says the message may be out, which no retry follows.
+    #[test]
+    fn a_jmap_submission_failure_is_a_refusal_only_when_the_server_answered() {
+        let refused = JmapError::Method { kind: "forbiddenFrom".into(), description: Some("may not send as x".into()) };
+        let (msg, destroy) = jmap_submit_failure(Some(&refused));
+        assert_eq!(msg, "E_JMAP_SUBMIT:forbiddenFrom: may not send as x");
+        assert!(destroy && is_terminal_send_error(&msg));
+
+        let (msg, destroy) = jmap_submit_failure(Some(&JmapError::Method { kind: "serverFail".into(), description: None }));
+        assert!(msg.starts_with("E_JMAP_SUBMIT:serverFail: "), "{msg}");
+        assert!(destroy && !is_terminal_send_error(&msg), "a server fault is worth another try: {msg}");
+
+        for (err, destroy_want) in [(JmapError::Unauthorized, true), (JmapError::RateLimited { retry_after: Some(3) }, true)] {
+            let (msg, destroy) = jmap_submit_failure(Some(&err));
+            assert_eq!((msg.as_str(), destroy), (err.to_string().as_str(), destroy_want));
+        }
+
+        for err in [None, Some(JmapError::Transport("connection closed".into())), Some(JmapError::Protocol("bad JMAP response".into()))] {
+            let (msg, destroy) = jmap_submit_failure(err.as_ref());
+            assert!(msg.contains(MAY_HAVE_GONE_OUT), "{err:?} -> {msg}");
+            assert!(!destroy, "{err:?}: the copy may be the Sent copy of a message that went");
+            assert!(is_terminal_send_error(&msg), "{msg}");
+            assert!(!msg.contains('\u{2014}'), "{msg}");
+        }
+    }
+
+    /// Scheduled Send ends a row on the JMAP refusals and keeps trying the rest.
+    #[test]
+    fn jmap_send_errors_are_classified_for_the_retry_ladder() {
+        for terminal in [
+            "E_JMAP_AUTH: authentication failed",
+            "E_JMAP_AUTH: there is no password or API token for a@x.test to send with",
+            "E_JMAP_NO_IDENTITY: the server lists no identity for b@x.test, so it will not send as that address",
+            "E_JMAP_NO_SUBMISSION: the server does not let a@x.test send with these credentials",
+            "E_JMAP_TOO_LARGE: this message is 9 bytes and the server takes at most 1 bytes",
+            "E_JMAP_SUBMIT:forbiddenToSend: quota",
+            "E_JMAP_SUBMIT:noRecipients: the server refused the message",
+            "E_JMAP_SUBMIT:tooManyRecipients: x",
+        ] {
+            assert!(is_terminal_send_error(terminal), "{terminal}");
+        }
+        for transient in [
+            "E_JMAP_RATE: rate limited, retry after 3s",
+            "E_JMAP_TRANSPORT: dns error",
+            "E_JMAP_PROTOCOL: HTTP 500",
+            "E_JMAP_SUBMIT:serverFail: the server refused the message",
+        ] {
+            assert!(!is_terminal_send_error(transient), "{transient}");
+        }
+    }
+
+    /// The send's budget is the SMTP and Graph one.
+    #[test]
+    fn the_jmap_send_budget_grows_with_size_and_is_capped() {
+        assert_eq!(jmap_send_timeout(0), Duration::from_secs(60));
+        assert_eq!(jmap_send_timeout(5_000_000), Duration::from_secs(160));
+        assert_eq!(jmap_send_timeout(500_000_000), Duration::from_secs(600));
     }
 
     /// A sign-in or throttle message must not read as the network being down

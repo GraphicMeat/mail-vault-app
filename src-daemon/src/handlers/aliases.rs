@@ -15,6 +15,7 @@
 
 use crate::custody as daemon_custody;
 use crate::handlers::common::{str_arg, vault_root};
+use crate::imap::ImapConfig;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::aliases::{self, DetectedAlias, ProviderAliases, ProviderStatus, Source};
@@ -35,8 +36,28 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         Err(resp) => return Some(resp),
     };
     let login = account.get("email").and_then(Value::as_str).unwrap_or_default().to_string();
+    // A JMAP server lists exactly what the account may send as: its
+    // identities are the answer, and its mail is not mined for more.
+    if aliases::is_jmap(account) {
+        let provider = jmap_provider(state, account).await;
+        let detected: Vec<DetectedAlias> = Vec::new();
+        return Some(RpcResponse::success(id, json!({ "provider": provider, "detected": detected })));
+    }
     let (provider, detected) = tokio::join!(provider(state, account, &login), detect(state, account_id, login.clone()));
     Some(RpcResponse::success(id, json!({ "provider": provider, "detected": detected })))
+}
+
+/// A JMAP account's identities (`Identity/get`) as the provider's list. An
+/// account object that does not read as one is an `error`, never an RPC error.
+async fn jmap_provider(state: &Arc<DaemonState>, account: &Value) -> ProviderAliases {
+    let Ok(config) = serde_json::from_value::<ImapConfig>(account.clone()) else {
+        tracing::warn!("[aliases] the JMAP account did not read as an account");
+        return ProviderAliases::empty(ProviderStatus::Error);
+    };
+    if !state.net.is_online() {
+        return ProviderAliases::empty(ProviderStatus::Error);
+    }
+    aliases::fetch_jmap_aliases(&config).await
 }
 
 /// The provider's list, or why there is none.
@@ -230,6 +251,67 @@ mod tests {
         let result = discover(&s, json!({"account": password_account(), "accountId": "a"})).await.result.unwrap();
         let addresses: Vec<&str> = result["detected"].as_array().unwrap().iter().map(|d| d["address"].as_str().unwrap()).collect();
         assert_eq!(addresses, ["alias@example.test", "in@example.test"]);
+    }
+
+    /// A JMAP mock with one Inbox and these identities (`(email, name)`).
+    fn jmap_mock(identities: &[(&str, &str)]) -> mock_jmap::MockJmap {
+        mailvault_core::jmap::base::allow_loopback_for_tests();
+        mock_jmap::MockJmap::start(mock_jmap::Scenario {
+            accounts: vec![mock_jmap::ScenarioAccount {
+                username: "me@example.test".into(),
+                password: "pw".into(),
+                token: None,
+                identities: identities.iter().map(|(e, n)| (e.to_string(), n.to_string())).collect(),
+                mailboxes: vec![mock_jmap::ScenarioMailbox {
+                    id: "mb-inbox".into(),
+                    name: "Inbox".into(),
+                    parent_id: None,
+                    role: Some("inbox".into()),
+                    emails: vec![],
+                }],
+            }],
+            ..Default::default()
+        })
+    }
+
+    fn jmap_account(m: &mock_jmap::MockJmap, password: &str) -> Value {
+        json!({"email": "me@example.test", "imapHost": "127.0.0.1", "authType": "password", "password": password,
+               "jmapSessionUrl": m.session_url(), "jmapAuth": "basic"})
+    }
+
+    /// A JMAP account's aliases are its server's identities (the login's own
+    /// as the primary, a wildcard left out), and its mail is not mined: a
+    /// Sent row and a delivery header that would be detected for IMAP are not.
+    #[tokio::test]
+    async fn a_jmap_account_lists_its_identities_and_mines_no_headers() {
+        let (t, s) = st(true);
+        let sent = json!({"emails": [{"uid": 1, "from": {"name": "Shop", "address": "shop@example.test"}}]}).to_string();
+        daemon_custody::with_conn(&s, |c| sql_cache::save_headers(c, "a", "Sent", &sent)).unwrap();
+        write_eml(t.path(), "INBOX", 1, "Delivered-To: in@example.test\r\n\r\n");
+        let m = jmap_mock(&[("me@example.test", "Me"), ("sales@example.test", "Sales"), ("*@example.test", "Anyone")]);
+
+        let result = discover(&s, json!({"account": jmap_account(&m, "pw"), "accountId": "a"})).await.result.unwrap();
+
+        assert_eq!(
+            result,
+            json!({
+                "provider": {"status": "ok", "aliases": [
+                    {"address": "me@example.test", "name": "Me", "isPrimary": true, "verified": true},
+                    {"address": "sales@example.test", "name": "Sales", "isPrimary": false, "verified": true},
+                ]},
+                "detected": [],
+            })
+        );
+        assert_eq!(m.count_calls("Identity/get"), 1);
+    }
+
+    /// Credentials the server will not take are `denied`, not an RPC error.
+    #[tokio::test]
+    async fn a_jmap_account_the_server_refuses_is_denied() {
+        let (_t, s) = st(true);
+        let m = jmap_mock(&[("me@example.test", "Me")]);
+        let result = discover(&s, json!({"account": jmap_account(&m, "wrong"), "accountId": "a"})).await.result.unwrap();
+        assert_eq!(result, json!({"provider": {"status": "denied", "aliases": []}, "detected": []}));
     }
 
     #[tokio::test]

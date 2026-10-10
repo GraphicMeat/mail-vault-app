@@ -293,11 +293,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             info!("[send:messageid_header] account={} extracted={:?}", account_id_for_log, message_id_header);
 
             // Microsoft Graph filed its own copy in Sent Items when it took
-            // the message (202), and a Graph account has no IMAP to APPEND
-            // over. Compose drops its staged local copy on this event, so it
-            // comes now, naming this message. Waiting to see the copy in Sent
-            // Items instead could wait for good: Exchange may rewrite the
-            // Message-ID.
+            // the message (202), and a JMAP server filed it in Sent when the
+            // submission was created (`onSuccessUpdateEmail`); neither
+            // account has IMAP to APPEND over. Compose drops its staged local
+            // copy on this event, so it comes now, naming this message.
+            // Waiting to see the copy in Sent Items instead could wait for
+            // good: Exchange may rewrite the Message-ID.
             if result.server_saved_sent {
                 let payload = json!({
                     "accountId": account_id_for_log,
@@ -307,7 +308,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     "ok": true,
                     "verify": {"serverSaved": true},
                 });
-                info!("[send:server_saved_sent] account={} Graph filed the Sent copy, no APPEND", account_id_for_log);
+                info!("[send:server_saved_sent] account={} the server filed the Sent copy, no APPEND", account_id_for_log);
                 state.events.emit("send-server-append-complete", payload);
                 return Some(RpcResponse::success(id, json!({"success": true, "messageId": message_id_for_response})));
             }
@@ -863,6 +864,98 @@ mod tests {
         let err = resp.error.expect("a 401 must fail the send").message;
         assert!(err.contains("Sign in to this account again"), "{err}");
         assert!(!err.contains("Authentication failed for"), "{err}");
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await.is_err(), "no event for a failed send");
+    }
+
+    /// A JMAP mock with Inbox, Drafts and Sent, sending as `me@example.test`.
+    fn jmap_send_mock() -> mock_jmap::MockJmap {
+        mailvault_core::jmap::base::allow_loopback_for_tests();
+        let mailbox = |id: &str, name: &str, role: &str| mock_jmap::ScenarioMailbox {
+            id: id.into(),
+            name: name.into(),
+            parent_id: None,
+            role: Some(role.into()),
+            emails: vec![],
+        };
+        mock_jmap::MockJmap::start(mock_jmap::Scenario {
+            accounts: vec![mock_jmap::ScenarioAccount {
+                username: "me@example.test".into(),
+                password: "pw".into(),
+                token: None,
+                identities: vec![("me@example.test".into(), "Me".into())],
+                mailboxes: vec![
+                    mailbox("mb-inbox", "Inbox", "inbox"),
+                    mailbox("mb-drafts", "Drafts", "drafts"),
+                    mailbox("mb-sent", "Sent", "sent"),
+                ],
+            }],
+            ..Default::default()
+        })
+    }
+
+    /// The carry from Task 5a: `smtp_send_email` for a JMAP account used to
+    /// reach the SMTP arm. It sends through `EmailSubmission/set`, the server
+    /// files the Sent copy, and the completion event compose waits for comes
+    /// at once with `serverSaved`. Its IMAP host is a live mock: nothing
+    /// dials it, so there is no Sent APPEND.
+    #[tokio::test]
+    async fn a_jmap_send_submits_through_jmap_and_reports_the_sent_copy_without_imap() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let m = jmap_send_mock();
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+        let account = json!({
+            "email": "me@example.test",
+            "password": "pw",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+            "authType": "password",
+            "jmapSessionUrl": m.session_url(),
+            "jmapAuth": "basic",
+        });
+        let mut email = outgoing_email("partner@example.com");
+        email["messageId"] = json!("<jmap.7@example.test>");
+
+        let resp = call(&s, "smtp_send_email", json!({"account": account, "email": email, "sentMailbox": "Sent"})).await;
+        let result = resp.result.unwrap_or_else(|| panic!("the JMAP send failed: {:?}", resp.error));
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(m.submitted().len(), 1, "one submission");
+        assert_eq!(m.count_calls("EmailSubmission/set"), 1);
+        assert_eq!(m.read(|st| st.emails_in("acc1", "mb-sent")).len(), 1, "the server holds the Sent copy");
+
+        let line = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .expect("send-server-append-complete must be emitted")
+            .unwrap();
+        let (name, payload) = mailvault_core::daemon_ipc::parse_event(&line).expect("a valid event line");
+        assert_eq!(name, "send-server-append-complete");
+        assert_eq!(payload["accountId"], json!("me@example.test"));
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_eq!(payload["verify"], json!({"serverSaved": true}), "{payload}");
+        assert_eq!(payload["messageIdHeader"], json!("jmap.7@example.test"), "{payload}");
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(server.commands().is_empty(), "IMAP was dialled: {:?}", server.commands());
+        assert!(server.state().find("Sent").unwrap().messages.is_empty(), "a Sent APPEND ran");
+    }
+
+    /// A refused JMAP submission is an RPC error carrying its code, and no
+    /// completion event: the staged copy is all the user has.
+    #[tokio::test]
+    async fn a_refused_jmap_send_is_an_error_and_emits_nothing() {
+        let m = jmap_send_mock();
+        m.mutate(|st| st.faults.push(mock_jmap::Fault::SubmissionRejected));
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+        let account = json!({
+            "email": "me@example.test", "password": "pw", "imapHost": "127.0.0.1", "authType": "password",
+            "jmapSessionUrl": m.session_url(), "jmapAuth": "basic",
+        });
+
+        let resp = call(&s, "smtp_send_email", json!({"account": account, "email": outgoing_email("partner@example.com")})).await;
+        let err = resp.error.expect("a refused submission must fail the send").message;
+        assert!(err.starts_with("E_JMAP_SUBMIT:forbiddenFrom"), "{err}");
         assert!(tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await.is_err(), "no event for a failed send");
     }
 

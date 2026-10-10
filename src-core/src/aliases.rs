@@ -9,6 +9,8 @@
 //! Parsing and ranking live here; `handlers::aliases` in the daemon does the
 //! store reads and calls `fetch_gmail_send_as`.
 
+use crate::imap::ImapConfig;
+use crate::jmap::Identity;
 use crate::maildir::{uid_file_map, IMPORT_UID_BASE};
 use crate::net_activity;
 use crate::vault_eml::parse_address_str;
@@ -104,6 +106,59 @@ pub fn is_gmail_oauth(account: &Value) -> bool {
     }
     let host = text("imapHost");
     text("oauth2Provider") == "google" || host == "imap.gmail.com" || host == "imap.googlemail.com"
+}
+
+/// A JMAP account (`jmapSessionUrl` set, the app's `isJmapAccount`). Its
+/// server lists the addresses it may send as (`Identity/get`), so those are
+/// the provider's answer and the account's mail is not mined for more.
+pub fn is_jmap(account: &Value) -> bool {
+    account.get("jmapSessionUrl").and_then(Value::as_str).is_some_and(|u| !u.trim().is_empty())
+}
+
+/// JMAP identities as provider aliases, in the server's order, each address
+/// once (the first identity's name). A wildcard identity (`*@domain`) names
+/// no one address to offer and is left out. The login's own identity is the
+/// primary entry. The server only lists what it lets the account send as, so
+/// every entry is verified.
+pub fn aliases_from_identities(identities: &[Identity], login: &str) -> Vec<ProviderAlias> {
+    let own = mailbox_identity(login);
+    let mut out: Vec<ProviderAlias> = Vec::new();
+    for identity in identities {
+        if identity.email.contains('*') {
+            continue;
+        }
+        let Some(address) = clean_address(&identity.email) else { continue };
+        if out.iter().any(|a| a.address == address) {
+            continue;
+        }
+        out.push(ProviderAlias {
+            is_primary: mailbox_identity(&address) == own,
+            address,
+            name: identity.name.trim().to_string(),
+            verified: true,
+        });
+    }
+    out
+}
+
+/// Ask a JMAP server for the account's identities. Credentials it will not
+/// take, or a token without the Submission scope, are `denied`; anything else
+/// that fails is an `error`. One connection, shown on Network Activity as
+/// this account's "alias lookup".
+pub async fn fetch_jmap_aliases(account: &ImapConfig) -> ProviderAliases {
+    match crate::smtp::jmap_identities(account).await {
+        Ok(identities) => {
+            ProviderAliases { status: ProviderStatus::Ok, aliases: aliases_from_identities(&identities, &account.email) }
+        }
+        Err(e) if e.starts_with("E_JMAP_AUTH") || e.starts_with("E_JMAP_NO_SUBMISSION") => {
+            tracing::info!("[aliases] JMAP identities refused: {e}");
+            ProviderAliases::empty(ProviderStatus::Denied)
+        }
+        Err(e) => {
+            tracing::warn!("[aliases] JMAP identities lookup failed: {e}");
+            ProviderAliases::empty(ProviderStatus::Error)
+        }
+    }
 }
 
 /// A `users.settings.sendAs.list` answer. Every entry comes back, the primary
@@ -417,6 +472,37 @@ mod tests {
         for code in [400, 429, 500, 502, 503] {
             assert_eq!(gmail_status(code), ProviderStatus::Error, "{code}");
         }
+    }
+
+    // ── JMAP identities ────────────────────────────────────────────────
+
+    #[test]
+    fn a_jmap_account_is_one_with_a_session_url() {
+        assert!(is_jmap(&json!({"email": "a@x.test", "jmapSessionUrl": "https://api.x.test/jmap/session"})));
+        assert!(!is_jmap(&json!({"email": "a@x.test", "jmapSessionUrl": "  "})));
+        assert!(!is_jmap(&json!({"email": "a@x.test", "imapHost": "imap.x.test"})));
+    }
+
+    #[test]
+    fn jmap_identities_become_provider_aliases_without_wildcards_or_repeats() {
+        let identity = |id: &str, email: &str, name: &str| Identity { id: id.into(), email: email.into(), name: name.into(), may_delete: false };
+        let got = aliases_from_identities(
+            &[
+                identity("id1", "Alice@Example.test", " Alice "),
+                identity("id2", "sales@example.test", "Sales"),
+                identity("id3", "*@example.test", "Anyone"),
+                identity("id4", "SALES@example.test", "Second"),
+                identity("id5", "not an address", "Broken"),
+            ],
+            "alice@example.test",
+        );
+        assert_eq!(
+            got,
+            vec![
+                ProviderAlias { address: "alice@example.test".into(), name: "Alice".into(), is_primary: true, verified: true },
+                ProviderAlias { address: "sales@example.test".into(), name: "Sales".into(), is_primary: false, verified: true },
+            ]
+        );
     }
 
     #[test]
