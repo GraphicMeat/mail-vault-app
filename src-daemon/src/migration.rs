@@ -9,7 +9,7 @@ use tracing::{info, warn};
 
 use crate::graph::GraphClient;
 use crate::imap::{self, ImapConfig, ImapSession, MailboxInfo};
-use crate::jmap_sessions::AccountJmap;
+use crate::jmap_sessions::{AccountJmap, Mailboxes};
 use crate::server::DaemonState;
 use mailvault_core::jmap::client::received_at_of;
 use mailvault_core::jmap::headers::{flags_to_keywords, keywords_to_flags};
@@ -493,6 +493,15 @@ pub fn effective_transport(config: &ImapConfig, transport: &str) -> String {
 /// mailbox id.
 pub async fn ensure_dest_folder_jmap(acct: &AccountJmap, folder_path: &str) -> Result<String, JmapError> {
     let boxes = acct.current().await?;
+    ensure_dest_folder_in(acct, folder_path, boxes).await
+}
+
+/// `ensure_dest_folder_jmap` over a mailbox list the caller read (possibly
+/// stale). A create the server refuses (`notCreated`: a concurrent restore
+/// folder or another client made the same level first, so the sibling name is
+/// taken) re-reads the list and carries on with the id found there; only a
+/// level that is still missing after the refresh fails.
+async fn ensure_dest_folder_in(acct: &AccountJmap, folder_path: &str, mut boxes: Mailboxes) -> Result<String, JmapError> {
     if let Some(id) = boxes.ids.get(folder_path) {
         return Ok(id.clone());
     }
@@ -517,6 +526,11 @@ pub async fn ensure_dest_folder_jmap(acct: &AccountJmap, folder_path: &str) -> R
             .await?;
         let Some(id) = r["created"]["f"]["id"].as_str() else {
             let e = &r["notCreated"]["f"];
+            boxes = acct.refresh().await?;
+            if let Some(id) = boxes.ids.get(&path) {
+                parent = Some(id.clone());
+                continue;
+            }
             return Err(JmapError::Method {
                 kind: e["type"].as_str().unwrap_or("serverFail").to_string(),
                 description: Some(format!("{path}: {}", e["description"].as_str().unwrap_or("not created"))),
@@ -2143,6 +2157,48 @@ mod tests {
         assert!(e1.has_flag("\\Seen"), "{:?}", e1.flags);
         let e2 = inbox.messages.iter().find(|msg| String::from_utf8_lossy(&msg.raw).contains("<e2@x>")).expect("e2 appended");
         assert!(!e2.has_flag("\\Seen"), "{:?}", e2.flags);
+    }
+
+    fn archive_count(m: &MockJmap) -> usize {
+        m.read(|s| s.account("acc1").mailboxes.values().filter(|b| b.name == "Archive").count())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_ensure_folder_carries_on_when_a_parent_was_made_meanwhile() {
+        let (_v, _a, s) = st();
+        let m = MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        let acct = s.jmap.get(&support::config(&m, port)).await.unwrap();
+        // The list this call works from, read before another folder's run
+        // (or another client) makes "Archive".
+        let stale = acct.current().await.unwrap();
+        assert!(!stale.ids.contains_key("Archive"));
+        m.mutate(|st| {
+            st.add_mailbox(
+                "acc1",
+                mock_jmap::ScenarioMailbox { id: "mb-archive".into(), name: "Archive".into(), parent_id: None, role: None, emails: vec![] },
+            )
+        });
+
+        let id = ensure_dest_folder_in(&acct, "Archive/2019", stale).await.expect("the create that lost the race is not a failure");
+
+        assert_eq!(support::mailbox_named(&m, Some("Archive"), "2019"), Some(id));
+        assert_eq!(archive_count(&m), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_ensure_folder_for_two_siblings_at_once_makes_the_parent_once() {
+        let (_v, _a, s) = st();
+        let m = MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        let acct = s.jmap.get(&support::config(&m, port)).await.unwrap();
+
+        let (a, b) = tokio::join!(ensure_dest_folder_jmap(&acct, "Archive/2019"), ensure_dest_folder_jmap(&acct, "Archive/2020"));
+
+        let (a, b) = (a.expect("2019"), b.expect("2020"));
+        assert_eq!(support::mailbox_named(&m, Some("Archive"), "2019"), Some(a));
+        assert_eq!(support::mailbox_named(&m, Some("Archive"), "2020"), Some(b));
+        assert_eq!(archive_count(&m), 1, "one Archive, whoever got there first");
     }
 
     #[tokio::test]
