@@ -37,6 +37,11 @@ pub struct WatchStatus {
     pub last_error: Option<String>,
     /// Why this watcher stopped for good. `None` = it is still running.
     pub reason: Option<String>,
+    /// A JMAP push watcher's state (`jmap_push`): "stream" (listening),
+    /// "backoff" (waiting to connect again) or "polling" (syncing on a
+    /// timer). `None` for an IDLE watcher, and left out of its JSON.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
 }
 
 struct Watcher {
@@ -81,6 +86,9 @@ pub struct IdleWatchers {
     /// owns these watchers. Absent in a test that never wires it — arrivals
     /// then keep their headers only.
     daemon: std::sync::OnceLock<Weak<DaemonState>>,
+    /// Every interval a JMAP push watcher waits on, read when one is spawned.
+    /// `PushTiming::PRODUCTION`; tests shrink it (`set_push_timing`).
+    push_timing: Mutex<crate::jmap_push::PushTiming>,
 }
 
 impl IdleWatchers {
@@ -98,11 +106,18 @@ impl IdleWatchers {
             backoff_base,
             auto_tag_notify: std::sync::OnceLock::new(),
             daemon: std::sync::OnceLock::new(),
+            push_timing: Mutex::new(crate::jmap_push::PushTiming::PRODUCTION),
         })
     }
 
     pub fn set_daemon(&self, state: &Arc<DaemonState>) {
         let _ = self.daemon.set(Arc::downgrade(state));
+    }
+
+    /// The intervals JMAP push watchers spawned from now on wait on.
+    #[cfg(test)]
+    pub(crate) fn set_push_timing(&self, timing: crate::jmap_push::PushTiming) {
+        *self.push_timing.lock().unwrap_or_else(|p| p.into_inner()) = timing;
     }
 
     /// Share Auto Tags' wake signal so an IDLE arrival sweeps auto-tag rules
@@ -114,6 +129,10 @@ impl IdleWatchers {
     /// Register an account. Re-registering the same config is a no-op — the app
     /// re-sends its account list on every reconnect, and respawning a watcher
     /// per tick would reconnect to the server forever.
+    ///
+    /// A JMAP account (`uses_jmap`) gets an EventSource push watcher
+    /// (`jmap_push::run`) instead of IDLE, under the same rules: one per
+    /// account, replaced on a config change, handed fresh credentials.
     pub async fn watch(self: &Arc<Self>, account: SyncAccount, idle_timeout: Duration) {
         let fingerprint = fingerprint_of(&account);
         let mut tasks = self.tasks.lock().await;
@@ -158,14 +177,35 @@ impl IdleWatchers {
             wakeups: 0,
             last_error: None,
             reason: None,
+            mode: None,
         }));
         let account_id = account.id.clone();
+        let jmap = account.imap_config.uses_jmap();
         let account = Arc::new(Mutex::new(account));
-        let me = Arc::clone(self);
         let task_state = Arc::clone(&state);
         let task_account = Arc::clone(&account);
-        let handle = tokio::spawn(async move { me.run(task_account, idle_timeout, task_state).await });
+        let handle = if jmap {
+            self.spawn_push(task_account, task_state)
+        } else {
+            let me = Arc::clone(self);
+            tokio::spawn(async move { me.run(task_account, idle_timeout, task_state).await })
+        };
         tasks.insert(account_id, Watcher { handle, fingerprint, account, state });
+    }
+
+    /// A JMAP account's watcher: EventSource push (`jmap_push::run`) in this
+    /// same task map, so `unwatch`, `status` and `shutdown` treat it like an
+    /// IDLE watcher. Without the daemon state (a test that never wired it)
+    /// it ends at once with a `reason`, so `watch` does not respawn it.
+    fn spawn_push(&self, slot: Arc<Mutex<SyncAccount>>, status: Arc<Mutex<WatchStatus>>) -> tokio::task::JoinHandle<()> {
+        let timing = *self.push_timing.lock().unwrap_or_else(|p| p.into_inner());
+        match self.daemon.get().and_then(Weak::upgrade) {
+            Some(daemon) => tokio::spawn(crate::jmap_push::run(daemon, slot, status, timing)),
+            None => {
+                status.lock().unwrap().reason = Some("no daemon state for JMAP push".to_string());
+                tokio::spawn(async {})
+            }
+        }
     }
 
     pub async fn unwatch(&self, account_id: &str) {

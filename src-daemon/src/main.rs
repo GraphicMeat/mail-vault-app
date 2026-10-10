@@ -32,6 +32,7 @@ mod idle_watch;
 mod inference;
 mod insights;
 mod ipc;
+mod jmap_push;
 mod jmap_sessions;
 mod learning;
 mod mbox;
