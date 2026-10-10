@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailStore Server 대안: 누구에게 무엇이 필요한가 | MailVault</title>
+  <meta name="description" content="회사를 위한 MailStore Server 대안(Piler, Mail-Archiver, Open Archiver, Purview, Google Vault)과, 개인에게는 데스크톱 보관 도구만 필요한 경우.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/mailstore-server-alternative.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/mailstore-server-alternative.html">
+  <meta property="og:title" content="MailStore Server 대안: 누구에게 무엇이 필요한가 | MailVault">
+  <meta property="og:description" content="회사를 위한 MailStore Server 대안(Piler, Mail-Archiver, Open Archiver, Purview, Google Vault)과, 개인에게는 데스크톱 보관 도구만 필요한 경우.">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailStore Server 대안: 누구에게 무엇이 필요한가 | MailVault">
+  <meta name="twitter:description" content="회사를 위한 MailStore Server 대안(Piler, Mail-Archiver, Open Archiver, Purview, Google Vault)과, 개인에게는 데스크톱 보관 도구만 필요한 경우.">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailStore Server 대안: 보관본이 누구를 위한 것인지로 고르기",
+  "description": "회사를 위한 MailStore Server 대안(Piler, Mail-Archiver, Open Archiver, Purview, Google Vault)과, 개인에게는 데스크톱 보관 도구만 필요한 경우.",
+  "url": "https://mailvaultapp.com/ko/guides/mailstore-server-alternative.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailStore Server의 무료 대안이 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "예, 서버를 운영할 수 있다면 있습니다. Piler Open Source Edition, Mail-Archiver, Open Archiver는 무료 오픈소스 보관 서버이며, Piler 무료판에는 보존 규칙, 소송 보존, 감사 로그가 들어 있습니다. 라이선스 비용은 없지만 서버 설치, 업데이트, 백업은 직접 해야 합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "회사가 MailStore Server 대신 MailStore Home을 써도 됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailStore는 Home이 가정의 개인 용도로 무료라고 하며, 상업적 용도에는 MailStore Server를 안내합니다. 업무에 Home을 쓰기 전에 MailStore의 라이선스 조건을 읽으십시오."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault는 규정 준수용 또는 소송 보존용 보관 시스템입니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "아니요. MailVault는 자신의 메일의 개인 사본을 자신의 컴퓨터에 간직합니다. 보존 정책, 소송 보존, 감사 기록, 중앙 보관본이 없으므로 규정 준수 목적으로 MailStore Server를 대신하지 못합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "어떤 MailStore Server 대안이 Linux에서 실행됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailStore Server는 Windows 11과 Windows Server에서 실행됩니다. Mail-Archiver와 Open Archiver는 Docker에서 실행되고, Piler는 Ubuntu용 .deb 패키지를 만드는 방법을 문서로 제공합니다."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/mailstore-server-alternative.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+<nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/mailstore-server-alternative.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/mailstore-server-alternative.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/mailstore-server-alternative.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/mailstore-server-alternative.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/mailstore-server-alternative.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/mailstore-server-alternative.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/mailstore-server-alternative.html" lang="ko" hreflang="ko" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/mailstore-server-alternative.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/mailstore-server-alternative.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary>
+<nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailStore Server 대안: 보관본이 누구를 위한 것인지로 고르기</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            이 페이지는 <strong>MailStore Server 대안</strong>을 찾는 모든 분을 위한 것입니다. MailStore Server는 회사용 유료판입니다. 여러 메일함을 위한 하나의 중앙 보관 시스템이며, 보존 규칙, 소송 보존, 감사 로그를 갖추고 있습니다. 필요한 것이 그것이라면 솔직한 답은 다른 서버 제품입니다. Piler, Mail-Archiver, Open Archiver, 또는 Microsoft 365와 Google Workspace에 이미 들어 있는 보존 도구입니다. MailVault는 거기에 속하지 않습니다. 한 사람의 자기 메일을 위한 데스크톱 앱입니다. 무료 Home판과 비교하고 있다면 <a href="/ko/compare/mailvault-vs-mailstore-home.html" class="text-primary-500 hover:text-primary-600 underline">MailVault vs MailStore Home</a>을 읽으십시오. 모든 선택지를 나란히 보려면 <a href="/ko/guides/mailstore-alternatives-compared.html" class="text-primary-500 hover:text-primary-600 underline">MailStore 대안 비교</a>를 보십시오.
+          </p>
+
+          <div class="p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">빠른 답</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li><strong>규정 준수, 보존, 소송 보존을 갖춘 회사용 보관 시스템:</strong> 자체 서버의 Piler Open Source Edition, Mail-Archiver, Open Archiver, 또는 메일이 이미 Microsoft 365나 Google Workspace에 있다면 Microsoft Purview와 Google Vault.</li>
+              <li><strong>개인, 또는 각자 자기 메일함을 관리하는 작은 팀:</strong> 아마 서버는 필요 없을 것입니다. MailVault 같은 데스크톱 보관 도구로 충분합니다.</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailStore Server가 하는 일</h2>
+
+          <p>
+            MailStore는 Server를 중소기업을 위한 메일 보관 소프트웨어라고 소개합니다. 현재 제품 페이지에 나와 있는 내용은 다음과 같습니다.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>플랫폼:</strong> Windows 11과 Windows Server 2016~2025.</li>
+            <li><strong>가격:</strong> 사용자 5명용 스타터 키트가 295 EUR(부가세 별도)부터이며, 1년간의 Standard Update &amp; Support가 포함됩니다. 최소 주문은 사용자 5명이고, 설치 하나로 사용자 2,000명까지 지원합니다. 30일 체험판이 있습니다.</li>
+            <li><strong>원본:</strong> Microsoft 365, Exchange Server, Google Workspace, 모든 IMAP 또는 POP3 서버, PST와 EML 파일, 그리고 메일이 메일함에 닿기 전에 보관할 수 있는 저널링.</li>
+            <li><strong>규정 준수:</strong> 보존 정책, 소송 보존, 감사 로그, 외부 감사인을 위한 Auditor 사용자 유형. 내용의 SHA 해시 값을 저장하고 보관본을 AES-256으로 암호화합니다.</li>
+            <li><strong>접근:</strong> 직원들은 Outlook 추가 기능이나 휴대전화에서도 작동하는 웹 인터페이스로 보관본을 검색합니다.</li>
+          </ul>
+
+          <p>
+            MailStore는 OpenText의 자회사입니다. 회사들이 이 제품을 사는 이유가 이런 기능이며, 진짜 대체품이라면 대부분을 갖춰야 합니다.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">조직을 위한 MailStore Server 대안</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">선택지</th>
+                  <th class="py-3 pr-4 font-semibold">무엇인가</th>
+                  <th class="py-3 pr-4 font-semibold">비용</th>
+                  <th class="py-3 font-semibold">규정 준수 기능</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Piler Open Source Edition</td>
+                  <td class="py-3 pr-4">자체 호스팅 보관 서버, GPL-3</td>
+                  <td class="py-3 pr-4">무료. Enterprise Edition 유료</td>
+                  <td class="py-3">보존 규칙, 소송 보존, 감사 로그, 암호화</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Mail-Archiver</td>
+                  <td class="py-3 pr-4">자체 호스팅 웹 앱, GPL-3, Docker와 PostgreSQL</td>
+                  <td class="py-3 pr-4">무료</td>
+                  <td class="py-3">접근 기록, 선택형 삭제 잠금, 보관 기간</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Open Archiver</td>
+                  <td class="py-3 pr-4">자체 호스팅 플랫폼, AGPL-3, Docker Compose</td>
+                  <td class="py-3 pr-4">무료</td>
+                  <td class="py-3">보존 정책, 감사 기록, 무결성 해시. 소송 보존은 아직 없음</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Microsoft Purview</td>
+                  <td class="py-3 pr-4">Microsoft 365 안의 보존과 eDiscovery</td>
+                  <td class="py-3 pr-4">Microsoft 365 요금제에 따라 다름</td>
+                  <td class="py-3">메일함용 보존 정책과 레이블, eDiscovery</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">Google Vault</td>
+                  <td class="py-3 pr-4">Google Workspace 안의 보존과 eDiscovery</td>
+                  <td class="py-3 pr-4">일부 Workspace 버전에 포함</td>
+                  <td class="py-3">보존 규칙, 보존 조치, 검색, 내보내기, 감사 로그</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">마지막 확인: 2026년 10월. 기능과 가격은 바뀌므로 각 업체 사이트에서 확인하십시오.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Piler</h3>
+
+          <p>
+            Piler는 MailStore Server의 규정 준수 측면에 가장 가까운 오픈소스 대안입니다. Open Source Edition은 무료입니다. SMTP로 메일을 받고, Office 365와 Google 계정을 받아들이며, EML, Maildir, 메일함 파일을 읽고, 보관 및 보존 규칙, 소송 보존, 감사 로그, 중복 제거, 메시지 암호화를 갖추고 있습니다. Enterprise Edition은 가격 등급이 공개된 유료판이며, eDiscovery, 멀티 테넌시, 선택형 유료 지원을 더합니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Mail-Archiver</h3>
+
+          <p>
+            Mail-Archiver(Mac 앱 Mail Archiver X와는 다름)는 여러 사람이 보관된 메일을 검색하는 웹 페이지 하나를 원하는 작은 사무실에 맞습니다. IMAP 계정과, Microsoft Graph를 통한 Microsoft 365를 동기화하고, MBOX와 압축된 EML 파일을 가져오며, 같은 형식으로 내보냅니다. 사용자는 계정별 권한을 받고, OpenID Connect로 로그인할 수 있습니다. 계정마다 정한 기간이 지나면 서버에서 메일을 지울 수 있고, 설정 하나로 보관본에서의 수동 삭제를 막을 수 있습니다. 자체적으로 HTTPS를 제공하지 않으므로 앞에 리버스 프록시가 필요합니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Open Archiver</h3>
+
+          <p>
+            Open Archiver는 Google Workspace, Microsoft 365, IMAP, 그리고 PST, MBOX, EML 파일을 받아들입니다. 메시지 텍스트와 PDF, DOCX 같은 첨부 파일을 색인하고, 변경을 감지할 수 있도록 받아들일 때 메일마다 해시를 저장하며, 감사 기록을 남깁니다. README에는 소송 보존이 아직 할 일로 나와 있으므로, 분쟁에 대비해 의존하기 전에 현재 상태를 확인하십시오.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">제공업체가 이미 갖춘 도구</h3>
+
+          <p>
+            회사가 이미 Microsoft 365나 Google Workspace에 비용을 내고 있다면 거기부터 보십시오. Microsoft Purview 보존 정책은 사용자가 지운 뒤에도 메일함 항목의 사본을 메일함의 복구 가능한 항목 폴더에 보존하며, eDiscovery로 여전히 찾을 수 있습니다. 필요한 기능이 어느 Microsoft 365 요금제에 들어 있는지 확인하십시오. Google Vault는 Gmail과 다른 Workspace 데이터의 보존, 보존 조치, 검색, 내보내기를 처리합니다. Google은 Vault가 데이터 보관소가 아니라고 분명히 말합니다. 규칙을 정하기 전까지는 아무것도 보존하지 않고, 보존 조치가 걸리지 않은 만료 데이터는 평소처럼 삭제됩니다.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailVault가 답이 아닐 때</h2>
+
+          <p>
+            MailVault는 저희가 만들기에 분명히 말씀드립니다. MailVault는 MailStore Server를 대신하지 못합니다. MailVault에는 다음이 없습니다.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>중앙 보관 서버도, 사용자 간에 공유하는 보관본도 없습니다.</li>
+            <li>다른 사람의 메일함에 대한 관리자 접근도, 저널링도 없습니다.</li>
+            <li>보존 정책, 소송 보존, 감사 기록, 감사인 역할이 없습니다.</li>
+            <li>PST 가져오기가 없습니다.</li>
+          </ul>
+
+          <p>
+            감사인, 규제 기관, 또는 법무팀이 회사 메일에 관해 질문할 일이 있다면 위의 서버 선택지 중 하나를 고르십시오.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailVault가 맞는 사람</h2>
+
+          <p>
+            MailStore Server 대안을 찾는 사람 중 많은 이들에게는 서버가 전혀 필요 없습니다. 메일함이 가득 찬 개인, 모든 고객 스레드를 간직하고 싶은 프리랜서, 각자 자기 받은편지함을 챙기는 세 명짜리 팀입니다. 이들에게 서버는 일거리만 늘립니다. 돌려야 할 컴퓨터, 적용해야 할 업데이트, 그리고 보관본 자체의 백업.
+          </p>
+
+          <p>
+            MailVault는 macOS, Windows, Linux용 무료 데스크톱 앱입니다. 각자 설치하고, 자기 Gmail, Microsoft 365, Outlook.com, IMAP 계정에 로그인해, 메일 사본을 자기 컴퓨터에 간직합니다. MailVault 계정이 없고 메일이 오가는 경로에 MailVault 서버도 없으며, 소스 코드는 GitHub에 있습니다. 이 경우는 <a href="/ko/guides/email-archiving-for-freelancers.html" class="text-primary-500 hover:text-primary-600 underline">프리랜서와 소규모 사업자를 위한 메일 보관 가이드</a>에서 더 자세히 다룹니다.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailVault가 하는 일</h2>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">일반 파일로 된 로컬 보관본</h3>
+
+          <p>
+            간직하는 모든 메시지는 Maildir 방식 폴더 안의 표준 <code>.eml</code> 파일이며, 메일 한 통에 파일 하나이므로 다른 메일 앱에서도 열 수 있습니다. 볼트는 외장 드라이브나 NAS 마운트로 옮길 수 있습니다. MailVault가 모든 것을 복사하고, 파일이 모두 도착했는지 확인한 다음에야 원본을 지웁니다. 이 옮기기는 Mac App Store판에서는 쓸 수 없습니다. 백업을 실행할 때 고른 폴더에 두 번째 사본을 쓸 수도 있습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">내 컴퓨터에서 검색</h3>
+
+          <p>
+            로컬 전문 인덱스가 연결이 있든 없든 저장된 모든 메시지를 검색합니다. 보낸 사람, 날짜, 폴더, 태그로 범위를 좁힐 수 있습니다. <a href="/ko/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">저희가 공개한 검색 시험</a>에서 메시지 50,000개를 대상으로 가장 느린 검색이 14밀리초였습니다. PDF와 Office 첨부 파일 내부 검색은 Premium 기능입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">백업</h3>
+
+          <p>
+            모든 계정의 수동 백업은 무료이고 무제한입니다. 폴더마다 서버, 로컬, 외부 개수를 보여 주는 예약 백업은 Premium에 들어 있습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">보관, 확인, 그리고 삭제</h3>
+
+          <p>
+            보관은 메일을 볼트에 복사하고 서버 사본은 건드리지 않습니다. 서버에서 삭제는 서버 사본을 지웁니다. 둘 다 무료입니다. <a href="/ko/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">보관 후 삭제</a>(Premium)는 둘을 한 번에 합니다. 메시지를 하나씩 볼트에 복사하고, 사본이 있는지 확인한 다음에야 서버에서 지웁니다. 확인을 통과하지 못한 메시지는 서버에 남습니다. 보관, 백업 후 삭제(Premium)는 백업 폴더에도 사본을 쓰고, 무엇이든 지우기 전에 두 사본을 모두 확인합니다.
+          </p>
+
+          <figure class="pt-2">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/selection-dialog-archive-720.webp 720w, /screenshots/ko/selection-dialog-archive-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/ko/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ko/selection-dialog-archive-light-720.webp 720w, /screenshots/ko/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="선택한 메일에 대한 MailVault의 작업 선택 대화 상자. 보관, 보관 취소, 서버에서 삭제, 보관 후 삭제, 모든 곳에서 삭제가 나열되어 있고, 그중 일부가 이미 볼트에 있다는 안내가 있습니다." class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async"></picture>
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">선택한 메일에 대한 작업 대화 상자. 보관은 무료입니다. 보관 후 삭제는 Premium이며, 서버 사본을 지우기 전에 볼트의 사본을 하나하나 확인합니다.</figcaption>
+          </figure>
+
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">서버 없는 작은 팀 구성</h2>
+
+          <p>
+            동료의 메일을 검색할 필요가 없는 2~5명 팀이라면 이것으로 충분합니다.
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>각자 MailVault를 설치하고 자기 계정을 추가합니다.</li>
+            <li>각자 설정, 백업 및 복원에서 외장 SSD나 NAS 공유 폴더처럼 자신이 관리하는 드라이브에 두 번째 사본 폴더를 정합니다.</li>
+            <li>백업을 실행한 다음 오래된 연도를 보관합니다. 서버에서는 볼트에 있는 것만 지웁니다. Premium에서는 보관 후 삭제가 그 확인을 대신 해 줍니다.</li>
+          </ol>
+
+          <p>
+            포기하는 것: 한 사람이 다른 사람의 보관본을 검색할 수 없고, 누가 무엇을 했는지에 대한 중앙 기록이 없습니다. 둘 중 하나라도 필요하다면 서버가 필요합니다.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h2>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailStore Server의 무료 대안이 있습니까?</p>
+            <p>예, 서버를 운영할 수 있다면 있습니다. Piler Open Source Edition, Mail-Archiver, Open Archiver는 무료 오픈소스 보관 서버이며, Piler 무료판에는 보존 규칙, 소송 보존, 감사 로그가 들어 있습니다. 라이선스 비용은 없지만 서버 설치, 업데이트, 백업은 직접 해야 합니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">회사가 MailStore Server 대신 MailStore Home을 써도 됩니까?</p>
+            <p>MailStore는 Home이 가정의 개인 용도로 무료라고 하며, 상업적 용도에는 MailStore Server를 안내합니다. 업무에 Home을 쓰기 전에 MailStore의 라이선스 조건을 읽으십시오.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailVault는 규정 준수용 또는 소송 보존용 보관 시스템입니까?</p>
+            <p>아니요. MailVault는 자신의 메일의 개인 사본을 자신의 컴퓨터에 간직합니다. 보존 정책, 소송 보존, 감사 기록, 중앙 보관본이 없으므로 규정 준수 목적으로 MailStore Server를 대신하지 못합니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">어떤 MailStore Server 대안이 Linux에서 실행됩니까?</p>
+            <p>MailStore Server는 Windows 11과 Windows Server에서 실행됩니다. Mail-Archiver와 Open Archiver는 Docker에서 실행되고, Piler는 Ubuntu용 .deb 패키지를 만드는 방법을 문서로 제공합니다.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">다음에 할 일</h2>
+
+          <p>
+            요구 사항이 규정 준수라면 서버 제품의 체험판을 시작하거나, 시험용 컴퓨터에 Piler나 Mail-Archiver를 올려 메일함 하나를 보관해 보십시오. 한 사람에 메일함 하나라면 <a href="/ko/get-started.html" class="text-primary-500 hover:text-primary-600 underline">MailVault를 무료로 다운로드</a>하고 먼저 계정 하나로 써 보십시오. 나중에 예약 백업이나 한 번에 하는 보관 후 삭제를 원하면 Premium은 얼리 액세스 가격으로 월 $4 또는 연 $25입니다(<a href="/ko/pricing.html" class="text-primary-500 hover:text-primary-600 underline">가격</a> 참고).
+          </p>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            관련 글: <a href="/ko/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac용 MailStore 대안</a>, <a href="/ko/compare/mailvault-vs-mailstore-home.html" class="text-primary-500 hover:text-primary-600 underline">MailVault vs MailStore Home</a>, <a href="/ko/guides/mailstore-alternatives-compared.html" class="text-primary-500 hover:text-primary-600 underline">MailStore 대안 일곱 가지 비교</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>메일을 읽고, 메일을 보관하세요.</p>
+</div>
+<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

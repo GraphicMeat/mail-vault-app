@@ -1468,7 +1468,7 @@ function EmailListComponent({ stacked = false }) {
                 {connectionStatus === 'error' ? (
                   <>
                     <ServerOff size={48} className="mb-4 opacity-50" />
-                    <p>Can&rsquo;t reach the server</p>
+                    <p>{t('list.cantReachServer')}</p>
                     <p className="text-sm mt-2">{t('list.folderMayNotEmptyNothing')}</p>
                   </>
                 ) : (

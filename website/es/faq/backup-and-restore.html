@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/es/faq/backup-and-restore.html">
   <meta property="og:title" content="Copias de seguridad y restauración — MailVault FAQ">
   <meta property="og:description" content="Cómo archiva MailVault el correo, qué le pasa a la copia del servidor al archivar y luego borrar, cuándo se ejecutan las copias automáticas y cómo exportar y volver a importar tu bóveda.">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Copias de seguridad y restauración — MailVault FAQ">
   <meta name="twitter:description" content="Cómo archiva MailVault el correo, qué le pasa a la copia del servidor al archivar y luego borrar, cuándo se ejecutan las copias automáticas y cómo exportar y volver a importar tu bóveda.">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,7 +60,7 @@
       "name": "¿Cómo hace MailVault la copia de seguridad del correo?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault se conecta a tu servidor de correo con el protocolo IMAP y descarga cada correo a tu bóveda como un archivo .eml estándar en formato Maildir. Cada correo es un archivo en disco: legible por una persona, portátil y compatible con cualquier cliente de correo. Una vez que un mensaje está en tu bóveda puedes borrar la copia del servidor para liberar espacio; la local no se ve afectada."
+        "text": "MailVault se conecta a tu servidor de correo (por IMAP, o mediante Microsoft Graph para las cuentas personales de Outlook.com) y descarga cada correo en tu bóveda como un archivo .eml estándar en formato Maildir. Cada correo es un archivo en disco: legible, portable y compatible con cualquier cliente de correo. Cuando un mensaje está en tu bóveda, puedes eliminar la copia del servidor para liberar espacio; la copia local no se ve afectada."
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": "¿Qué pasa cuando archivo y borro del servidor?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Archive & Delete, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached. Archive, Back up & Delete, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first; if the drive cannot be reached, nothing is deleted. Two jobs in Settings > Backup & Restore > Archive & delete, both Premium, do the same for a whole account instead of selected messages: Archive, back up & delete from server saves the mail you scope to your vault and your backup folder, and Archive & delete from server saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail's own limits instead of failing."
+        "text": "Archivar y eliminar, una función Premium, sigue tres pasos en orden: copia el mensaje en tu bóveda como archivo .eml, comprueba que la copia está realmente ahí y solo entonces lo elimina del servidor. Lo que no supera la comprobación se queda en el servidor. Después, la fila muestra el estado de única copia: tu bóveda es el único sitio donde sigue existiendo ese mensaje, y esa es también la señal para tener conectado un disco de copia de seguridad. Archivar, respaldar y eliminar, también Premium, añade una segunda copia: copia además cada mensaje a tu carpeta de copia de seguridad, comprueba las dos copias y solo quita del servidor lo que ambas confirman. Antes tienes que elegir una carpeta de copia de seguridad; si no se puede acceder al disco, no se elimina nada. Dos tareas en Ajustes > Copia y restauración > Archivar y eliminar, ambas Premium, hacen lo mismo con una cuenta entera en lugar de con mensajes seleccionados: Archivar, respaldar y eliminar del servidor guarda el correo que acotes en tu bóveda y en tu carpeta de copia de seguridad, y Archivar y eliminar del servidor lo guarda solo en tu bóveda. Eliges las carpetas y las fechas (todas las fechas, este año, el año pasado, más de 2 años o los años que marques), si eliminar cuando todo esté guardado o a medida que se guarda cada correo, y si mover a la papelera o mover a la papelera y vaciarla; antes de confirmar, un resumen te muestra lo que se va a quitar. Cada copia se comprueba antes de quitar un correo, la tarea sigue en segundo plano y tras un reinicio, y espera a tu límite diario de descarga o a los límites propios de Gmail en lugar de fallar."
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "¿Qué pasa si borro correos del servidor?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete (Premium), which copies each message into your vault and verifies it there before removing it from the server."
+        "text": "Lo que archivaste antes se queda en tu bóveda, al margen de lo que haga después el servidor: esa es la razón de ser del producto. Lo que no archivaste desaparece con la copia del servidor, por eso MailVault muestra el estado de cada mensaje en su propia fila antes de que elimines: en el servidor, en tu bóveda o en ambos. La vía segura es Archivar y eliminar (Premium), que copia cada mensaje en tu bóveda y lo verifica ahí antes de quitarlo del servidor."
       }
     },
     {
@@ -145,7 +145,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/backup-and-restore.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/backup-and-restore.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
@@ -216,7 +216,7 @@
         <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Cómo hace MailVault la copia de seguridad del correo?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
+              MailVault se conecta a tu servidor de correo (por IMAP, o mediante Microsoft Graph para las cuentas personales de Outlook.com) y descarga cada correo como un <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">archivo .eml</a> estándar guardado en formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> en tu ordenador. Cada correo es un archivo en disco: legible, portable y compatible con cualquier cliente de correo. Cuando un mensaje está en tu bóveda, puedes eliminar la copia del servidor para liberar espacio; la copia local no se ve afectada.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/archive-progress-720.webp 720w, /screenshots/es/archive-progress-1440.webp 1440w, /screenshots/es/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/archive-progress-light-1440.webp" srcset="/screenshots/es/archive-progress-light-720.webp 720w, /screenshots/es/archive-progress-light-1440.webp 1440w, /screenshots/es/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Barra de progreso de archivado de MailVault mostrando una copia de correo en bloque en marcha" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
@@ -233,19 +233,19 @@
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Qué pasa cuando archivo y borro del servidor?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive &amp; Delete</strong>, a Premium feature, runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.</p>
+              <strong>Archivar y eliminar</strong>, una función Premium, sigue tres pasos en orden: copia el mensaje en tu bóveda como archivo .eml, comprueba que la copia está realmente ahí y solo entonces lo elimina del servidor. Lo que no supera la comprobación se queda en el servidor &mdash; una copia fallida nunca te cuesta el original. Después, la fila muestra <strong>Tu única copia</strong>: la bóveda es el único sitio donde sigue existiendo ese mensaje, y esa es también la señal para tener conectado un disco de copia de seguridad.</p>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive, Back up &amp; Delete</strong>, also Premium, adds a second copy: it copies each message to your backup folder as well, checks both copies, and removes from the server only what both confirm. It needs a backup folder chosen first. If the drive cannot be reached, or a copy does not match, nothing is deleted for those messages and the result tells you how many stayed on the server.
+              <strong>Archivar, respaldar y eliminar</strong>, también Premium, añade una segunda copia: copia además cada mensaje a tu carpeta de copia de seguridad, comprueba las dos copias y solo quita del servidor lo que ambas confirman. Antes tienes que elegir una carpeta de copia de seguridad. Si no se puede acceder al disco o una copia no coincide, no se elimina nada de esos mensajes y el resultado te dice cuántos se han quedado en el servidor.
             </p>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Two jobs in <strong>Settings &rarr; Backup &amp; Restore &rarr; Archive &amp; delete</strong>, both Premium, do the same for a whole account instead of selected messages. <strong>Archive, back up &amp; delete from server</strong> saves the mail you scope to your vault and your backup folder, and <strong>Archive &amp; delete from server</strong> saves it to your vault only. You choose the folders and the dates (all dates, this year, last year, older than 2 years, or the years you pick), whether to delete after everything is saved or as each email is saved, and whether to move to Trash or move to Trash and empty it, and a summary shows what will be removed before you confirm. Every copy is checked before an email is removed, the job keeps running in the background and after a restart, and it waits for your daily download limit or for Gmail&rsquo;s own limits instead of failing.
+              Dos tareas en <strong>Ajustes &rarr; Copia y restauración &rarr; Archivar y eliminar</strong>, ambas Premium, hacen lo mismo con una cuenta entera en lugar de con mensajes seleccionados. <strong>Archivar, respaldar y eliminar del servidor</strong> guarda el correo que acotes en tu bóveda y en tu carpeta de copia de seguridad, y <strong>Archivar y eliminar del servidor</strong> lo guarda solo en tu bóveda. Eliges las carpetas y las fechas (todas las fechas, este año, el año pasado, más de 2 años o los años que marques), si eliminar cuando todo esté guardado o a medida que se guarda cada correo, y si mover a la papelera o mover a la papelera y vaciarla; antes de confirmar, un resumen te muestra lo que se va a quitar. Cada copia se comprueba antes de quitar un correo, la tarea sigue en segundo plano y tras un reinicio, y espera a tu límite diario de descarga o a los límites propios de Gmail en lugar de fallar.
             </p>
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Qué pasa si borro correos del servidor?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong> (Premium), which copies each message into your vault and verifies it there before removing it from the server.
+              Lo que archivaste antes se queda en tu bóveda, al margen de lo que haga después el servidor: esa es la razón de ser del producto. Lo que <em>no</em> archivaste desaparece con la copia del servidor, por eso MailVault muestra el estado de cada mensaje en su propia fila antes de que elimines: en el servidor, en tu bóveda o en ambos. La vía segura es <strong>Archivar y eliminar</strong> (Premium), que copia cada mensaje en tu bóveda y lo verifica ahí antes de quitarlo del servidor.
             </p>
             <figure class="px-6 pb-5">
               <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/state-icons-720.webp 720w, /screenshots/es/state-icons-1440.webp 1440w, /screenshots/es/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/state-icons-light-1440.webp" srcset="/screenshots/es/state-icons-light-720.webp 720w, /screenshots/es/state-icons-light-1440.webp 1440w, /screenshots/es/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Bandeja de MailVault con los iconos de estado de cada mensaje: solo en el servidor, archivado en local y solo en local" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
@@ -303,7 +303,7 @@
 <div><a class="mv-brand" href="/es/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
 <p>Lee tu correo. Conserva tu correo.</p>
 </div>
-<nav aria-label="Explora MailVault"><a href="/es/use-cases.html">Casos de uso</a><a href="/es/blog.html">Blog</a><a href="/changelog.html">Novedades</a><a href="/es/mentioned-in.html">Menciones</a><a href="/es/faq.html">FAQ</a><a href="/es/docs.html">Ayuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código en GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidad ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contacta con el equipo ↗</a>
+<nav aria-label="Explora MailVault"><a href="/es/use-cases.html">Casos de uso</a><a href="/es/blog.html">Blog</a><a href="/changelog.html">Novedades</a><a href="/es/mentioned-in.html">Menciones</a><a href="/es/faq.html">FAQ</a><a href="/es/docs.html">Ayuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código en GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidad ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contacta con el equipo ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">
@@ -316,6 +316,6 @@
 
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
-<script defer src="/assets/english-site.js?v=20261005-noph"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
 </body>
 </html>

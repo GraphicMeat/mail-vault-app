@@ -1,0 +1,19 @@
+{
+  "f9cef652e1c8": "Der Frühbucher- und Familienpreis gilt nur für die ersten 100 Abonnenten, mit bis zu 5 Geräten je Abo. Standardpreis nach dem Early Access: <span data-mv-price=\"{standardYearly}\">$39</span>/Jahr.",
+  "8a653ec70079": "Der Frühbucher- und Familienpreis gilt nur für die ersten 100 Abonnenten, mit bis zu 5 Geräten je Abo. Standardpreis nach dem Early Access: <span data-mv-price=\"{standardMonthly}\">$6</span>/Monat.",
+  "93311792de5c": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Für immer kostenlos. Frühbucher- und Familienpreis: Premium <span data-mv-price=\"{yearly}\">$25</span>/Jahr, bis zu 5 Geräte, 14 Tage kostenlos testen. Standardpreis nach dem Early Access: <span data-mv-price=\"{standardYearly}\">$39</span>/Jahr.</a>",
+  "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Frühbucher- und Familienpreis: Premium <span data-mv-price=\"{yearly}\">$25</span>/Jahr. Standardpreis nach dem Early Access: <span data-mv-price=\"{standardYearly}\">$39</span>/Jahr.</a>",
+  "6a75808687cf": "Frühbucher- und Familienpreis <span>Solange MailVault im Early Access ist</span><span>Nur für die ersten 100 Abonnenten</span>",
+  "b2659317751b": "Nur für die ersten 100 Abonnenten.",
+  "c69aee3090fa": "MailVault ist im Early Access. Wenn du heute zum Frühbucher- und Familienpreis abonnierst, bleibt dein Preis, solange dein Abo aktiv ist, auch nach Preiserhöhungen. Der Standardpreis nach dem Early Access, <span data-mv-price=\"{standardMonthly}\">$6</span>/Monat oder <span data-mv-price=\"{standardYearly}\">$39</span>/Jahr, gilt für neue Abonnenten.",
+  "b165a52c2694": "Frühbucher- und Familienpreis",
+  "5ffae7ce0a0a": "MailVault ist im Early Access. Sichere dir heute den vergünstigten Preis: Er bleibt, solange dein Abo aktiv ist, auch nach Preiserhöhungen.",
+  "c456e993e85f": "Bis zu 5 Geräte je Abo",
+  "5328ac1d1bea": "Was passiert mit meinem Preis, wenn der Early Access endet?",
+  "ca975ed49493": "<span data-mv-price=\"{yearly}\">$25</span><span>/ Jahr</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdSavingsPercent} % Rabatt\">36 % Rabatt</span>",
+  "e6ab8b62b31b": "<span data-mv-price=\"{monthly}\">$4</span><span>/ Monat</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdMonthlySavingsPercent} % Rabatt\">33 % Rabatt</span>",
+  "afcfdfb278e6": "<span data-mv-price=\"{earlyBirdSavingsPercent} %\">36 %</span> unter dem Standardpreis nach dem Early Access: <span data-mv-price=\"{standardYearly}\">$39</span>/Jahr",
+  "cca45ed84541": "<span data-mv-price=\"{earlyBirdMonthlySavingsPercent} %\">33 %</span> unter dem Standardpreis nach dem Early Access: <span data-mv-price=\"{standardMonthly}\">$6</span>/Monat",
+  "c3c58b94d797": "{taken} von {cap} Frühbucher-Plätzen vergeben.",
+  "1ce2c687bdd4": "Alle {cap} Frühbucher-Plätze sind vergeben. Premium gibt es jetzt zum Standardpreis."
+}

@@ -1,7 +1,6 @@
 {
   "21f943d44c69": "백그라운드에서 계속 실행할 수 있다면 열어 둘 필요가 없습니다. 예약 이메일은 MailVault의 백그라운드 도우미가 발송합니다. 설정 &rsaquo; <strong>진단</strong> &rsaquo; <strong>백그라운드 데몬</strong>에서 <strong>백그라운드에서 계속 실행</strong>을 켜면 도우미가 앱을 종료한 뒤에도 계속 실행되고 로그인할 때 시작되므로, 앱이 닫혀 있어도 이메일이 제시간에 발송됩니다.",
   "6c5fe8620902": "백그라운드에서 계속 실행할 수 있다면 열어 둘 필요가 없습니다. 예약 이메일은 MailVault의 백그라운드 도우미가 발송합니다. 설정 › 진단 › 백그라운드 데몬에서 백그라운드에서 계속 실행을 켜면 도우미가 앱을 종료한 뒤에도 계속 실행되고 로그인할 때 시작되므로, 앱이 닫혀 있어도 이메일이 제시간에 발송됩니다. 이 설정이 꺼져 있거나 사용 중인 MailVault가 백그라운드에서 계속 실행될 수 없으면, 예약한 이메일은 다음에 MailVault를 열 때 발송됩니다. 어느 경우인지는 예약됨 폴더에 표시되며, 설정으로 가는 링크도 있습니다.",
-  "a7568f34ebc5": "모든 메시지를 내 컴퓨터에 저장하는 프라이빗 이메일 앱입니다. 원할 때 서버에서 삭제해도 내 사본은 그대로 남습니다. 광고도, MailVault 계정도 없고, 누구도 엿보지 않습니다.",
   "a8fb4e24821f": "서버 사본을 삭제하기 전에 디스크에서 확인",
   "fc9a7c52d616": "빠진 언급을 알고 계십니까? <a href=\"mailto:prime@graphicmeat.com\" class=\"text-primary-500 hover:text-primary-600\">알려 주십시오.</a>",
   "e3e522ffdf93": "macOS, Windows, Linux용 MailVault 다운로드: 봉투가 컨베이어 벨트를 타고 소포를 Mac, Windows PC, Linux 컴퓨터로 옮기는 모습",
@@ -35,9 +34,7 @@
   "384095550461": "내 메일 중 얼마나 이 컴퓨터에 남나요?",
   "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>모두 보관</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: 최근 기간만이 아니라 모든 폴더와 전체 기록을 백그라운드에서 다운로드해 이 컴퓨터에 보관하는 다운로드 모드입니다</span>",
   "7f9bb36583b5": "14개 기능 모두 보기",
-  "fc7a64a4b0b9": "무료에 있는 모든 것에 이 16가지 기능이 더해집니다. 하나를 선택하면 어떻게 동작하는지 볼 수 있습니다.",
   "0fed852ca4ff": "모두 보관",
-  "a2b2b116f08b": "앱의 첫 안내에서 만나는 것과 같은 16가지 기능입니다. 기능을 열어 살펴보십시오.",
   "243d708b71a7": "모든 폴더와 전체 기록을 백그라운드에서 다운로드해 이 컴퓨터에 보관합니다.",
   "45472e5ac7ea": "Premium에는 예약 백업, 스냅샷, 마이그레이션, 정리, 내보내기, 추적기 차단, 그리고 최근 기간만이 아니라 모든 폴더의 전체 기록을 보관하는 다운로드 모드인 모두 보관이 추가됩니다. 구독은 소규모 팀의 지속적인 개발과 유지보수도 지원합니다. 전체 메일 클라이언트와 수동 보관은 무료로 유지됩니다.",
   "9e30d2ebdfa2": "<strong>설정 &rarr; 저장소 &rarr; 다운로드 모드</strong>에서 정하며, <strong>설정 &rarr; 계정 &rarr; 고급</strong>에서 계정마다 다른 모드를 지정할 수도 있습니다.",

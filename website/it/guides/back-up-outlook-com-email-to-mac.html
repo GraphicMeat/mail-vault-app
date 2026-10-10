@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backup della posta Outlook.com su Mac: 4 modi | MailVault</title>
+  <meta name="description" content="Quattro modi per fare il backup della posta Outlook.com e Hotmail su Mac: Outlook per Mac, Apple Mail, Thunderbird e MailVault. Cosa salva ciascuno e come controllarlo.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/guides/back-up-outlook-com-email-to-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/guides/back-up-outlook-com-email-to-mac.html">
+  <meta property="og:title" content="Backup della posta Outlook.com su Mac: 4 modi | MailVault">
+  <meta property="og:description" content="Quattro modi per fare il backup della posta Outlook.com e Hotmail su Mac: Outlook per Mac, Apple Mail, Thunderbird e MailVault. Cosa salva ciascuno e come controllarlo.">
+  <meta property="og:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare. Gratis per macOS, Windows e Linux, con un'anteprima dell'app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Backup della posta Outlook.com su Mac: 4 modi | MailVault">
+  <meta name="twitter:description" content="Quattro modi per fare il backup della posta Outlook.com e Hotmail su Mac: Outlook per Mac, Apple Mail, Thunderbird e MailVault. Cosa salva ciascuno e come controllarlo.">
+  <meta name="twitter:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare. Gratis per macOS, Windows e Linux, con un'anteprima dell'app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Come fare il backup della posta Outlook.com e Hotmail sul Mac",
+  "description": "Quattro modi per fare il backup della posta Outlook.com e Hotmail su Mac: Outlook per Mac, Apple Mail, Thunderbird e MailVault. Cosa salva ciascuno e come controllarlo.",
+  "url": "https://mailvaultapp.com/it/guides/back-up-outlook-com-email-to-mac.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Posso esportare le email di Hotmail su un Mac senza Outlook?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sì. Apple Mail può scaricare la tua posta Outlook.com ed esportare ogni casella come file .mbox. Thunderbird può fare lo stesso con un componente aggiuntivo di esportazione, e MailVault salva ogni messaggio come file .eml. L'esportazione di Microsoft richiede una versione desktop di Outlook."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qual è il formato di file migliore per un backup della posta?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un formato che altre app sanno aprire. Un file .eml contiene un messaggio con i suoi allegati, e un file .mbox contiene un'intera casella. Apple Mail può aprire i file .eml e importare i file .mbox. Un file .olm è pensato per essere reimportato in Outlook per Mac."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault funziona con gli indirizzi Hotmail e Live.com?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sì. MailVault tratta gli indirizzi outlook.com, hotmail.com e live.com come account Microsoft personali. Accedi con Microsoft nel browser e MailVault si collega tramite Microsoft Graph, quindi non ci sono impostazioni IMAP da inserire."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Un backup della posta resta aggiornato?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un'esportazione da Apple Mail o da Outlook è un'istantanea, quindi devi esportare di nuovo per includere la posta nuova. In MailVault rifai il backup e vengono scaricate solo le email nuove. I backup automatici programmati fanno parte di MailVault Premium."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "In Outlook.com c'è ancora un pulsante per esportare la casella?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "L'attuale pagina di aiuto di Microsoft descrive solo l'esportazione con una versione desktop di Outlook. Guide più vecchie citano un pulsante Export mailbox nelle impostazioni di Outlook.com. Se non lo vedi nel tuo account, usa uno dei metodi di questa pagina."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Vai al contenuto</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/it/" aria-label="Pagina iniziale di MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">di Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Navigazione principale"><a href="/it/features.html">Funzioni</a><a href="/it/pricing.html">Prezzi</a><a href="/it/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Metti una stella a MailVault su GitHub" title="Metti una stella a MailVault su GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Manda un cuore a MailVault" title="Manda un cuore a MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Scegli lingua"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Italiano</span><span class="mv-language-code" aria-hidden="true">IT</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/back-up-outlook-com-email-to-mac.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/back-up-outlook-com-email-to-mac.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/back-up-outlook-com-email-to-mac.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/back-up-outlook-com-email-to-mac.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/back-up-outlook-com-email-to-mac.html" lang="it" hreflang="it" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/back-up-outlook-com-email-to-mac.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/back-up-outlook-com-email-to-mac.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/back-up-outlook-com-email-to-mac.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/back-up-outlook-com-email-to-mac.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Cambia tema colore" title="Cambia tema colore"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=it" target="_blank" rel="noopener" aria-label="Apri la demo di MailVault in una nuova finestra">Demo</a><a class="mv-button mv-nav-download" href="/it/get-started.html?plan=free">Download</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menu</span></summary>
+<nav aria-label="Navigazione mobile"><a href="/it/features.html">Funzioni</a><a href="/it/pricing.html">Prezzi</a><a href="/it/faq.html">FAQ</a><a href="/demo/?lang=it" target="_blank" rel="noopener" aria-label="Apri la demo di MailVault in una nuova finestra">Prova la demo</a><a href="/it/get-started.html?plan=free">Scarica gratis</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Cambia tema colore</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna alla home
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Come fare il backup della posta Outlook.com e Hotmail sul Mac</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>9 min di lettura</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>Aggiornato l'8 ottobre 2026</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>
+            Oggi ci sono quattro modi funzionanti per fare il backup della posta Outlook.com o Hotmail su un Mac. Puoi esportare un file <code>.olm</code> dall'Outlook per Mac legacy, esportare file <code>.mbox</code> da Apple Mail, esportare da Thunderbird con un componente aggiuntivo, oppure lasciare che MailVault salvi ogni messaggio come file <code>.eml</code>. Questa pagina li confronta, mostra cosa ti dà ciascuno e spiega come controllare il backup prima di farci affidamento. Se dopo il backup vuoi eliminare la posta online, leggi <a href="/it/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">come liberare spazio in Hotmail e Outlook.com</a>.
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Risposta rapida</p>
+            <ul class="list-disc pl-6 space-y-1">
+              <li><strong>Una copia, oggi, con quello che hai già:</strong> aggiungi l'account ad Apple Mail, poi usa <strong>Casella</strong> &gt; <strong>Esporta casella di posta</strong>.</li>
+              <li><strong>Usi già Outlook per Mac:</strong> esporta un file .olm dall'Outlook legacy.</li>
+              <li><strong>Una copia da tenere aggiornata e in cui cercare:</strong> MailVault (gratis) o Thunderbird (gratis).</li>
+              <li><strong>Qualunque cosa scegli:</strong> apri email e allegati vecchi dal backup prima di eliminare qualsiasi cosa online.</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Prima di iniziare</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>L'esportazione di Microsoft richiede Outlook desktop.</strong> La pagina di aiuto di Microsoft dice che una casella Outlook.com si esporta con una versione desktop di Outlook: un file .pst su Windows, oppure un file .olm dall'Outlook per Mac legacy. Se non hai Outlook, Microsoft suggerisce una prova gratuita di 30 giorni di Microsoft 365.</li>
+            <li><strong>Le altre app devono usare l'accesso moderno.</strong> Microsoft dice che dal 16 settembre 2024 le altre app di posta devono usare l'accesso moderno (OAuth) per raggiungere Outlook.com, e non solo nome utente e password. Apple Mail, Thunderbird e MailVault lo supportano tutti.</li>
+            <li><strong>Controlla lo spazio su disco.</strong> Guarda <strong>Impostazioni</strong> &gt; <strong>Account</strong> &gt; <strong>Spazio di archiviazione</strong> in Outlook.com. Il backup richiede più o meno altrettanto spazio libero sul Mac.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Metodo 1: Outlook per Mac legacy (file .olm)</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Aggiungi il tuo account Outlook.com a Outlook per Mac e lascia che finisca la sincronizzazione.</li>
+            <li>Passa all'Outlook legacy. Microsoft documenta l'esportazione solo per l'Outlook per Mac legacy, e dice che il supporto per l'Outlook per Mac legacy termina a ottobre 2026. La sua pagina di aiuto non descrive l'esportazione per il nuovo Outlook per Mac, quindi controlla lo stato attuale sulla pagina di Microsoft prima di affidarti a questo metodo.</li>
+            <li>Nella scheda <strong>Strumenti</strong> scegli <strong>Esporta</strong>. Se non la vedi, controlla gli aggiornamenti, poi guarda nel menu <strong>File</strong>.</li>
+            <li>In <strong>Esporta in file di archivio (.olm)</strong>, spunta gli elementi che vuoi, scegli <strong>Continua</strong> e indica dove salvare il file.</li>
+          </ol>
+
+          <p>
+            <strong>Cosa ottieni:</strong> un file .olm con la posta, più contatti e calendario se li hai spuntati. È pensato per essere reimportato in Outlook per Mac con <strong>Strumenti</strong> &gt; <strong>Importa</strong>. <strong>Adatto a:</strong> chi usa già Outlook per Mac.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Metodo 2: Apple Mail (file .mbox)</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>In Mail scegli <strong>Mail</strong> &gt; <strong>Aggiungi account</strong>, scrivi il tuo indirizzo Outlook.com e segui i passaggi. Microsoft dice che Apple Mail usa l'accesso moderno quando configuri l'account come Outlook.com.</li>
+            <li>Scegli <strong>Mail</strong> &gt; <strong>Impostazioni</strong> &gt; <strong>Account</strong> &gt; <strong>Informazioni account</strong> e imposta <strong>Scarica allegati</strong> su <strong>Tutti</strong>. Mail scarica sempre immagini, PDF, video e audio. Con <strong>Recenti</strong>, gli altri tipi di allegato vengono scaricati solo per gli ultimi 15 mesi.</li>
+            <li>Aspetta che ogni cartella sia stata scaricata. Apri qualcuna delle tue email più vecchie per esserne sicuro.</li>
+            <li>Seleziona una o più caselle e scegli <strong>Casella</strong> &gt; <strong>Esporta casella di posta</strong>. Scegli una cartella e conferma.</li>
+          </ol>
+
+          <p>
+            <strong>Cosa ottieni:</strong> un pacchetto .mbox per casella. Se esporti di nuovo, Mail crea un nuovo file accanto al vecchio, per esempio <em>La mia casella 3.mbox</em>, invece di sostituirlo. Per leggere il backup in seguito usa <strong>Archivio</strong> &gt; <strong>Importa caselle di posta</strong>; i messaggi compaiono in una nuova casella chiamata <strong>Importazione</strong>. <strong>Adatto a:</strong> una copia veloce senza installare nulla. Ogni esportazione è un'istantanea, quindi la posta nuova richiede una nuova esportazione.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Metodo 3: Thunderbird (file .mbox o .eml)</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Installa Thunderbird e aggiungi il tuo account Outlook.com. La guida 2026 di Mozilla dice di impostare il metodo di autenticazione su <strong>OAuth2</strong> e di consentire i cookie dei siti Microsoft nelle impostazioni di Thunderbird stesso.</li>
+            <li>In <strong>Impostazioni account</strong> &gt; <strong>Sincronizzazione e archiviazione</strong>, attiva <strong>Conserva i messaggi di questo account su questo computer</strong>. Senza questa opzione, Thunderbird conserva solo le intestazioni dei messaggi e recupera il resto dal server.</li>
+            <li>Lascia scaricare ogni cartella.</li>
+            <li>Installa il componente aggiuntivo ImportExportTools NG. Esporta una cartella come file .mbox, oppure i messaggi di una cartella come file .eml, HTML, PDF, CSV o di testo semplice.</li>
+          </ol>
+
+          <p>
+            <strong>Adatto a:</strong> chi vuole un'app di posta gratuita e open source anche per l'uso quotidiano. Un account di lavoro o della scuola potrebbe richiedere che l'amministratore approvi prima Thunderbird.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Metodo 4: MailVault (file .eml in cui puoi cercare)</h2>
+
+          <p>
+            MailVault è un'app di posta gratuita per macOS, Windows e Linux che tiene una copia della tua posta in un vault sul tuo computer. Non esiste un account MailVault, e la tua posta non passa da un server di MailVault. I passaggi qui sotto valgono per la versione che scarichi dal nostro sito. L'edizione del Mac App Store differisce in alcuni punti, come le impostazioni di backup e lo spostamento del vault.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Collega il tuo account Outlook.com</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><a href="/it/get-started.html" class="text-primary-500 hover:text-primary-600 underline">Scarica MailVault</a> e aprilo. Usa la versione 2.19.1 o successiva, che ha corretto l'archiviazione per gli account Outlook.com.</li>
+            <li>Scegli <strong>Aggiungi account</strong>, poi <strong>Outlook / Microsoft 365</strong>, e scrivi il tuo indirizzo.</li>
+            <li>Seleziona <strong>Accedi con Microsoft</strong>. La pagina di accesso di Microsoft si apre nel browser. Quando torni, MailVault aggiunge l'account da solo.</li>
+          </ol>
+
+          <p>
+            MailVault riconosce gli indirizzi outlook.com, hotmail.com e live.com (e le versioni regionali) e li collega tramite Microsoft Graph, l'API di posta di Microsoft. Non inserisci impostazioni IMAP né una password per app. Gli account Microsoft 365 di lavoro e della scuola accedono invece con OAuth2 su IMAP, e un'organizzazione con regole rigide può impostare il proprio client ID e tenant ID in <strong>Avanzate (aziendale)</strong>.
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/onboarding-account-720.webp 720w, /screenshots/it/onboarding-account-1440.webp 1440w, /screenshots/it/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/it/onboarding-account-light-1440.webp" srcset="/screenshots/it/onboarding-account-light-720.webp 720w, /screenshots/it/onboarding-account-light-1440.webp 1440w, /screenshots/it/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Schermata di primo avvio di MailVault intitolata Dove vivono i tuoi dati. Elenca Portachiavi di sistema, Niente in un file in chiaro, Nessun account, nessuna telemetria e La tua cassaforte: ogni email che archivi è un file .eml standard sul tuo disco, sopra un pulsante Aggiungi il primo account." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Prima che tu aggiunga un account, MailVault spiega dove vivono i tuoi dati: i dati di accesso nel portachiavi di sistema, e ogni email archiviata come file .eml standard sul tuo disco.</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Fai il backup</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Apri <strong>Impostazioni</strong> &gt; <strong>Backup e ripristino</strong> &gt; <strong>Impostazioni backup</strong>.</li>
+            <li>In <strong>Cosa salvare</strong>, scegli <strong>Tutte le email (scarica dal server)</strong>. L'altra scelta, <strong>Solo le email archiviate</strong>, copia solo la posta che è già nel tuo vault.</li>
+            <li>Se hai un disco esterno, scegli una cartella per la <strong>Seconda copia</strong>. È una copia separata che MailVault non legge nell'uso quotidiano.</li>
+            <li>Nella scheda <strong>Pianificazione backup</strong>, seleziona <strong>Esegui ora il backup di tutti gli account</strong>. I backup manuali sono gratuiti, senza limiti.</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/settings-backup-720.webp 720w, /screenshots/it/settings-backup-1440.webp 1440w, /screenshots/it/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/it/settings-backup-light-1440.webp" srcset="/screenshots/it/settings-backup-light-720.webp 720w, /screenshots/it/settings-backup-light-1440.webp 1440w, /screenshots/it/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Impostazioni di MailVault, Backup e ripristino, scheda Impostazioni backup. Mostra Dove viene conservata la posta con i pulsanti Apri cartella e Sposta la posta in un'altra cartella, un menu Cosa salvare impostato su Solo le email archiviate e una sezione Seconda copia con un avviso che esiste una sola copia." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Impostazioni backup mostra dove è conservata la posta, cosa include il backup e se hai una seconda copia. La nota arancione avvisa quando tutto si trova in un solo posto.</figcaption>
+          </figure>
+
+          <p>
+            <strong>Cosa ottieni:</strong> un file .eml per messaggio in cartelle Maildir, ordinate per account e cartella. Su un Mac la posizione predefinita è <code>~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/</code>. Puoi spostare il vault su un altro disco, tranne che nell'edizione del Mac App Store. I backup successivi sono incrementali: vengono scaricate solo le email nuove. La posta è ricercabile in MailVault, anche offline.
+          </p>
+
+          <p>
+            <strong>Gratis e Premium:</strong> collegare l'account, leggere, cercare, archiviare e fare backup manuali è gratuito. I backup automatici programmati, il monitoraggio dei backup, Collezionista (che scarica in background ogni cartella e tutta la cronologia e la conserva) e <a href="/it/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">Archivia ed elimina</a> in un solo passaggio sono Premium, attualmente $4 al mese o $25 all'anno ai prezzi di accesso anticipato.
+          </p>
+
+          <p>
+            <strong>Limiti noti per gli account Outlook.com:</strong> poiché questi account usano Microsoft Graph, Posticipa non è ancora disponibile, un file MBOX non può essere ripristinato sul server, un'email eliminata si può recuperare sul computer ma non sul server, e il conteggio della Posta in arrivo dopo il test di connessione non viene mostrato. Lettura, eliminazione, spostamento, contrassegni e backup funzionano come sugli altri account.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">I quattro metodi a confronto</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">Metodo</th>
+                  <th class="py-3 pr-4 font-semibold">Costo</th>
+                  <th class="py-3 pr-4 font-semibold">Risultato</th>
+                  <th class="py-3 pr-4 font-semibold">Posta nuova in seguito</th>
+                  <th class="py-3 font-semibold">Dove ci cerchi</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Outlook per Mac legacy</td>
+                  <td class="py-3 pr-4">Richiede Outlook desktop</td>
+                  <td class="py-3 pr-4">Un file .olm</td>
+                  <td class="py-3 pr-4">Esporta di nuovo</td>
+                  <td class="py-3">Outlook per Mac, dopo l'importazione</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Apple Mail</td>
+                  <td class="py-3 pr-4">Incluso in macOS</td>
+                  <td class="py-3 pr-4">Un pacchetto .mbox per casella</td>
+                  <td class="py-3 pr-4">Esporta di nuovo</td>
+                  <td class="py-3">Apple Mail, dopo l'importazione</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Thunderbird e ImportExportTools NG</td>
+                  <td class="py-3 pr-4">Gratuito</td>
+                  <td class="py-3 pr-4">.mbox per cartella, oppure .eml, HTML o PDF per messaggio</td>
+                  <td class="py-3 pr-4">Thunderbird continua a sincronizzare; esporta di nuovo per avere i file</td>
+                  <td class="py-3">Thunderbird</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">MailVault</td>
+                  <td class="py-3 pr-4">Gratis; Premium per la pianificazione</td>
+                  <td class="py-3 pr-4">Un file .eml per messaggio, in cartelle Maildir</td>
+                  <td class="py-3 pr-4">Rifai il backup; viene scaricata solo la posta nuova</td>
+                  <td class="py-3">MailVault, con un indice di ricerca locale</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Ultimo controllo: ottobre 2026. Apple Mail, Thunderbird e Outlook per Mac fanno ciascuno molto più dei backup. Questa tabella copre solo ciò che conta per conservare una copia della posta Outlook.com.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Come controllare che il backup sia completo</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>Confronta i conteggi.</strong> Annota quante email ha ogni cartella grande in Outlook.com e confrontale con il backup. In MailVault, l'intestazione di ogni cartella mostra quante delle sue email sono nel tuo vault, per esempio <em>Nella tua cassaforte: 79 di 79</em>. Una tabella con i conteggi del server e del vault per ogni cartella fa parte di Premium (monitoraggio dei backup).</li>
+            <li><strong>Apri le email più vecchie,</strong> non solo quelle recenti. È nelle cartelle vecchie che si nascondono i buchi.</li>
+            <li><strong>Apri allegati</strong> di vario tipo: un PDF, una foto, un documento da ufficio.</li>
+            <li><strong>Cerca qualcosa che ricordi</strong> di anni fa, come un nome o un numero d'ordine.</li>
+            <li><strong>Apri i file fuori dall'app che li ha creati.</strong> Fai doppio clic su un file .eml e si apre in Apple Mail. Importa un .mbox con <strong>Archivio</strong> &gt; <strong>Importa caselle di posta</strong>.</li>
+            <li><strong>Tieni una seconda copia</strong> su un altro disco. Una copia su un solo portatile non è un backup.</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/local-vault-720.webp 720w, /screenshots/it/local-vault-1440.webp 1440w, /screenshots/it/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/it/local-vault-light-1440.webp" srcset="/screenshots/it/local-vault-light-720.webp 720w, /screenshots/it/local-vault-light-1440.webp 1440w, /screenshots/it/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="La posta in arrivo di MailVault con il filtro Cassaforte selezionato. L'intestazione mostra il numero di email della cartella e un conteggio Nella tua cassaforte, e ogni riga di messaggio ha un'icona verde del vault." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">L'intestazione della cartella offre un controllo rapido: quando i due numeri in Nella tua cassaforte coincidono, ogni email che MailVault conta per questa cartella ha una copia sul tuo computer. La scheda di avanzamento nell'angolo appartiene a un'altra operazione.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Domande frequenti</h2>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Posso esportare le email di Hotmail su un Mac senza Outlook?</h3>
+            <p>Sì. Apple Mail può scaricare la tua posta Outlook.com ed esportare ogni casella come file .mbox. Thunderbird può fare lo stesso con un componente aggiuntivo di esportazione, e MailVault salva ogni messaggio come file .eml. L'esportazione di Microsoft richiede una versione desktop di Outlook.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Qual è il formato di file migliore per un backup della posta?</h3>
+            <p>Un formato che altre app sanno aprire. Un file .eml contiene un messaggio con i suoi allegati, e un file .mbox contiene un'intera casella. Apple Mail può aprire i file .eml e importare i file .mbox. Un file .olm è pensato per essere reimportato in Outlook per Mac.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">MailVault funziona con gli indirizzi Hotmail e Live.com?</h3>
+            <p>Sì. MailVault tratta gli indirizzi outlook.com, hotmail.com e live.com come account Microsoft personali. Accedi con Microsoft nel browser e MailVault si collega tramite Microsoft Graph, quindi non ci sono impostazioni IMAP da inserire.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Un backup della posta resta aggiornato?</h3>
+            <p>Un'esportazione da Apple Mail o da Outlook è un'istantanea, quindi devi esportare di nuovo per includere la posta nuova. In MailVault rifai il backup e vengono scaricate solo le email nuove. I backup automatici programmati fanno parte di MailVault Premium.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">In Outlook.com c'è ancora un pulsante per esportare la casella?</h3>
+            <p>L'attuale pagina di aiuto di Microsoft descrive solo l'esportazione con una versione desktop di Outlook. Guide più vecchie citano un pulsante Export mailbox nelle impostazioni di Outlook.com. Se non lo vedi nel tuo account, usa uno dei metodi di questa pagina.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Cosa fare adesso</h2>
+
+          <p>
+            Scegli un metodo e fai la prima copia questa settimana, poi controllala con l'elenco qui sopra. Se la tua casella è già piena, leggi prima <a href="/it/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">cosa fare quando lo spazio di Outlook è pieno</a>, così la posta smette di tornare indietro. La breve panoramica in <a href="/it/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">casella Outlook.com o Hotmail piena</a> e la guida valida per ogni provider su <a href="/it/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">come liberare spazio nella posta</a> spiegano come una copia locale ti permetta di eliminare online senza perdere posta. Per mettere a confronto una copia locale e un piano più grande, vedi <a href="/it/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">archiviare in locale o pagare per più spazio</a>.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Fai il backup di Outlook.com sul Mac con MailVault</p>
+            <p class="text-sm mb-4">Gratis, con il codice sorgente su GitHub. Ogni email è un semplice file .eml sul tuo disco. I backup manuali sono gratuiti; i backup programmati sono Premium.</p>
+            <a href="/it/get-started.html" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Scarica MailVault gratis
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Fonti: Microsoft, <a href="https://support.microsoft.com/en-us/outlook/export-your-outlook-com-mailbox" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Esportare la casella di Outlook.com</a>, <a href="https://support.microsoft.com/en-us/outlook/export-items-to-an-archive-file-in-outlook-for-mac" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Esportare elementi in un file di archivio nell'Outlook per Mac legacy</a> e <a href="https://support.microsoft.com/en-us/office/modern-authentication-methods-now-needed-to-continue-syncing-outlook-email-in-non-microsoft-email-apps-c5d65390-9676-4763-b41f-d7986499a90d" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Metodi di autenticazione moderni necessari per continuare a sincronizzare la posta di Outlook nelle app di posta non Microsoft</a>; Apple, <a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Importare o esportare caselle in Mail sul Mac</a>; Mozilla, <a href="https://support.mozilla.org/en-US/kb/microsoft-oauth-authentication-and-thunderbird-202" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Autenticazione OAuth di Microsoft e Thunderbird</a>. Ultimo controllo: ottobre 2026.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/it/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Leggi la tua posta. Conserva la tua posta.</p>
+</div>
+<nav aria-label="Esplora MailVault"><a href="/it/use-cases.html">Casi d'uso</a><a href="/it/blog.html">Blog</a><a href="/changelog.html">Novità</a><a href="/it/mentioned-in.html">Menzioni</a><a href="/it/faq.html">FAQ</a><a href="/it/docs.html">Aiuto</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Codice su GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contatta il team ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Realizzato da <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacy</a><a href="/terms.html">Termini</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

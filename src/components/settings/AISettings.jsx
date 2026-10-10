@@ -163,7 +163,7 @@ export function AISettings() {
               <p className="text-xs text-mail-text-muted">{t('settings.ai.corrections')}</p>
             </div>
             <div className="p-2.5 rounded-lg bg-mail-surface-hover text-center">
-              <p className="text-lg font-bold text-mail-text">{stats.totalClassified > 0 && Number.isFinite(stats.accuracyRate) ? `${Math.round(stats.accuracyRate * 100)}%` : '—'}</p>
+              <p className="text-lg font-bold text-mail-text">{stats.totalClassified > 0 && Number.isFinite(stats.accuracyRate) ? `${Math.round(stats.accuracyRate * 100)}%` : '-'}</p>
               <p className="text-xs text-mail-text-muted">{t('settings.ai.accuracy')}</p>
             </div>
           </div>

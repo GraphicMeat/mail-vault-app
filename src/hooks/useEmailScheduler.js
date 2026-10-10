@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, selectOwnAddresses } from '../stores/settingsStore';
 import { localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
 import { recountInbox, addArrivals, isCompleteCache, selectTotalUnread, unreadRows } from '../stores/unreadCounts';
 import { notify } from '../stores/focusStore';
@@ -13,6 +13,7 @@ import { onDaemonReconnected } from '../services/searchIndex';
 import { hasValidCredentials } from '../services/authUtils';
 import { isGraphAccount } from '../services/graphConfig';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
+import { isOwnAddress } from '../utils/ownAddresses';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
@@ -81,12 +82,17 @@ const dispatchNotifications = (perAccountResults) => {
 /// (stores/snoozeStore.js) both announce through it.
 export function notifyArrival(accountId, folder, count, header) {
   const account = useMailStore.getState().accounts.find(a => a.id === accountId);
+  const fromAddress = typeof header?.from === 'string' ? header.from : (header?.from?.address || '');
+  // The user's own reply lands in the inbox thread too (Gmail files it under
+  // INBOX as well as Sent): mail the user wrote is not an arrival. Only a lone
+  // message can be judged by its newest header; a batch may hold others' mail.
+  if (count === 1 && account && isOwnAddress(fromAddress, selectOwnAddresses(useSettingsStore.getState(), account))) return;
   dispatchNotifications([{
     accountId, accountEmail: account?.email, folder, newCount: count,
     newestSender: header?.from?.name || header?.from?.address,
     newestSubject: header?.subject,
     newestUid: header?.uid,
-    newestFromAddress: typeof header?.from === 'string' ? header.from : (header?.from?.address || ''),
+    newestFromAddress: fromAddress,
   }]);
 }
 

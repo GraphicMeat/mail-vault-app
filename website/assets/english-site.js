@@ -89,9 +89,10 @@
   const heroPlatform = mobile ? 'mobile' : mac ? 'mac' : windows ? 'windows' : linux ? 'linux' : '';
   const ownPlatform = heroPlatform && document.querySelector('[data-platform="' + heroPlatform + '"]');
   if (ownPlatform) ownPlatform.parentElement.prepend(ownPlatform);
+  // Only the visitor's own action stays. The homepage hero has no fallback and
+  // shows macOS without a script, so an unknown platform keeps that default.
   if (heroPlatform && document.querySelector('[data-hero-platform="' + heroPlatform + '"]')) {
-    document.querySelectorAll('[data-hero-platform="fallback"]').forEach(el => { el.hidden = true; });
-    document.querySelectorAll('[data-hero-platform="' + heroPlatform + '"]').forEach(el => { el.hidden = false; });
+    document.querySelectorAll('[data-hero-platform]').forEach(el => { el.hidden = el.dataset.heroPlatform !== heroPlatform; });
   }
   // One .deb button for Linux: pick the ARM build when the browser says so.
   const arm = /aarch64|arm64|armv8/i.test(navigator.userAgent);
@@ -345,6 +346,15 @@
     const placement = form.dataset.sendLink;
     // The localized pages are copies of the English one, so the language comes from the path.
     form.elements.lang.value = locale.slice(1) || 'en';
+    // The hero's form is a phone's main action, so it starts open there (no
+    // focus, or the keyboard would cover the page). A computer gets a quiet link to it.
+    if (form.hasAttribute('data-send-link-primary')) {
+      if (mobile) openSendLink(form);
+      else {
+        const opener = document.querySelector('[data-send-link-open][aria-controls="' + form.id + '"]');
+        if (opener) opener.hidden = false;
+      }
+    }
     const returned = query.get('send_link');
     const returnedHere = (location.hash === '#download' ? 'final' : 'hero') === placement;
     if (mobile && returned && returnedHere) {
@@ -394,4 +404,69 @@
       play.replaceWith(frame);
     }, { once: true });
   });
+
+  // Feature clips: muted loops with preload="none", so nothing downloads until
+  // one plays. A clip plays while at least half of it is on screen and pauses
+  // when it leaves or the tab is hidden. Nothing starts before the visitor's
+  // first scroll (no autoplay above the fold), and never with reduced motion.
+  const clips = [...document.querySelectorAll('.mv-clip video')];
+  // Each clip has a dark cut and a light one beside it: <clip>.mp4 and <clip>.light.mp4,
+  // posters <clip>-poster.jpg / <clip>.jpg and their .light twins. The theme is the
+  // `dark` class on <html>, so watch it rather than a media query. The hero sits on a
+  // dark band in either theme and keeps its clip.
+  const cut = (url, light) => {
+    const base = url.replace(/\.light(\.\w+)$/, '$1');
+    return light ? base.replace(/(\.\w+)$/, '.light$1') : base;
+  };
+  const swapAttr = (el, name, light) => {
+    const now = el.getAttribute(name);
+    if (now && cut(now, light) !== now) el.setAttribute(name, cut(now, light));
+  };
+  function syncClips() {
+    const light = !html.classList.contains('dark');
+    clips.filter(video => !video.closest('.hm-hero-clip')).forEach(video => {
+      const card = video.closest('.mv-clip');
+      const still = card.querySelector('.mv-clip-poster');
+      if (still) swapAttr(still, 'src', light);
+      swapAttr(video, 'poster', light);
+      const file = video.querySelector('source');
+      if (!file || cut(file.getAttribute('src'), light) === file.getAttribute('src')) return;
+      const running = !video.paused;
+      swapAttr(file, 'src', light);
+      try { video.load(); } catch { /* the poster stays */ }
+      if (card.classList.contains('is-live')) {
+        card.classList.remove('is-live');
+        video.addEventListener('playing', () => card.classList.add('is-live'), { once: true });
+      }
+      if (running) { try { Promise.resolve(video.play()).catch(() => {}); } catch { /* the poster stays */ } }
+    });
+  }
+  syncClips();
+  try { new MutationObserver(syncClips).observe(html, { attributes: true, attributeFilter: ['class'] }); } catch { /* the first cut stays */ }
+  let reducedMotion = false;
+  try { reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* treat as no preference */ }
+  clips.forEach(video => video.addEventListener('playing', () => {
+    acquisitionEvent('clip_play', { clip: video.closest('.mv-clip').dataset.clip });
+  }, { once: true }));
+  if (clips.length && !reducedMotion && 'IntersectionObserver' in window) {
+    const onScreen = new Set();
+    const play = video => {
+      if (document.hidden) return;
+      try { Promise.resolve(video.play()).catch(() => {}); } catch { /* the poster stays */ }
+    };
+    const pause = video => { try { video.pause(); } catch { /* already stopped */ } };
+    const watch = () => {
+      const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) { onScreen.add(entry.target); play(entry.target); }
+        else { onScreen.delete(entry.target); pause(entry.target); }
+      }), { threshold: [0, 0.5] });
+      clips.forEach(video => observer.observe(video));
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) clips.forEach(pause);
+        else onScreen.forEach(play);
+      });
+    };
+    if (window.scrollY > 0) watch();
+    else window.addEventListener('scroll', watch, { once: true, passive: true });
+  }
 })();

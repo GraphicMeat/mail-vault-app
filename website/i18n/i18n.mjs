@@ -59,6 +59,25 @@ const EXCLUDE = new Set([
 
 const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
 
+/*
+ * Frozen pages: the English page was redesigned before its translation, so the
+ * locale pages are still built from a snapshot of the English page as it stood
+ * when they were last translated (i18n/frozen/<page>, not deployed). build,
+ * extract and verify read the snapshot, so the locale pages and the corpus stay
+ * exactly as committed while the live English page moves on; inject and nav
+ * still edit only the live page, so a header or footer change made while frozen
+ * goes into the snapshot by hand. To localize the new page: delete its entry
+ * here and its snapshot, run extract, translate the new keys, then build.
+ */
+export const FROZEN = { 'index.html': 'i18n/frozen/index.html' };
+export function sourceHtml(rel) {
+  return fs.readFileSync(path.join(ROOT, FROZEN[rel] || rel), 'utf8');
+}
+
+// The clips change is measured on English pages only; their locale copies show
+// no clips and keep the tag they had. Drop the pair when the clips are localized.
+const LOCALE_TAG = { 'clips-2026-10': 'conversion-2026-10' };
+
 export function sourcePages() {
   const out = [];
   for (const d of PAGE_DIRS) {
@@ -158,6 +177,37 @@ function matchingClose(html, name, from) {
   return -1;
 }
 
+/*
+ * An element marked data-i18n-en-only (with everything inside it) exists on the
+ * English page only: build drops it from every locale page, extract keeps its
+ * strings out of the corpus, and verify ignores it. Its whole lines go, so a
+ * locale page is byte for byte what it would be without the block. To localize
+ * one, remove the marker, run extract, and translate the new keys.
+ */
+const EN_ONLY_RE = /<([a-zA-Z][\w-]*)\b[^>]*\sdata-i18n-en-only\b[^>]*>/g;
+
+export function dropEnglishOnly(html) {
+  let out = '', from = 0, m;
+  EN_ONLY_RE.lastIndex = 0;
+  while ((m = EN_ONLY_RE.exec(html))) {
+    const name = m[1].toLowerCase();
+    const closeAt = VOID.has(name) ? m.index : matchingClose(html, name, EN_ONLY_RE.lastIndex);
+    if (closeAt === -1) throw new Error(`data-i18n-en-only <${name}> at ${m.index} has no closing tag`);
+    let start = m.index;
+    let end = VOID.has(name) ? EN_ONLY_RE.lastIndex : html.indexOf('>', closeAt) + 1;
+    const lineStart = html.lastIndexOf('\n', start - 1) + 1;
+    if (/^[ \t]*$/.test(html.slice(lineStart, start))) {
+      start = lineStart;
+      if (html.startsWith('\r\n', end)) end += 2;
+      else if (html[end] === '\n') end += 1;
+    }
+    out += html.slice(from, start);
+    from = end;
+    EN_ONLY_RE.lastIndex = end;
+  }
+  return out + html.slice(from);
+}
+
 export function scan(html) {
   const texts = [], tags = [], jsonlds = [], blocks = [];
   const stack = [];
@@ -246,7 +296,7 @@ export function scan(html) {
 
 // ------------------------------------------------------------ string picking
 
-const TRANSLATABLE_ATTRS = new Set(['alt', 'title', 'placeholder', 'aria-label', 'data-mv-price']);
+const TRANSLATABLE_ATTRS = new Set(['alt', 'title', 'placeholder', 'aria-label', 'data-mv-price', 'data-mv-spots', 'data-mv-spots-full']);
 const META_KEYS = new Set(['description', 'og:title', 'og:description', 'og:image:alt',
   'twitter:title', 'twitter:description', 'twitter:image:alt', 'apple-mobile-web-app-title']);
 
@@ -303,7 +353,7 @@ function walkLd(node, key, fn) {
  * extract (to build the corpus) and build (to substitute).
  */
 export function collect(html) {
-  const { texts, tags, jsonlds, blocks } = scan(html);
+  const { texts, tags, jsonlds, blocks } = scan(dropEnglishOnly(html));
   const found = [];
 
   for (const b of blocks) {
@@ -449,6 +499,8 @@ function applyEdits(src, edits) {
 const ESC = (s) => s.replace(/&(?![a-zA-Z#][a-zA-Z0-9]*;)/g, '&amp;');
 
 export function render(html, pageRel, loc, dict) {
+  html = dropEnglishOnly(html)
+    .replace(/(data-site="mailvault" data-tag=")([^"]+)"/, (m, pre, tag) => `${pre}${LOCALE_TAG[tag] || tag}"`);
   const tr = (s) => {
     const v = dict[keyOf(s)];
     return (typeof v === 'string' && v.trim()) ? v : normalize(s);
@@ -696,8 +748,8 @@ export function extract() {
   const live = new Map();
   const risky = [];
   for (const rel of sourcePages()) {
-    const html = fs.readFileSync(path.join(ROOT, rel), 'utf8');
-    for (const b of scan(html).blocks) {
+    const html = sourceHtml(rel);
+    for (const b of scan(dropEnglishOnly(html)).blocks) {
       if (b.raw.length > 1200) risky.push(`${rel}: block of ${b.raw.length} chars — check it is one sentence`);
     }
     for (const { key, text } of collect(html)) {
@@ -961,7 +1013,7 @@ export function verify() {
   let pages = 0, links = 0, images = 0;
 
   for (const rel of sourcePages()) {
-    const en = tagBag(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+    const en = tagBag(dropEnglishOnly(sourceHtml(rel)));
     for (const loc of LOCALES) {
       const file = path.join(ROOT, loc.dir, rel);
       if (!fs.existsSync(file)) { problems.push(`${loc.dir}/${rel}: not built`); continue; }
@@ -1027,7 +1079,7 @@ export function build(only) {
     if (only && loc.dir !== only && loc.hreflang !== only) continue;
     const dict = loadDict(loc);
     for (const rel of pages) {
-      const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+      const src = sourceHtml(rel);
       const dest = path.join(ROOT, loc.dir, rel);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, render(src, rel, loc, dict));

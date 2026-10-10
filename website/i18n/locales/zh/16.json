@@ -1,7 +1,6 @@
 {
   "21f943d44c69": "只要它能在后台持续运行，就不必开着。定时邮件由 MailVault 的后台助手发送。在设置 &rsaquo; <strong>诊断</strong> &rsaquo; <strong>后台守护进程</strong>中开启<strong>在后台持续运行</strong>后，助手会在你退出后继续运行，并在登录时启动，因此即使应用已关闭，邮件也会准时发出。",
   "6c5fe8620902": "只要它能在后台持续运行，就不必开着。定时邮件由 MailVault 的后台助手发送。在设置 › 诊断 › 后台守护进程中开启在后台持续运行后，助手会在你退出后继续运行，并在登录时启动，因此即使应用已关闭，邮件也会准时发出。如果该设置已关闭，或你的 MailVault 无法在后台持续运行，定时邮件会在你下次打开 MailVault 时发出。“定时发送”文件夹会说明你属于哪种情况，并提供前往该设置的链接。",
-  "a7568f34ebc5": "一款把每封邮件保存在你自己电脑上的私密邮箱应用，你可以随时从服务器上删除邮件，自己的副本依然保留。没有广告，不需要 MailVault 账户，也没有人在旁边偷看。",
   "a8fb4e24821f": "在你删除服务器副本之前，先在磁盘上核对",
   "fc9a7c52d616": "知道我们漏掉了哪次提及？<a href=\"mailto:prime@graphicmeat.com\" class=\"text-primary-500 hover:text-primary-600\">告诉我们。</a>",
   "e3e522ffdf93": "下载适用于 macOS、Windows 和 Linux 的 MailVault：信封在传送带上把包裹送到 Mac、Windows 电脑和 Linux 电脑",
@@ -35,9 +34,7 @@
   "384095550461": "我的邮件有多少会留在这台电脑上？",
   "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>全部保存</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>：一种下载模式，会在后台获取每个文件夹和全部历史邮件并保存在这台电脑上，而不只是最近一段时间</span>",
   "7f9bb36583b5": "查看全部 14 项功能",
-  "fc7a64a4b0b9": "免费版的一切，再加上这 16 项功能。选择其中一项，看看它怎么运作。",
   "0fed852ca4ff": "全部保存",
-  "a2b2b116f08b": "与应用初次引导中介绍的 16 项功能相同。打开某项功能即可了解它。",
   "243d708b71a7": "在后台下载所有文件夹和全部历史邮件，并保存在这台电脑上。",
   "45472e5ac7ea": "Premium 增加定时备份、快照、迁移、清理、导出、跟踪器拦截，以及下载模式全部保存，它会保留每个文件夹的全部历史，而不只是最近一段时间。你的订阅也支持我们小团队持续开发和维护。完整邮件客户端和手动归档仍然免费。",
   "9e30d2ebdfa2": "<strong>设置 &rarr; 存储 &rarr; 下载模式</strong>用于控制，<strong>设置 &rarr; 账户 &rarr; 高级</strong>还可以为单个账户单独设置模式。",

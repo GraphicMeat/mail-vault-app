@@ -184,12 +184,15 @@ export function AutoTagSettings() {
     setNewTagName('');
   };
 
-  const providerFor = () => (form.allowRemote ? (form.provider || currentProvider()) : { type: 'localGguf' });
+  // `null` without the remote toggle: the daemon picks this computer's
+  // on-device model (Apple Intelligence, else the downloaded one), the same
+  // one the worker will run the saved rule on.
+  const providerFor = () => (form.allowRemote ? (form.provider || currentProvider()) : null);
   // Google mail never goes to a cloud endpoint (the daemon refuses it too):
   // say so here instead of sending a request that is bound to be turned away.
   const providerForAccount = () => {
     const provider = providerFor();
-    if (!isOnDevice(provider) && mailMustStayOnDevice([accountId])) throw googleMailRefusal();
+    if (provider && !isOnDevice(provider) && mailMustStayOnDevice([accountId])) throw googleMailRefusal();
     return provider;
   };
 
@@ -226,10 +229,10 @@ export function AutoTagSettings() {
       if (manualPreviewKey.current === previewKey) return;
       setPreviewing(true);
       try {
-        const rows = await previewRule({ rule: formToDraft(form), accountId, provider: { type: 'localGguf' } });
+        const rows = await previewRule({ rule: formToDraft(form), accountId, provider: null });
         if (!cancelled && generation === previewGeneration.current) setPreviewRows(rows);
       } catch (error) {
-        if (!cancelled && generation === previewGeneration.current) setPreviewRows({ error: error?.message || String(error) });
+        if (!cancelled && generation === previewGeneration.current) setPreviewRows({ error: aiErrorText(error, t, error?.message || String(error)) });
       } finally {
         if (!cancelled && generation === previewGeneration.current) setPreviewing(false);
       }

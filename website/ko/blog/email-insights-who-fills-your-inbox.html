@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>메일 분석: 누가 받은편지함을 채우는지 확인하기 - MailVault 블로그</title>
+  <meta name="description" content="누가 메일을 가장 많이 보내고, 언제 메일이 쌓일까요? MailVault 메일 분석이 컴퓨터의 헤더로 둘 다 답합니다. 읽는 법과 활용하는 법.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/email-insights-who-fills-your-inbox.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/email-insights-who-fills-your-inbox.html">
+  <meta property="og:title" content="MailVault의 메일 분석: 누가, 언제 받은편지함을 채우는가">
+  <meta property="og:description" content="누가 메일을 가장 많이 보내고, 언제 메일이 쌓일까요? MailVault 메일 분석이 컴퓨터의 헤더로 둘 다 답합니다. 읽는 법과 활용하는 법.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault의 메일 분석: 누가, 언제 받은편지함을 채우는가">
+  <meta name="twitter:description" content="누가 메일을 가장 많이 보내고, 언제 메일이 쌓일까요? MailVault 메일 분석이 컴퓨터에 있는 헤더로 둘 다 답합니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailVault의 메일 분석: 누가, 언제 받은편지함을 채우는가",
+  "description": "누가 메일을 가장 많이 보내고, 언제 메일이 쌓일까요? MailVault 메일 분석이 컴퓨터의 헤더로 둘 다 답합니다. 읽는 법과 활용하는 법.",
+  "url": "https://mailvaultapp.com/ko/blog/email-insights-who-fills-your-inbox.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailVault 메일 분석은 무료입니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "예. 메일 분석과 Explorer는 무료 앱에 들어 있으며 계정도 로그인도 필요 없습니다. MailVault 2.13.0에서 추가되었습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "메일 분석이 내 메일을 어딘가로 업로드합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "아니요. 메일 분석은 이미 컴퓨터에 저장된 헤더 데이터로 만들어집니다. 차트는 메시지 본문이나 첨부 파일을 읽지 않으며, 어떤 서비스에도 업로드되는 것은 없습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "메일 분석에서 모든 계정을 한 번에 볼 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "아니요. 메일 분석은 한 번에 한 계정을 봅니다. 페이지 위쪽의 계정 메뉴로 계정을 바꾸십시오."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "왜 웹메일보다 숫자가 적습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "메일 분석은 헤더가 이 컴퓨터에 있는 메일만 셉니다. 데이터 범위 세부 정보를 열면 폴더마다 로컬에 저장된 헤더 수와 서버에 있는 것으로 알려진 메시지 수를 볼 수 있습니다. 메일함을 더 많이 로컬에 저장한 다음 분석 새로 고침을 누르십시오."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "메일 분석으로 어떤 발신자가 저장 공간을 가장 많이 쓰는지 알 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "직접적으로는 아닙니다. 메일 분석은 크기가 아니라 메시지 수로 발신자 순위를 매깁니다. 큰 메일을 찾으려면 첨부 파일 보기나 from:name has:attachment 같은 검색을 쓰십시오."
+      }
+    }
+  ]
+}
+  </script>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+      <nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="언어 선택"><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/email-insights-who-fills-your-inbox.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/email-insights-who-fills-your-inbox.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/email-insights-who-fills-your-inbox.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/email-insights-who-fills-your-inbox.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/email-insights-who-fills-your-inbox.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/email-insights-who-fills-your-inbox.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/email-insights-who-fills-your-inbox.html" lang="ko" hreflang="ko" translate="no" aria-current="page">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/email-insights-who-fills-your-inbox.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/email-insights-who-fills-your-inbox.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary><nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-08" class="text-sm text-primary-500 font-medium">2026년 10월 8일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault의 메일 분석: 누가, 언제 받은편지함을 채우는가</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7분 분량</span></div>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>메일 분석은 메일함을 실제로 활용할 수 있는 정보로 바꿔 주는 MailVault의 기능입니다. 발신자 지도, 타임라인, 활동 달력이 누가, 얼마나 자주 메일을 보내는지, 어느 날 메일이 쌓이는지 보여 줍니다. 이 글은 각 보기를 차례로 살펴보고, 가장 많이 보내는 발신자를 찾는 방법과 찾은 뒤에 할 일을 설명합니다. 진짜 문제가 가득 찬 메일함이고 오늘 당장 공간을 되찾고 싶다면, 대신 <a href="/ko/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">오래된 메일을 잃지 않고 메일 저장 공간을 비우는</a> 가이드부터 보십시오.</p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">빠른 답</p>
+            <ul class="list-disc pl-6 space-y-1 text-sm">
+              <li>MailVault 사이드바에서 <strong>메일 분석</strong>을 여십시오. 무료이며 계정이 필요 없습니다.</li>
+              <li>누가 메일을 가장 많이 보내는지 보려면 발신자 지도를 열고 <strong>발신자 정렬</strong>을 <strong>메시지 수</strong>로 설정하십시오.</li>
+              <li>메일이 언제 쌓이는지 보려면 <strong>활동</strong>을 여십시오. 하루에 칸 하나이며, 바쁜 날일수록 진하게 표시됩니다.</li>
+              <li>모든 것은 이미 컴퓨터에 있는 메시지 헤더로 만들어집니다. 차트는 아무것도 업로드하지 않습니다.</li>
+            </ul>
+          </div>
+
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">메일 분석이 보여 주는 것</h2>
+          <p>메일 분석은 사이드바에서 전체 화면으로 열리며 탭이 세 개 있습니다. 탭들은 위쪽의 같은 컨트롤을 공유합니다. 어느 계정인지, 어느 날짜 범위인지(최근 30일, 최근 90일, 최근 12개월 또는 직접 고른 날짜), 어느 방향인지(받은 메일, 보낸 메일, 또는 모두), 그리고 <strong>자동 발송으로 추정되는 발신자 숨기기</strong> 체크박스입니다. 마지막 것은 기계가 보낸 것으로 보이는 메일의 발신자를 뺍니다. no-reply 주소, 또는 메일링 리스트가 붙이는 List-Id, List-Unsubscribe, bulk Precedence 헤더가 기준입니다.</p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th class="py-2 pr-4 font-semibold">보기</th>
+                  <th class="py-2 pr-4 font-semibold">그리는 것</th>
+                  <th class="py-2 font-semibold">답하는 질문</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">발신자 지도</td>
+                  <td class="py-2 pr-4">가운데에 내가 있고, 발신자마다 거품 하나입니다. 거품 면적은 메시지 수, 거리는 마지막 연락 이후의 시간입니다.</td>
+                  <td class="py-2">누가 가장 많이 보내고, 누가 조용해졌는가?</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">타임라인</td>
+                  <td class="py-2 pr-4">시간 축을 따라 발신자마다 줄 하나. 받은 메일은 원, 보낸 메일은 마름모. 주별, 일별, 메시지별로 자세히 볼 수 있습니다.</td>
+                  <td class="py-2">이 발신자는 얼마나 자주 보내고, 나는 답장을 하는가?</td>
+                </tr>
+                <tr>
+                  <td class="py-2 pr-4 font-medium">활동</td>
+                  <td class="py-2 pr-4">하루에 칸 하나인 달력 격자로, 그날 오간 메일 양에 따라 색이 진해집니다.</td>
+                  <td class="py-2">메일은 언제 쌓이는가?</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>모든 보기는 누를 수 있습니다. 거품, 줄 위의 점, 또는 날짜를 누르면 해당 메시지가 목록으로 열리고, 메일 분석을 떠나지 않고 읽을 수 있습니다.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">메일을 가장 많이 보내는 사람 찾기</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>메일 분석을 열고 <strong>계정</strong>에서 계정을 고르십시오. 메일 분석은 한 번에 한 계정을 봅니다.</li>
+            <li><strong>날짜 범위</strong>를 <em>최근 12개월</em>로, <strong>송수신 방향</strong>을 <em>수신</em>으로 설정하십시오.</li>
+            <li><strong>발신자 지도</strong>에서 가장 큰 거품이 가장 많이 보내는 발신자입니다. 지도 아래에서 <strong>발신자 정렬</strong>을 <em>최근 연락순</em>(기본값)에서 <em>메시지 수</em>로 바꾸면 숫자가 붙은 순위 목록으로 볼 수 있습니다.</li>
+            <li>발신자를 누르면 받은 수와 보낸 수, 마지막 연락 날짜, 자동 발송으로 분류되었다면 그 이유가 보입니다.</li>
+          </ol>
+          <p>그런 다음 두 번 해 보십시오. 자동 발송으로 추정되는 발신자 숨기기를 끈 상태로 한 번, 켠 상태로 한 번. 첫 번째 목록은 대개 뉴스레터, 쇼핑몰, 알림입니다. 두 번째 목록은 실제로 메일을 주고받는 사람들이며, 대개 훨씬 짧습니다.</p>
+
+          <figure class="my-6">
+            <img src="/screenshots/ko/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 메일 분석의 발신자 지도. 두 글자 이니셜이 적힌 거품들이 ‘나’라고 적힌 원을 둘러싸고 있습니다. 설명에는 거품 면적은 메시지 수, 거리는 2026년 9월 24일 기준 마지막 연락 이후의 시간이라고 적혀 있습니다. 지도 아래에서 발신자 정렬이 최근 연락순으로 설정되어 있습니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">시험용 계정의 발신자 지도. 거품이 클수록 메일을 많이 보냈고, 가까울수록 최근에 보냈습니다. 지도 아래의 정렬 컨트롤은 최근 연락순으로 시작합니다.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">어떤 발신자가 공간을 가장 많이 차지합니까?</h2>
+          <p>여기서 메일 분석에는 알아 둘 만한 한계가 있습니다. 메가바이트가 아니라 메시지 수를 셉니다. 짧은 알림 900통을 보낸 발신자는 지도를 가득 채우지만, 큰 PDF 여섯 개를 보낸 고객은 거의 보이지 않습니다. 메시지 수는 공간을 대략 짐작하는 기준일 뿐이라, 잡동사니를 찾는 데는 좋지만 무거운 메일을 찾는 데는 맞지 않습니다.</p>
+          <p>무거운 메일은 첨부 파일을 보면 됩니다. 텍스트는 작고, 메시지를 크게 만드는 것은 파일입니다. MailVault에서 찾는 방법은 두 가지입니다.</p>
+          <ul class="list-disc pl-6 space-y-2">
+            <li>사이드바의 기본 <strong>첨부 파일</strong> 보기는 파일이 첨부된 메시지를 나열합니다.</li>
+            <li><code>from:name has:attachment</code> 같은 연산자로 검색하면 한 발신자가 보낸 파일 첨부 메일을 볼 수 있습니다. <code>before:2024-01-01</code>을 더하면 오래된 메일로 범위가 좁혀집니다.</li>
+          </ul>
+          <p>두 가지를 함께 쓰십시오. 메일 분석은 누가 많이 보내는지 알려 주고, 검색은 그중 누가 큰 메일을 보내는지 알려 줍니다.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">메일이 언제 쌓이는지 보기</h2>
+          <p><strong>활동</strong> 탭은 한 해의 메일을 가장 빨리 파악할 수 있는 그림입니다. 칸 하나가 하루이고, 진한 칸일수록 메일이 많았다는 뜻입니다. 패턴은 금방 드러납니다. 월요일마다 몰려오는 메일, 조용한 8월, 프로젝트 하나가 받은편지함을 덮어 버린 봄의 한 주. 칸을 누르면 그날 정확히 무엇이 도착했는지 보입니다.</p>
+          <p><strong>타임라인</strong> 탭은 같은 이야기를 발신자별로 보여 줍니다. 뉴스레터는 점이 고르게 이어진 줄로, 바쁜 고객은 촘촘한 덩어리로, 한쪽으로만 흐르게 된 관계는 마름모 없이 원만 늘어선 줄로 나타납니다. 확대하려면 <strong>타임라인 상세 수준</strong>을 주별, 일별, 메시지별로 바꾸십시오.</p>
+
+          <figure class="my-6">
+            <img src="/screenshots/ko/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="시험용 계정에서 본 MailVault 메일 분석의 타임라인 탭. 메일 이벤트 82건, 수신 82건, 발신 5건이 표시되어 있습니다. 합계 아래 안내에는 이 기기에서 사용할 수 있는 메일을 기준으로 합니다, 이 기기에 일부 메일이 없습니다. 집계가 불완전할 수 있습니다, 51건이 대체 날짜를 사용합니다라고 적혀 있습니다. 그 아래에 2025년 9월 25일부터 2026년 9월 24일까지 발신자마다 줄이 하나씩 있고, 받은 메일은 점으로 표시됩니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">발신자마다 줄 하나인 타임라인. 합계 아래의 범위 안내를 보십시오. 이 시험용 계정은 메일 일부만 기기에 있었고, 메일 분석은 짐작하는 대신 그렇다고 알려 줍니다.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">찾은 것을 처리하기</h2>
+          <p>메일 분석은 살펴보는 곳입니다. 정리는 일반 메일 보기에서 하며, Explorer를 쓰면 빠릅니다.</p>
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>폴더로 돌아가 메시지 목록을 <strong>목록</strong>에서 <strong>Explorer</strong>로 바꾸십시오.</li>
+            <li><strong>분류 기준</strong>을 <strong>보낸 사람</strong>으로 설정하십시오. 상대마다 그룹 하나가 되며, 담긴 메일 수, 이미 볼트에 있는 수, 읽지 않은 수가 표시됩니다.</li>
+            <li>발신자 행의 체크박스를 선택하면 그 그룹의 모든 메시지가 한 번에 선택됩니다. 큰 메일함에서 Explorer에 "불러온 이메일을 기준으로 그룹을 표시합니다. 더 많은 메일이 있습니다."라고 나오면, 먼저 메일을 더 불러와 그룹에 그 발신자의 메일이 모두 들어가게 하십시오.</li>
+            <li>할 일을 고르십시오. <strong>보관</strong>은 메일을 볼트에 복사하고 서버는 건드리지 않습니다(무료). <strong>서버에서 삭제</strong>는 서버에서 메일을 지웁니다(무료). 이미 볼트에 있는 메일은 사본이 남지만, 그렇지 않은 메일은 영영 사라지므로 먼저 보관하십시오. <a href="/ko/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">보관 후 삭제</a>는 메일을 하나씩 볼트에 저장하고 확인한 다음 서버 사본을 지웁니다(Premium).</li>
+          </ol>
+
+          <figure class="my-6">
+            <img src="/screenshots/ko/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="분류 기준을 보낸 사람으로 설정한 MailVault Explorer. 요약 행에 그룹 20개, 메일 82개, 읽지 않음 13개가 표시됩니다. 발신자 행마다 체크박스, 이름, 주소, 개수가 있습니다. 예: Theo Lomas, 메일 6개, 보관함에 6개, 읽지 않음 1개." class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">보낸 사람 기준 Explorer. 행의 체크박스는 폴더에서 불러온 그 발신자의 메일을 모두 선택해, 보관하거나 삭제할 수 있게 합니다.</figcaption>
+          </figure>
+
+          <p>메일링 리스트에는 더 짧은 길이 있습니다. 발신자의 메일에 구독 취소 링크가 있으면 메일 분석의 발신자 세부 정보에 <strong>구독 취소</strong> 버튼이 나타납니다. MailVault는 항상 먼저 묻습니다. 리스트가 원클릭 구독 취소를 지원하고 메시지가 DKIM을 통과했다면 MailVault가 직접 요청을 보내고, 그렇지 않으면 브라우저에서 리스트의 구독 취소 페이지를 열거나 미리 작성된 구독 취소 메일을 엽니다.</p>
+          <p>같은 종류의 메일이 매달 다시 쌓인다면 <a href="/ko/features/email-cleanup.html" class="text-primary-500 hover:text-primary-600 underline">메일 정리</a>(Premium)가 뉴스레터, 프로모션 등 여러 카테고리를 분류하고 카테고리마다 남기거나 보관하거나 삭제할 수 있습니다. 계정과 폴더별로 기간 규칙을 둘 수 있습니다.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">내 컴퓨터에서 계산</h2>
+          <p>메일 분석은 MailVault가 이미 디스크에 가지고 있는 메시지 헤더를 읽습니다. 열어 본 폴더의 캐시된 헤더와 볼트의 메시지에서 보낸 사람, 받는 사람, 날짜를 가져옵니다. 차트를 그리기 위해 메시지 본문이나 첨부 파일을 읽지 않으며, MailVault로 전송되는 것은 없습니다. MailVault 계정이 관여하지 않고, 네트워크를 꺼도 차트가 작동합니다.</p>
+          <p>외부와 연결되는 동작은 두 가지이며, 사용자가 고를 때만 일어납니다. 메일 분석에서 메시지를 열면 평소처럼 불러오므로, 자신의 메일 서버에서 내려받을 수 있습니다. 구독 취소는 위에서 설명한 대로 메일링 리스트에 연락합니다.</p>
+          <p>메일 분석은 이 기기에 있는 것만 알기 때문에, 그림이 얼마나 완전한지도 알려 줍니다. 컨트롤 아래에 "이 기기에서 사용할 수 있는 메일을 기준으로 합니다"라는 안내가 있고, <strong>데이터 범위 세부 정보</strong>는 폴더마다 로컬에 저장된 헤더 수와 서버에 있는 것으로 알려진 메시지 수를 나란히 보여 줍니다. 일부 메일이 빠져 있으면 숫자가 불완전할 수 있다고 알려 줍니다. 날짜가 믿을 만하지 않은 메시지가 있으면 대체 날짜를 쓴 항목이 몇 개인지 알려 줍니다. 조용한 달은 범위가 완전할 때만 사실로 받아들이십시오. 범위를 완전하게 하려면 먼저 메일함을 더 많이 컴퓨터에 저장하십시오. 그 방법은 <a href="/ko/guides/what-is-an-email-vault.html" class="text-primary-500 hover:text-primary-600 underline">메일 볼트란 무엇이고 어떻게 만드는지</a>에 관한 가이드에서 다룹니다.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h2>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 메일 분석은 무료입니까?</h3>
+          <p>예. 메일 분석과 Explorer는 무료 앱에 들어 있으며 계정도 로그인도 필요 없습니다. MailVault 2.13.0에서 추가되었습니다.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">메일 분석이 내 메일을 어딘가로 업로드합니까?</h3>
+          <p>아니요. 메일 분석은 이미 컴퓨터에 저장된 헤더 데이터로 만들어집니다. 차트는 메시지 본문이나 첨부 파일을 읽지 않으며, 어떤 서비스에도 업로드되는 것은 없습니다.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">메일 분석에서 모든 계정을 한 번에 볼 수 있습니까?</h3>
+          <p>아니요. 메일 분석은 한 번에 한 계정을 봅니다. 페이지 위쪽의 계정 메뉴로 계정을 바꾸십시오.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">왜 웹메일보다 숫자가 적습니까?</h3>
+          <p>메일 분석은 헤더가 이 컴퓨터에 있는 메일만 셉니다. 데이터 범위 세부 정보를 열면 폴더마다 로컬에 저장된 헤더 수와 서버에 있는 것으로 알려진 메시지 수를 볼 수 있습니다. 메일함을 더 많이 로컬에 저장한 다음 분석 새로 고침을 누르십시오.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">메일 분석으로 어떤 발신자가 저장 공간을 가장 많이 쓰는지 알 수 있습니까?</h3>
+          <p>직접적으로는 아닙니다. 메일 분석은 크기가 아니라 메시지 수로 발신자 순위를 매깁니다. 큰 메일을 찾으려면 첨부 파일 보기나 from:name has:attachment 같은 검색을 쓰십시오.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">다음에 할 일</h2>
+          <p>가장 바쁜 계정에서 메일 분석을 열고, 발신자 지도를 메시지 수로 정렬하고, 자동 발송 발신자를 보이게 할 때와 숨길 때의 상위 열 곳을 살펴보십시오. 더 이상 읽지 않는 뉴스레터와, 폴더나 규칙으로 보낼 수 있는 알림 발신자를 적어 두십시오. 자세한 내용은 <a href="/ko/features/insights.html" class="text-primary-500 hover:text-primary-600 underline">메일 분석 기능 페이지</a>와 <a href="/ko/faq/explorer-and-insights.html" class="text-primary-500 hover:text-primary-600 underline">Explorer와 메일 분석 FAQ</a>에 있습니다. 메일함이 한도에 가깝다면 <a href="/ko/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">Outlook 저장 공간이 가득 찼을 때 할 일</a>에 관한 가이드가 여기서 이어집니다.</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">누가 받은편지함을 채우는지 확인하십시오.</p>
+            <p class="text-sm mb-4">메일 분석은 macOS, Windows, Linux용 무료 MailVault 앱에 들어 있습니다. 저희 쪽 계정이 필요 없고, 차트는 사용자의 컴퓨터에서 만들어집니다.</p>
+            <div class="flex flex-wrap gap-3"><a href="/ko/get-started.html?plan=free" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">MailVault 무료 다운로드</a><a href="/ko/features/insights.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">메일 분석 보기</a></div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

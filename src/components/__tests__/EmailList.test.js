@@ -1906,7 +1906,7 @@ describe('a saved view drives the grouping', () => {
     });
     const groups = [...container.querySelectorAll('[data-testid="explorer-group-row"]')];
     // 'High', not the stored 'hi' — and the no-value group for the other row.
-    expect(groups.map(n => n.dataset.label)).toEqual(['High', '—']);
+    expect(groups.map(n => n.dataset.label)).toEqual(['High', '-']);
     // The field's own name, which only the schema knows: without it the memo
     // fell back to ''.
     expect(groups[0].dataset.detail).toBe('Priority');

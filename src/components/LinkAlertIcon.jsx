@@ -50,7 +50,7 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
                   </span>
                 </div>
                 <div className="text-xs text-mail-text-muted mb-1">{t('alert.link.linkTextSays')}</div>
-                <div className="text-sm font-mono text-mail-text break-all mb-2">{alert.textContent || '(no text)'}</div>
+                <div className="text-sm font-mono text-mail-text break-all mb-2">{alert.textContent || t('alert.link.noText')}</div>
                 <div className="text-xs text-mail-text-muted mb-1">{t('alert.link.actuallyGoes')}</div>
                 <div className="text-sm font-mono text-mail-text break-all">{alert.actualUrl}</div>
                 <div className="text-xs text-mail-text-muted mt-1">{alert.reason}</div>

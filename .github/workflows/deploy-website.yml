@@ -17,6 +17,9 @@ name: Deploy Website
 #   STRIPE_WEBHOOK_SECRET
 #   STRIPE_PRICE_MONTHLY_EUR
 #   STRIPE_PRICE_YEARLY_EUR
+#   STRIPE_PRICE_MONTHLY_STANDARD_EUR  Optional: sold once all 100 Early Bird spots are taken
+#   STRIPE_PRICE_YEARLY_STANDARD_EUR   Optional: as above; unset = checkout refuses early bird when full
+#   EARLY_BIRD_EXCLUDE_CUSTOMERS       Optional: comma-separated Stripe customer ids that take no spot
 #   GRAPHICMEAT_PARTNER_URL   https://graphicmeat.com
 #   GRAPHICMEAT_PARTNER_KEY   Must equal PARTNER_API_KEY in graphicmeat.com
 #   IP_SALT                   Random 32+ char string
@@ -196,6 +199,9 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_PRICE_MONTHLY_EUR: ${{ secrets.STRIPE_PRICE_MONTHLY_EUR }}
           STRIPE_PRICE_YEARLY_EUR: ${{ secrets.STRIPE_PRICE_YEARLY_EUR }}
+          STRIPE_PRICE_MONTHLY_STANDARD_EUR: ${{ secrets.STRIPE_PRICE_MONTHLY_STANDARD_EUR }}
+          STRIPE_PRICE_YEARLY_STANDARD_EUR: ${{ secrets.STRIPE_PRICE_YEARLY_STANDARD_EUR }}
+          EARLY_BIRD_EXCLUDE_CUSTOMERS: ${{ secrets.EARLY_BIRD_EXCLUDE_CUSTOMERS }}
           # No SMTP_* here on purpose: this site sends no mail of its own.
           # Contact and newsletter mail go through graphicmeat.com's partner API,
           # which holds the only Purelymail credentials.
@@ -227,6 +233,9 @@ jobs:
           STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
           STRIPE_PRICE_MONTHLY_EUR=${STRIPE_PRICE_MONTHLY_EUR}
           STRIPE_PRICE_YEARLY_EUR=${STRIPE_PRICE_YEARLY_EUR}
+          STRIPE_PRICE_MONTHLY_STANDARD_EUR=${STRIPE_PRICE_MONTHLY_STANDARD_EUR}
+          STRIPE_PRICE_YEARLY_STANDARD_EUR=${STRIPE_PRICE_YEARLY_STANDARD_EUR}
+          EARLY_BIRD_EXCLUDE_CUSTOMERS=${EARLY_BIRD_EXCLUDE_CUSTOMERS}
           EOF
           chmod 600 /tmp/secrets.env
 

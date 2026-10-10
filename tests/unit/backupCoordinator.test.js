@@ -658,11 +658,11 @@ describe('BackupCoordinator — manual backup result contract', () => {
     authUtils.resolveServerAccount.mockResolvedValueOnce({
       ok: false,
       reason: 'missing_credentials',
-      message: 'Credentials unavailable — retry keychain access or re-enter in Settings > Accounts',
+      message: 'Credentials unavailable: retry keychain access or re-enter in Settings > Accounts',
     });
     const result = await backupScheduler.triggerManualBackup('acc-1');
     expect(result.status).toBe('failed_credentials');
-    expect(result.message).toBe('Credentials unavailable — retry keychain access or re-enter in Settings > Accounts');
+    expect(result.message).toBe('Credentials unavailable: retry keychain access or re-enter in Settings > Accounts');
   });
 
   it('triggerManualBackup resolves with failed immediately on error (no retries)', async () => {

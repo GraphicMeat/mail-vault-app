@@ -174,4 +174,29 @@ describe('AutoTagSettings', () => {
     expect(within(results).getByText(/only processed by on-device AI/)).toBeTruthy();
     expect(within(results).queryByText(/E_GOOGLE_MAIL/)).toBeNull();
   });
+
+  it('previews a rule without the remote toggle on the daemon\'s on-device default, not on the GGUF alone', async () => {
+    useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'appleFm', endpointUrl: '', endpointModel: '', endpointConsented: false } });
+    mockDaemonCall.mockResolvedValueOnce({ candidates: [] });
+    render(<AutoTagSettings />);
+    fireEvent.click(screen.getByText('New rule'));
+    fireEvent.change(screen.getByLabelText('Rule, in plain English'), { target: { value: 'receipts' } });
+
+    fireEvent.click(screen.getByText('Preview'));
+
+    await screen.findByTestId('auto-tag-preview-results');
+    expect(mockDaemonCall).toHaveBeenCalledWith('auto_tags.preview', expect.objectContaining({ provider: null }));
+  });
+
+  it('says what to do when this computer has no on-device AI', async () => {
+    mockDaemonCall.mockRejectedValueOnce(new Error('E_NO_ON_DEVICE_MODEL: no on-device AI is available'));
+    render(<AutoTagSettings />);
+    fireEvent.click(screen.getByText('New rule'));
+    fireEvent.change(screen.getByLabelText('Rule, in plain English'), { target: { value: 'receipts' } });
+    fireEvent.click(screen.getByText('Preview'));
+
+    const results = await screen.findByTestId('auto-tag-preview-results');
+    expect(within(results).getByText(/Turn on Apple Intelligence or download a model/)).toBeTruthy();
+    expect(within(results).queryByText(/E_NO_ON_DEVICE/)).toBeNull();
+  });
 });

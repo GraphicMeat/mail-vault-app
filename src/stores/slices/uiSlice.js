@@ -6,6 +6,9 @@ import { getAccountCacheMailboxes as _getAccountMailboxes } from '../../services
 import { _resolveMailboxPath, vaultKey, vaultKeys } from './unifiedHelpers';
 import { setArchivedGroup, deriveArchivedUnion } from './messageListSlice';
 
+// Never resets, so a flash after a clear still differs from the one before.
+let _flashSeq = 0;
+
 export const createUiSlice = (set, get) => ({
   // View mode: 'all' | 'server' | 'local'
   viewMode: 'all',
@@ -14,6 +17,11 @@ export const createUiSlice = (set, get) => ({
   // and a persisted flag that hides most of a mailbox across restarts reads
   // as lost mail, not as a filter.
   unreadOnly: false,
+
+  // An email outside the inbox cannot be unread, so the filter in such a folder
+  // can only be empty. Turning it on there raises this, `{ path, n }`, and the
+  // sidebar flashes that folder's row once; `n` makes a repeat replay it.
+  unreadFlash: null,
 
   // Selection keys of messages read WHILE the filter was on. Reading a message
   // marks it read, and cutting its row at that moment made the message the
@@ -192,7 +200,18 @@ export const createUiSlice = (set, get) => ({
     }
   },
 
-  toggleUnreadOnly: () => set(state => ({ unreadOnly: !state.unreadOnly, unreadKeep: new Set() })),
+  toggleUnreadOnly: () => set(state => {
+    const on = !state.unreadOnly;
+    // All Inboxes has no folder row of its own to flash.
+    const flash = on && !state.unifiedInbox && state.activeMailbox && state.activeMailbox !== 'INBOX';
+    return {
+      unreadOnly: on,
+      unreadKeep: new Set(),
+      unreadFlash: flash ? { path: state.activeMailbox, n: ++_flashSeq } : null,
+    };
+  }),
+
+  clearUnreadFlash: () => set({ unreadFlash: null }),
 
   // Hold these rows on screen for the rest of this filter session. A no-op
   // while the filter is off — nothing is being hidden, so nothing needs

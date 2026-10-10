@@ -15,7 +15,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/ko/features/archive-and-delete.html">
   <meta property="og:title" content="보관 후 삭제: 메일함을 비우세요">
   <meta property="og:description" content="메일을 내 컴퓨터에 보관하고, MailVault가 사본을 하나씩 검증하게 한 뒤 서버에서 제거해 공간을 확보하세요.">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -26,7 +26,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="보관 후 삭제: 메일함을 비우세요">
   <meta name="twitter:description" content="메일을 내 컴퓨터에 보관하고, MailVault가 사본을 하나씩 검증하게 한 뒤 서버에서 제거해 공간을 확보하세요.">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -78,8 +78,8 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/archive-and-delete.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-<link rel="stylesheet" href="/assets/home.css?v=15">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/home.css?v=23">
 </head>
 <body class="mv-site min-h-screen"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
 <header class="mv-header">
@@ -130,7 +130,9 @@
 <p class="mv-eyebrow">보관 후 삭제 </p>
 <h1 id="fp-title">메일함을 비우세요.<br><span class="hm-grad">아무것도 잃지 않습니다.</span></h1>
 <p class="hm-body fp-lead">아직 필요한 메일을 저장하고, MailVault가 디스크의 모든 사본을 확인하게 한 뒤 서버에서 제거하세요. 메일함이 가득 찼다고 기록을 지울 필요가 없습니다.</p>
-<div class="mv-actions"><a class="mv-button" href="/ko/get-started.html?plan=free">MailVault 다운로드</a><a class="mv-button mv-secondary" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 라이브 데모 사용해 보기">라이브 데모 사용해 보기 ↗</a></div>
+<div class="mv-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">macOS용 다운로드</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page href="/ko/thank-you.html?platform=windows&amp;start=1" hidden>Windows용 다운로드</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Linux용 다운로드 (.deb)</a><a class="mv-button" data-hero-platform="mobile" href="/ko/get-started.html?plan=free" hidden>MailVault 다운로드</a></div>
+<div class="fp-links"><a class="mv-text-link" href="/ko/get-started.html?plan=free#platforms">다른 플랫폼 및 형식 →</a>
+<a class="mv-text-link" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 라이브 데모 사용해 보기">라이브 데모 사용해 보기 ↗</a></div>
 <figure class="fp-closeup"><button class="mv-shot" type="button" data-image aria-label="확대: MailVault의 보관 후 삭제, 클로즈업"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/premium-auto-cleanup-detail-720.webp 720w, /screenshots/ko/premium-auto-cleanup-detail-1440.webp 1440w, /screenshots/ko/premium-auto-cleanup-detail-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 760px"><img src="/screenshots/ko/premium-auto-cleanup-detail-light-1792.webp" srcset="/screenshots/ko/premium-auto-cleanup-detail-light-720.webp 720w, /screenshots/ko/premium-auto-cleanup-detail-light-1440.webp 1440w, /screenshots/ko/premium-auto-cleanup-detail-light-1792.webp 1792w" sizes="(max-width: 900px) 92vw, 760px" width="896" height="341" alt="MailVault의 보관 후 삭제, 클로즈업" fetchpriority="high" decoding="async"></picture></button></figure>
 </div>
 </section>
@@ -138,10 +140,10 @@
 <div class="mv-wrap fp-grid">
 <div>
 <h2 id="fp-how">작동 방식</h2>
-<ul class="fp-how"><li><strong>먼저 보관</strong><span>사본은 보관함에 저장되고, 직접 선택하기 전까지는 서버에도 그대로 남습니다.</span></li><li><strong>Verified before deletion</strong><span>Archive &amp; Delete checks each saved copy before the server copy goes. Archive, Back up &amp; Delete also copies each message to your backup drive and checks that copy too.</span></li><li><strong>Whole accounts, in one job</strong><span>Premium: Archive, back up &amp; delete from server and Archive &amp; delete from server clear the folders and years you choose (all dates, this year, last year, older than 2 years, or the years you pick), saving and checking every copy first. They show their progress in a panel you can minimize, keep going when you close the window or restart, and wait out your daily download limit and Gmail's own limits.</span></li><li><strong>반복 작업을 위한 규칙</strong><span>Premium은 계정별, 폴더별로 정한 기간이 지난 메일을 보관하거나 삭제할 수 있습니다.</span></li></ul>
+<ul class="fp-how"><li><strong>먼저 보관</strong><span>사본은 보관함에 저장되고, 직접 선택하기 전까지는 서버에도 그대로 남습니다.</span></li><li><strong>삭제 전에 확인</strong><span>보관 후 삭제는 서버 사본을 지우기 전에 저장된 사본을 하나하나 확인합니다. 보관, 백업 후 삭제는 각 메시지를 백업 드라이브에도 복사하고 그 사본까지 확인합니다.</span></li><li><strong>계정 전체를 한 번의 작업으로</strong><span>Premium: 보관, 백업 후 서버에서 삭제와 보관 후 서버에서 삭제는 사용자가 고른 폴더와 연도(모든 기간, 올해, 작년, 2년보다 오래된 메일, 또는 직접 고른 연도)를 비우며, 먼저 모든 사본을 저장하고 확인합니다. 진행 상황은 최소화할 수 있는 패널에 표시되고, 창을 닫거나 다시 시작해도 계속 진행되며, 일일 다운로드 한도와 Gmail 자체 한도가 풀릴 때까지 기다립니다.</span></li><li><strong>반복 작업을 위한 규칙</strong><span>Premium은 계정별, 폴더별로 정한 기간이 지난 메일을 보관하거나 삭제할 수 있습니다.</span></li></ul>
 
-<p class="fp-plan"><strong>Free and Premium.</strong> Archive is free, and so is deleting from the server on its own. Archive &amp; Delete, Archive, Back up &amp; Delete (which needs a backup folder), the two whole-account jobs in Settings and automatic cleanup rules are Premium. <a class="mv-text-link" href="/ko/pricing.html">Compare plans →</a></p>
-<p class="fp-where"><span>Where to find it</span>Select messages → Archive, or for a whole account Settings → Backup &amp; Restore → Archive &amp; delete</p>
+<p class="fp-plan"><strong>무료와 Premium.</strong> 보관은 무료이고, 서버에서 삭제만 하는 것도 무료입니다. 보관 후 삭제, 보관, 백업 후 삭제(백업 폴더가 필요함), 설정에 있는 계정 전체 작업 두 가지, 자동 정리 규칙은 Premium입니다. <a class="mv-text-link" href="/ko/pricing.html">요금제 비교 →</a></p>
+<p class="fp-where"><span>위치</span>메시지 선택 → 보관, 계정 전체라면 설정 → 백업 및 복원 → 보관 후 삭제</p>
 </div>
 <section class="fp-video" data-youtube-id="" hidden aria-label="동영상: MailVault의 보관 후 삭제">
 <h2>작동 방식 보기</h2>
@@ -167,7 +169,7 @@
 <div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
 <p>메일을 읽고, 메일을 보관하세요.</p>
 </div>
-<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
+<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">
@@ -196,9 +198,9 @@
   "voteSendError": "투표를 보내지 못했습니다. 잠시 후 다시 시도하세요."
 }
   </script>
-<script defer src="/assets/english-site.js?v=20261005-noph">
+<script defer src="/assets/english-site.js?v=20261008-light">
 </script>
-<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09">
+<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/community-support.js?v=3"></script>
 </body>

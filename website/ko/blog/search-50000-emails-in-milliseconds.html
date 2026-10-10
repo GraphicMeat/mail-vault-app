@@ -13,7 +13,7 @@
   <meta property="og:title" content="이메일 50,000통을 밀리초 만에 검색하기: MailVault 로컬 인덱스의 작동 방식">
   <meta property="og:description" content="메시지 50,000개짜리 메일함에서 MailVault 검색 시간을 쟀습니다. 쿼리당 7~14밀리초입니다. 측정 결과, 그 뒤에 있는 SQLite 기술, 그리고 Premium이 첨부 파일과 Vision 이미지 검색을 더하는 방식을 소개합니다.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="MailVault">
@@ -22,15 +22,15 @@
   <meta name="twitter:title" content="이메일 50,000통을 밀리초 만에 검색하기: MailVault 로컬 인덱스의 작동 방식">
   <meta name="twitter:description" content="이메일 50,000통을 7~14 ms에 검색합니다. 실제 테스트 결과와 그 뒤에 있는 SQLite 인덱스.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
   <meta name="twitter:site" content="@GraphicMeat">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=11">
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/search-50000-emails-in-milliseconds.html">
@@ -198,6 +198,10 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">기술: 아주 빠르고 아주 단순한 SQL 데이터베이스</h3>
           <p>검색 서버도, 클라우드 서비스도 없습니다. 인덱스는 볼트 안에 있는 SQLite 파일 하나이며, SQLite는 아마 세계에서 가장 널리 배포된 데이터베이스일 것입니다. MailVault는 SQLite의 전문 검색 엔진인 FTS5를 <strong>trigram</strong> 토크나이저와 함께 사용합니다. 모든 단어가 세 글자씩 겹치는 조각으로 저장됩니다. 그래서 "voic"을 입력하면 "invoice"를 찾을 수 있고, 와일드카드도 정확한 단어 규칙도 필요 없습니다. 악센트는 무시되므로 "reunion"으로 "Réunion"도 찾을 수 있습니다. 단어 사이에 띄어쓰기를 쓰지 않는 일본어와 중국어는 이를 위해 만든 두 번째 테이블을 거칩니다.</p>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="로컬 검색 흐름: 저장된 메시지가 SQLite 인덱스로 들어가고, 쿼리가 결과를 돌려주며, 결과를 열면 저장된 원본을 읽습니다."><figcaption>결과 목록은 인덱스에서 나옵니다. 원본 메시지는 그대로 남아 있어 읽고 확인할 수 있습니다.</figcaption></figure>
+
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice는 inv, nvo, voi, oic, ice로 나뉩니다. 쿼리 voic는 voi와 oic 조각을 공유합니다."><figcaption>세 글자씩 겹치는 조각 덕분에 부분 문자열 일치가 가능해집니다. 이 그림은 토큰화를 보여 줄 뿐, 쿼리 실행 과정 전체를 나타내지는 않습니다.</figcaption></figure>
+
           <p>속도는 세 가지 평범한 결정에서 나옵니다.</p>
           <ul>
             <li><strong>검색은 메시지 파일을 열지 않습니다.</strong> 목록에 필요한 모든 정보(보낸 사람, 제목, 날짜, 폴더, 플래그)가 인덱스 행에 저장되어 있습니다. 메시지 50,000개 테스트에서 결과를 만드는 동안 메일 파서는 한 번도 호출되지 않았습니다.</li>
@@ -239,8 +243,8 @@ status check             5 ms</code></pre>
   </main>
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
-  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
-  <script defer src="/assets/english-site.js?v=20261005-noph"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
 </body>
 </html>

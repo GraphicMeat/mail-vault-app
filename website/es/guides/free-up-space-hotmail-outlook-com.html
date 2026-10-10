@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liberar espacio en Hotmail y Outlook.com | MailVault</title>
+  <meta name="description" content="Libera espacio en Hotmail y Outlook.com paso a paso: vacía Elementos eliminados, encuentra los correos más grandes, guarda una copia local y elimínalo en línea.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/es/guides/free-up-space-hotmail-outlook-com.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/es/guides/free-up-space-hotmail-outlook-com.html">
+  <meta property="og:title" content="Liberar espacio en Hotmail y Outlook.com | MailVault">
+  <meta property="og:description" content="Libera espacio en Hotmail y Outlook.com paso a paso: vacía Elementos eliminados, encuentra los correos más grandes, guarda una copia local y elimínalo en línea.">
+  <meta property="og:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="es_ES">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Liberar espacio en Hotmail y Outlook.com | MailVault">
+  <meta name="twitter:description" content="Libera espacio en Hotmail y Outlook.com paso a paso: vacía Elementos eliminados, encuentra los correos más grandes, guarda una copia local y elimínalo en línea.">
+  <meta name="twitter:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Cómo liberar espacio en Hotmail y Outlook.com sin perder el correo antiguo",
+  "description": "Libera espacio en Hotmail y Outlook.com paso a paso: vacía Elementos eliminados, encuentra los correos más grandes, guarda una copia local y elimínalo en línea.",
+  "url": "https://mailvaultapp.com/es/guides/free-up-space-hotmail-outlook-com.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "¿Por qué mi Hotmail sigue lleno después de eliminar correos?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Los correos eliminados van a Elementos eliminados, y siguen contando en tu almacenamiento hasta que vacías esa carpeta o hasta que se quitan a los 30 días. Los correos quitados con Limpiar también cuentan hasta que salen de Elementos eliminados. Microsoft dice que los cambios pueden tardar hasta 24 horas en verse."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Guardar los adjuntos en OneDrive libera espacio en Outlook.com?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Solo después de eliminar el correo original. OneDrive usa tu almacenamiento en la nube de Microsoft, que también usan tus adjuntos de Outlook.com, así que mover archivos allí no ayuda cuando el que está lleno es ese almacenamiento."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Puedo liberar espacio sin perder los correos antiguos?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sí. Guarda una copia de los correos antiguos en tu ordenador, comprueba que la copia se abre y luego elimina los correos de Outlook.com. En la app gratuita MailVault son dos pasos: Archivar y luego Eliminar del servidor."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Merece la pena vaciar la carpeta Correo no deseado?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Rara vez libera mucho. Outlook.com elimina por sí solo los elementos de Correo no deseado a los 10 días. Revisa la página Almacenamiento de Configuración para ver qué carpetas son de verdad las más grandes."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/es/" aria-label="Inicio de MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">por Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Navegación principal"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Dar una estrella a MailVault en GitHub" title="Dar una estrella a MailVault en GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Enviar un corazón a MailVault" title="Enviar un corazón a MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Seleccionar idioma"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Español</span><span class="mv-language-code" aria-hidden="true">ES</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/free-up-space-hotmail-outlook-com.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/free-up-space-hotmail-outlook-com.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/free-up-space-hotmail-outlook-com.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/free-up-space-hotmail-outlook-com.html" lang="es" hreflang="es" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/free-up-space-hotmail-outlook-com.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/free-up-space-hotmail-outlook-com.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/free-up-space-hotmail-outlook-com.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/free-up-space-hotmail-outlook-com.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/free-up-space-hotmail-outlook-com.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Cambiar tema de color" title="Cambiar tema de color"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Demo</a><a class="mv-button mv-nav-download" href="/es/get-started.html?plan=free">Descargar</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menú</span></summary>
+<nav aria-label="Navegación móvil"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a><a href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Probar la demo</a><a href="/es/get-started.html?plan=free">Descargar gratis</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Cambiar tema de color</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Volver al inicio
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cómo liberar espacio en Hotmail y Outlook.com sin perder el correo antiguo</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 min de lectura</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>Actualizado el 8 de octubre de 2026</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>
+            Para liberar espacio en Hotmail u Outlook.com, vacía <strong>Elementos eliminados</strong>, encuentra tus correos más grandes con <strong>Filtrar</strong> &gt; <strong>Ordenar por</strong> &gt; <strong>Tamaño</strong> y quita el correo antiguo que ya no necesitas en línea. Antes de eliminar el correo antiguo que quieres conservar, guarda una copia en tu ordenador. Esta página es la lista práctica de pasos. Las direcciones de Hotmail y Live.com son cuentas de Outlook.com, así que los mismos pasos sirven para las tres. Si no tienes claro si está lleno tu buzón o tu almacenamiento en la nube, empieza por <a href="/es/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">almacenamiento de Outlook lleno: qué hacer</a>.
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Respuesta rápida</p>
+            <ol class="list-decimal pl-6 space-y-1">
+              <li>Abre <strong>Configuración</strong> &gt; <strong>Cuenta</strong> &gt; <strong>Almacenamiento</strong> y mira qué carpetas son grandes.</li>
+              <li>Vacía Elementos eliminados.</li>
+              <li>Ordena por tamaño y ocúpate de los correos más grandes.</li>
+              <li>Guarda una copia del correo antiguo en tu ordenador y compruébala.</li>
+              <li>Elimina ese correo antiguo de Outlook.com.</li>
+              <li>Vuelve a vaciar Elementos eliminados y espera hasta 24 horas a que se actualicen las cifras.</li>
+            </ol>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Antes de empezar: dos datos que cambian el plan</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Hay dos límites.</strong> Una cuenta gratuita tiene 15 GB para el correo y 5 GB de almacenamiento en la nube de Microsoft. Microsoft dice que el almacenamiento en la nube lo comparten OneDrive y los adjuntos de Outlook.com. Si cualquiera de los dos está lleno, no puedes enviar ni recibir correo.</li>
+            <li><strong>Eliminar no es lo mismo que liberar espacio.</strong> Un correo eliminado va a Elementos eliminados y sigue contando hasta que vacías esa carpeta, o hasta que se quita a los 30 días.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Paso 1: mira qué carpetas ocupan el espacio</h2>
+
+          <p>
+            Inicia sesión en Outlook.com. Selecciona <strong>Configuración</strong>, luego <strong>Cuenta</strong> y luego <strong>Almacenamiento</strong>. La página muestra cuánto espacio ocupa cada carpeta. Apunta las tres carpetas más grandes. Las volverás a revisar al final.
+          </p>
+
+          <p>
+            La misma página puede eliminar de forma permanente todos los elementos de una carpeta, o solo los de más de 3, 6 o 12 meses. No la uses todavía en Bandeja de entrada, Elementos enviados ni Archivo. Después no puedes recuperar esos correos.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Paso 2: vacía Elementos eliminados</h2>
+
+          <p>
+            Abre la carpeta <strong>Elementos eliminados</strong>, selecciona los correos y elimínalos. Repasa antes la carpeta. A veces contiene un correo que eliminaste por error.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Si usaste Limpiar:</strong> los correos que quitó Limpiar no reducen tu almacenamiento hasta que también se eliminan de Elementos eliminados.</li>
+            <li><strong>Correo no deseado</strong> se vacía solo. Outlook.com elimina sus elementos a los 10 días, así que rara vez contiene mucho.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Paso 3: encuentra los correos más grandes</h2>
+
+          <p>
+            Abre una carpeta grande. En la parte superior de la lista de mensajes, selecciona <strong>Filtrar</strong> &gt; <strong>Ordenar por</strong> &gt; <strong>Tamaño</strong>. Si los correos más pequeños aparecen arriba, vuelve a seleccionarlo. Unos pocos correos con adjuntos grandes suelen ocupar más que miles de correos cortos.
+          </p>
+
+          <p>Para cada correo grande, decide:</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>No lo necesitas:</strong> selecciónalo y pulsa <strong>Mayús</strong> + <strong>Supr</strong>. Así se elimina de forma permanente, sin pasar por Elementos eliminados.</li>
+            <li><strong>Solo necesitas el archivo:</strong> guarda el adjunto en tu ordenador y luego elimina el correo. El adjunto solo se quita cuando se elimina el correo entero.</li>
+            <li><strong>Necesitas el correo:</strong> déjalo para el paso 4, que guarda una copia completa antes de eliminar nada.</li>
+          </ul>
+
+          <p>
+            Microsoft también sugiere <strong>Guardar en OneDrive</strong>, que aparece debajo de un adjunto. Ten cuidado con eso. OneDrive usa los mismos 5 GB de almacenamiento en la nube que tus adjuntos. Si tu problema es el almacenamiento en la nube, mover archivos allí no ayuda.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Paso 4: guarda una copia local del correo antiguo</h2>
+
+          <p>
+            Los pasos 1 a 3 liberan espacio tirando cosas. Para años de correo que podrías volver a necesitar (recibos, contratos, cartas, fotos de la familia), haz antes una copia en tu ordenador. Así puedes eliminarlo en línea sin perderlo.
+          </p>
+
+          <p>MailVault es una forma de hacerlo. Es gratis y funciona en macOS, Windows y Linux.</p>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><a href="/es/get-started.html" class="text-primary-500 hover:text-primary-600 underline">Descarga MailVault</a> y ábrelo. Usa la versión 2.19.1 o posterior: el archivado de cuentas de Outlook.com funciona a partir de esa versión.</li>
+            <li>Elige <strong>Añadir cuenta</strong>, luego <strong>Outlook / Microsoft 365</strong>, y escribe tu dirección de Outlook.com, Hotmail o Live.com.</li>
+            <li>Selecciona <strong>Inicia sesión con Microsoft</strong> y termina el inicio de sesión en tu navegador. Cuando vuelvas, MailVault añade la cuenta. No escribes ninguna contraseña en MailVault, y no hay ajustes de servidor que introducir.</li>
+            <li>Abre la carpeta que quieres vaciar. Marca la casilla de la parte superior de la lista de mensajes (su etiqueta es <strong>Seleccionar mensajes…</strong>). En el cuadro de diálogo, elige un año en <strong>Por año</strong>, o fija un <strong>Intervalo personalizado</strong>, y continúa. Si el cuadro dice que solo algunos correos están disponibles en local, deja que la carpeta termine de cargarse en MailVault y vuelve a intentarlo.</li>
+            <li>Elige <strong>Archivar</strong>. Copia los correos en tu bóveda, y también se quedan en el servidor.</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/selection-dialog-archive-720.webp 720w, /screenshots/es/selection-dialog-archive-1440.webp 1440w, /screenshots/es/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/es/selection-dialog-archive-light-1440.webp" srcset="/screenshots/es/selection-dialog-archive-light-720.webp 720w, /screenshots/es/selection-dialog-archive-light-1440.webp 1440w, /screenshots/es/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="El cuadro Elige la acción de MailVault para una selección de correos, con Archivar seleccionado. Archivar dice Copiar a tu bóveda. También permanece en el servidor. Debajo están Desarchivar, Eliminar del servidor, Archivar y eliminar y Eliminar en todas partes." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Archivar es el primer paso seguro: hace la copia y no cambia nada en el servidor. La nota de la parte superior del cuadro indica cuántos de los correos seleccionados ya están en la bóveda.</figcaption>
+          </figure>
+
+          <p>
+            Ahora comprueba la copia. En la barra lateral, cambia la lista de carpetas a <strong>Bóveda</strong>. Abre algunos de los correos más antiguos, abre uno o dos adjuntos y busca algo que recuerdes. Cada correo se guarda como un archivo <code>.eml</code> estándar en tu ordenador, así que otras apps de correo también pueden abrirlo.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Paso 5: elimina el correo antiguo de Outlook.com</h2>
+
+          <p>Cuando tengas claro que la copia está bien, tienes tres formas de quitar el correo del servidor.</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Gratis, en MailVault:</strong> vuelve a seleccionar los mismos correos y elige <strong>Eliminar del servidor</strong>. Solo quita la copia del servidor. Los correos que ya están en tu bóveda conservan su copia.</li>
+            <li><strong>Premium, en MailVault:</strong> <strong>Archivar y eliminar</strong> hace el paso 4 y el paso 5 a la vez. Copia cada correo en tu bóveda, comprueba que la copia está ahí y solo entonces lo quita del servidor. Un correo que no supera la comprobación se queda en el servidor. Para una cuenta entera, <strong>Ajustes</strong> &gt; <strong>Copia y restauración</strong> &gt; <strong>Archivar y eliminar</strong> vacía las carpetas y los años que elijas.</li>
+            <li><strong>En Outlook.com:</strong> elimina ahí los mismos correos. Usa las mismas fechas que archivaste, para no eliminar correo que no tiene copia.</li>
+          </ul>
+
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/archive-success-720.webp 720w, /screenshots/es/archive-success-1440.webp 1440w, /screenshots/es/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/es/archive-success-light-1440.webp" srcset="/screenshots/es/archive-success-light-720.webp 720w, /screenshots/es/archive-success-light-1440.webp 1440w, /screenshots/es/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Bandeja de entrada de MailVault después de una tarea de archivado. Una tarjeta en la esquina inferior derecha dice Operación completada. La cabecera muestra cuántos de los correos de la carpeta están En tu bóveda, y la leyenda bajo la lista explica Solo en el servidor, En tu bóveda, Única copia y En la unidad de copia." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Cuando termina una tarea, MailVault dice Operación completada. La leyenda bajo la lista te dice dónde está cada correo: solo en el servidor, en tu bóveda o en tu bóveda como única copia. La barra de progreso bajo la tarjeta pertenece a otra tarea.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Paso 6: vuelve a vaciar Elementos eliminados y espera</h2>
+
+          <p>
+            El correo que eliminas, en Outlook.com o desde otra app, puede ir primero a Elementos eliminados. Abre Elementos eliminados en Outlook.com y vuelve a vaciarla. Luego vuelve a <strong>Configuración</strong> &gt; <strong>Cuenta</strong> &gt; <strong>Almacenamiento</strong> y compara con las cifras que apuntaste. Microsoft dice que los cambios pueden tardar hasta 24 horas en verse, así que no elimines más solo porque la cifra todavía no se haya movido.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Qué quita cada paso</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">Paso</th>
+                  <th class="py-3 pr-4 font-semibold">Qué quita</th>
+                  <th class="py-3 font-semibold">¿Puedes recuperarlo?</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Vaciar Elementos eliminados</td>
+                  <td class="py-3 pr-4">El correo que ya eliminaste</td>
+                  <td class="py-3">Considéralo permanente</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Mayús + Supr en los correos grandes</td>
+                  <td class="py-3 pr-4">El correo y sus adjuntos</td>
+                  <td class="py-3">No, salvo que guardaras antes el adjunto</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Página Almacenamiento: eliminar elementos de más de 3, 6 o 12 meses</td>
+                  <td class="py-3 pr-4">Todo lo de esa carpeta anterior a la fecha</td>
+                  <td class="py-3">No</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Archivar y luego eliminar del servidor</td>
+                  <td class="py-3 pr-4">La copia del servidor del correo antiguo</td>
+                  <td class="py-3">Sí: la copia de tu ordenador se queda</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Qué no eliminar</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Todo aquello de lo que solo tienes una copia.</strong> Recibos, facturas, papeles de impuestos, contratos, garantías, cartas médicas y legales. Archívalos primero.</li>
+            <li><strong>Correos que demuestran que algo es tuyo.</strong> Las claves de licencia de software, los correos de alta de dominios y cuentas y las confirmaciones de pedidos pueden ser difíciles de volver a conseguir.</li>
+            <li><strong>Adjuntos que no existen en ningún otro sitio.</strong> Fotos y documentos que alguien te envió una vez y que nunca guardaste.</li>
+            <li><strong>Carpetas enteras por fecha</strong> con la opción de la página Almacenamiento, salvo que tengas una copia de esa carpeta.</li>
+            <li><strong>Tu copia local.</strong> Después de eliminar el correo del servidor, la copia de tu bóveda es la única. En MailVault, <strong>Desarchivar</strong> elimina la copia de la bóveda, y <strong>Eliminar en todas partes</strong> quita el correo del servidor, de tu bóveda y de tu disco de copia de seguridad. Guarda una segunda copia en otro disco si el correo importa.</li>
+          </ul>
+
+          <p>
+            Elementos eliminados no es una copia de seguridad. Microsoft quita sus elementos a los 30 días.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Preguntas frecuentes</h2>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Por qué mi Hotmail sigue lleno después de eliminar correos?</h3>
+            <p>Los correos eliminados van a Elementos eliminados, y siguen contando en tu almacenamiento hasta que vacías esa carpeta o hasta que se quitan a los 30 días. Los correos quitados con Limpiar también cuentan hasta que salen de Elementos eliminados. Microsoft dice que los cambios pueden tardar hasta 24 horas en verse.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Guardar los adjuntos en OneDrive libera espacio en Outlook.com?</h3>
+            <p>Solo después de eliminar el correo original. OneDrive usa tu almacenamiento en la nube de Microsoft, que también usan tus adjuntos de Outlook.com, así que mover archivos allí no ayuda cuando el que está lleno es ese almacenamiento.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Puedo liberar espacio sin perder los correos antiguos?</h3>
+            <p>Sí. Guarda una copia de los correos antiguos en tu ordenador, comprueba que la copia se abre y luego elimina los correos de Outlook.com. En la app gratuita MailVault son dos pasos: Archivar y luego Eliminar del servidor.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Merece la pena vaciar la carpeta Correo no deseado?</h3>
+            <p>Rara vez libera mucho. Outlook.com elimina por sí solo los elementos de Correo no deseado a los 10 días. Revisa la página Almacenamiento de Configuración para ver qué carpetas son de verdad las más grandes.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Qué hacer a continuación</h2>
+
+          <p>
+            Haz hoy los pasos 1 a 3 para bajar del límite. Después copia tu correo antiguo en tu ordenador y elimínalo en línea por tandas, un año cada vez. Para comparar otras formas de hacer esa copia en un Mac, lee <a href="/es/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">cómo hacer copia de seguridad del correo de Outlook.com en un Mac</a>. El mismo método sirve para Gmail y otros proveedores, como se explica en <a href="/es/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">cómo liberar almacenamiento de correo sin perder los correos antiguos</a>. Si estás pensando en Microsoft 365, consulta <a href="/es/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">archivar en local frente a pagar por más almacenamiento</a>.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Libera espacio en Outlook.com y conserva tu correo</p>
+            <p class="text-sm mb-4">MailVault es gratis para macOS, Windows y Linux. Archivar y Eliminar del servidor son gratis. <a href="/es/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">Archivar y eliminar</a> en un solo paso es Premium.</p>
+            <a href="/es/get-started.html" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Descarga MailVault gratis
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Los pasos y límites de Outlook.com proceden del soporte de Microsoft: <a href="https://support.microsoft.com/en-us/outlook/storage-limits-in-outlook-com" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">límites de almacenamiento en Outlook.com</a> y <a href="https://support.microsoft.com/en-us/outlook/check-email-and-cloud-storage" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">comprobar el almacenamiento de correo y en la nube</a>. Última revisión: octubre de 2026. Para un resumen más breve, consulta <a href="/es/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">buzón de Outlook.com o Hotmail lleno</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creación de Graphic Meat</p><h2 id="studio-title">Conoce a las personas detrás de MailVault.</h2><p>Somos Graphic Meat, un estudio de productos independiente que crea software útil desde 2013. MailVault es una de las cosas que hacemos. Ven a conocernos y descubre en qué más estamos trabajando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conoce Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, el estudio detrás de MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Más de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Convierte tus fotos en un libro listo para imprimir.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espacio de trabajo local para notas y código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mueve tu correo a un proveedor nuevo.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/es/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Lee tu correo. Conserva tu correo.</p>
+</div>
+<nav aria-label="Explora MailVault"><a href="/es/use-cases.html">Casos de uso</a><a href="/es/blog.html">Blog</a><a href="/changelog.html">Novedades</a><a href="/es/mentioned-in.html">Menciones</a><a href="/es/faq.html">FAQ</a><a href="/es/docs.html">Ayuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código en GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidad ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contacta con el equipo ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Creado por <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

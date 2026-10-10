@@ -23,7 +23,7 @@ export function SenderInsightsPanel({ senderEmail, email = null }) {
 
   const formatDate = (d) => {
     const result = formatDateOnly(d, { alwaysShowYear: true });
-    return result || '—';
+    return result || '-';
   };
 
   return (

@@ -55,7 +55,6 @@
   "c4c836251a9c": "Abo aktiviert - MailVault",
   "058a813016f5": "Alles bereit!",
   "2a5178b7f46e": "Blog - MailVault",
-  "c7d20dd92f6f": "Hinter den Kulissen der Entwicklung von MailVault",
   "1733f097e696": "28. August 2026",
   "00fd574c1eef": "Cloud-Backup heißt, ein Anbieter kann deine E-Mails für immer lesen. Lokales Backup heißt, nur du kannst es.",
   "ef44e83e09c8": "Ein Cloud-Backup-Dienst eines Dritten beseitigt den Single Point of Failure nicht — er fügt ein zweites Unternehmen mit dauerhaftem Zugriff auf alles hinzu, was du je gesendet oder empfangen hast. Der eigentliche Unterschied in der Architektur, und warum lokales Backup ihn schließt.",
@@ -94,7 +93,6 @@
   "91526b86de0c": "Die macOS-Sandbox-Signatur-Saga (oder warum es v1.4.0 bis v1.4.5 gibt)",
   "e1d517831a41": "Sechs Patch-Releases an einem einzigen Tag. macOS-Codesignierung, App Sandbox und Bun-kompilierte Sidecars vertragen sich schlecht — hier ist die ganze Geschichte, wie wir das behoben haben.",
   "a78b94f51a58": "5 Min. Lesezeit",
-  "90600dedf512": "Hinter den Kulissen der Entwicklung von MailVault. Entwicklungs-Updates, technische Einblicke und Release-Notes.",
   "fa3229126bbe": "Doku — MailVault",
   "9e9cf3221a30": "Dokumentation",
   "1ec295839f81": "Anleitungen, Abläufe und Antworten, um das Meiste aus MailVault herauszuholen.",
@@ -104,8 +102,6 @@
   "405cd296dba3": "Postfach voll? Archiviere E-Mails lokal und lösche sie dann gefahrlos vom Server, um Platz zurückzugewinnen.",
   "f31ef2ff820f": "E-Mails behalten, nachdem der Server sie gelöscht hat",
   "65e40eb0394e": "Lösche E-Mails von deinem Server, ohne sie zu verlieren. Erst lokal archivieren, dann für immer behalten.",
-  "c7914d235e02": "Die beste MailStore-Alternative für den Mac",
-  "6835ea0b7eb6": "Du suchst eine MailStore-Alternative für den Mac? Vergleiche MailVault &mdash; kostenlos, Open Source, nativ für macOS.",
   "edf92377c652": "Gmail-Speicher voll? So bekommst du ihn frei",
   "949d1bee2bf2": "Was Gmail-Speicher wirklich freigibt, nach Aufwand sortiert &mdash; und wie du verhinderst, dass das Problem zurückkommt.",
   "61d7642c762a": "Alle deine Gmail-E-Mails herunterladen",
@@ -203,6 +199,5 @@
   "a2dd7988e261": "Häufige Fragen zu MailVault. Erfahre, wie MailVault deine IMAP-E-Mails lokal auf macOS sichert, welche Anbieter unterstützt werden, wie es um die Sicherheit steht und mehr.",
   "e5768534ec25": "FAQ - MailVault",
   "ccd236b1059f": "Häufige Fragen zu MailVault. Erfahre, wie MailVault deine IMAP-E-Mails lokal auf macOS sichert.",
-  "0e882c844500": "MailVault verbindet sich über das IMAP-Protokoll mit deinem E-Mail-Server und lädt jede E-Mail als standardisierte .eml-Datei im Maildir-Format in deinen Vault. Jede E-Mail ist eine Datei auf der Festplatte — menschenlesbar, portabel und mit jedem Mailclient kompatibel. Sobald eine Nachricht in deinem Vault liegt, kannst du die Serverkopie löschen, um Platz zu schaffen; die lokale bleibt davon unberührt.",
   "9fa678355882": ".eml (RFC 5322) ist das Internet-Standardformat für E-Mail-Nachrichten. Jede E-Mail liegt als einzelne, in sich geschlossene Textdatei vor, die sich mit jedem Mailclient öffnen lässt. Maildir ist eine bewährte Verzeichnisstruktur für die Ablage von E-Mails, seit Jahrzehnten von Mailservern genutzt. Jede E-Mail ist eine Datei, es gibt also keine einzelne Datenbank, die beschädigt werden kann. Zusammen bedeuten .eml + Maildir, dass deine E-Mails zukunftssicher und portabel sind und nie an eine einzelne Anwendung gebunden."
 }

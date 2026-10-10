@@ -238,7 +238,7 @@ describe('Connected Compose Fields', function () {
   it('lists contacts in the To picker popover and appends the one that is picked', async function () {
     await freshCompose();
 
-    expect(await clickButtonTitle('Pick TO from contacts')).toBe(true);
+    expect(await clickButtonTitle('Pick To from contacts')).toBe(true);
 
     let contacts = [];
     await browser.waitUntil(async () => {

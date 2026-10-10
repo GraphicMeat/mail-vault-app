@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailStore 替代方案：7 种选择对比 | MailVault</title>
+  <meta name="description" content="按使用场景划分的 MailStore 替代方案：适用于 Mac、Linux 和 Windows 的个人归档工具、开源归档服务器，以及 Microsoft 365 或 Google Workspace 的工具。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/mailstore-alternatives-compared.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/mailstore-alternatives-compared.html">
+  <meta property="og:title" content="MailStore 替代方案：7 种选择对比 | MailVault">
+  <meta property="og:description" content="按使用场景划分的 MailStore 替代方案：适用于 Mac、Linux 和 Windows 的个人归档工具、开源归档服务器，以及 Microsoft 365 或 Google Workspace 的工具。">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailStore 替代方案：7 种选择对比 | MailVault">
+  <meta name="twitter:description" content="按使用场景划分的 MailStore 替代方案：适用于 Mac、Linux 和 Windows 的个人归档工具、开源归档服务器，以及 Microsoft 365 或 Google Workspace 的工具。">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailStore 替代方案：七种选择，按使用场景分类",
+  "description": "按使用场景划分的 MailStore 替代方案：适用于 Mac、Linux 和 Windows 的个人归档工具、开源归档服务器，以及 Microsoft 365 或 Google Workspace 的工具。",
+  "url": "https://mailvaultapp.com/zh/guides/mailstore-alternatives-compared.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailStore 最好的免费替代方案是什么？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "这取决于用途。对于在 Mac、Windows 或 Linux 上的个人，选 MailVault 或 Thunderbird 加 ImportExportTools NG。对于在自己服务器上的公司归档，选 Piler 开源版、Mail-Archiver 或 Open Archiver。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailStore 有开源的替代方案吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "有。Piler 和 Mail-Archiver（均为 GPL-3）以及 Open Archiver（AGPL-3）都是开源的归档服务器。在桌面端，Thunderbird 是开源的，MailVault 的源代码也公开在 GitHub 上。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "哪些 MailStore 替代方案能读取 PST 文件？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "在这里的工具中，Open Archiver 可以导入 PST 文件，MailStore Home 和 MailStore Server 也能归档它们。MailVault、Mail-Archiver、Thunderbird 加 ImportExportTools NG 以及 Piler 的免费版都没有列出 PST 导入功能。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mail-Archiver 和 Mail Archiver X 是同一个东西吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不是。Mail-Archiver 是一款在 Docker 中运行的免费自托管 Web 应用。Mail Archiver X 是 Moth Software 出品的付费 Mac 应用。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/mailstore-alternatives-compared.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+<nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="选择语言"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/mailstore-alternatives-compared.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/mailstore-alternatives-compared.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/mailstore-alternatives-compared.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/mailstore-alternatives-compared.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/mailstore-alternatives-compared.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/mailstore-alternatives-compared.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/mailstore-alternatives-compared.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/mailstore-alternatives-compared.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/mailstore-alternatives-compared.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary>
+<nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailStore 替代方案：七种选择，按使用场景分类</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            合适的 <strong>MailStore 替代方案</strong>，取决于你要替换的是哪一个 MailStore，以及为什么要替换。MailStore Home 是一款供私人使用的免费 Windows 归档工具。MailStore Server 是一款面向企业的付费 Windows 归档。本文把七种真实的选择分为四组：在 Mac 或 Linux 上的个人使用、在 Windows 上的个人使用、开源归档服务器，以及 Microsoft 365 和 Google Workspace 已内置的工具。MailVault 是我们做的，是七种之一，我们把它的限制和其他产品的限制并列写出。想深入比较某一对，请阅读 <a href="/zh/compare/mailvault-vs-mailstore-home.html" class="text-primary-500 hover:text-primary-600 underline">MailVault 与 MailStore Home 对比</a>或 <a href="/zh/guides/mailstore-server-alternative.html" class="text-primary-500 hover:text-primary-600 underline">MailStore Server 替代方案</a>。
+          </p>
+
+          <div class="p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">简短回答</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li><strong>在 Mac 或 Linux 上的个人：</strong>MailVault，或者在 Mac 上用 Mail Archiver X。</li>
+              <li><strong>在 Windows 上、想要免费自己动手搭建的个人：</strong>Thunderbird 加 ImportExportTools NG，或者 MailVault。</li>
+              <li><strong>愿意自己运行服务器的公司：</strong>Piler、Mail-Archiver 或 Open Archiver。</li>
+              <li><strong>已经在用 Microsoft 365 或 Google Workspace 的公司：</strong>Microsoft Purview 或 Google 保险柜（Google Vault）。</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">七种选择一览</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">工具</th>
+                  <th class="py-3 pr-4 font-semibold">最适合</th>
+                  <th class="py-3 pr-4 font-semibold">运行平台</th>
+                  <th class="py-3 pr-4 font-semibold">成本</th>
+                  <th class="py-3 font-semibold">保留或法律保留</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">MailVault</td>
+                  <td class="py-3 pr-4">想要一款带本地归档的邮件应用的个人</td>
+                  <td class="py-3 pr-4">macOS、Windows、Linux</td>
+                  <td class="py-3 pr-4">免费；Premium $4/月或 $25/年（抢先体验价）</td>
+                  <td class="py-3">不支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Mail Archiver X</td>
+                  <td class="py-3 pr-4">想要数据库式归档和 PDF 导出的 Mac 用户</td>
+                  <td class="py-3 pr-4">macOS</td>
+                  <td class="py-3 pr-4">付费，提供免费试用</td>
+                  <td class="py-3">未列出</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Thunderbird 加 ImportExportTools NG</td>
+                  <td class="py-3 pr-4">一套自己动手搭建的免费方案</td>
+                  <td class="py-3 pr-4">Windows、macOS、Linux</td>
+                  <td class="py-3 pr-4">免费</td>
+                  <td class="py-3">不支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Mail-Archiver</td>
+                  <td class="py-3 pr-4">想要共享网页搜索的小型办公室</td>
+                  <td class="py-3 pr-4">Docker 加 PostgreSQL</td>
+                  <td class="py-3 pr-4">免费，GPL-3</td>
+                  <td class="py-3">归档保留期限和删除锁定；未列出法律保留</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Piler</td>
+                  <td class="py-3 pr-4">在自己服务器上的合规归档</td>
+                  <td class="py-3 pr-4">Linux 服务器</td>
+                  <td class="py-3 pr-4">开源版免费；企业版付费</td>
+                  <td class="py-3">是，两者都有，另有审计日志</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Open Archiver</td>
+                  <td class="py-3 pr-4">支持多种导入来源的自托管归档</td>
+                  <td class="py-3 pr-4">Docker Compose</td>
+                  <td class="py-3 pr-4">免费，AGPL-3</td>
+                  <td class="py-3">保留策略；法律保留尚未推出</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">Microsoft Purview 或 Google 保险柜（Google Vault）</td>
+                  <td class="py-3 pr-4">已经在用 Microsoft 365 或 Google Workspace 的公司</td>
+                  <td class="py-3 pr-4">服务商的云</td>
+                  <td class="py-3 pr-4">包含在部分方案中</td>
+                  <td class="py-3">支持</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">最后核对：2026 年 10 月，依据各厂商自己的网站或代码仓库。价格和功能会变化，购买或部署之前请再次确认。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">适合在 Mac 或 Linux 上的个人</h2>
+
+          <p>
+            MailStore Home 需要 Windows 10 或 11，所以 Mac 和 Linux 用户只能另找出路。我们的 <a href="/zh/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac 上的 MailStore 替代方案指南</a>更深入地讨论了 Mac 的情况。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. MailVault</h3>
+
+          <p>
+            MailVault 是一款适用于 macOS、Windows 和 Linux 的免费邮件应用，把你选择的邮件以普通 <code>.eml</code> 文件的形式，存放在你电脑上 Maildir 风格文件夹组成的<a href="/zh/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">本地保险库</a>中。它可以连接 Gmail、Microsoft 365、Outlook.com 和任何 IMAP 账户，导入 Google Takeout 导出等 MBOX 文件，并用本地索引离线搜索它保存的所有内容。手动备份免费且不限次数。「归档」和「从服务器删除」作为两个单独的步骤都是免费的，而一步完成、在移除服务器副本之前检查每一份副本的「归档并删除」属于 Premium。
+          </p>
+
+          <p>
+            <strong>限制：</strong>不支持 PST 导入，不支持导入 Outlook 或 Thunderbird 配置文件，没有供多位用户共用的归档，也没有保留策略或法律保留。附件搜索、定时备份和清理规则属于 Premium。
+          </p>
+
+          <figure class="pt-2">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w, /screenshots/zh/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w, /screenshots/zh/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="MailVault 收件箱，每一行邮件都带有一个存储图标，列表底部的图例为「仅在服务器」、「在你的保险库中」、「唯一副本」和「在备份盘上」。" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async"></picture>
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">MailVault 中的每一行都会显示这封邮件保存在哪里：仅在服务器上、在你的保险库中、作为你唯一的副本，或者也在备份盘上。</figcaption>
+          </figure>
+
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Mail Archiver X</h3>
+
+          <p>
+            Moth Software 的 Mail Archiver X 是一款付费 Mac 应用，可以从 Apple Mail、Outlook、Thunderbird、Postbox 以及包括 Gmail 和 iCloud 在内的 IMAP 账户归档。它把归档保存在一个带搜索索引的内部数据库中，可以导出为 PDF 和 MBOX，归档可以放在内置或外置硬盘上。厂商也列出了网络存储，但它的手册说标准版需要本地归档。带有服务器组件的 Pro 版增加了多台电脑和多位用户的访问。当前版本为 8.2.4。
+          </p>
+
+          <p>
+            <strong>限制：</strong>仅限 Mac，而且归档是一个数据库，而不是每封邮件一个文件，所以要取出标准文件就得导出。价格写在厂商的手册中：$49.95 另加税，Pro 版 $150 起。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">适合在 Windows 上的个人</h2>
+
+          <p>
+            在 Windows 上，MailStore Home 本身仍可免费用于私人用途。如果你无论如何都要离开它，或者想要一套在其他系统上也能用的方案，MailVault 同样可以在 Windows 上运行，此外还有一条免费的自己动手路线。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Thunderbird 加 ImportExportTools NG</h3>
+
+          <p>
+            Thunderbird 是一款适用于 Windows、macOS 和 Linux 的免费邮件客户端。它的「归档」按钮会把邮件移到一个归档文件夹，你可以把这个文件夹指向电脑上的本地文件夹，按年或按月归档。免费的 ImportExportTools NG 附加组件可以把邮件导出为 EML、HTML、PDF、CSV 或纯文本，把文件夹导出为 mbox，还能导入 mbox 和 EML 文件。
+          </p>
+
+          <p>
+            <strong>限制：</strong>Thunderbird 默认把每个文件夹存为一个 mbox 文件；Maildir 存储需要按账户手动开启，Mozilla 称之为实验性功能，并表示在开启之前，你应该知道如何提交错误报告和恢复邮件。归档需要手动进行，而且一旦邮件进入本地文件夹，备份该文件夹就是你自己的事了。详情请参阅 <a href="/zh/compare/mailvault-vs-thunderbird.html" class="text-primary-500 hover:text-primary-600 underline">MailVault 与 Thunderbird</a>。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">开源归档服务器</h2>
+
+          <p>
+            这些更多是在替代 MailStore Server，而不是 MailStore Home。三者都可以免费使用，也都需要有人来安装、更新和备份服务器。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. Mail-Archiver</h3>
+
+          <p>
+            Mail-Archiver（与 Mail Archiver X 是不同的产品）是一款基于 GPL-3 的自托管 Web 应用，在 Docker 中与 PostgreSQL 数据库一起运行。它可以同步 IMAP 账户，通过 Microsoft Graph 同步 Microsoft 365，连接个人 Outlook.com 账户，导入 MBOX 和压缩的 EML，并导出为同样的格式。多位用户可以共用它，按账户设置权限。它可以在你为每个账户设定的期限之后从服务器删除邮件，并保留登录、搜索和导出的访问日志。
+          </p>
+
+          <p>
+            <strong>限制：</strong>本身不提供 HTTPS，所以需要反向代理，而且它的 README 中没有列出法律保留功能。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5. Piler</h3>
+
+          <p>
+            Piler 是一款基于 GPL-3 的开源归档服务器。免费的开源版通过 SMTP 接收邮件，可接入 Office 365 和 Google 账户，读取 EML、Maildir 和邮箱文件，并包含归档和保留规则、法律保留、审计日志、去重、压缩和邮件加密。它通过 AD 或 LDAP、单点登录和双重验证码让用户登录。企业版是付费的，公开了价格档位，并增加了电子数据展示、多租户和可选的付费支持。
+          </p>
+
+          <p>
+            <strong>限制：</strong>免费版仅限单台服务器，提供社区支持，企业版价格只能单独询价。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">6. Open Archiver</h3>
+
+          <p>
+            Open Archiver 是一个基于 AGPL-3 的自托管平台，用 Docker Compose 启动。它可以接收 Google Workspace、Microsoft 365、IMAP、PST 文件、压缩的 EML 和 MBOX，并为邮件和 PDF、DOCX 等附件的文本建立索引。它把邮件以 <code>.eml</code> 文件存储在本地磁盘或兼容 S3 的存储上，支持去重、压缩和静态加密，在接收时记录每封邮件的哈希值，并保留审计记录。
+          </p>
+
+          <p>
+            <strong>限制：</strong>它的 README 把法律保留标为尚待推出，默认配置至少需要 4 GB 内存。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">企业级：你的服务商已经提供的归档</h2>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">7. Microsoft Purview 或 Google 保险柜（Google Vault）</h3>
+
+          <p>
+            如果公司的邮件在 Microsoft 365 中，Microsoft Purview 的保留策略和标签会在用户删除邮箱项目之后保留其副本，电子数据展示（eDiscovery）可以搜索它们。请确认哪个 Microsoft 365 方案包含你需要的部分。如果邮件在 Google Workspace 中，Google 保险柜会在包含它的版本上处理保留规则、保留、搜索、导出以及保险柜活动的审计日志。
+          </p>
+
+          <p>
+            <strong>限制：</strong>副本仍留在同一服务商的云中，所以它们不是独立的备份。Google 表示，保险柜（Vault）不是数据归档，在你设置规则之前不会保留任何内容。如果需要一个基于 Windows、具备同类控制功能的独立归档，MailStore Server 本身仍是一个选择。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">如何选择</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>归档是给谁用的？</strong>一个人的邮件是桌面端的工作。很多人的邮件、由其他人来搜索，是服务器端的工作。</li>
+            <li><strong>你需要保留规则、法律保留或审计日志吗？</strong>如果需要，请看看 Piler、MailStore Server 或你的服务商自己的工具。这里的桌面端选项都做不到。</li>
+            <li><strong>你的旧邮件在哪里？</strong>PST 文件指向 MailStore Home 或 Open Archiver。MBOX 文件和 IMAP 账户几乎适用于这里所有的工具。</li>
+            <li><strong>最后你希望留下什么格式？</strong>如果你希望十年后不借助工具也能打开普通文件，请优先选择每封邮件一个文件的格式，例如 <code>.eml</code>。</li>
+          </ol>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h2>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailStore 最好的免费替代方案是什么？</p>
+            <p>这取决于用途。对于在 Mac、Windows 或 Linux 上的个人，选 MailVault 或 Thunderbird 加 ImportExportTools NG。对于在自己服务器上的公司归档，选 Piler 开源版、Mail-Archiver 或 Open Archiver。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailStore 有开源的替代方案吗？</p>
+            <p>有。Piler 和 Mail-Archiver（均为 GPL-3）以及 Open Archiver（AGPL-3）都是开源的归档服务器。在桌面端，Thunderbird 是开源的，MailVault 的源代码也公开在 GitHub 上。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">哪些 MailStore 替代方案能读取 PST 文件？</p>
+            <p>在这里的工具中，Open Archiver 可以导入 PST 文件，MailStore Home 和 MailStore Server 也能归档它们。MailVault、Mail-Archiver、Thunderbird 加 ImportExportTools NG 以及 Piler 的免费版都没有列出 PST 导入功能。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Mail-Archiver 和 Mail Archiver X 是同一个东西吗？</p>
+            <p>不是。Mail-Archiver 是一款在 Docker 中运行的免费自托管 Web 应用。Mail Archiver X 是 Moth Software 出品的付费 Mac 应用。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">下一步做什么</h2>
+
+          <p>
+            挑出与你情况相符的那一组，在把所有邮件迁过去之前，先在一个邮箱上试用一款工具。如果你是在 Mac、Windows 或 Linux 上的个人，希望把邮件保存为普通文件，请<a href="/zh/get-started.html" class="text-primary-500 hover:text-primary-600 underline">免费下载 MailVault</a>，先归档较早的一年。我们的 <a href="/zh/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">IMAP 备份工具检查清单</a>可以帮你用同样的方法测试这里的任何一款工具。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>阅读你的邮件。保留你的邮件。</p>
+</div>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

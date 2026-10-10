@@ -2,6 +2,9 @@ import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from '
 import '../styles/sidebar-navigation.css';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
+import { XLogo, DiscordLogo } from './ui/BrandGlyphs';
+import { openInBrowser } from '../services/billingApi';
+import { DISCORD_INVITE, X_PROFILE } from '../utils/communityLinks';
 import { Popover } from './ui/Popover';
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import { createPortal } from 'react-dom';
@@ -67,6 +70,11 @@ import {
   Search,
   Clock,
 } from 'lucide-react';
+
+/* A nightly is `2.19.1-nightly.<stamp>.g<sha>`: far wider than the sidebar, and the
+   stamp is noise next to the number, so it drops to its own quiet line. */
+const [versionBase, ...versionRest] = version.split('-');
+const versionBuild = versionRest.join('-');
 
 const UNIFIED_FOLDERS = () => ([
   { id: 'INBOX', name: tr('sidebar.inbox'), icon: Inbox },
@@ -281,7 +289,7 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
         onDoubleClick={onActivateInbox}
         aria-label={label === account.email ? pa(label, 'email') : `${pa(label, 'name')}, ${pa(account.email, 'email')}`}
         aria-current={isActive && !unifiedInbox && !insightsOpen ? 'true' : undefined}
-        title={label === account.email ? pa(label, 'email') : `${pa(label, 'name')} — ${pa(account.email, 'email')}`}>
+        title={label === account.email ? pa(label, 'email') : `${pa(label, 'name')} - ${pa(account.email, 'email')}`}>
         <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none" style={{ backgroundColor: color }}>
           {initial}
         </span>
@@ -314,7 +322,7 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
       <button type="button" className="sidebar-account-open"
         aria-label={showAddress ? `${pa(label, 'name')}, ${pa(account.email, 'email')}` : pa(account.email, 'email')}
         aria-current={selected ? 'true' : undefined}
-        title={showAddress ? `${pa(label, 'name')} — ${pa(account.email, 'email')}` : pa(account.email, 'email')}
+        title={showAddress ? `${pa(label, 'name')} - ${pa(account.email, 'email')}` : pa(account.email, 'email')}
         onClick={onActivate} onDoubleClick={onActivateInbox}>
         <span className="sidebar-account-avatar" style={{ backgroundColor: color }} aria-hidden="true">{initial}</span>
         <span className="sidebar-account-label">
@@ -602,6 +610,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const setViewMode = useUiStore(s => s.setViewMode);
   const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
+  const unreadFlash = useUiStore(s => s.unreadFlash);
+  const clearUnreadFlash = useUiStore(s => s.clearUnreadFlash);
   const transferHoverEnabled = useSettingsStore(s => s.transferHoverEnabled);
 
   // Only the local cache lagging the mailbox is real, user-visible progress.
@@ -1105,6 +1115,18 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           >
             <Gift size={15} className="text-mail-text-muted" />
           </Button>
+          <Button variant="ghost" icon size="sm"
+            onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})}
+            title={t('bugReport.joinDiscord')} aria-label={t('bugReport.joinDiscord')}
+          >
+            <span className="text-mail-text-muted"><DiscordLogo size={15} /></span>
+          </Button>
+          <Button variant="ghost" icon size="sm"
+            onClick={() => openInBrowser(X_PROFILE).catch(() => {})}
+            title={t('bugReport.followX')} aria-label={t('bugReport.followX')}
+          >
+            <span className="text-mail-text-muted"><XLogo size={13} /></span>
+          </Button>
           {totalEmails > 0 && (
             <div
               className="p-2"
@@ -1262,7 +1284,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <div className="sidebar-account-row sidebar-switcher-row">
               <button type="button" ref={accountTriggerRef} className="sidebar-account-switcher"
                 aria-label={`${t('sidebar.switchAccount')}: ${shownAccountLabel}${!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `, ${shownAccountEmail}` : ''}`}
-                title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${shownAccountLabel} — ${shownAccountEmail}` : shownAccountLabel}
+                title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${shownAccountLabel} - ${shownAccountEmail}` : shownAccountLabel}
                 aria-haspopup="dialog" aria-expanded={!!chooserPosition}
                 onClick={chooserPosition ? closeChooser : openChooser}
                 onDoubleClick={() => { if (activeAccount && !unifiedInbox) activateInbox(activeAccount.id); }}>
@@ -1328,7 +1350,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} /> : (
               <Folders mailboxes={shownMailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
-                onContextMenu={onFolderContextMenu} searchQuery={folderQuery} />
+                onContextMenu={onFolderContextMenu} searchQuery={folderQuery}
+                flash={unreadFlash} onFlashEnd={clearUnreadFlash} />
             )}
           </div>
         </section>
@@ -1338,28 +1361,36 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         renderAccount={renderAccount} unifiedRow={renderUnifiedRow(true)} onAddAccount={onAddAccount} />}
 
       <div className="sidebar-footer">
-        <div className="sidebar-footer-tools">
-          <div className="flex-1 min-w-0"><FocusTimerButton onUpgrade={() => onOpenSettings('billing')} /></div>
+        <FocusTimerButton onUpgrade={() => onOpenSettings('billing')} />
+        <div className="sidebar-footer-actions">
           <PrivacyModeButton onUpgrade={() => onOpenSettings('billing')} />
-          <Button variant="ghost" icon size="sm" onClick={onReportBug} title={t('sidebar.reportABug')} aria-label={t('sidebar.reportABug')}><Bug size={14} /></Button>
-          <Button variant="ghost" icon size="sm" onClick={onReferFriend} title={t('sidebar.referAFriend')} aria-label={t('sidebar.referAFriend')}><Gift size={14} /></Button>
-        </div>
-        <div className="sidebar-footer-meta">
-          <div className="min-w-0">
-            {totalEmails > 0 && <div className="sidebar-mail-count">
-              <HardDrive size={12} />
-              <span>{cacheFilling
-                ? t('sidebar.emailsDownloaded', { cachedCount: formatCount(cachedCount), totalEmails: formatCount(totalEmails) })
-                : t('sidebar.emails', { totalEmails: formatCount(totalEmails) })}</span>
-              {(loading || cacheFilling) && <RefreshCw size={10} className="animate-spin text-mail-accent-text" />}
-            </div>}
-            <div className="sidebar-version">{t('sidebar.mailvaultVersion', { version })}</div>
-            <PortableBadge onClick={() => onOpenSettings?.('portable')} />
-          </div>
+          <Button variant="ghost" icon size="sm" onClick={onReportBug} title={t('sidebar.reportABug')} aria-label={t('sidebar.reportABug')}><Bug size={15} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={onReferFriend} title={t('sidebar.referAFriend')} aria-label={t('sidebar.referAFriend')}><Gift size={15} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})} title={t('bugReport.joinDiscord')} aria-label={t('bugReport.joinDiscord')}><DiscordLogo size={15} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(X_PROFILE).catch(() => {})} title={t('bugReport.followX')} aria-label={t('bugReport.followX')}><XLogo size={13} /></Button>
           <Button variant="ghost" icon size="sm" onClick={toggleTheme}
-            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}>
+            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}
+            aria-label={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}>
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </Button>
+        </div>
+        <div className="sidebar-status">
+          {totalEmails > 0 && <div className="sidebar-mail-count">
+            <HardDrive size={12} />
+            <span className="sidebar-mail-count-label">{cacheFilling
+              ? t('sidebar.emailsDownloaded', { cachedCount: formatCount(cachedCount), totalEmails: formatCount(totalEmails) })
+              : t('sidebar.emails', { totalEmails: formatCount(totalEmails) })}</span>
+            {(loading || cacheFilling) && <RefreshCw size={10} className="sidebar-mail-count-spin animate-spin text-mail-accent-text" />}
+          </div>}
+          {totalEmails > 0 && cacheFilling && <div className="sidebar-fill-track" role="progressbar" aria-valuemin={0}
+            aria-valuemax={totalEmails} aria-valuenow={Math.min(cachedCount, totalEmails)}>
+            <div className="sidebar-fill-bar" style={{ width: `${Math.min(100, (cachedCount / totalEmails) * 100)}%` }} />
+          </div>}
+          <div className="sidebar-version" title={t('sidebar.mailvaultVersion', { version })}>
+            {t('sidebar.mailvaultVersion', { version: versionBase })}
+            {versionBuild && <span className="sidebar-version-build">{versionBuild}</span>}
+          </div>
+          <PortableBadge onClick={() => onOpenSettings?.('portable')} />
         </div>
       </div>
 

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮件保险库：含义以及如何建立 | MailVault</title>
+  <meta name="description" content="邮件保险库可以指由你拥有的本地归档、托管的加密邮箱或合规归档。它们有何不同，以及如何免费建立你自己的保险库。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/what-is-an-email-vault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/what-is-an-email-vault.html">
+  <meta property="og:title" content="什么是邮件保险库？三种含义，以及如何建立你自己的保险库">
+  <meta property="og:description" content="邮件保险库可以指由你拥有的本地归档、托管的加密邮箱或合规归档。它们有何不同，以及如何免费建立你自己的保险库。">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="什么是邮件保险库？三种含义，以及如何建立你自己的保险库">
+  <meta name="twitter:description" content="邮件保险库可以指由你拥有的本地归档、托管的加密邮箱或合规归档。它们有何不同，以及如何免费建立你自己的保险库。">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "什么是邮件保险库？三种含义，以及如何建立你自己的保险库",
+  "description": "邮件保险库可以指由你拥有的本地归档、托管的加密邮箱或合规归档。它们有何不同，以及如何免费建立你自己的保险库。",
+  "url": "https://mailvaultapp.com/zh/guides/what-is-an-email-vault.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "邮件保险库和备份是一回事吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "很接近，但不完全一样。备份是出问题时用来恢复的副本。保险库是一份你同时也在使用的副本：你每天阅读和搜索它，而且在服务器删除邮件之后它依然保留这些邮件。MailVault 还可以把第二份副本写入外置硬盘，那就是你保险库的备份。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "邮件保险库和加密邮件或安全邮件是一回事吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不是。安全邮件服务保护存放在其服务器上的邮件不被他人读取。本地邮件保险库关注的是谁持有副本。MailVault 把你的邮件保存为普通 .eml 文件，以便其他应用读取，这也意味着任何能打开这个文件夹的人都能读到它们。如果电脑可能丢失或被盗，请打开系统的磁盘加密（Mac 上的 FileVault，Windows 上的 BitLocker）。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "没有 MailVault，我能打开我的保险库吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "能。每封邮件都是 Maildir 风格文件夹中的一个标准 .eml 文件。Apple Mail、Thunderbird 和其他邮件应用都能打开它们，文本编辑器也能读取。你还可以把保险库导出为一个装有 .eml 文件的 ZIP。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "如果我停止支付 Premium，我的保险库会怎样？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "什么都不会被删除。阅读、搜索、归档和手动备份都是免费的，Premium 订阅过期也绝不会从你的电脑上移除邮件。你失去的是 Premium 的附加功能，比如定时备份和「归档并删除」。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/what-is-an-email-vault.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+<nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="选择语言"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/what-is-an-email-vault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/what-is-an-email-vault.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/what-is-an-email-vault.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/what-is-an-email-vault.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/what-is-an-email-vault.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/what-is-an-email-vault.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/what-is-an-email-vault.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/what-is-an-email-vault.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/what-is-an-email-vault.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary>
+<nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">什么是邮件保险库？三种含义，以及如何建立你自己的保险库</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            <strong>邮件保险库</strong>是一个受保护的、保存邮件以便日后查找的地方。这个词涵盖三种不同的东西：一份由你拥有、保存在你自己电脑上的本地邮件归档；一个由安全邮件服务在其服务器上加密的托管邮箱；以及一份公司为法律原因保存员工邮件而运行的合规归档。本页逐一解释它们，然后演示如何自己建立第一种。如果你已经确定想要本地保险库，正在挑选软件，那么<a href="/zh/compare/mail-client-vs-mail-vault.html" class="text-primary-500 hover:text-primary-600 underline">邮件客户端与邮件保险库</a>的对比是更好的起点。
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">简短回答</p>
+            <ul class="list-disc pl-6 space-y-1 text-sm">
+              <li><strong>本地邮件保险库：</strong>你自己磁盘上的一份邮件副本，服务器删除邮件时它依然保留。由你持有。</li>
+              <li><strong>托管的安全邮箱：</strong>以加密方式存储在服务商服务器上的邮件。对他人保密，但仍然是别人运营的账户。</li>
+              <li><strong>合规归档：</strong>由公司运行、包含每一封邮件的副本，为审计和法律要求保存一定年限。</li>
+              <li>MailVault 属于第一种：一款适用于 macOS、Windows 和 Linux 的免费桌面应用，把你的邮件以普通 <code>.eml</code> 文件保存在你的电脑上。</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">人们说「邮件保险库」时指的三种东西</h2>
+
+          <p>
+            搜索<em>邮件保险库</em>或 <em>mail vault</em> 会得到截然不同的工具，因为很多产品都用这个词。下面简要说明每种含义，不涉及任何具体产品。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 由你拥有的本地归档</h3>
+          <p>
+            一份保存在你掌控的电脑或硬盘上的邮箱副本，采用其他程序也能读取的格式。它不依赖你的服务商的服务器、你的登录信息或你的订阅。当服务器上的邮件被删除，甚至整个账户消失时，这份副本依然保留。这是大多数个人想要「保存」邮件时心里想的含义。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 托管的加密邮箱</h3>
+          <p>
+            一些安全邮件服务把它们的存储称为保险库。你的邮件以加密方式存放在它们的服务器上，你通过它们的应用或网站访问。目的是隐私：防止你的邮件被他人读取。它仍然是一个托管账户，所以本页后面关于保管的问题同样适用于它。如果账户被关闭或你失去访问权，那台服务器上的邮件就无法触及了。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 合规归档</h3>
+          <p>
+            许多组织必须在固定期限内保存业务邮件，并在审计、纠纷或法律保留时提供出来。合规归档会在每封邮件发出或收到时捕获一份副本，以用户无法悄悄删除的方式存储，并让管理员可以搜索所有人的邮件。它由雇主或 IT 部门运营。邮箱的主人离职时，通常无法带走这份副本。
+          </p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th class="py-2 pr-4 font-semibold">&nbsp;</th>
+                  <th class="py-2 pr-4 font-semibold">由你拥有的本地归档</th>
+                  <th class="py-2 pr-4 font-semibold">托管的加密邮箱</th>
+                  <th class="py-2 font-semibold">合规归档</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">谁持有副本</td>
+                  <td class="py-2 pr-4">你，在你的磁盘上</td>
+                  <td class="py-2 pr-4">邮件服务</td>
+                  <td class="py-2">组织</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">主要用途</td>
+                  <td class="py-2 pr-4">在服务器放弃邮件之后保留它</td>
+                  <td class="py-2 pr-4">让邮件不被他人读取</td>
+                  <td class="py-2">履行保留和法律义务</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">账户关闭后仍然存在</td>
+                  <td class="py-2 pr-4">支持</td>
+                  <td class="py-2 pr-4">不，它就是那个账户</td>
+                  <td class="py-2">对组织而言，是</td>
+                </tr>
+                <tr>
+                  <td class="py-2 pr-4 font-medium">典型用户</td>
+                  <td class="py-2 pr-4">个人、自由职业者、小团队</td>
+                  <td class="py-2 pr-4">注重隐私的个人</td>
+                  <td class="py-2">企业、公共机构</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailVault 属于哪一种</h2>
+
+          <p>
+            MailVault 属于第一种。它是一款适用于 macOS、Windows 和 Linux 的桌面邮件应用，会在你电脑上的保险库里保留一份邮件副本。每封邮件都是 Maildir 风格文件夹里的一个普通 <code>.eml</code> 文件，所以不借助 MailVault，Apple Mail、Thunderbird 或文本编辑器也能打开它。你登录的是你的邮箱服务商，而不是 MailVault：Gmail 和 Microsoft 365 通过它们自己的登录页面，Outlook.com 通过 Microsoft Graph，其他服务商则通过 IMAP。你的电脑直接与邮件服务器通信，MailVault 的服务器从不接触你的邮件。源代码公开在 GitHub 上。
+          </p>
+
+          <p>
+            它不是托管服务，也不是合规归档。没有 MailVault 服务器保存你的邮件，它也没有管理控制台或法律保留功能。什么进入保险库、什么离开，由你决定。
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/local-vault-720.webp 720w, /screenshots/zh/local-vault-1440.webp 1440w, /screenshots/zh/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/local-vault-light-1440.webp" srcset="/screenshots/zh/local-vault-light-720.webp 720w, /screenshots/zh/local-vault-light-1440.webp 1440w, /screenshots/zh/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="在「文件夹」下选中了「保险库」标签页的 MailVault。收件箱标题显示「在你的保险库中」的数量，列表底部的图例解释了各行图标：「仅在服务器」、「在你的保险库中」、「唯一副本」、「在备份盘上」。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">「保险库」标签页只显示保存在你电脑上的内容。标题统计该文件夹有多少在你的保险库中，每一行的图标说明那封邮件在哪里。</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">保险库不是一个镜像服务器的邮件客户端</h2>
+
+          <p>
+            大多数邮件应用都是镜像。它们显示服务器上的内容，并为了速度保留本地缓存。当服务器删除一封邮件时，镜像也会在下次同步时删除它。这对于让手机、笔记本和网页邮箱保持一致是对的，对于保存邮件却是错的。
+          </p>
+          <p>
+            保险库副本不受服务器支配：一封邮件一旦进入保险库，上游的任何操作都不会删除它。MailVault 两项工作都做：一个普通的邮件客户端，背后有一个保险库，每一行都会显示一封邮件是仅在服务器上、在你的保险库中，还是你唯一的副本。
+          </p>
+          <p>
+            有一个细节很重要。MailVault 还保留一个工作缓存，默认情况下（「保留近期」下载模式），它会从你的电脑上移除超过几个月的缓存副本，而服务器保留它的副本。缓存的邮件不是保险库；已归档和已备份的邮件永远不会被任何下载模式移除。这就是为什么下面的步骤最后要做一次明确的备份或归档。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">如何在 10 分钟内建立你自己的邮件保险库</h2>
+
+          <p>
+            10 分钟是设置所需的时间。在那之后，大邮箱的下载会在后台继续进行，需要多长时间取决于邮箱的大小和你的网络连接。下面的六个步骤只用到免费应用。
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-3">
+            <li><strong>安装 MailVault。</strong>从<a href="/zh/get-started.html?plan=free" class="text-primary-500 hover:text-primary-600 underline">开始使用页面</a>下载适用于 macOS、Windows 或 Linux 的免费应用。无需注册 MailVault 账户。</li>
+            <li><strong>选择保险库的位置。</strong>首次运行时会询问你的邮件应该存放在哪里。默认是应用自己的文件夹。你也可以选择另一个文件夹或外置硬盘，之后还可以在 设置 &rarr; 备份与恢复 &rarr; 备份设置 中更改。MailVault 会把所有内容复制到新位置，检查每个文件都已到达，然后才删除原文件。（Mac App Store 版不支持移动保险库。）</li>
+            <li><strong>添加你的账户。</strong>在服务商自己的页面上登录 Gmail、Microsoft 365 或 Outlook.com，或者为其他任何服务商输入 IMAP 信息。你的密码或登录令牌保存在系统的凭据存储中，比如 macOS 上的钥匙串。</li>
+            <li><strong>决定哪些内容进入保险库。</strong>在 设置 &rarr; 备份与恢复 中，「备份内容」默认为<em>仅已归档邮件</em>。要把仍然只在服务器上的邮件也拉进来，请选择<em>全部邮件（从服务器下载）</em>。这可能会占用大量磁盘空间，所以请确认空间足够。如果你只想保留部分邮件，可以跳过这一步，手动归档：选中邮件并选择<strong>归档</strong>，它会把邮件复制进你的保险库，同时也保留在服务器上。</li>
+            <li><strong>点击「立即备份所有账户」。</strong>手动备份免费且不限次数。进度条会开始运行，备份卡片会在每一份副本都进入保险库时告诉你。之后的运行是增量的，只下载新邮件。</li>
+            <li><strong>检查一下。</strong>把文件夹列表切换到<strong>保险库</strong>标签页。你在那里看到的内容都在你的磁盘上。标题会显示该文件夹有多少在你的保险库中。设置中的账户卡片还会列出 MailVault 已显示或缓存、但尚未进入保险库的近期邮件，并提供一个「立即保存」按钮；它覆盖的是你的下载模式所保留的那几个月，而不是仍在服务器上的更早邮件。</li>
+          </ol>
+
+
+          <p>
+            有两个可选步骤能让保险库更稳固。第一，在 设置 &rarr; 备份与恢复 中，在外置硬盘或 NAS 上添加第二份副本（在 Mac App Store 版中，外部备份文件夹需要单独购买）。MailVault 会在那里写入同样的 <code>.eml</code> 文件，应用在日常使用中从不读取它，服务器上删除的邮件也会保留在其中。没有它，所有内容都放在一台电脑的一个文件夹里，失去那台电脑就失去了保险库。第二，一旦保险库保存了你的旧邮件，你就可以把它们从服务器清除，腾出空间。单独从服务器删除是免费的。<a href="/zh/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">归档并删除</a>会把每封邮件复制进保险库，并在移除服务器副本之前检查它，这是一项 Premium 功能。
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/selection-dialog-archive-720.webp 720w, /screenshots/zh/selection-dialog-archive-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/selection-dialog-archive-light-1440.webp" srcset="/screenshots/zh/selection-dialog-archive-light-720.webp 720w, /screenshots/zh/selection-dialog-archive-light-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 中针对选中邮件的「选择操作」对话框。它显示服务器上有多少封、此处已归档多少封，警告取消归档会删除保险库副本，并列出「归档」、「取消归档」、「从服务器删除」、「归档并删除」和「全部删除」，当前选中的是「归档」。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">手动归档选中的邮件。「归档」把邮件复制进保险库，服务器保持不变。在你选择风险更大的操作之前，对话框会统计哪些已经归档。</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">保管：如果服务商关闭了账户，你的邮件会怎样</h2>
+
+          <p>
+            你的收件箱建立在别人运营的基础设施上，适用的条款由他们随时可以修改。丢了手机号或身份验证器，账户就会被锁。员工离职当天，雇主就会关闭邮箱。服务商会删除不活跃的账户：例如 Google 表示，它可以删除连续两年不活跃的 Google 账户及其内容（<a href="https://support.google.com/accounts/answer/12418290" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Google 的不活跃账户政策</a>）。我们关于<a href="/zh/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">你的邮箱服务商为什么不是备份</a>的文章更详细地讨论了这些情况。
+          </p>
+
+          <p>当账户没了，本地保险库能给你什么、不能给你什么：</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>它保留之前已保存的内容。</strong>已经在保险库中的每封邮件都作为文件留在你的磁盘上。打开它们不需要旧的登录信息、密码重置或服务商的许可。</li>
+            <li><strong>它不会继续接收邮件。</strong>在那之后发往已关闭地址的邮件，不会出现在任何你能看到的地方。保险库保存的是过去，而不是地址。</li>
+            <li><strong>它只和磁盘一样安全。</strong>一台笔记本上的一份副本，终究只是一份副本。在外置硬盘上保留第二份副本，并像对待任何其他备份一样对待那块硬盘。</li>
+            <li><strong>没有 MailVault 也能阅读。</strong>这些文件都是标准的 <code>.eml</code>，你还可以把保险库导出为一个 ZIP，附带一份按地址把邮件对应到账户的清单文件，以便在另一台电脑上重新导入。</li>
+          </ul>
+
+          <p>
+            如果你知道某个账户即将关闭，请先建立保险库，并在失去访问权之前在「保险库」标签页上检查它。如果你用的是 Mac，还在比较各种工具，<a href="/zh/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac 上的邮件归档</a>介绍了更广泛的选择。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h2>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">邮件保险库和备份是一回事吗？</h3>
+          <p>很接近，但不完全一样。备份是出问题时用来恢复的副本。保险库是一份你同时也在使用的副本：你每天阅读和搜索它，而且在服务器删除邮件之后它依然保留这些邮件。MailVault 还可以把第二份副本写入外置硬盘，那就是你保险库的备份。</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">邮件保险库和加密邮件或安全邮件是一回事吗？</h3>
+          <p>不是。安全邮件服务保护存放在其服务器上的邮件不被他人读取。本地邮件保险库关注的是谁持有副本。MailVault 把你的邮件保存为普通 .eml 文件，以便其他应用读取，这也意味着任何能打开这个文件夹的人都能读到它们。如果电脑可能丢失或被盗，请打开系统的磁盘加密（Mac 上的 FileVault，Windows 上的 BitLocker）。</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">没有 MailVault，我能打开我的保险库吗？</h3>
+          <p>能。每封邮件都是 Maildir 风格文件夹中的一个标准 .eml 文件。Apple Mail、Thunderbird 和其他邮件应用都能打开它们，文本编辑器也能读取。你还可以把保险库导出为一个装有 .eml 文件的 ZIP。</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">如果我停止支付 Premium，我的保险库会怎样？</h3>
+          <p>什么都不会被删除。阅读、搜索、归档和手动备份都是免费的，Premium 订阅过期也绝不会从你的电脑上移除邮件。你失去的是 Premium 的附加功能，比如定时备份和「归档并删除」。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">下一步做什么</h2>
+
+          <p>
+            判断本地保险库最快的方法，是用一个账户建一个，然后看看「保险库」标签页。<a href="/zh/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">本地保险库功能页</a>详细介绍了文件布局以及如何把保险库移到另一块硬盘，<a href="/zh/pricing.html" class="text-primary-500 hover:text-primary-600 underline">价格</a>页面列出了 Premium 增加的功能。邮件进入保险库之后，<a href="/zh/blog/email-insights-who-fills-your-inbox.html" class="text-primary-500 hover:text-primary-600 underline">MailVault 邮件分析</a>可以告诉你是谁把它塞满的。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">建立你的邮件保险库</p>
+            <p class="text-sm mb-4">MailVault 在 macOS、Windows 和 Linux 上免费。无需 MailVault 账户，你的邮件以普通 .eml 文件留在你的电脑上。</p>
+            <a href="/zh/get-started.html?plan=free" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              免费下载 MailVault
+            </a>
+          </div>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>阅读你的邮件。保留你的邮件。</p>
+</div>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

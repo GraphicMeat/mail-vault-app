@@ -221,12 +221,12 @@ export function getSignatureFoldingScript(mode, nonce = '') {
     }
     el.style.display = 'none';
     var toggle = document.createElement('div');
-    toggle.textContent = '\\u2014 ' + ${SHOW_SIG};
+    toggle.textContent = '\\u25B8 ' + ${SHOW_SIG};
     toggle.style.cssText = 'cursor:pointer;color:#9ca3af;font-size:12px;margin:4px 0;user-select:none;';
     toggle.addEventListener('click', function() {
       var visible = el.style.display !== 'none';
       el.style.display = visible ? 'none' : '';
-      toggle.textContent = visible ? '\\u2014 ' + ${SHOW_SIG} : '\\u25BE ' + ${HIDE_SIG};
+      toggle.textContent = visible ? '\\u25B8 ' + ${SHOW_SIG} : '\\u25BE ' + ${HIDE_SIG};
       if (window.parent) {
         window.parent.postMessage({ type: 'iframe-resize', height: document.body.scrollHeight }, '*');
       }

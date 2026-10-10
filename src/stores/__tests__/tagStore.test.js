@@ -6,7 +6,12 @@ vi.mock('../../services/daemonClient', () => ({
   DaemonError: class DaemonError extends Error {},
 }));
 
-const { useTagStore, tagRowKey, requestRowTags } = await import('../tagStore');
+const listeners = {};
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (name, cb) => { listeners[name] = cb; return Promise.resolve(() => {}); },
+}));
+
+const { useTagStore, tagRowKey, requestRowTags, initTagEvents } = await import('../tagStore');
 
 const RECEIPTS = { id: 't1', name: 'Receipts', color: '#f00', position: 0, count: 0 };
 const CLIENTS = { id: 't2', name: 'Clients', color: '', position: 1, count: 0 };
@@ -133,5 +138,51 @@ describe('tagStore', () => {
     requestRowTags({ uid: 7, messageId: '<one@x>' }, location);
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+});
+
+describe('tags the daemon assigned on its own', () => {
+  const row7 = tagRowKey('a', 'INBOX', 7);
+  const row8 = tagRowKey('a', 'INBOX', 8);
+
+  it('puts the chip on a row already on screen whose untagged answer was cached', async () => {
+    useTagStore.setState({ tags: [RECEIPTS], byRow: { [row7]: [] } });
+    mockDaemonCall.mockResolvedValue([{ ...RECEIPTS, count: 1 }]);
+    await initTagEvents();
+
+    await listeners['tags-assigned']({ payload: { tagId: 't1', items: [{ accountId: 'a', mailbox: 'INBOX', uid: 7 }] } });
+
+    expect(useTagStore.getState().byRow[row7]).toEqual(['t1']);
+    expect(mockDaemonCall).toHaveBeenCalledWith('tags.list', {});
+    expect(useTagStore.getState().tags[0].count).toBe(1);
+  });
+
+  it('keeps the other tags a row already carried', async () => {
+    useTagStore.setState({ tags: [RECEIPTS, CLIENTS], byRow: { [row7]: ['t2'] } });
+    mockDaemonCall.mockResolvedValue([RECEIPTS, CLIENTS]);
+    await initTagEvents();
+
+    await listeners['tags-assigned']({ payload: { tagId: 't1', items: [{ accountId: 'a', mailbox: 'INBOX', uid: 7 }] } });
+
+    expect(useTagStore.getState().byRow[row7]).toEqual(['t2', 't1']);
+  });
+
+  it('leaves a row it never asked about to be fetched in full, not guessed', async () => {
+    useTagStore.setState({ tags: [RECEIPTS], byRow: {} });
+    mockDaemonCall.mockResolvedValue([RECEIPTS]);
+    await initTagEvents();
+
+    await listeners['tags-assigned']({ payload: { tagId: 't1', items: [{ accountId: 'a', mailbox: 'INBOX', uid: 8 }] } });
+
+    expect(useTagStore.getState().byRow[row8]).toBeUndefined();
+  });
+
+  it('forgets a tag on the rows on screen so they ask again', () => {
+    useTagStore.setState({ tags: [RECEIPTS, CLIENTS], byRow: { [row7]: ['t1', 't2'], [row8]: ['t2'] } });
+
+    useTagStore.getState().forgetRowsWithTag('t1');
+
+    expect(useTagStore.getState().byRow[row7]).toBeUndefined();
+    expect(useTagStore.getState().byRow[row8]).toEqual(['t2']);
   });
 });

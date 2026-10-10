@@ -7,7 +7,7 @@ import { shortcutParts } from '../../utils/shortcutParts';
 
 // Format keybinding for display
 export const formatKeybindingDisplay = (keybinding) => {
-  if (!keybinding) return '\u2014';
+  if (!keybinding) return '-';
   const modMap = { Meta: '\u2318', Ctrl: '\u2303', Alt: '\u2325', Shift: '\u21E7' };
   if (keybinding.includes('+')) {
     return shortcutParts(keybinding).map(p => modMap[p] || p).join('');

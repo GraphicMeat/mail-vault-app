@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook.com のメールを Mac にバックアップする 4 つの方法 | MailVault</title>
+  <meta name="description" content="Outlook.com と Hotmail のメールを Mac にバックアップする 4 つの方法：Outlook for Mac、Apple Mail、Thunderbird、MailVault。それぞれが保存するものと確認の仕方。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/guides/back-up-outlook-com-email-to-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/guides/back-up-outlook-com-email-to-mac.html">
+  <meta property="og:title" content="Outlook.com のメールを Mac にバックアップする 4 つの方法 | MailVault">
+  <meta property="og:description" content="Outlook.com と Hotmail のメールを Mac にバックアップする 4 つの方法：Outlook for Mac、Apple Mail、Thunderbird、MailVault。それぞれが保存するものと確認の仕方。">
+  <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Outlook.com のメールを Mac にバックアップする 4 つの方法 | MailVault">
+  <meta name="twitter:description" content="Outlook.com と Hotmail のメールを Mac にバックアップする 4 つの方法：Outlook for Mac、Apple Mail、Thunderbird、MailVault。それぞれが保存するものと確認の仕方。">
+  <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Outlook.com と Hotmail のメールを Mac にバックアップする方法",
+  "description": "Outlook.com と Hotmail のメールを Mac にバックアップする 4 つの方法：Outlook for Mac、Apple Mail、Thunderbird、MailVault。それぞれが保存するものと確認の仕方。",
+  "url": "https://mailvaultapp.com/ja/guides/back-up-outlook-com-email-to-mac.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Outlook なしで Hotmail のメールを Mac に書き出せますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "はい。Apple Mail は Outlook.com のメールをダウンロードし、各メールボックスを .mbox ファイルとして書き出せます。Thunderbird も書き出し用のアドオンで同じことができ、MailVault は各メッセージを .eml ファイルとして保存します。Microsoft 自身の書き出しにはデスクトップ版の Outlook が必要です。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "メールのバックアップに最適なファイル形式は？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "ほかのアプリで開ける形式です。.eml ファイルは 1 通のメッセージを添付ファイルごと収め、.mbox ファイルはメールボックス全体を収めます。Apple Mail は .eml ファイルを開け、.mbox ファイルを読み込めます。.olm ファイルは Outlook for Mac に取り込み直すためのものです。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault は Hotmail や Live.com のアドレスでも使えますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "はい。MailVault は outlook.com、hotmail.com、live.com のアドレスを個人の Microsoft アカウントとして扱います。ブラウザで Microsoft にサインインすると、MailVault は Microsoft Graph 経由で接続するので、入力する IMAP の設定はありません。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "メールのバックアップは最新の状態に保たれますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Apple Mail や Outlook からの書き出しはその時点のスナップショットなので、新しいメールを含めるにはもう一度書き出します。MailVault ではバックアップをもう一度実行すれば、新しいメールだけがダウンロードされます。スケジュール自動バックアップは MailVault Premium に含まれます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Outlook.com にはまだ「メールボックスのエクスポート」ボタンがありますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Microsoft の現在のヘルプページでは、デスクトップ版の Outlook による書き出しだけを説明しています。古いガイドには、Outlook.com の設定にある「メールボックスのエクスポート」ボタンが出てきます。自分のアカウントで見当たらない場合は、このページの方法のどれかを使ってください。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/back-up-outlook-com-email-to-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ja/" aria-label="MailVault ホーム"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat による</a></div>
+<nav class="mv-navlinks" aria-label="メインナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub で MailVault にスターを付ける" title="GitHub で MailVault にスターを付ける"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault にハートを送る" title="MailVault にハートを送る"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="言語を選択"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/back-up-outlook-com-email-to-mac.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/back-up-outlook-com-email-to-mac.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/back-up-outlook-com-email-to-mac.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/back-up-outlook-com-email-to-mac.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/back-up-outlook-com-email-to-mac.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/back-up-outlook-com-email-to-mac.html" lang="ja" hreflang="ja" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/back-up-outlook-com-email-to-mac.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/back-up-outlook-com-email-to-mac.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/back-up-outlook-com-email-to-mac.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="カラーテーマを切り替える" title="カラーテーマを切り替える"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモ</a><a class="mv-button mv-nav-download" href="/ja/get-started.html?plan=free">ダウンロード</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">メニュー</span></summary>
+<nav aria-label="モバイルナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a><a href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す</a><a href="/ja/get-started.html?plan=free">無料でダウンロード</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>カラーテーマを切り替える</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ホームに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook.com と Hotmail のメールを Mac にバックアップする方法</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>9分で読めます</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>2026年10月8日更新</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>
+            Outlook.com や Hotmail のメールを Mac にバックアップする方法で、今使えるものは 4 つあります。従来の Outlook for Mac から <code>.olm</code> ファイルを書き出す、Apple Mail から <code>.mbox</code> ファイルを書き出す、アドオンを使って Thunderbird から書き出す、または MailVault ですべてのメッセージを <code>.eml</code> ファイルとして保存する方法です。このページではそれらを比較し、それぞれで何が得られるかを示し、頼る前にバックアップを確認する方法を説明します。バックアップの後にオンラインのメールを削除したいなら、<a href="/ja/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">Hotmail と Outlook.com の空き容量を増やす方法</a>を読んでください。
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">手短な答え</p>
+            <ul class="list-disc pl-6 space-y-1">
+              <li><strong>今あるもので、今日、コピーを 1 つ：</strong>Apple Mail にアカウントを追加し、<strong>メールボックス</strong> &gt; <strong>メールボックスを書き出す</strong>を使います。</li>
+              <li><strong>すでに Outlook for Mac を使っている：</strong>従来の Outlook から .olm ファイルを書き出します。</li>
+              <li><strong>最新の状態を保てて検索もできるコピー：</strong>MailVault（無料）または Thunderbird（無料）。</li>
+              <li><strong>どれを選ぶにしても：</strong>オンラインで何かを削除する前に、バックアップから古いメールと添付ファイルを開いてください。</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">始める前に</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Microsoft 自身の書き出しにはデスクトップ版の Outlook が必要です。</strong>Microsoft のヘルプページによると、Outlook.com のメールボックスはデスクトップ版の Outlook で書き出します。Windows なら .pst ファイル、従来の Outlook for Mac なら .olm ファイルです。Outlook を持っていない場合、Microsoft は Microsoft 365 の 30 日間の無料試用版をすすめています。</li>
+            <li><strong>ほかのアプリは先進認証を使う必要があります。</strong>Microsoft によると、2024年9月16日以降、ほかのメールアプリが Outlook.com にアクセスするには、ユーザー名とパスワードだけでなく、先進認証（OAuth）を使う必要があります。Apple Mail、Thunderbird、MailVault はいずれも対応しています。</li>
+            <li><strong>ディスクの空き容量を確認してください。</strong>Outlook.com で<strong>設定</strong> &gt; <strong>アカウント</strong> &gt; <strong>ストレージ</strong>を見てください。バックアップには、Mac にそれと同じくらいの空き容量が必要です。</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">方法 1：従来の Outlook for Mac（.olm ファイル）</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Outlook for Mac に Outlook.com のアカウントを追加し、同期が終わるのを待ちます。</li>
+            <li>従来の Outlook に切り替えます。Microsoft がエクスポートを説明しているのは従来の Outlook for Mac だけで、従来の Outlook for Mac のサポートは 2026年10月に終了するとしています。ヘルプページには新しい Outlook for Mac でのエクスポートの説明がないので、この方法に頼る前に Microsoft のページで現在の状況を確認してください。</li>
+            <li><strong>ツール</strong>タブで<strong>エクスポート</strong>を選びます。見当たらない場合はアップデートを確認してから、<strong>ファイル</strong>メニューを見てください。</li>
+            <li><strong>アーカイブ ファイル (.olm) にエクスポート</strong>で必要な項目にチェックを入れ、<strong>続行</strong>を選んで、ファイルの保存先を選びます。</li>
+          </ol>
+
+          <p>
+            <strong>得られるもの：</strong>メールと、チェックを入れた場合は連絡先とカレンダーを含む 1 つの .olm ファイルです。<strong>ツール</strong> &gt; <strong>インポート</strong>で Outlook for Mac に取り込み直すためのものです。<strong>向いている人：</strong>すでに Outlook for Mac を使っている人。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">方法 2：Apple Mail（.mbox ファイル）</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>メールで<strong>メール</strong> &gt; <strong>アカウントを追加</strong>を選び、Outlook.com のアドレスを入力して手順に従います。Microsoft によると、アカウントを Outlook.com として設定すれば、Apple Mail は先進認証を使います。</li>
+            <li><strong>メール</strong> &gt; <strong>設定</strong> &gt; <strong>アカウント</strong> &gt; <strong>アカウント情報</strong>を選び、<strong>添付ファイルをダウンロード</strong>を<strong>すべて</strong>にします。メールは画像、PDF、ビデオ、オーディオを常にダウンロードします。<strong>最近</strong>の場合、ほかの種類の添付ファイルは過去 15 か月分しかダウンロードされません。</li>
+            <li>すべてのフォルダのダウンロードが終わるまで待ちます。念のため、最も古いメールをいくつか開いてください。</li>
+            <li>1 つ以上のメールボックスを選び、<strong>メールボックス</strong> &gt; <strong>メールボックスを書き出す</strong>を選びます。フォルダを選んで確定します。</li>
+          </ol>
+
+          <p>
+            <strong>得られるもの：</strong>メールボックスごとに 1 つの .mbox パッケージです。もう一度書き出すと、メールは古いファイルを置き換えず、<em>My Mailbox 3.mbox</em> のような新しいファイルを隣に作ります。後でバックアップを読むには<strong>ファイル</strong> &gt; <strong>メールボックスを読み込む</strong>を使います。メッセージは<strong>読み込み</strong>という名前の新しいメールボックスに表示されます。<strong>向いている人：</strong>何もインストールせずに手早くコピーを取りたい人。書き出しはその時点のスナップショットなので、新しいメールには新しい書き出しが必要です。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">方法 3：Thunderbird（.mbox または .eml ファイル）</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Thunderbird をインストールし、Outlook.com のアカウントを追加します。Mozilla の 2026 年のガイドでは、認証方式を <strong>OAuth2</strong> にし、Thunderbird 自体の設定で Microsoft のサイトからの Cookie を許可するよう案内しています。</li>
+            <li><strong>アカウント設定</strong> &gt; <strong>同期とディスク領域</strong>で、<strong>このアカウントのメッセージをこのコンピューターに保存する</strong>をオンにします。これがないと、Thunderbird はメッセージのヘッダーだけを保存し、残りはサーバーから取得します。</li>
+            <li>すべてのフォルダをダウンロードさせます。</li>
+            <li>ImportExportTools NG のアドオンをインストールします。フォルダを .mbox ファイルとして、またはフォルダ内のメッセージを .eml、HTML、PDF、CSV、プレーンテキストのファイルとして書き出せます。</li>
+          </ol>
+
+          <p>
+            <strong>向いている人：</strong>日々の利用にも使える、無料でオープンソースのメールアプリが欲しい人。職場や学校のアカウントでは、先に管理者が Thunderbird を承認する必要がある場合があります。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">方法 4：MailVault（検索できる .eml ファイル）</h2>
+
+          <p>
+            MailVault は、メールのコピーをコンピュータ上の保管庫に保管する、macOS・Windows・Linux 向けの無料のメールアプリです。MailVault のアカウントはなく、メールが MailVault のサーバーを通ることもありません。以下の手順は、私たちのウェブサイトからダウンロードする版のものです。Mac App Store 版は、バックアップ設定や保管庫の移動など、いくつかの点で異なります。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Outlook.com のアカウントを接続する</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><a href="/ja/get-started.html" class="text-primary-500 hover:text-primary-600 underline">MailVault をダウンロード</a>して開きます。Outlook.com のアカウントのアーカイブを修正したバージョン 2.19.1 以降を使ってください。</li>
+            <li><strong>アカウントを追加</strong>を選び、<strong>Outlook / Microsoft 365</strong> を選んで、アドレスを入力します。</li>
+            <li><strong>Microsoft でサインイン</strong>を選びます。ブラウザで Microsoft のサインインページが開きます。戻ってくると、MailVault が自動的にアカウントを追加します。</li>
+          </ol>
+
+          <p>
+            MailVault は outlook.com、hotmail.com、live.com のアドレス（と地域ごとの版）を認識し、Microsoft のメール API である Microsoft Graph 経由で接続します。IMAP の設定やアプリパスワードを入力する必要はありません。職場や学校の Microsoft 365 のアカウントは、代わりに IMAP 上の OAuth2 でサインインします。ルールの厳しい組織は、<strong>詳細設定（法人向け）</strong>で独自のクライアント ID とテナント ID を設定できます。
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/onboarding-account-720.webp 720w, /screenshots/ja/onboarding-account-1440.webp 1440w, /screenshots/ja/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/onboarding-account-light-1440.webp" srcset="/screenshots/ja/onboarding-account-light-720.webp 720w, /screenshots/ja/onboarding-account-light-1440.webp 1440w, /screenshots/ja/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="「データが置かれる場所」という見出しの MailVault の初回起動画面。「システムキーチェーン」「平文ファイルには何も置きません」「アカウント不要、テレメトリなし」、そして「あなたの保管庫：アーカイブした各メールは、ディスク上の標準的な .eml ファイルです」が並び、その下に「最初のアカウントを追加」ボタンがあります。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">アカウントを追加する前に、MailVault はデータがどこに置かれるかを説明します。サインイン情報はシステムキーチェーンに、アーカイブした各メールは標準的な .eml ファイルとしてディスクに置かれます。</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">バックアップを作る</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>設定</strong> &gt; <strong>バックアップと復元</strong> &gt; <strong>バックアップ設定</strong>を開きます。</li>
+            <li><strong>バックアップの対象</strong>で<strong>すべてのメール（サーバーから取得）</strong>を選びます。もう一方の<strong>アーカイブ済みメールのみ</strong>は、すでに保管庫にあるメールだけをコピーします。</li>
+            <li>外付けドライブがあるなら、<strong>2 つ目のコピー</strong>のフォルダを選んでください。MailVault が日常的には読まない、別のコピーです。</li>
+            <li><strong>バックアップのスケジュール</strong>タブで<strong>すべてのアカウントを今すぐバックアップ</strong>を選びます。手動バックアップは無料で、上限はありません。</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/settings-backup-light-1440.webp" srcset="/screenshots/ja/settings-backup-light-720.webp 720w, /screenshots/ja/settings-backup-light-1440.webp 1440w, /screenshots/ja/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault の設定の、バックアップと復元のバックアップ設定タブ。「フォルダを開く」と「メールを別のフォルダーへ移動」のボタンが付いた「メールの保存場所」、「アーカイブ済みメールのみ」に設定された「バックアップの対象」のメニュー、そしてコピーが 1 つしかないという警告の付いた「2 つ目のコピー」の欄が表示されています。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">バックアップ設定には、メールの保存場所、バックアップの対象、2 つ目のコピーがあるかどうかが表示されます。すべてが 1 か所にある場合は、オレンジ色の注意書きが警告します。</figcaption>
+          </figure>
+
+          <p>
+            <strong>得られるもの：</strong>アカウントとフォルダごとに整理された Maildir のフォルダに、1 通につき 1 つの .eml ファイル。Mac での既定の場所は <code>~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/</code> です。Mac App Store 版を除き、保管庫は別のドライブに移せます。2 回目以降のバックアップは差分で、新しいメールだけがダウンロードされます。メールは MailVault で検索でき、オフラインでも使えます。
+          </p>
+
+          <p>
+            <strong>無料と Premium：</strong>アカウントの接続、閲覧、検索、アーカイブ、手動バックアップは無料です。スケジュール自動バックアップ、バックアップの健全性チェック、すべて保存（すべてのフォルダと全期間のメールをバックグラウンドでダウンロードして保存します）、ワンステップの<a href="/ja/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">アーカイブして削除</a>は Premium で、現在は早期アクセス価格で月額 $4 または年額 $25 です。
+          </p>
+
+          <p>
+            <strong>Outlook.com のアカウントの既知の制限：</strong>これらのアカウントは Microsoft Graph を使うため、スヌーズはまだ使えず、MBOX ファイルをサーバーに復元できず、削除したメールはコンピュータには復元できてもサーバーには戻せず、接続テストの後の受信トレイの件数は表示されません。閲覧、削除、移動、マーク、バックアップは、ほかのアカウントと同じように使えます。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">4 つの方法の比較</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">方法</th>
+                  <th class="py-3 pr-4 font-semibold">費用</th>
+                  <th class="py-3 pr-4 font-semibold">結果</th>
+                  <th class="py-3 pr-4 font-semibold">後から届くメール</th>
+                  <th class="py-3 font-semibold">検索する場所</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">従来の Outlook for Mac</td>
+                  <td class="py-3 pr-4">デスクトップ版の Outlook が必要</td>
+                  <td class="py-3 pr-4">1 つの .olm ファイル</td>
+                  <td class="py-3 pr-4">もう一度書き出す</td>
+                  <td class="py-3">取り込み後の Outlook for Mac</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Apple Mail</td>
+                  <td class="py-3 pr-4">macOS に付属</td>
+                  <td class="py-3 pr-4">メールボックスごとに 1 つの .mbox パッケージ</td>
+                  <td class="py-3 pr-4">もう一度書き出す</td>
+                  <td class="py-3">読み込み後の Apple Mail</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Thunderbird と ImportExportTools NG</td>
+                  <td class="py-3 pr-4">無料</td>
+                  <td class="py-3 pr-4">フォルダごとの .mbox、またはメッセージごとの .eml、HTML、PDF</td>
+                  <td class="py-3 pr-4">Thunderbird は同期を続けます。ファイルにするにはもう一度書き出し</td>
+                  <td class="py-3">Thunderbird</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">MailVault</td>
+                  <td class="py-3 pr-4">無料。スケジュールは Premium</td>
+                  <td class="py-3 pr-4">Maildir のフォルダに、1 通につき 1 つの .eml ファイル</td>
+                  <td class="py-3 pr-4">もう一度バックアップ。新しいメールだけをダウンロード</td>
+                  <td class="py-3">ローカルの検索インデックスを持つ MailVault</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">最終確認：2026年10月。Apple Mail、Thunderbird、Outlook for Mac は、いずれもバックアップ以外のこともできます。この表は、Outlook.com のメールのコピーを残すうえで重要な点だけを扱っています。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">バックアップが完全か確認する方法</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>件数を比べます。</strong>Outlook.com で大きなフォルダごとのメールの件数を書き留め、バックアップと比べてください。MailVault では、各フォルダのヘッダーに、そのメールのうち何件が保管庫にあるかが表示されます。たとえば<em>保管庫に 79 / 79</em> のようにです。すべてのフォルダのサーバーと保管庫の件数の表は Premium（バックアップの健全性チェック）に含まれます。</li>
+            <li>最近のメールだけでなく、<strong>最も古いメールを開きます。</strong>抜けが隠れているのは古いフォルダです。</li>
+            <li>PDF、写真、Office の文書など、何種類かの<strong>添付ファイルを開きます</strong>。</li>
+            <li>名前や注文番号など、何年も前の<strong>覚えているものを検索します</strong>。</li>
+            <li><strong>作ったアプリの外でファイルを開きます。</strong>.eml ファイルはダブルクリックすると Apple Mail で開きます。.mbox は<strong>ファイル</strong> &gt; <strong>メールボックスを読み込む</strong>で読み込みます。</li>
+            <li>別のドライブに<strong>2 つ目のコピーを置きます</strong>。1 台のノートパソコンにコピーが 1 つだけでは、バックアップとは言えません。</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="「保管庫」のフィルターを選んだ MailVault の受信トレイ。ヘッダーにはフォルダのメールの件数と「保管庫に」の件数が表示され、すべてのメッセージの行に緑色の保管庫のアイコンがあります。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">フォルダのヘッダーで手早く確認できます。「保管庫に」の 2 つの数字が一致していれば、MailVault がこのフォルダで数えたすべてのメールのコピーがコンピュータにあります。隅にある進行状況のカードは別のジョブのものです。</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h2>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook なしで Hotmail のメールを Mac に書き出せますか？</h3>
+            <p>はい。Apple Mail は Outlook.com のメールをダウンロードし、各メールボックスを .mbox ファイルとして書き出せます。Thunderbird も書き出し用のアドオンで同じことができ、MailVault は各メッセージを .eml ファイルとして保存します。Microsoft 自身の書き出しにはデスクトップ版の Outlook が必要です。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">メールのバックアップに最適なファイル形式は？</h3>
+            <p>ほかのアプリで開ける形式です。.eml ファイルは 1 通のメッセージを添付ファイルごと収め、.mbox ファイルはメールボックス全体を収めます。Apple Mail は .eml ファイルを開け、.mbox ファイルを読み込めます。.olm ファイルは Outlook for Mac に取り込み直すためのものです。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">MailVault は Hotmail や Live.com のアドレスでも使えますか？</h3>
+            <p>はい。MailVault は outlook.com、hotmail.com、live.com のアドレスを個人の Microsoft アカウントとして扱います。ブラウザで Microsoft にサインインすると、MailVault は Microsoft Graph 経由で接続するので、入力する IMAP の設定はありません。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">メールのバックアップは最新の状態に保たれますか？</h3>
+            <p>Apple Mail や Outlook からの書き出しはその時点のスナップショットなので、新しいメールを含めるにはもう一度書き出します。MailVault ではバックアップをもう一度実行すれば、新しいメールだけがダウンロードされます。スケジュール自動バックアップは MailVault Premium に含まれます。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com にはまだ「メールボックスのエクスポート」ボタンがありますか？</h3>
+            <p>Microsoft の現在のヘルプページでは、デスクトップ版の Outlook による書き出しだけを説明しています。古いガイドには、Outlook.com の設定にある「メールボックスのエクスポート」ボタンが出てきます。自分のアカウントで見当たらない場合は、このページの方法のどれかを使ってください。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">次にすること</h2>
+
+          <p>
+            方法を 1 つ選んで今週のうちに最初のコピーを作り、上の一覧で確認してください。メールボックスがすでにいっぱいなら、届いたメールが送信者に戻されないよう、先に<a href="/ja/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">Outlook のストレージがいっぱいになったときの対処法</a>を読んでください。<a href="/ja/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com や Hotmail のメールボックスがいっぱい</a>の短い概要と、プロバイダーを問わない<a href="/ja/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">メールの容量を空けるガイド</a>では、ローカルのコピーがあればメールを失わずにオンラインで削除できる仕組みを説明しています。ローカルのコピーと大きなプランを比べるには、<a href="/ja/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">ローカルでのアーカイブとストレージの追加購入の比較</a>を参照してください。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">MailVault で Outlook.com を Mac にバックアップ</p>
+            <p class="text-sm mb-4">無料で、ソースコードは GitHub で公開。各メールはディスク上のプレーンな .eml ファイルです。手動バックアップは無料、スケジュールバックアップは Premium です。</p>
+            <a href="/ja/get-started.html" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault を無料でダウンロード
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            出典：Microsoft、<a href="https://support.microsoft.com/en-us/outlook/export-your-outlook-com-mailbox" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Outlook.com のメールボックスをエクスポートする</a>、<a href="https://support.microsoft.com/en-us/outlook/export-items-to-an-archive-file-in-outlook-for-mac" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">従来の Outlook for Mac でアイテムをアーカイブファイルにエクスポートする</a>、<a href="https://support.microsoft.com/en-us/office/modern-authentication-methods-now-needed-to-continue-syncing-outlook-email-in-non-microsoft-email-apps-c5d65390-9676-4763-b41f-d7986499a90d" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Microsoft 以外のメールアプリで Outlook のメールの同期を続けるには先進認証が必要になりました</a>。Apple、<a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Mac のメールでメールボックスを読み込む / 書き出す</a>。Mozilla、<a href="https://support.mozilla.org/en-US/kb/microsoft-oauth-authentication-and-thunderbird-202" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Microsoft の OAuth 認証と Thunderbird</a>。最終確認：2026年10月。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>メールを読む。メールを残す。</p>
+</div>
+<nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/mentioned-in.html">掲載情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">コミュニティ ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">チームに連絡 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

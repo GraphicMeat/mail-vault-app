@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailStore Home 대안: MailVault와 비교 | MailVault</title>
+  <meta name="description" content="MailVault vs MailStore Home: 플랫폼, 가격, PST와 IMAP 같은 원본, 저장 형식, 검색과 삭제 규칙, 그리고 각각이 앞서는 부분.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/compare/mailvault-vs-mailstore-home.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/compare/mailvault-vs-mailstore-home.html">
+  <meta property="og:title" content="MailStore Home 대안: MailVault와 비교 | MailVault">
+  <meta property="og:description" content="MailVault vs MailStore Home: 플랫폼, 가격, PST와 IMAP 같은 원본, 저장 형식, 검색과 삭제 규칙, 그리고 각각이 앞서는 부분.">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailStore Home 대안: MailVault와 비교 | MailVault">
+  <meta name="twitter:description" content="MailVault vs MailStore Home: 플랫폼, 가격, PST와 IMAP 같은 원본, 저장 형식, 검색과 삭제 규칙, 그리고 각각이 앞서는 부분.">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailVault vs MailStore Home 나란히 보기",
+  "description": "MailVault vs MailStore Home: 플랫폼, 가격, PST와 IMAP 같은 원본, 저장 형식, 검색과 삭제 규칙, 그리고 각각이 앞서는 부분.",
+  "url": "https://mailvaultapp.com/ko/compare/mailvault-vs-mailstore-home.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Mac용 MailStore Home이 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "아니요. MailStore는 MailStore Home의 시스템 요구 사항으로 Windows 10과 Windows 11을 밝히고 있습니다. Mac에서는 MailVault나 다른 Mac용 선택지 같은 다른 도구가 필요합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault로 MailStore Home 보관본을 가져올 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "직접은 안 됩니다. MailVault는 MailStore의 보관 파일을 읽지 못합니다. MailStore Home에서 메일을 IMAP이나 Gmail 메일함으로 내보내 MailVault로 보관하거나, MailVault를 원래 계정들에 연결하십시오."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault는 PST 파일을 열 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "아니요. MailVault는 MBOX 파일을 가져오고 Gmail, Microsoft 365, Outlook.com, IMAP 계정에 연결합니다. 오래된 메일이 PST 파일에 있다면 Windows의 MailStore Home이 보관할 수 있습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailStore Home은 정말 무료입니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailStore에 따르면 가정의 개인 용도로는 무료입니다. 상업적 용도에는 유료 MailStore Server를 안내합니다."
+      }
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/compare/mailvault-vs-mailstore-home.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/compare/mailvault-vs-mailstore-home.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+<nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/compare/mailvault-vs-mailstore-home.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/compare/mailvault-vs-mailstore-home.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/compare/mailvault-vs-mailstore-home.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/compare/mailvault-vs-mailstore-home.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/compare/mailvault-vs-mailstore-home.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/compare/mailvault-vs-mailstore-home.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/compare/mailvault-vs-mailstore-home.html" lang="ko" hreflang="ko" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/compare/mailvault-vs-mailstore-home.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/compare/mailvault-vs-mailstore-home.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary>
+<nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault vs MailStore Home 나란히 보기</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            <strong>MailStore Home 대안</strong>을 원한다면, 이 페이지는 한 사람의 메일을 위한 두 무료 도구를 직접 비교합니다. MailStore Home은 Outlook, Thunderbird, Gmail, Outlook.com, IMAP 계정, PST 파일의 메일을 하나의 검색 가능한 보관본으로 복사하는 Windows 프로그램입니다. MailVault는 메일 사본을 일반 <code>.eml</code> 파일로 컴퓨터에 간직하는 macOS, Windows, Linux용 무료 메일 앱입니다. 회사 전체를 위한 보관 시스템이 필요하다면 대신 <a href="/ko/guides/mailstore-server-alternative.html" class="text-primary-500 hover:text-primary-600 underline">MailStore Server 대안</a>을 읽으십시오. 더 넓은 도구 목록은 <a href="/ko/guides/mailstore-alternatives-compared.html" class="text-primary-500 hover:text-primary-600 underline">MailStore 대안 비교</a>를 보십시오.
+          </p>
+
+          <div class="p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">빠른 답</p>
+            <p>Windows에서 PST 파일이나 여러 로컬 메일 프로그램에서 가져와야 한다면 MailStore Home이 더 잘 맞습니다. Mac이나 Linux를 쓰거나, 메일을 읽고 답장하는 앱 안에 보관본을 일반 <code>.eml</code> 파일로 두고 싶다면 MailVault가 더 잘 맞습니다.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">나란히 비교</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">기능</th>
+                  <th class="py-3 pr-4 font-semibold">MailStore Home</th>
+                  <th class="py-3 font-semibold">MailVault</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">플랫폼</td>
+                  <td class="py-3 pr-4">Windows 10과 11, .NET Framework 4.8 이상</td>
+                  <td class="py-3">macOS 11 이상, Windows 10과 11, Linux(.deb와 Snap)</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">가격</td>
+                  <td class="py-3 pr-4">가정의 개인 용도로 무료. 회사는 MailStore Server를 안내받음</td>
+                  <td class="py-3">무료. 선택형 Premium $4/월 또는 $25/년(얼리 액세스 가격)</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">소스 코드</td>
+                  <td class="py-3 pr-4">비공개</td>
+                  <td class="py-3">소스 코드는 GitHub에</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">메일을 가져오는 곳</td>
+                  <td class="py-3 pr-4">Gmail, Yahoo Mail, Outlook.com, 모든 IMAP 또는 POP3 메일함, Outlook 2003~2019, Exchange Server 2003~2019, Thunderbird, SeaMonkey, Windows 메일, PST와 EML 파일</td>
+                  <td class="py-3">Gmail, Microsoft 365, Outlook.com, 모든 IMAP 계정. Google Takeout 내보내기 같은 MBOX 파일</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">보관본 저장 방식</td>
+                  <td class="py-3 pr-4">데이터 폴더 안의 MailStore 자체 보관 파일. EML이나 MSG 파일은 내보내야 얻음</td>
+                  <td class="py-3">Maildir 방식 폴더 안의 일반 .eml 파일, 메시지마다 파일 하나</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">검색</td>
+                  <td class="py-3 pr-4">첨부 파일을 포함한 전문 검색. 첨부 파일 색인용 선택형 iFilter 팩</td>
+                  <td class="py-3">오프라인에서도 작동하는 로컬 전문 인덱스. 첨부 파일 검색은 Premium</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">읽기, 답장, 보내기</td>
+                  <td class="py-3 pr-4">아니요, 보관 도구입니다</td>
+                  <td class="py-3">예, 완전한 메일 앱입니다</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">보관 후 메일함에서 메일 제거</td>
+                  <td class="py-3 pr-4">보관 프로필마다 무료: 즉시, 정해진 시간 뒤, 또는 정해진 기간보다 오래된 메일, 그리고 보관이 확인된 메일만</td>
+                  <td class="py-3">보관과 서버에서 삭제는 따로 하면 무료. 사본을 하나하나 확인하는 한 번에 하는 보관 후 삭제는 Premium</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">메일 다시 꺼내기</td>
+                  <td class="py-3 pr-4">Exchange, IMAP, Gmail 메일함, SMTP를 통한 주소, 메일 클라이언트, EML이나 MSG 파일 폴더로 내보내기</td>
+                  <td class="py-3">.eml 파일 그 자체, ZIP 내보내기, MBOX 내보내기, IMAP 서버로 MBOX 복원</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">USB 드라이브에서 포터블로 실행</td>
+                  <td class="py-3 pr-4">예, 무료</td>
+                  <td class="py-3">Windows 전용, Premium</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">최근 업데이트</td>
+                  <td class="py-3 pr-4">26.1(2026년 1월), 26.2(2026년 4월), 26.3(2026년 7월)</td>
+                  <td class="py-3">2026년 10월 7일 2.19.1. 한 달에 여러 번 릴리스</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">도움말</td>
+                  <td class="py-3 pr-4">온라인 매뉴얼과 커뮤니티 포럼</td>
+                  <td class="py-3">FAQ, 설정 가이드, GitHub Discussions, Discord</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">마지막 확인: 2026년 10월, mailstore.com과 help.mailstore.com 기준. 최신 정보는 MailStore 사이트에서 확인하십시오.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailStore Home이 앞서는 부분</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>더 많은 원본, 특히 Windows에서.</strong> Outlook 프로필, PST 파일, Exchange Server 메일함, Windows 메일, Thunderbird 프로필을 읽습니다. MailVault는 PST 파일을 전혀 읽지 못합니다.</li>
+            <li><strong>무료 첨부 파일 검색.</strong> MailStore Home은 첨부 파일을 무료로 색인합니다. MailVault에서 PDF와 Office 첨부 파일 내부 검색은 Premium입니다.</li>
+            <li><strong>무료 삭제 규칙.</strong> 보관 프로필은 보관이 끝난 뒤, 일정 대기 기간이 지난 뒤, 또는 기간 기준으로 메일함에서 메일을 제거할 수 있으며, 보관본에 있다고 확인된 메일만 제거합니다. 플래그가 지정된 메시지는 함께 지우는 옵션을 켜지 않는 한 남겨 둡니다. MailVault에서 자동 정리 규칙과 한 번에 하는 보관 후 삭제는 Premium입니다.</li>
+            <li><strong>무료 포터블.</strong> 설치하지 않고 USB 드라이브에서 실행됩니다. MailVault의 포터블 모드는 Windows 전용이며 Premium입니다.</li>
+            <li><strong>메일을 되돌려 놓는 방법이 더 많습니다.</strong> 보관한 메일을 Exchange, IMAP 메일함, Gmail로 내보낼 수 있어 이전 도구로도 쓸 수 있습니다.</li>
+            <li><strong>오랜 실적.</strong> MailStore 제품은 2006년부터 시장에 있었고, Home은 2026년에도 업데이트를 받았습니다.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailVault가 앞서는 부분</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Mac과 Linux에서 실행됩니다.</strong> MailStore Home은 Windows 10과 11만 명시합니다. MailVault는 macOS 11 이상(Apple Silicon과 Intel), Windows, Linux에서 실행됩니다. Mac의 경우는 <a href="/ko/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac용 MailStore 대안 가이드</a>에서 다룹니다.</li>
+            <li><strong>보관본이 일반 파일입니다.</strong> 메시지마다 Maildir 방식 폴더 안의 표준 <code>.eml</code> 파일이며, Apple Mail, Thunderbird, 텍스트 편집기로 MailVault 없이 열 수 있습니다. MailStore Home은 메일을 자체 보관 파일에 두며, 표준 파일을 꺼내려면 내보내야 합니다.</li>
+            <li><strong>메일을 읽고 간직하는 앱 하나.</strong> MailVault는 완전한 메일 클라이언트입니다. 읽고, 검색하고, 답장하고, 보낸 다음, 간직하고 싶은 것을 보관합니다. 각 행에 메시지가 서버에 있는지, 볼트에 있는지, 둘 다에 있는지 표시됩니다.</li>
+            <li><strong>Microsoft 365가 명시된 원본입니다.</strong> Microsoft 365 계정은 OAuth2로 로그인하고, 개인 Outlook.com, Hotmail, Live.com 계정은 Microsoft Graph로 연결됩니다. MailStore Home 제품 페이지에는 Outlook.com과 Exchange Server 2003~2019는 나와 있지만 Microsoft 365는 없습니다.</li>
+            <li><strong>소스 코드는 GitHub에 있습니다.</strong> 코드가 GitHub에 있으므로 메일을 어떻게 다루는지 직접 확인할 수 있습니다.</li>
+          </ul>
+
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">보관본이 있는 곳</h2>
+
+          <p>
+            MailStore Home에서 보관본은 데이터 폴더에 있으며, 내장 백업 기능으로 백업하거나 프로그램을 닫은 상태에서 폴더를 복사해 백업합니다. MailStore는 그 폴더를 Dropbox 같은 동기화 서비스에 두지 말라고 경고합니다. MailStore Home이 파일을 쓰는 동안 서비스가 파일을 건드릴 수 있기 때문입니다.
+          </p>
+
+          <p>
+            MailVault에서 보관본은 <code>.eml</code> 파일이 든 폴더입니다. 설정, 백업 및 복원에서 위치를 보여 주고, 파일 관리자로 열며, 다른 드라이브로 옮길 수 있습니다. 외장 드라이브나 NAS 공유 폴더에 두 번째 사본을 추가할 수 있으며, 백업을 실행할 때마다 기록됩니다.
+          </p>
+
+          <figure class="pt-2">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/ko/settings-backup-light-1440.webp" srcset="/screenshots/ko/settings-backup-light-720.webp 720w, /screenshots/ko/settings-backup-light-1440.webp 1440w, /screenshots/ko/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="MailVault 설정, 백업 및 복원, 백업 설정 탭: 폴더 열기와 메일을 다른 폴더로 이동 버튼이 있는 메일 저장 위치 패널, 그 아래 두 번째 사본(외부 콜드 스토리지) 폴더 선택기." class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async"></picture>
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">MailVault는 메일이 들어 있는 폴더를 보여 주고, 다른 드라이브로 옮길 수 있으며, 고른 폴더에 두 번째 사본을 쓸 수 있습니다.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailStore Home에서 MailVault로 옮기기</h2>
+
+          <p>
+            MailVault는 MailStore의 보관 파일을 직접 열지 못합니다. 가장 간단한 방법은 MailVault를 같은 계정들에 연결하고 아직 서버에 있는 것을 보관하는 것입니다. 이제 MailStore Home에만 있는 메일은 MailStore Home에서 IMAP이나 Gmail 메일함으로 내보내고, MailVault가 보관하게 한 다음, 다시 서버에서 지우십시오. 내보내기를 하면 그 메일이 한동안 다시 서버에 올라가므로, 먼저 메일함 용량을 확인하십시오.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">누가 무엇을 골라야 할까</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>Windows를 쓰고, 가져올 PST 파일이나 Outlook과 Thunderbird 프로필이 있고, 무료 첨부 파일 검색과 무료 삭제 규칙을 원하며, 보관 전용 도구로 만족한다면 <strong>MailStore Home을 고르십시오</strong>.</li>
+            <li>Mac이나 Linux를 쓰고, 어디서든 열 수 있는 일반 파일로 보관본을 원하고, Gmail, Microsoft 365, Outlook.com, IMAP을 쓰며, 메일을 읽고 검색하고 간직하는 앱 하나를 원한다면 <strong>MailVault를 고르십시오</strong>.</li>
+            <li>회사에 보존 정책, 소송 보존, 감사 로그가 필요하다면 <strong>둘 다 고르지 마십시오</strong>. 그것은 서버의 영역입니다.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h2>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Mac용 MailStore Home이 있습니까?</p>
+            <p>아니요. MailStore는 MailStore Home의 시스템 요구 사항으로 Windows 10과 Windows 11을 밝히고 있습니다. Mac에서는 MailVault나 다른 Mac용 선택지 같은 다른 도구가 필요합니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailVault로 MailStore Home 보관본을 가져올 수 있습니까?</p>
+            <p>직접은 안 됩니다. MailVault는 MailStore의 보관 파일을 읽지 못합니다. MailStore Home에서 메일을 IMAP이나 Gmail 메일함으로 내보내 MailVault로 보관하거나, MailVault를 원래 계정들에 연결하십시오.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailVault는 PST 파일을 열 수 있습니까?</p>
+            <p>아니요. MailVault는 MBOX 파일을 가져오고 Gmail, Microsoft 365, Outlook.com, IMAP 계정에 연결합니다. 오래된 메일이 PST 파일에 있다면 Windows의 MailStore Home이 보관할 수 있습니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailStore Home은 정말 무료입니까?</p>
+            <p>MailStore에 따르면 가정의 개인 용도로는 무료입니다. 상업적 용도에는 유료 MailStore Server를 안내합니다.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">다음에 할 일</h2>
+
+          <p>
+            Windows에서 PST 파일이 있다면 MailStore Home부터 써 보십시오. Mac이나 Linux를 쓰거나 일반 파일을 원한다면, <a href="/ko/get-started.html" class="text-primary-500 hover:text-primary-600 underline">MailVault를 무료로 다운로드</a>하고, 계정 하나를 연결하고, 오래된 한 해를 보관해 작동 방식을 보십시오. 무엇이 무료이고 무엇이 Premium인지는 <a href="/ko/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">보관 후 삭제 페이지</a>에 있습니다.
+          </p>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            MailVault를 <a href="/ko/compare/mailvault-vs-thunderbird.html" class="text-primary-500 hover:text-primary-600 underline">Thunderbird</a>, <a href="/ko/compare/mailvault-vs-apple-mail.html" class="text-primary-500 hover:text-primary-600 underline">Apple Mail</a>과도 비교해 보거나, <a href="/ko/features/search.html" class="text-primary-500 hover:text-primary-600 underline">로컬 검색</a>에 관해 읽어 보십시오.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>메일을 읽고, 메일을 보관하세요.</p>
+</div>
+<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

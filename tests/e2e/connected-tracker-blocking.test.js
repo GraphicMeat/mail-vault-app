@@ -171,8 +171,8 @@ describe('Tracker blocking', function () {
     await openTab('Tracker Blocking');
     const text = await settingsText();
     expect(text).toContain('Tracker Blocking is a Premium Feature');
-    expect(text).toContain('Before — beacon fires on open');
-    expect(text).toContain('After — beacon removed');
+    expect(text).toContain('Before: beacon fires on open');
+    expect(text).toContain('After: beacon removed');
     // The upsell has to show the tracking code itself, not just describe it.
     expect(text).toContain('open.php');
     expect(text).toContain('data-mv-tracker-blocked');

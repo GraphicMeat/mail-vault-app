@@ -8,6 +8,7 @@
 //! be a bigger change than the storage swap this is.
 
 use rusqlite::{params, Connection};
+use std::collections::HashSet;
 
 // ── Results ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,81 @@ pub fn replace_account(conn: &Connection, account_id: &str, entries: &[(String, 
             stmt.execute(params![account_id, key, json]).map_err(|e| e.to_string())?;
         }
         Ok(())
+    })
+}
+
+/// Whether a result is stored for this message.
+pub fn has(conn: &Connection, account_id: &str, email_key: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM classifications WHERE account_id = ?1 AND email_key = ?2)",
+        params![account_id, email_key],
+        |r| r.get(0),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Several results in one transaction, leaving every key not given alone. A
+/// row pruned meanwhile (`remove_at`) is not written back.
+pub fn put_many(conn: &Connection, account_id: &str, entries: &[(String, String)]) -> Result<(), String> {
+    crate::app_db::db::in_txn(conn, || {
+        let mut stmt = conn
+            .prepare_cached("INSERT OR REPLACE INTO classifications(account_id, email_key, entry_json) VALUES (?1,?2,?3)")
+            .map_err(|e| e.to_string())?;
+        for (key, json) in entries {
+            stmt.execute(params![account_id, key, json]).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+}
+
+/// Forget the results of these uids in `mailbox`: the server no longer has
+/// them there (deleted, archived and removed, or moved out), so Cleanup must
+/// not list them. A row with no snapshot mailbox was classified in INBOX.
+/// Returns how many rows went.
+pub fn remove_at(conn: &Connection, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<usize, String> {
+    let uids: HashSet<u64> = uids.iter().map(|&u| u64::from(u)).collect();
+    remove_where(conn, account_id, mailbox, |uid| uid.is_some_and(|u| uids.contains(&u)))
+}
+
+/// Forget every result in `mailbox`: its UIDVALIDITY changed, so each stored
+/// uid may now name another message.
+pub fn remove_mailbox(conn: &Connection, account_id: &str, mailbox: &str) -> Result<usize, String> {
+    remove_where(conn, account_id, mailbox, |_| true)
+}
+
+/// Delete the account's rows in `mailbox` whose snapshot uid `gone` picks.
+/// One scan of the account reading only the two snapshot fields, then deletes
+/// by key, all in one transaction so a concurrent save cannot interleave.
+fn remove_where(conn: &Connection, account_id: &str, mailbox: &str, gone: impl Fn(Option<u64>) -> bool) -> Result<usize, String> {
+    crate::app_db::db::in_txn(conn, || {
+        let mut stmt = conn
+            .prepare(
+                "SELECT email_key, \
+                        CASE WHEN json_valid(entry_json) THEN json_extract(entry_json, '$.snapshot.uid') END, \
+                        CASE WHEN json_valid(entry_json) THEN json_extract(entry_json, '$.snapshot.mailbox') END \
+                 FROM classifications WHERE account_id = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let keys: Vec<String> = stmt
+            .query_map([account_id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, Option<String>>(2)?))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(Result::ok)
+            .filter(|(_, uid, mb)| {
+                let mb = mb.as_deref().filter(|m| !m.is_empty()).unwrap_or("INBOX");
+                mb == mailbox && gone(uid.and_then(|u| u64::try_from(u).ok()))
+            })
+            .map(|(key, _, _)| key)
+            .collect();
+        drop(stmt);
+        let mut delete = conn
+            .prepare_cached("DELETE FROM classifications WHERE account_id = ?1 AND email_key = ?2")
+            .map_err(|e| e.to_string())?;
+        for key in &keys {
+            delete.execute(params![account_id, key]).map_err(|e| e.to_string())?;
+        }
+        Ok(keys.len())
     })
 }
 
@@ -128,6 +204,88 @@ mod tests {
         replace_account(&c, "a", &[("k1".into(), "1".into())]).unwrap();
         put(&c, "a", "k2", "2").unwrap();
         assert_eq!(load(&c, "a").unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn row(uid: u64, mailbox: &str) -> String {
+        serde_json::json!({"category": "newsletter", "snapshot": {"uid": uid, "subject": "s", "from": "f", "date": "d", "mailbox": mailbox}})
+            .to_string()
+    }
+
+    fn keys(c: &Connection, account: &str) -> Vec<String> {
+        let mut k: Vec<String> = load(c, account).unwrap().into_iter().map(|(k, _)| k).collect();
+        k.sort();
+        k
+    }
+
+    fn seeded(name: &str) -> (std::path::PathBuf, Connection) {
+        let (dir, c) = conn(name);
+        put_many(
+            &c,
+            "a",
+            &[
+                ("in1".into(), row(1, "INBOX")),
+                ("in2".into(), row(2, "INBOX")),
+                ("arch1".into(), row(1, "Archive")),
+                ("legacy3".into(), row(3, "")),
+            ],
+        )
+        .unwrap();
+        put_many(&c, "b", &[("b1".into(), row(1, "INBOX"))]).unwrap();
+        (dir, c)
+    }
+
+    #[test]
+    fn put_many_leaves_the_other_keys_alone() {
+        let (dir, c) = conn("put-many");
+        put_many(&c, "a", &[("k1".into(), row(1, "INBOX"))]).unwrap();
+        put_many(&c, "a", &[("k2".into(), row(2, "INBOX"))]).unwrap();
+        assert_eq!(keys(&c, "a"), vec!["k1".to_string(), "k2".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn has_answers_per_account_and_key() {
+        let (dir, c) = seeded("has");
+        assert!(has(&c, "a", "in1").unwrap());
+        assert!(!has(&c, "a", "b1").unwrap());
+        assert!(!has(&c, "b", "in1").unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_delete_forgets_exactly_the_deleted_uids_of_that_mailbox() {
+        let (dir, c) = seeded("delete");
+        assert_eq!(remove_at(&c, "a", "INBOX", &[1, 99]).unwrap(), 1);
+        assert_eq!(keys(&c, "a"), vec!["arch1".to_string(), "in2".to_string(), "legacy3".to_string()]);
+        assert_eq!(keys(&c, "b"), vec!["b1".to_string()], "another account's uid 1 stays");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_move_out_forgets_the_source_row_only() {
+        let (dir, c) = seeded("move");
+        // uid 1 moved out of Archive; INBOX's own uid 1 is another message.
+        assert_eq!(remove_at(&c, "a", "Archive", &[1]).unwrap(), 1);
+        assert_eq!(keys(&c, "a"), vec!["in1".to_string(), "in2".to_string(), "legacy3".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_archive_and_delete_forgets_a_legacy_row_with_no_mailbox_as_inbox() {
+        let (dir, c) = seeded("legacy");
+        assert_eq!(remove_at(&c, "a", "INBOX", &[3]).unwrap(), 1);
+        assert!(!keys(&c, "a").contains(&"legacy3".to_string()));
+        assert_eq!(remove_at(&c, "a", "Archive", &[2]).unwrap(), 0, "INBOX's uid 2 is not Archive's");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_uid_validity_change_forgets_the_whole_mailbox() {
+        let (dir, c) = seeded("wipe");
+        assert_eq!(remove_mailbox(&c, "a", "INBOX").unwrap(), 3);
+        assert_eq!(keys(&c, "a"), vec!["arch1".to_string()]);
+        assert_eq!(keys(&c, "b"), vec!["b1".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

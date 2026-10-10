@@ -284,6 +284,13 @@
 .mv-yearly-saving { display:flex; flex-direction:column; gap:4px; background:var(--mv-tint); padding:14px 16px; border-radius:8px; margin:16px 0; color:var(--mv-ink); }
 .mv-yearly-saving strong { font-size:1rem; color:var(--mv-accent); }
 .mv-yearly-saving span { font-size:.82rem; line-height:1.5; }
+/* Standard price after early access: body text with a bold amount, clear of the saving box. */
+.mv-plan .mv-standard-price { font-size:.94rem; line-height:1.55; color:var(--mv-ink); margin:10px 0 18px; }
+.mv-standard-price [data-mv-price] { font-weight:700; }
+.mv-early-band { max-width:1000px; margin:0 auto 28px; padding:18px 22px; }
+.mv-early-band .mv-checklist { display:flex; flex-wrap:wrap; gap:6px 28px; margin:4px 0 0; }
+.mv-early-band .mv-checklist li { margin:0; font-size:.86rem; }
+.mv-early-band .mv-checklist li:first-child { flex-basis:100%; }
 .mv-currency-control { display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-size:.82rem; color:var(--mv-muted); margin:16px 0; }
 .mv-currency-control select { min-height:44px; padding:8px 32px 8px 12px; border:1px solid var(--mv-line); border-radius:8px; color:var(--mv-ink); background:var(--mv-card); font:inherit; cursor:pointer; }
 main>.mv-currency-control { max-width:1128px; margin:0 auto 24px; padding-inline:24px; }
@@ -380,3 +387,21 @@ main>.mv-currency-control { max-width:1128px; margin:0 auto 24px; padding-inline
    bar's Demo button yields first (the hero keeps "Try the live demo"). */
 @media(min-width:761px) and (max-width:1000px) { .mv-brand-family { flex-shrink:0; } .mv-maker { white-space:nowrap; } .mv-language-globe { display:none; } .mv-social { padding:0 4px; } }
 @media(min-width:761px) and (max-width:900px) { .mv-navtools > .mv-nav-download.mv-secondary { display:none; } .mv-navlinks { gap:14px; } }
+/* Feature clips: a card with the clip on a tinted block, a title, one or two
+   plain sentences and, on the homepage, a Learn more link. english-site.js plays
+   a clip only while it is on screen; without a script the poster stands in. */
+.mv-clip { --clip-hue:var(--hue,#8b5cf6); display:flex; flex-direction:column; padding:12px 12px 22px; border:1px solid var(--mv-line); border-radius:22px; background:var(--mv-card); }
+.mv-clip-media { padding:10px; border-radius:16px; background:color-mix(in oklab,var(--clip-hue) 14%,var(--mv-surface)); }
+.mv-clip video { display:block; width:100%; height:auto; aspect-ratio:960/660; border-radius:10px; background:#11121b; }
+.mv-site .mv-clip figcaption { flex:1; display:flex; flex-direction:column; gap:6px; margin:0; padding:18px 10px 0; font-size:.95rem; line-height:1.55; color:var(--mv-muted); }
+.mv-clip-title { display:flex; flex-wrap:wrap; align-items:center; gap:8px; color:var(--mv-ink); font-size:1.15rem; font-weight:650; letter-spacing:-.015em; line-height:1.3; }
+.mv-clip .mv-text-link { align-self:flex-start; margin-top:auto; padding-top:6px; }
+.mv-clip-kicker { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.74rem !important; letter-spacing:.08em; text-transform:uppercase; }
+.mv-clip-group { margin-top:56px; }
+.mv-clip-group h3 { font-size:clamp(1.5rem,2.4vw,2rem); margin-bottom:24px; }
+.mv-clip-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.mv-clip-grid-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.mv-clip-spot { padding-block:40px 8px; }
+.mv-clip-spot-inner { box-sizing:content-box; max-width:686px; margin-inline:auto; }
+@media(max-width:900px) { .mv-clip-grid-3 { grid-template-columns:repeat(2,minmax(0,1fr)); } .mv-clip-grid-3 > :last-child:nth-child(odd) { grid-column:1 / -1; justify-self:center; width:calc(50% - 10px); } }
+@media(max-width:760px) { .mv-clip-grid,.mv-clip-grid-3 { grid-template-columns:1fr; } .mv-clip-grid-3 > :last-child:nth-child(odd) { width:auto; justify-self:stretch; } .mv-clip-group { margin-top:40px; } .mv-clip-spot { padding-top:28px; } }

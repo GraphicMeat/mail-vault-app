@@ -385,7 +385,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
         : 'grid grid-cols-1 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] gap-5'}>
         {preview}
 
-        <div className={`space-y-3 min-w-0 ${filled ? 'w-80 shrink-0 overflow-y-auto pr-1' : ''}`}>
+        <div className={`space-y-3 min-w-0 ${filled ? 'w-80 shrink-0 overflow-y-auto px-1' : ''}`}>
           <Field label={t('export.social.content')}>
             <Chips label={t('export.social.content')} value={prefs.content} onChange={v => update({ content: v })}
               options={[{ value: 'card', label: t('export.social.contentCard') }, { value: 'app', label: t('export.social.contentApp') }]} />
@@ -395,12 +395,16 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
             <Chips label={t('export.social.appearance')} value={theme} onChange={v => update({ appTheme: v })} options={themeOptions} />
           </Field>
 
+          <Field label={t('export.social.emailTheme')}>
+            <Chips label={t('export.social.emailTheme')} value={mailTheme} onChange={v => update({ mailTheme: v })} options={themeOptions} />
+          </Field>
+
           <Field label={t('export.social.size')}>
             <Chips label={t('export.social.size')} value={prefs.size} onChange={v => update({ size: v })} options={sizeOptions} />
           </Field>
 
           <Field label={t('export.social.background')}>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 p-1 -m-1">
               {GRADIENT_PRESETS.map(g => (
                 <Swatch key={g.id} label={names[g.id]} style={{ background: cssGradient(g.stops, g.angle) }}
                   selected={!imageActive && sameBackground(prefs.background, { type: 'gradient', id: g.id })}

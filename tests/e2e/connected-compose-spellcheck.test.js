@@ -77,7 +77,7 @@ describe('Connected Compose Spellcheck', function () {
     // The button is lit while checking is on — the same "active" vocabulary the
     // mark buttons next to it use.
     expect((await toolbarState('Spellcheck')).active).toBe(true);
-    expect(await buttonTitle()).toBe('Spellcheck on — click to turn off');
+    expect(await buttonTitle()).toBe('Spellcheck on, click to turn off');
   });
 
   it('turns checking off for the body and the subject in one press', async function () {
@@ -92,7 +92,7 @@ describe('Connected Compose Spellcheck', function () {
     // squiggled has only moved the complaint one field up.
     expect(await subjectSpellcheck()).toBe(false);
     expect((await toolbarState('Spellcheck')).active).toBe(false);
-    expect(await buttonTitle()).toBe('Spellcheck off — click to turn on');
+    expect(await buttonTitle()).toBe('Spellcheck off, click to turn on');
   });
 
   it('turns it back on from the same window', async function () {

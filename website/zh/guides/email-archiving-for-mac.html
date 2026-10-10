@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac 上的邮件归档：保留一份属于你的副本 | MailVault</title>
+  <meta name="description" content="Mac 邮件归档详解：归档、备份与同步的区别，macOS 上有哪些选择，该保留哪种格式，以及如何建立并检查本地归档。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/email-archiving-for-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/email-archiving-for-mac.html">
+  <meta property="og:title" content="Mac 上的邮件归档：保留一份属于你的副本 | MailVault">
+  <meta property="og:description" content="Mac 邮件归档详解：归档、备份与同步的区别，macOS 上有哪些选择，该保留哪种格式，以及如何建立并检查本地归档。">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mac 上的邮件归档：保留一份属于你的副本 | MailVault">
+  <meta name="twitter:description" content="Mac 邮件归档详解：归档、备份与同步的区别，macOS 上有哪些选择，该保留哪种格式，以及如何建立并检查本地归档。">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "如何在 Mac 上归档你的邮件并长久保存",
+  "description": "Mac 邮件归档详解：归档、备份与同步的区别，macOS 上有哪些选择，该保留哪种格式，以及如何建立并检查本地归档。",
+  "url": "https://mailvaultapp.com/zh/guides/email-archiving-for-mac.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Apple Mail 里的「归档」按钮会把我的邮件保存到 Mac 上吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不会。Apple 的「邮件」使用手册说，归档会把邮件移到为该邮箱账户创建的「归档」邮箱中。这是账户内部的移动，而不是保存在你磁盘上的副本。要保留一份属于你的副本，请导出邮箱或使用归档工具。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "邮件归档用哪种文件格式最好？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "普通的 .eml 文件或 mbox。两者都是开放格式，很多邮件应用都能读取。eml 每个文件一封邮件，所以一个文件损坏只影响一封邮件。mbox 每个文件夹一个文件，是最常见的导入格式。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "归档一个大的 Gmail 账户需要多长时间？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Google 把每个账户每天的 IMAP 下载量限制在 2,500 MB，所以对于超过这个大小的邮箱，任何 IMAP 工具都需要不止一天。MailVault 会在达到上限时停下，下次运行时从停下的地方继续。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "在 Mac 上归档邮件是免费的吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以是免费的。Apple Mail 的导出和 Thunderbird 都不花钱，MailVault 也是免费的，包括不限次数的手动备份。在 MailVault 中，定时运行的备份属于 Premium。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "归档之后，我可以从服务器删除邮件吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以，只要你检查过归档。MailVault 中的归档副本会留在你的磁盘上，不受服务器之后任何操作的影响。MailVault Premium 可以一步完成归档和删除，在移除服务器副本之前检查每一份已保存的副本。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/email-archiving-for-mac.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+<nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="选择语言"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/email-archiving-for-mac.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/email-archiving-for-mac.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/email-archiving-for-mac.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/email-archiving-for-mac.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/email-archiving-for-mac.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/email-archiving-for-mac.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/email-archiving-for-mac.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/email-archiving-for-mac.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/email-archiving-for-mac.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary>
+<nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何在 Mac 上归档你的邮件并长久保存</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Mac 上的邮件归档，是指把一份完整的邮件副本以开放格式保存为你自己磁盘上的文件，这样在服务商删除邮件、账户关闭或你用过的应用消失之后，它依然可读。本指南解释归档是什么、不是什么，macOS 提供了哪些选择，应该保留哪种文件格式，以及如何为 Gmail、Outlook.com、iCloud 或 IMAP 账户建立并检查归档。如果你已经了解这些，只想挑一款工具，请阅读我们的 <a href="/zh/guides/best-email-archiver-for-mac.html">Mac 最佳邮件归档工具精选</a>。
+          </p>
+
+          <div class="p-5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">简短回答</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li>Apple Mail、Gmail 或 Outlook 中的「归档」按钮，只是把邮件移到同一账户的另一个文件夹。邮件仍然留在服务商那里，并没有为你另外保存任何东西。</li>
+              <li>真正的归档是一份属于你的副本：每封邮件一个文件（.eml）或每个文件夹一个文件（mbox），存放在你的 Mac 或你掌控的硬盘上。</li>
+              <li>Apple Mail 可以把邮箱导出为 mbox，做一次性的副本。要让归档跟上新邮件，就需要一个能反复下载的工具。</li>
+              <li>在免费应用 MailVault 中：添加账户，把<strong>备份内容</strong>设为<strong>全部邮件</strong>，点击<strong>立即备份所有账户</strong>，然后检查每一行的图标。定时备份属于 Premium。</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">归档、备份和同步不是一回事</h2>
+
+          <p>
+            邮件应用里的「归档」按钮是移动，而不是复制。Apple 的「邮件」使用手册说，归档会把邮件移到为该邮箱账户创建的「归档」邮箱中。Gmail 的帮助说，已归档的邮件仍然可以在「所有邮件」中找到。Microsoft 的 Outlook 帮助说，「存档」按钮不会减小你的邮箱大小。这三种情况下，邮件都留在服务商那里。
+          </p>
+
+          <p>
+            同步会镜像服务器，所以在手机上删除的邮件也会从你的 Mac 上消失。备份是存放在别处的一份副本，让你可以恢复。而本页所说的归档，是一份你会保存多年、并且依然可以阅读的备份：完整、可搜索，而且不绑定于某一个应用。
+          </p>
+
+          <div class="scroll-x overflow-x-auto -mx-4 sm:mx-0">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">是什么</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">邮件存放在哪里</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">服务器上删除后还在吗？</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">能腾出服务器空间吗？</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-700 dark:text-slate-300">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">同步（普通的邮件应用）</td>
+                  <td class="py-3 px-4">在服务器上，镜像到你的设备</td>
+                  <td class="py-3 px-4">不支持</td>
+                  <td class="py-3 px-4">不支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">「归档」按钮</td>
+                  <td class="py-3 px-4">同一账户的另一个文件夹</td>
+                  <td class="py-3 px-4">不支持</td>
+                  <td class="py-3 px-4">不支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">备份</td>
+                  <td class="py-3 px-4">一份由你掌控的第二份副本</td>
+                  <td class="py-3 px-4">在，只要它从未被清理</td>
+                  <td class="py-3 px-4">只有之后在服务器上删除才能</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">归档（本地副本）</td>
+                  <td class="py-3 px-4">你 Mac 上或你自己硬盘上的文件</td>
+                  <td class="py-3 px-4">支持</td>
+                  <td class="py-3 px-4">只有之后在服务器上删除才能</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Mac 上的选择</h2>
+
+          <ul class="list-disc pl-6 space-y-3">
+            <li><strong>Apple Mail 的「导出邮箱」。</strong>选中一个或多个邮箱，选择 邮箱 &gt; 导出邮箱，然后选择一个文件夹。Apple 表示导出为 mbox 格式，而且「邮件」不会覆盖之前的导出，而是在旁边新建一个 .mbox 文件。通过 文件 &gt; 导入邮箱 可以把它导回来。它免费且系统内置，但它是一份需要你手动重复的快照。</li>
+            <li><strong>Thunderbird。</strong>免费且开源，提供 macOS 版下载。Mozilla 表示，Thunderbird 默认把邮件存为每个文件夹一个 mbox 文件，也可以选择每封邮件一个文件（Maildir）的存储方式，但 Mozilla 仍将其视为实验性功能。ImportExportTools NG 附加组件可以把邮件导出为 EML、PDF 和其他格式，把文件夹导出为 mbox。</li>
+            <li><strong>命令行备份工具。</strong>Got Your Back（GYB）是一款开源工具，通过 Gmail 的 API 把 Gmail 和 Google Workspace 账户备份到本地文件夹，并能恢复它们。它适合习惯使用终端的人，只支持 Google 账户。</li>
+            <li><strong>专门的归档工具。</strong>Mail Archiver X、MailSteward 和 EagleFiler 都是付费的 Mac 应用，把邮件汇集到一个可搜索的归档或资料库中，各有各的存储方式。我们的 <a href="/zh/guides/best-email-archiver-for-mac.html">Mac 最佳邮件归档工具</a>页面按使用场景对它们进行了比较。</li>
+            <li><strong>MailVault。</strong>一款适用于 macOS、Windows 和 Linux 的免费邮件应用，以普通 .eml 文件的形式，在 Maildir 风格的文件夹中把一份邮件副本保存在你的电脑上，可登录 Gmail、Microsoft 365、Outlook.com 和任何 IMAP 账户，你的邮件传输路径上没有 MailVault 账户或服务器。本指南其余部分的分步说明都以它为例。</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">该用哪种格式保存你的邮件</h2>
+
+          <p>
+            格式比工具更重要，因为归档应该比工具活得更久。
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>.eml 文件。</strong>每个文件一封邮件，采用互联网邮件格式（RFC 5322）：邮件头、正文和附件都在一起。很多邮件应用可以直接打开它们，一个文件损坏只影响一封邮件。Maildir 是组织这些文件的文件夹结构。</li>
+            <li><strong>mbox。</strong>每个文件夹一个文件，邮件一封接一封地存放。它是受支持最广泛的导入格式，这也是 Apple Mail 导出它的原因。通常你得先把它导入某个应用才能浏览，而且一个文件损坏会影响整个文件夹。</li>
+            <li><strong>应用自己的数据库。</strong>专门的归档工具常常使用数据库，它能让搜索变快。代价是，读取归档要依赖那个应用。在决定使用之前，先确认它能把所有内容导出为 mbox 或 .eml。</li>
+          </ul>
+
+          <p>
+            一条实用的原则：无论你还用了什么，都至少以 .eml 或 mbox 格式保留一份归档。想进一步了解在信任一款工具之前要检查什么，请参阅我们的 <a href="/zh/guides/imap-backup-tool-checklist.html">IMAP 备份工具检查清单</a>。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">分步操作：用 MailVault 把 Gmail、Outlook.com、iCloud 或 IMAP 邮件归档到你的 Mac</h2>
+
+          <p>
+            MailVault 可在 macOS 11 Big Sur 或更高版本上运行，支持 Apple Silicon 和 Intel。除标明 Premium 的步骤外，每一步都是免费的。
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-3">
+            <li>从<a href="/zh/get-started.html">下载页面</a><strong>安装 MailVault</strong>。</li>
+            <li><strong>添加你的账户。</strong>Gmail 和 Microsoft 365 在 Google 或 Microsoft 自己的页面上登录。个人 Outlook.com、Hotmail 和 Live.com 账户通过 Microsoft Graph 连接，所以无需填写任何 IMAP 设置。iCloud 邮件和其他服务商使用 IMAP。对于 iCloud，MailVault 使用你在 Apple 账户中创建的应用专用密码登录；我们的 <a href="/zh/guides/export-icloud-mail.html">iCloud 邮件导出指南</a>会一步步带你完成。你的密码由系统钥匙串保管，而不是由 MailVault 保管。</li>
+            <li><strong>让 MailVault 备份所有内容。</strong>打开 设置 &gt; 备份与恢复 &gt; 备份设置。在<strong>备份内容</strong>下，默认是<strong>仅归档邮件（已保存在本地）</strong>。把它切换为<strong>全部邮件（从服务器下载）</strong>，这样仍然只在服务器上的邮件也会包括在内。你也可以在这里为外置硬盘或 NAS 选择第二份副本的位置。</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/settings-backup-720.webp 720w, /screenshots/zh/settings-backup-1440.webp 1440w, /screenshots/zh/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/zh/settings-backup-light-1440.webp" srcset="/screenshots/zh/settings-backup-light-720.webp 720w, /screenshots/zh/settings-backup-light-1440.webp 1440w, /screenshots/zh/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 设置中「备份与恢复」的「备份设置」标签页。它显示邮件的存放位置以及「打开文件夹」和「移动邮件」按钮，设为「仅已归档邮件」的「备份内容」菜单，以及「第二份副本：外部冷存储」的文件夹选择器。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">备份设置。在第一次运行之前，把「备份内容」从「仅已归档邮件」切换为「全部邮件」。</figcaption>
+          </figure>
+
+          <ol class="list-decimal pl-6 space-y-3" start="4">
+            <li><strong>运行备份。</strong>打开<strong>备份计划</strong>标签页，点击<strong>立即备份所有账户</strong>，或者在某个账户的卡片上点击<strong>立即备份</strong>。它会覆盖该账户的每个文件夹。手动备份免费，我们不设额度；占用的是你自己的磁盘空间。</li>
+          </ol>
+
+
+          <ol class="list-decimal pl-6 space-y-3" start="5">
+            <li><strong>给大邮箱一些时间。</strong>Google 把每个账户每天的 IMAP 下载量限制在 2,500 MB，超出后访问会被暂停，通常为一小时，最长 24 小时。这适用于所有 IMAP 工具。MailVault 会在达到上限时干净地停下来，下次运行时从停下的地方继续。一个大的 Gmail 账户可能需要好几天。</li>
+            <li><strong>或者只归档其中一部分。</strong>如果只想保留部分邮件，选中邮件（或者一个年份，或者整个文件夹），然后选择<strong>归档</strong>。这会把它们复制进你的保险库，服务器副本保持不变。它是免费的。</li>
+          </ol>
+
+          <p>
+            有一项设置需要了解：设置 &gt; 存储 &gt; 下载模式 决定有多少普通缓存邮件留在 Mac 上。默认的「保留近期」会保留最近几个月的邮件。它从不删除备份或已归档的邮件，所以不会缩小你的归档。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">如何检查归档是否完整</h2>
+
+          <p>
+            在服务器上删除任何内容之前，先检查副本。
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>看懂每一行的图标。</strong>每封邮件都会显示它是仅在服务器上、在你的保险库中、是你唯一的副本，还是也在你的备份盘上。文件夹列表上方的「保险库」开关只显示保存在你 Mac 上的内容。</li>
+            <li><strong>断网检查。</strong>关闭 Wi-Fi，然后打开几封带附件的旧邮件，再做一次搜索。此时能打开的一切，都在你的磁盘上。</li>
+            <li><strong>在别处打开这些文件。</strong>设置 &gt; 备份与恢复 &gt; 备份设置 &gt; 打开文件夹 会在访达中显示保险库。在 Apple Mail 中打开几个 .eml 文件。如果它们在那里能正常显示，这份归档就不依赖 MailVault。</li>
+            <li><strong>比较数量（Premium）。</strong>备份健康监测会按文件夹显示服务器、应用和外部副本的数量，让你看出哪些文件夹已经完整保存。</li>
+          </ul>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w, /screenshots/zh/state-icons-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w, /screenshots/zh/state-icons-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 收件箱，每一行邮件都带有一个保险库图标。列表底部的图例为「仅在服务器」、「在你的保险库中」、「唯一副本」和「在备份盘上」，文件夹列表有「所有邮件」、「服务器」和「保险库」开关。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">每一行都会说明这封邮件在哪里。列表下方的图例解释了各个图标。</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/premium-backup-health-detail-720.webp 720w, /screenshots/zh/premium-backup-health-detail-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/zh/premium-backup-health-detail-light-1440.webp" srcset="/screenshots/zh/premium-backup-health-detail-light-720.webp 720w, /screenshots/zh/premium-backup-health-detail-light-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="524" loading="lazy" decoding="async" alt="MailVault 中的「备份校验」表格。应用为 73%，外部未配置，每个文件夹一行，列出服务器数量和应用数量，例如 Archive 服务器上 12 封，应用中 0 封。合计为应用中 84 / 115。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Premium：备份健康监测会逐个文件夹比较服务器和你的 Mac。这里 Archive、Trash、Clients 和 Suppliers 文件夹还没有保存。</figcaption>
+          </figure>
+
+          <p>
+            当你准备清理服务器时，MailVault 的<a href="/zh/features/archive-and-delete.html">归档并删除</a>（Premium）会把每封邮件复制进你的保险库，检查副本，然后才删除服务器副本。单独从服务器删除是免费的，但检查就要靠你自己了。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">如何让归档持续更新</h2>
+
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>手动，免费。</strong>随时运行<strong>立即备份所有账户</strong>。备份是增量的，所以之后的运行只下载上次以来的新邮件。参阅<a href="/zh/features/local-backups.html">手动备份</a>。</li>
+            <li><strong>定时，Premium。</strong><a href="/zh/features/scheduled-backups.html">定时备份</a>可以每小时、每天一次、每周一次或在你选定的时间运行，并且只在应用空闲时运行。Premium 前 100 位订阅者按当前抢先体验价为每月 $4 或每年 $25（之后的标准价格为每月 $6 或每年 $39）。</li>
+          </ul>
+
+          <p>
+            无论哪种方式，都要在 Mac 之外保留第二份副本：保险库就是普通文件，所以外置硬盘或 NAS 都可以存放一份。想了解本地副本更全面的理由，请阅读<a href="/zh/guides/archive-imap-emails-locally.html">如何在本地归档 IMAP 邮件</a>。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">常见问题</h2>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Apple Mail 里的「归档」按钮会把我的邮件保存到 Mac 上吗？</h3>
+            <p>不会。Apple 的「邮件」使用手册说，归档会把邮件移到为该邮箱账户创建的「归档」邮箱中。这是账户内部的移动，而不是保存在你磁盘上的副本。要保留一份属于你的副本，请导出邮箱或使用归档工具。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">邮件归档用哪种文件格式最好？</h3>
+            <p>普通的 .eml 文件或 mbox。两者都是开放格式，很多邮件应用都能读取。eml 每个文件一封邮件，所以一个文件损坏只影响一封邮件。mbox 每个文件夹一个文件，是最常见的导入格式。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">归档一个大的 Gmail 账户需要多长时间？</h3>
+            <p>Google 把每个账户每天的 IMAP 下载量限制在 2,500 MB，所以对于超过这个大小的邮箱，任何 IMAP 工具都需要不止一天。MailVault 会在达到上限时停下，下次运行时从停下的地方继续。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">在 Mac 上归档邮件是免费的吗？</h3>
+            <p>可以是免费的。Apple Mail 的导出和 Thunderbird 都不花钱，MailVault 也是免费的，包括不限次数的手动备份。在 MailVault 中，定时运行的备份属于 Premium。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">归档之后，我可以从服务器删除邮件吗？</h3>
+            <p>可以，只要你检查过归档。MailVault 中的归档副本会留在你的磁盘上，不受服务器之后任何操作的影响。MailVault Premium 可以一步完成归档和删除，在移除服务器副本之前检查每一份已保存的副本。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">下一步做什么</h2>
+
+          <p>
+            挑出你最不想失去的那个账户，本周就做出第一份归档，并按上面的步骤检查它。如果用 MailVault 来做，它可以免费下载，无需注册账户。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">在你的 Mac 上保留一份邮件副本</p>
+            <p class="text-sm mb-4">普通 .eml 文件，存放在你自己的磁盘上。免费支持 macOS、Windows 和 Linux，源代码公开在 GitHub 上，无需 MailVault 账户。</p>
+            <a href="/zh/get-started.html?plan=free" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              免费下载 MailVault
+            </a>
+          </div>
+
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>阅读你的邮件。保留你的邮件。</p>
+</div>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

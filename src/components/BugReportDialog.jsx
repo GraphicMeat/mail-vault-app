@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Bug, Github, HelpCircle, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
-import { Dialog, Button, XLogo } from './ui';
+import { Dialog, Button, XLogo, DiscordLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
+import { DISCORD_INVITE, X_PROFILE } from '../utils/communityLinks';
 import { faqUrl } from '../services/faqUrl';
 import { useSettingsStore } from '../stores/settingsStore';
 import logoUrl from '../assets/graphicmeat-logo.webp';
@@ -10,7 +11,6 @@ import { t as tr, useT  } from '../i18n/index.js';
 const GH_DISCUSSIONS = 'https://github.com/GraphicMeat/mail-vault-app/discussions';
 const GH_NEW_BUG = `${GH_DISCUSSIONS}/new?category=bug-reports`;
 const GH_NEW_IDEA = `${GH_DISCUSSIONS}/new?category=ideas`;
-const X_PROFILE = 'https://x.com/GraphicMeat';
 const MAKER_SITE = 'https://graphicmeat.com';
 
 // One emailed report every five minutes (stamped when the report is sent):
@@ -155,15 +155,26 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       </p>
 
       <div className="pt-3 border-t border-mail-border flex flex-col items-center gap-3">
-        <button
-          type="button"
-          data-testid="bug-follow-x"
-          data-url={X_PROFILE}
-          onClick={openAndClose(X_PROFILE)}
-          className="inline-flex items-center gap-2 text-xs text-mail-text-muted hover:text-mail-text transition-colors"
-        >
-          <XLogo size={14} /> {t('bugReport.followX')}
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <button
+            type="button"
+            data-testid="bug-join-discord"
+            data-url={DISCORD_INVITE}
+            onClick={openAndClose(DISCORD_INVITE)}
+            className="inline-flex items-center gap-2 text-xs text-mail-text-muted hover:text-mail-text transition-colors"
+          >
+            <DiscordLogo size={14} /> {t('bugReport.joinDiscord')}
+          </button>
+          <button
+            type="button"
+            data-testid="bug-follow-x"
+            data-url={X_PROFILE}
+            onClick={openAndClose(X_PROFILE)}
+            className="inline-flex items-center gap-2 text-xs text-mail-text-muted hover:text-mail-text transition-colors"
+          >
+            <XLogo size={14} /> {t('bugReport.followX')}
+          </button>
+        </div>
 
         <div className="flex flex-col items-center gap-1 text-xs text-mail-text-muted">
           <span>{t('bugReport.cookedOver')} <span className="text-mail-accent-text font-medium">{t('bugReport.openGpu')}</span> {t('bugReport.by')}</span>

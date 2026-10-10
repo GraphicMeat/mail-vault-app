@@ -101,7 +101,7 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
     detail: (unknownServer ? t('email.state.serverCopyVerifiedYet') : t('email.state.alsoStillServer'))
       + (unknownServer && dot === 'hollow' ? ' Backup drive not connected.' : '')
       + (!unknownServer && dot === 'filled' ? ' Three copies.' : '')
-      + (!unknownServer && dot === 'hollow' ? " Backup drive not connected — can't verify." : ''),
+      + (!unknownServer && dot === 'hollow' ? " Backup drive not connected, can't verify." : ''),
   };
 }
 

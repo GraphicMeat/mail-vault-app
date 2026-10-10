@@ -128,14 +128,17 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
     onChange(appendRecipient(value, formatContact(c), false));
   };
 
+  // `fieldName` is the field's caption ("To:"); the sentence wants it bare.
+  const pickLabel = t('compose.pickFromContacts', { field: fieldName.replace(/[:：]\s*$/, '') });
+
   return (
     <div className="relative flex-shrink-0" ref={popoverRef}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
         className="p-1.5 text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors"
-        title={`Pick ${fieldName} from contacts`}
-        aria-label={`Pick ${fieldName} from contacts`}
+        title={pickLabel}
+        aria-label={pickLabel}
       >
         <Users size={14} />
       </button>

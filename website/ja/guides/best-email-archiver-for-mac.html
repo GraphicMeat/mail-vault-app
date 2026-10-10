@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac におすすめのメールアーカイバー：7 つのツールを比較 | MailVault</title>
+  <meta name="description" content="Mac に最適なメールアーカイバーはメール次第です。macOS の 7 つのツールを、形式、検索、取り込み元、価格、オープンソース、Apple Silicon への対応で比較します。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/guides/best-email-archiver-for-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/guides/best-email-archiver-for-mac.html">
+  <meta property="og:title" content="Mac におすすめのメールアーカイバー：7 つのツールを比較 | MailVault">
+  <meta property="og:description" content="Mac に最適なメールアーカイバーはメール次第です。macOS の 7 つのツールを、形式、検索、取り込み元、価格、オープンソース、Apple Silicon への対応で比較します。">
+  <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mac におすすめのメールアーカイバー：7 つのツールを比較 | MailVault">
+  <meta name="twitter:description" content="Mac に最適なメールアーカイバーはメール次第です。macOS の 7 つのツールを、形式、検索、取り込み元、価格、オープンソース、Apple Silicon への対応で比較します。">
+  <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Mac におすすめのメールアーカイバーを用途別に選ぶ",
+  "description": "Mac に最適なメールアーカイバーはメール次第です。macOS の 7 つのツールを、形式、検索、取り込み元、価格、オープンソース、Apple Silicon への対応で比較します。",
+  "url": "https://mailvaultapp.com/ja/guides/best-email-archiver-for-mac.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Mac に最適な無料のメールアーカイバーは？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Gmail、Outlook.com、iCloud、IMAP のアカウントをプレーンなファイルとして残すなら、MailVault は無料で、ソースコードは GitHub で公開されています。すでに Thunderbird を使っているなら、無料の ImportExportTools NG のアドオンで、フォルダを mbox として、メッセージを EML として書き出せます。Apple Mail の「メールボックスを書き出す」は無料ですが手作業です。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailStore Home は Mac で動きますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "いいえ。MailStore は MailStore Home の対応 OS として Windows 10 と Windows 11 を挙げています。Mac では、代わりにこのページのツールのどれかを使ってください。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "これらのメールアーカイバーは Apple Silicon でネイティブに動きますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault と Thunderbird はネイティブに動作し、MailSteward は Apple Silicon 向けに最適化されているとしています。EagleFiler は現在 Rosetta 2 に頼っており、開発者は macOS 28 より前にネイティブ版を出す見込みです。Mail Archiver X は macOS 11〜27 を挙げ、Intel 版と Apple Silicon 版を提供しています。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "メールのアーカイブはデータベースとプレーンなファイルのどちらにすべきですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "データベースなら 1 つのアプリの中で検索を速くできます。プレーンな .eml や mbox のファイルは、どのツールがなくなった後でも、ほかのアプリで開けます。アーカイバーがデータベースを使っているなら、ときどき mbox や eml にコピーを書き出してください。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/best-email-archiver-for-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/best-email-archiver-for-mac.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ja/" aria-label="MailVault ホーム"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat による</a></div>
+<nav class="mv-navlinks" aria-label="メインナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub で MailVault にスターを付ける" title="GitHub で MailVault にスターを付ける"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault にハートを送る" title="MailVault にハートを送る"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="言語を選択"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/best-email-archiver-for-mac.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/best-email-archiver-for-mac.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/best-email-archiver-for-mac.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/best-email-archiver-for-mac.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/best-email-archiver-for-mac.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/best-email-archiver-for-mac.html" lang="ja" hreflang="ja" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/best-email-archiver-for-mac.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/best-email-archiver-for-mac.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/best-email-archiver-for-mac.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="カラーテーマを切り替える" title="カラーテーマを切り替える"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモ</a><a class="mv-button mv-nav-download" href="/ja/get-started.html?plan=free">ダウンロード</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">メニュー</span></summary>
+<nav aria-label="モバイルナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a><a href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す</a><a href="/ja/get-started.html?plan=free">無料でダウンロード</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>カラーテーマを切り替える</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ホームに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac におすすめのメールアーカイバーを用途別に選ぶ</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8分で読めます</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>最終確認：2026年10月</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Mac にとって唯一最良のメールアーカイバーはありません。正しい選択は、今メールがどこにあり、10 年後にどう読みたいかによります。要するに、複数のメールアプリの専用アーカイブなら Mail Archiver X、プロバイダーのアカウントを無料でプレーンなファイルとして残すなら MailVault、無料のオープンソースの構成なら Thunderbird と ImportExportTools NG です。このページでは、現在の macOS で動く 7 つのツールを用途別に比較し、価格と制限は各社のサイトから取っています。MailVault は私たちのアプリで、制限も含めて一覧に一度だけ載せています。まずアーカイブそのもの、形式、アーカイブの確かめ方を理解したいなら、<a href="/ja/guides/email-archiving-for-mac.html">Mac のためのメールアーカイブのガイド</a>を読んでください。
+          </p>
+
+          <div class="p-5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">すぐに選ぶなら</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li><strong>複数のメールアプリの専用アーカイブ：</strong>Mail Archiver X。</li>
+              <li><strong>無料で、プロバイダーのアカウントをプレーンな .eml ファイルとして残す：</strong>MailVault。</li>
+              <li><strong>すでに Thunderbird を使っているなら、無料でオープンソース：</strong>Thunderbird と ImportExportTools NG。</li>
+              <li><strong>Apple Mail や Gmail のデータベース：</strong>MailSteward。</li>
+              <li><strong>メールと文書を 1 つのライブラリに：</strong>EagleFiler。</li>
+              <li><strong>何もインストールせずに 1 回限りのコピー：</strong>Apple Mail の「メールボックスを書き出す」。</li>
+              <li><strong>ターミナルから Gmail：</strong>Got Your Back（GYB）。</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">評価の基準</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>保存形式。</strong>プレーンな .eml や mbox のファイルは、何年たってもほかのアプリで開けます。独自のデータベースは検索が速いこともありますが、1 つのアプリに縛られるので、書き出せるかどうかを確認しています。</li>
+            <li><strong>検索。</strong>2014 年のメッセージを、本文や添付ファイルの中の言葉で見つけられるか？</li>
+            <li><strong>取り込み元。</strong>プロバイダー（Gmail、Outlook.com、iCloud、IMAP）から読むのか、デスクトップアプリのローカルの保存場所から読むのか、その両方か？</li>
+            <li><strong>自動化。</strong>覚えておかないと更新されないアーカイブは、古くなっていくアーカイブです。</li>
+            <li><strong>価格とライセンス。</strong>買い切りか、サブスクリプションか、無料か。そして支払いをやめたらアクセスがどうなるか。</li>
+            <li><strong>オープンソース。</strong>メールを扱うコードを読めるかどうか。</li>
+            <li><strong>Apple Silicon。</strong>ネイティブか、Rosetta 2 に頼っているか。</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">7 つのツールの比較</h2>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">最終確認：2026年10月。価格は各社のサイトによる税抜きの米ドルです。購入前に各社のサイトで現在の価格を確認してください。</p>
+
+          <div class="scroll-x overflow-x-auto -mx-4 sm:mx-0">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">ツール</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">メールの保存形式</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">アーカイブの取り込み元</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">価格</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">オープンソース</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">macOS と Apple Silicon</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-700 dark:text-slate-300">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">Mail Archiver X</td>
+                  <td class="py-3 px-4">独自のデータベース。mbox と PDF に書き出し</td>
+                  <td class="py-3 px-4">Apple Mail、Outlook、Thunderbird、Postbox、IMAP（Gmail、iCloud を含む）、mbox</td>
+                  <td class="py-3 px-4">$49.95。Pro は $150 から</td>
+                  <td class="py-3 px-4">非対応</td>
+                  <td class="py-3 px-4">macOS 11〜27。Intel と Apple Silicon</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">MailVault</td>
+                  <td class="py-3 px-4">Maildir のフォルダに .eml ファイル。mbox に書き出し</td>
+                  <td class="py-3 px-4">Gmail、Microsoft 365、Outlook.com、IMAP（iCloud を含む）、mbox の読み込み</td>
+                  <td class="py-3 px-4">無料。Premium は $4/月または $25/年（早期アクセス）</td>
+                  <td class="py-3 px-4">ソースコードは GitHub で公開</td>
+                  <td class="py-3 px-4">macOS 11 以降。Apple Silicon と Intel</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">Thunderbird + ImportExportTools NG</td>
+                  <td class="py-3 px-4">既定ではフォルダごとの mbox。アドオンで EML、mbox、PDF などに書き出し</td>
+                  <td class="py-3 px-4">Thunderbird に追加したアカウント</td>
+                  <td class="py-3 px-4">無料</td>
+                  <td class="py-3 px-4">はい（アドオンは GPL-3.0）</td>
+                  <td class="py-3 px-4">Apple Silicon にネイティブ対応</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">MailSteward</td>
+                  <td class="py-3 px-4">リレーショナルデータベース（Pro は MySQL を使用）</td>
+                  <td class="py-3 px-4">Apple Mail、Gmail</td>
+                  <td class="py-3 px-4">Lite $24.95、標準 $49.95、Pro $99.95</td>
+                  <td class="py-3 px-4">非対応</td>
+                  <td class="py-3 px-4">macOS 12 以降。「Apple Silicon 向けに最適化」</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">EagleFiler</td>
+                  <td class="py-3 px-4">通常のファイルとフォルダ。メールは mbox で保存</td>
+                  <td class="py-3 px-4">Apple Mail、Outlook、.eml などの形式</td>
+                  <td class="py-3 px-4">$69.99</td>
+                  <td class="py-3 px-4">非対応</td>
+                  <td class="py-3 px-4">macOS 10.13〜27。現在は Rosetta 2 を使用</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">Apple Mail の「メールボックスを書き出す」</td>
+                  <td class="py-3 px-4">mbox</td>
+                  <td class="py-3 px-4">メールのメールボックス</td>
+                  <td class="py-3 px-4">無料、標準搭載</td>
+                  <td class="py-3 px-4">非対応</td>
+                  <td class="py-3 px-4">macOS の一部</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">Got Your Back（GYB）</td>
+                  <td class="py-3 px-4">ローカルのバックアップフォルダ</td>
+                  <td class="py-3 px-4">Gmail と Google Workspace</td>
+                  <td class="py-3 px-4">無料</td>
+                  <td class="py-3 px-4">はい（Apache-2.0）</td>
+                  <td class="py-3 px-4">macOS 用のインストールスクリプト。Apple Silicon への対応は明記なし</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">用途別のおすすめ</h2>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Mail Archiver X：複数のメールアプリの専用アーカイブに最適</h3>
+          <p>
+            Moth Software の Mail Archiver X（バージョン 8.2.4、2026年9月）は、Apple Mail、Outlook、Thunderbird、Postbox、Gmail や iCloud を含む IMAP のアカウント、mbox ファイルからメールを取り込んで 1 つのアーカイブにまとめ、差出人、件名、本文、添付ファイルを対象にした簡易検索と絞り込み検索ができます。mbox と PDF に書き出せるので、アプリなしで読める記録が必要なときに便利です。一覧の中で最も充実した純粋なアーカイバーで、メールが複数のデスクトップアプリに散らばっているなら選ぶべきものです。
+          </p>
+          <p>
+            <strong>注意点：</strong>アーカイブはアプリ独自の内部データベースにあるので、いつか乗り換えるときには書き出す計画を立てておいてください。標準ライセンスは $49.95 です。Pro のサーバー版は年額のサブスクリプションで、有効な Pro のライセンスがないと、アプリはメールを表示できてもアーカイブや書き出しはできません。Easy 版はアーカイブあたり 10,000 通が上限で、スケジュール機能はありません。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. MailVault：プロバイダーのアカウントをプレーンなファイルとして残す無料の方法に最適</h3>
+          <p>
+            MailVault は、メールのコピーを Maildir 形式のフォルダに 1 通につき 1 つの .eml ファイルとしてコンピュータに保管する、macOS・Windows・Linux 向けの無料のメールアプリです。Gmail と Microsoft 365 にはそれぞれのページでサインインし、個人の Outlook.com には Microsoft Graph 経由で接続し、iCloud を含むあらゆる IMAP のアカウントを扱えます。MailVault のアカウントはなく、メールの経路に MailVault のサーバーはありません。検索はローカルのインデックスでオフラインでも動き、公開しているテストでは、50,000 通のメッセージを対象にした最も遅い検索でも 14 ミリ秒でした。手動バックアップは無料で無制限、保管庫は mbox として書き出せます。
+          </p>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-results-720.webp 720w, /screenshots/ja/search-results-1440.webp 1440w, /screenshots/ja/search-results-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ja/search-results-light-1440.webp" srcset="/screenshots/ja/search-results-light-720.webp 720w, /screenshots/ja/search-results-light-1440.webp 1440w, /screenshots/ja/search-results-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Rack and Rind の MailVault の検索結果。検索ボックスの下の行には「INBOX で 7 件、ローカル 7 件、サーバー 0 件」とあり、一致する 7 通のメッセージが一覧に表示されています。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">検索は Mac 上のメールのコピーに対して行われます。ここでは 7 件の結果すべてがローカルのファイルから得られ、サーバーからは 0 件です。</figcaption>
+          </figure>
+
+          <p>
+            <strong>注意点：</strong>MailVault がアーカイブするのはアカウントからで、ほかのアプリのローカルの保存場所からではありません。そのため、Apple Mail の「このMac内」フォルダにしかないメールは、mbox として書き出して読み込む必要があります。既定のバックアップはすでに保管庫にあるメールだけが対象なので、完全なコピーにはバックアップの対象をすべてのメールに切り替えてください。スケジュールバックアップ、バックアップの健全性の件数、ワンステップのアーカイブして削除、PDF と Office の添付ファイル内の検索は Premium です（最初の 100 人の購読者向けの早期アクセス価格で月額 $4 または年額 $25、その後は $6 または $39）。Outlook.com のアカウントでは、mbox ファイルをサーバーに復元することと、削除したメールをサーバーに復元することはまだできません。MailVault は早期アクセス中です。
+          </p>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault の「63 件のメールの操作を選択」ダイアログ。「サーバー上 63 件」「ここにアーカイブ済み 32 件」とあり、アーカイブ、アーカイブから戻す、サーバーから削除、アーカイブして削除、すべてから削除が選べ、アーカイブが選択されています。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">アーカイブは、選んだメールを保管庫にコピーし、サーバーのコピーはそのまま残します。これは無料です。各コピーを検証してからサーバーから削除するアーカイブして削除は Premium です。</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Thunderbird と ImportExportTools NG：無料で完全にオープンソースの構成に最適</h3>
+          <p>
+            Thunderbird は無料のオープンソースで、Mozilla によると現在のバージョンは Apple Silicon でネイティブに動作します。標準ではフォルダごとに 1 つの mbox ファイルとして保存します。1 通ごとに 1 ファイルの保存方式もありますが、Mozilla はまだ試験的なものとしています。ImportExportTools NG のアドオン（GPL-3.0、Thunderbird 140〜157 向け）は、メッセージを EML、HTML、PDF、CSV、プレーンテキストとして書き出し、フォルダとサブフォルダを mbox として書き出し、終了時にスケジュールでプロファイル全体をバックアップできます。すでに Thunderbird でメールを読んでいるなら、費用はかからず、すべてをオープンな形式で残せます。
+          </p>
+          <p>
+            <strong>注意点：</strong>自分で組み立てるアーカイブです。IMAP のアカウントでは Thunderbird はサーバーを映すだけなので、アーカイブの完全さは最後の書き出しやプロファイルのバックアップ次第です。詳しくは <a href="/ja/compare/mailvault-vs-thunderbird.html">MailVault と Thunderbird の比較</a>を参照してください。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. MailSteward：Apple Mail や Gmail の検索できるデータベースに最適</h3>
+          <p>
+            MailSteward（バージョン 18.2.2、2026年9月リリース）は、Apple Mail のアカウントと Gmail のメールを Mac 上のリレーショナルデータベースにコピーします。版は 3 つあります。Lite（$24.95、保存した検索と書き出しはなし）、標準（$49.95）、Pro（$99.95、企業規模のアーカイブ向けで MySQL サーバーが必要）です。開発元によると Apple Silicon 向けに最適化されており、macOS 12 以降が必要で、無料版は 15,000 通まで扱えるので、試すにはちょうどよい方法です。
+          </p>
+          <p>
+            <strong>注意点：</strong>取り込み元は Apple Mail と Gmail に限られ、アーカイブはデータベースなので、購入する版の書き出しの選択肢を確認してください。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5. EagleFiler：メールと文書を 1 つのライブラリにまとめるのに最適</h3>
+          <p>
+            C-Command の EagleFiler（バージョン 1.9.22、2026年10月）は、メール、ウェブページ、PDF などのファイルのための汎用のアーカイブです。Apple Mail、Outlook、.eml などの形式のメールを標準の mbox に変換し、ライブラリをほかのアプリでも開ける通常のファイルとフォルダとして保管します。ライブ検索はメッセージと添付ファイルを対象にします。請求書のメールを、関連する PDF やウェブページの隣に置きたいなら、ほかのツールではできません。30 日間の試用期間があり、ライセンスは $69.99 です。
+          </p>
+          <p>
+            <strong>注意点：</strong>Apple Mail、Outlook、ファイルにすでにあるメールを元に動きます。プロバイダーから直接ダウンロードすることについて、開発元は説明していません。C-Command によると、EagleFiler は現在 Apple Silicon では Rosetta 2 に頼っており、macOS 28 より前に完全にネイティブになる見込みです。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">6. Apple Mail の「メールボックスを書き出す」：何もインストールせずに 1 回限りのコピーに最適</h3>
+          <p>
+            メールで 1 つ以上のメールボックスを選び、メールボックス &gt; メールボックスを書き出す を選びます。Apple によると、結果は mbox 形式で、後の書き出しが前の書き出しを上書きすることはなく、番号付きの新しいファイルが作られます。無料で、すでに Mac に入っています。アーカイバーではありません。スケジュールはなく、書き出したものを読むにはメールアプリに読み込み直す必要があります。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">7. Got Your Back（GYB）：ターミナルから Gmail を扱うのに最適</h3>
+          <p>
+            GYB はオープンソース（Apache-2.0）のコマンドラインツールで、Gmail の API を通じて Gmail と Google Workspace のアカウントをコンピュータ上のフォルダにバックアップし、mbox と .eml のファイルをアカウントに復元できます。macOS にはスクリプトでインストールでき、コマンドラインツールなので自分のスクリプトに組み込めます。対象は Google のアカウントだけで、すべてターミナルで操作します。
+          </p>
+
+          <p>
+            一覧にないもの：人気のある無料のアーカイバー MailStore Home は Windows 専用です。MailStore は対応するシステムとして Windows 10 と Windows 11 を挙げています。MailStore から移ってくるなら、<a href="/ja/guides/mailstore-alternatives-compared.html">MailStore の代わりの比較</a>を参照してください。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">よくある質問</h2>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Mac に最適な無料のメールアーカイバーは？</h3>
+            <p>Gmail、Outlook.com、iCloud、IMAP のアカウントをプレーンなファイルとして残すなら、MailVault は無料で、ソースコードは GitHub で公開されています。すでに Thunderbird を使っているなら、無料の ImportExportTools NG のアドオンで、フォルダを mbox として、メッセージを EML として書き出せます。Apple Mail の「メールボックスを書き出す」は無料ですが手作業です。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailStore Home は Mac で動きますか？</h3>
+            <p>いいえ。MailStore は MailStore Home の対応 OS として Windows 10 と Windows 11 を挙げています。Mac では、代わりにこのページのツールのどれかを使ってください。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">これらのメールアーカイバーは Apple Silicon でネイティブに動きますか？</h3>
+            <p>MailVault と Thunderbird はネイティブに動作し、MailSteward は Apple Silicon 向けに最適化されているとしています。EagleFiler は現在 Rosetta 2 に頼っており、開発者は macOS 28 より前にネイティブ版を出す見込みです。Mail Archiver X は macOS 11〜27 を挙げ、Intel 版と Apple Silicon 版を提供しています。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">メールのアーカイブはデータベースとプレーンなファイルのどちらにすべきですか？</h3>
+            <p>データベースなら 1 つのアプリの中で検索を速くできます。プレーンな .eml や mbox のファイルは、どのツールがなくなった後でも、ほかのアプリで開けます。アーカイバーがデータベースを使っているなら、ときどき mbox や eml にコピーを書き出してください。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">次にすること</h2>
+
+          <p>
+            表の中から、メールがある場所に合う行を選び、そのツールを 1 つのアカウントで試し、信頼する前にアーカイブしたメッセージをいくつかそのツールの外で開いてください。試すべき点は <a href="/ja/guides/imap-backup-tool-checklist.html">IMAP バックアップツールのチェックリスト</a>にまとめています。MailVault が合うなら、作成するアカウントもない無料のダウンロードです。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">1 つのアカウントで MailVault を試す</p>
+            <p class="text-sm mb-4">メールをプレーンな .eml ファイルとして Mac に。無料、ソースコードは GitHub で公開、MailVault のアカウントは不要です。</p>
+            <a href="/ja/get-started.html?plan=free" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault を無料でダウンロード
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            関連：<a href="/ja/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac のためのメールアーカイブの手順</a>、<a href="/ja/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">IMAP のメールをローカルにアーカイブする</a>、<a href="/ja/features/search.html" class="text-primary-500 hover:text-primary-600 underline">MailVault のオフライン検索</a>、<a href="/ja/pricing.html" class="text-primary-500 hover:text-primary-600 underline">無料と Premium の比較</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>メールを読む。メールを残す。</p>
+</div>
+<nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/mentioned-in.html">掲載情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">コミュニティ ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">チームに連絡 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

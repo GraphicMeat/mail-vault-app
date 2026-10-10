@@ -252,17 +252,12 @@ const FLUSH_BATCH: usize = 50;
 /// Classified-but-not-yet-saved messages, per account.
 type PendingBatches = HashMap<String, HashMap<String, classification::EmailClassification>>;
 
-/// What each account's classifications file held when we first read it, plus
-/// everything we have flushed into it since.
-type KnownClassifications = PendingBatches;
-
 /// Write one account's pending classifications. A failed write keeps the batch
 /// in memory for the next flush point — dropping it would lose every message it
 /// carries for the life of the process.
 async fn flush_account(
     state: &DaemonState,
     batches: &mut PendingBatches,
-    known: &mut KnownClassifications,
     account_id: &str,
 ) {
     let Some(batch) = batches.get(account_id).cloned() else { return };
@@ -270,23 +265,12 @@ async fn flush_account(
         batches.remove(account_id);
         return;
     }
-    let cached = known.entry(account_id.to_string()).or_default();
-    // Write what we know with the batch folded in, so a file that lost entries
-    // behind our back gets them back — minus the overrides we read: the file
-    // may hold a NEWER override for the same message, and re-emitting ours
-    // would revert it. They stay in the cache so the pre-check still counts
-    // them as classified. save_classifications refuses to put anything
-    // automatic over a user override, which covers the other direction.
-    let mut to_write: HashMap<String, classification::EmailClassification> = cached
-        .iter()
-        .filter(|(_, e)| e.source != classification::ClassificationSource::UserOverride)
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-    to_write.extend(batch.iter().map(|(k, v)| (k.clone(), v.clone())));
-    match classification::save_classifications(&state.app_dir, account_id, &to_write) {
+    // Only the batch is written. The worker once wrote back everything it had
+    // ever seen, which put back every row `classification::forget_at` took
+    // out for mail the server no longer has: Cleanup listed it forever.
+    match classification::save_classifications(&state.app_dir, account_id, &batch) {
         Ok(()) => {
             batches.remove(account_id);
-            cached.extend(batch);
         }
         Err(e) => {
             warn!(
@@ -304,10 +288,9 @@ async fn flush_account(
 async fn flush_all(
     state: &DaemonState,
     batches: &mut PendingBatches,
-    known: &mut KnownClassifications,
 ) {
     for account_id in batches.keys().cloned().collect::<Vec<_>>() {
-        flush_account(state, batches, known, &account_id).await;
+        flush_account(state, batches, &account_id).await;
     }
 }
 
@@ -318,12 +301,11 @@ async fn run_classification_worker(
 ) {
     info!("[queue-worker] Classification worker started");
     let mut batches: PendingBatches = HashMap::new();
-    let mut known: KnownClassifications = HashMap::new();
 
     loop {
         // Wait for items
         if state.classification.queue_depth().await == 0 {
-            flush_all(&state, &mut batches, &mut known).await;
+            flush_all(&state, &mut batches).await;
             {
                 let mut progress = state.classification.progress.lock().await;
                 if progress.status == classification::PipelineStatus::Running && batches.is_empty() {
@@ -339,7 +321,7 @@ async fn run_classification_worker(
             let mut cancel = state.classification.cancel_flag.lock().await;
             if *cancel {
                 *cancel = false;
-                flush_all(&state, &mut batches, &mut known).await;
+                flush_all(&state, &mut batches).await;
                 // Clear the queue via a temporary lock scope
                 let depth = {
                     let mut queue = state.classification.queue.lock().await;
@@ -370,17 +352,13 @@ async fn run_classification_worker(
         }
 
         // Check if already classified (race between enqueue and processing).
-        // The pending batch counts — it is not on disk yet. The file is read
-        // once per account and never invalidated: save_classifications refuses
-        // to put an automatic entry over a user override, so the worst a stale
-        // copy can cost is one redundant automatic classification that the
-        // flush then declines to write.
-        let existing = known
-            .entry(item.account_id.clone())
-            .or_insert_with(|| classification::load_classifications(&state.app_dir, &item.account_id));
+        // The pending batch counts — it is not on disk yet. The store is asked
+        // per message (one primary-key lookup, cheaper than the model read
+        // below): a copy kept in memory never learned of rows forgotten since,
+        // so a moved message was never classified at its new place.
         let pending = batches.get(&item.account_id);
-        if existing.contains_key(&item.message_id)
-            || pending.is_some_and(|b| b.contains_key(&item.message_id))
+        if pending.is_some_and(|b| b.contains_key(&item.message_id))
+            || classification::is_classified(&state.app_dir, &item.account_id, &item.message_id)
         {
             let mut progress = state.classification.progress.lock().await;
             progress.classified += 1;
@@ -405,7 +383,7 @@ async fn run_classification_worker(
         }
 
         if full {
-            flush_account(&state, &mut batches, &mut known, &item.account_id).await;
+            flush_account(&state, &mut batches, &item.account_id).await;
         }
     }
 }
@@ -587,14 +565,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&app_dir);
     }
 
-    /// The "already classified?" check used to re-read and re-parse the whole
-    /// account's records for every popped item. Proof that it now reads once:
-    /// empty the account after the worker has warmed its copy, then hand it a
-    /// message it has already seen. A worker that re-reads sees nothing stored
-    /// and classifies the message again — from the new, differently-classified
-    /// body — and its flush writes only what it just did.
+    /// The "already classified?" check asks the store, not a copy the worker
+    /// read once: rows are taken out when the server loses their mail, and a
+    /// copy never hears of it. Empty the account after the worker has seen
+    /// three messages, then hand it one of them again: nothing is stored, so
+    /// it is classified again (from its new, differently-classified body),
+    /// and the flush writes only what it just did.
     #[tokio::test]
-    async fn the_worker_does_not_re_read_the_file_per_item() {
+    async fn the_worker_asks_the_store_whether_a_message_is_classified() {
         let mail_dir = scratch("cache-mail");
         let app_dir = scratch("cache-app");
         let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
@@ -646,16 +624,63 @@ mod tests {
         assert_eq!(progress.classified, 6);
 
         let saved = classification::load_classifications(&app_dir, "acc1");
+        assert_ne!(saved["<m1@t>"].category, "personal", "<m1@t> was classified again from its new body");
         assert_eq!(
-            saved["<m1@t>"].category, "personal",
-            "the worker knew <m1@t> was classified without re-reading the store"
+            classification::keys_for_test(&app_dir, "acc1"),
+            vec!["<m1@t>".to_string(), "<m4@t>".to_string(), "<m5@t>".to_string()],
+            "the flush writes only what it just classified: <m2@t> and <m3@t> stay gone"
         );
-        assert_eq!(
-            saved.len(),
-            5,
-            "the flush writes what the worker knows, so the emptied account loses nothing"
-        );
-        assert!(saved.contains_key("<m4@t>") && saved.contains_key("<m5@t>"));
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// Cleanup listed a Newsletter group again after deleting it: the next
+    /// flush wrote back every row the worker had ever seen, including the ones
+    /// forgotten for mail the server no longer has.
+    #[tokio::test]
+    async fn a_row_forgotten_after_a_delete_is_not_written_back_by_the_next_flush() {
+        let mail_dir = scratch("forgotten-mail");
+        let app_dir = scratch("forgotten-app");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), no_rules()));
+
+        state.classification.enqueue("acc1", (1..=3u64).map(header).collect(), classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 3 && p.status == classification::PipelineStatus::Complete).await;
+
+        classification::forget_at(&app_dir, "acc1", "INBOX", &[1, 2]);
+        state.classification.enqueue("acc1", vec![header(4)], classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 4 && p.status == classification::PipelineStatus::Complete).await;
+
+        assert_eq!(classification::keys_for_test(&app_dir, "acc1"), vec!["<m3@t>".to_string(), "<m4@t>".to_string()]);
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// A message moved to another folder keeps its Message-ID. The worker
+    /// still remembers classifying it in INBOX; that row is gone, so it is
+    /// classified again where it is now.
+    #[tokio::test]
+    async fn a_moved_message_is_classified_again_at_its_new_place() {
+        let mail_dir = scratch("moved-mail");
+        let app_dir = scratch("moved-app");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), no_rules()));
+
+        state.classification.enqueue("acc1", vec![header(1)], classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 1 && p.status == classification::PipelineStatus::Complete).await;
+
+        classification::forget_at(&app_dir, "acc1", "INBOX", &[1]);
+        let moved = classification::EmailForClassification { uid: 40, mailbox: "Archive".into(), ..header(1) };
+        state.classification.enqueue("acc1", vec![moved], classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 2 && p.status == classification::PipelineStatus::Complete).await;
+
+        let saved = classification::load_classifications(&app_dir, "acc1");
+        let snap = saved["<m1@t>"].snapshot.as_ref().expect("classified again");
+        assert_eq!((snap.uid, snap.mailbox.as_str()), (40, "Archive"));
 
         worker.abort();
         let _ = std::fs::remove_dir_all(&mail_dir);

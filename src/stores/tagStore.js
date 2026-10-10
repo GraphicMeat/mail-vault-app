@@ -166,6 +166,25 @@ export const useTagStore = create((set, get) => ({
     }
   },
 
+  /// The daemon tagged these rows on its own (an Auto Tag rule, a backfill).
+  /// Only rows already in the render cache are patched: one it never asked
+  /// about fetches its full list when it renders, and a guessed entry would
+  /// stop that fetch and hide the row's other tags.
+  applyAssigned: async ({ tagId, items } = {}) => {
+    if (!tagId || !Array.isArray(items)) return;
+    const keys = items.map(item => tagRowKey(item.accountId, item.mailbox, item.uid));
+    set(state => ({ byRow: withTag(state.byRow, keys.filter(key => state.byRow[key]), tagId) }));
+    await get().refreshCounts();
+  },
+
+  /// Drop every cached row carrying `tagId`, so the rows on screen ask the
+  /// daemon again (an undone backfill names its tag, not its rows).
+  forgetRowsWithTag: (tagId) => {
+    set(state => ({
+      byRow: Object.fromEntries(Object.entries(state.byRow).filter(([, ids]) => !ids.includes(tagId))),
+    }));
+  },
+
   /// The per-tag counts the manager shows are the daemon's, never derived from
   /// the render cache: that cache only holds the rows on screen. A saved view
   /// filtered by tag has just changed too, so its badge is refreshed with them.
@@ -209,4 +228,25 @@ export function requestRowTags(email, location) {
   if (!key || useTagStore.getState().byRow[key] || pendingRows.has(key)) return;
   pendingRows.set(key, { email, location });
   if (!pendingTimer) pendingTimer = setTimeout(flushRowTags, 0);
+}
+
+async function listenTo(event, cb) {
+  try {
+    const { listen } = await import('@tauri-apps/api/event');
+    return await listen(event, (e) => cb(e.payload));
+  } catch {
+    return () => {};
+  }
+}
+
+let _eventsInitialized = null;
+
+/// Called once at app launch (App.jsx). The daemon's Auto Tag worker assigns
+/// tags a second or so after new mail lands, while that mail's row is already
+/// on screen with its empty tag list cached.
+export function initTagEvents() {
+  if (!_eventsInitialized) {
+    _eventsInitialized = listenTo('tags-assigned', payload => useTagStore.getState().applyAssigned(payload).catch(() => {}));
+  }
+  return _eventsInitialized;
 }

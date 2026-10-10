@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Mail-Tresor: Was er ist und wie du einen anlegst | MailVault</title>
+  <meta name="description" content="Ein E-Mail-Tresor: eigenes lokales Archiv, gehostetes verschlüsseltes Postfach oder Compliance-Archiv. Die Unterschiede und wie du kostenlos deinen anlegst.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/de/guides/what-is-an-email-vault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/de/guides/what-is-an-email-vault.html">
+  <meta property="og:title" content="Was ist ein E-Mail-Tresor? Drei Bedeutungen und wie du deinen eigenen anlegst">
+  <meta property="og:description" content="Ein E-Mail-Tresor: eigenes lokales Archiv, gehostetes verschlüsseltes Postfach oder Compliance-Archiv. Die Unterschiede und wie du kostenlos deinen anlegst.">
+  <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="de_DE">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Was ist ein E-Mail-Tresor? Drei Bedeutungen und wie du deinen eigenen anlegst">
+  <meta name="twitter:description" content="Ein E-Mail-Tresor: eigenes lokales Archiv, gehostetes verschlüsseltes Postfach oder Compliance-Archiv. Die Unterschiede und wie du kostenlos deinen anlegst.">
+  <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Was ist ein E-Mail-Tresor? Drei Bedeutungen und wie du deinen eigenen anlegst",
+  "description": "Ein E-Mail-Tresor: eigenes lokales Archiv, gehostetes verschlüsseltes Postfach oder Compliance-Archiv. Die Unterschiede und wie du kostenlos deinen anlegst.",
+  "url": "https://mailvaultapp.com/de/guides/what-is-an-email-vault.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Ist ein E-Mail-Tresor dasselbe wie ein Backup?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Fast, aber nicht ganz. Ein Backup ist eine Kopie, aus der du wiederherstellst, wenn etwas kaputtgeht. Ein Tresor ist eine Kopie, die du auch benutzt: Du liest und durchsuchst sie jeden Tag, und sie behält Nachrichten, nachdem der Server sie gelöscht hat. MailVault kann zusätzlich eine zweite Kopie auf ein externes Laufwerk schreiben, und das ist das Backup deines Tresors."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Ist ein E-Mail-Tresor dasselbe wie verschlüsselte oder sichere E-Mail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Nein. Sichere E-Mail-Dienste schützen E-Mails davor, von anderen gelesen zu werden, während sie auf ihren Servern liegen. Bei einem lokalen E-Mail-Tresor geht es darum, wer die Kopie hält. MailVault behält deine E-Mails als einfache .eml-Dateien, damit andere Apps sie lesen können, was auch heißt, dass jeder, der den Ordner öffnen kann, sie lesen kann. Schalte die Festplattenverschlüsselung deines Systems ein (FileVault auf dem Mac, BitLocker unter Windows), wenn der Computer verloren gehen oder gestohlen werden könnte."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Kann ich meinen Tresor ohne MailVault öffnen?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ja. Jede Nachricht ist eine normale .eml-Datei in Ordnern im Maildir-Stil. Apple Mail, Thunderbird und andere Mail-Apps können sie öffnen, und ein Texteditor kann sie lesen. Du kannst den Tresor auch als ZIP mit .eml-Dateien exportieren."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Was passiert mit meinem Tresor, wenn ich nicht mehr für Premium bezahle?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Nichts wird gelöscht. Lesen, Suchen, Archivieren und manuelle Backups sind kostenlos, und ein abgelaufenes Premium-Abo entfernt nie E-Mails von deinem Computer. Du verlierst die Premium-Extras wie geplante Backups und Archivieren & löschen."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/what-is-an-email-vault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/what-is-an-email-vault.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/de/" aria-label="MailVault-Startseite"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">von Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Hauptnavigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="MailVault auf GitHub einen Stern geben" title="MailVault auf GitHub einen Stern geben"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault ein Herz schicken" title="MailVault ein Herz schicken"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Sprache auswählen"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Deutsch</span><span class="mv-language-code" aria-hidden="true">DE</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/what-is-an-email-vault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/what-is-an-email-vault.html" lang="de" hreflang="de" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/what-is-an-email-vault.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/what-is-an-email-vault.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/what-is-an-email-vault.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/what-is-an-email-vault.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/what-is-an-email-vault.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/what-is-an-email-vault.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/what-is-an-email-vault.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Farbschema wechseln" title="Farbschema wechseln"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo</a><a class="mv-button mv-nav-download" href="/de/get-started.html?plan=free">Download</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menü</span></summary>
+<nav aria-label="Mobile Navigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a><a href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo ausprobieren</a><a href="/de/get-started.html?plan=free">Kostenlos herunterladen</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Farbschema wechseln</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/de/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Zurück zur Startseite
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Was ist ein E-Mail-Tresor? Drei Bedeutungen und wie du deinen eigenen anlegst</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 Min. Lesezeit</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Ein <strong>E-Mail-Tresor</strong> ist ein geschützter Ort, an dem E-Mails aufbewahrt werden, damit man sie später wiederfindet. Der Begriff deckt drei verschiedene Dinge ab: ein lokales Archiv deiner E-Mails, das dir gehört und auf deinem eigenen Computer liegt, ein gehostetes Postfach, das ein sicherer E-Mail-Dienst auf seinen Servern verschlüsselt, und ein Compliance-Archiv, das eine Firma betreibt, um die E-Mails ihrer Mitarbeitenden aus rechtlichen Gründen aufzubewahren. Diese Seite erklärt jede Bedeutung und zeigt dann, wie du die erste Art selbst anlegst. Wenn du schon weißt, dass du einen lokalen Tresor willst, und Software auswählst, ist der Vergleich zwischen <a href="/de/compare/mail-client-vs-mail-vault.html" class="text-primary-500 hover:text-primary-600 underline">einem E-Mail-Programm und einem E-Mail-Tresor</a> der bessere Ausgangspunkt.
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Kurze Antwort</p>
+            <ul class="list-disc pl-6 space-y-1 text-sm">
+              <li><strong>Lokaler E-Mail-Tresor:</strong> eine Kopie deiner E-Mails auf deiner eigenen Festplatte, die bleibt, wenn der Server sie löscht. Du hältst sie.</li>
+              <li><strong>Gehostetes sicheres Postfach:</strong> E-Mails, die verschlüsselt auf den Servern eines Anbieters liegen. Vor anderen geschützt, aber immer noch ein Konto, das jemand anderes betreibt.</li>
+              <li><strong>Compliance-Archiv:</strong> eine von der Firma betriebene Kopie jeder Nachricht, die für Prüfungen und rechtliche Anfragen eine festgelegte Zahl von Jahren aufbewahrt wird.</li>
+              <li>MailVault ist die erste Art: eine kostenlose Desktop-App für macOS, Windows und Linux, die deine E-Mails als einfache <code>.eml</code>-Dateien auf deinem Computer behält.</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Drei Dinge, die mit „E-Mail-Tresor“ gemeint sind</h2>
+
+          <p>
+            Eine Suche nach <em>E-Mail-Tresor</em> oder <em>Mail-Vault</em> liefert sehr unterschiedliche Werkzeuge, weil viele Produkte das Wort benutzen. Hier jede Bedeutung in Kürze, ohne Bezug auf ein bestimmtes Produkt.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Ein lokales Archiv, das dir gehört</h3>
+          <p>
+            Eine Kopie deines Postfachs auf einem Computer oder Laufwerk, über das du verfügst, in einem Format, das andere Programme lesen können. Sie hängt nicht von den Servern deines Anbieters, deiner Anmeldung oder deinem Abo ab. Wird eine Nachricht auf dem Server gelöscht oder verschwindet das ganze Konto, bleibt die Kopie. Das ist die Bedeutung, an die die meisten Einzelpersonen denken, wenn sie ihre E-Mails „behalten“ wollen.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Ein gehostetes, verschlüsseltes Postfach</h3>
+          <p>
+            Manche sicheren E-Mail-Dienste bezeichnen ihren Speicher als Tresor. Deine E-Mails liegen verschlüsselt auf ihren Servern, und du erreichst sie über ihre App oder Website. Das Ziel ist Privatsphäre: Deine Nachrichten sollen nicht von anderen gelesen werden. Es bleibt ein gehostetes Konto, daher gelten die Fragen zur Verwahrung weiter unten auf dieser Seite auch hier. Wird das Konto geschlossen oder verlierst du den Zugang, sind die E-Mails auf diesem Server außer Reichweite.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Ein Compliance-Archiv</h3>
+          <p>
+            Viele Organisationen müssen geschäftliche E-Mails für einen festen Zeitraum aufbewahren und für Prüfungen, Streitfälle oder Legal Holds vorlegen. Ein Compliance-Archiv erfasst eine Kopie jeder Nachricht beim Senden oder Empfangen, speichert sie so, dass Nutzer sie nicht unbemerkt entfernen können, und gibt Administratoren eine Suche über die E-Mails aller. Betrieben wird es vom Arbeitgeber oder der IT-Abteilung. Die Person, der das Postfach gehört, kann diese Kopie meist nicht mitnehmen, wenn sie geht.
+          </p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th class="py-2 pr-4 font-semibold">&nbsp;</th>
+                  <th class="py-2 pr-4 font-semibold">Lokales Archiv, das dir gehört</th>
+                  <th class="py-2 pr-4 font-semibold">Gehostetes verschlüsseltes Postfach</th>
+                  <th class="py-2 font-semibold">Compliance-Archiv</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">Wer die Kopie hält</td>
+                  <td class="py-2 pr-4">Du, auf deiner Festplatte</td>
+                  <td class="py-2 pr-4">Der E-Mail-Dienst</td>
+                  <td class="py-2">Die Organisation</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">Hauptzweck</td>
+                  <td class="py-2 pr-4">E-Mails behalten, nachdem der Server sie loslässt</td>
+                  <td class="py-2 pr-4">E-Mails vor anderen schützen</td>
+                  <td class="py-2">Aufbewahrungs- und Rechtspflichten erfüllen</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">Übersteht die Schließung des Kontos</td>
+                  <td class="py-2 pr-4">Ja</td>
+                  <td class="py-2 pr-4">Nein, es ist das Konto</td>
+                  <td class="py-2">Für die Organisation, ja</td>
+                </tr>
+                <tr>
+                  <td class="py-2 pr-4 font-medium">Typische Nutzer</td>
+                  <td class="py-2 pr-4">Einzelpersonen, Freiberufler, kleine Teams</td>
+                  <td class="py-2 pr-4">Datenschutzbewusste Einzelpersonen</td>
+                  <td class="py-2">Firmen, Behörden</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Welche davon MailVault ist</h2>
+
+          <p>
+            MailVault ist die erste Art. Es ist eine Desktop-E-Mail-App für macOS, Windows und Linux und behält eine Kopie deiner E-Mails in einem Tresor auf deinem Computer. Jede Nachricht ist eine einfache <code>.eml</code>-Datei in Ordnern im Maildir-Stil, sodass Apple Mail, Thunderbird oder ein Texteditor sie ohne MailVault öffnen können. Du meldest dich bei deinem E-Mail-Anbieter an, nie bei MailVault: bei Gmail und Microsoft 365 über deren eigene Anmeldeseiten, bei Outlook.com über Microsoft Graph und bei jedem anderen Anbieter über IMAP. Dein Computer spricht direkt mit deinem Mailserver, und die Server von MailVault sehen deine Nachrichten nie. Der Quellcode liegt auf GitHub.
+          </p>
+
+          <p>
+            Es ist kein gehosteter Dienst und kein Compliance-Archiv. Es gibt keinen MailVault-Server, der deine E-Mails hält, und es hat keine Admin-Konsole und keine Legal-Hold-Funktionen. Du entscheidest, was in den Tresor kommt und was herausgeht.
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/local-vault-720.webp 720w, /screenshots/de/local-vault-1440.webp 1440w, /screenshots/de/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/de/local-vault-light-1440.webp" srcset="/screenshots/de/local-vault-light-720.webp 720w, /screenshots/de/local-vault-light-1440.webp 1440w, /screenshots/de/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault mit ausgewähltem Tab Tresor unter Ordner. Der Kopf des Posteingangs zeigt eine Zahl In deinem Tresor, und eine Legende unten in der Liste erklärt die Symbole der Zeilen: Nur auf dem Server, In deinem Tresor, Einzige Kopie, Auf dem Sicherungslaufwerk." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Der Tab Tresor zeigt nur, was auf deinem Computer gespeichert ist. Der Kopf zählt, wie viel vom Ordner in deinem Tresor liegt, und das Symbol jeder Zeile sagt, wo diese Nachricht liegt.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Ein Tresor ist kein E-Mail-Programm, das den Server spiegelt</h2>
+
+          <p>
+            Die meisten Mail-Apps sind Spiegel. Sie zeigen, was auf dem Server liegt, und behalten für die Geschwindigkeit einen lokalen Cache. Löscht der Server eine Nachricht, löscht der Spiegel sie bei der nächsten Synchronisierung auch. Das ist richtig, um Handy, Laptop und Webmail auf demselben Stand zu halten, und falsch, um E-Mails zu behalten.
+          </p>
+          <p>
+            Eine Kopie im Tresor hört nicht auf den Server: Sobald eine Nachricht im Tresor liegt, entfernt nichts von oben sie wieder. MailVault erledigt beide Aufgaben, ein normales E-Mail-Programm mit einem Tresor dahinter, und jede Zeile zeigt, ob eine Nachricht nur auf dem Server liegt, in deinem Tresor oder deine einzige Kopie ist.
+          </p>
+          <p>
+            Ein Detail ist wichtig. MailVault führt außerdem einen Arbeits-Cache und entfernt standardmäßig (im Download-Modus Aktuelle behalten) zwischengespeicherte Kopien, die älter als ein paar Monate sind, von deinem Computer, während der Server seine Kopie behält. Zwischengespeicherte E-Mails sind nicht der Tresor; archivierte und gesicherte E-Mails werden von keinem Download-Modus je entfernt. Deshalb enden die Schritte unten mit einem ausdrücklichen Backup oder Archivieren.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">So legst du in 10 Minuten deinen eigenen E-Mail-Tresor an</h2>
+
+          <p>
+            Zehn Minuten dauert die Einrichtung. Das Herunterladen eines großen Postfachs läuft danach im Hintergrund weiter, und wie lange das dauert, hängt von der Größe des Postfachs und deiner Verbindung ab. Die sechs Schritte unten nutzen nur die kostenlose App.
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-3">
+            <li><strong>Installiere MailVault.</strong> Lade die kostenlose App für macOS, Windows oder Linux von der <a href="/de/get-started.html?plan=free" class="text-primary-500 hover:text-primary-600 underline">Startseite zum Loslegen</a>. Du musst kein MailVault-Konto anlegen.</li>
+            <li><strong>Wähle, wo der Tresor liegt.</strong> Beim ersten Start fragt die App, wo deine E-Mails gespeichert werden sollen. Standard ist der eigene Ordner der App. Du kannst stattdessen einen anderen Ordner oder ein externes Laufwerk wählen und das später unter Einstellungen &rarr; Sichern &amp; Wiederherstellen &rarr; Sicherungseinstellungen ändern. MailVault kopiert alles an den neuen Ort, prüft, ob jede Datei angekommen ist, und entfernt erst dann die Originale. (Das Verschieben des Tresors ist in der Mac-App-Store-Version nicht verfügbar.)</li>
+            <li><strong>Füge dein Konto hinzu.</strong> Melde dich bei Gmail, Microsoft 365 oder Outlook.com auf der eigenen Seite des Anbieters an oder gib für jeden anderen Anbieter die IMAP-Daten ein. Dein Passwort oder Anmeldetoken liegt im Anmeldespeicher deines Systems, etwa im Schlüsselbund unter macOS.</li>
+            <li><strong>Leg fest, was in den Tresor kommt.</strong> Unter Einstellungen &rarr; Sichern &amp; Wiederherstellen steht „Was gesichert wird“ anfangs auf <em>Nur archivierte E-Mails</em>. Um auch E-Mails zu holen, die bisher nur auf dem Server liegen, wähle <em>Alle E-Mails (vom Server laden)</em>. Das kann viel Speicherplatz belegen, prüfe also, ob du genug hast. Wenn du nur einige E-Mails behalten willst, überspring das und archiviere von Hand: Wähle Nachrichten aus und dann <strong>Archivieren</strong>, das sie in deinen Tresor kopiert und auch auf dem Server lässt.</li>
+            <li><strong>Drücke „Jetzt alle Konten sichern“.</strong> Manuelle Backups sind kostenlos und unbegrenzt. Ein Fortschrittsbalken läuft, und die Backup-Karte sagt dir, wann jede Kopie in deinem Tresor ist. Spätere Durchläufe sind inkrementell und laden nur neue E-Mails.</li>
+            <li><strong>Prüfe es.</strong> Stelle die Ordnerliste auf den Tab <strong>Tresor</strong>. Was du dort siehst, liegt auf deiner Festplatte. Der Kopf zeigt, wie viel vom Ordner in deinem Tresor liegt. Die Kontokarte in den Einstellungen listet außerdem neuere Nachrichten, die MailVault angezeigt oder zwischengespeichert hat und die noch nicht im Tresor liegen, mit einem Button Diese jetzt sichern; das umfasst die Monate, die dein Download-Modus behält, nicht ältere E-Mails, die noch auf dem Server liegen.</li>
+          </ol>
+
+
+          <p>
+            Zwei optionale Schritte machen den Tresor robuster. Erstens: Lege unter Einstellungen &rarr; Sichern &amp; Wiederherstellen eine zweite Kopie auf einem externen Laufwerk oder NAS an (in der Mac-App-Store-Version sind externe Sicherungsordner ein separater Kauf). MailVault schreibt dort dieselben <code>.eml</code>-Dateien hin, die App liest sie im Alltag nie, und auf dem Server gelöschte E-Mails bleiben darin. Ohne sie liegt alles in einem Ordner auf einem Computer, und wer diesen Computer verliert, verliert den Tresor. Zweitens: Sobald der Tresor deine alten E-Mails hält, kannst du sie vom Server entfernen, um Platz zu schaffen. Das Löschen vom Server für sich allein ist kostenlos. <a href="/de/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">Archivieren &amp; löschen</a>, das jede Nachricht in den Tresor kopiert und prüft, bevor es die Kopie auf dem Server entfernt, ist eine Premium-Funktion.
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/selection-dialog-archive-720.webp 720w, /screenshots/de/selection-dialog-archive-1440.webp 1440w, /screenshots/de/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/de/selection-dialog-archive-light-1440.webp" srcset="/screenshots/de/selection-dialog-archive-light-720.webp 720w, /screenshots/de/selection-dialog-archive-light-1440.webp 1440w, /screenshots/de/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Der Dialog Aktion wählen in MailVault für eine Auswahl von E-Mails. Er zeigt, wie viele auf dem Server liegen und wie viele hier archiviert sind, warnt, dass Aus dem Archiv holen die Kopie im Tresor löscht, und listet Archivieren, Aus dem Archiv holen, Vom Server löschen, Archivieren und löschen sowie Überall löschen, wobei Archivieren ausgewählt ist." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Ausgewählte E-Mails von Hand archivieren. Archivieren kopiert Nachrichten in den Tresor und lässt den Server in Ruhe. Der Dialog zählt, was schon archiviert ist, bevor du etwas Riskanteres wählst.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Verwahrung: was mit deinen E-Mails passiert, wenn der Anbieter das Konto schließt</h2>
+
+          <p>
+            Dein Posteingang liegt auf einer Infrastruktur, die jemand anderes betreibt, zu Bedingungen, die er ändern kann. Konten werden gesperrt, wenn eine Telefonnummer oder ein Authenticator verloren geht. Arbeitgeber schließen Postfächer an dem Tag, an dem jemand geht. Anbieter löschen inaktive Konten: Google sagt zum Beispiel, dass es ein Google-Konto, das zwei Jahre inaktiv war, samt Inhalten löschen kann (<a href="https://support.google.com/accounts/answer/12418290" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Googles Richtlinie zu inaktiven Konten</a>). Unser Beitrag dazu, warum <a href="/de/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">dein E-Mail-Anbieter kein Backup ist</a>, geht diese Fälle genauer durch.
+          </p>
+
+          <p>Wenn das Konto verschwindet, leistet ein lokaler Tresor Folgendes und Folgendes nicht:</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Er behält, was vorher gespeichert wurde.</strong> Jede Nachricht, die schon im Tresor liegt, bleibt als Datei auf deiner Festplatte. Zum Öffnen braucht sie weder die alte Anmeldung noch ein zurückgesetztes Passwort noch die Erlaubnis des Anbieters.</li>
+            <li><strong>Er empfängt nicht weiter.</strong> E-Mails, die danach an die geschlossene Adresse geschickt werden, kommen nirgends an, wo du sie sehen kannst. Ein Tresor bewahrt die Vergangenheit, nicht die Adresse.</li>
+            <li><strong>Er ist nur so sicher wie die Festplatte.</strong> Eine Kopie auf einem Laptop bleibt eine Kopie. Bewahre die zweite Kopie auf einem externen Laufwerk auf und behandle dieses Laufwerk wie jedes andere Backup.</li>
+            <li><strong>Er bleibt ohne MailVault lesbar.</strong> Die Dateien sind normale <code>.eml</code>-Dateien, und du kannst den Tresor auch als ZIP mit einem Manifest exportieren, das die E-Mails anhand der Adresse den Konten zuordnet, sodass er sich auf einem anderen Computer wieder importieren lässt.</li>
+          </ul>
+
+          <p>
+            Wenn du weißt, dass ein Konto bald geschlossen wird, lege zuerst den Tresor an und prüfe ihn auf dem Tab Tresor, bevor du den Zugang verlierst. Wenn du auf einem Mac bist und noch Werkzeuge vergleichst, behandelt <a href="/de/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">E-Mail-Archivierung auf dem Mac</a> die Auswahl im Ganzen.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Häufige Fragen</h2>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Ist ein E-Mail-Tresor dasselbe wie ein Backup?</h3>
+          <p>Fast, aber nicht ganz. Ein Backup ist eine Kopie, aus der du wiederherstellst, wenn etwas kaputtgeht. Ein Tresor ist eine Kopie, die du auch benutzt: Du liest und durchsuchst sie jeden Tag, und sie behält Nachrichten, nachdem der Server sie gelöscht hat. MailVault kann zusätzlich eine zweite Kopie auf ein externes Laufwerk schreiben, und das ist das Backup deines Tresors.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Ist ein E-Mail-Tresor dasselbe wie verschlüsselte oder sichere E-Mail?</h3>
+          <p>Nein. Sichere E-Mail-Dienste schützen E-Mails davor, von anderen gelesen zu werden, während sie auf ihren Servern liegen. Bei einem lokalen E-Mail-Tresor geht es darum, wer die Kopie hält. MailVault behält deine E-Mails als einfache .eml-Dateien, damit andere Apps sie lesen können, was auch heißt, dass jeder, der den Ordner öffnen kann, sie lesen kann. Schalte die Festplattenverschlüsselung deines Systems ein (FileVault auf dem Mac, BitLocker unter Windows), wenn der Computer verloren gehen oder gestohlen werden könnte.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Kann ich meinen Tresor ohne MailVault öffnen?</h3>
+          <p>Ja. Jede Nachricht ist eine normale .eml-Datei in Ordnern im Maildir-Stil. Apple Mail, Thunderbird und andere Mail-Apps können sie öffnen, und ein Texteditor kann sie lesen. Du kannst den Tresor auch als ZIP mit .eml-Dateien exportieren.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Was passiert mit meinem Tresor, wenn ich nicht mehr für Premium bezahle?</h3>
+          <p>Nichts wird gelöscht. Lesen, Suchen, Archivieren und manuelle Backups sind kostenlos, und ein abgelaufenes Premium-Abo entfernt nie E-Mails von deinem Computer. Du verlierst die Premium-Extras wie geplante Backups und Archivieren &amp; löschen.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Wie es weitergeht</h2>
+
+          <p>
+            Am schnellsten beurteilst du einen lokalen Tresor, indem du einen mit einem einzigen Konto anlegst und dir den Tab Tresor ansiehst. Die <a href="/de/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">Funktionsseite zum lokalen Tresor</a> erklärt die Dateistruktur und wie du den Tresor auf ein anderes Laufwerk verschiebst, und <a href="/de/pricing.html" class="text-primary-500 hover:text-primary-600 underline">Preise</a> listet, was Premium dazubringt. Sobald deine E-Mails im Tresor liegen, kann dir <a href="/de/blog/email-insights-who-fills-your-inbox.html" class="text-primary-500 hover:text-primary-600 underline">Einblicke in MailVault</a> zeigen, wer ihn füllt.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Leg deinen E-Mail-Tresor an</p>
+            <p class="text-sm mb-4">MailVault ist kostenlos für macOS, Windows und Linux. Kein MailVault-Konto, und deine E-Mails bleiben als einfache .eml-Dateien auf deinem Computer.</p>
+            <a href="/de/get-started.html?plan=free" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault kostenlos laden
+            </a>
+          </div>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/de/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Lies deine E-Mails. Behalte deine E-Mails.</p>
+</div>
+<nav aria-label="MailVault entdecken"><a href="/de/use-cases.html">Anwendungsfälle</a><a href="/de/blog.html">Blog</a><a href="/changelog.html">Neuigkeiten</a><a href="/de/mentioned-in.html">Erwähnungen</a><a href="/de/faq.html">FAQ</a><a href="/de/docs.html">Hilfe</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code auf GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Team kontaktieren ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Gemacht von <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Datenschutz</a><a href="/terms.html">AGB</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

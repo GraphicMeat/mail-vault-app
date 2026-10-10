@@ -669,11 +669,51 @@ function computePremiumAccess(status, cancelAtPeriodEnd, currentPeriodEnd) {
 // ── Hybrid pricing: EUR base, manual USD/GBP, Adaptive for others ───────────
 // Two EUR-based Stripe prices with currency_options for USD and GBP.
 // Stripe Adaptive Pricing handles other eligible currencies from the EUR base.
-const BASE_CURRENCY = 'eur';
+// Amounts, currency resolution and the /pricing body live in ./pricing.js.
+const { resolvePricing, pricingBody } = require('./pricing');
 const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY_EUR || process.env.STRIPE_PRICE_MONTHLY;
 const PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY_EUR || process.env.STRIPE_PRICE_YEARLY;
 
-// Price IDs are only exercised at checkout, and /pricing serves MANUAL_AMOUNTS without
+// ── Early Bird spots: the first 100 subscribers (./early-bird.js) ──────────
+// The count comes from Stripe (cached an hour, cleared by subscription webhooks), else from billing_subscriptions.
+// Once every spot is taken, checkout sells the standard prices when
+// STRIPE_PRICE_*_STANDARD(_EUR) are set and refuses early bird otherwise.
+const {
+  createEarlyBirdCounter, publicBody: earlyBirdBody, isEarlyBirdFull, checkoutPrice, pricingFor,
+  earlyBirdPrices, standardPrices, parseIdList,
+} = require('./early-bird');
+const EARLY_BIRD_PRICES = earlyBirdPrices(process.env);
+const STANDARD_PRICES = standardPrices(process.env);
+const earlyBirdCounter = createEarlyBirdCounter({
+  stripe,
+  getDb: () => (dbError ? null : getPool()),
+  priceIds: [EARLY_BIRD_PRICES.monthly, EARLY_BIRD_PRICES.yearly],
+  excludeCustomers: parseIdList(process.env.EARLY_BIRD_EXCLUDE_CUSTOMERS),
+});
+// Its own counter with the status limits: the homepage already spends statusLimiter
+// on latest-version, downloads and pricing.
+const earlyBirdLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many status checks. Please try again shortly.' },
+});
+
+// GET /api/billing/early-bird → { cap, taken, remaining }. Counts only, never customer data.
+app.get('/api/billing/early-bird', earlyBirdLimiter, async (req, res) => {
+  try {
+    const status = await earlyBirdCounter.status();
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(earlyBirdBody(status));
+  } catch (err) {
+    // No count: the pages keep their static "100 spots" line.
+    console.error('early-bird:', err.message);
+    res.status(503).json({ error: 'unavailable' });
+  }
+});
+
+// Price IDs are only exercised at checkout, and /pricing serves MANUAL_AMOUNTS (./pricing.js) without
 // asking Stripe — so a price belonging to another account ("No such price") advertises a
 // plan nobody can buy, silently. Retrieve both once at boot and refuse to sell if they're
 // unusable. null = not checked yet.
@@ -687,81 +727,14 @@ async function validatePrices() {
     pricesOk = false;
     console.error('[billing] configured price IDs unusable — checkout will fail:', error.message);
   }
-}
-
-// Manual currency_options amounts (in minor units). These match what's set on the Stripe price.
-const MANUAL_AMOUNTS = {
-  eur: { monthly: 400, yearly: 2500 },
-  usd: { monthly: 400, yearly: 2500 },
-  gbp: { monthly: 350, yearly: 2100 },
-};
-const MANUAL_CURRENCIES = new Set(Object.keys(MANUAL_AMOUNTS));
-
-// Currencies where Stripe Adaptive Pricing is commonly available
-const ADAPTIVE_CURRENCIES = new Set([
-  'aud', 'brl', 'cad', 'chf', 'czk', 'dkk', 'hkd', 'huf', 'inr', 'jpy',
-  'krw', 'mxn', 'nok', 'nzd', 'pln', 'ron', 'sek', 'sgd', 'thb', 'try', 'twd', 'zar',
-]);
-
-// Map country code → currency
-const COUNTRY_CURRENCY = {
-  US: 'usd', GB: 'gbp', UK: 'gbp',
-  AT: 'eur', BE: 'eur', CY: 'eur', DE: 'eur', EE: 'eur', ES: 'eur', FI: 'eur', FR: 'eur',
-  GR: 'eur', IE: 'eur', IT: 'eur', LT: 'eur', LU: 'eur', LV: 'eur', MT: 'eur', NL: 'eur',
-  PT: 'eur', SI: 'eur', SK: 'eur', HR: 'eur',
-  AU: 'aud', BR: 'brl', CA: 'cad', CH: 'chf', CZ: 'czk', DK: 'dkk', HK: 'hkd',
-  HU: 'huf', IN: 'inr', JP: 'jpy', KR: 'krw', MX: 'mxn', NO: 'nok', NZ: 'nzd',
-  PL: 'pln', RO: 'ron', SE: 'sek', SG: 'sgd', TH: 'thb', TR: 'try', TW: 'twd', ZA: 'zar',
-};
-
-function resolveCountry(reqCountry, cfCountry, acceptLanguage) {
-  if (reqCountry) return reqCountry.toUpperCase();
-  if (cfCountry) return cfCountry.toUpperCase();
-  if (acceptLanguage) {
-    const match = acceptLanguage.match(/[a-z]{2}-([A-Z]{2})/);
-    if (match) return match[1];
+  // The standard prices are only sold once every early-bird spot is taken. A bad id is
+  // logged, never folded into pricesOk: the deploy health check reads that flag.
+  const standardIds = [STANDARD_PRICES.monthly, STANDARD_PRICES.yearly].filter(Boolean);
+  if (stripe && standardIds.length) {
+    try { await Promise.all(standardIds.map((id) => stripe.prices.retrieve(id))); } catch (error) {
+      console.error('[billing] standard price IDs unusable: checkout will fail once the early-bird spots are taken:', error.message);
+    }
   }
-  return null;
-}
-
-/**
- * Resolve pricing for a customer.
- * Returns: { currency, pricingMode, monthly: {amount, formatted}, yearly: {amount, formatted} }
- * pricingMode: 'manual' | 'adaptive' | 'fallback'
- */
-function resolvePricing(reqCurrency, country, acceptLanguage) {
-  // 1. Determine target currency
-  let currency = reqCurrency?.toLowerCase();
-  if (!currency) {
-    const cc = resolveCountry(country, null, acceptLanguage);
-    currency = cc ? (COUNTRY_CURRENCY[cc] || null) : null;
-  }
-
-  // 2. Manual currency → exact known amounts
-  if (currency && MANUAL_CURRENCIES.has(currency)) {
-    const amounts = MANUAL_AMOUNTS[currency];
-    return { currency, pricingMode: 'manual', monthly: amounts.monthly, yearly: amounts.yearly };
-  }
-
-  // 3. Adaptive currency → Stripe will convert at checkout; show base EUR amounts as estimate
-  if (currency && ADAPTIVE_CURRENCIES.has(currency)) {
-    const base = MANUAL_AMOUNTS[BASE_CURRENCY];
-    return { currency: BASE_CURRENCY, presentmentCurrency: currency, pricingMode: 'adaptive', monthly: base.monthly, yearly: base.yearly };
-  }
-
-  // 4. Fallback → EUR
-  const base = MANUAL_AMOUNTS[BASE_CURRENCY];
-  return { currency: BASE_CURRENCY, pricingMode: currency ? 'fallback' : 'default', monthly: base.monthly, yearly: base.yearly };
-}
-
-function formatAmount(amount, currency) {
-  try {
-    // Whole amounts drop the decimals (€4, not €4.00); anything with cents keeps
-    // both digits — a flat minimumFractionDigits: 0 renders £3.50 as "£3.5".
-    const digits = amount % 100 === 0 ? 0 : 2;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase(), minimumFractionDigits: digits, maximumFractionDigits: digits })
-      .format(amount / 100);
-  } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
 }
 
 // Trial applies to the YEARLY plan only — monthly bills from day one.
@@ -785,11 +758,17 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
 
   const { currency: reqCurrency, country, email, customerId } = req.query;
   const cfCountry = req.headers['cf-ipcountry'];
-  const resolved = resolvePricing(
+  // Once checkout sells the standard prices, quote them. Only a count already cached
+  // decides this: /pricing never waits on Stripe.
+  const earlyBirdNow = earlyBirdCounter.peek();
+  // Nothing cached (cold start, or a subscription webhook just cleared it): count in
+  // the background so the next request knows, without delaying this one.
+  if (!earlyBirdNow) earlyBirdCounter.status().catch(() => {});
+  const resolved = pricingFor(resolvePricing(
     reqCurrency,
     country || cfCountry,
     req.headers['accept-language']
-  );
+  ), { full: !!earlyBirdNow && earlyBirdNow.taken >= earlyBirdNow.cap, standard: STANDARD_PRICES });
 
   // Determine trial eligibility: one free yearly trial per customer, never used before
   let trialEligible = true; // default for unknown/new users
@@ -811,42 +790,7 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
     }
   } catch { /* non-fatal — default to eligible */ }
 
-  const displayCur = resolved.currency;
-  const monthlyFormatted = formatAmount(resolved.monthly, displayCur);
-  const yearlyFormatted = formatAmount(resolved.yearly, displayCur);
-  const monthlyEquiv = formatAmount(Math.round(resolved.yearly / 12), displayCur);
-  const savingsPercent = resolved.monthly > 0
-    ? Math.round((1 - (resolved.yearly / 12) / resolved.monthly) * 100)
-    : 0;
-
-  res.json({
-    currency: displayCur,
-    baseCurrency: BASE_CURRENCY,
-    pricingMode: resolved.pricingMode,
-    ...(resolved.presentmentCurrency ? { presentmentCurrency: resolved.presentmentCurrency } : {}),
-    plans: [
-      {
-        planId: 'monthly',
-        interval: 'month',
-        currency: displayCur,
-        amount: resolved.monthly,
-        formattedAmount: monthlyFormatted,
-        trialDays: 0,
-        trialEligible,
-      },
-      {
-        planId: 'yearly',
-        interval: 'year',
-        currency: displayCur,
-        amount: resolved.yearly,
-        formattedAmount: yearlyFormatted,
-        monthlyEquivalent: monthlyEquiv,
-        savingsPercent,
-        trialDays: TRIAL_DAYS,
-        trialEligible,
-      },
-    ],
-  });
+  res.json(pricingBody(resolved, { trialDays: TRIAL_DAYS, trialEligible }));
 });
 
 // POST /api/billing/checkout-session
@@ -857,7 +801,15 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
 
     // Always use the EUR-based prices — Stripe handles currency via currency_options + adaptive
     const interval = planId === 'yearly' || priceType === 'yearly' ? 'yearly' : 'monthly';
-    const priceId = interval === 'yearly' ? PRICE_YEARLY : PRICE_MONTHLY;
+    // Early bird while spots remain; once all are taken, the standard price or a refusal.
+    const choice = checkoutPrice({
+      interval,
+      full: await isEarlyBirdFull(earlyBirdCounter),
+      earlyBird: { monthly: PRICE_MONTHLY, yearly: PRICE_YEARLY },
+      standard: STANDARD_PRICES,
+    });
+    if (choice.error) return res.status(409).json({ error: choice.error, message: choice.message });
+    const priceId = choice.priceId;
     if (!priceId) return res.status(503).json({ error: 'billing_unavailable', message: 'Price not configured.' });
 
     const db = getPool();
@@ -1339,6 +1291,11 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
         }
         break;
       }
+    }
+
+    // A subscription came, changed or went: the next spot count asks Stripe again.
+    if (event.type === 'checkout.session.completed' || event.type.startsWith('customer.subscription.')) {
+      earlyBirdCounter.invalidate();
     }
 
     // Record event as processed

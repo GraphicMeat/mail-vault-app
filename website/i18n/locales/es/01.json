@@ -55,7 +55,6 @@
   "c4c836251a9c": "Suscripción activada - MailVault",
   "058a813016f5": "¡Todo listo!",
   "2a5178b7f46e": "Blog - MailVault",
-  "c7d20dd92f6f": "Entre bastidores del desarrollo de MailVault",
   "1733f097e696": "28 de agosto de 2026",
   "00fd574c1eef": "Una copia de seguridad en la nube significa que un proveedor puede leer tu correo para siempre. Una copia local significa que solo puedes leerlo tú.",
   "ef44e83e09c8": "Un servicio de copia de seguridad en la nube de terceros no elimina el punto único de fallo: añade una segunda empresa con acceso continuo a todo lo que has enviado y recibido. La diferencia real de arquitectura y por qué la copia local la cierra.",
@@ -94,7 +93,6 @@
   "91526b86de0c": "La saga de la firma en el sandbox de macOS (o por qué existen las versiones de la 1.4.0 a la 1.4.5)",
   "e1d517831a41": "Seis versiones de parche en un solo día. La firma de código de macOS, el App Sandbox y los sidecars compilados con Bun no se llevan bien; aquí está la historia completa de cómo lo arreglamos.",
   "a78b94f51a58": "5 min de lectura",
-  "90600dedf512": "Entre bastidores del desarrollo de MailVault. Novedades del desarrollo, análisis técnicos a fondo y notas de las versiones.",
   "fa3229126bbe": "Docs — MailVault",
   "9e9cf3221a30": "Documentación",
   "1ec295839f81": "Guías, flujos de trabajo y respuestas para sacarle todo el partido a MailVault.",
@@ -104,8 +102,6 @@
   "405cd296dba3": "¿Buzón lleno? Archiva los correos en local y bórralos después del servidor sin riesgo para recuperar espacio.",
   "f31ef2ff820f": "Cómo conservar correos después de borrarlos del servidor",
   "65e40eb0394e": "Borra correos de tu servidor sin perderlos. Archívalos antes en local y consérvalos para siempre.",
-  "c7914d235e02": "La mejor alternativa a MailStore para Mac",
-  "6835ea0b7eb6": "¿Buscas una alternativa a MailStore en Mac? Compara MailVault &mdash; gratis, de código abierto y nativo en macOS.",
   "edf92377c652": "¿Almacenamiento de Gmail lleno? Así se arregla",
   "949d1bee2bf2": "Qué libera de verdad espacio en Gmail, ordenado por esfuerzo &mdash; y cómo evitar que el problema vuelva.",
   "61d7642c762a": "Cómo descargar todos tus correos de Gmail",
@@ -203,6 +199,5 @@
   "a2dd7988e261": "Preguntas frecuentes sobre MailVault. Aprende cómo MailVault copia tus correos IMAP en local en macOS, qué proveedores admite, cómo protege tus datos y más.",
   "e5768534ec25": "FAQ - MailVault",
   "ccd236b1059f": "Preguntas frecuentes sobre MailVault. Aprende cómo MailVault copia tus correos IMAP en local en macOS.",
-  "0e882c844500": "MailVault se conecta a tu servidor de correo con el protocolo IMAP y descarga cada correo a tu bóveda como un archivo .eml estándar en formato Maildir. Cada correo es un archivo en disco: legible por una persona, portátil y compatible con cualquier cliente de correo. Una vez que un mensaje está en tu bóveda puedes borrar la copia del servidor para liberar espacio; la local no se ve afectada.",
   "9fa678355882": ".eml (RFC 5322) es el formato estándar de internet para los mensajes de correo. Cada correo se guarda como un único archivo de texto autocontenido que se puede abrir con cualquier cliente de correo. Maildir es una estructura de directorios contrastada para guardar correo, usada por los servidores de correo desde hace décadas. Cada correo es un archivo, así que no hay una única base de datos que se pueda corromper. Juntos, .eml + Maildir hacen que tus correos sean duraderos, portátiles y que nunca queden atados a una sola aplicación."
 }

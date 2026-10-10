@@ -127,11 +127,108 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.19.2">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.19.2</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">October 10, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The unread filter tells you when a folder cannot have unread mail.</strong> Turn Unread on in Sent, Trash or any folder other than the inbox and that folder flashes in the sidebar: mail there was sent or filed, never received, so the empty list is right and the account's unread badge counts the inbox only.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Send asks when you mention an attachment but forgot it (Premium).</strong> A message that says "attached", "see the attachment", "im Anhang", "ci-joint", "添付" and the like in any of the app's languages, with no file attached, stops at Send and offers Attach file or Send anyway. Quoted text and your signature are not read, nor is a reply's subject. Turn it off in Settings > Mail preferences > Behavior > Attachments.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Get reminded when nobody replies (Premium).</strong> When you write an email, the bell next to Templates offers to remind you in 1 day, 3 days or a week. If nobody has answered by then, the email you sent is pinned above your inbox, unread, with one notification. Click it to read it again, or its x to dismiss the reminder; nothing in your mailbox is moved. Replies are looked for in the mail MailVault already holds in any folder but Sent and Drafts, and on the server in your inbox, archive and Trash; mail from your own addresses and aliases does not count, and neither do automatic out-of-office replies. Not offered for Outlook.com accounts signed in with Microsoft.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault has a Discord server.</strong> Join it, or follow MailVault on X, from the icons at the bottom of the sidebar or from Report a bug, for questions and chat with other users.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>IONOS accounts no longer get a false DKIM warning after Change server.</strong> The check looks for your domain's DKIM key under a list of common selector names and did not know IONOS's <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">s1-ionos</code> and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">s2-ionos</code>, so it warned that outgoing mail might be marked as spam even when DKIM was set up correctly. Both are checked now.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>No banner for mail you sent.</strong> Replying in a thread that lives in your inbox no longer notifies you of your own message. Mail from your login address, default From or any alias is skipped; mail from others still notifies.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A long message in the compose window no longer shows two scrollbars.</strong> The whole window now scrolls as one, address rows, attachments and body together, with the formatting toolbar pinned at the top and Send always in reach; the attachment list no longer scrolls on its own either.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Link and tracker warnings speak your language.</strong> The sentence under "Dangerous Link Detected" ("Link text shows ... but goes to ..."), the one on a link that redirects through another site or uses a script scheme, the hover text on a flagged link and the reason a tracking pixel was blocked stayed in English in every language, and "(no text)" in the link list too. They now follow the app language, and change when you switch it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The compose window's To, Cc and Bcc follow the app's language.</strong> They stayed English beside a translated From and Subject ("Von:" / "Betreff:" over "To:" / "Cc:" / "Bcc:"). The three captions and the contacts button next to each ("Pick To from contacts") now read in German, Spanish, French, Italian, Japanese, Korean, Portuguese and Chinese.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An Auto Tag appears on new mail while you look at it.</strong> A message that arrived with its folder open got its tag a second later, but the row showed no chip until you left the folder and came back. The chip now appears on its own, a hide-from-Inbox rule takes the row out of the Inbox the same way, and running or undoing a backfill updates the rows on screen too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Auto Tags use Apple Intelligence.</strong> A rule without "Allow a remote AI provider" only ever asked the downloaded model, so on a Mac with Apple Intelligence and no downloaded model it never tagged anything. It now runs on Apple Intelligence when it is available, else the downloaded model, and Preview says so plainly when neither is there.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Labels, hints and tooltips drop the long dash, in every language.</strong> Text that joined two parts with an em dash now uses a colon, comma or hyphen, among them the Time Capsule header ("Snapshot: 8 Oct 2026"), the Scheduled list rows, account tooltips in the sidebar and the restore progress lines. A missing value shows "-", and a folded signature reads "▸ Show signature".</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The shortcut chip in Settings shows "Press key…" again.</strong> It read "Press key\u2026", and a two-key shortcut waiting for its second key read "G + \u2026"; the same broken escape showed "provider\u2019s" and "Settings \u203a Accounts" in two English messages.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Alerts break their lines again.</strong> Eight "could not save / read / write" error alerts showed a literal "\n\nDetails:" in every language instead of putting the details on their own line, and the MBOX import summary showed a literal "\n\n" too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Email Cleanup drops the mail you delete or archive.</strong> Selecting a group such as Newsletter and pressing Delete or Archive finished, yet every message stayed listed, because Cleanup kept its results for mail the server no longer had. Mail that is deleted, archived and then removed from the server, or moved to another folder, now leaves the Cleanup list and its counts, whether you did it in MailVault or another mail app, and a moved message is sorted again where it now is the next time Cleanup sorts your mail. Archive in Cleanup now saves each message to your vault, checks the copy, then deletes it from the server, as its confirmation says; a message whose copy cannot be checked stays on the server and in the list. Cleanup's Delete and Archive buttons, its progress line and the All preset in Bulk operations now follow the app's language.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Social export has an Email Light/Dark choice, and the background selection shows in full.</strong> Under Appearance, a new Email row sets the message body to Light or Dark, as the sun/moon over the preview does and as the reader does in the app. The ring around the selected background no longer loses its left edge.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>About twenty more screens speak your language.</strong> English text that stayed English in every locale now follows the app's language: "Sign in with ...", "Advanced (Corporate)", "Change server: ...", the restore tray and its "Restore N" button, "Can't reach the server", the search bar's "Popular filters" and "From (sender)", the Backup and MBOX headings and bullets, the Premium unlock button, "(this device)", the Time Capsule note, the spell-check help for snap builds and "Download v..." in the update dialog. The Remove account explanation also no longer shows a literal "\u2019" in place of its apostrophe.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.19.1">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.19.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">October 7, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
@@ -6018,7 +6115,7 @@
 <div><a class="mv-brand" href="/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
 <p>Read your mail. Keep your mail.</p>
 </div>
-<nav aria-label="Explore MailVault"><a href="/use-cases.html">Use cases</a><a href="/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/mentioned-in.html">Mentions</a><a href="/faq.html">FAQ</a><a href="/docs.html">Help</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+<nav aria-label="Explore MailVault"><a href="/use-cases.html">Use cases</a><a href="/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/mentioned-in.html">Mentions</a><a href="/faq.html">FAQ</a><a href="/docs.html">Help</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">

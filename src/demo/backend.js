@@ -627,16 +627,17 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           await new Promise(resolve => setTimeout(resolve, timeoutMs));
           return { gen: Number(args.params?.since ?? args.since ?? 0), changes: [], simulated: true };
         }
+        // Like the daemon: mail the server lost leaves the classified set.
+        const classified = args => messages.filter(row => (!paramsAccountId(args) || row.accountId === paramsAccountId(args)) && (row.serverPresent || row.vaultPresent) && !row.serverDeleted);
         if (method === 'classification.summary') {
-          const rows = messages.filter(row => !paramsAccountId(args) || row.accountId === paramsAccountId(args));
+          const rows = classified(args);
           const byCategory = { newsletter: 0, promotional: 0, notification: 0, transactional: 0, personal: 0, work: 0, 'spam-likely': 0 };
           const byAction = {};
           rows.forEach(row => { const result = classificationFor(row); byCategory[result.category] = (byCategory[result.category] || 0) + 1; byAction[result.action] = (byAction[result.action] || 0) + 1; });
           return { total: rows.length, classified: rows.length, by_category: byCategory, by_action: byAction, by_importance: { normal: rows.length }, simulated: true };
         }
         if (method === 'classification.results') {
-          const rows = messages.filter(row => !paramsAccountId(args) || row.accountId === paramsAccountId(args));
-          return rows.filter(row => row.serverPresent || row.vaultPresent).map(row => {
+          return classified(args).map(row => {
             const override = classificationOverrides.get(row.messageId) || {};
             const result = classificationFor(row);
             return { ...header(row), from: row.from?.address || row.from?.name || '', messageId: row.messageId, classification: { ...result, confidence: 0.95, classified_at: row.date, model_used: 'demo-rules', source: override.category ? 'override' : 'demo-rules' } };

@@ -90,10 +90,10 @@ export default function BackupConfig() {
           </div>
 
           <ul className="space-y-2 text-sm text-mail-text-muted pl-1">
-            <li>• Save .eml files to any folder you choose</li>
-            <li>• Incremental backups — new mail only</li>
-            <li>• Works offline; no MailVault account required</li>
-            <li>• One-time payment, no subscription</li>
+            <li>• {t('settings.backup.config.bulletSaveEml')}</li>
+            <li>• {t('settings.backup.config.bulletIncremental')}</li>
+            <li>• {t('settings.backup.config.bulletOffline')}</li>
+            <li>• {t('settings.backup.config.bulletOneTime')}</li>
           </ul>
 
           {iapError && (
@@ -142,7 +142,7 @@ export default function BackupConfig() {
       <div className="settings-section space-y-4">
         <h4 className="font-semibold text-mail-text flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
-          Backup Scope & Storage
+          {t('settings.backup.config.scopeStorageHeading')}
         </h4>
 
         {/* Explanation */}

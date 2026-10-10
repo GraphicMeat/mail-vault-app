@@ -1,10 +1,22 @@
 /* Browser-region pricing. Manual amounts and fallback mirror src/utils/pricing.js.
  * Automatic uses billing country detection; browser region is an offline fallback.
  * Page language controls number formatting, not the choice of currency.
+ * Minor units per currency: [monthly, yearly, standard monthly, standard yearly].
+ * The first two are the Early Bird & Family Pricing charged today; the standard
+ * price after early access mirrors MANUAL_AMOUNTS in website/api/pricing.js and
+ * stands in when an older API answer has no `standard` block.
+ *
+ * Early Bird spots: [data-mv-spots] holds the static line ("Only 100 spots in
+ * total"); GET /api/billing/early-bird fills it from data-mv-spots ({taken}, {cap})
+ * or, once every spot is taken, from data-mv-spots-full. Then the early-bird price
+ * is no longer offered: price tokens read the standard amounts and [data-mv-early]
+ * copy is hidden. No answer, no change: the static copy stays.
  */
 (function () {
   var nodes = document.querySelectorAll('[data-mv-price]');
-  if (!nodes.length) return;
+  var spotNodes = document.querySelectorAll('[data-mv-spots]');
+  var earlyNodes = document.querySelectorAll('[data-mv-early]');
+  if (!nodes.length && !spotNodes.length) return;
 
   var region = null;
   var tags = Array.from(navigator.languages || []).concat(navigator.language || []);
@@ -18,9 +30,12 @@
   try { cachedCurrency = localStorage.getItem('mv-last-auto-currency'); } catch(e) {}
   if (['eur','usd','gbp'].includes(cachedCurrency)) autoCurrency = cachedCurrency;
   var currency = choice === 'auto' ? autoCurrency : choice;
+  var AMOUNTS = { eur: [400, 2500, 600, 3900], usd: [400, 2500, 600, 3900], gbp: [350, 2100, 500, 3300] };
   var amounts;
   var requestVersion = 0;
   var priceTimer;
+  var lastData = null;   // the last price answer rendered, kept to re-render when sold out
+  var soldOut = false;
   function reveal() { document.documentElement.classList.remove('mv-prices-pending'); }
   function format(minor) {
     var digits = minor % 100 === 0 ? 0 : 2;
@@ -40,8 +55,37 @@
     } catch (e) { return null; }
   }
 
+  function moneyIn(cur, amount) {
+    var digits = amount % 100 === 0 ? 0 : 2;
+    return new Intl.NumberFormat(document.documentElement.lang || 'en-US', {
+      style: 'currency', currency: cur.toUpperCase(), minimumFractionDigits: digits, maximumFractionDigits: digits
+    }).format(amount / 100);
+  }
+
+  // Every early-bird spot is taken: the standard price is the current price.
+  function atStandardPrice(data) {
+    var table = AMOUNTS[data.currency];
+    var standard = data.standard;
+    var sm, sy, fsm, fsy;
+    if (standard && Number.isFinite(standard.monthly) && Number.isFinite(standard.yearly) &&
+        typeof standard.formattedMonthly === 'string' && standard.formattedMonthly &&
+        typeof standard.formattedYearly === 'string' && standard.formattedYearly) {
+      sm = standard.monthly; sy = standard.yearly; fsm = standard.formattedMonthly; fsy = standard.formattedYearly;
+    } else if (table) {
+      sm = table[2]; sy = table[3]; fsm = moneyIn(data.currency, sm); fsy = moneyIn(data.currency, sy);
+    } else {
+      return data;
+    }
+    return { currency: data.currency, plans: [
+      { interval: 'month', currency: data.currency, amount: sm, formattedAmount: fsm },
+      { interval: 'year', currency: data.currency, amount: sy, formattedAmount: fsy, monthlyEquivalent: moneyIn(data.currency, Math.round(sy / 12)) }
+    ], standard: { monthly: sm, yearly: sy, formattedMonthly: fsm, formattedYearly: fsy } };
+  }
+
   function render(data) {
       if (!data || !Array.isArray(data.plans) || data.currency !== currency) return;
+      lastData = data;
+      if (soldOut) data = atStandardPrice(data);
 
       var monthly = null, yearly = null;
       data.plans.forEach(function (plan) {
@@ -52,6 +96,13 @@
 
       var zero = zeroIn(data.currency || 'usd');
       if (!zero) return;
+      function money(amount) {
+        var digits = amount % 100 === 0 ? 0 : 2;
+        return new Intl.NumberFormat(document.documentElement.lang || 'en-US', {
+          style: 'currency', currency: (data.currency || 'usd').toUpperCase(),
+          minimumFractionDigits: digits, maximumFractionDigits: digits
+        }).format(amount / 100);
+      }
 
       var values = {
         '{monthly}': monthly.formattedAmount,
@@ -60,6 +111,30 @@
         '{zero}': zero,
       };
 
+      // Standard price after early access: the API's when it sends one, otherwise
+      // this file's table for the same currency, so the page never mixes currencies.
+      var table = AMOUNTS[data.currency];
+      var standard = data.standard;
+      var standardValid = !!standard && typeof standard.formattedYearly === 'string' && standard.formattedYearly &&
+        typeof standard.formattedMonthly === 'string' && standard.formattedMonthly && Number.isFinite(standard.yearly);
+      var standardYearly = standardValid ? standard.yearly : table && table[3];
+      var standardMonthly = standardValid && Number.isFinite(standard.monthly) ? standard.monthly : table && table[2];
+      if (standardValid) {
+        values['{standardMonthly}'] = standard.formattedMonthly;
+        values['{standardYearly}'] = standard.formattedYearly;
+      } else if (table) {
+        values['{standardMonthly}'] = money(table[2]);
+        values['{standardYearly}'] = money(table[3]);
+      }
+      var earlyYearly = Number.isFinite(yearly.amount) ? yearly.amount : table && table[1];
+      if (Number.isFinite(earlyYearly) && Number.isFinite(standardYearly) && earlyYearly > 0 && standardYearly > earlyYearly) {
+        values['{earlyBirdSavingsPercent}'] = String(Math.round((1 - earlyYearly / standardYearly) * 100));
+      }
+      var earlyMonthly = Number.isFinite(monthly.amount) ? monthly.amount : table && table[0];
+      if (Number.isFinite(earlyMonthly) && Number.isFinite(standardMonthly) && earlyMonthly > 0 && standardMonthly > earlyMonthly) {
+        values['{earlyBirdMonthlySavingsPercent}'] = String(Math.round((1 - earlyMonthly / standardMonthly) * 100));
+      }
+
       // Optional English savings copy; amounts use the API's hundredths convention.
       var annualMonthly = monthly.amount * 12;
       var savingsValid = Number.isFinite(monthly.amount) && monthly.amount > 0 &&
@@ -67,13 +142,6 @@
         (!monthly.currency || monthly.currency === data.currency) &&
         (!yearly.currency || yearly.currency === data.currency);
       if (savingsValid) {
-        function money(amount) {
-          var digits = amount % 100 === 0 ? 0 : 2;
-          return new Intl.NumberFormat(document.documentElement.lang || 'en-US', {
-            style: 'currency', currency: (data.currency || 'usd').toUpperCase(),
-            minimumFractionDigits: digits, maximumFractionDigits: digits
-          }).format(amount / 100);
-        }
         values['{annualMonthly}'] = money(annualMonthly);
         values['{annualSavings}'] = money(annualMonthly - yearly.amount);
         values['{savingsPercent}'] = String(Math.round((1 - yearly.amount / annualMonthly) * 100));
@@ -86,12 +154,14 @@
         Object.keys(values).forEach(function (token) {
           text = text.split(token).join(values[token]);
         });
+        // A token this answer could not fill keeps the text already shown, never the raw token.
+        if (/\{(?:standardMonthly|standardYearly|earlyBirdSavingsPercent|earlyBirdMonthlySavingsPercent)\}/.test(text)) return;
         el.textContent = text;
       });
   }
   function update() {
     currency = choice === 'auto' ? autoCurrency : choice;
-    amounts = { eur: [400, 2500], usd: [400, 2500], gbp: [350, 2100] }[currency];
+    amounts = AMOUNTS[currency];
     var version = ++requestVersion;
     clearTimeout(priceTimer);
     var finished = false;
@@ -103,7 +173,7 @@
     render({ currency: currency, plans: [
       { interval: 'month', currency: currency, amount: amounts[0], formattedAmount: format(amounts[0]) },
       { interval: 'year', currency: currency, amount: amounts[1], formattedAmount: format(amounts[1]), monthlyEquivalent: format(Math.round(amounts[1] / 12)) }
-    ] });
+    ], standard: { monthly: amounts[2], yearly: amounts[3], formattedMonthly: format(amounts[2]), formattedYearly: format(amounts[3]) } });
     if (window.fetch) fetch('/api/billing/pricing' + (choice === 'auto' ? '' : '?currency=' + currency), { headers: { Accept: 'application/json' } })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
@@ -123,4 +193,29 @@
     else finish();
   }
   update();
+
+  // Early Bird spots, asked once. A page without the line asks nothing.
+  function applySpots(s) {
+    if (!s || !Number.isInteger(s.cap) || s.cap <= 0 || !Number.isInteger(s.taken) || s.taken < 0) return;
+    var remaining = Number.isFinite(s.remaining) ? s.remaining : s.cap - s.taken;
+    var full = remaining <= 0 || s.taken >= s.cap;
+    Array.prototype.forEach.call(spotNodes, function (el) {
+      var text = el.getAttribute(full ? 'data-mv-spots-full' : 'data-mv-spots');
+      if (!text) return;
+      text = text.split('{taken}').join(String(s.taken)).split('{cap}').join(String(s.cap));
+      if (/\{\w+\}/.test(text)) return;
+      el.textContent = text;
+    });
+    if (!full) return;
+    soldOut = true;
+    // Inline style, so a script that toggles `hidden` (plan copy) cannot bring it back.
+    Array.prototype.forEach.call(earlyNodes, function (el) { el.style.display = 'none'; });
+    if (lastData) render(lastData);
+  }
+  if ((spotNodes.length || earlyNodes.length) && window.fetch) {
+    fetch('/api/billing/early-bird', { headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(applySpots)
+      .catch(function () {});
+  }
 })();

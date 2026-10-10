@@ -22,10 +22,24 @@
 - [MailVault vs Apple Mail](https://mailvaultapp.com/compare/mailvault-vs-apple-mail.html)
 - [MailVault vs paying for more storage](https://mailvaultapp.com/compare/mailvault-vs-paying-for-storage.html)
 - [Mail client vs mail vault](https://mailvaultapp.com/compare/mail-client-vs-mail-vault.html): a mirror forgets, a vault keeps
+- [MailVault vs MailStore Home](https://mailvaultapp.com/compare/mailvault-vs-mailstore-home.html): platforms, price, sources, storage format, and where each one wins
+
+## Archiving and storage guides
+
+- [Email archiving for Mac](https://mailvaultapp.com/guides/email-archiving-for-mac.html): archive vs backup vs sync, options on macOS, file formats, and how to check an archive is complete
+- [Best email archiver for Mac](https://mailvaultapp.com/guides/best-email-archiver-for-mac.html): seven macOS tools compared by format, search, sources, price and Apple Silicon support
+- [What is an email vault?](https://mailvaultapp.com/guides/what-is-an-email-vault.html): local archive, hosted encrypted mailbox and compliance archive compared, and how to build your own
+- [MailStore Server alternatives](https://mailvaultapp.com/guides/mailstore-server-alternative.html): company archive options, and when one person needs only a desktop archive
+- [MailStore alternatives compared](https://mailvaultapp.com/guides/mailstore-alternatives-compared.html): seven options by use case
+- [MailStore alternative for Mac](https://mailvaultapp.com/guides/mailstore-alternative-mac.html): MailStore Home is Windows only; what MailVault does on Mac, Windows and Linux
+- [Outlook storage full: what to do](https://mailvaultapp.com/guides/outlook-storage-full-what-to-do.html): which limit is full, the 5-minute checks, and the options in order
+- [Free up space in Hotmail and Outlook.com](https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html): step by step, keeping a local copy before deleting
+- [Back up Outlook.com email to a Mac](https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html): four methods compared, and how to verify the backup
 
 ## Email guides and research
 
 - [Gmail third-party account changes before January 2027](https://mailvaultapp.com/blog/gmail-third-party-changes-2027.html): Gmailify, third-party Send as, and POP fetching changes; what remains supported and how to transition
+- [Email Insights: who fills your inbox](https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html): sender map, timeline and activity views built from local headers, and how to act on them
 - [Cloud versus local email search](https://mailvaultapp.com/blog/cloud-vs-local-email-search.html): AI search availability, local index coverage, offline retrieval, and diagrams showing where processing happens
 - [Leaving an email provider safely](https://mailvaultapp.com/blog/leave-email-provider-safely.html): inventory, complete archives, attachment verification, independent backups, and testing before closing an account
 - [Phishing beyond suspicious links](https://mailvaultapp.com/blog/phishing-beyond-suspicious-links.html): calendar invitations, QR codes, attached emails, independent verification, and incident reporting

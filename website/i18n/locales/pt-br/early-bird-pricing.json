@@ -1,0 +1,19 @@
+{
+  "f9cef652e1c8": "O preço antecipado e família é limitado aos primeiros 100 assinantes, com até 5 dispositivos cada. Preço padrão após o acesso antecipado: <span data-mv-price=\"{standardYearly}\">$39</span>/ano.",
+  "8a653ec70079": "O preço antecipado e família é limitado aos primeiros 100 assinantes, com até 5 dispositivos cada. Preço padrão após o acesso antecipado: <span data-mv-price=\"{standardMonthly}\">$6</span>/mês.",
+  "93311792de5c": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Grátis para sempre. Preço antecipado e família: Premium por <span data-mv-price=\"{yearly}\">$25</span>/ano, até 5 dispositivos, 14 dias de teste grátis. Preço padrão após o acesso antecipado: <span data-mv-price=\"{standardYearly}\">$39</span>/ano.</a>",
+  "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">Preço antecipado e família: Premium por <span data-mv-price=\"{yearly}\">$25</span>/ano. Preço padrão após o acesso antecipado: <span data-mv-price=\"{standardYearly}\">$39</span>/ano.</a>",
+  "6a75808687cf": "Preço antecipado e família <span>Enquanto o MailVault estiver em acesso antecipado</span><span>Limitado aos primeiros 100 assinantes</span>",
+  "b2659317751b": "Limitado aos primeiros 100 assinantes.",
+  "c69aee3090fa": "O MailVault está em acesso antecipado. Se você assinar hoje com o preço antecipado e família, sua taxa continua a mesma enquanto a assinatura estiver ativa, mesmo após aumentos. O preço padrão após o acesso antecipado, <span data-mv-price=\"{standardMonthly}\">$6</span>/mês ou <span data-mv-price=\"{standardYearly}\">$39</span>/ano, vale para novos assinantes.",
+  "b165a52c2694": "Preço antecipado e família",
+  "5ffae7ce0a0a": "O MailVault está em acesso antecipado. Trave hoje o preço com desconto: sua taxa continua a mesma enquanto a assinatura estiver ativa, mesmo após aumentos.",
+  "c456e993e85f": "Até 5 dispositivos por assinatura",
+  "5328ac1d1bea": "O que acontece com o meu preço quando o acesso antecipado terminar?",
+  "ca975ed49493": "<span data-mv-price=\"{yearly}\">$25</span><span>/ ano</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdSavingsPercent}% de desconto\">36% de desconto</span>",
+  "e6ab8b62b31b": "<span data-mv-price=\"{monthly}\">$4</span><span>/ mês</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdMonthlySavingsPercent}% de desconto\">33% de desconto</span>",
+  "afcfdfb278e6": "<span data-mv-price=\"{earlyBirdSavingsPercent}%\">36%</span> abaixo do preço padrão após o acesso antecipado: <span data-mv-price=\"{standardYearly}\">$39</span>/ano",
+  "cca45ed84541": "<span data-mv-price=\"{earlyBirdMonthlySavingsPercent}%\">33%</span> abaixo do preço padrão após o acesso antecipado: <span data-mv-price=\"{standardMonthly}\">$6</span>/mês",
+  "c3c58b94d797": "{taken} de {cap} vagas com preço antecipado preenchidas.",
+  "1ce2c687bdd4": "As {cap} vagas com preço antecipado foram preenchidas. O Premium agora está no preço padrão."
+}

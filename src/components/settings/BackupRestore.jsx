@@ -350,7 +350,7 @@ export default function BackupRestore() {
       <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
-          Backup & Restore
+          {t('settings.tab.backup')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
@@ -378,7 +378,7 @@ export default function BackupRestore() {
       <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
-          MBOX Import / Export
+          {t('settings.backup.restore.mboxImportExportHeading')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">

@@ -262,6 +262,7 @@ const DKIM_SELECTORS: &[&str] = &[
     "dkim", "zoho", "hostingermail1", "hostingermail2", "protonmail", "fm1",
     "fm2", "fm3", "purelymail1", "purelymail2", "purelymail3", "key1", "key2",
     "mx", "smtp", "mandrill", "everlytickey1", "everlytickey2",
+    "s1-ionos", "s2-ionos",
 ];
 
 #[derive(Debug, Serialize, Clone)]
@@ -644,6 +645,15 @@ mod tests {
         assert!(is_dkim("v=DKIM1; k=rsa; p=MIGf..."));
         assert!(is_dkim("k=rsa; p=MIGf...")); // p= alone counts
         assert!(!is_dkim("v=spf1 -all"));
+    }
+
+    #[test]
+    fn dkim_selectors_cover_ionos() {
+        // IONOS publishes DKIM under s1-ionos / s2-ionos; without them the
+        // post-save check warned about a DKIM setup that was fine.
+        for sel in ["s1-ionos", "s2-ionos"] {
+            assert!(DKIM_SELECTORS.contains(&sel), "missing selector {sel}");
+        }
     }
 
     #[test]

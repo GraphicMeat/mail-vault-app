@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotmail と Outlook.com の空き容量を増やす | MailVault</title>
+  <meta name="description" content="Hotmail と Outlook.com の空き容量を増やす手順：削除済みアイテムを空にし、最も大きなメールを見つけ、古いメールのローカルのコピーを残してから、オンラインで削除します。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/guides/free-up-space-hotmail-outlook-com.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/guides/free-up-space-hotmail-outlook-com.html">
+  <meta property="og:title" content="Hotmail と Outlook.com の空き容量を増やす | MailVault">
+  <meta property="og:description" content="Hotmail と Outlook.com の空き容量を増やす手順：削除済みアイテムを空にし、最も大きなメールを見つけ、古いメールのローカルのコピーを残してから、オンラインで削除します。">
+  <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Hotmail と Outlook.com の空き容量を増やす | MailVault">
+  <meta name="twitter:description" content="Hotmail と Outlook.com の空き容量を増やす手順：削除済みアイテムを空にし、最も大きなメールを見つけ、古いメールのローカルのコピーを残してから、オンラインで削除します。">
+  <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "古いメールを失わずに Hotmail と Outlook.com の空き容量を増やす方法",
+  "description": "Hotmail と Outlook.com の空き容量を増やす手順：削除済みアイテムを空にし、最も大きなメールを見つけ、古いメールのローカルのコピーを残してから、オンラインで削除します。",
+  "url": "https://mailvaultapp.com/ja/guides/free-up-space-hotmail-outlook-com.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "メールを削除したのに Hotmail がいっぱいのままなのはなぜですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "削除したメールは削除済みアイテムに移り、そのフォルダを空にするか、30 日後に削除されるまでは容量に数えられます。一括処理で削除したメールも、削除済みアイテムから消えるまでは数えられます。Microsoft によると、変更が反映されるまで最大 24 時間かかることがあります。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "添付ファイルを OneDrive に保存すると Outlook.com の容量は空きますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "元のメールを削除した後に限ります。OneDrive は Microsoft のクラウドストレージを使い、Outlook.com の添付ファイルも同じ容量を使うので、いっぱいなのがそのストレージなら、そこにファイルを移しても解決しません。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "古いメールを失わずに容量を空けられますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "はい。古いメールのコピーをコンピュータに保存し、コピーが開けることを確認してから、Outlook.com からメールを削除します。無料の MailVault アプリでは、アーカイブ、次にサーバーから削除の 2 ステップです。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "迷惑メールのフォルダを空にする価値はありますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "たいして空きません。Outlook.com は迷惑メールのアイテムを 10 日後に自動で削除します。どのフォルダが本当に大きいかは、設定のストレージのページで確認してください。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/free-up-space-hotmail-outlook-com.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ja/" aria-label="MailVault ホーム"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat による</a></div>
+<nav class="mv-navlinks" aria-label="メインナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub で MailVault にスターを付ける" title="GitHub で MailVault にスターを付ける"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault にハートを送る" title="MailVault にハートを送る"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="言語を選択"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/free-up-space-hotmail-outlook-com.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/free-up-space-hotmail-outlook-com.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/free-up-space-hotmail-outlook-com.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/free-up-space-hotmail-outlook-com.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/free-up-space-hotmail-outlook-com.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/free-up-space-hotmail-outlook-com.html" lang="ja" hreflang="ja" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/free-up-space-hotmail-outlook-com.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/free-up-space-hotmail-outlook-com.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/free-up-space-hotmail-outlook-com.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="カラーテーマを切り替える" title="カラーテーマを切り替える"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモ</a><a class="mv-button mv-nav-download" href="/ja/get-started.html?plan=free">ダウンロード</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">メニュー</span></summary>
+<nav aria-label="モバイルナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a><a href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す</a><a href="/ja/get-started.html?plan=free">無料でダウンロード</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>カラーテーマを切り替える</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ホームに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">古いメールを失わずに Hotmail と Outlook.com の空き容量を増やす方法</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8分で読めます</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>2026年10月8日更新</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>
+            Hotmail や Outlook.com の空き容量を増やすには、<strong>削除済みアイテム</strong>を空にし、<strong>フィルター</strong> &gt; <strong>並べ替え</strong> &gt; <strong>サイズ</strong>で最も大きなメールを見つけ、オンラインではもう必要ない古いメールを削除します。残したい古いメールを削除する前に、コンピュータにコピーを保存してください。このページは実際の作業手順の一覧です。Hotmail と Live.com のアドレスは Outlook.com のアカウントなので、3 つとも同じ手順で使えます。いっぱいなのがメールボックスかクラウドストレージかわからないなら、<a href="/ja/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">Outlook のストレージがいっぱい：対処法</a>から始めてください。
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">手短な答え</p>
+            <ol class="list-decimal pl-6 space-y-1">
+              <li><strong>設定</strong> &gt; <strong>アカウント</strong> &gt; <strong>ストレージ</strong>を開き、どのフォルダが大きいかを確認します。</li>
+              <li>削除済みアイテムを空にします。</li>
+              <li>サイズで並べ替え、最も大きなメールに対処します。</li>
+              <li>古いメールのコピーをコンピュータに保存し、確認します。</li>
+              <li>その古いメールを Outlook.com から削除します。</li>
+              <li>削除済みアイテムをもう一度空にし、数字が更新されるまで最大 24 時間待ちます。</li>
+            </ol>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">始める前に：計画を左右する 2 つの事実</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>上限は 2 つあります。</strong>無料のアカウントには、メール用の 15 GB と、Microsoft のクラウドストレージ 5 GB があります。Microsoft によると、クラウドストレージは OneDrive と Outlook.com の添付ファイルで共有されます。どちらか一方でもいっぱいになると、メールを送受信できません。</li>
+            <li><strong>削除することと容量を空けることは同じではありません。</strong>削除したメールは削除済みアイテムに移り、そのフォルダを空にするか、30 日後に削除されるまでは容量に数えられます。</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 1：どのフォルダが容量を使っているかを見る</h2>
+
+          <p>
+            Outlook.com にサインインします。<strong>設定</strong>、<strong>アカウント</strong>、<strong>ストレージ</strong>の順に選びます。このページには、各フォルダが使っている容量が表示されます。大きい 3 つのフォルダを書き留めてください。最後にもう一度確認します。
+          </p>
+
+          <p>
+            同じページで、フォルダ内のすべてのアイテム、または 3、6、12 か月より古いアイテムだけを完全に削除できます。受信トレイ、送信済みアイテム、アーカイブにはまだ使わないでください。後からそのメールを取り戻すことはできません。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 2：削除済みアイテムを空にする</h2>
+
+          <p>
+            <strong>削除済みアイテム</strong>のフォルダを開き、メールを選んで削除します。先にフォルダの中に目を通してください。誤って削除したメールが入っていることがあります。
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>一括処理を使った場合：</strong>一括処理で削除されたメールは、削除済みアイテムからも削除されるまで容量は減りません。</li>
+            <li><strong>迷惑メール</strong>は自動的に空になります。Outlook.com はそこにあるアイテムを 10 日後に削除するので、たいして溜まりません。</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 3：最も大きなメールを見つける</h2>
+
+          <p>
+            大きなフォルダを開きます。メッセージ一覧の上部で<strong>フィルター</strong> &gt; <strong>並べ替え</strong> &gt; <strong>サイズ</strong>を選びます。最も小さいメールが上にある場合は、もう一度選んでください。大きな添付ファイル付きの数通のメールが、何千通もの短いメールより多くの容量を使っていることはよくあります。
+          </p>
+
+          <p>大きなメールごとに判断します。</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>不要な場合：</strong>選んで <strong>Shift</strong> + <strong>Delete</strong> を押します。削除済みアイテムを経由せずに完全に削除されます。</li>
+            <li><strong>ファイルだけが必要な場合：</strong>添付ファイルをコンピュータに保存してから、メールを削除します。添付ファイルが消えるのは、メール全体を削除したときだけです。</li>
+            <li><strong>メールが必要な場合：</strong>ステップ 4 まで残しておきます。ステップ 4 で、何かを削除する前に完全なコピーを残します。</li>
+          </ul>
+
+          <p>
+            Microsoft は、添付ファイルの下に表示される <strong>OneDrive に保存</strong>もすすめています。これには注意してください。OneDrive は添付ファイルと同じ 5 GB のクラウドストレージを使います。問題がクラウドストレージなら、そこにファイルを移しても解決しません。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 4：古いメールのローカルのコピーを残す</h2>
+
+          <p>
+            ステップ 1〜3 は、ものを捨てることで容量を空けます。また必要になるかもしれない何年分ものメール（領収書、契約書、手紙、家族からの写真）は、先にコンピュータにコピーを作ってください。そうすれば、失わずにオンラインで削除できます。
+          </p>
+
+          <p>MailVault はその方法の 1 つです。無料で、macOS、Windows、Linux で動作します。</p>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><a href="/ja/get-started.html" class="text-primary-500 hover:text-primary-600 underline">MailVault をダウンロード</a>して開きます。バージョン 2.19.1 以降を使ってください。Outlook.com のアカウントのアーカイブはそのバージョンから使えます。</li>
+            <li><strong>アカウントを追加</strong>を選び、<strong>Outlook / Microsoft 365</strong> を選んで、Outlook.com、Hotmail、または Live.com のアドレスを入力します。</li>
+            <li><strong>Microsoft でサインイン</strong>を選び、ブラウザでサインインを完了します。戻ってくると、MailVault がアカウントを追加します。MailVault にパスワードを入力することはなく、入力するサーバーの設定もありません。</li>
+            <li>空にしたいフォルダを開きます。メッセージ一覧の上部にあるチェックボックス（ラベルは<strong>メッセージを選択…</strong>）を選びます。ダイアログで<strong>年ごと</strong>から年を選ぶか、<strong>カスタム期間</strong>を設定して進みます。一部のメールしかローカルにないとダイアログに表示されたら、MailVault でフォルダの読み込みが終わるのを待ってから、もう一度試してください。</li>
+            <li><strong>アーカイブ</strong>を選びます。メールが保管庫にコピーされ、サーバーにも残ります。</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="選択したメールに対する MailVault の「操作を選択」ダイアログで、アーカイブが選択されています。アーカイブには「保管庫にコピーします。サーバーにも残ります。」とあります。その下に、アーカイブから戻す、サーバーから削除、アーカイブして削除、すべてから削除が並んでいます。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">アーカイブは安全な最初のステップです。コピーを作り、サーバー上では何も変えません。ダイアログの上部の注記に、選んだメールのうち何件がすでに保管庫にあるかが表示されます。</figcaption>
+          </figure>
+
+          <p>
+            次にコピーを確認します。サイドバーでフォルダ一覧を<strong>保管庫</strong>に切り替えます。最も古いメールをいくつか開き、添付ファイルを 1 つか 2 つ開き、覚えているものを検索します。各メールは標準的な <code>.eml</code> ファイルとしてコンピュータに保存されているので、ほかのメールアプリでも開けます。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 5：古いメールを Outlook.com から削除する</h2>
+
+          <p>コピーに問題がないと確信できたら、サーバーからメールを削除する方法は 3 つあります。</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>MailVault で無料：</strong>同じメールをもう一度選び、<strong>サーバーから削除</strong>を選びます。サーバーのコピーだけが削除されます。すでに保管庫にあるメールはコピーが残ります。</li>
+            <li><strong>MailVault で Premium：</strong><strong>アーカイブして削除</strong>は、ステップ 4 とステップ 5 を一度に行います。各メールを保管庫にコピーし、コピーがあることを確認し、そのあとで初めてサーバーから削除します。確認に通らなかったメールはサーバーに残ります。アカウント全体なら、<strong>設定</strong> &gt; <strong>バックアップと復元</strong> &gt; <strong>アーカイブして削除</strong>で、選んだフォルダと年を空にできます。</li>
+            <li><strong>Outlook.com で：</strong>そこで同じメールを削除します。コピーのないメールを削除しないよう、アーカイブしたのと同じ期間を使ってください。</li>
+          </ul>
+
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/archive-success-720.webp 720w, /screenshots/ja/archive-success-1440.webp 1440w, /screenshots/ja/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/archive-success-light-1440.webp" srcset="/screenshots/ja/archive-success-light-720.webp 720w, /screenshots/ja/archive-success-light-1440.webp 1440w, /screenshots/ja/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="アーカイブのジョブの後の MailVault の受信トレイ。右下の隅のカードには「操作が完了しました」とあります。ヘッダーにはフォルダのメールのうち何件が保管庫にあるかが表示され、一覧の下の凡例が「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」を説明しています。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">ジョブが終わると、MailVault に「操作が完了しました」と表示されます。一覧の下の凡例で、各メールがどこにあるか（サーバーのみ、保管庫、または唯一のコピーとして保管庫）がわかります。カードの下の進行バーは別のジョブのものです。</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 6：削除済みアイテムをもう一度空にして待つ</h2>
+
+          <p>
+            Outlook.com やほかのアプリで削除したメールは、まず削除済みアイテムに入ることがあります。Outlook.com で削除済みアイテムを開き、もう一度空にします。それから<strong>設定</strong> &gt; <strong>アカウント</strong> &gt; <strong>ストレージ</strong>に戻り、書き留めた数字と比べます。Microsoft によると、変更が反映されるまで最大 24 時間かかることがあるので、数字がまだ変わらないからといって、さらに削除しないでください。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">各ステップで削除されるもの</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">ステップ</th>
+                  <th class="py-3 pr-4 font-semibold">削除されるもの</th>
+                  <th class="py-3 font-semibold">取り戻せるか？</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">削除済みアイテムを空にする</td>
+                  <td class="py-3 pr-4">すでに削除したメール</td>
+                  <td class="py-3">完全に消えるものとして扱う</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">大きなメールで Shift + Delete</td>
+                  <td class="py-3 pr-4">メールとその添付ファイル</td>
+                  <td class="py-3">いいえ、先に添付ファイルを保存していない限り</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">ストレージのページ：3、6、12 か月より古いアイテムを削除</td>
+                  <td class="py-3 pr-4">そのフォルダの、日付を過ぎたすべてのもの</td>
+                  <td class="py-3">非対応</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">アーカイブしてからサーバーから削除</td>
+                  <td class="py-3 pr-4">古いメールのサーバーのコピー</td>
+                  <td class="py-3">はい：コンピュータ上のコピーが残ります</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">削除してはいけないもの</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>コピーが 1 つしかないもの。</strong>領収書、請求書、税金の書類、契約書、保証書、医療や法律に関する書面。先にアーカイブしてください。</li>
+            <li><strong>何かを所有していることを証明するメール。</strong>ソフトウェアのライセンスキー、ドメインやアカウントの登録メール、注文確認は、再び手に入れるのが難しいことがあります。</li>
+            <li><strong>ほかのどこにもない添付ファイル。</strong>誰かが一度だけ送ってくれて、保存していない写真や書類。</li>
+            <li>そのフォルダのコピーがない限り、ストレージのページの選択肢で<strong>日付によってフォルダ全体を削除すること</strong>。</li>
+            <li><strong>ローカルのコピー。</strong>サーバーからメールを削除した後は、保管庫のコピーが唯一のものです。MailVault では、<strong>アーカイブから戻す</strong>は保管庫のコピーを削除し、<strong>すべてから削除</strong>はサーバー、保管庫、バックアップドライブからメールを削除します。大切なメールなら、別のドライブに 2 つ目のコピーを置いてください。</li>
+          </ul>
+
+          <p>
+            削除済みアイテムはバックアップではありません。Microsoft はそこにあるアイテムを 30 日後に削除します。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h2>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">メールを削除したのに Hotmail がいっぱいのままなのはなぜですか？</h3>
+            <p>削除したメールは削除済みアイテムに移り、そのフォルダを空にするか、30 日後に削除されるまでは容量に数えられます。一括処理で削除したメールも、削除済みアイテムから消えるまでは数えられます。Microsoft によると、変更が反映されるまで最大 24 時間かかることがあります。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">添付ファイルを OneDrive に保存すると Outlook.com の容量は空きますか？</h3>
+            <p>元のメールを削除した後に限ります。OneDrive は Microsoft のクラウドストレージを使い、Outlook.com の添付ファイルも同じ容量を使うので、いっぱいなのがそのストレージなら、そこにファイルを移しても解決しません。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">古いメールを失わずに容量を空けられますか？</h3>
+            <p>はい。古いメールのコピーをコンピュータに保存し、コピーが開けることを確認してから、Outlook.com からメールを削除します。無料の MailVault アプリでは、アーカイブ、次にサーバーから削除の 2 ステップです。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">迷惑メールのフォルダを空にする価値はありますか？</h3>
+            <p>たいして空きません。Outlook.com は迷惑メールのアイテムを 10 日後に自動で削除します。どのフォルダが本当に大きいかは、設定のストレージのページで確認してください。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">次にすること</h2>
+
+          <p>
+            今日のうちにステップ 1〜3 を済ませて、上限を下回るようにします。それから古いメールをコンピュータにコピーし、1 年分ずつまとめてオンラインで削除します。Mac でそのコピーを作るほかの方法を比べるには、<a href="/ja/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com のメールを Mac にバックアップする方法</a>を読んでください。<a href="/ja/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">古いメールを失わずにメールの容量を空ける方法</a>で説明しているとおり、同じ方法は Gmail やほかのプロバイダーでも使えます。代わりに Microsoft 365 を検討しているなら、<a href="/ja/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">ローカルでのアーカイブとストレージの追加購入の比較</a>を参照してください。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">メールを残したまま Outlook.com の容量を空ける</p>
+            <p class="text-sm mb-4">MailVault は macOS・Windows・Linux 向けに無料です。アーカイブとサーバーから削除は無料です。ワンステップの<a href="/ja/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">アーカイブして削除</a>は Premium です。</p>
+            <a href="/ja/get-started.html" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault を無料でダウンロード
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Outlook.com の手順と上限は Microsoft サポートによるものです：<a href="https://support.microsoft.com/en-us/outlook/storage-limits-in-outlook-com" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Outlook.com のストレージの上限</a>、<a href="https://support.microsoft.com/en-us/outlook/check-email-and-cloud-storage" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">メールとクラウドストレージを確認する</a>。最終確認：2026年10月。短い概要は <a href="/ja/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com や Hotmail のメールボックスがいっぱい</a>を参照してください。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>メールを読む。メールを残す。</p>
+</div>
+<nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/mentioned-in.html">掲載情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">コミュニティ ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">チームに連絡 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

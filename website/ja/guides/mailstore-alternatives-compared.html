@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailStore の代わり：7 つの選択肢を比較 | MailVault</title>
+  <meta name="description" content="用途別の MailStore の代わり：Mac、Linux、Windows 向けの個人用アーカイバー、オープンソースのアーカイブサーバー、Microsoft 365 や Google Workspace のツール。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/guides/mailstore-alternatives-compared.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/guides/mailstore-alternatives-compared.html">
+  <meta property="og:title" content="MailStore の代わり：7 つの選択肢を比較 | MailVault">
+  <meta property="og:description" content="用途別の MailStore の代わり：Mac、Linux、Windows 向けの個人用アーカイバー、オープンソースのアーカイブサーバー、Microsoft 365 や Google Workspace のツール。">
+  <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailStore の代わり：7 つの選択肢を比較 | MailVault">
+  <meta name="twitter:description" content="用途別の MailStore の代わり：Mac、Linux、Windows 向けの個人用アーカイバー、オープンソースのアーカイブサーバー、Microsoft 365 や Google Workspace のツール。">
+  <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailStore の代わり：用途別に並べた 7 つの選択肢",
+  "description": "用途別の MailStore の代わり：Mac、Linux、Windows 向けの個人用アーカイバー、オープンソースのアーカイブサーバー、Microsoft 365 や Google Workspace のツール。",
+  "url": "https://mailvaultapp.com/ja/guides/mailstore-alternatives-compared.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailStore の無料の代わりで最適なものは？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "用途によります。Mac、Windows、Linux の個人なら、MailVault か、Thunderbird と ImportExportTools NG。自社サーバーでの会社のアーカイブなら、Piler Open Source Edition、Mail-Archiver、Open Archiver です。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailStore のオープンソースの代わりはありますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "はい。Piler と Mail-Archiver（どちらも GPL-3）、Open Archiver（AGPL-3）はオープンソースのアーカイブサーバーです。デスクトップでは Thunderbird がオープンソースで、MailVault のソースコードは GitHub で公開されています。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "PST ファイルを読める MailStore の代わりはどれですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "ここにあるツールのうち、Open Archiver は PST ファイルを取り込め、MailStore Home と MailStore Server も PST をアーカイブできます。MailVault、Mail-Archiver、Thunderbird と ImportExportTools NG、Piler の無料版には PST の取り込みの記載がありません。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mail-Archiver と Mail Archiver X は同じものですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "いいえ。Mail-Archiver は Docker で動く無料のセルフホスト型のウェブアプリです。Mail Archiver X は Moth Software の有料の Mac アプリです。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/mailstore-alternatives-compared.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/mailstore-alternatives-compared.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ja/" aria-label="MailVault ホーム"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat による</a></div>
+<nav class="mv-navlinks" aria-label="メインナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub で MailVault にスターを付ける" title="GitHub で MailVault にスターを付ける"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault にハートを送る" title="MailVault にハートを送る"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="言語を選択"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/mailstore-alternatives-compared.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/mailstore-alternatives-compared.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/mailstore-alternatives-compared.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/mailstore-alternatives-compared.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/mailstore-alternatives-compared.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/mailstore-alternatives-compared.html" lang="ja" hreflang="ja" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/mailstore-alternatives-compared.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/mailstore-alternatives-compared.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/mailstore-alternatives-compared.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="カラーテーマを切り替える" title="カラーテーマを切り替える"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモ</a><a class="mv-button mv-nav-download" href="/ja/get-started.html?plan=free">ダウンロード</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">メニュー</span></summary>
+<nav aria-label="モバイルナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a><a href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す</a><a href="/ja/get-started.html?plan=free">無料でダウンロード</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>カラーテーマを切り替える</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ホームに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailStore の代わり：用途別に並べた 7 つの選択肢</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7分で読めます</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            正しい <strong>MailStore の代わり</strong>は、どの MailStore を、なぜ置き換えるのかによります。MailStore Home は個人利用向けの無料の Windows のアーカイバーです。MailStore Server は企業向けの有料の Windows のアーカイブです。このまとめでは、実在する 7 つの選択肢を 4 つのグループに分けています。Mac や Linux での個人利用、Windows での個人利用、オープンソースのアーカイブサーバー、そして Microsoft 365 と Google Workspace にすでに組み込まれたツールです。私たちは 7 つのうちの 1 つである MailVault を作っており、その制限もほかのものと並べて載せています。特定の 2 つをより詳しく比べるには、<a href="/ja/compare/mailvault-vs-mailstore-home.html" class="text-primary-500 hover:text-primary-600 underline">MailVault と MailStore Home の比較</a>や <a href="/ja/guides/mailstore-server-alternative.html" class="text-primary-500 hover:text-primary-600 underline">MailStore Server の代わり</a>を読んでください。
+          </p>
+
+          <div class="p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">手短な答え</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li><strong>Mac や Linux の個人：</strong>MailVault、または Mac なら Mail Archiver X。</li>
+              <li><strong>無料で自分で組み立てたい Windows の個人：</strong>Thunderbird と ImportExportTools NG、または MailVault。</li>
+              <li><strong>自社でサーバーを運用する会社：</strong>Piler、Mail-Archiver、または Open Archiver。</li>
+              <li><strong>すでに Microsoft 365 や Google Workspace を使っている会社：</strong>Microsoft Purview または Google Vault。</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">7 つの選択肢の早見表</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">ツール</th>
+                  <th class="py-3 pr-4 font-semibold">最適な用途</th>
+                  <th class="py-3 pr-4 font-semibold">対応環境</th>
+                  <th class="py-3 pr-4 font-semibold">費用</th>
+                  <th class="py-3 font-semibold">保持または訴訟ホールド</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">MailVault</td>
+                  <td class="py-3 pr-4">ローカルのアーカイブを持つメールアプリが欲しい個人</td>
+                  <td class="py-3 pr-4">macOS、Windows、Linux</td>
+                  <td class="py-3 pr-4">無料。Premium は $4/月または $25/年（早期アクセス価格）</td>
+                  <td class="py-3">非対応</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Mail Archiver X</td>
+                  <td class="py-3 pr-4">データベース形式のアーカイブと PDF の書き出しが欲しい Mac ユーザー</td>
+                  <td class="py-3 pr-4">macOS</td>
+                  <td class="py-3 pr-4">有料、無料試用あり</td>
+                  <td class="py-3">記載なし</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Thunderbird と ImportExportTools NG</td>
+                  <td class="py-3 pr-4">自分で組み立てる無料の構成</td>
+                  <td class="py-3 pr-4">Windows、macOS、Linux</td>
+                  <td class="py-3 pr-4">無料</td>
+                  <td class="py-3">非対応</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Mail-Archiver</td>
+                  <td class="py-3 pr-4">共有のウェブ検索が欲しい小さなオフィス</td>
+                  <td class="py-3 pr-4">Docker と PostgreSQL</td>
+                  <td class="py-3 pr-4">無料、GPL-3</td>
+                  <td class="py-3">アーカイブの保持期間と削除のロック。訴訟ホールドの記載なし</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Piler</td>
+                  <td class="py-3 pr-4">自社サーバー上のコンプライアンス用アーカイブ</td>
+                  <td class="py-3 pr-4">Linux サーバー</td>
+                  <td class="py-3 pr-4">Open Source Edition は無料。Enterprise Edition は有料</td>
+                  <td class="py-3">はい、両方とも。監査ログも</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Open Archiver</td>
+                  <td class="py-3 pr-4">取り込み元の多いセルフホスト型のアーカイブ</td>
+                  <td class="py-3 pr-4">Docker Compose</td>
+                  <td class="py-3 pr-4">無料、AGPL-3</td>
+                  <td class="py-3">保持ポリシー。訴訟ホールドはまだ未対応</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">Microsoft Purview または Google Vault</td>
+                  <td class="py-3 pr-4">すでに Microsoft 365 や Google Workspace を使っている会社</td>
+                  <td class="py-3 pr-4">プロバイダーのクラウド</td>
+                  <td class="py-3 pr-4">一部のプランに含まれる</td>
+                  <td class="py-3">対応</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">最終確認：2026年10月、各社のサイトまたはリポジトリにて。価格と機能は変わるので、購入や導入の前に確認してください。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Mac や Linux の個人向け</h2>
+
+          <p>
+            MailStore Home には Windows 10 か 11 が必要なので、Mac や Linux のユーザーはほかを探す必要があります。Mac の場合については <a href="/ja/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac 向けの MailStore の代わりのガイド</a>で詳しく説明しています。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. MailVault</h3>
+
+          <p>
+            MailVault は、選んだメールのコピーを Maildir 形式のフォルダにプレーンな <code>.eml</code> ファイルとして、コンピュータ上の<a href="/ja/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">ローカルの保管庫</a>に保管する、macOS・Windows・Linux 向けの無料のメールアプリです。Gmail、Microsoft 365、Outlook.com、あらゆる IMAP のアカウントに接続し、Google Takeout の書き出しなどの MBOX ファイルを読み込み、持っているすべてをローカルのインデックスでオフラインで検索します。手動バックアップは無料で無制限です。アーカイブとサーバーから削除は別々のステップとしてなら無料で、各コピーを確認してからサーバーのコピーを削除するワンステップのアーカイブして削除は Premium です。
+          </p>
+
+          <p>
+            <strong>制限：</strong>PST の読み込み、Outlook や Thunderbird のプロファイルの読み込み、複数ユーザーでの共有アーカイブ、保持ポリシーや訴訟ホールドはありません。添付ファイル検索、スケジュールバックアップ、整理ルールは Premium です。
+          </p>
+
+          <figure class="pt-2">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="各メッセージの行に保存状態のアイコンが付いた MailVault の受信トレイ。一覧の下の凡例には「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」とあります。" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async"></picture>
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">MailVault の各行には、そのメッセージがどこに保管されているかが表示されます。サーバーのみ、保管庫、唯一のコピー、あるいはバックアップドライブにもある、のいずれかです。</figcaption>
+          </figure>
+
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Mail Archiver X</h3>
+
+          <p>
+            Moth Software の Mail Archiver X は、Apple Mail、Outlook、Thunderbird、Postbox、そして Gmail や iCloud を含む IMAP のアカウントからアーカイブする有料の Mac アプリです。アーカイブは検索インデックス付きの内部データベースに保管され、PDF と MBOX に書き出せ、アーカイブは内蔵または外付けのドライブに置けます。開発元はネットワークストレージも挙げていますが、マニュアルでは標準版はローカルのアーカイブを前提にしているとしています。サーバーのコンポーネントを持つ Pro 版では、複数のコンピュータとユーザーからのアクセスが加わります。現在のバージョンは 8.2.4 です。
+          </p>
+
+          <p>
+            <strong>制限：</strong>Mac 専用で、アーカイブは 1 通につき 1 ファイルではなくデータベースなので、標準的なファイルを取り出すには書き出しが必要です。価格は開発元のマニュアルに記載されており、$49.95（税別）、Pro は $150 からです。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Windows の個人向け</h2>
+
+          <p>
+            Windows では、MailStore Home 自体は今も個人利用なら無料です。それでも離れるつもりなら、あるいはほかのシステムでも使える構成が欲しいなら、MailVault は Windows でも動きますし、無料で自分で組み立てる方法もあります。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Thunderbird と ImportExportTools NG</h3>
+
+          <p>
+            Thunderbird は Windows、macOS、Linux 向けの無料のメールクライアントです。アーカイブボタンでメッセージをアーカイブフォルダに移せ、そのフォルダをコンピュータのローカルフォルダに向け、年や月ごとに整理できます。無料の ImportExportTools NG のアドオンは、メッセージを EML、HTML、PDF、CSV、プレーンテキストとして、フォルダを mbox として書き出し、mbox と EML のファイルを読み込めます。
+          </p>
+
+          <p>
+            <strong>制限：</strong>Thunderbird は標準ではフォルダごとに 1 つの mbox ファイルとして保存します。Maildir での保存はアカウントごとに選ぶ方式で、Mozilla は試験的なものとし、有効にする前に不具合の報告の仕方とメールの復元の仕方を知っておくよう案内しています。アーカイブは手作業で、メールをローカルのフォルダに入れた後は、そのフォルダのバックアップは自分の仕事です。詳しくは <a href="/ja/compare/mailvault-vs-thunderbird.html" class="text-primary-500 hover:text-primary-600 underline">MailVault と Thunderbird の比較</a>を参照してください。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">オープンソースのアーカイブサーバー</h2>
+
+          <p>
+            これらは MailStore Home より MailStore Server の代わりになるものです。3 つとも無料で使えますが、3 つともサーバーのインストール、更新、バックアップを誰かが行う必要があります。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. Mail-Archiver</h3>
+
+          <p>
+            Mail-Archiver（Mail Archiver X とは別の製品）は GPL-3 のセルフホスト型のウェブアプリで、PostgreSQL のデータベースと並べて Docker で動かします。IMAP のアカウントと、Microsoft Graph 経由で Microsoft 365 を同期し、個人の Outlook.com のアカウントにも接続し、MBOX と ZIP 圧縮した EML を読み込み、同じ形式で書き出します。アカウントごとの権限を付けて複数のユーザーで共有できます。アカウントごとに設定した期間が過ぎるとサーバーからメールを削除でき、ログイン、検索、書き出しのアクセスログを残します。
+          </p>
+
+          <p>
+            <strong>制限：</strong>独自の HTTPS がないのでリバースプロキシが必要で、README には訴訟ホールドの記載がありません。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5. Piler</h3>
+
+          <p>
+            Piler は GPL-3 のオープンソースのアーカイブサーバーです。無料の Open Source Edition は、SMTP でメールを受け取り、Office 365 と Google のアカウントを取り込み、EML、Maildir、メールボックスのファイルを読み、アーカイブと保持のルール、訴訟ホールド、監査ログ、重複排除、圧縮、メッセージの暗号化を備えています。ユーザーは AD や LDAP、シングルサインオン、2 段階認証のコードでサインインします。Enterprise Edition は価格帯が公開された有料版で、電子情報開示、マルチテナント、任意の有償サポートが加わります。
+          </p>
+
+          <p>
+            <strong>制限：</strong>無料版は単一サーバー向けでコミュニティによるサポートのみ、Enterprise の価格は問い合わせのみです。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">6. Open Archiver</h3>
+
+          <p>
+            Open Archiver は AGPL-3 のセルフホスト型のプラットフォームで、Docker Compose で起動します。Google Workspace、Microsoft 365、IMAP、PST ファイル、ZIP 圧縮した EML、MBOX を取り込み、メッセージと PDF や DOCX などの添付ファイルのテキストをインデックス化します。メールを重複排除、圧縮、保存時の暗号化を施した <code>.eml</code> ファイルとしてローカルのディスクか S3 互換のストレージに保存し、取り込み時に各メッセージのハッシュを記録し、監査証跡を残します。
+          </p>
+
+          <p>
+            <strong>制限：</strong>README では訴訟ホールドは今後対応予定とされており、既定の構成では少なくとも 4 GB の RAM が必要です。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">企業向け：プロバイダーがすでに持っているアーカイブ</h2>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">7. Microsoft Purview または Google Vault</h3>
+
+          <p>
+            会社のメールが Microsoft 365 にあるなら、Microsoft Purview の保持ポリシーとラベルによって、ユーザーが削除した後もメールボックスのアイテムのコピーが残り、電子情報開示で検索できます。必要な機能がどの Microsoft 365 のプランに含まれるか確認してください。メールが Google Workspace にあるなら、対応するエディションでは Google Vault が保持ルール、ホールド、検索、書き出し、Vault の操作の監査ログを扱います。
+          </p>
+
+          <p>
+            <strong>制限：</strong>コピーは同じプロバイダーのクラウドに残るので、独立したバックアップにはなりません。Google によると、Vault はデータのアーカイブではなく、ルールを設定するまでは何も保持しません。同じような管理機能を持つ、別の Windows ベースのアーカイブなら、MailStore Server 自体も引き続き選択肢です。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">選び方</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>アーカイブは誰のためのものか？</strong>1 人のメールはデスクトップの仕事です。多くの人のメールを、ほかの誰かが検索するならサーバーの仕事です。</li>
+            <li><strong>保持ルール、訴訟ホールド、監査ログが必要か？</strong>必要なら、Piler、MailStore Server、またはプロバイダー自身のツールを見てください。ここにあるデスクトップの選択肢ではできません。</li>
+            <li><strong>古いメールはどこにあるか？</strong>PST ファイルなら MailStore Home か Open Archiver です。MBOX ファイルと IMAP のアカウントは、ここにあるほぼすべてで使えます。</li>
+            <li><strong>最終的にどんな形式で手元に残したいか？</strong>10 年後にツールなしで開けるプレーンなファイルが欲しいなら、<code>.eml</code> のような 1 通につき 1 ファイルの形式を選んでください。</li>
+          </ol>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h2>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailStore の無料の代わりで最適なものは？</p>
+            <p>用途によります。Mac、Windows、Linux の個人なら、MailVault か、Thunderbird と ImportExportTools NG。自社サーバーでの会社のアーカイブなら、Piler Open Source Edition、Mail-Archiver、Open Archiver です。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailStore のオープンソースの代わりはありますか？</p>
+            <p>はい。Piler と Mail-Archiver（どちらも GPL-3）、Open Archiver（AGPL-3）はオープンソースのアーカイブサーバーです。デスクトップでは Thunderbird がオープンソースで、MailVault のソースコードは GitHub で公開されています。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">PST ファイルを読める MailStore の代わりはどれですか？</p>
+            <p>ここにあるツールのうち、Open Archiver は PST ファイルを取り込め、MailStore Home と MailStore Server も PST をアーカイブできます。MailVault、Mail-Archiver、Thunderbird と ImportExportTools NG、Piler の無料版には PST の取り込みの記載がありません。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Mail-Archiver と Mail Archiver X は同じものですか？</p>
+            <p>いいえ。Mail-Archiver は Docker で動く無料のセルフホスト型のウェブアプリです。Mail Archiver X は Moth Software の有料の Mac アプリです。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">次にすること</h2>
+
+          <p>
+            自分の場合に合うグループを選び、すべてを移す前に 1 つのメールボックスで 1 つのツールを試してください。Mac、Windows、Linux の個人で、メールをプレーンなファイルとして持ちたいなら、<a href="/ja/get-started.html" class="text-primary-500 hover:text-primary-600 underline">MailVault を無料でダウンロード</a>して、まず古い 1 年分をアーカイブしてください。<a href="/ja/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">IMAP バックアップツールのチェックリスト</a>を使えば、これらのどのツールも同じ方法で試せます。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>メールを読む。メールを残す。</p>
+</div>
+<nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/mentioned-in.html">掲載情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">コミュニティ ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">チームに連絡 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

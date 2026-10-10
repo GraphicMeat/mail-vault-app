@@ -7,6 +7,7 @@ vi.mock('../../services/daemonClient', () => ({
 }));
 
 const { useAutoTagStore } = await import('../autoTagStore');
+const { useTagStore, tagRowKey } = await import('../tagStore');
 
 const KEEP_RULE = {
   id: 'r1', name: 'Receipts', instruction: 'receipts and invoices', constraints: {},
@@ -117,5 +118,26 @@ describe('autoTagStore', () => {
       expect(result).toEqual({ unassigned: 3 });
       expect(useAutoTagStore.getState().backfills.r1).toBeUndefined();
     });
+  });
+
+  it('leaves a rule without a remote provider to the daemon\'s on-device default', async () => {
+    mockDaemonCall.mockResolvedValue({ candidates: [] });
+    await useAutoTagStore.getState().preview({ rule: KEEP_RULE, accountId: 'a1' });
+    expect(mockDaemonCall).toHaveBeenCalledWith('auto_tags.preview', expect.objectContaining({ provider: null }));
+
+    mockDaemonCall.mockResolvedValue({ batchId: 'b1', processed: 0, total: 0, matched: 0, assigned: 0 });
+    await useAutoTagStore.getState().backfill({ ruleId: 'r1', accountId: 'a1' });
+    expect(mockDaemonCall).toHaveBeenCalledWith('auto_tags.backfill', expect.objectContaining({ provider: null }));
+  });
+
+  it('an undone backfill takes its tag off the rows on screen', async () => {
+    const row = tagRowKey('a1', 'INBOX', 7);
+    useTagStore.setState({ tags: [], byRow: { [row]: ['t1'] } });
+    mockDaemonCall.mockResolvedValue({ unassigned: 1, tagId: 't1' });
+    useAutoTagStore.setState({ backfills: { r1: { batchId: 'b1', done: true } } });
+
+    await useAutoTagStore.getState().undoBackfill('r1', 'b1');
+
+    expect(useTagStore.getState().byRow[row]).toBeUndefined();
   });
 });

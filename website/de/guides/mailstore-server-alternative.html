@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alternativen zu MailStore Server: Wer was braucht | MailVault</title>
+  <meta name="description" content="Alternativen zu MailStore Server für Firmen (Piler, Mail-Archiver, Open Archiver, Purview, Google Vault) und wann eine Person nur ein Desktop-Archiv braucht.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/de/guides/mailstore-server-alternative.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/de/guides/mailstore-server-alternative.html">
+  <meta property="og:title" content="Alternativen zu MailStore Server: Wer was braucht | MailVault">
+  <meta property="og:description" content="Alternativen zu MailStore Server für Firmen (Piler, Mail-Archiver, Open Archiver, Purview, Google Vault) und wann eine Person nur ein Desktop-Archiv braucht.">
+  <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="de_DE">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Alternativen zu MailStore Server: Wer was braucht | MailVault">
+  <meta name="twitter:description" content="Alternativen zu MailStore Server für Firmen (Piler, Mail-Archiver, Open Archiver, Purview, Google Vault) und wann eine Person nur ein Desktop-Archiv braucht.">
+  <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Alternativen zu MailStore Server: Wähle danach, für wen das Archiv ist",
+  "description": "Alternativen zu MailStore Server für Firmen (Piler, Mail-Archiver, Open Archiver, Purview, Google Vault) und wann eine Person nur ein Desktop-Archiv braucht.",
+  "url": "https://mailvaultapp.com/de/guides/mailstore-server-alternative.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Gibt es eine kostenlose Alternative zu MailStore Server?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ja, wenn du einen Server betreiben kannst. Piler Open Source Edition, Mail-Archiver und Open Archiver sind kostenlose, quelloffene Archivserver, und die kostenlose Version von Piler enthält Aufbewahrungsregeln, Legal Hold und Prüfprotokolle. Die Lizenz kostet nichts, aber du installierst, aktualisierst und sicherst den Server selbst."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Kann eine Firma MailStore Home statt MailStore Server nutzen?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Laut MailStore ist Home für die private Nutzung zu Hause kostenlos, und für die kommerzielle Nutzung verweist es Firmen auf MailStore Server. Lies die Lizenzbedingungen von MailStore, bevor du Home für die Arbeit nutzt."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Ist MailVault ein Archiv für Compliance oder Legal Hold?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Nein. MailVault behält eine persönliche Kopie deiner eigenen E-Mails auf deinem eigenen Computer. Es hat keine Aufbewahrungsrichtlinien, kein Legal Hold, kein Prüfprotokoll und kein zentrales Archiv und ersetzt MailStore Server deshalb nicht für Compliance-Zwecke."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Welche Alternativen zu MailStore Server laufen unter Linux?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailStore Server läuft unter Windows 11 und Windows Server. Mail-Archiver und Open Archiver laufen in Docker, und Piler dokumentiert, wie man ein .deb-Paket für Ubuntu baut."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/mailstore-server-alternative.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/mailstore-server-alternative.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/de/" aria-label="MailVault-Startseite"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">von Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Hauptnavigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="MailVault auf GitHub einen Stern geben" title="MailVault auf GitHub einen Stern geben"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault ein Herz schicken" title="MailVault ein Herz schicken"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Sprache auswählen"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Deutsch</span><span class="mv-language-code" aria-hidden="true">DE</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/mailstore-server-alternative.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/mailstore-server-alternative.html" lang="de" hreflang="de" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/mailstore-server-alternative.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/mailstore-server-alternative.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/mailstore-server-alternative.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/mailstore-server-alternative.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/mailstore-server-alternative.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/mailstore-server-alternative.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/mailstore-server-alternative.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Farbschema wechseln" title="Farbschema wechseln"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo</a><a class="mv-button mv-nav-download" href="/de/get-started.html?plan=free">Download</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menü</span></summary>
+<nav aria-label="Mobile Navigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a><a href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo ausprobieren</a><a href="/de/get-started.html?plan=free">Kostenlos herunterladen</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Farbschema wechseln</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/de/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Zurück zur Startseite
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Alternativen zu MailStore Server: Wähle danach, für wen das Archiv ist</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 Min. Lesezeit</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Diese Seite ist für alle, die eine <strong>Alternative zu MailStore Server</strong> suchen. MailStore Server ist die kostenpflichtige Version für Unternehmen: ein zentrales Archiv für viele Postfächer, mit Aufbewahrungsregeln, Legal Hold und Prüfprotokollen. Wenn du das brauchst, lautet die ehrliche Antwort: ein anderes Serverprodukt wie Piler, Mail-Archiver oder Open Archiver oder die Aufbewahrungswerkzeuge, die in Microsoft 365 und Google Workspace schon eingebaut sind. MailVault gehört nicht dazu. Es ist eine Desktop-App für die eigenen E-Mails einer Person. Wenn du stattdessen die kostenlose Home-Version vergleichst, lies <a href="/de/compare/mailvault-vs-mailstore-home.html" class="text-primary-500 hover:text-primary-600 underline">MailVault vs. MailStore Home</a>. Alle Möglichkeiten nebeneinander findest du in <a href="/de/guides/mailstore-alternatives-compared.html" class="text-primary-500 hover:text-primary-600 underline">MailStore-Alternativen im Vergleich</a>.
+          </p>
+
+          <div class="p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Kurze Antwort</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li><strong>Ein Firmenarchiv mit Compliance, Aufbewahrung oder Legal Hold:</strong> Piler Open Source Edition, Mail-Archiver oder Open Archiver auf deinem eigenen Server, oder Microsoft Purview und Google Vault, wenn deine E-Mails schon in Microsoft 365 oder Google Workspace liegen.</li>
+              <li><strong>Eine Person oder ein kleines Team, in dem jeder sein eigenes Postfach behält:</strong> Du brauchst wahrscheinlich keinen Server. Ein Archivierer für den Desktop wie MailVault reicht.</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Was MailStore Server macht</h2>
+
+          <p>
+            MailStore beschreibt Server als Software zur E-Mail-Archivierung für kleine und mittlere Unternehmen. Das listet die Produktseite heute auf:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Plattform:</strong> Windows 11 und Windows Server 2016 bis 2025.</li>
+            <li><strong>Preis:</strong> ab 295 EUR zzgl. MwSt. für ein Starterpaket mit fünf Nutzern, mit einem Jahr Standard Update &amp; Support. Die Mindestbestellung sind fünf Nutzer, und eine Installation unterstützt bis zu 2.000 Nutzer. Es gibt eine 30-tägige Testversion.</li>
+            <li><strong>Quellen:</strong> Microsoft 365, Exchange Server, Google Workspace, jeder IMAP- oder POP3-Server, PST- und EML-Dateien sowie Journaling, sodass E-Mails archiviert werden können, bevor sie ein Postfach erreichen.</li>
+            <li><strong>Compliance:</strong> Aufbewahrungsrichtlinien, Legal Hold, ein Prüfprotokoll und ein Nutzertyp Auditor für externe Prüfer. Es speichert SHA-Hashwerte der Inhalte und verschlüsselt das Archiv mit AES-256.</li>
+            <li><strong>Zugriff:</strong> Mitarbeitende durchsuchen das Archiv über ein Outlook-Add-in oder eine Weboberfläche, die auch auf dem Handy funktioniert.</li>
+          </ul>
+
+          <p>
+            MailStore ist eine Tochtergesellschaft von OpenText. Diese Funktionen sind der Grund, warum Firmen es kaufen, und jeder echte Ersatz braucht die meisten davon.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Alternativen zu MailStore Server für eine Organisation</h2>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">Option</th>
+                  <th class="py-3 pr-4 font-semibold">Was es ist</th>
+                  <th class="py-3 pr-4 font-semibold">Kosten</th>
+                  <th class="py-3 font-semibold">Compliance-Funktionen</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Piler Open Source Edition</td>
+                  <td class="py-3 pr-4">Selbst gehosteter Archivserver, GPL-3</td>
+                  <td class="py-3 pr-4">Kostenlos; Enterprise Edition kostenpflichtig</td>
+                  <td class="py-3">Aufbewahrungsregeln, Legal Hold, Prüfprotokolle, Verschlüsselung</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Mail-Archiver</td>
+                  <td class="py-3 pr-4">Selbst gehostete Web-App, GPL-3, Docker und PostgreSQL</td>
+                  <td class="py-3 pr-4">Kostenlos</td>
+                  <td class="py-3">Zugriffsprotokoll, optionale Löschsperre, Aufbewahrungsdauer im Archiv</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Open Archiver</td>
+                  <td class="py-3 pr-4">Selbst gehostete Plattform, AGPL-3, Docker Compose</td>
+                  <td class="py-3 pr-4">Kostenlos</td>
+                  <td class="py-3">Aufbewahrungsrichtlinien, Prüfprotokoll, Integritäts-Hashes; Legal Hold noch nicht verfügbar</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Microsoft Purview</td>
+                  <td class="py-3 pr-4">Aufbewahrung und eDiscovery innerhalb von Microsoft 365</td>
+                  <td class="py-3 pr-4">Hängt von deinem Microsoft-365-Tarif ab</td>
+                  <td class="py-3">Aufbewahrungsrichtlinien und -bezeichnungen für Postfächer, eDiscovery</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">Google Vault</td>
+                  <td class="py-3 pr-4">Aufbewahrung und eDiscovery innerhalb von Google Workspace</td>
+                  <td class="py-3 pr-4">In einigen Workspace-Editionen enthalten</td>
+                  <td class="py-3">Aufbewahrungsregeln, Holds, Suche, Export, Prüfprotokoll</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">Zuletzt geprüft: Oktober 2026. Funktionen und Preise ändern sich, prüfe sie also auf der Website des jeweiligen Herstellers.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Piler</h3>
+
+          <p>
+            Piler ist die quelloffene Lösung, die der Compliance-Seite von MailStore Server am nächsten kommt. Seine Open Source Edition ist kostenlos. Sie nimmt E-Mails per SMTP an, übernimmt Office-365- und Google-Konten, liest EML-, Maildir- und Postfachdateien und enthält Archivierungs- und Aufbewahrungsregeln, Legal Hold, Prüfprotokolle, Deduplizierung und Nachrichtenverschlüsselung. Die Enterprise Edition ist kostenpflichtig, mit veröffentlichten Preisstufen, und bringt eDiscovery, Mandantenfähigkeit und optionalen bezahlten Support dazu.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Mail-Archiver</h3>
+
+          <p>
+            Mail-Archiver (nicht die Mac-App Mail Archiver X) passt zu einem kleinen Büro, das eine Webseite will, auf der mehrere Leute archivierte E-Mails durchsuchen. Es synchronisiert IMAP-Konten und Microsoft 365 über Microsoft Graph, importiert MBOX und gezippte EML-Dateien und exportiert in dieselben Formate. Nutzer bekommen Berechtigungen pro Konto, und die Anmeldung kann über OpenID Connect laufen. Es kann E-Mails nach einer Frist, die du pro Konto festlegst, vom Server löschen, und eine Einstellung sperrt das manuelle Löschen aus dem Archiv. Es liefert selbst kein HTTPS aus und braucht deshalb einen Reverse Proxy davor.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Open Archiver</h3>
+
+          <p>
+            Open Archiver übernimmt Google Workspace, Microsoft 365, IMAP sowie PST-, MBOX- und EML-Dateien. Es indexiert den Text von Nachrichten und Anhängen wie PDF und DOCX, speichert beim Übernehmen einen Hash jeder E-Mail, damit Änderungen erkannt werden, und führt ein Prüfprotokoll. Sein README führt Legal Hold noch als offen, prüfe also den aktuellen Stand, bevor du dich in einem Streitfall darauf verlässt.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Die Werkzeuge, die dein Anbieter schon hat</h3>
+
+          <p>
+            Wenn deine Firma schon für Microsoft 365 oder Google Workspace bezahlt, sieh zuerst dort nach. Aufbewahrungsrichtlinien von Microsoft Purview behalten eine Kopie von Postfachelementen, nachdem Nutzer sie gelöscht haben, im Ordner „Wiederherstellbare Elemente“ des Postfachs, wo eDiscovery sie weiterhin findet. Prüfe, welcher Microsoft-365-Tarif die Teile enthält, die du brauchst. Google Vault übernimmt Aufbewahrung, Holds, Suche und Export für Gmail und andere Workspace-Daten. Google sagt deutlich, dass Vault kein Datenarchiv ist: Es bewahrt nichts auf, bis du Regeln festlegst, und abgelaufene Daten ohne Hold werden wie üblich gelöscht.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Wann MailVault nicht die Antwort ist</h2>
+
+          <p>
+            Wir machen MailVault, deshalb ganz offen: MailVault ersetzt MailStore Server nicht. Es hat:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>Keinen zentralen Archivserver und kein gemeinsames Archiv für mehrere Nutzer.</li>
+            <li>Keinen Admin-Zugriff auf die Postfächer anderer und kein Journaling.</li>
+            <li>Keine Aufbewahrungsrichtlinien, kein Legal Hold, kein Prüfprotokoll und keine Prüferrolle.</li>
+            <li>Keinen PST-Import.</li>
+          </ul>
+
+          <p>
+            Wenn ein Prüfer, eine Aufsichtsbehörde oder deine Rechtsabteilung Fragen zu den E-Mails deiner Firma stellen wird, wähle eine der Serverlösungen oben.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Für wen MailVault passt</h2>
+
+          <p>
+            Viele, die nach einer Alternative zu MailStore Server suchen, brauchen gar keinen Server. Es ist eine Person mit einem vollen Postfach, eine Freiberuflerin, die jeden Kunden-Thread behalten will, oder ein Dreierteam, in dem sich jeder um seinen eigenen Posteingang kümmert. Für sie ist ein Server zusätzliche Arbeit: ein Rechner, der laufen muss, Updates, die eingespielt werden müssen, und ein Backup des Archivs selbst.
+          </p>
+
+          <p>
+            MailVault ist eine kostenlose Desktop-App für macOS, Windows und Linux. Jede Person installiert sie, meldet sich bei ihrem eigenen Gmail-, Microsoft-365-, Outlook.com- oder IMAP-Konto an und behält eine Kopie ihrer E-Mails auf ihrem eigenen Computer. Es gibt kein MailVault-Konto und keinen MailVault-Server auf dem Weg der E-Mails, und der Quellcode liegt auf GitHub. Die <a href="/de/guides/email-archiving-for-freelancers.html" class="text-primary-500 hover:text-primary-600 underline">Anleitung zur E-Mail-Archivierung für Freiberufler und kleine Unternehmen</a> behandelt diesen Fall genauer.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Was MailVault macht</h2>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ein lokales Archiv in einfachen Dateien</h3>
+
+          <p>
+            Jede Nachricht, die du behältst, ist eine normale <code>.eml</code>-Datei in Ordnern im Maildir-Stil, eine Datei pro E-Mail, andere Mail-Apps können sie also öffnen. Der Tresor kann auf ein externes Laufwerk oder ein eingebundenes NAS umziehen: MailVault kopiert alles, prüft, ob jede Datei angekommen ist, und entfernt erst dann die Originale. Dieser Umzug ist in der Mac-App-Store-Version nicht verfügbar. Ein Backup-Durchlauf kann außerdem eine zweite Kopie in einen Ordner deiner Wahl schreiben.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Suche auf deinem eigenen Computer</h3>
+
+          <p>
+            Ein lokaler Volltextindex durchsucht jede gespeicherte Nachricht, mit oder ohne Verbindung. Du kannst nach Absender, Datum, Ordner oder Tag eingrenzen. In unserem <a href="/de/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">veröffentlichten Suchtest</a> dauerte die langsamste Suche über 50.000 Nachrichten 14 Millisekunden. Die Suche in PDF- und Office-Anhängen ist eine Premium-Funktion.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Sicherungen</h3>
+
+          <p>
+            Manuelle Backups jedes Kontos sind kostenlos und unbegrenzt. Geplante Backups, mit den Zahlen auf dem Server, lokal und extern pro Ordner, gehören zu Premium.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Archivieren, dann löschen, mit einer Prüfung dazwischen</h3>
+
+          <p>
+            Archivieren kopiert E-Mails in deinen Tresor und lässt die Kopie auf dem Server unberührt. Vom Server löschen entfernt die Kopie auf dem Server. Beides ist kostenlos. <a href="/de/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">Archivieren &amp; löschen</a> (Premium) macht beides in einem Schritt: Es kopiert jede Nachricht in deinen Tresor, prüft, ob die Kopie da ist, und löscht sie erst dann vom Server. Was die Prüfung nicht besteht, bleibt auf dem Server. Archivieren, sichern &amp; löschen (Premium) schreibt zusätzlich eine Kopie in deinen Sicherungsordner und prüft beide Kopien, bevor etwas entfernt wird.
+          </p>
+
+          <figure class="pt-2">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/selection-dialog-archive-720.webp 720w, /screenshots/de/selection-dialog-archive-1440.webp 1440w, /screenshots/de/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/de/selection-dialog-archive-light-1440.webp" srcset="/screenshots/de/selection-dialog-archive-light-720.webp 720w, /screenshots/de/selection-dialog-archive-light-1440.webp 1440w, /screenshots/de/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="Der Dialog Aktion wählen von MailVault für eine Auswahl von E-Mails mit Archivieren, Aus dem Archiv holen, Vom Server löschen, Archivieren &amp; löschen und Überall löschen sowie einem Hinweis, dass der Tresor einige davon schon enthält." class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async"></picture>
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">Der Aktionsdialog für eine Auswahl. Archivieren ist kostenlos. Archivieren &amp; löschen ist Premium und prüft jede Kopie im Tresor, bevor die Kopie auf dem Server entfernt wird.</figcaption>
+          </figure>
+
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Eine Lösung für kleine Teams ohne Server</h2>
+
+          <p>
+            Für ein Team aus zwei bis fünf Leuten, in dem niemand die E-Mails von Kollegen durchsuchen muss, reicht das:
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Jede Person installiert MailVault und fügt ihr eigenes Konto hinzu.</li>
+            <li>Jede Person wählt unter Einstellungen, Sichern &amp; Wiederherstellen einen Ordner für die zweite Kopie auf einem Laufwerk, über das sie verfügt, etwa einer externen SSD oder einer NAS-Freigabe.</li>
+            <li>Starte ein Backup und archiviere dann die älteren Jahre. Lösche vom Server nur, was im Tresor liegt. Mit Premium übernimmt Archivieren &amp; löschen diese Prüfung für dich.</li>
+          </ol>
+
+          <p>
+            Worauf du verzichtest: Niemand kann das Archiv einer anderen Person durchsuchen, und es gibt keine zentrale Aufzeichnung, wer was getan hat. Wenn du eines davon brauchst, brauchst du einen Server.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Häufige Fragen</h2>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Gibt es eine kostenlose Alternative zu MailStore Server?</p>
+            <p>Ja, wenn du einen Server betreiben kannst. Piler Open Source Edition, Mail-Archiver und Open Archiver sind kostenlose, quelloffene Archivserver, und die kostenlose Version von Piler enthält Aufbewahrungsregeln, Legal Hold und Prüfprotokolle. Die Lizenz kostet nichts, aber du installierst, aktualisierst und sicherst den Server selbst.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Kann eine Firma MailStore Home statt MailStore Server nutzen?</p>
+            <p>Laut MailStore ist Home für die private Nutzung zu Hause kostenlos, und für die kommerzielle Nutzung verweist es Firmen auf MailStore Server. Lies die Lizenzbedingungen von MailStore, bevor du Home für die Arbeit nutzt.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Ist MailVault ein Archiv für Compliance oder Legal Hold?</p>
+            <p>Nein. MailVault behält eine persönliche Kopie deiner eigenen E-Mails auf deinem eigenen Computer. Es hat keine Aufbewahrungsrichtlinien, kein Legal Hold, kein Prüfprotokoll und kein zentrales Archiv und ersetzt MailStore Server deshalb nicht für Compliance-Zwecke.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Welche Alternativen zu MailStore Server laufen unter Linux?</p>
+            <p>MailStore Server läuft unter Windows 11 und Windows Server. Mail-Archiver und Open Archiver laufen in Docker, und Piler dokumentiert, wie man ein .deb-Paket für Ubuntu baut.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Wie es weitergeht</h2>
+
+          <p>
+            Geht es um Compliance, starte eine Testversion eines Serverprodukts oder setze Piler oder Mail-Archiver auf einem Testrechner auf und archiviere ein Postfach. Geht es um ein Postfach pro Person, <a href="/de/get-started.html" class="text-primary-500 hover:text-primary-600 underline">lade MailVault kostenlos herunter</a> und probiere es zuerst mit einem Konto aus. Premium kostet zu Early-Access-Preisen $4 im Monat oder $25 im Jahr (siehe <a href="/de/pricing.html" class="text-primary-500 hover:text-primary-600 underline">Preise</a>), falls du später geplante Backups oder Archivieren &amp; löschen in einem Schritt willst.
+          </p>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Siehe auch: <a href="/de/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">eine MailStore-Alternative für den Mac</a>, <a href="/de/compare/mailvault-vs-mailstore-home.html" class="text-primary-500 hover:text-primary-600 underline">MailVault vs. MailStore Home</a> und <a href="/de/guides/mailstore-alternatives-compared.html" class="text-primary-500 hover:text-primary-600 underline">sieben MailStore-Alternativen im Vergleich</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/de/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Lies deine E-Mails. Behalte deine E-Mails.</p>
+</div>
+<nav aria-label="MailVault entdecken"><a href="/de/use-cases.html">Anwendungsfälle</a><a href="/de/blog.html">Blog</a><a href="/changelog.html">Neuigkeiten</a><a href="/de/mentioned-in.html">Erwähnungen</a><a href="/de/faq.html">FAQ</a><a href="/de/docs.html">Hilfe</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code auf GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Team kontaktieren ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Gemacht von <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Datenschutz</a><a href="/terms.html">AGB</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

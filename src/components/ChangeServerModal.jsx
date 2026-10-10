@@ -13,6 +13,7 @@ import { deriveSuggestion, classifyVerifyError, nextStepAfterVerify } from './ch
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { t as tr, useT  } from '../i18n/index.js';
 import { Private } from './privacy/Private';
+import { T } from '../i18n/T.jsx';
 
 const inputClass = 'w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:outline-none focus:border-mail-accent';
 
@@ -211,7 +212,7 @@ export default function ChangeServerModal() {
     >
         <div className="flex items-center justify-between mb-3">
           <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
-            <Server size={18} /> Change server — <Private kind="email">{account.email}</Private>
+            <Server size={18} /> <T k="changeServer.titleWithEmail" vars={{ email: account.email }} parts={[(txt) => <Private kind="email">{txt}</Private>]} />
           </h2>
           {step === 2 && activeRestore && (
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('changeServer.minimizeRestoreContinuesBackground')}>
@@ -324,7 +325,7 @@ export default function ChangeServerModal() {
                   <Button variant="primary"
                     onClick={handleStartRestore}
                   >
-                    <UploadCloud size={14} /> Restore {localTotal}
+                    <UploadCloud size={14} /> {t('restore.restoreCount', { localTotal })}
                   </Button>
                 </div>
               </>
@@ -334,7 +335,7 @@ export default function ChangeServerModal() {
               <div>
                 <div className="flex items-center gap-2 mb-2 text-mail-text">
                   <Loader2 className="animate-spin" size={16} />
-                  <span>{tr('restore.uploadingFolder', { suffix: activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
+                  <span>{tr('restore.uploadingFolder', { suffix: activeRestore.current_folder ? `: ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
                 </div>
                 <div className="text-mail-text-muted">
                   {tr('restore.uploadedSkippedFailed', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
@@ -384,7 +385,7 @@ export default function ChangeServerModal() {
           <div className="text-sm">
             {dnsHealth.loading && (
               <div className="flex items-center gap-2 text-mail-text-muted mb-4">
-                <Loader2 className="animate-spin" size={16} /> Checking DNS records…
+                <Loader2 className="animate-spin" size={16} /> {t('changeServer.checkingDnsRecords')}
               </div>
             )}
             {!dnsHealth.loading && dnsHealth.failed && (

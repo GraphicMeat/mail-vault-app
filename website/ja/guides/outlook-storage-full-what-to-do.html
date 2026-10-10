@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook のストレージがいっぱい？ 手順を追った対処法 | MailVault</title>
+  <meta name="description" content="Outlook でストレージがいっぱいと表示されたら？ どの上限がいっぱいかを突き止め、5 分でできる確認を済ませてから、整理する、古いメールをコンピュータに残す、ストレージを購入する、から選びます。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/guides/outlook-storage-full-what-to-do.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/guides/outlook-storage-full-what-to-do.html">
+  <meta property="og:title" content="Outlook のストレージがいっぱい？ 手順を追った対処法 | MailVault">
+  <meta property="og:description" content="Outlook でストレージがいっぱいと表示されたら？ どの上限がいっぱいかを突き止め、5 分でできる確認を済ませてから、整理する、古いメールをコンピュータに残す、ストレージを購入する、から選びます。">
+  <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Outlook のストレージがいっぱい？ 手順を追った対処法 | MailVault">
+  <meta name="twitter:description" content="Outlook でストレージがいっぱいと表示されたら？ どの上限がいっぱいかを突き止め、5 分でできる確認を済ませてから、整理する、古いメールをコンピュータに残す、ストレージを購入する、から選びます。">
+  <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Outlook のストレージがいっぱい：何がいっぱいかを突き止めて対処する",
+  "description": "Outlook でストレージがいっぱいと表示されたら？ どの上限がいっぱいかを突き止め、5 分でできる確認を済ませてから、整理する、古いメールをコンピュータに残す、ストレージを購入する、から選びます。",
+  "url": "https://mailvaultapp.com/ja/guides/outlook-storage-full-what-to-do.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Outlook.com の無料のストレージはどれくらいですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "無料の Outlook.com のアカウントには、メール用の 15 GB と、Microsoft のクラウドストレージ 5 GB があります。クラウドストレージは、OneDrive のファイルと写真、Outlook.com の添付ファイル、Microsoft 365 のアプリで共有されます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Outlook のストレージがいっぱいでもメールを受信できますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "いいえ。Outlook.com のメールボックスか Microsoft のクラウドストレージがいっぱいになると、メールを送受信できません。あなた宛てのメッセージは送信者に戻され、あなたが容量を空けた後で、送信者がもう一度送る必要があります。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "空けた容量が Outlook に表示されるまでどのくらいかかりますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Microsoft によると、変更が反映されるまで最大 24 時間かかることがあります。削除済みアイテムにあるメールはフォルダを空にするまで数えられるので、先に空にしてください。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Microsoft 365 を購入すれば、いっぱいの Outlook のメールボックスは解決しますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Microsoft 365 Basic、Personal、Family には 100 GB のメール用ストレージが含まれるので、当面は上限が問題でなくなります。100 GB のメールボックスは Microsoft 365 の試用期間中は使えません。メールが増え続ければ、大きな上限もいっぱいになることがあります。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Outlook.com から削除した後もメールは安全ですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "どこか別の場所にコピーがある場合に限ります。削除済みアイテムのアイテムは 30 日後に削除されます。何かを削除する前に、まず古いメールのコピーをコンピュータに保存し、コピーが開けることを確認してください。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/outlook-storage-full-what-to-do.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/outlook-storage-full-what-to-do.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ja/" aria-label="MailVault ホーム"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat による</a></div>
+<nav class="mv-navlinks" aria-label="メインナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub で MailVault にスターを付ける" title="GitHub で MailVault にスターを付ける"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault にハートを送る" title="MailVault にハートを送る"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="言語を選択"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/outlook-storage-full-what-to-do.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/outlook-storage-full-what-to-do.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/outlook-storage-full-what-to-do.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/outlook-storage-full-what-to-do.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/outlook-storage-full-what-to-do.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/outlook-storage-full-what-to-do.html" lang="ja" hreflang="ja" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/outlook-storage-full-what-to-do.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/outlook-storage-full-what-to-do.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/outlook-storage-full-what-to-do.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="カラーテーマを切り替える" title="カラーテーマを切り替える"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモ</a><a class="mv-button mv-nav-download" href="/ja/get-started.html?plan=free">ダウンロード</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">メニュー</span></summary>
+<nav aria-label="モバイルナビゲーション"><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/faq.html">FAQ</a><a href="/demo/?lang=ja" target="_blank" rel="noopener" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す</a><a href="/ja/get-started.html?plan=free">無料でダウンロード</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>カラーテーマを切り替える</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ホームに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook のストレージがいっぱい：何がいっぱいかを突き止めて対処する</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8分で読めます</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>2026年10月8日更新</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>
+            Outlook でストレージがいっぱいと表示されたら、まず<strong>どの</strong>ストレージがいっぱいなのかを突き止めてください。無料の Outlook.com のアカウント（Hotmail と Live.com のアドレスを含む）には 2 つの上限があります。メール用の 15 GB と、OneDrive と Outlook.com の添付ファイルで共有する Microsoft のクラウドストレージ 5 GB です。職場や学校のアカウントには、組織が設定するメールボックスの上限があります。無料の上限に達すると、Outlook.com ではメールの送受信が止まります。このページでは、何がいっぱいなのかを見つけて対処法を選ぶ手助けをします。実際の整理の手順は <a href="/ja/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">Hotmail と Outlook.com の空き容量を増やす方法</a>を読んでください。短い概要は <a href="/ja/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com や Hotmail のメールボックスがいっぱい</a>を参照してください。
+          </p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">手短な答え</p>
+            <ol class="list-decimal pl-6 space-y-1">
+              <li>Outlook.com で<strong>設定</strong> &gt; <strong>アカウント</strong> &gt; <strong>ストレージ</strong>を開き、メール用ストレージを確認します。それから Microsoft のクラウドストレージも確認してください。</li>
+              <li><strong>削除済みアイテム</strong>を空にします。空にするまでは容量に数えられます。</li>
+              <li>まだいっぱいですか？ 古いメールのコピーをコンピュータに保存し、コピーを確認してから、そのメールを Outlook.com から削除します。</li>
+              <li>ストレージを追加で購入するのは、すべてのデバイスで古いメールをすべてオンラインに置いておく必要がある場合だけにします。</li>
+            </ol>
+            <p class="text-sm mt-3">変更が反映されるまで最大 24 時間かかることがあります。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Outlook のストレージがいっぱいになると起きること</h2>
+
+          <p>Microsoft は 3 つの状況を説明しています。どれもメールを止めるので、その日のうちに対処する価値があります。</p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Outlook.com のメールボックスがいっぱい。</strong>Outlook.com でメールを送受信できません。あなた宛てに送られたメールは送信者に戻されます。あなたの容量が空いた後で、送信者がもう一度送る必要があります。</li>
+            <li><strong>Microsoft のクラウドストレージがいっぱい。</strong>メールボックスにまだ余裕があっても、Outlook.com でメールを送受信できません。OneDrive のファイルは読み取り専用になり、新しいファイルはアップロードも同期もされません。Microsoft によると、6 か月後には OneDrive とその中のファイルが削除される可能性があります。</li>
+            <li><strong>職場や学校のメールボックスがいっぱい。</strong>メッセージを送受信できず、あなたにメールを送った人には、メールボックスがいっぱいだというエラーメッセージが届きます。その前に、メールボックスがいっぱいに近づくと、Microsoft が警告のメールとアプリ内のメッセージを送ります。</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 1：アカウントの種類を確かめる</h2>
+
+          <p>対処法は、誰が上限を設定しているかによります。表で自分の行を見つけてください。</p>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">アカウント</th>
+                  <th class="py-3 pr-4 font-semibold">上限を決めるもの</th>
+                  <th class="py-3 pr-4 font-semibold">確認する場所</th>
+                  <th class="py-3 font-semibold">上限を引き上げられる人</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">無料の Outlook.com、Hotmail、Live.com</td>
+                  <td class="py-3 pr-4">メール用の 15 GB と、Microsoft のクラウドストレージ 5 GB</td>
+                  <td class="py-3 pr-4">Outlook.com：設定 &gt; アカウント &gt; ストレージ。クラウドストレージ：Microsoft アカウントの Microsoft ストレージのページ</td>
+                  <td class="py-3">自分：整理する、アーカイブする、または Microsoft 365 を購入する</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Microsoft 365 Basic、Personal、Family を使う Outlook.com</td>
+                  <td class="py-3 pr-4">メール用に 100 GB。クラウドストレージはプランによるので、現在の容量は Microsoft のプランのページで確認してください</td>
+                  <td class="py-3 pr-4">無料のアカウントと同じページ</td>
+                  <td class="py-3">自分。ただし個人のメールボックスは 100 GB まで</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">職場や学校のアカウント（Microsoft 365 または Exchange）</td>
+                  <td class="py-3 pr-4">メールボックスあたり最大 100 GB。管理者がより低い上限を設定できます</td>
+                  <td class="py-3 pr-4">新しい Outlook：設定 &gt; アカウント &gt; ストレージ。Outlook on the web：設定 &gt; アカウント &gt; ストレージ</td>
+                  <td class="py-3">IT 管理者</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">従来の Outlook for Windows のデータファイル（.pst または .ost）</td>
+                  <td class="py-3 pr-4">PC 上のファイルのサイズ上限。Microsoft は既定で 50 GB としています</td>
+                  <td class="py-3 pr-4">ファイル &gt; ツール &gt; メールボックスの整理</td>
+                  <td class="py-3">自分または IT 管理者</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Mac、PC、スマートフォンの Outlook アプリは、たいていウェブサイトと同じメールボックスを表示します。Outlook.com でメールボックスがいっぱいと表示されればアプリでも同じように表示され、どこかで空けた容量はすべての場所で空きます。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 2：メールボックスか、クラウドストレージか？</h2>
+
+          <p>
+            個人のアカウントでは、2 つの上限は別々の理由でいっぱいになります。<strong>メールボックス</strong>にはメール、連絡先、カレンダーが入ります。<strong>Microsoft のクラウドストレージ</strong>には、OneDrive のファイルと写真、OneDrive のごみ箱、そして Microsoft によると Outlook.com の添付ファイルが入ります。そのため、写真でいっぱいの OneDrive が、受信トレイに一切触れていなくてもメールを止めることがあります。
+          </p>
+
+          <p>
+            Microsoft 自身のヘルプページでも、この分け方の説明は一様ではありません。推測しないでください。何かを削除する前に、両方の数字を見てください。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">5 分でできる確認</h2>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>メール用ストレージを確認します。</strong>Outlook.com にサインインし、<strong>設定</strong> &gt; <strong>アカウント</strong> &gt; <strong>ストレージ</strong>を選びます。各フォルダが使っている容量が表示されます。</li>
+            <li><strong>クラウドストレージを確認します。</strong>Microsoft アカウントにサインインし、Microsoft ストレージのページを開きます。<a href="https://support.microsoft.com/en-us/office/microsoft-storage-2a261b34-421c-4a47-9901-74ef5bd0c426" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Microsoft のクラウドストレージとは</a>のヘルプページで、何が容量に数えられるかを説明しています。</li>
+            <li><strong>削除済みアイテムを見ます。</strong>空にするか、各アイテムが 30 日後に削除されるまでは容量に数えられます。</li>
+            <li><strong>一括処理を使いましたか？</strong>一括処理で削除したメールは、削除済みアイテムからも削除されるまで容量は減りません。</li>
+            <li><strong>迷惑メールを見ます。</strong>Outlook.com は迷惑メールのアイテムを 10 日後に削除するので、このフォルダが問題になることはめったにありません。</li>
+            <li>いっぱいなのがクラウドストレージなら、<strong>OneDrive のごみ箱を確認します</strong>。これも容量に数えられます。</li>
+          </ol>
+
+          <p>
+            ストレージのページでは、フォルダ内のすべてのアイテム、または 3、6、12 か月より古いアイテムだけを完全に削除することもできます。手早いですが、元に戻せません。必要のないフォルダか、すでにコピーしたフォルダにだけ使ってください。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">3 つの選択肢を順番に</h2>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 整理する</h3>
+
+          <p>
+            削除済みアイテムを空にし、読んでいないニュースレターを削除し、<strong>フィルター</strong> &gt; <strong>並べ替え</strong> &gt; <strong>サイズ</strong>で最も大きなメールを見つけます。無料で、上限を少し超えているだけならこれで足りることがよくあります。何を残すべきかを含めた手順の全体は、<a href="/ja/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">Hotmail と Outlook.com の空き容量を増やす</a>にあります。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 古いメールをコンピュータに残してから、オンラインで削除する</h3>
+
+          <p>
+            いっぱいのメールボックスの多くは、めったに開かないけれど失いたくない古いメールでいっぱいです。そのメールのコピーをコンピュータにダウンロードし、コピーを確認してから、Outlook.com からメールを削除できます。容量が戻り、必要なときにはメールがまだそこにあります。
+          </p>
+
+          <p>
+            MailVault は、これを行う macOS・Windows・Linux 向けの無料のデスクトップアプリです。各メールを標準的な <code>.eml</code> ファイルとしてコンピュータに保存します。無料のアプリでは 2 つのステップで行います。<strong>アーカイブ</strong>がメールを保管庫にコピーし、次に<strong>サーバーから削除</strong>が Outlook.com から削除します。各コピーを確認してからサーバーのコピーを削除するワンステップの<strong>アーカイブして削除</strong>は Premium に含まれます。<a href="/ja/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">アーカイブして削除の仕組み</a>を参照してください。
+          </p>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="選択したメールに対する MailVault の「操作を選択」ダイアログ。アーカイブ、アーカイブから戻す、サーバーから削除、アーカイブして削除、すべてから削除が、それぞれ 1 行の説明付きで並び、その下に、一部のメールはすでにアーカイブ済みだという注記があります。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">メッセージを選ぶと、MailVault はそれをどうするかを尋ねます。アーカイブはサーバーのコピーを残します。サーバーから削除はサーバーのコピーだけを削除します。アーカイブして削除（Premium）は両方を行い、先に各コピーを確認します。</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. ストレージを追加で購入する</h3>
+
+          <p>
+            Microsoft 365 Basic、Personal、Family では、メール用ストレージが 100 GB に増えます。100 GB のメールボックスは Microsoft 365 の試用版には含まれません。価格は国によって異なるので、Microsoft のサイトで確認してください。スマートフォンでもウェブでも古いメールをすべて見られる必要があるなら、これが正しい選択です。ただし、メールボックスが大きくなり続けることは止められません。2 つの考え方は<a href="/ja/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">ローカルでのアーカイブとストレージの追加購入の比較</a>で比べています。
+          </p>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">選択肢</th>
+                  <th class="py-3 pr-4 font-semibold">費用</th>
+                  <th class="py-3 pr-4 font-semibold">その後の古いメール</th>
+                  <th class="py-3 font-semibold">向いている場合</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">整理する</td>
+                  <td class="py-3 pr-4">無料</td>
+                  <td class="py-3 pr-4">削除したものは消える</td>
+                  <td class="py-3">上限を少し超えている、または削除済みアイテムが大きい</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">ローカルにアーカイブしてから削除</td>
+                  <td class="py-3 pr-4">MailVault なら無料（2 ステップ）。ワンステップのアーカイブして削除は Premium</td>
+                  <td class="py-3 pr-4">コンピュータ上にあり、オフラインで読めて検索できる</td>
+                  <td class="py-3">めったに開かない何年分もの古いメール</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 font-medium text-slate-700 dark:text-slate-300">Microsoft 365 を購入する</td>
+                  <td class="py-3 pr-4">サブスクリプション。Microsoft の価格を確認</td>
+                  <td class="py-3 pr-4">オンライン、すべてのデバイスで</td>
+                  <td class="py-3">スマートフォンとウェブで古いメールをすべて見る必要がある</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">どれを選ぶべきか</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>今まさにメールが戻されている。</strong>まず削除済みアイテムを空にします。すぐに済み、削除されるのはすでに削除したメールだけです。それから今週のうちに、より長く効く対処を計画します。</li>
+            <li><strong>メールボックスが古いメールでいっぱい。</strong>ローカルにアーカイブしてから、Outlook.com から削除します。何も失わずに多くの容量を空けられます。</li>
+            <li><strong>クラウドストレージがいっぱいで、その大部分が OneDrive。</strong>メールを削除しても少ししか効きません。OneDrive のファイルを移動するか削除し、OneDrive のごみ箱を空にするか、ストレージを購入します。大きな添付ファイル付きの古いメールを削除するのも効果があります。</li>
+            <li><strong>職場や学校のアカウント。</strong>まず IT 管理者に相談してください。組織があなたのためのアーカイブメールボックスを用意している場合があります。会社の規則で認められていないなら、仕事のメールを個人のツールにコピーしないでください。</li>
+            <li><strong>すべてをオンラインに置いておく必要がある。</strong>ストレージを購入し、請求が続くことを受け入れてください。</li>
+          </ul>
+
+          <p>
+            アーカイブを選ぶなら、まずコピーを作り、削除はその後です。<a href="/ja/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com のメールを Mac にバックアップする</a>ガイドでそのコピーの作り方を比べ、<a href="/ja/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">古いメールを失わずにメールの容量を空ける</a>ガイドで、どのプロバイダーにも通じる同じ考え方を説明しています。
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Outlook のデスクトップアプリについての注意</h2>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>従来の Outlook for Windows</strong> には<strong>ファイル</strong> &gt; <strong>ツール</strong> &gt; <strong>メールボックスの整理</strong>があります。メールボックスとそのフォルダのサイズを表示し、指定した日付より古いアイテムや指定したサイズより大きいアイテムを見つけ、削除済みアイテムを空にします。</li>
+            <li><strong>.pst や .ost のファイル</strong>は PC 上にあります。Microsoft はこれらのファイルの既定のサイズ上限を 50 GB としています。この上限は、Outlook.com や職場のメールボックスの上限とは別のものです。</li>
+          </ul>
+
+          <figure class="my-6">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="サイドバーで「保管庫」のフィルターを選んだ MailVault。受信トレイのヘッダーには、フォルダのメールのうち何件が保存されているかを示す「保管庫に」の件数があり、各メッセージの行には保管庫のアイコンがあります。一覧の下の凡例が「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」を説明しています。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">「保管庫」のフィルターには、コンピュータに保存されているメールが表示されます。「保管庫に」で始まるヘッダーの行で、このフォルダのどれだけがそこにコピーされているかがわかります。隅にある進行状況のカードは別のジョブのものです。</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h2>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com の無料のストレージはどれくらいですか？</h3>
+            <p>無料の Outlook.com のアカウントには、メール用の 15 GB と、Microsoft のクラウドストレージ 5 GB があります。クラウドストレージは、OneDrive のファイルと写真、Outlook.com の添付ファイル、Microsoft 365 のアプリで共有されます。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook のストレージがいっぱいでもメールを受信できますか？</h3>
+            <p>いいえ。Outlook.com のメールボックスか Microsoft のクラウドストレージがいっぱいになると、メールを送受信できません。あなた宛てのメッセージは送信者に戻され、あなたが容量を空けた後で、送信者がもう一度送る必要があります。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">空けた容量が Outlook に表示されるまでどのくらいかかりますか？</h3>
+            <p>Microsoft によると、変更が反映されるまで最大 24 時間かかることがあります。削除済みアイテムにあるメールはフォルダを空にするまで数えられるので、先に空にしてください。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Microsoft 365 を購入すれば、いっぱいの Outlook のメールボックスは解決しますか？</h3>
+            <p>Microsoft 365 Basic、Personal、Family には 100 GB のメール用ストレージが含まれるので、当面は上限が問題でなくなります。100 GB のメールボックスは Microsoft 365 の試用期間中は使えません。メールが増え続ければ、大きな上限もいっぱいになることがあります。</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com から削除した後もメールは安全ですか？</h3>
+            <p>どこか別の場所にコピーがある場合に限ります。削除済みアイテムのアイテムは 30 日後に削除されます。何かを削除する前に、まず古いメールのコピーをコンピュータに保存し、コピーが開けることを確認してください。</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">次にすること</h2>
+
+          <p>
+            今日のうちに 5 分でできる確認を済ませて、届いたメールが送信者に戻されないようにします。それから古いメールをどうするかを決めます。オンラインのストレージに追加で支払わずに残したいなら、MailVault が自分のコンピュータにプレーンな <code>.eml</code> ファイルとしてコピーを残し、無料のアプリで 2 つのステップでアーカイブしてサーバーから削除できます。MailVault のアカウントはなく、メールが MailVault のサーバーを通ることもありません。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">古い Outlook のメールをコンピュータに残す</p>
+            <p class="text-sm mb-4">macOS・Windows・Linux 向けに無料。ソースコードは GitHub で公開。Premium ではワンステップのアーカイブして削除とスケジュールバックアップが加わります。</p>
+            <a href="/ja/get-started.html" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault を無料でダウンロード
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            出典：Microsoft サポート、<a href="https://support.microsoft.com/en-us/outlook/storage-limits-in-outlook-com" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Outlook.com のストレージの上限</a>、<a href="https://support.microsoft.com/en-us/outlook/check-email-and-cloud-storage" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">メールとクラウドストレージを確認する</a>、<a href="https://support.microsoft.com/en-us/outlook/mailbox-storage-limits-in-outlook" class="text-primary-500 hover:text-primary-600 underline" rel="noopener" target="_blank">Outlook のメールボックスのストレージの上限</a>（職場や学校のアカウント）。最終確認：2026年10月。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>メールを読む。メールを残す。</p>
+</div>
+<nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/mentioned-in.html">掲載情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">コミュニティ ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">チームに連絡 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

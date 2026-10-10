@@ -102,11 +102,11 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
       {unavailable ? <p className="text-sm text-mail-text-muted py-3" role="status">{t('settings.dataUsage.unavailable')}</p> : <div className="grid grid-cols-2 gap-4 pt-3 border-t border-mail-border" aria-busy={loading}>
         <div>
           <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowDown size={12} className="text-mail-accent" /> {t('settings.dataUsage.account.downloaded')}</div>
-          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '—' : formatBytes(periodStats.down)}</div>
+          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '-' : formatBytes(periodStats.down)}</div>
         </div>
         <div>
           <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowUp size={12} className="text-mail-text-muted" /> {t('settings.dataUsage.account.uploaded')}</div>
-          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '—' : formatBytes(periodStats.up)}</div>
+          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '-' : formatBytes(periodStats.up)}</div>
         </div>
       </div>}
 

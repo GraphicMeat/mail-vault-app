@@ -57,7 +57,7 @@ function ToolbarDivider() {
   return <div className="w-px h-5 bg-mail-border mx-0.5" />;
 }
 
-function Toolbar({ editor, onLink, onImage }) {
+function Toolbar({ editor, onLink, onImage, sticky = false }) {
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const setSpellcheckEnabled = useSettingsStore((s) => s.setSpellcheckEnabled);
@@ -87,7 +87,8 @@ function Toolbar({ editor, onLink, onImage }) {
   if (!editor) return null;
 
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1 border-b border-mail-border bg-mail-surface/50 flex-wrap">
+    <div data-testid="editor-toolbar"
+      className={`flex items-center gap-0.5 px-2 py-1 border-b border-mail-border flex-wrap ${sticky ? 'sticky top-0 z-10 bg-mail-surface' : 'bg-mail-surface/50'}`}>
       <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title={t('editor.boldCtrlB')}>
         <Bold size={S} />
       </ToolbarButton>
@@ -387,7 +388,7 @@ export function padEmptyLines(html) {
  * handles on a picture, and after a resize offers the file at 3x its display
  * size (see ImageScaleDialog).
  */
-export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles, placeCaret, imageTools = false }) {
+export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles, placeCaret, imageTools = false, autoGrow = false }) {
   const t = useT();
   const [scaleOfferState, setScaleOffer] = useState(null);
   const pictures = useRef([]);
@@ -639,9 +640,9 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     // spellCheck is inherited by the contenteditable below — ProseMirror never
     // sets the attribute itself, so nothing here overrides it.
     <div ref={wrap} data-file-drag={fileDrag || undefined}
-      className={`flex flex-col flex-1 min-h-0 overflow-hidden bg-mail-bg ${fileDrag ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
+      className={`flex flex-col bg-mail-bg ${autoGrow ? 'flex-1' : 'flex-1 min-h-0 overflow-hidden'} ${fileDrag ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
       spellCheck={spellcheckEnabled}>
-      <Toolbar editor={editor} onLink={openLinkEditor} onImage={imageTools ? () => fileInput.current?.click() : undefined} />
+      <Toolbar sticky={autoGrow} editor={editor} onLink={openLinkEditor} onImage={imageTools ? () => fileInput.current?.click() : undefined} />
       {imageTools && (
         <input ref={fileInput} type="file" accept="image/*" multiple className="hidden" tabIndex={-1}
           data-testid="editor-image-input" aria-hidden="true"
@@ -652,7 +653,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
           }} />
       )}
       <ImageScaleDialog offer={scaleOfferState} onScale={applyScale} onKeep={() => setScaleOffer(null)} />
-      <div className="flex-1 overflow-y-auto" onMouseOver={onMouseOver} onMouseOut={onMouseOut}>
+      <div className={autoGrow ? 'flex-1' : 'flex-1 overflow-y-auto'} onMouseOver={onMouseOver} onMouseOut={onMouseOut}>
         <EditorContent editor={editor} className="h-full" />
       </div>
       {editor && <SlashMenu editor={editor} slash={slash} keysRef={slashKeys} />}

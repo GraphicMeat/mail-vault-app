@@ -49,8 +49,14 @@ fn draft_of(params: &Value) -> Result<auto_tags::RuleDraft, String> {
     serde_json::from_value(params.get("rule").cloned().unwrap_or(Value::Null)).map_err(|e| format!("rule: {e}"))
 }
 
-fn provider_of(params: &Value) -> Result<Provider, String> {
-    serde_json::from_value(params.get("provider").cloned().unwrap_or(Value::Null)).map_err(|e| format!("provider: {e}"))
+/// The request's provider, or the on-device default when it names none: a
+/// rule without "Allow a remote AI provider" previews and backfills on the
+/// same model the worker will run it on.
+async fn provider_of(state: &DaemonState, params: &Value) -> Result<Provider, String> {
+    match params.get("provider") {
+        None | Some(Value::Null) => on_device(state).await,
+        Some(v) => serde_json::from_value(v.clone()).map_err(|e| format!("provider: {e}")),
+    }
 }
 
 pub(crate) fn now_secs() -> i64 {
@@ -85,7 +91,9 @@ fn undo_backfill(conn: &app_db::Connection, batch_id: &str) -> Result<Value, Str
     };
     let unassigned = mailvault_core::app_db::tags::unassign(conn, &tag_id, &targets)?;
     auto_tags::delete_backfill_batch(conn, batch_id)?;
-    Ok(json!({ "unassigned": unassigned }))
+    // The tag, so the app can drop it from the rows it has on screen: a
+    // target here is only a `msg_key`, which the app cannot map to a row.
+    Ok(json!({ "unassigned": unassigned, "tagId": tag_id }))
 }
 
 /// The one place a rule's instruction is ever run against a model — preview,
@@ -114,14 +122,47 @@ pub(crate) async fn evaluate(
     auto_tags::parse_verdict(&text)
 }
 
-/// The provider the STANDING worker evaluates `rule` through: whatever JSON
-/// the rule itself carries, or on-device (`LocalGguf`) — the privacy
-/// default — when that JSON is absent or unrecognized. `.preview`/
-/// `.backfill` never call this; a caller of those RPCs is present to hand a
-/// provider over each time (`provider_of`), which is what lets a rule be
-/// tried against a different provider before it is ever saved.
-pub(crate) fn provider_from_rule(rule: &auto_tags::Rule) -> Provider {
-    serde_json::from_value(rule.provider.clone()).unwrap_or(Provider::LocalGguf)
+/// Event the daemon sends when it assigns a tag on its own (the standing
+/// worker, a backfill): `{tagId, items: [{accountId, mailbox, uid}]}`, the
+/// identity the app's tag render cache keys rows by.
+pub(crate) const TAGS_ASSIGNED: &str = "tags-assigned";
+
+/// Tell the app which rows now carry `tag_id`, so a row already on screen
+/// shows the chip without its folder being reopened.
+pub(crate) fn emit_assigned(state: &DaemonState, tag_id: &str, refs: &[&MessageRef]) {
+    if refs.is_empty() {
+        return;
+    }
+    let items: Vec<Value> =
+        refs.iter().map(|r| json!({"accountId": r.account_id, "mailbox": r.mailbox, "uid": r.uid})).collect();
+    state.events.emit(TAGS_ASSIGNED, json!({"tagId": tag_id, "items": items}));
+}
+
+/// The on-device provider a job without one of its own uses: Apple's model,
+/// else the downloaded GGUF (`mailvault_core::ai::on_device_provider`).
+pub(crate) fn on_device_from(statuses: &[mailvault_core::ai::ProviderStatus]) -> Result<Provider, String> {
+    match mailvault_core::ai::on_device_provider(statuses) {
+        Some("appleFm") => Ok(Provider::AppleFm),
+        Some(_) => Ok(Provider::LocalGguf),
+        None => Err(format!(
+            "{}: no on-device AI is available (Apple Intelligence is off and no model is downloaded)",
+            mailvault_core::ai::NO_ON_DEVICE_MODEL
+        )),
+    }
+}
+
+/// What is available on this computer right now. Asking Apple's model spawns
+/// its helper, so a caller resolves once per batch, not per message.
+pub(crate) async fn on_device(state: &DaemonState) -> Result<Provider, String> {
+    on_device_from(&llm::providers_status(&state.llm, None).await)
+}
+
+/// The provider a saved rule names, or `None` for a rule without "Allow a
+/// remote AI provider" (saved with `provider: null`), which runs on whatever
+/// on-device model this computer has (`on_device`). An unrecognized value is
+/// read the same way: on-device is the privacy default.
+pub(crate) fn provider_from_rule(rule: &auto_tags::Rule) -> Option<Provider> {
+    serde_json::from_value(rule.provider.clone()).ok()
 }
 
 /// Whether a verdict — or the refusal `evaluate` produced instead of one —
@@ -220,7 +261,7 @@ async fn rule_for_eval(state: &Arc<DaemonState>, params: &Value) -> Result<auto_
 /// what the app shows before "enable" is ever pressed.
 async fn run_preview(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     let account_id = arg(params, "accountId")?;
-    let provider = provider_of(params)?;
+    let provider = provider_of(state, params).await?;
     let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(200) as usize;
     let rule = rule_for_eval(state, params).await?;
     // Said once, up front, rather than as one refusal per candidate.
@@ -266,7 +307,7 @@ async fn run_preview(state: &Arc<DaemonState>, params: &Value) -> Result<Value, 
 /// `evaluate` above, so history is only ever touched by someone pressing this.
 async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     let account_id = arg(params, "accountId")?;
-    let provider = provider_of(params)?;
+    let provider = provider_of(state, params).await?;
     let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(200) as usize;
     let rule_id = arg(params, "ruleId")?;
 
@@ -288,6 +329,7 @@ async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value,
     let mut processed = 0usize;
     let mut matched = 0usize;
     let mut targets: Vec<Target> = Vec::new();
+    let mut refs: Vec<MessageRef> = Vec::new();
 
     for c in candidates {
         processed += 1;
@@ -296,6 +338,7 @@ async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value,
             if should_assign(&verdict, rule.min_confidence) {
                 matched += 1;
                 targets.push(c.msg_ref.target());
+                refs.push(c.msg_ref);
             }
         }
         // Every 10 messages and on the last one — frequent enough to feel
@@ -312,18 +355,22 @@ async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value,
     let rule_id_for_batch = rule.id.clone();
     let tag_id = rule.tag_id.clone();
     let batch_for_write = batch_id.clone();
-    let assigned = blocking(move || {
+    let newly = blocking(move || {
         app_db::with(&app_dir, |conn| {
             // Only what this batch NEWLY tagged is recorded, so undoing it
             // can never strip a tag a message already carried going in.
             let newly = exclude_already_tagged(conn, &tag_id, targets)?;
             mailvault_core::app_db::tags::assign(conn, &tag_id, &newly)?;
             auto_tags::record_backfill(conn, &batch_for_write, &rule_id_for_batch, &tag_id, &newly)?;
-            Ok(newly.len())
+            Ok(newly)
         })
     })
     .await
     .and_then(|r| r)?;
+    let assigned = newly.len();
+    let newly: HashSet<(String, String)> = newly.into_iter().map(|t| (t.account_id, t.msg_key)).collect();
+    let newly_refs: Vec<&MessageRef> = refs.iter().filter(|r| newly.contains(&(r.account_id.clone(), r.msg_key()))).collect();
+    emit_assigned(state, &rule.tag_id, &newly_refs);
 
     state.events.emit(
         "auto-tag-backfill-complete",
@@ -609,6 +656,7 @@ mod tests {
 
         let undone = call(&s, "auto_tags.undo_backfill", json!({"batchId": batch_id})).await;
         assert_eq!(undone["unassigned"], 1);
+        assert_eq!(undone["tagId"], json!(tag), "the app drops this tag from the rows it has on screen");
         assert_eq!(tag_count(&s).await, 0, "undo removed exactly what the batch assigned");
 
         // A second undo of the same (now-forgotten) batch is a harmless no-op.
@@ -718,6 +766,65 @@ mod tests {
         let out = call(&s, "auto_tags.backfill", json!({"accountId": "a", "ruleId": rule_id, "provider": provider})).await;
         assert_eq!(out["matched"], 0, "an unparseable reply is a refusal, never a guessed match");
         assert_eq!(out["assigned"], 0);
+    }
+
+    #[tokio::test]
+    async fn backfill_tells_the_app_which_rows_it_newly_tagged() {
+        let s = st();
+        seed_header(&s, "a", "INBOX", 4, "Your receipt", "billing@shop.example", true);
+        let tag = tag_named(&s, "Receipts").await;
+        let mut rule = rule_json(&tag, true);
+        rule["minConfidence"] = json!(0.5);
+        let created = call(&s, "auto_tags.create", json!({"rule": rule})).await;
+        let rule_id = created["id"].as_str().unwrap().to_string();
+        let port = mock_endpoint_once("MATCH: yes\nCONFIDENCE: 0.9");
+        let provider = json!({"type": "endpoint", "url": format!("http://127.0.0.1:{port}"), "model": "m"});
+        let mut events = s.events.subscribe();
+
+        call(&s, "auto_tags.backfill", json!({"accountId": "a", "ruleId": rule_id, "provider": provider})).await;
+
+        let mut sent = Vec::new();
+        while let Ok(line) = events.try_recv() {
+            if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                if name == TAGS_ASSIGNED {
+                    sent.push(payload);
+                }
+            }
+        }
+        assert_eq!(sent, vec![json!({"tagId": tag, "items": [{"accountId": "a", "mailbox": "INBOX", "uid": 4}]})]);
+    }
+
+    // ── A rule without a provider of its own runs on-device ──────────
+
+    fn statuses(apple: bool, gguf: bool) -> Vec<mailvault_core::ai::ProviderStatus> {
+        vec![
+            mailvault_core::ai::local_gguf_status(gguf),
+            mailvault_core::ai::endpoint_status(None),
+            mailvault_core::ai::ProviderStatus { provider: "appleFm".into(), available: apple, reason: String::new() },
+        ]
+    }
+
+    /// The 2026-10-08 footage: Apple Intelligence on, no GGUF downloaded, and a
+    /// plain rule (no remote toggle) that never matched because it ran on the
+    /// missing GGUF.
+    #[test]
+    fn a_rule_without_a_provider_runs_on_apple_intelligence_when_that_is_what_the_mac_has() {
+        assert_eq!(on_device_from(&statuses(true, false)), Ok(Provider::AppleFm));
+        assert_eq!(on_device_from(&statuses(false, true)), Ok(Provider::LocalGguf));
+        let none = on_device_from(&statuses(false, false)).unwrap_err();
+        assert!(none.starts_with(mailvault_core::ai::NO_ON_DEVICE_MODEL), "{none}");
+    }
+
+    /// A test build finds no `mailvault-fm-helper` (it is built only for the
+    /// app bundle) and a fresh data dir has no GGUF, so nothing is available.
+    #[tokio::test]
+    async fn preview_without_a_provider_and_no_on_device_model_says_so() {
+        let s = st();
+        seed_header(&s, "a", "INBOX", 1, "Your receipt", "billing@shop.example", true);
+        let tag = tag_named(&s, "Receipts").await;
+        let err = call_err(&s, "auto_tags.preview", json!({"accountId": "a", "provider": null, "rule": rule_json(&tag, false)})).await;
+        assert!(err.starts_with(mailvault_core::ai::NO_ON_DEVICE_MODEL), "{err}");
+        assert_eq!(tag_count(&s).await, 0);
     }
 
     #[tokio::test]

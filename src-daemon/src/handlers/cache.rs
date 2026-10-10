@@ -80,13 +80,18 @@ fn without_preview_text(data: String) -> String {
     serde_json::to_string(&entry).unwrap_or(data)
 }
 
-/// Whether a `save_email_cache` payload takes any uid off the list.
-fn removes_uids(data: &str) -> bool {
-    data.contains("\"removedUids\"")
-        && serde_json::from_str::<Value>(data)
-            .ok()
-            .and_then(|v| v.get("removedUids")?.as_array().map(|a| !a.is_empty()))
-            .unwrap_or(false)
+/// The uids a `save_email_cache` payload takes off the list.
+fn removed_uids(data: &str) -> Vec<u32> {
+    if !data.contains("\"removedUids\"") {
+        return Vec::new();
+    }
+    let Ok(v) = serde_json::from_str::<Value>(data) else { return Vec::new() };
+    v.get("removedUids")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|u| u.as_u64().or_else(|| u.as_str()?.parse().ok()).and_then(|u| u32::try_from(u).ok()))
+        .collect()
 }
 
 /// The account's cached folder list as `load_mailbox_cache` answers it, for
@@ -120,8 +125,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     })?;
                     // The search index keeps an evicted message's row while
                     // this list holds its uid: reconcile the folder once it does not.
-                    if removes_uids(&data) {
+                    // The app's delete, move or re-key took them off the server
+                    // folder, so Cleanup stops listing them too.
+                    let removed = removed_uids(&data);
+                    if !removed.is_empty() {
                         crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
+                        crate::classification::forget_at(&state.app_dir, &account_id, &mailbox, &removed);
                     }
                     Ok(Value::Null)
                 })
@@ -389,6 +398,20 @@ mod tests {
             rx.try_recv().unwrap(),
             mailvault_core::search_index::plan::Signal::Nudge { account_id: "a".into(), vault_dir: "Projects_2026".into() }
         );
+    }
+
+    /// The app's own delete, move or re-key writes `removedUids`: those
+    /// messages left this server folder, so Cleanup stops listing them.
+    #[tokio::test]
+    async fn saving_headers_that_remove_uids_forgets_their_classifications() {
+        let (_t, s) = st(true);
+        crate::classification::seed_for_test(&s.app_dir, "a", &[("<1>", "Projects/2026", 1), ("<2>", "Projects/2026", 2), ("<3>", "INBOX", 3)]);
+        let data = json!({"emails": [{"uid": 1}, {"uid": 2}]}).to_string();
+        call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "Projects/2026", "data": data})).await;
+        assert_eq!(crate::classification::keys_for_test(&s.app_dir, "a").len(), 3, "a save that removes nothing forgets nothing");
+        let data = json!({"emails": [], "removedUids": [2, "3"]}).to_string();
+        call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "Projects/2026", "data": data})).await;
+        assert_eq!(crate::classification::keys_for_test(&s.app_dir, "a"), vec!["<1>".to_string(), "<3>".to_string()]);
     }
 
     #[tokio::test]

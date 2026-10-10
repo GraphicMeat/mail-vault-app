@@ -346,7 +346,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       <div data-testid="settings-auto-cleanup" className="settings-section relative overflow-hidden">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Clock size={18} className="text-mail-accent-text" />
-          Auto-Cleanup
+          {t('settings.storage.autoCleanupHeading')}
           {!isPaidUser && (
             <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
               {t('common.premium')}
@@ -716,8 +716,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Empties your vault on this computer and forgets every account and setting.
-          Mail still on the server is untouched; anything the server no longer has is gone for good.
+          {t('settings.storage.emptiesVaultExplanation')}
         </p>
         <Button variant="dangerTint"
           onClick={() => setShowClearConfirm(true)}

@@ -185,7 +185,7 @@ export function ReadingPreview({ setting, value, label }) {
     content = <div className="preview-signatures">{['question', 'followup'].map((text, index) => {
       const visible = value === 'always-show' || (value === 'smart' && index === 0);
       return <div className="preview-reply" key={text}><div><strong>Nell Okafor</strong><span>{formatTime(index ? SAMPLE_DATE : FIRST_REPLY)}</span></div><p>{t(`settings.preview.${text}`)}</p>
-        {visible ? <div className="preview-signature">Nell Okafor<br />Prime Cut Studio</div> : value !== 'always-hide' && <span className="preview-signature-toggle">— {t('util.iframeQuoteFolding.showSignature')}</span>}
+        {visible ? <div className="preview-signature">Nell Okafor<br />Prime Cut Studio</div> : value !== 'always-hide' && <span className="preview-signature-toggle">▸ {t('util.iframeQuoteFolding.showSignature')}</span>}
       </div>;
     })}</div>;
   } else if (setting === 'emailRowHighlight') {

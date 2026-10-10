@@ -5,7 +5,7 @@
  */
 
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
-import { t } from '../i18n/index.js';
+import { t, getLocale } from '../i18n/index.js';
 
 // Known legitimate URL shorteners — exempt from YELLOW alerts
 const SHORTENER_ALLOWLIST = new Set([
@@ -74,8 +74,8 @@ export function isScannableHref(href) {
 /**
  * The verdict on one link: `level` 'red' (a script/data scheme, or text that
  * shows one site and goes to another), 'yellow' (a redirect through a tracker
- * to a different site) or null, with the English `reason` the in-app tooltip
- * uses. Shared by the reader's scan and the social card's links list.
+ * to a different site) or null, with the `reason` (in the UI language) the
+ * in-app tooltip uses. Shared by the reader's scan and the social card's links list.
  */
 export function classifyLink(href, text) {
   let level = null;
@@ -86,12 +86,12 @@ export function classifyLink(href, text) {
   // RED: javascript: or data: schemes
   if (href.startsWith('javascript:') || href.startsWith('data:')) {
     level = 'red';
-    reason = `Link uses dangerous ${href.split(':')[0]}: scheme`;
+    reason = t('linkSafety.reason.dangerousScheme', { scheme: href.split(':')[0] });
   }
   // RED: Text looks like URL but domain doesn't match href
   else if (textDomain && actualDomain && textDomain !== actualDomain) {
     level = 'red';
-    reason = `Link text shows ${textDomain} but goes to ${actualDomain}`;
+    reason = t('linkSafety.reason.textMismatch', { textDomain, actualDomain });
   }
   // YELLOW: Redirect/tracking params in URL (skip shortener allowlist)
   else if (actualDomain && !SHORTENER_ALLOWLIST.has(actualDomain) && REDIRECT_PARAMS.test(href)) {
@@ -102,7 +102,7 @@ export function classifyLink(href, text) {
         const redirectDomain = extractDomain(redirectUrl);
         if (redirectDomain && redirectDomain !== actualDomain) {
           level = 'yellow';
-          reason = `Link redirects through ${actualDomain} to ${redirectDomain}`;
+          reason = t('linkSafety.reason.redirect', { actualDomain, redirectDomain });
         }
       } catch { /* ignore decode errors */ }
     }
@@ -156,7 +156,8 @@ export function scanEmailLinks(bodyHtml, key) {
     return { alerts: [], modifiedBodyHtml: bodyHtml, indicatorStyle: '', maxAlertLevel: null };
   }
 
-  const stamp = key ? bodyStamp(bodyHtml) : null;
+  // The reasons are written in the UI language, so a language change is a different scan.
+  const stamp = key ? `${bodyStamp(bodyHtml)}:${getLocale()}` : null;
   if (stamp) {
     const hit = _scanCache.get(key);
     if (hit && hit.stamp === stamp) return hit.result;

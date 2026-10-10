@@ -6,7 +6,7 @@
 // Atoms — single-purpose, no composition of other catalog pieces.
 export { Button } from './Button';
 export { ToggleSwitch } from './ToggleSwitch';
-export { XLogo, LinkedInLogo } from './BrandGlyphs';
+export { XLogo, LinkedInLogo, DiscordLogo } from './BrandGlyphs';
 
 // Molecules — a label/control pair or small composite built from atoms.
 export { SettingRow } from './SettingRow';

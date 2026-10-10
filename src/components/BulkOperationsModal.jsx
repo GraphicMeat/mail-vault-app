@@ -602,7 +602,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
                     { type: 'last_90', label: t('bulk.ops.last90Days') },
                     { type: 'this_year', label: t('bulk.ops.year2') },
                     { type: 'last_year', label: t('bulk.ops.lastYear') },
-                    { type: 'all', label: 'All' },
+                    { type: 'all', label: t('bulk.ops.all') },
                   ].map(preset => {
                     const isActive = selectedRange?.type === preset.type;
                     return (

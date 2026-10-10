@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/zh/guides/outlook-hotmail-mailbox-full.html">
   <meta property="og:title" content="Outlook.com / Hotmail 邮箱满了？如何归档旧邮件 — MailVault">
   <meta property="og:description" content="Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Outlook.com / Hotmail 邮箱满了？如何归档旧邮件 — MailVault">
   <meta name="twitter:description" content="Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -38,7 +38,7 @@
   "description": "Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。",
   "url": "https://mailvaultapp.com/zh/guides/outlook-hotmail-mailbox-full.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-08",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -66,7 +66,7 @@
       "name": "Outlook.com 提供多少免费存储？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "15 GB，由邮件和 OneDrive 共用。你可以在 设置 → 常规 → 存储 里看到各自的占用。"
+        "text": "15 GB 邮件存储空间，外加由 OneDrive、Outlook.com 附件和 Microsoft 365 应用共享的 5 GB 云存储空间。你可以在 设置 → 帐户 → 存储 中查看占用明细。"
       }
     },
     {
@@ -74,7 +74,7 @@
       "name": "在 Outlook.com 清空「已删除邮件」会立刻腾出空间吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "会。与某些要等固定天数的服务商不同，在 Outlook.com 手动清空「已删除邮件」和「垃圾邮件」文件夹，会立刻释放那部分存储。"
+        "text": "会，但有延迟。与某些要等待固定天数的服务商不同，一旦你在 Outlook.com 中手动清空「已删除邮件」和「垃圾邮件」文件夹，这些项目就不再占用你的配额。Microsoft 表示，显示的总量最长可能需要 24 小时才会更新。"
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "不买 Microsoft 365，我能归档 Outlook.com 的邮件吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "能。Outlook.com 支持标准 IMAP 访问，所以任何 IMAP 归档工具，包括 MailVault 的免费版，都能在没有 Microsoft 365 订阅的情况下把你的邮件下载到本地。"
+        "text": "可以。MailVault 的免费版无需任何 Microsoft 365 订阅，就能把你的 Outlook.com 或 Hotmail 邮件下载到本地。"
       }
     }
   ]
@@ -151,7 +151,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/outlook-hotmail-mailbox-full.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/outlook-hotmail-mailbox-full.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
@@ -219,19 +219,19 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            Outlook.com（也就是当年 Hotmail 的现名）给免费账户 15 GB 存储，与 OneDrive 共用。装满之后，新邮件会退信，你会在网页端以及 Outlook 桌面或手机应用里看到存储警告。Microsoft 自己的解法是通过 Microsoft 365 订阅卖给你更多存储 &mdash; 但如果你更想真正解决问题，而不是无限期地租下去，下面是完整的图景。
+            Outlook.com（过去叫 Hotmail 的服务如今的名字）为免费账户提供 15 GB 邮件存储空间，外加由 OneDrive、Outlook.com 附件和 Microsoft 365 应用共享的 5 GB 云存储空间。只要其中一项满了，你就无法再收发邮件，发来的邮件会被退回，你还会在网页界面以及 Outlook 桌面或移动应用中看到存储警告。Microsoft 自己的解决办法是通过 Microsoft 365 订阅卖给你更多存储空间 &mdash; 但如果你宁愿真正解决问题，而不是无限期地租用更多空间，下面是完整的情况。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 先看看存储到底花在哪了</h3>
 
           <p>
-            在 Outlook.com 里，打开 设置 &rarr; 常规 &rarr; 存储，可以看到邮件和 OneDrive 各占多少。如果 OneDrive 是大头，清邮件帮助不大 &mdash; 你得单独处理 OneDrive 文件。如果邮件是大头，那原因几乎总是附件，而不是邮件正文本身。
+            在 Outlook.com 中，前往 设置 &rarr; 帐户 &rarr; 存储，查看邮件和云存储空间的占用明细。如果占用更多的是 OneDrive，清理邮件帮不了多少 &mdash; 你需要单独处理 OneDrive 文件。如果大部分是邮件，原因几乎总是附件，而不是邮件本身的文字。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 清空「已删除邮件」和「垃圾邮件」</h3>
 
           <p>
-            和多数服务商一样，Outlook.com 会把删除的邮件留在「已删除邮件」文件夹里，直到你清空为止，在那之前它们仍然占用你的配额。在文件夹列表里右键点击「已删除邮件」和「垃圾邮件」，选择「清空文件夹」，就能立刻拿回这部分空间。
+            和大多数服务商一样，Outlook.com 会把删除的邮件保留在「已删除邮件」文件夹中，直到你清空它为止，在那之前它们仍然占用你的配额。在文件夹列表中右键点击「已删除邮件」和「垃圾邮件」，选择「清空文件夹」，即可收回这部分空间。Microsoft 表示，新的总量最长可能需要 24 小时才会显示。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 按大小排序，清掉附件很重的旧邮件</h3>
@@ -253,7 +253,7 @@
           </p>
 
           <p>
-            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free, open-source option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's OAuth sign-in (no password fiddling), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
+            Outlook.com 和 Hotmail 都支持 IMAP，所以任何基于 IMAP 的归档工具都能做到这一点。MailVault 是一个适用于 macOS、Windows 和 Linux 的免费选择：用 Microsoft 的登录方式连接你的 Outlook.com 或 Hotmail 账户（不用折腾密码；对于个人 Outlook.com 账户，MailVault 使用 Microsoft Graph），选择你需要的文件夹，MailVault 就会把每封邮件下载为你磁盘上一个单独的 <code>.eml</code> 文件，按标准的 Maildir 结构整理。核验过归档之后 &mdash; 打开几封邮件，检查附件，搜索一个你记得的内容 &mdash; 你就可以放心地从 Outlook.com 删除原件，收回你的存储配额。
           </p>
 
           <p>
@@ -277,12 +277,12 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com 提供多少免费存储？</p>
-            <p>15 GB，由邮件和 OneDrive 共用。你可以在 设置 → 常规 → 存储 里看到各自的占用。</p>
+            <p>15 GB 邮件存储空间，外加由 OneDrive、Outlook.com 附件和 Microsoft 365 应用共享的 5 GB 云存储空间。你可以在 设置 → 帐户 → 存储 中查看占用明细。</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">在 Outlook.com 清空「已删除邮件」会立刻腾出空间吗？</p>
-            <p>会。与某些要等固定天数的服务商不同，在 Outlook.com 手动清空「已删除邮件」和「垃圾邮件」文件夹，会立刻释放那部分存储。</p>
+            <p>会，但有延迟。与某些要等待固定天数的服务商不同，一旦你在 Outlook.com 中手动清空「已删除邮件」和「垃圾邮件」文件夹，这些项目就不再占用你的配额。Microsoft 表示，显示的总量最长可能需要 24 小时才会更新。</p>
           </div>
 
           <div class="pt-2">
@@ -292,7 +292,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">不买 Microsoft 365，我能归档 Outlook.com 的邮件吗？</p>
-            <p>能。Outlook.com 支持标准 IMAP 访问，所以任何 IMAP 归档工具，包括 MailVault 的免费版，都能在没有 Microsoft 365 订阅的情况下把你的邮件下载到本地。</p>
+            <p>可以。MailVault 的免费版无需任何 Microsoft 365 订阅，就能把你的 Outlook.com 或 Hotmail 邮件下载到本地。</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
@@ -312,7 +312,7 @@
 <div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
 <p>阅读你的邮件。保留你的邮件。</p>
 </div>
-<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">
@@ -326,6 +326,6 @@
 
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
-<script defer src="/assets/english-site.js?v=20261005-noph"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
 </body>
 </html>

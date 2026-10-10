@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮件分析：看看谁在塞满你的收件箱 - MailVault 博客</title>
+  <meta name="description" content="谁给你发的邮件最多，邮件又在什么时候堆积？MailVault 邮件分析根据你电脑上的邮件头回答这两个问题。如何解读并据此行动。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/email-insights-who-fills-your-inbox.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/email-insights-who-fills-your-inbox.html">
+  <meta property="og:title" content="MailVault 的邮件分析：谁在塞满你的收件箱，又是在什么时候">
+  <meta property="og:description" content="谁给你发的邮件最多，邮件又在什么时候堆积？MailVault 邮件分析根据你电脑上的邮件头回答这两个问题。如何解读并据此行动。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault 的邮件分析：谁在塞满你的收件箱，又是在什么时候">
+  <meta name="twitter:description" content="谁给你发的邮件最多，邮件又在什么时候堆积？MailVault 邮件分析根据你电脑上的邮件头回答这两个问题。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailVault 的邮件分析：谁在塞满你的收件箱，又是在什么时候",
+  "description": "谁给你发的邮件最多，邮件又在什么时候堆积？MailVault 邮件分析根据你电脑上的邮件头回答这两个问题。如何解读并据此行动。",
+  "url": "https://mailvaultapp.com/zh/blog/email-insights-who-fills-your-inbox.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailVault 邮件分析免费吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "免费。邮件分析和 Explorer 是免费应用的一部分，不需要账户，也不需要登录。它们在 MailVault 2.13.0 中推出。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "邮件分析会把我的邮件上传到别处吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不会。邮件分析基于已经保存在你电脑上的邮件头数据生成。图表不读取邮件正文或附件，也不会向任何服务上传任何内容。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "邮件分析能同时显示我所有的账户吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不能。邮件分析一次只查看一个账户。用页面顶部的「账户」菜单切换账户。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "为什么我的数字比网页邮箱里的少？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "邮件分析只统计邮件头在这台电脑上的邮件。打开「数据覆盖详情」，可以按文件夹查看本地保存了多少邮件头，以及服务器上已知有多少封邮件。把邮箱的更多内容保存到本地，然后点击「刷新分析」。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "邮件分析能告诉我哪些发件人占用的存储空间最多吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不能直接告诉你。邮件分析按邮件数量而不是大小给发件人排名。要找大邮件，请使用「附件」视图，或者像 from:name has:attachment 这样的搜索。"
+      }
+    }
+  ]
+}
+  </script>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+      <nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="选择语言"><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/email-insights-who-fills-your-inbox.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/email-insights-who-fills-your-inbox.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/email-insights-who-fills-your-inbox.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/email-insights-who-fills-your-inbox.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/email-insights-who-fills-your-inbox.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/email-insights-who-fills-your-inbox.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/email-insights-who-fills-your-inbox.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/email-insights-who-fills-your-inbox.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/email-insights-who-fills-your-inbox.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary><nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-08" class="text-sm text-primary-500 font-medium">2026 年 10 月 8 日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 的邮件分析：谁在塞满你的收件箱，又是在什么时候</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7 分钟阅读</span></div>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>邮件分析是 MailVault 中把你的邮箱变成可据以行动的洞察的部分：发件人地图、时间线和活动日历，显示谁在给你写信、多久写一次，以及邮件在哪些日子堆积。本文逐一介绍每个视图，演示如何找出给你发信最多的发件人，以及找到之后该做什么。如果你真正的问题是邮箱满了，想今天就腾出空间，请改为从这篇指南开始：<a href="/zh/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">在不丢失旧邮件的前提下腾出邮箱空间</a>。</p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">简短回答</p>
+            <ul class="list-disc pl-6 space-y-1 text-sm">
+              <li>在 MailVault 侧边栏中打开<strong>邮件分析</strong>。它是免费的，不需要注册账户。</li>
+              <li>要查看谁给你发的邮件最多，打开发件人地图，把<strong>排序发件人</strong>设为<strong>邮件数量</strong>。</li>
+              <li>要查看邮件在什么时候堆积，打开<strong>活动</strong>：每天一个方块，越忙的日子颜色越深。</li>
+              <li>一切都基于你电脑上已有的邮件头生成。这些图表不会上传任何内容。</li>
+            </ul>
+          </div>
+
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">邮件分析显示什么</h2>
+          <p>邮件分析从侧边栏全屏打开，有三个标签页。它们顶部共用同一组控件：哪个账户、哪个日期范围（过去 30 天、过去 90 天、过去 12 个月或你选定的日期）、哪个收发方向（收到的邮件、发出的邮件或两者），以及一个<strong>隐藏疑似自动发件人</strong>复选框。最后这一项会排除那些看起来由机器发出邮件的发件人：no-reply 地址，或者带有邮件列表添加的 List-Id、List-Unsubscribe 或批量 Precedence 邮件头的发件人。</p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th class="py-2 pr-4 font-semibold">视图</th>
+                  <th class="py-2 pr-4 font-semibold">绘制的内容</th>
+                  <th class="py-2 font-semibold">回答的问题</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">发件人地图</td>
+                  <td class="py-2 pr-4">你在中间，每个发件人是一个气泡。气泡面积代表邮件数量，距离代表上次联系以来的时间。</td>
+                  <td class="py-2">谁给我写信最多，谁已经沉寂了？</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">时间线</td>
+                  <td class="py-2 pr-4">每个发件人一条轨道，沿时间轴排开。圆圈表示收到的邮件，菱形表示发出的邮件。可按周、按天或逐封邮件查看细节。</td>
+                  <td class="py-2">这个发件人多久写一次信，我有没有回复过？</td>
+                </tr>
+                <tr>
+                  <td class="py-2 pr-4 font-medium">活动</td>
+                  <td class="py-2 pr-4">一个日历网格，每天一个方块，颜色深浅取决于那天收发了多少邮件。</td>
+                  <td class="py-2">邮件在什么时候堆积？</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>每个视图都可以点击。点击一个气泡、轨道上的一个点或某一天，对应的邮件就会在列表中打开，你可以直接阅读，无需离开邮件分析。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">找出给你发信最多的人</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>打开邮件分析，在<strong>账户</strong>中选择账户。邮件分析一次只查看一个账户。</li>
+            <li>把<strong>日期范围</strong>设为<em>过去12个月</em>，把<strong>收发方向</strong>设为<em>收到</em>。</li>
+            <li>在<strong>发件人地图</strong>上，最大的气泡就是给你发信最多的发件人。在地图下方，把<strong>排序发件人</strong>从<em>最近互动</em>（默认）改为<em>邮件数量</em>，就能得到一份带数字的排名列表。</li>
+            <li>点击一个发件人，可以看到收到和发出的数量、上次联系的日期，以及如果被算作自动发件人，原因是什么。</li>
+          </ol>
+          <p>然后做两遍：一遍关闭「隐藏疑似自动发件人」，一遍打开。第一份列表通常是简报、商店和通知。第二份才是你真正有来往的人，往往要短得多。</p>
+
+          <figure class="my-6">
+            <img src="/screenshots/zh/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 中邮件分析的发件人地图。标有两个字母缩写的气泡围绕着一个标为「你」的圆圈。说明文字为：气泡面积表示邮件数量。距离表示上次联系以来的时间，以 2026 年 9 月 24 日为准。地图下方，排序发件人设为「最近互动」。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">测试账户上的发件人地图。气泡越大，发来的邮件越多；气泡越近，表示最近联系过。地图下方的排序控件默认为「最近互动」。</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">哪些发件人占用的空间最多？</h2>
+          <p>这里邮件分析有一个值得了解的局限：它统计的是邮件封数，而不是兆字节。一个发了 900 条简短通知的发件人会占满整张地图，而一位只发过六份大 PDF 的客户几乎看不出来。邮件数量只能粗略代表空间占用，适合用来发现杂乱的邮件，而不适合找出占空间的大邮件。</p>
+          <p>要找占空间的大邮件，就看附件。文字很小；让邮件变大的是文件。在 MailVault 中有两种方法可以找到它们：</p>
+          <ul class="list-disc pl-6 space-y-2">
+            <li>侧边栏中内置的<strong>附件</strong>视图会列出带有文件的邮件。</li>
+            <li>使用搜索运算符，例如 <code>from:name has:attachment</code>，查看某个发件人带文件的邮件。加上 <code>before:2024-01-01</code>，把范围限定在较早的邮件。</li>
+          </ul>
+          <p>把两者结合起来：邮件分析告诉你谁发得多，搜索告诉你其中谁发的邮件大。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">看看邮件在什么时候堆积</h2>
+          <p><strong>活动</strong>标签页能最快地呈现你这一年的邮件全貌。每个方块代表一天；方块越深，邮件越多。规律很快就会显现：每逢周一的一波邮件，一个安静的八月，春天里某个项目把你的收件箱淹没的那一周。点击一个方块，就能看到那天到底收到了什么。</p>
+          <p><strong>时间线</strong>标签页按发件人讲述同样的故事。一份简报显示为一排均匀的圆点，一位忙碌的客户显示为密集的一簇，而一段变成单向的往来，则显示为一条只有圆圈、没有菱形的轨道。在<strong>时间线详细程度</strong>中切换按周、按天和逐封邮件来放大查看。</p>
+
+          <figure class="my-6">
+            <img src="/screenshots/zh/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 中邮件分析的时间线标签页，测试账户上显示 82 条邮件记录，收到 82 封，发出 5 封。总数下方的提示为「基于此设备上可用的邮件」、「此设备上缺少部分邮件，统计可能不完整」，以及「51 次活动使用替代日期」。下方是从 2025 年 9 月 25 日到 2026 年 9 月 24 日、每个发件人一条的轨道，圆点表示收到的邮件。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">时间线，每个发件人一条轨道。注意总数下方的覆盖提示：这个测试账户只有部分邮件在设备上，邮件分析会如实说明，而不是去猜。</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">根据发现采取行动</h2>
+          <p>邮件分析是用来查看的。清理在普通的邮件视图中进行，而 Explorer 能让它变得很快：</p>
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>回到文件夹，把邮件列表从<strong>列表</strong>切换为 <strong>Explorer</strong>。</li>
+            <li>把<strong>浏览方式</strong>设为<strong>发件人</strong>。每位通信对象会成为一组，显示其中有多少封邮件、多少封已在你的保险库中，以及多少封未读。</li>
+            <li>勾选某个发件人那一行的复选框，就能一次选中该分组里的所有邮件。在大邮箱中，如果 Explorer 显示「分组基于已加载的邮件。还有更多邮件可供加载。」，请先加载更多邮件，让分组包含该发件人的全部邮件。</li>
+            <li>选择要做什么：<strong>归档</strong>把它们复制进你的保险库，服务器保持不变（免费）。<strong>从服务器删除</strong>把它们从服务器上移除（免费）。已经在保险库中的邮件会保留副本，但不在保险库中的邮件就永久消失了，所以请先归档。<a href="/zh/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">归档并删除</a>会把每封邮件保存进保险库、检查无误，然后再移除服务器副本（Premium）。</li>
+          </ol>
+
+          <figure class="my-6">
+            <img src="/screenshots/zh/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="MailVault Explorer，浏览方式设为「发件人」。一行摘要显示 20 个分组、82 封邮件、13 封未读。每个发件人一行，带有复选框、姓名、地址和数量，例如 Theo Lomas，6 封邮件，保险库中 6 封，1 封未读。" class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">按发件人浏览的 Explorer。某一行的复选框会选中该文件夹中这个发件人所有已加载的邮件，随时可以归档或删除。</figcaption>
+          </figure>
+
+          <p>对于邮件列表，还有一条更短的路。当某个发件人的邮件带有退订链接时，邮件分析里的发件人详情会显示一个<strong>退订</strong>按钮。MailVault 总会先征求你的同意。如果该列表支持一键退订，且邮件通过了 DKIM 验证，MailVault 会自己发送退订请求；否则它会在浏览器中打开该列表的退订页面，或者生成一封现成的退订邮件。</p>
+          <p>如果你发现同样几类邮件每个月都会卷土重来，<a href="/zh/features/email-cleanup.html" class="text-primary-500 hover:text-primary-600 underline">邮件清理</a>（Premium）可以对简报、促销和其他类别分类，并对每一类选择保留、归档或删除，还可以按账户和文件夹设置基于时间的规则。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">在你的电脑上计算</h2>
+          <p>邮件分析读取的是 MailVault 已经保存在你磁盘上的邮件头：发件人、收件人和日期，来自你打开过的文件夹的缓存邮件头以及你保险库中的邮件。绘制图表时，它不读取邮件正文或附件，也不会向 MailVault 发送任何内容。整个过程不涉及 MailVault 账户，断网时图表照样可用。</p>
+          <p>有两个操作会对外联网，而且只在你选择它们时才会发生。从邮件分析中打开一封邮件，会以正常方式加载它，这可能意味着从你自己的邮件服务器下载。退订会联系邮件列表，如上文所述。</p>
+          <p>因为邮件分析只知道这台设备上有什么，所以它会告诉你这幅图景有多完整。控件下方有一行提示「基于此设备上可用的邮件」，<strong>数据覆盖详情</strong>会列出每个文件夹在本地保存了多少邮件头，以及服务器上已知有多少封邮件。如果缺少部分邮件，它会提示统计可能不完整。如果某封邮件没有可靠的日期，它会说明有多少条记录使用了备用日期。只有在覆盖完整时，才把一个安静的月份当作事实。要让覆盖完整，请先把邮箱的更多内容保存到你的电脑上；我们的指南<a href="/zh/guides/what-is-an-email-vault.html" class="text-primary-500 hover:text-primary-600 underline">什么是邮件保险库以及如何建立一个</a>对此有介绍。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h2>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 邮件分析免费吗？</h3>
+          <p>免费。邮件分析和 Explorer 是免费应用的一部分，不需要账户，也不需要登录。它们在 MailVault 2.13.0 中推出。</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">邮件分析会把我的邮件上传到别处吗？</h3>
+          <p>不会。邮件分析基于已经保存在你电脑上的邮件头数据生成。图表不读取邮件正文或附件，也不会向任何服务上传任何内容。</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">邮件分析能同时显示我所有的账户吗？</h3>
+          <p>不能。邮件分析一次只查看一个账户。用页面顶部的「账户」菜单切换账户。</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">为什么我的数字比网页邮箱里的少？</h3>
+          <p>邮件分析只统计邮件头在这台电脑上的邮件。打开「数据覆盖详情」，可以按文件夹查看本地保存了多少邮件头，以及服务器上已知有多少封邮件。把邮箱的更多内容保存到本地，然后点击「刷新分析」。</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">邮件分析能告诉我哪些发件人占用的存储空间最多吗？</h3>
+          <p>不能直接告诉你。邮件分析按邮件数量而不是大小给发件人排名。要找大邮件，请使用「附件」视图，或者像 from:name has:attachment 这样的搜索。</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">下一步做什么</h2>
+          <p>在你邮件最多的账户上打开邮件分析，按邮件数量对发件人地图排序，分别在显示和隐藏自动发件人的情况下看看前十名。记下那些你已经不再阅读的简报，以及可以归入某个文件夹或规则的通知类发件人。<a href="/zh/features/insights.html" class="text-primary-500 hover:text-primary-600 underline">邮件分析功能页</a>和 <a href="/zh/faq/explorer-and-insights.html" class="text-primary-500 hover:text-primary-600 underline">Explorer 与邮件分析常见问题</a>有更多细节。如果你的邮箱已接近上限，<a href="/zh/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">Outlook 存储空间已满时该怎么办</a>这篇指南会接着讲下去。</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">看看谁在塞满你的收件箱。</p>
+            <p class="text-sm mb-4">邮件分析包含在免费的 MailVault 应用中，支持 macOS、Windows 和 Linux。无需在我们这里注册账户，图表在你的电脑上生成。</p>
+            <div class="flex flex-wrap gap-3"><a href="/zh/get-started.html?plan=free" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">免费下载 MailVault</a><a href="/zh/features/insights.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">了解邮件分析</a></div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

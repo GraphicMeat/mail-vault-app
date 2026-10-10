@@ -13,7 +13,7 @@
   <meta property="og:title" content="Pesquisando 50.000 e-mails em milissegundos: como funciona o índice local do MailVault">
   <meta property="og:description" content="Cronometramos a pesquisa do MailVault em uma caixa de correio de 50.000 mensagens: de 7 a 14 milissegundos por consulta. Os resultados, a tecnologia SQLite por trás deles e como o Premium acrescenta a pesquisa em anexos e em imagens com Vision.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta property="og:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar.">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="MailVault">
@@ -22,15 +22,15 @@
   <meta name="twitter:title" content="Pesquisando 50.000 e-mails em milissegundos: como funciona o índice local do MailVault">
   <meta name="twitter:description" content="50.000 e-mails pesquisados em 7 a 14 ms. Os resultados reais do teste e o índice SQLite por trás deles.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
-  <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep.">
+  <meta name="twitter:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar.">
   <meta name="twitter:site" content="@GraphicMeat">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=11">
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
-  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/search-50000-emails-in-milliseconds.html">
@@ -198,6 +198,10 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">A tecnologia: um banco de dados SQL muito rápido e muito simples</h3>
           <p>Não há servidor de pesquisa nem serviço na nuvem. O índice é um único arquivo SQLite dentro do seu cofre, e o SQLite é provavelmente o banco de dados mais amplamente usado do mundo. O MailVault usa o mecanismo de pesquisa em texto completo dele, o FTS5, com um tokenizador <strong>trigram</strong>: cada palavra é armazenada como pedaços sobrepostos de três letras. É por isso que você pode digitar “voic” e encontrar “invoice”, sem curingas e sem regras de palavra exata. Os acentos são ignorados na comparação, então “reunion” encontra “Réunion”. Japonês e chinês, que não usam espaços entre as palavras, passam por uma segunda tabela feita para eles.</p>
+<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Fluxo da busca local: as mensagens salvas alimentam um índice SQLite; uma consulta devolve resultados, e abrir um resultado lê o original salvo."><figcaption>A lista de resultados vem do índice. A mensagem original continua disponível para leitura e verificação.</figcaption></figure>
+
+<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice se divide em inv, nvo, voi, oic e ice. A consulta voic compartilha os pedaços voi e oic."><figcaption>Pedaços sobrepostos de três caracteres tornam possível a busca por trechos de palavras. Isto ilustra a tokenização, não um rastreamento completo da execução de uma consulta.</figcaption></figure>
+
           <p>A velocidade vem de três decisões simples:</p>
           <ul>
             <li><strong>A pesquisa nunca abre um arquivo de mensagem.</strong> Tudo o que a lista precisa (remetente, assunto, data, pasta, marcadores) fica guardado na linha do índice. Durante o teste com 50.000 mensagens, o analisador de e-mail foi chamado zero vezes enquanto os resultados eram montados.</li>
@@ -239,8 +243,8 @@ status check             5 ms</code></pre>
   </main>
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Uma criação da Graphic Meat</p><h2 id="studio-title">Conheça as pessoas por trás do MailVault.</h2><p>Somos a Graphic Meat, um estúdio independente de produtos que cria software útil desde 2013.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conheça a Graphic Meat ↗</a></div></div></aside>
-  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/pt-br/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Leia seu e-mail. Guarde seu e-mail.</p></div><nav aria-label="Explore o MailVault"><a href="/pt-br/use-cases.html">Casos de uso</a><a href="/pt-br/blog.html">Blog</a><a href="/changelog.html">Novidades</a><a href="/pt-br/faq.html">FAQ</a><a href="/pt-br/docs.html">Ajuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código no GitHub ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Feito pela <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Privacidade</a><a href="/terms.html">Termos</a></div></div></div></footer>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/pt-br/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Leia seu e-mail. Guarde seu e-mail.</p></div><nav aria-label="Explore o MailVault"><a href="/pt-br/use-cases.html">Casos de uso</a><a href="/pt-br/blog.html">Blog</a><a href="/changelog.html">Novidades</a><a href="/pt-br/faq.html">FAQ</a><a href="/pt-br/docs.html">Ajuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código no GitHub ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Feito pela <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Privacidade</a><a href="/terms.html">Termos</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
-  <script defer src="/assets/english-site.js?v=20261005-noph"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
 </body>
 </html>

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac용 메일 보관: 내가 소유하는 사본 간직하기 | MailVault</title>
+  <meta name="description" content="Mac용 메일 보관 설명: 보관, 백업, 동기화의 차이, macOS에서의 선택지, 어떤 형식을 남길지, 로컬 보관본을 만들고 확인하는 방법.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/email-archiving-for-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/email-archiving-for-mac.html">
+  <meta property="og:title" content="Mac용 메일 보관: 내가 소유하는 사본 간직하기 | MailVault">
+  <meta property="og:description" content="Mac용 메일 보관 설명: 보관, 백업, 동기화의 차이, macOS에서의 선택지, 어떤 형식을 남길지, 로컬 보관본을 만들고 확인하는 방법.">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mac용 메일 보관: 내가 소유하는 사본 간직하기 | MailVault">
+  <meta name="twitter:description" content="Mac용 메일 보관 설명: 보관, 백업, 동기화의 차이, macOS에서의 선택지, 어떤 형식을 남길지, 로컬 보관본을 만들고 확인하는 방법.">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Mac에서 메일을 보관하고 영구히 간직하는 방법",
+  "description": "Mac용 메일 보관 설명: 보관, 백업, 동기화의 차이, macOS에서의 선택지, 어떤 형식을 남길지, 로컬 보관본을 만들고 확인하는 방법.",
+  "url": "https://mailvaultapp.com/ko/guides/email-archiving-for-mac.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Apple Mail의 보관 버튼은 메일을 Mac에 저장합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "아니요. Apple의 Mail 가이드에 따르면 보관은 메시지를 그 메일 계정용으로 만든 보관 메일상자로 옮깁니다. 계정 안에서의 이동이지, 디스크에 사본을 만드는 것이 아닙니다. 내가 소유하는 사본을 간직하려면 메일상자를 내보내거나 보관 도구를 쓰십시오."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "메일 보관본에는 어떤 파일 형식이 가장 좋습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "일반 .eml 파일 또는 mbox입니다. 둘 다 많은 메일 앱이 읽을 수 있는 개방형 형식입니다. eml은 파일 하나에 메시지 하나를 담으므로, 파일 하나가 손상되어도 영향을 받는 것은 메시지 하나입니다. mbox는 폴더마다 파일 하나이며 가장 흔한 가져오기 형식입니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "큰 Gmail 계정을 보관하는 데 얼마나 걸립니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Google은 계정당 하루 IMAP 다운로드를 2,500 MB로 제한하므로, 그보다 큰 메일함은 어떤 IMAP 도구로도 하루 넘게 걸립니다. MailVault는 한도에 이르면 멈추고 다음 실행 때 멈춘 곳부터 이어 갑니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mac에서 메일 보관은 무료입니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "무료로 할 수 있습니다. Apple Mail의 내보내기와 Thunderbird는 비용이 들지 않고, MailVault도 무제한 수동 백업을 포함해 무료입니다. MailVault에서 예약 실행되는 백업은 Premium에 들어 있습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "보관한 뒤 서버에서 메일을 지워도 됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "예, 보관본을 확인했다면 됩니다. MailVault에 보관한 사본은 서버가 나중에 무엇을 하든 디스크에 남습니다. MailVault Premium은 보관과 삭제를 한 번에 할 수 있으며, 서버 사본을 지우기 전에 저장된 사본을 하나하나 확인합니다."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/email-archiving-for-mac.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+<nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/email-archiving-for-mac.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/email-archiving-for-mac.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/email-archiving-for-mac.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/email-archiving-for-mac.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/email-archiving-for-mac.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/email-archiving-for-mac.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/email-archiving-for-mac.html" lang="ko" hreflang="ko" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/email-archiving-for-mac.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/email-archiving-for-mac.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary>
+<nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac에서 메일을 보관하고 영구히 간직하는 방법</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Mac용 메일 보관이란 메일의 완전한 사본을 개방형 형식의 파일로 자신의 디스크에 저장해, 제공업체가 지우거나 계정이 닫히거나 쓰던 앱이 사라진 뒤에도 읽을 수 있게 하는 것입니다. 이 가이드는 보관이 무엇이고 무엇이 아닌지, macOS가 주는 선택지, 어떤 파일 형식을 남길지, Gmail, Outlook.com, iCloud, IMAP 계정의 보관본을 만들고 확인하는 방법을 설명합니다. 이미 다 알고 도구만 고르고 싶다면 <a href="/ko/guides/best-email-archiver-for-mac.html">Mac용 최고의 메일 보관 도구 추천 목록</a>을 읽으십시오.
+          </p>
+
+          <div class="p-5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">빠른 답</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li>Apple Mail, Gmail, Outlook의 보관 버튼은 메일을 같은 계정의 다른 폴더로 옮길 뿐입니다. 메일은 제공업체에 남고, 새로 저장되는 것은 없습니다.</li>
+              <li>진짜 보관본은 내가 소유하는 사본입니다. 메시지마다 파일 하나(.eml) 또는 폴더마다 파일 하나(mbox)로, Mac이나 내가 관리하는 드라이브에 있습니다.</li>
+              <li>Apple Mail은 일회성 사본으로 메일상자를 mbox로 내보낼 수 있습니다. 새 메일을 계속 따라가는 보관본에는 반복해서 내려받는 도구가 필요합니다.</li>
+              <li>무료 앱인 MailVault에서: 계정을 추가하고, <strong>백업 대상</strong>을 <strong>모든 메일</strong>로 설정하고, <strong>모든 계정 지금 백업</strong>을 누른 다음, 각 행의 아이콘을 확인하십시오. 예약 백업은 Premium입니다.</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">보관, 백업, 동기화는 같은 것이 아닙니다</h2>
+
+          <p>
+            메일 앱의 보관 버튼은 복사가 아니라 이동입니다. Apple의 Mail 가이드에 따르면 보관은 메시지를 그 메일 계정용으로 만든 보관 메일상자로 옮깁니다. Gmail 도움말에 따르면 보관한 메시지는 여전히 전체보관함에서 찾을 수 있습니다. Microsoft의 Outlook 도움말에 따르면 보관 버튼은 메일함 크기를 줄이지 않습니다. 세 경우 모두 메일은 제공업체에 남습니다.
+          </p>
+
+          <p>
+            동기화는 서버를 그대로 반영하므로, 휴대전화에서 지운 메시지는 Mac에서도 사라집니다. 백업은 복원할 수 있도록 다른 곳에 둔 사본입니다. 이 페이지에서 말하는 보관본이란 몇 년 동안 간직하면서 여전히 읽을 수 있는 백업입니다. 완전하고, 검색할 수 있고, 한 앱에 묶여 있지 않습니다.
+          </p>
+
+          <div class="scroll-x overflow-x-auto -mx-4 sm:mx-0">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">무엇인가</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">메일이 있는 곳</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">서버에서 삭제되어도 남는가?</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">서버 공간을 비우는가?</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-700 dark:text-slate-300">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">동기화(일반 메일 앱)</td>
+                  <td class="py-3 px-4">서버에 있고, 기기들에 반영됨</td>
+                  <td class="py-3 px-4">미지원</td>
+                  <td class="py-3 px-4">미지원</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">보관 버튼</td>
+                  <td class="py-3 px-4">같은 계정의 다른 폴더</td>
+                  <td class="py-3 px-4">미지원</td>
+                  <td class="py-3 px-4">미지원</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">백업</td>
+                  <td class="py-3 px-4">내가 관리하는 두 번째 사본</td>
+                  <td class="py-3 px-4">예, 정리해서 지우지 않는다면</td>
+                  <td class="py-3 px-4">그 뒤에 서버에서 삭제할 때만</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">보관(로컬 사본)</td>
+                  <td class="py-3 px-4">Mac이나 내 드라이브에 있는 파일</td>
+                  <td class="py-3 px-4">지원</td>
+                  <td class="py-3 px-4">그 뒤에 서버에서 삭제할 때만</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Mac에서의 선택지</h2>
+
+          <ul class="list-disc pl-6 space-y-3">
+            <li><strong>Apple Mail의 메일상자 내보내기.</strong> 메일상자를 하나 이상 선택하고 메일상자 &gt; 메일상자 내보내기를 고른 다음 폴더를 고르십시오. Apple에 따르면 내보낸 파일은 mbox 형식이며, Mail은 이전에 내보낸 것을 덮어쓰지 않고 그 옆에 새 .mbox 파일을 만듭니다. 파일 &gt; 메일상자 가져오기로 다시 불러옵니다. 무료이고 기본 내장이지만, 손으로 되풀이해야 하는 스냅샷입니다.</li>
+            <li><strong>Thunderbird.</strong> 무료 오픈소스이며 macOS용 다운로드가 있습니다. Mozilla에 따르면 Thunderbird는 기본적으로 폴더마다 mbox 파일 하나로 메일을 저장하고, 메시지마다 파일 하나(Maildir)로 저장하는 선택형 방식은 아직 실험 단계로 봅니다. ImportExportTools NG 추가 기능은 메시지를 EML, PDF 등 여러 형식으로, 폴더를 mbox로 내보냅니다.</li>
+            <li><strong>명령줄 백업 도구.</strong> Got Your Back(GYB)은 Gmail API를 통해 Gmail과 Google Workspace 계정을 로컬 폴더에 백업하고 복원할 수 있는 오픈소스 도구입니다. 터미널이 편한 사람에게 맞으며 Google 계정만 다룹니다.</li>
+            <li><strong>전용 보관 도구.</strong> Mail Archiver X, MailSteward, EagleFiler는 메일을 검색 가능한 보관본이나 라이브러리로 모으는 유료 Mac 앱이며, 저장 방식이 저마다 다릅니다. <a href="/ko/guides/best-email-archiver-for-mac.html">Mac용 최고의 메일 보관 도구</a> 페이지에서 용도별로 비교합니다.</li>
+            <li><strong>MailVault.</strong> macOS, Windows, Linux용 무료 메일 앱으로, 메일 사본을 Maildir 방식 폴더 안에 일반 .eml 파일로 컴퓨터에 간직합니다. Gmail, Microsoft 365, Outlook.com, 모든 IMAP 계정에 로그인하며, 메일이 오가는 경로에 MailVault 계정도 서버도 없습니다. 이 가이드의 나머지 단계별 안내는 MailVault를 기준으로 합니다.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">메일을 어떤 형식으로 간직할까</h2>
+
+          <p>
+            보관본은 도구보다 오래 살아남아야 하므로, 도구보다 형식이 더 중요합니다.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>.eml 파일.</strong> 인터넷 메시지 형식(RFC 5322)으로 파일 하나에 메시지 하나가 들어 있습니다. 헤더, 본문, 첨부 파일이 함께 담깁니다. 많은 메일 앱이 바로 열 수 있고, 파일이 손상되어도 영향을 받는 것은 메시지 하나입니다. Maildir은 이 파일들을 정리하는 폴더 구조입니다.</li>
+            <li><strong>mbox.</strong> 폴더마다 파일 하나에 메시지가 차례로 이어져 있습니다. 가장 널리 지원되는 가져오기 형식이라 Apple Mail도 이 형식으로 내보냅니다. 보통은 앱으로 가져와야 둘러볼 수 있고, 파일 하나가 손상되면 폴더 전체가 영향을 받습니다.</li>
+            <li><strong>앱 자체의 데이터베이스.</strong> 전용 보관 도구는 흔히 이 방식을 쓰며, 검색을 빠르게 해 줄 수 있습니다. 대신 보관본을 읽는 일이 그 앱에 달려 있게 됩니다. 정하기 전에 모든 것을 mbox나 .eml로 내보낼 수 있는지 확인하십시오.</li>
+          </ul>
+
+          <p>
+            실용적인 원칙: 무엇을 쓰든 보관본의 사본 하나는 .eml이나 mbox로 간직하십시오. 도구를 믿기 전에 무엇을 확인해야 하는지는 <a href="/ko/guides/imap-backup-tool-checklist.html">IMAP 백업 도구 체크리스트</a>를 보십시오.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">단계별 안내: MailVault로 Gmail, Outlook.com, iCloud, IMAP을 Mac에 보관하기</h2>
+
+          <p>
+            MailVault는 Apple Silicon과 Intel에서 macOS 11 Big Sur 이상으로 실행됩니다. Premium 표시가 없는 단계는 모두 무료입니다.
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-3">
+            <li><a href="/ko/get-started.html">다운로드 페이지</a>에서 <strong>MailVault를 설치하십시오</strong>.</li>
+            <li><strong>계정을 추가하십시오.</strong> Gmail과 Microsoft 365는 Google이나 Microsoft 자체 페이지에서 로그인합니다. 개인용 Outlook.com, Hotmail, Live.com 계정은 Microsoft Graph로 연결되므로 입력할 IMAP 설정이 없습니다. iCloud Mail과 다른 제공업체는 IMAP을 씁니다. iCloud의 경우 MailVault는 Apple 계정에서 만든 앱 전용 암호로 로그인하며, <a href="/ko/guides/export-icloud-mail.html">iCloud Mail 내보내기 가이드</a>에서 그 과정을 안내합니다. 비밀번호는 MailVault가 아니라 시스템 키체인이 보관합니다.</li>
+            <li><strong>MailVault가 모든 것을 백업하도록 설정하십시오.</strong> 설정 &gt; 백업 및 복원 &gt; 백업 설정을 여십시오. <strong>백업 대상</strong>의 기본값은 <strong>보관된 메일만 (로컬에 저장된 것)</strong>입니다. 아직 서버에만 있는 메일도 포함되도록 <strong>모든 메일 (서버에서 내려받기)</strong>로 바꾸십시오. 외장 드라이브나 NAS에 두 번째 사본을 둘 곳도 여기서 고를 수 있습니다.</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ko/settings-backup-light-1440.webp" srcset="/screenshots/ko/settings-backup-light-720.webp 720w, /screenshots/ko/settings-backup-light-1440.webp 1440w, /screenshots/ko/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 설정, 백업 및 복원, 백업 설정 탭. 폴더 열기와 메일 이동 버튼이 있는 메일 저장 위치, 보관된 메일만으로 설정된 백업 대상 메뉴, 두 번째 사본(외부 콜드 스토리지) 폴더 선택기가 보입니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">백업 설정. 첫 실행 전에 백업 대상을 보관된 메일만에서 모든 메일로 바꾸십시오.</figcaption>
+          </figure>
+
+          <ol class="list-decimal pl-6 space-y-3" start="4">
+            <li><strong>백업을 실행하십시오.</strong> <strong>백업 일정</strong> 탭을 열고 <strong>모든 계정 지금 백업</strong>을 누르거나, 계정 카드 하나에서 <strong>지금 백업</strong>을 누르십시오. 계정의 모든 폴더를 다룹니다. 수동 백업은 무료이며 저희 쪽 한도가 없고, 쓰는 공간은 사용자 자신의 디스크입니다.</li>
+          </ol>
+
+
+          <ol class="list-decimal pl-6 space-y-3" start="5">
+            <li><strong>큰 메일함에는 시간을 주십시오.</strong> Google은 계정당 하루 IMAP 다운로드를 2,500 MB로 제한하며, 넘으면 보통 한 시간, 길게는 24시간까지 접근이 중단됩니다. 모든 IMAP 도구에 해당합니다. MailVault는 한도에서 깔끔하게 멈추고, 다음 실행 때 멈춘 곳부터 이어 갑니다. 큰 Gmail 계정은 며칠이 걸릴 수 있습니다.</li>
+            <li><strong>또는 일부만 보관하십시오.</strong> 일부 메일만 간직하려면 메시지(또는 한 해, 또는 폴더 전체)를 선택하고 <strong>보관</strong>을 고르십시오. 볼트에 복사하고 서버 사본은 그대로 둡니다. 무료입니다.</li>
+          </ol>
+
+          <p>
+            알아 둘 설정 하나: 설정 &gt; 저장소 &gt; 다운로드 모드는 일반 캐시 메일을 Mac에 얼마나 남길지 정합니다. 기본값인 최근 메일 보관은 최근 몇 달 치를 남깁니다. 백업이나 보관한 메일은 절대 지우지 않으므로 보관본이 줄어들지 않습니다.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">보관본이 완전한지 확인하는 방법</h2>
+
+          <p>
+            서버에서 무언가를 지우기 전에 사본을 확인하십시오.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>행 아이콘을 읽으십시오.</strong> 메시지마다 서버에만 있는지, 볼트에 있는지, 유일한 사본인지, 백업 드라이브에도 있는지 표시됩니다. 폴더 목록 위의 Vault 스위치를 켜면 Mac에 저장된 것만 보입니다.</li>
+            <li><strong>오프라인으로 전환하십시오.</strong> Wi-Fi를 끄고 첨부 파일이 있는 오래된 메시지 몇 개를 열고 검색을 해 보십시오. 지금 열리는 것은 모두 디스크에 있는 것입니다.</li>
+            <li><strong>다른 곳에서 파일을 여십시오.</strong> 설정 &gt; 백업 및 복원 &gt; 백업 설정 &gt; 폴더 열기를 누르면 Finder에서 볼트가 열립니다. .eml 파일 몇 개를 Apple Mail에서 여십시오. 거기서 제대로 읽힌다면 보관본은 MailVault에 의존하지 않습니다.</li>
+            <li><strong>개수를 비교하십시오(Premium).</strong> 백업 상태 점검은 폴더마다 서버, 앱, 외부 개수를 보여 주므로 어느 폴더가 완전히 저장되었는지 알 수 있습니다.</li>
+          </ul>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w, /screenshots/ko/state-icons-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ko/state-icons-light-1440.webp" srcset="/screenshots/ko/state-icons-light-720.webp 720w, /screenshots/ko/state-icons-light-1440.webp 1440w, /screenshots/ko/state-icons-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="메시지 행마다 볼트 아이콘이 있는 MailVault 받은편지함. 목록 아래 범례에 서버에만 있음, 보관함에 있음, 유일한 사본, 백업 드라이브에 있음이 적혀 있고, 폴더 목록에는 모든 메일, 서버, Vault 스위치가 있습니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">행마다 그 메시지가 어디에 있는지 알려 줍니다. 목록 아래 범례가 아이콘을 설명합니다.</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/premium-backup-health-detail-720.webp 720w, /screenshots/ko/premium-backup-health-detail-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ko/premium-backup-health-detail-light-1440.webp" srcset="/screenshots/ko/premium-backup-health-detail-light-720.webp 720w, /screenshots/ko/premium-backup-health-detail-light-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="524" loading="lazy" decoding="async" alt="MailVault의 백업 검증 표. 앱은 73퍼센트, 외부는 설정되지 않음이며, 폴더 행마다 서버 개수와 앱 개수가 나란히 나옵니다. 예를 들어 Archive는 서버에 12개, 앱에 0개입니다. 합계는 앱에 115개 중 84개입니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Premium: 백업 상태 점검은 서버와 Mac을 폴더별로 비교합니다. 여기서는 Archive, Trash, Clients, Suppliers 폴더가 아직 저장되지 않았습니다.</figcaption>
+          </figure>
+
+          <p>
+            서버를 비울 준비가 되면, MailVault의 <a href="/ko/features/archive-and-delete.html">보관 후 삭제</a>(Premium)가 메시지를 하나씩 볼트에 복사하고, 사본을 확인한 다음에야 서버 사본을 지웁니다. 서버에서 삭제만 하는 것은 무료이지만, 그 경우 확인은 사용자의 몫입니다.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">보관본을 계속 이어 가는 방법</h2>
+
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>직접, 무료.</strong> 원할 때마다 <strong>모든 계정 지금 백업</strong>을 실행하십시오. 백업은 증분 방식이라, 이후 실행에서는 지난번 이후 새로 온 메일만 내려받습니다. <a href="/ko/features/local-backups.html">수동 백업</a>을 보십시오.</li>
+            <li><strong>예약, Premium.</strong> <a href="/ko/features/scheduled-backups.html">예약 백업</a>은 매시간, 하루 한 번, 일주일에 한 번, 또는 직접 고른 시각에, 앱이 쉬고 있을 때만 실행됩니다. Premium은 처음 100명의 구독자에게 현재 얼리 액세스 가격으로 월 $4 또는 연 $25입니다(이후 표준 가격은 월 $6 또는 연 $39).</li>
+          </ul>
+
+          <p>
+            어느 쪽이든 Mac과 떨어진 곳에 두 번째 사본을 두십시오. 볼트는 일반 파일이므로 외장 드라이브나 NAS에 담을 수 있습니다. 로컬 사본이 필요한 더 넓은 이유는 <a href="/ko/guides/archive-imap-emails-locally.html">IMAP 메일을 로컬에 보관하는 방법</a>을 읽으십시오.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">자주 묻는 질문</h2>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Apple Mail의 보관 버튼은 메일을 Mac에 저장합니까?</h3>
+            <p>아니요. Apple의 Mail 가이드에 따르면 보관은 메시지를 그 메일 계정용으로 만든 보관 메일상자로 옮깁니다. 계정 안에서의 이동이지, 디스크에 사본을 만드는 것이 아닙니다. 내가 소유하는 사본을 간직하려면 메일상자를 내보내거나 보관 도구를 쓰십시오.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">메일 보관본에는 어떤 파일 형식이 가장 좋습니까?</h3>
+            <p>일반 .eml 파일 또는 mbox입니다. 둘 다 많은 메일 앱이 읽을 수 있는 개방형 형식입니다. eml은 파일 하나에 메시지 하나를 담으므로, 파일 하나가 손상되어도 영향을 받는 것은 메시지 하나입니다. mbox는 폴더마다 파일 하나이며 가장 흔한 가져오기 형식입니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">큰 Gmail 계정을 보관하는 데 얼마나 걸립니까?</h3>
+            <p>Google은 계정당 하루 IMAP 다운로드를 2,500 MB로 제한하므로, 그보다 큰 메일함은 어떤 IMAP 도구로도 하루 넘게 걸립니다. MailVault는 한도에 이르면 멈추고 다음 실행 때 멈춘 곳부터 이어 갑니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Mac에서 메일 보관은 무료입니까?</h3>
+            <p>무료로 할 수 있습니다. Apple Mail의 내보내기와 Thunderbird는 비용이 들지 않고, MailVault도 무제한 수동 백업을 포함해 무료입니다. MailVault에서 예약 실행되는 백업은 Premium에 들어 있습니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">보관한 뒤 서버에서 메일을 지워도 됩니까?</h3>
+            <p>예, 보관본을 확인했다면 됩니다. MailVault에 보관한 사본은 서버가 나중에 무엇을 하든 디스크에 남습니다. MailVault Premium은 보관과 삭제를 한 번에 할 수 있으며, 서버 사본을 지우기 전에 저장된 사본을 하나하나 확인합니다.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">다음에 할 일</h2>
+
+          <p>
+            가장 잃고 싶지 않은 계정을 골라 이번 주에 첫 보관본을 만들고, 위의 단계로 확인하십시오. MailVault로 한다면 무료로 내려받을 수 있고 만들어야 할 계정도 없습니다.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Mac에 메일 사본을 간직하십시오</p>
+            <p class="text-sm mb-4">내 디스크에 있는 일반 .eml 파일. macOS, Windows, Linux에서 무료이고, 소스 코드는 GitHub에 있으며, MailVault 계정이 없습니다.</p>
+            <a href="/ko/get-started.html?plan=free" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault 무료 다운로드
+            </a>
+          </div>
+
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>메일을 읽고, 메일을 보관하세요.</p>
+</div>
+<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

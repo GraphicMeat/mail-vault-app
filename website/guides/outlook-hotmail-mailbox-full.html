@@ -38,7 +38,7 @@
     "description": "Outlook.com or Hotmail warning you're out of space? Here's how to check what's using it, clear it out safely, and archive old email locally instead of paying for more storage.",
     "url": "https://mailvaultapp.com/guides/outlook-hotmail-mailbox-full.html",
     "datePublished": "2026-07-15",
-    "dateModified": "2026-07-15",
+    "dateModified": "2026-10-08",
     "author": {
       "@type": "Organization",
       "name": "MailVault"
@@ -66,7 +66,7 @@
         "name": "How much free storage does Outlook.com give?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "15 GB, shared between Mail and OneDrive. You can see the breakdown in Settings → General → Storage."
+          "text": "15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage."
         }
       },
       {
@@ -74,7 +74,7 @@
         "name": "Does emptying Deleted Items in Outlook.com free up space right away?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage immediately."
+          "text": "Yes, with a delay. Unlike some providers that wait a set number of days, once you manually empty the Deleted Items and Junk Email folders in Outlook.com, those items stop counting against your quota. Microsoft says the displayed total can take up to 24 hours to update."
         }
       },
       {
@@ -90,7 +90,7 @@
         "name": "Can I archive Outlook.com email without paying for Microsoft 365?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Outlook.com supports standard IMAP access, so any IMAP archiving tool, including MailVault's free tier, can download your mail locally without any Microsoft 365 subscription."
+          "text": "Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription."
         }
       }
     ]
@@ -151,7 +151,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/outlook-hotmail-mailbox-full.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/outlook-hotmail-mailbox-full.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20261005-noph">
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
@@ -219,19 +219,19 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            Outlook.com (the modern name for what used to be Hotmail) gives free accounts 15 GB of storage, shared with OneDrive. When you fill it up, incoming mail bounces and you'll see storage warnings in the web interface and in Outlook desktop or mobile apps. Microsoft's own fix is to sell you more storage through a Microsoft 365 subscription &mdash; but if you'd rather actually solve the problem instead of renting more space indefinitely, here's the full picture.
+            Outlook.com (the modern name for what used to be Hotmail) gives free accounts 15 GB of email storage, plus 5 GB of cloud storage that OneDrive, Outlook.com attachments and Microsoft 365 apps share. When either one is full, you can no longer send or receive mail, and incoming mail bounces and you'll see storage warnings in the web interface and in Outlook desktop or mobile apps. Microsoft's own fix is to sell you more storage through a Microsoft 365 subscription &mdash; but if you'd rather actually solve the problem instead of renting more space indefinitely, here's the full picture.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Check where your storage actually went</h3>
 
           <p>
-            In Outlook.com, go to Settings &rarr; General &rarr; Storage to see a breakdown between Mail and OneDrive. If OneDrive is the bigger consumer, clearing out mail won't help much &mdash; you'll want to deal with OneDrive files separately. If Mail is the bulk of it, attachments are almost always the reason, not the text of the emails themselves.
+            In Outlook.com, go to Settings &rarr; Account &rarr; Storage to see a breakdown between email and cloud storage. If OneDrive is the bigger consumer, clearing out mail won't help much &mdash; you'll want to deal with OneDrive files separately. If Mail is the bulk of it, attachments are almost always the reason, not the text of the emails themselves.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Empty Deleted Items and Junk Email</h3>
 
           <p>
-            Like most providers, Outlook.com keeps deleted messages in the Deleted Items folder until you empty it, and they still count against your quota until you do. Right-click Deleted Items and Junk Email in the folder list and choose "Empty folder" to reclaim that space immediately.
+            Like most providers, Outlook.com keeps deleted messages in the Deleted Items folder until you empty it, and they still count against your quota until you do. Right-click Deleted Items and Junk Email in the folder list and choose "Empty folder" to reclaim that space. Microsoft says the new total can take up to 24 hours to show.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Sort by size and clear out attachment-heavy old mail</h3>
@@ -253,7 +253,7 @@
           </p>
 
           <p>
-            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free, open-source option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's OAuth sign-in (no password fiddling), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
+            Outlook.com and Hotmail both support IMAP, so any IMAP-based archiving tool can do this. MailVault is a free option for macOS, Windows and Linux: connect your Outlook.com or Hotmail account with Microsoft's sign-in (no password fiddling; MailVault uses Microsoft Graph for personal Outlook.com accounts), select the folders you want, and MailVault downloads each message as an individual <code>.eml</code> file on your disk, organized in a standard Maildir structure. Once you've verified the archive &mdash; open a few emails, check attachments, search for something you remember &mdash; you can safely delete the originals from Outlook.com and get your quota back.
           </p>
 
           <p>
@@ -277,12 +277,12 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">How much free storage does Outlook.com give?</p>
-            <p>15 GB, shared between Mail and OneDrive. You can see the breakdown in Settings → General → Storage.</p>
+            <p>15 GB of email storage, plus 5 GB of cloud storage shared by OneDrive, Outlook.com attachments and Microsoft 365 apps. You can see the breakdown in Settings → Account → Storage.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Does emptying Deleted Items in Outlook.com free up space right away?</p>
-            <p>Yes. Unlike some providers that wait a set number of days, manually emptying the Deleted Items and Junk Email folders in Outlook.com frees up that storage immediately.</p>
+            <p>Yes, with a delay. Unlike some providers that wait a set number of days, once you manually empty the Deleted Items and Junk Email folders in Outlook.com, those items stop counting against your quota. Microsoft says the displayed total can take up to 24 hours to update.</p>
           </div>
 
           <div class="pt-2">
@@ -292,7 +292,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Can I archive Outlook.com email without paying for Microsoft 365?</p>
-            <p>Yes. Outlook.com supports standard IMAP access, so any IMAP archiving tool, including MailVault's free tier, can download your mail locally without any Microsoft 365 subscription.</p>
+            <p>Yes. MailVault's free tier can download your Outlook.com or Hotmail mail locally without any Microsoft 365 subscription.</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
@@ -312,7 +312,7 @@
 <div><a class="mv-brand" href="/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
 <p>Read your mail. Keep your mail.</p>
 </div>
-<nav aria-label="Explore MailVault"><a href="/use-cases.html">Use cases</a><a href="/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/mentioned-in.html">Mentions</a><a href="/faq.html">FAQ</a><a href="/docs.html">Help</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+<nav aria-label="Explore MailVault"><a href="/use-cases.html">Use cases</a><a href="/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/mentioned-in.html">Mentions</a><a href="/faq.html">FAQ</a><a href="/docs.html">Help</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
 </nav>
 </div>
 <div class="mv-footer-bottom">
@@ -326,6 +326,6 @@
 
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
-<script defer src="/assets/english-site.js?v=20261005-noph"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
 </body>
 </html>

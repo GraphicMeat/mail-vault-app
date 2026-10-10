@@ -314,3 +314,27 @@ describe.each([['List', FolderTree], ['Bubbles', FolderBubbles]])('%s folder sea
     expect(container.querySelector('[role="status"]').textContent).toBeTruthy();
   });
 });
+
+describe('unread-filter flash', () => {
+  it('overlays only the folder the flash names, and reports when the animation ends', () => {
+    const onFlashEnd = vi.fn();
+    const { container } = draw({
+      mailboxes: [box('INBOX'), box('Sent', { specialUse: '\\Sent' })],
+      activeMailbox: 'Sent', flash: { path: 'Sent', n: 1 }, onFlashEnd,
+    });
+    const flashes = container.querySelectorAll('[data-testid="folder-flash"]');
+    expect(flashes).toHaveLength(1);
+    expect(flashes[0].closest('[data-testid="folder-row"]').getAttribute('data-path')).toBe('Sent');
+    // jsdom has no AnimationEvent, so React listens for the webkit-prefixed name.
+    fireEvent(flashes[0], new Event('webkitAnimationEnd', { bubbles: true }));
+    expect(onFlashEnd).toHaveBeenCalled();
+  });
+
+  it('does not flash a folder the flash was not raised for', () => {
+    const { container } = draw({
+      mailboxes: [box('INBOX'), box('Sent', { specialUse: '\\Sent' })],
+      activeMailbox: 'INBOX', flash: { path: 'Sent', n: 1 },
+    });
+    expect(container.querySelector('[data-testid="folder-flash"]')).toBeNull();
+  });
+});

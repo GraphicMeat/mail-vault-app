@@ -175,6 +175,15 @@ pub struct EmailHeader {
     pub list_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub precedence: Option<String>,
+    /// The message says a machine sent it: `Auto-Submitted` (any value but
+    /// "no", RFC 3834), or the field name of `X-Autoreply`, `X-Autorespond`
+    /// or `X-Auto-Response-Suppress`. What the follow-up check's header cache
+    /// scan leaves out (`custody::cache::reply_scan_page`).
+    ///
+    /// Written on every row the header fetch makes, "" for none, so a cached
+    /// row from before this field (no key at all) tells itself apart.
+    #[serde(rename = "autoReply", serialize_with = "empty_when_none")]
+    pub auto_reply: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -676,7 +685,7 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
 // both. Thunderbird fetches the size on every pass; BODYSTRUCTURE is a few
 // hundred bytes per multipart message under DEFLATE, and this exact spec has
 // served search results in production since the search feature shipped.
-const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Unsubscribe-Post List-Id Precedence)])";
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Unsubscribe-Post List-Id Precedence Auto-Submitted X-Autoreply X-Autorespond X-Auto-Response-Suppress)])";
 
 /// Gmail suspends accounts that exceed daily IMAP bandwidth caps (2500 MB down,
 /// 500 MB up) — the suspension can last up to 24h and locks webmail sign-in too.
@@ -2830,26 +2839,19 @@ const AUTO_REPLY_HEADERS: [(&str, &str); 4] = [
     ("X-Autorespond", ""),
 ];
 
-/// The `UID SEARCH` criteria for "a reply to `message_id` from a person who
-/// is not the sender": any message whose In-Reply-To or References names it,
-/// from none of `own_addresses` (the user's own follow-up, or a nudge from an
-/// alias, is no answer), and not an automatic reply. `NOT FROM` is a
-/// substring match, so an address that merely contains one of them is left
-/// out too: a reply missed, never one invented. `None` for an empty
-/// Message-ID, which would match every header.
-pub fn reply_search_criteria(message_id: &str, own_addresses: &[String], skip_auto_replies: bool) -> Option<String> {
+/// The `UID SEARCH` criteria for "a reply to `message_id`": any message
+/// whose In-Reply-To or References names it, and (`skip_auto_replies`) not
+/// an automatic reply. Who sent each hit is the caller's to check, after a
+/// FETCH: `NOT FROM` is a substring match that cannot fold a Gmail address
+/// (`notes_to_self::normalize_identity`), so it would let john.doe@ through
+/// for johndoe@ and drop notme@ for me@. `None` for an empty Message-ID,
+/// which would match every header.
+pub fn reply_search_criteria(message_id: &str, skip_auto_replies: bool) -> Option<String> {
     let term = message_id_search_term(message_id);
     if term.is_empty() {
         return None;
     }
-    let quote = |v: &str| v.trim().replace('\\', "\\\\").replace('"', "\\\"");
     let mut criteria = format!("OR HEADER In-Reply-To \"{term}\" HEADER References \"{term}\"");
-    let mut seen = std::collections::HashSet::new();
-    for own in own_addresses.iter().map(|a| quote(a)).filter(|a| !a.is_empty()) {
-        if seen.insert(own.to_lowercase()) {
-            criteria.push_str(&format!(" NOT FROM \"{own}\""));
-        }
-    }
     // A server can refuse these (an empty HEADER string, a field it does not
     // index): the caller asks again without them rather than not at all.
     if skip_auto_replies {
@@ -3242,6 +3244,8 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
     let precedence = raw_headers.as_ref()
         .and_then(|raw| parse_single_header(raw, "Precedence"));
 
+    let auto_reply = raw_headers.as_deref().and_then(auto_reply_marker);
+
     let date = envelope
         .date
         .as_ref()
@@ -3308,6 +3312,7 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         list_unsubscribe_post,
         list_id,
         precedence,
+        auto_reply,
     })
 }
 
@@ -3343,6 +3348,49 @@ fn parse_references_header(raw: &str) -> Vec<String> {
 
 /// Parse a single header value from raw header text.
 /// Handles multi-line (folded) headers per RFC 5322.
+fn empty_when_none<S: serde::Serializer>(value: &Option<String>, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(value.as_deref().unwrap_or(""))
+}
+
+/// Whether the fetched header fields say a machine sent the message, and
+/// which: `Auto-Submitted`'s value (anything but "no", RFC 3834), else the
+/// lowercased name of the first of `X-Autoreply`, `X-Autorespond`,
+/// `X-Auto-Response-Suppress` present (the last is what Exchange and Outlook
+/// put on their own automatic replies). The same set the follow-up server
+/// search leaves out (`AUTO_REPLY_HEADERS`).
+pub fn auto_reply_marker(raw_headers: &str) -> Option<String> {
+    if let Some(value) = parse_single_header(raw_headers, "Auto-Submitted") {
+        let value = value.trim().to_lowercase();
+        if value != "no" {
+            return Some(value);
+        }
+    }
+    ["X-Autoreply", "X-Autorespond", "X-Auto-Response-Suppress"]
+        .into_iter()
+        .find(|field| raw_headers.lines().any(|l| l.to_ascii_lowercase().starts_with(&format!("{}:", field.to_ascii_lowercase()))))
+        .map(str::to_ascii_lowercase)
+}
+
+/// Folder names, as whole words of one path segment, that are Sent or
+/// Drafts: English, and the localized names `ensure_sent_mailbox` creates or
+/// finds, plus the usual Drafts names in the app's languages.
+const OWN_MAIL_WORDS: &[&str] = &[
+    "sent", "draft", "drafts", "gesendet", "enviados", "envoyés", "envoyes", "inviati", "verzonden", "skickat", "sendt",
+    "lähetetyt", "lahetetyt", "wysłane", "wyslane", "entwürfe", "brouillons", "borradores", "bozze", "rascunhos",
+    "concepten",
+];
+
+/// A folder the app takes for Sent or Drafts by its name, for a folder no
+/// role names: a path segment (split on `/`, `.` or `\`) with one of
+/// `OWN_MAIL_WORDS` as a whole word, so "Sent Mail" and "INBOX.Drafts" are,
+/// and "Presentations", "Consent" or "Absent" are not. Stricter than
+/// `guessed_special_use`'s substring guess, which the folder list keeps.
+pub fn is_own_mail_path(path: &str) -> bool {
+    path.split(['/', '.', '\\'])
+        .flat_map(|segment| segment.split(|c: char| !c.is_alphanumeric()))
+        .any(|word| OWN_MAIL_WORDS.contains(&word.to_lowercase().as_str()))
+}
+
 fn parse_single_header(raw: &str, header_name: &str) -> Option<String> {
     let search = format!("{}:", header_name);
     // Case-insensitive search for the header name
@@ -4076,47 +4124,64 @@ mod is_missing_mailbox_tests {
 }
 
 #[cfg(test)]
+mod auto_reply_marker_tests {
+    use super::*;
+
+    #[test]
+    fn a_machine_sent_message_says_so_in_one_of_four_headers() {
+        assert_eq!(auto_reply_marker("Auto-Submitted: auto-replied\r\n").as_deref(), Some("auto-replied"));
+        assert_eq!(auto_reply_marker("auto-submitted: Auto-Generated\r\n").as_deref(), Some("auto-generated"));
+        assert_eq!(auto_reply_marker("X-Autoreply: yes\r\n").as_deref(), Some("x-autoreply"));
+        assert_eq!(auto_reply_marker("X-Autorespond: on\r\n").as_deref(), Some("x-autorespond"));
+        assert_eq!(auto_reply_marker("X-Auto-Response-Suppress: All\r\n").as_deref(), Some("x-auto-response-suppress"));
+        assert_eq!(auto_reply_marker("Auto-Submitted: no\r\nList-Id: x\r\n"), None, "RFC 3834: \"no\" is a person");
+        assert_eq!(auto_reply_marker("References: <a@b>\r\n"), None);
+    }
+
+    #[test]
+    fn sent_and_drafts_folders_are_known_by_name_where_no_role_says_so() {
+        for path in ["Sent", "INBOX.Sent", "Sent Items", "[Gmail]/Sent Mail", "Drafts", "INBOX/Drafts"] {
+            assert!(is_own_mail_path(path), "{path}");
+        }
+        for path in ["INBOX", "Archive", "Trash", "[Gmail]/All Mail", "Presentations", "INBOX.Consent", "Projects/Absent", "Draftsmanship"] {
+            assert!(!is_own_mail_path(path), "{path}");
+        }
+    }
+}
+
+#[cfg(test)]
 mod reply_search_criteria_tests {
     use super::*;
 
     const AUTO: &str = r#" NOT HEADER Auto-Submitted "auto" NOT HEADER X-Auto-Response-Suppress "" NOT HEADER X-Autoreply "" NOT HEADER X-Autorespond """#;
 
     #[test]
-    fn a_reply_names_the_id_comes_from_none_of_the_senders_and_is_no_auto_reply() {
-        let own = vec!["me@x.com".to_string(), "alias@x.com".to_string(), "ME@x.com".to_string()];
+    fn a_reply_names_the_id_and_is_no_auto_reply() {
         assert_eq!(
-            reply_search_criteria("<abc@mail.x>", &own, true),
-            Some(format!(r#"OR HEADER In-Reply-To "abc@mail.x" HEADER References "abc@mail.x" NOT FROM "me@x.com" NOT FROM "alias@x.com"{AUTO}"#))
+            reply_search_criteria("<abc@mail.x>", true),
+            Some(format!(r#"OR HEADER In-Reply-To "abc@mail.x" HEADER References "abc@mail.x"{AUTO}"#))
         );
     }
 
     #[test]
-    fn quotes_in_either_value_are_escaped() {
+    fn quotes_in_the_id_are_escaped() {
         assert_eq!(
-            reply_search_criteria("<a\"b@x>", &["o\"dd@x.com".to_string()], true),
-            Some(format!(r#"OR HEADER In-Reply-To "a\"b@x" HEADER References "a\"b@x" NOT FROM "o\"dd@x.com"{AUTO}"#))
+            reply_search_criteria("<a\"b@x>", true),
+            Some(format!(r#"OR HEADER In-Reply-To "a\"b@x" HEADER References "a\"b@x"{AUTO}"#))
         );
     }
 
     #[test]
     fn the_auto_reply_terms_can_be_left_out_for_a_server_that_refuses_them() {
         assert_eq!(
-            reply_search_criteria("<m@x>", &["me@x.com".to_string()], false).as_deref(),
-            Some(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x" NOT FROM "me@x.com""#)
+            reply_search_criteria("<m@x>", false).as_deref(),
+            Some(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x""#)
         );
     }
 
     #[test]
     fn an_empty_message_id_has_no_criteria() {
-        assert_eq!(reply_search_criteria(" <> ", &["me@x.com".to_string()], true), None);
-    }
-
-    #[test]
-    fn no_own_address_drops_only_the_not_from() {
-        assert_eq!(
-            reply_search_criteria("<m@x>", &["  ".to_string()], true),
-            Some(format!(r#"OR HEADER In-Reply-To "m@x" HEADER References "m@x"{AUTO}"#))
-        );
+        assert_eq!(reply_search_criteria(" <> ", true), None);
     }
 }
 

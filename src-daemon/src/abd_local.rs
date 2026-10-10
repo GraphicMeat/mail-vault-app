@@ -292,6 +292,7 @@ impl LocalStore for DaemonLocal {
         let (state, account, mailbox, uids) =
             (Arc::clone(&self.state), self.account_id.clone(), folder.to_string(), uids.to_vec());
         let r = common::blocking(move || {
+            crate::classification::forget_at(&state.app_dir, &account, &mailbox, &uids);
             crate::custody::with_conn(&state, |c| {
                 mailvault_core::custody::cache::remove_headers(c, &account, &mailbox, &uids)
             })
@@ -301,5 +302,24 @@ impl LocalStore for DaemonLocal {
             Ok(Ok(_)) => {}
             Ok(Err(e)) | Err(e) => warn!("abd: header rows of deleted mail not dropped: {e}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An archive-and-delete job's delete step: the vault copy stays, the
+    /// server copy is gone, so Email Cleanup stops listing it.
+    #[tokio::test]
+    async fn mail_deleted_from_the_server_leaves_email_cleanup() {
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        crate::classification::seed_for_test(&state.app_dir, "acc", &[("<5>", "INBOX", 5), ("<6>", "INBOX", 6)]);
+
+        DaemonLocal::new(Arc::clone(&state), "acc", "a@b.test").deleted_from_server("INBOX", &[5]).await;
+
+        assert_eq!(crate::classification::keys_for_test(&state.app_dir, "acc"), vec!["<6>".to_string()]);
     }
 }

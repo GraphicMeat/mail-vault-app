@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estadísticas de correo: mira quién llena tu bandeja - Blog de MailVault</title>
+  <meta name="description" content="¿Quién te envía más correo y cuándo se acumula? Estadísticas de MailVault responde a ambas cosas con las cabeceras de tu ordenador. Cómo leerlo y actuar.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/es/blog/email-insights-who-fills-your-inbox.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/es/blog/email-insights-who-fills-your-inbox.html">
+  <meta property="og:title" content="Estadísticas de correo en MailVault: quién llena tu bandeja y cuándo">
+  <meta property="og:description" content="¿Quién te envía más correo y cuándo se acumula? Estadísticas de MailVault responde a ambas cosas con las cabeceras de tu ordenador. Cómo leerlo y actuar.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="es_ES">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Estadísticas de correo en MailVault: quién llena tu bandeja y cuándo">
+  <meta name="twitter:description" content="¿Quién te envía más correo y cuándo se acumula? Estadísticas de MailVault responde a ambas cosas a partir de las cabeceras de tu ordenador.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Estadísticas de correo en MailVault: quién llena tu bandeja y cuándo",
+  "description": "¿Quién te envía más correo y cuándo se acumula? Estadísticas de MailVault responde a ambas cosas con las cabeceras de tu ordenador. Cómo leerlo y actuar.",
+  "url": "https://mailvaultapp.com/es/blog/email-insights-who-fills-your-inbox.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "¿Estadísticas de MailVault es gratis?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sí. Estadísticas y Explorer forman parte de la app gratuita, sin cuenta y sin inicio de sesión. Llegaron en MailVault 2.13.0."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Estadísticas sube mi correo a algún sitio?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Estadísticas se construye a partir de datos de cabecera que ya están guardados en tu ordenador. Los gráficos no leen el cuerpo de los mensajes ni los adjuntos, y no se sube nada a ningún servicio."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Puede Estadísticas mostrar todas mis cuentas a la vez?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Estadísticas analiza una cuenta cada vez. Cambia de cuenta con el menú Cuentas de la parte superior de la página."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Por qué mis cifras son más bajas que en el webmail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Estadísticas solo cuenta el correo cuyas cabeceras están en este ordenador. Abre Detalles de cobertura para ver, por carpeta, cuántas cabeceras hay guardadas en local y cuántos mensajes se sabe que tiene el servidor. Guarda más parte del buzón en local y luego pulsa Actualizar estadísticas."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Puede Estadísticas decirme qué remitentes ocupan más almacenamiento?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No directamente. Estadísticas ordena los remitentes por número de mensajes, no por tamaño. Para encontrar correo grande, usa la vista Adjuntos o una búsqueda como from:nombre has:attachment."
+      }
+    }
+  ]
+}
+  </script>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/email-insights-who-fills-your-inbox.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/es/" aria-label="Inicio de MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">por Graphic Meat</a></div>
+      <nav class="mv-navlinks" aria-label="Navegación principal"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Dar una estrella a MailVault en GitHub" title="Dar una estrella a MailVault en GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Enviar un corazón a MailVault" title="Enviar un corazón a MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="Seleccionar idioma"><span class="mv-language-name">Español</span><span class="mv-language-code" aria-hidden="true">ES</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/email-insights-who-fills-your-inbox.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/email-insights-who-fills-your-inbox.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/email-insights-who-fills-your-inbox.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/email-insights-who-fills-your-inbox.html" lang="es" hreflang="es" translate="no" aria-current="page">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/email-insights-who-fills-your-inbox.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/email-insights-who-fills-your-inbox.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/email-insights-who-fills-your-inbox.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/email-insights-who-fills-your-inbox.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/email-insights-who-fills-your-inbox.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="Cambiar tema de color" title="Cambiar tema de color">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Demo</a><a class="mv-button mv-nav-download" href="/es/get-started.html?plan=free">Descargar</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menú</span></summary><nav aria-label="Navegación móvil"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a><a href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Probar la demo</a><a href="/es/get-started.html?plan=free">Descargar gratis</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Cambiar tema de color</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/es/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← Volver al blog</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-08" class="text-sm text-primary-500 font-medium">8 de octubre de 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Estadísticas de correo en MailVault: quién llena tu bandeja y cuándo</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7 min de lectura</span></div>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>Estadísticas es la parte de MailVault que convierte tu buzón en datos de correo con los que puedes actuar: un mapa de remitentes, una cronología y un calendario de actividad que muestran quién te escribe, con qué frecuencia y qué días se acumula el correo. Este artículo recorre cada vista, muestra cómo encontrar a tus remitentes más grandes y qué hacer cuando los encuentres. Si tu problema real es un buzón lleno y quieres recuperar espacio hoy, empieza mejor por la guía para <a href="/es/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">liberar almacenamiento de correo sin perder el correo antiguo</a>.</p>
+
+          <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Respuesta rápida</p>
+            <ul class="list-disc pl-6 space-y-1 text-sm">
+              <li>Abre <strong>Estadísticas</strong> en la barra lateral de MailVault. Es gratis y no necesita cuenta.</li>
+              <li>Para ver quién te envía más correo, abre el Mapa de remitentes y pon <strong>Ordenar remitentes</strong> en <strong>Número de mensajes</strong>.</li>
+              <li>Para ver cuándo se acumula el correo, abre <strong>Actividad</strong>: un cuadro por día, más oscuro cuanto más movimiento.</li>
+              <li>Todo se construye a partir de las cabeceras de los mensajes que ya están en tu ordenador. Los gráficos no suben nada.</li>
+            </ul>
+          </div>
+
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Qué muestra Estadísticas</h2>
+          <p>Estadísticas se abre a pantalla completa desde la barra lateral y tiene tres pestañas. Comparten los mismos controles en la parte superior: qué cuenta, qué intervalo de fechas (últimos 30 días, últimos 90 días, últimos 12 meses o las fechas que elijas), qué dirección (correo recibido, enviado o ambos) y una casilla <strong>Ocultar remitentes probablemente automatizados</strong>. Esta última quita a los remitentes cuyo correo parece enviado por una máquina: una dirección no-reply, o las cabeceras List-Id, List-Unsubscribe o Precedence de envío masivo que añaden las listas de correo.</p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th class="py-2 pr-4 font-semibold">Vista</th>
+                  <th class="py-2 pr-4 font-semibold">Qué dibuja</th>
+                  <th class="py-2 font-semibold">La pregunta que responde</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">Mapa de remitentes</td>
+                  <td class="py-2 pr-4">Tú en el centro y cada remitente como una burbuja. El área de la burbuja es el número de mensajes; la distancia, el tiempo desde el último contacto.</td>
+                  <td class="py-2">¿Quién me escribe más y quién ha dejado de hacerlo?</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-2 pr-4 font-medium">Cronología</td>
+                  <td class="py-2 pr-4">Un carril por remitente a lo largo de un eje temporal. Círculos para el correo recibido, rombos para el enviado. Detalle por semanas, días o mensajes sueltos.</td>
+                  <td class="py-2">¿Con qué frecuencia escribe este remitente, y le respondo alguna vez?</td>
+                </tr>
+                <tr>
+                  <td class="py-2 pr-4 font-medium">Actividad</td>
+                  <td class="py-2 pr-4">Una cuadrícula de calendario, un cuadro por día, sombreado según cuánto correo se movió ese día.</td>
+                  <td class="py-2">¿Cuándo se acumula el correo?</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Todas las vistas son clicables. Haz clic en una burbuja, en un punto de un carril o en un día, y los mensajes correspondientes se abren en una lista, donde puedes leerlos sin salir de Estadísticas.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Encuentra quién te envía más correo</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Abre Estadísticas y elige la cuenta en <strong>Cuentas</strong>. Estadísticas analiza una cuenta cada vez.</li>
+            <li>Pon <strong>Intervalo de fechas</strong> en <em>Últimos 12 meses</em> y <strong>Dirección</strong> en <em>Recibidos</em>.</li>
+            <li>En el <strong>Mapa de remitentes</strong>, las burbujas más grandes son tus remitentes más grandes. Debajo del mapa, cambia <strong>Ordenar remitentes</strong> de <em>Última interacción</em> (la opción predeterminada) a <em>Número de mensajes</em> para verlos en una lista ordenada con cifras.</li>
+            <li>Haz clic en un remitente para ver sus recuentos de recibidos y enviados, la fecha del último contacto y, si cuenta como automatizado, por qué.</li>
+          </ol>
+          <p>Luego hazlo dos veces: una con Ocultar remitentes probablemente automatizados desactivado y otra con la opción activada. La primera lista suele ser de boletines, tiendas y notificaciones. La segunda es la gente con la que de verdad te escribes, que suele ser mucho más corta.</p>
+
+          <figure class="my-6">
+            <img src="/screenshots/es/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="El Mapa de remitentes de Estadísticas en MailVault. Burbujas marcadas con iniciales de dos letras rodean un círculo con la etiqueta Tú. El pie dice: el área de la burbuja indica el número de mensajes. La distancia indica el tiempo desde el último contacto, medido el 24 de septiembre de 2026. Bajo el mapa, Ordenar remitentes está en Última interacción." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">El Mapa de remitentes en una cuenta de prueba. Las burbujas más grandes envían más correo; las más cercanas escribieron más recientemente. El control de orden bajo el mapa empieza en Última interacción.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">¿Qué remitentes ocupan más espacio?</h2>
+          <p>Aquí Estadísticas tiene un límite que conviene conocer: cuenta mensajes, no megabytes. Un remitente con 900 notificaciones cortas llena el mapa, mientras que un cliente que envió seis PDF grandes apenas se ve. El número de mensajes es una aproximación burda del espacio: sirve para encontrar desorden, no para encontrar el correo pesado.</p>
+          <p>Para el correo pesado, mira los adjuntos. El texto ocupa poco; son los archivos los que hacen grande un mensaje. Dos formas de encontrarlos en MailVault:</p>
+          <ul class="list-disc pl-6 space-y-2">
+            <li>La vista integrada <strong>Adjuntos</strong> de la barra lateral muestra los mensajes que llevan archivos.</li>
+            <li>Busca con operadores, por ejemplo <code>from:name has:attachment</code>, para ver el correo con archivos de un remitente. Añade <code>before:2024-01-01</code> para limitarlo al correo más antiguo.</li>
+          </ul>
+          <p>Combina las dos: Estadísticas te dice quién envía mucho, y la búsqueda te dice cuáles de ellos envían cosas grandes.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Mira cuándo se acumula el correo</h2>
+          <p>La pestaña <strong>Actividad</strong> es la imagen más rápida de tu año de correo. Cada cuadro es un día; los cuadros más oscuros significan más correo. Los patrones aparecen enseguida: una oleada de correo cada lunes, un agosto tranquilo, una semana de primavera en la que un proyecto enterró tu bandeja. Haz clic en un cuadro y verás exactamente lo que llegó ese día.</p>
+          <p>La pestaña <strong>Cronología</strong> cuenta lo mismo por remitente. Un boletín aparece como una fila regular de puntos, un cliente con mucho movimiento como un grupo denso, y una relación que se volvió unilateral como un carril de círculos sin rombos. Cambia <strong>Detalle de la cronología</strong> entre semanas, días y mensajes para acercar la vista.</p>
+
+          <figure class="my-6">
+            <img src="/screenshots/es/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="La pestaña Cronología de Estadísticas en MailVault en una cuenta de prueba, con 82 eventos de correo, 82 recibidos y 5 enviados. Las notas bajo el total dicen Basado en el correo disponible en este dispositivo, Falta parte del correo en este dispositivo. Los recuentos pueden estar incompletos, y 51 eventos usan una fecha alternativa. Debajo, un carril por remitente del 25 de septiembre de 2025 al 24 de septiembre de 2026, con puntos para el correo recibido." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">La Cronología, un carril por remitente. Fíjate en las líneas de cobertura bajo el total: esta cuenta de prueba solo tenía parte de su correo en el dispositivo, y Estadísticas lo dice en lugar de adivinar.</figcaption>
+          </figure>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Actúa sobre lo que has encontrado</h2>
+          <p>Estadísticas sirve para mirar. La limpieza se hace en la vista normal del correo, y Explorer la hace rápida:</p>
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Vuelve a la carpeta y cambia la lista de mensajes de <strong>Lista</strong> a <strong>Explorer</strong>.</li>
+            <li>Pon <strong>Explorar por</strong> en <strong>Remitente</strong>. Cada interlocutor pasa a ser un grupo, con cuántos correos contiene, cuántos están ya en tu bóveda y cuántos están sin leer.</li>
+            <li>Marca la casilla de la fila de un remitente para seleccionar de una vez todos los mensajes de ese grupo. En un buzón grande, si Explorer dice «Los grupos reflejan los correos cargados. Hay más correo disponible.», carga antes más correos para que el grupo contenga todo el correo de ese remitente.</li>
+            <li>Elige qué hacer: <strong>Archivar</strong> los copia en tu bóveda y deja el servidor como está (gratis). <strong>Eliminar del servidor</strong> los quita del servidor (gratis). Lo que ya está en tu bóveda conserva su copia, pero lo que no lo está desaparece para siempre, así que archiva primero. <a href="/es/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">Archivar y eliminar</a> guarda cada uno en la bóveda, lo comprueba y luego quita la copia del servidor (Premium).</li>
+          </ol>
+
+          <figure class="my-6">
+            <img src="/screenshots/es/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="Explorer de MailVault con Explorar por en Remitente. Una fila de resumen dice 20 grupos, 82 correos, 13 sin leer. Cada fila de remitente tiene una casilla, un nombre, una dirección y recuentos, por ejemplo Theo Lomas, 6 correos, 6 en la bóveda, 1 sin leer." class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto">
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Explorer por remitente. La casilla de una fila selecciona todo el correo cargado de ese remitente en la carpeta, listo para archivar o eliminar.</figcaption>
+          </figure>
+
+          <p>Para las listas de correo hay un camino más corto. Cuando el correo de un remitente lleva un enlace para darse de baja, los detalles del remitente en Estadísticas muestran un botón <strong>Darse de baja</strong>. MailVault siempre pregunta antes. Si la lista admite la baja con un clic y el mensaje pasó DKIM, MailVault envía la solicitud por sí mismo; si no, abre en tu navegador la página de baja de la lista, o un correo de baja ya preparado.</p>
+          <p>Si ves que los mismos tipos de correo vuelven cada mes, <a href="/es/features/email-cleanup.html" class="text-primary-500 hover:text-primary-600 underline">Limpieza de correo</a> (Premium) puede clasificar boletines, promociones y otras categorías y conservar, archivar o eliminar cada una, con reglas por antigüedad para cada cuenta y carpeta.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Calculado en tu ordenador</h2>
+          <p>Estadísticas lee las cabeceras de los mensajes que MailVault ya tiene en tu disco: remitente, destinatarios y fechas, a partir de las cabeceras en caché de las carpetas que has abierto y de los mensajes de tu bóveda. No lee el cuerpo de los mensajes ni los adjuntos para dibujar los gráficos, y no se envía nada a MailVault. No hay ninguna cuenta de MailVault de por medio, y los gráficos funcionan sin red.</p>
+          <p>Dos acciones sí salen a la red, y solo cuando tú las eliges. Abrir un mensaje desde Estadísticas lo carga de la forma normal, lo que puede suponer descargarlo de tu propio servidor de correo. Darse de baja contacta con la lista de correo, como se ha descrito arriba.</p>
+          <p>Como Estadísticas solo conoce lo que hay en este dispositivo, te dice lo completa que es la imagen. Una nota bajo los controles dice «Basado en el correo disponible en este dispositivo», y <strong>Detalles de cobertura</strong> enumera cada carpeta con cuántas cabeceras hay guardadas en local junto a cuántos mensajes se sabe que tiene el servidor. Si falta correo, indica que los recuentos pueden estar incompletos. Si un mensaje no tenía una fecha fiable, indica cuántos eventos usan una fecha alternativa. Toma un mes tranquilo como un hecho solo cuando la cobertura esté completa. Para completarla, guarda antes más parte del buzón en tu ordenador; nuestra guía sobre <a href="/es/guides/what-is-an-email-vault.html" class="text-primary-500 hover:text-primary-600 underline">qué es una bóveda de correo y cómo crear una</a> lo explica.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Preguntas frecuentes</h2>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">¿Estadísticas de MailVault es gratis?</h3>
+          <p>Sí. Estadísticas y Explorer forman parte de la app gratuita, sin cuenta y sin inicio de sesión. Llegaron en MailVault 2.13.0.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">¿Estadísticas sube mi correo a algún sitio?</h3>
+          <p>No. Estadísticas se construye a partir de datos de cabecera que ya están guardados en tu ordenador. Los gráficos no leen el cuerpo de los mensajes ni los adjuntos, y no se sube nada a ningún servicio.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">¿Puede Estadísticas mostrar todas mis cuentas a la vez?</h3>
+          <p>No. Estadísticas analiza una cuenta cada vez. Cambia de cuenta con el menú Cuentas de la parte superior de la página.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">¿Por qué mis cifras son más bajas que en el webmail?</h3>
+          <p>Estadísticas solo cuenta el correo cuyas cabeceras están en este ordenador. Abre Detalles de cobertura para ver, por carpeta, cuántas cabeceras hay guardadas en local y cuántos mensajes se sabe que tiene el servidor. Guarda más parte del buzón en local y luego pulsa Actualizar estadísticas.</p>
+
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">¿Puede Estadísticas decirme qué remitentes ocupan más almacenamiento?</h3>
+          <p>No directamente. Estadísticas ordena los remitentes por número de mensajes, no por tamaño. Para encontrar correo grande, usa la vista Adjuntos o una búsqueda como from:nombre has:attachment.</p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Qué hacer a continuación</h2>
+          <p>Abre Estadísticas en tu cuenta con más movimiento, ordena el Mapa de remitentes por número de mensajes y mira los diez primeros con los remitentes automatizados visibles y ocultos. Apunta los boletines que ya no lees y los remitentes de notificaciones que podrían ir a una carpeta o a una regla. La <a href="/es/features/insights.html" class="text-primary-500 hover:text-primary-600 underline">página de la función Estadísticas</a> y las <a href="/es/faq/explorer-and-insights.html" class="text-primary-500 hover:text-primary-600 underline">preguntas frecuentes sobre Explorer y Estadísticas</a> tienen más detalles. Si tu buzón está cerca de su límite, la guía sobre <a href="/es/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">qué hacer cuando el almacenamiento de Outlook está lleno</a> continúa a partir de aquí.</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Mira quién llena tu bandeja de entrada.</p>
+            <p class="text-sm mb-4">Estadísticas está en la app gratuita de MailVault para macOS, Windows y Linux. Sin cuenta con nosotros, y los gráficos se construyen en tu ordenador.</p>
+            <div class="flex flex-wrap gap-3"><a href="/es/get-started.html?plan=free" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">Descarga MailVault gratis</a><a href="/es/features/insights.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">Ver Estadísticas</a></div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creación de Graphic Meat</p><h2 id="studio-title">Conoce a las personas detrás de MailVault.</h2><p>Somos Graphic Meat, un estudio independiente de productos que crea software útil desde 2013.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conocer Graphic Meat ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/es/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Lee tu correo. Conserva tu correo.</p></div><nav aria-label="Explora MailVault"><a href="/es/use-cases.html">Casos de uso</a><a href="/es/blog.html">Blog</a><a href="/changelog.html">Novedades</a><a href="/es/faq.html">FAQ</a><a href="/es/docs.html">Ayuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código en GitHub ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Creado por <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

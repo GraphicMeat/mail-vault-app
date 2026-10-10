@@ -1,0 +1,19 @@
+{
+  "f9cef652e1c8": "早割・ファミリー価格は先着 100 名の購読者までの限定で、1 契約につき最大 5 台です。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。",
+  "8a653ec70079": "早割・ファミリー価格は先着 100 名の購読者までの限定で、1 契約につき最大 5 台です。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardMonthly}\">$6</span>/月。",
+  "93311792de5c": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">ずっと無料。早割・ファミリー価格：Premium は <span data-mv-price=\"{yearly}\">$25</span>/年、1 契約につき最大 5 台、14 日間の無料トライアル付き。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。</a>",
+  "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">早割・ファミリー価格：Premium は <span data-mv-price=\"{yearly}\">$25</span>/年。早期アクセス終了後の通常価格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。</a>",
+  "6a75808687cf": "早割・ファミリー価格 <span>MailVault の早期アクセス期間中</span><span>先着 100 名の購読者限定</span>",
+  "b2659317751b": "先着 100 名の購読者までの限定です。",
+  "c69aee3090fa": "MailVault は早期アクセス中です。今の早割・ファミリー価格で登録すると、サブスクリプションが有効な限り、値上げ後も同じ料金のままです。早期アクセス終了後の通常価格は <span data-mv-price=\"{standardMonthly}\">$6</span>/月または <span data-mv-price=\"{standardYearly}\">$39</span>/年で、新規登録の方に適用されます。",
+  "b165a52c2694": "早割・ファミリー価格",
+  "5ffae7ce0a0a": "MailVault は早期アクセス中です。今なら割引価格を固定でき、サブスクリプションが有効な限り、値上げ後も同じ料金のままです。",
+  "c456e993e85f": "1 契約につき最大 5 台",
+  "5328ac1d1bea": "早期アクセスが終わると料金はどうなりますか？",
+  "ca975ed49493": "<span data-mv-price=\"{yearly}\">$25</span><span>/ 年</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdSavingsPercent}%オフ\">36%オフ</span>",
+  "e6ab8b62b31b": "<span data-mv-price=\"{monthly}\">$4</span><span>/ 月</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"{earlyBirdMonthlySavingsPercent}%オフ\">33%オフ</span>",
+  "afcfdfb278e6": "早期アクセス終了後の通常価格より <span data-mv-price=\"{earlyBirdSavingsPercent}%\">36%</span> お得：<span data-mv-price=\"{standardYearly}\">$39</span>/年",
+  "cca45ed84541": "早期アクセス終了後の通常価格より <span data-mv-price=\"{earlyBirdMonthlySavingsPercent}%\">33%</span> お得：<span data-mv-price=\"{standardMonthly}\">$6</span>/月",
+  "c3c58b94d797": "早割 {cap} 枠中 {taken} 枠が埋まっています。",
+  "1ce2c687bdd4": "早割の {cap} 枠はすべて埋まりました。Premium は現在、通常価格です。"
+}

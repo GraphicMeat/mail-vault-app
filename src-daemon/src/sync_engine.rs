@@ -219,6 +219,7 @@ impl SyncEngine {
             mailbox: mailbox.to_string(),
             contacts: Arc::clone(&self.contacts),
             db: self.custody_db.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+            app_dir: self.app_dir.clone(),
         }
     }
 
@@ -1266,6 +1267,8 @@ struct CacheCtx {
     mailbox: String,
     contacts: Arc<ContactsState>,
     db: Option<Arc<mailvault_core::custody::SharedConn>>,
+    /// Where the classifications live: mail the server lost leaves Cleanup.
+    app_dir: PathBuf,
 }
 
 impl CacheCtx {
@@ -1391,14 +1394,21 @@ impl CacheCtx {
 
     fn remove(&self, uids: &[u32]) -> Result<usize, String> {
         self.vault_open()?;
-        self.require_db(|conn| mailvault_core::custody::cache::remove_headers(conn, &self.account, &self.mailbox, uids))
+        let removed =
+            self.require_db(|conn| mailvault_core::custody::cache::remove_headers(conn, &self.account, &self.mailbox, uids))?;
+        crate::classification::forget_at(&self.app_dir, &self.account, &self.mailbox, uids);
+        Ok(removed)
     }
 
     fn prune(&self, live: &[u32]) -> Result<usize, String> {
         self.vault_open()?;
-        self.require_db(|conn| {
+        let live_set: HashSet<u32> = live.iter().copied().collect();
+        let gone: Vec<u32> = self.cached_uids().into_iter().filter(|u| !live_set.contains(u)).collect();
+        let pruned = self.require_db(|conn| {
             mailvault_core::custody::cache::prune_headers(conn, &self.account, &self.mailbox, live)
-        })
+        })?;
+        crate::classification::forget_at(&self.app_dir, &self.account, &self.mailbox, &gone);
+        Ok(pruned)
     }
 
     /// UIDVALIDITY changed: the whole generation goes. Only the rows — the
@@ -1408,7 +1418,9 @@ impl CacheCtx {
         self.vault_open()?;
         self.require_db(|conn| {
             mailvault_core::custody::cache::clear_headers(conn, Some(&self.account), Some(&self.mailbox))
-        })
+        })?;
+        crate::classification::forget_mailbox(&self.app_dir, &self.account, &self.mailbox);
+        Ok(())
     }
 
     /// The vault-closed / vault-moving barrier the sidecar writes used to take
@@ -1602,6 +1614,7 @@ mod tests {
             mailbox: "INBOX".into(),
             contacts: ContactsState::new(dir.to_path_buf()),
             db: Some(Arc::new(std::sync::Mutex::new(Some(conn)))),
+            app_dir: dir.to_path_buf(),
         }
     }
 
@@ -1708,6 +1721,31 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// What a sync learns the server lost (another client deleted or moved
+    /// it, or the folder got a new UIDVALIDITY) leaves Email Cleanup too.
+    #[test]
+    fn a_sync_that_drops_cached_uids_forgets_their_classifications() {
+        let dir = scratch_dir("forget-classified");
+        let c = ctx(&dir, false);
+        c.write_headers(&[test_header(1), test_header(2), test_header(3)]).unwrap();
+        crate::classification::seed_for_test(
+            &dir,
+            "acc1",
+            &[("<1>", "INBOX", 1), ("<2>", "INBOX", 2), ("<3>", "INBOX", 3), ("<9>", "INBOX", 9), ("<x1>", "Sent", 1)],
+        );
+        let keys = || crate::classification::keys_for_test(&dir, "acc1");
+
+        c.remove(&[1]).unwrap();
+        assert_eq!(keys(), vec!["<2>", "<3>", "<9>", "<x1>"], "an expunge forgets that uid");
+        c.prune(&[3]).unwrap();
+        assert_eq!(keys(), vec!["<3>", "<9>", "<x1>"], "a reconcile forgets what the server no longer lists");
+        c.wipe().unwrap();
+        assert_eq!(keys(), vec!["<x1>"], "a new UIDVALIDITY forgets the whole folder, not another");
+
+        drop(c);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// Task 2.7 (2.5 review I4): a sync write attempted while the vault is
     /// closed for a move is refused with the same `E_VAULT_UNAVAILABLE:` text
     /// every gated RPC route uses, and nothing is stored.
@@ -1775,6 +1813,7 @@ mod tests {
             list_unsubscribe_post: None,
             list_id: None,
             precedence: None,
+            auto_reply: None,
         }
     }
 

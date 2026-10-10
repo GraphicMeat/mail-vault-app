@@ -57,6 +57,7 @@ const settingsStore = create(() => ({ notificationSettings: { enabled: true, sho
 vi.mock('../settingsStore', () => ({
   useSettingsStore: Object.assign((s) => settingsStore(s), { getState: () => settingsStore.getState() }),
   hasPremiumAccess: () => false,
+  selectOwnAddresses: (_state, account) => [account?.email].filter(Boolean),
 }));
 
 const { initSnooze, useSnoozeStore } = await import('../snoozeStore');

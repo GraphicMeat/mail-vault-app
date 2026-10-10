@@ -56,7 +56,7 @@ export function hasValidCredentials(account) {
   return !!account.oauth2AccessToken;
 }
 
-const CREDENTIALS_UNAVAILABLE = 'Credentials unavailable — retry keychain access or re-enter in Settings > Accounts';
+const CREDENTIALS_UNAVAILABLE = 'Credentials unavailable: retry keychain access or re-enter in Settings > Accounts';
 
 /**
  * Resolve a fully credentialed account ready for server operations.

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arquivamento de e-mail para Mac: tenha uma cópia sua | MailVault</title>
+  <meta name="description" content="Arquivamento de e-mail para Mac: arquivo vs backup vs sincronização, suas opções no macOS, qual formato guardar e como montar e conferir um arquivo local.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/guides/email-archiving-for-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/guides/email-archiving-for-mac.html">
+  <meta property="og:title" content="Arquivamento de e-mail para Mac: tenha uma cópia sua | MailVault">
+  <meta property="og:description" content="Arquivamento de e-mail para Mac: arquivo vs backup vs sincronização, suas opções no macOS, qual formato guardar e como montar e conferir um arquivo local.">
+  <meta property="og:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Arquivamento de e-mail para Mac: tenha uma cópia sua | MailVault">
+  <meta name="twitter:description" content="Arquivamento de e-mail para Mac: arquivo vs backup vs sincronização, suas opções no macOS, qual formato guardar e como montar e conferir um arquivo local.">
+  <meta name="twitter:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como arquivar seus e-mails num Mac e guardá-los de vez",
+  "description": "Arquivamento de e-mail para Mac: arquivo vs backup vs sincronização, suas opções no macOS, qual formato guardar e como montar e conferir um arquivo local.",
+  "url": "https://mailvaultapp.com/pt-br/guides/email-archiving-for-mac.html",
+  "datePublished": "2026-10-08",
+  "dateModified": "2026-10-08",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "O botão Arquivar do Apple Mail salva meus e-mails no meu Mac?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não. O guia do Mail da Apple diz que arquivar move a mensagem para uma caixa Arquivo criada para aquela conta de e-mail. É uma mudança de lugar dentro da conta, não uma cópia no seu disco. Para ter uma cópia sua, exporte a caixa de correio ou use uma ferramenta de arquivamento."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qual é o melhor formato de arquivo para um arquivo de e-mail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Arquivos .eml simples ou mbox. Os dois são formatos abertos que muitos apps de e-mail conseguem ler. O eml guarda uma mensagem por arquivo, então um arquivo danificado afeta uma mensagem. O mbox guarda um arquivo por pasta e é o formato de importação mais comum."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quanto tempo leva para arquivar uma conta Gmail grande?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O Google limita os downloads por IMAP a 2.500 MB por dia por conta, então uma caixa postal maior do que isso leva mais de um dia com qualquer ferramenta IMAP. O MailVault para quando o limite é atingido e continua de onde parou na próxima execução."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Arquivar e-mails num Mac é grátis?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pode ser. A exportação do Apple Mail e o Thunderbird não custam nada, e o MailVault é grátis, incluindo backups manuais ilimitados. No MailVault, os backups que rodam com agendamento fazem parte do Premium."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso excluir e-mails do servidor depois de arquivá-los?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim, depois de conferir o arquivo. As cópias arquivadas no MailVault ficam no seu disco, faça o servidor o que fizer depois. O MailVault Premium pode arquivar e excluir numa só etapa, conferindo cada cópia salva antes de a cópia do servidor ser removida."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/email-archiving-for-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/email-archiving-for-mac.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Pular para o conteúdo</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/pt-br/" aria-label="Página inicial do MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">por Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Navegação principal"><a href="/pt-br/features.html">Recursos</a><a href="/pt-br/pricing.html">Preços</a><a href="/pt-br/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Dar uma estrela ao MailVault no GitHub" title="Dar uma estrela ao MailVault no GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Mandar um coração para o MailVault" title="Mandar um coração para o MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Escolha o idioma"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Português (Brasil)</span><span class="mv-language-code" aria-hidden="true">PT-BR</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/email-archiving-for-mac.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/email-archiving-for-mac.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/email-archiving-for-mac.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/email-archiving-for-mac.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/email-archiving-for-mac.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/email-archiving-for-mac.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/email-archiving-for-mac.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/email-archiving-for-mac.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/email-archiving-for-mac.html" lang="pt-BR" hreflang="pt-BR" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Alternar tema de cores" title="Alternar tema de cores"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=pt-BR" target="_blank" rel="noopener" aria-label="Abrir a demonstração do MailVault em uma nova janela">Demonstração</a><a class="mv-button mv-nav-download" href="/pt-br/get-started.html?plan=free">Download</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menu</span></summary>
+<nav aria-label="Navegação móvel"><a href="/pt-br/features.html">Recursos</a><a href="/pt-br/pricing.html">Preços</a><a href="/pt-br/faq.html">FAQ</a><a href="/demo/?lang=pt-BR" target="_blank" rel="noopener" aria-label="Abrir a demonstração do MailVault em uma nova janela">Experimentar a demonstração</a><a href="/pt-br/get-started.html?plan=free">Baixar grátis</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Alternar tema de cores</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Voltar ao início
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Como arquivar seus e-mails num Mac e guardá-los de vez</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 min de leitura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Arquivar e-mails no Mac significa salvar uma cópia completa dos seus e-mails como arquivos no seu próprio disco, num formato aberto, para que continuem legíveis depois que o provedor os apagar, a conta for encerrada ou o app que você usava sumir. Este guia explica o que o arquivamento é e o que não é, as opções que o macOS oferece, qual formato de arquivo guardar e como montar e conferir um arquivo de uma conta Gmail, Outlook.com, iCloud ou IMAP. Se você já sabe tudo isso e só quer escolher uma ferramenta, leia a nossa <a href="/pt-br/guides/best-email-archiver-for-mac.html">lista dos melhores arquivadores de e-mail para Mac</a>.
+          </p>
+
+          <div class="p-5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Resposta rápida</p>
+            <ul class="list-disc pl-6 space-y-2">
+              <li>O botão Arquivar do Apple Mail, do Gmail ou do Outlook move o e-mail para outra pasta da mesma conta. Ele continua no seu provedor, e nada novo é salvo para você.</li>
+              <li>Um arquivo de verdade é uma cópia que é sua: um arquivo por mensagem (.eml) ou um arquivo por pasta (mbox), no seu Mac ou num disco que você controla.</li>
+              <li>O Apple Mail pode exportar uma caixa de correio como mbox para uma cópia avulsa. Um arquivo que acompanhe os e-mails novos precisa de uma ferramenta que baixe repetidamente.</li>
+              <li>No MailVault, um app gratuito: adicione a conta, defina <strong>O que fazer backup</strong> como <strong>Todos os e-mails</strong>, clique em <strong>Fazer backup de todas as contas agora</strong> e depois confira os ícones de cada linha. Backups agendados são Premium.</li>
+            </ul>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Arquivo, backup e sincronização não são a mesma coisa</h2>
+
+          <p>
+            O botão Arquivar do seu app de e-mail é uma mudança de lugar, não uma cópia. O guia do Mail da Apple diz que arquivar move a mensagem para uma caixa Arquivo criada para aquela conta de e-mail. A ajuda do Gmail diz que uma mensagem arquivada ainda pode ser encontrada em Todos os e-mails. A ajuda do Outlook da Microsoft diz que o botão Arquivar não reduz o tamanho da sua caixa postal. Nos três casos, os e-mails ficam com o provedor.
+          </p>
+
+          <p>
+            A sincronização espelha o servidor, então uma mensagem excluída no celular também some do Mac. Um backup é uma cópia guardada em outro lugar para você poder restaurá-la. Um arquivo, no sentido usado nesta página, é um backup que você guarda por anos e ainda consegue ler: completo, pesquisável e sem depender de um único app.
+          </p>
+
+          <div class="scroll-x overflow-x-auto -mx-4 sm:mx-0">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">O que é</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Onde os e-mails ficam</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Sobrevive à exclusão no servidor?</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Libera espaço no servidor?</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-700 dark:text-slate-300">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">Sincronização (um app de e-mail comum)</td>
+                  <td class="py-3 px-4">No servidor, espelhados nos seus dispositivos</td>
+                  <td class="py-3 px-4">Não</td>
+                  <td class="py-3 px-4">Não</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">O botão Arquivar</td>
+                  <td class="py-3 px-4">Outra pasta da mesma conta</td>
+                  <td class="py-3 px-4">Não</td>
+                  <td class="py-3 px-4">Não</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">Backup</td>
+                  <td class="py-3 px-4">Uma segunda cópia que você controla</td>
+                  <td class="py-3 px-4">Sim, se nunca for podado</td>
+                  <td class="py-3 px-4">Só se você depois excluir no servidor</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">Arquivo (cópia local)</td>
+                  <td class="py-3 px-4">Arquivos no seu Mac ou no seu próprio disco</td>
+                  <td class="py-3 px-4">Sim</td>
+                  <td class="py-3 px-4">Só se você depois excluir no servidor</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Suas opções num Mac</h2>
+
+          <ul class="list-disc pl-6 space-y-3">
+            <li><strong>O Exportar Caixa de Correio do Apple Mail.</strong> Selecione uma ou mais caixas de correio, escolha Caixa de Correio &gt; Exportar Caixa de Correio e escolha uma pasta. A Apple diz que a exportação fica no formato mbox e que o Mail não sobrescreve uma exportação anterior, mas cria um novo arquivo .mbox ao lado dela. Arquivo &gt; Importar Caixas de Correio a traz de volta. É grátis e nativo, mas é um retrato do momento que você repete à mão.</li>
+            <li><strong>Thunderbird.</strong> Gratuito e de código aberto, com download para macOS. A Mozilla diz que o Thunderbird guarda os e-mails como um arquivo mbox por pasta por padrão, com um armazenamento opcional de um arquivo por mensagem (Maildir) que a Mozilla ainda trata como experimental. O complemento ImportExportTools NG exporta mensagens como EML, PDF e outros formatos, e pastas como mbox.</li>
+            <li><strong>Ferramentas de backup de linha de comando.</strong> O Got Your Back (GYB) é uma ferramenta de código aberto que faz backup de contas Gmail e Google Workspace numa pasta local pela API do Gmail, e pode restaurá-las. Serve para quem se sente à vontade no Terminal e cobre só contas Google.</li>
+            <li><strong>Arquivadores dedicados.</strong> Mail Archiver X, MailSteward e EagleFiler são apps pagos para Mac que reúnem e-mails num arquivo ou biblioteca pesquisável, cada um guardado do seu jeito. A nossa página do <a href="/pt-br/guides/best-email-archiver-for-mac.html">melhor arquivador de e-mail para Mac</a> os compara por caso de uso.</li>
+            <li><strong>MailVault.</strong> Um app de e-mail gratuito para macOS, Windows e Linux que mantém uma cópia dos seus e-mails no seu computador como arquivos .eml simples em pastas no estilo Maildir, faz login no Gmail, Microsoft 365, Outlook.com e em qualquer conta IMAP, e não tem conta nem servidor do MailVault no caminho dos seus e-mails. O restante deste guia o usa no passo a passo.</li>
+          </ul>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Em qual formato guardar seus e-mails</h2>
+
+          <p>
+            O formato importa mais do que a ferramenta, porque o arquivo deve durar mais do que a ferramenta.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Arquivos .eml.</strong> Uma mensagem por arquivo, no formato de mensagem da internet (RFC 5322): cabeçalhos, corpo e anexos juntos. Muitos apps de e-mail os abrem diretamente, e um arquivo danificado afeta uma só mensagem. O Maildir é a estrutura de pastas que os organiza.</li>
+            <li><strong>mbox.</strong> Um arquivo por pasta, com as mensagens uma depois da outra. É o formato de importação mais aceito, e é por isso que o Apple Mail o exporta. Normalmente você precisa importá-lo num app antes de poder navegar por ele, e um arquivo danificado afeta uma pasta inteira.</li>
+            <li><strong>O banco de dados próprio de um app.</strong> Arquivadores dedicados muitas vezes usam um, e ele pode deixar a busca rápida. A desvantagem é que ler o arquivo depende desse app. Antes de se comprometer, confira se ele consegue exportar tudo para mbox ou .eml.</li>
+          </ul>
+
+          <p>
+            Uma regra prática: mantenha pelo menos uma cópia do seu arquivo em .eml ou mbox, seja o que for que você use além disso. Para saber mais sobre o que conferir antes de confiar numa ferramenta, veja o nosso <a href="/pt-br/guides/imap-backup-tool-checklist.html">checklist de ferramentas de backup IMAP</a>.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Passo a passo: arquive Gmail, Outlook.com, iCloud ou IMAP no seu Mac com o MailVault</h2>
+
+          <p>
+            O MailVault roda no macOS 11 Big Sur ou posterior, em Apple Silicon e Intel. Todas as etapas são grátis, salvo as marcadas como Premium.
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-3">
+            <li><strong>Instale o MailVault</strong> pela <a href="/pt-br/get-started.html">página de download</a>.</li>
+            <li><strong>Adicione sua conta.</strong> Gmail e Microsoft 365 fazem login na página do próprio Google ou da Microsoft. Contas pessoais do Outlook.com, Hotmail e Live.com se conectam pelo Microsoft Graph, então não há configurações IMAP para preencher. O iCloud Mail e outros provedores usam IMAP. No iCloud, o MailVault entra com uma senha específica de app que você cria na sua Conta Apple; o nosso <a href="/pt-br/guides/export-icloud-mail.html">guia de exportação do iCloud Mail</a> mostra o passo a passo. Sua senha fica guardada no chaveiro do sistema, não no MailVault.</li>
+            <li><strong>Diga ao MailVault para fazer backup de tudo.</strong> Abra Configurações &gt; Backup e restauração &gt; Configurações de backup. Em <strong>O que fazer backup</strong>, o padrão é <strong>Somente e-mails arquivados (salvos localmente)</strong>. Mude para <strong>Todos os e-mails (baixar do servidor)</strong> para incluir os e-mails que ainda estão só no servidor. É aqui também que você pode escolher uma segunda cópia num disco externo ou NAS.</li>
+          </ol>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/settings-backup-720.webp 720w, /screenshots/pt-br/settings-backup-1440.webp 1440w, /screenshots/pt-br/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/pt-br/settings-backup-light-1440.webp" srcset="/screenshots/pt-br/settings-backup-light-720.webp 720w, /screenshots/pt-br/settings-backup-light-1440.webp 1440w, /screenshots/pt-br/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Configurações do MailVault, Backup e restauração, aba Configurações de backup. Ela mostra onde os e-mails estão guardados, com os botões Abrir pasta e Mover e-mails, o menu O que fazer backup definido como Somente e-mails arquivados e o seletor de pasta da segunda cópia, armazenamento externo frio." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Configurações de backup. Mude O que fazer backup de Somente e-mails arquivados para Todos os e-mails antes da primeira execução.</figcaption>
+          </figure>
+
+          <ol class="list-decimal pl-6 space-y-3" start="4">
+            <li><strong>Rode o backup.</strong> Abra a aba <strong>Agendamento de backup</strong> e clique em <strong>Fazer backup de todas as contas agora</strong>, ou em <strong>Fazer backup agora</strong> no cartão de uma conta. Ele cobre todas as pastas da conta. Backups manuais são grátis e sem cota da nossa parte; o espaço usado é o do seu próprio disco.</li>
+          </ol>
+
+
+          <ol class="list-decimal pl-6 space-y-3" start="5">
+            <li><strong>Dê tempo a uma caixa postal grande.</strong> O Google limita os downloads por IMAP a 2.500 MB por dia por conta, e passar disso suspende o acesso, normalmente por uma hora e por até 24. Isso vale para qualquer ferramenta IMAP. O MailVault para de forma limpa no limite, e a próxima execução continua de onde parou. Uma conta Gmail grande pode levar vários dias.</li>
+            <li><strong>Ou arquive só uma parte.</strong> Para guardar só alguns e-mails, selecione mensagens (ou um ano, ou uma pasta inteira) e escolha <strong>Arquivar</strong>. Isso as copia para o seu cofre e não mexe na cópia do servidor. É grátis.</li>
+          </ol>
+
+          <p>
+            Uma configuração que vale conhecer: Configurações &gt; Armazenamento &gt; Modo de download decide quantos e-mails comuns em cache ficam no Mac. O padrão, Manter recentes, guarda os últimos meses. Ele nunca remove backups nem e-mails arquivados, então não encolhe o seu arquivo.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Como conferir se o arquivo está completo</h2>
+
+          <p>
+            Confira a cópia antes de excluir qualquer coisa no servidor.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Leia os ícones das linhas.</strong> Cada mensagem mostra se está só no servidor, no seu cofre, se é sua única cópia ou se também está no seu disco de backup. A chave Cofre acima da lista de pastas mostra só o que está salvo no seu Mac.</li>
+            <li><strong>Fique offline.</strong> Desligue o Wi-Fi, abra algumas mensagens antigas com anexos e faça uma busca. Tudo o que abrir agora está no seu disco.</li>
+            <li><strong>Abra os arquivos em outro lugar.</strong> Configurações &gt; Backup e restauração &gt; Configurações de backup &gt; Abrir pasta mostra o cofre no Finder. Abra alguns arquivos .eml no Apple Mail. Se eles aparecerem corretamente ali, o arquivo não depende do MailVault.</li>
+            <li><strong>Compare as contagens (Premium).</strong> O monitoramento dos backups mostra as contagens do servidor, do app e do disco externo por pasta, para você ver quais pastas estão totalmente salvas.</li>
+          </ul>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/state-icons-720.webp 720w, /screenshots/pt-br/state-icons-1440.webp 1440w, /screenshots/pt-br/state-icons-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/pt-br/state-icons-light-1440.webp" srcset="/screenshots/pt-br/state-icons-light-720.webp 720w, /screenshots/pt-br/state-icons-light-1440.webp 1440w, /screenshots/pt-br/state-icons-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="A caixa de entrada do MailVault com um ícone de cofre em cada linha de mensagem. Uma legenda no pé da lista diz Somente no servidor, No seu cofre, Única cópia e No disco de backup, e a lista de pastas tem as chaves Tudo, Servidor e Cofre." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Cada linha diz onde aquela mensagem está. A legenda abaixo da lista explica os ícones.</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <picture>
+              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/premium-backup-health-detail-720.webp 720w, /screenshots/pt-br/premium-backup-health-detail-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/pt-br/premium-backup-health-detail-light-1440.webp" srcset="/screenshots/pt-br/premium-backup-health-detail-light-720.webp 720w, /screenshots/pt-br/premium-backup-health-detail-light-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="524" loading="lazy" decoding="async" alt="A tabela Verificação do backup no MailVault. O app está em 73 por cento, o externo não está configurado, e cada linha de pasta mostra uma contagem do servidor ao lado de uma contagem do app, por exemplo Archive com 12 no servidor e 0 no app. O total diz 84 de 115 no app." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            </picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Premium: o monitoramento dos backups compara o servidor e o seu Mac pasta por pasta. Aqui as pastas Archive, Trash, Clients e Suppliers ainda não foram salvas.</figcaption>
+          </figure>
+
+          <p>
+            Quando você estiver pronto para limpar o servidor, o <a href="/pt-br/features/archive-and-delete.html">Arquivar e excluir</a> do MailVault (Premium) copia cada mensagem para o seu cofre, confere a cópia e só então exclui a cópia do servidor. Excluir do servidor por si só é grátis, mas aí a conferência fica por sua conta.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Como manter o arquivo em dia</h2>
+
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>À mão, grátis.</strong> Rode <strong>Fazer backup de todas as contas agora</strong> quando quiser. Os backups são incrementais, então as execuções seguintes baixam só os e-mails novos desde a última. Veja <a href="/pt-br/features/local-backups.html">backups manuais</a>.</li>
+            <li><strong>Com agendamento, Premium.</strong> Os <a href="/pt-br/features/scheduled-backups.html">backups agendados</a> rodam a cada hora, uma vez por dia, uma vez por semana ou nos horários que você escolher, e só enquanto o app está ocioso. O Premium custa $4 por mês ou $25 por ano no preço atual de acesso antecipado para os primeiros 100 assinantes (depois disso, o preço normal é $6 por mês ou $39 por ano).</li>
+          </ul>
+
+          <p>
+            De um jeito ou de outro, mantenha uma segunda cópia longe do Mac: o cofre é feito de arquivos comuns, então um disco externo ou um NAS podem guardar uma. Para entender melhor por que ter uma cópia local, leia <a href="/pt-br/guides/archive-imap-emails-locally.html">como arquivar e-mails IMAP localmente</a>.
+          </p>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Perguntas frequentes</h2>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">O botão Arquivar do Apple Mail salva meus e-mails no meu Mac?</h3>
+            <p>Não. O guia do Mail da Apple diz que arquivar move a mensagem para uma caixa Arquivo criada para aquela conta de e-mail. É uma mudança de lugar dentro da conta, não uma cópia no seu disco. Para ter uma cópia sua, exporte a caixa de correio ou use uma ferramenta de arquivamento.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Qual é o melhor formato de arquivo para um arquivo de e-mail?</h3>
+            <p>Arquivos .eml simples ou mbox. Os dois são formatos abertos que muitos apps de e-mail conseguem ler. O eml guarda uma mensagem por arquivo, então um arquivo danificado afeta uma mensagem. O mbox guarda um arquivo por pasta e é o formato de importação mais comum.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Quanto tempo leva para arquivar uma conta Gmail grande?</h3>
+            <p>O Google limita os downloads por IMAP a 2.500 MB por dia por conta, então uma caixa postal maior do que isso leva mais de um dia com qualquer ferramenta IMAP. O MailVault para quando o limite é atingido e continua de onde parou na próxima execução.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Arquivar e-mails num Mac é grátis?</h3>
+            <p>Pode ser. A exportação do Apple Mail e o Thunderbird não custam nada, e o MailVault é grátis, incluindo backups manuais ilimitados. No MailVault, os backups que rodam com agendamento fazem parte do Premium.</p>
+          </div>
+
+          <div class="pt-2">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Posso excluir e-mails do servidor depois de arquivá-los?</h3>
+            <p>Sim, depois de conferir o arquivo. As cópias arquivadas no MailVault ficam no seu disco, faça o servidor o que fizer depois. O MailVault Premium pode arquivar e excluir numa só etapa, conferindo cada cópia salva antes de a cópia do servidor ser removida.</p>
+          </div>
+
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">O que fazer a seguir</h2>
+
+          <p>
+            Escolha a conta que você menos gostaria de perder, faça um primeiro arquivo esta semana e confira com as etapas acima. Para fazer isso com o MailVault, é um download gratuito, sem conta para criar.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Tenha uma cópia dos seus e-mails no seu Mac</p>
+            <p class="text-sm mb-4">Arquivos .eml simples no seu próprio disco. Grátis para macOS, Windows e Linux, código-fonte no GitHub, sem conta do MailVault.</p>
+            <a href="/pt-br/get-started.html?plan=free" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Baixe o MailVault grátis
+            </a>
+          </div>
+
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Uma criação da Graphic Meat</p><h2 id="studio-title">Conheça as pessoas por trás do MailVault.</h2><p>Somos a Graphic Meat, um estúdio independente de produtos que cria software útil desde 2013. MailVault é uma das coisas que fazemos. Venha nos conhecer e explorar em que mais estamos trabalhando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conheça a Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visite a Graphic Meat, o estúdio por trás do MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mais da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transforme suas fotos em um livro pronto para impressão.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Um espaço de trabalho local para notas e código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mova seu e-mail para outro provedor.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/pt-br/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Leia seu e-mail. Guarde seu e-mail.</p>
+</div>
+<nav aria-label="Explore o MailVault"><a href="/pt-br/use-cases.html">Casos de uso</a><a href="/pt-br/blog.html">Blog</a><a href="/changelog.html">Novidades</a><a href="/pt-br/mentioned-in.html">Menções</a><a href="/pt-br/faq.html">FAQ</a><a href="/pt-br/docs.html">Ajuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código no GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidade ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Fale com a equipe ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Feito pela <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacidade</a><a href="/terms.html">Termos</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

@@ -261,3 +261,54 @@ describe('LOCALES', () => {
     expect(new Set(LOCALES.map((l) => l.flag)).size).toBe(8);
   });
 });
+
+// English-only blocks (feature clips awaiting approval) must never reach a
+// locale page, nor the corpus a translator works from.
+describe('data-i18n-en-only', () => {
+  const MARKED = `<main>
+<section class="hero"><h1>Keep your mail.</h1></section>
+<section id="clips" data-i18n-en-only aria-label="See it in seconds">
+<figure class="mv-clip"><video muted loop playsinline preload="none" poster="/assets/clips/en/a.jpg" aria-label="A clip plays"><source src="/assets/clips/en/a.mp4" type="video/mp4"></video>
+<figcaption><strong>Undo Send</strong><span>Send a reply and it waits.</span><a href="/features/undo-send.html">Learn more</a></figcaption></figure>
+<section><p>Nested section stays inside.</p></section>
+</section>
+  <div data-i18n-en-only><p>Indented block too.</p></div>
+<section><h2>Next section</h2></section>
+</main>`;
+  const PLAIN = `<main>
+<section class="hero"><h1>Keep your mail.</h1></section>
+<section><h2>Next section</h2></section>
+</main>`;
+
+  it('drops the marked element, and only it, from the locale page, byte for byte', () => {
+    expect(render(MARKED, 'index.html', de, {})).toBe(render(PLAIN, 'index.html', de, {}));
+  });
+
+  it('keeps every marked string out of the corpus', () => {
+    const texts = collect(MARKED).map((f) => f.text);
+    expect(texts).toContain('Keep your mail.');
+    expect(texts).toContain('Next section');
+    for (const s of ['See it in seconds', 'A clip plays', 'Undo Send', 'Send a reply and it waits.', 'Learn more', 'Nested section stays inside.', 'Indented block too.']) {
+      expect(texts).not.toContain(s);
+    }
+  });
+});
+
+// Pages redesigned in English before translation: the locale pages are built
+// from a frozen snapshot of the English page, and the English-only clips tag
+// falls back to the tag the locale pages already carry.
+describe('frozen pages and the clips tag', () => {
+  it('builds frozen pages from their snapshot and every other page from the live source', async () => {
+    const { FROZEN, sourceHtml } = await import('../../website/i18n/i18n.mjs');
+    const { readFileSync } = await import('node:fs');
+    expect(Object.keys(FROZEN)).toEqual(['index.html']);
+    expect(sourceHtml('index.html')).toBe(readFileSync('website/' + FROZEN['index.html'], 'utf8'));
+    expect(sourceHtml('pricing.html')).toBe(readFileSync('website/pricing.html', 'utf8'));
+  });
+
+  it('keeps the conversion tag on a locale copy of a clips page, and other tags as they are', () => {
+    const tag = (t) => `<script defer src="/gm.js?v=1" data-site="mailvault" data-tag="${t}">\n</script>`;
+    expect(render(tag('clips-2026-10'), 'features/undo-send.html', de, {})).toBe(render(tag('conversion-2026-10'), 'features/undo-send.html', de, {}));
+    expect(render(tag('redesign-2026-09'), 'blog.html', de, {})).toContain('data-tag="redesign-2026-09"');
+  });
+});

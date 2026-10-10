@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { bootstrapTags } from './services/tagMigration';
+import { initTagEvents } from './stores/tagStore';
 import { initScheduledSend } from './stores/scheduledStore';
 import { initSnooze } from './stores/snoozeStore';
 import { initFollowUp } from './stores/followUpStore';
@@ -1353,6 +1354,8 @@ function App() {
           initFollowUp();
           // Loads Auto Tag rules and subscribes to backfill progress/completion.
           initAutoTags();
+          // Tags the daemon assigns on its own reach the rows on screen.
+          initTagEvents();
         }).catch((err) => {
           console.error('[App] Full init failed:', err);
           clearTimeout(failsafe);

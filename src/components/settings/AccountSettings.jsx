@@ -794,12 +794,12 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-mail-text-muted space-y-0.5">
                     <div>
-                      {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code>
+                      {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '-'}:{selectedAccount.imapPort || 993}</code>
                       {selectedAccount.imapSecurity && selectedAccount.imapSecurity !== 'ssl' && (
                         <span className="ml-1">({selectedAccount.imapSecurity.toUpperCase()})</span>
                       )}
                     </div>
-                    <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
+                    <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '-'}:{selectedAccount.smtpPort || 587}</code></div>
                   </div>
                   <button
                     onClick={() => openChangeServer(selectedAccountId)}
@@ -1035,7 +1035,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                         {t('settings.accounts.sureRemoveAccount', { email: pa(selectedAccount.email, 'email') })}
                       </p>
                       <p className="text-sm text-mail-text-muted mb-2">
-                        Deletes this account\u2019s emails, attachments and settings from your vault. Mail still on the server is untouched; anything the server no longer has is gone for good.
+                        {t('settings.accounts.removeAccountExplanation')}
                       </p>
                       {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) && (
                         <p className="text-sm text-mail-warning mb-2">

@@ -1,0 +1,19 @@
+{
+  "f9cef652e1c8": "早鸟与家庭定价仅限前 100 位订阅者，每个订阅最多 5 台设备。早期访问结束后的标准价格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。",
+  "8a653ec70079": "早鸟与家庭定价仅限前 100 位订阅者，每个订阅最多 5 台设备。早期访问结束后的标准价格：<span data-mv-price=\"{standardMonthly}\">$6</span>/月。",
+  "93311792de5c": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"hero\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">永久免费。早鸟与家庭定价：Premium <span data-mv-price=\"{yearly}\">$25</span>/年，每个订阅最多 5 台设备，14 天免费试用。早期访问结束后的标准价格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。</a>",
+  "3181f2b60500": "<a data-acquisition-event=\"home_cta\" data-acquisition-placement=\"final\" data-acquisition-destination=\"pricing\" href=\"/pricing.html\">早鸟与家庭定价：Premium <span data-mv-price=\"{yearly}\">$25</span>/年。早期访问结束后的标准价格：<span data-mv-price=\"{standardYearly}\">$39</span>/年。</a>",
+  "6a75808687cf": "早鸟与家庭定价<span>MailVault 早期访问期间</span><span>仅限前 100 位订阅者</span>",
+  "b2659317751b": "仅限前 100 位订阅者。",
+  "c69aee3090fa": "MailVault 处于早期访问阶段。如果你现在以早鸟与家庭定价订阅，只要订阅有效，即使日后涨价，你的价格也保持不变。早期访问结束后的标准价格为 <span data-mv-price=\"{standardMonthly}\">$6</span>/月或 <span data-mv-price=\"{standardYearly}\">$39</span>/年，适用于新订阅用户。",
+  "b165a52c2694": "早鸟与家庭定价",
+  "5ffae7ce0a0a": "MailVault 处于早期访问阶段。今天锁定优惠价：只要订阅有效，即使日后涨价，你的价格也保持不变。",
+  "c456e993e85f": "每个订阅最多 5 台设备",
+  "5328ac1d1bea": "早期访问结束后，我的价格会怎样？",
+  "ca975ed49493": "<span data-mv-price=\"{yearly}\">$25</span><span>/ 年</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"优惠 {earlyBirdSavingsPercent}%\">优惠 36%</span>",
+  "e6ab8b62b31b": "<span data-mv-price=\"{monthly}\">$4</span><span>/ 月</span><span class=\"mv-tag\" data-mv-early data-mv-price=\"优惠 {earlyBirdMonthlySavingsPercent}%\">优惠 33%</span>",
+  "afcfdfb278e6": "比早期访问结束后的标准价格低 <span data-mv-price=\"{earlyBirdSavingsPercent}%\">36%</span>：<span data-mv-price=\"{standardYearly}\">$39</span>/年",
+  "cca45ed84541": "比早期访问结束后的标准价格低 <span data-mv-price=\"{earlyBirdMonthlySavingsPercent}%\">33%</span>：<span data-mv-price=\"{standardMonthly}\">$6</span>/月",
+  "c3c58b94d797": "{cap} 个早鸟名额已占 {taken} 个。",
+  "1ce2c687bdd4": "{cap} 个早鸟名额已全部占满。Premium 现按标准价格提供。"
+}
