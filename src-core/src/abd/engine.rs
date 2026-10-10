@@ -545,11 +545,11 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
 
     fn can_delete(&self) -> bool {
         self.trash_info.is_some()
-            && (self.job.caps.move_cmd || self.job.caps.uidplus || self.job.provider == Provider::Graph)
+            && (self.job.caps.move_cmd || self.job.caps.uidplus || self.job.provider.is_id_based())
     }
 
     fn can_empty(&self) -> bool {
-        self.job.caps.uidplus || self.job.provider == Provider::Graph
+        self.job.caps.uidplus || self.job.provider.is_id_based()
     }
 
     fn is_gmail_route(&self, i: usize) -> bool {
@@ -791,7 +791,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
     /// error, "gone" and a reply without UIDVALIDITY are `Unknown`, never
     /// "unchanged".
     async fn read_validity(&mut self, folder: &FolderInfo, recorded: Option<u32>) -> Flow<Validity> {
-        if self.job.provider == Provider::Graph {
+        if self.job.provider.is_id_based() {
             return Ok(Validity::Same);
         }
         let Some(recorded) = recorded else { return Ok(Validity::Unknown) };
@@ -821,7 +821,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
 
     /// The UIDVALIDITY a command in `via` must find, or `None` for Graph.
     fn expected_validity(&self, i: usize, via_path: &str) -> Option<u32> {
-        if self.job.provider == Provider::Graph {
+        if self.job.provider.is_id_based() {
             return None;
         }
         match self.job.gmail.as_ref() {
@@ -861,7 +861,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         if self.job.folders[i].stale {
             return Ok(false);
         }
-        if self.job.provider == Provider::Graph || self.job.folders[i].uid_validity.is_none() {
+        if self.job.provider.is_id_based() || self.job.folders[i].uid_validity.is_none() {
             return Ok(true);
         }
         let folder = self.folder_info(i)?;
@@ -916,7 +916,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         if let Some(b) = self.gen_ok.get(&i) {
             return Ok(*b);
         }
-        let ok = if self.job.provider == Provider::Graph {
+        let ok = if self.job.provider.is_id_based() {
             true
         } else {
             match self.job.folders[i].uid_validity {
@@ -1620,7 +1620,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         // The Trash generation every uid below is read in, and the one the
         // expunge's own SELECT must find. Unreadable, or not the one the move
         // recorded: nothing is emptied (I5, I6).
-        let trash_validity: Option<u32> = if self.job.provider == Provider::Graph {
+        let trash_validity: Option<u32> = if self.job.provider.is_id_based() {
             None
         } else {
             let mut cur: Option<u32> = None;
@@ -1887,7 +1887,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             let info: FolderInfo = sf.info.clone();
             let mut rows: Vec<ListedMsg> = sf.msgs.iter().map(|m| (*m).clone()).collect();
 
-            if preview.provider == Provider::Graph {
+            if preview.provider.is_id_based() {
                 let listed: Vec<(String, Option<String>)> =
                     rows.iter().map(|m| (m.graph_id.clone().unwrap_or_default(), m.message_id.clone())).collect();
                 let r = self.local.graph_uids(&info.path, &listed).await;
@@ -1911,7 +1911,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                 return Err(stop(RunExit::Failed(format!("duplicate uids in {}", info.path))));
             }
 
-            if preview.provider != Provider::Graph {
+            if !preview.provider.is_id_based() {
                 let need: Vec<u32> = rows.iter().filter(|m| m.message_id.is_none()).map(|m| m.uid).collect();
                 let mut got: HashMap<u32, Option<String>> = HashMap::new();
                 for chunk in need.chunks(ID_CHUNK) {
@@ -2006,7 +2006,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                 sizes: rows.iter().map(|m| m.size).collect(),
                 message_ids: rows.iter().map(|m| m.message_id.clone()).collect(),
                 gm_msgids: if gmail { Some(gm_col) } else { None },
-                graph_ids: if preview.provider == Provider::Graph {
+                graph_ids: if preview.provider.is_id_based() {
                     Some(rows.iter().map(|m| m.graph_id.clone().unwrap_or_default()).collect())
                 } else {
                     None
@@ -2037,7 +2037,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                     return Err(paused(PauseReason::VaultUnavailable));
                 }
             };
-            let gen_ok = if preview.provider == Provider::Graph {
+            let gen_ok = if preview.provider.is_id_based() {
                 true
             } else if let Some(v) = sf.uid_validity {
                 let r = self.local.vault_generation(&info.path).await;

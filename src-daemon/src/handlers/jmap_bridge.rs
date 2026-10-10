@@ -862,7 +862,7 @@ async fn remove_one(
     };
     let outcome = match remove_from(&acct.client, &email_id, &mailbox_id, trash_id, permanent).await {
         Ok(outcome) => outcome,
-        Err(JmapError::Protocol(m)) if trash_id.is_none() && !permanent && m.starts_with("no Trash mailbox") => {
+        Err(JmapError::NoTrash) => {
             return Err(Fail::Rpc(format!(
                 "E_JMAP_NO_TRASH: the account has no Trash mailbox to move UID {} from {} into",
                 uid, mailbox

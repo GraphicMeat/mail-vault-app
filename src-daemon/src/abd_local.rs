@@ -34,6 +34,8 @@ pub(crate) struct DaemonLocal {
     state: Arc<DaemonState>,
     account_id: String,
     email: String,
+    /// A JMAP account: `graph_uids` allocates from the mailbox's JMAP ledger.
+    jmap: bool,
     /// One listing per mirror folder, held across batches (Part B's contract).
     mirror_listings: Mutex<HashMap<String, MirrorListing>>,
     /// The fallback listing for a folder whose mirror name missed. Dropped by
@@ -60,9 +62,17 @@ impl DaemonLocal {
             state,
             account_id: account_id.to_string(),
             email: email.to_string(),
+            jmap: false,
             mirror_listings: Mutex::new(HashMap::new()),
             mirror_maps: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// The local store of a JMAP account (`true`): its uids come from the
+    /// JMAP ledger the bridge and the sync allocate from.
+    pub(crate) fn with_jmap(mut self, jmap: bool) -> DaemonLocal {
+        self.jmap = jmap;
+        self
     }
 
     /// The vault root, or "the vault is not available" (a move in progress, an
@@ -269,15 +279,21 @@ impl LocalStore for DaemonLocal {
         Ok(verify)
     }
 
+    /// The plan freeze's uids: Outlook from `graph_id_map.json`, JMAP from
+    /// `jmap_id_map.json` (`jmap_sessions::jmap_ledger_path`, the ledger the
+    /// bridge and the sync use). JMAP passes no Message-IDs, as
+    /// `AccountJmap::ids_to_uids` does: adoption could issue a uid below the
+    /// uidNext the app last saw.
     async fn graph_uids(&self, folder: &str, listed: &[(String, Option<String>)]) -> Result<Vec<u32>, LocalError> {
         let root = self.vault()?;
-        // Graph-only: `graph_uids` is the Outlook allocation; a JMAP ledger is `JMAP_LEDGER_FILE`.
-        let ledger = root
-            .join("email_cache")
-            .join(header_cache::cache_base_name(&self.account_id, folder))
-            .join(graph_ledger::LEDGER_FILE);
+        let ledger = graph_ledger::ledger_path(&header_cache::sidecar_dir(&root, &self.account_id, folder), self.jmap);
         let cur = vault_files::cur_path(&root, &self.account_id, folder);
-        let (state, listed) = (Arc::clone(&self.state), listed.to_vec());
+        let listed: Vec<(String, Option<String>)> = if self.jmap {
+            listed.iter().map(|(id, _)| (id.clone(), None)).collect()
+        } else {
+            listed.to_vec()
+        };
+        let state = Arc::clone(&self.state);
         common::blocking(move || {
             common::with_vault_write(&state, |_root| graph_ledger::allocate(&ledger, &cur, &listed))
         })

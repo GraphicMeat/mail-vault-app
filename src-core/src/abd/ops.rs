@@ -6,7 +6,7 @@
 
 use super::plan::{AllMailMap, FolderPlan};
 use super::state::{FolderRole, JobFile};
-use super::throttle::{classify_graph, classify_imap, Signal};
+use super::throttle::{classify_graph, classify_imap, classify_jmap, Signal};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -125,6 +125,14 @@ impl OpsError {
     pub fn from_graph(err: &str) -> OpsError {
         let (sig, retry) = classify_graph(err);
         OpsError::from_signal(sig, retry, err)
+    }
+
+    /// A JMAP error as the engine should react to it (`classify_jmap`). The
+    /// text is the error's own `Display` (its `E_JMAP_*` code first), with
+    /// every address masked: a server's description can echo one.
+    pub fn from_jmap(err: &crate::jmap::JmapError) -> OpsError {
+        let (sig, retry) = classify_jmap(err);
+        OpsError::from_signal(sig, retry, &crate::log_redact::redact(&err.to_string(), b"abd-jmap-ops"))
     }
 }
 

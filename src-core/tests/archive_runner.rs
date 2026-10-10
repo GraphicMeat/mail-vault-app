@@ -6,6 +6,7 @@
 //! the mock IMAP server already used by the other `src-core/tests` files.
 
 mod common;
+mod common_jmap;
 
 use common::{config_for, eml, pool};
 use mailvault_core::archive::{self, ArchiveCtx, ArchiveGate, ArchiveSinks};
@@ -469,4 +470,46 @@ async fn a_run_without_a_limit_fetches_everything() {
     .await
     .expect("run does not error");
     assert_eq!(result.completed, 4);
+}
+
+// ── a JMAP account: bodies from JMAP by the ledger id ───────────────────────
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_jmap_account_archives_from_jmap_by_the_ledger_id() {
+    let m = mock_jmap::MockJmap::start(common_jmap::scenario());
+    let root = tempfile::tempdir().expect("tempdir");
+    let (_app, registry) = registry_for(root.path());
+    // The ledger the bridge and the sync allocate from; the run only reads it.
+    let sidecar = mailvault_core::header_cache::sidecar_dir(root.path(), "acct", "INBOX");
+    std::fs::create_dir_all(&sidecar).unwrap();
+    std::fs::write(sidecar.join(mailvault_core::graph_ledger::JMAP_LEDGER_FILE), br#"{"1":"e1","2":"e2"}"#).unwrap();
+    let ctx = Arc::new(ArchiveCtx {
+        root: root.path().to_path_buf(),
+        pool: Arc::new(pool()),
+        gate: always_open_gate(),
+        sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
+    });
+    let account = serde_json::json!({
+        "email": "alice@example.test", "password": "pw", "imapHost": "127.0.0.1",
+        "jmapSessionUrl": m.session_url(), "jmapAuth": "basic",
+    })
+    .to_string();
+
+    let result = archive::run(ctx, "acct".to_string(), account, "INBOX".to_string(), vec![1, 2, 3], Arc::new(AtomicBool::new(false)), false)
+        .await
+        .expect("run itself does not error");
+
+    assert_eq!(result.completed, 2);
+    assert_eq!(result.errors, 1, "uid 3 has no ledger row");
+    assert!(
+        result.last_error.as_deref().is_some_and(|e| e.contains("not in the JMAP listing")),
+        "{:?}",
+        result.last_error
+    );
+    let cur = cur_dir(root.path(), "acct", "INBOX");
+    // e1 is $seen, e2 $flagged: the server's keywords name the files.
+    assert_eq!(file_names(&cur), vec![format!("1{INFO_PREFIX}AS.eml"), format!("2{INFO_PREFIX}AF.eml")]);
+    assert_eq!(std::fs::read(cur.join(format!("1{INFO_PREFIX}AS.eml"))).unwrap(), common_jmap::E1_RAW.as_bytes());
+    assert_eq!(m.count_calls("Email/get"), 2, "one Email/get per message, no IMAP");
 }

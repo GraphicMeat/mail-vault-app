@@ -39,6 +39,17 @@ pub enum Provider {
     Imap,
     Gmail,
     Graph,
+    Jmap,
+}
+
+impl Provider {
+    /// Graph and JMAP: a message is named by the server's own id, the uid
+    /// ledger gives it its uid at plan freeze (`LocalStore::graph_uids`), the
+    /// plan keeps the ids (`graph_folder_id`, `graph_ids`), and there is no
+    /// UIDVALIDITY to check.
+    pub fn is_id_based(self) -> bool {
+        matches!(self, Provider::Graph | Provider::Jmap)
+    }
 }
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "snake_case")]

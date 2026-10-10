@@ -203,7 +203,10 @@ fn remove_from_follows_label_rule() {
     // Out of a mailbox it is not in: nothing to do.
     assert_eq!(rt.block_on(ops::remove_from(&c, "e1", "mb-inbox", trash, false)).unwrap(), RemoveOutcome::Gone);
     // Never destroyed by a plain delete: e3 has no other mailbox and there is no Trash to move it to.
-    assert!(matches!(rt.block_on(ops::remove_from(&c, "e3", "mb-sub", None, false)), Err(JmapError::Protocol(_))));
+    let refused = rt.block_on(ops::remove_from(&c, "e3", "mb-sub", None, false));
+    assert_eq!(refused, Err(JmapError::NoTrash), "a typed refusal, not a Protocol string to match");
+    assert_eq!(JmapError::NoTrash.code(), "E_JMAP_NO_TRASH");
+    assert!(JmapError::NoTrash.to_string().starts_with("E_JMAP_NO_TRASH: "));
     assert_eq!(mailboxes_of("e3"), Some(vec!["mb-sub".to_string()]));
     assert_eq!(m.count_calls("Email/set"), 4);
 }

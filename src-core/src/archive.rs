@@ -209,7 +209,23 @@ pub async fn run_with_backup(
         let token = account.access_token.clone().unwrap_or_default();
         Arc::new(crate::graph::GraphClient::for_purpose(&token, "archive").for_account(&account.email))
     });
-    let sem = Arc::new(Semaphore::new(if graph.is_some() { 4 } else { 5 }));
+    // A JMAP account: every body comes from JMAP by the uid's ledger id, over
+    // one session for the run (its own, like the JMAP send). A session that
+    // will not open fails each message with the reason, never the run. Four
+    // at a time, like Graph. Nothing to fetch opens no session.
+    let jmap: Option<Result<Arc<crate::jmap::JmapClient>, String>> = if account.uses_jmap() && !uids.is_empty() {
+        Some(match account.jmap_auth() {
+            None => Err(crate::jmap::JmapError::Unauthorized.to_string()),
+            Some(auth) => {
+                let url = account.jmap_session_url.clone().unwrap_or_default();
+                let connect = crate::jmap::JmapClient::connect(url.trim(), auth, &account.email);
+                crate::net_activity::with_purpose("archive", connect).await.map(Arc::new).map_err(|e| e.to_string())
+            }
+        })
+    } else {
+        None
+    };
+    let sem = Arc::new(Semaphore::new(if graph.is_some() || jmap.is_some() { 4 } else { 5 }));
     let completed = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
     let bw_limited = Arc::new(AtomicBool::new(false));
@@ -231,9 +247,10 @@ pub async fn run_with_backup(
     // external drive the run is already struggling to keep up with.
     // ponytail: a copy another writer lands mid-run is not in the listing, and
     // this run writes its own beside it under a second flag name.
-    let (vault_listing, mirror_uids, graph_ledger) = {
+    let (vault_listing, mirror_uids, id_ledger) = {
         let root = ctx.root.clone();
         let uses_graph = graph.is_some();
+        let uses_jmap = jmap.is_some();
         let (acct, mbox) = (account_id.clone(), mailbox.clone());
         let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
             std::path::PathBuf::from(bp).join(addr).join(&mailbox).join("cur")
@@ -249,16 +266,13 @@ pub async fn run_with_backup(
                 .map(|dir| crate::maildir::mirror_file_map(&dir).into_keys().collect())
                 .unwrap_or_default();
             // Read-only: the listings allocate; a uid they never handed out
-            // has no Graph id and fails on its own.
-            let graph_ledger = uses_graph.then(|| {
-                // Graph-only: `uses_graph` gates this; a JMAP account is never `uses_graph`.
-                let path = root
-                    .join("email_cache")
-                    .join(crate::header_cache::cache_base_name(&acct, &mbox))
-                    .join(crate::graph_ledger::LEDGER_FILE);
-                crate::graph_ledger::load(&path)
+            // has no server id and fails on its own. A JMAP account reads its
+            // own ledger (`jmap_id_map.json`), Outlook `graph_id_map.json`.
+            let id_ledger = (uses_graph || uses_jmap).then(|| {
+                let sidecar = crate::header_cache::sidecar_dir(&root, &acct, &mbox);
+                crate::graph_ledger::load(&crate::graph_ledger::ledger_path(&sidecar, uses_jmap))
             });
-            (vault_listing, mirror_uids, graph_ledger)
+            (vault_listing, mirror_uids, id_ledger)
         })
         .await
         .map_err(|e| format!("archive listing panicked: {}", e))?
@@ -288,16 +302,15 @@ pub async fn run_with_backup(
         let started = Arc::clone(&started);
         let listed = vault_listing.get(&uid).cloned();
         let in_mirror = mirror_uids.contains(&uid);
-        let graph_source = graph.clone().map(|client| {
-            let id = match &graph_ledger {
-                Some(Ok(ledger)) => ledger.get(&uid).cloned().ok_or_else(|| {
-                    format!("Email UID {} is not in the Outlook listing; reopen the folder and try again", uid)
-                }),
-                Some(Err(e)) => Err(e.clone()),
-                None => Err(format!("Email UID {}: no Outlook listing", uid)),
-            };
-            (client, id)
-        });
+        let ledger_id = |provider: &str| match &id_ledger {
+            Some(Ok(ledger)) => ledger.get(&uid).cloned().ok_or_else(|| {
+                format!("Email UID {} is not in the {} listing; reopen the folder and try again", uid, provider)
+            }),
+            Some(Err(e)) => Err(e.clone()),
+            None => Err(format!("Email UID {}: no {} listing", uid, provider)),
+        };
+        let graph_source = graph.clone().map(|client| (client, ledger_id("Outlook")));
+        let jmap_source = jmap.clone().map(|client| (client, ledger_id("JMAP")));
 
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -347,7 +360,7 @@ pub async fn run_with_backup(
 
             match fetch_and_store(
                 &ctx, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
-                listed, in_mirror, &pace, background, graph_source,
+                listed, in_mirror, &pace, background, graph_source, jmap_source,
             ).await {
                 Ok(index_entry) => {
                     // Track external copy failures
@@ -518,17 +531,26 @@ async fn fetch_and_store(
     background: bool,
     // A Graph account's client and this uid's Graph id (or why it has none).
     graph: Option<(Arc<crate::graph::GraphClient>, Result<String, String>)>,
+    // A JMAP account's session (or why it did not open) and this uid's JMAP
+    // email id (or why it has none).
+    jmap: Option<(Result<Arc<crate::jmap::JmapClient>, String>, Result<String, String>)>,
 ) -> Result<serde_json::Value, String> {
     // The body and the server's flags, with the custody entry built from them
     // (`_external_copy_failed` is set once the copies are written).
-    let (raw_bytes, server_flags, mut index_entry) = match graph {
-        Some((client, id)) => {
+    let (raw_bytes, server_flags, mut index_entry) = match (graph, jmap) {
+        (Some((client, id)), _) => {
             let raw = fetch_graph_mime(&client, &id?).await?;
             // Graph's MIME carries no flags; "archived" is added below.
             let entry = custody_entry_from_raw(uid, &raw, &[]);
             (raw, Vec::new(), entry)
         }
-        None => fetch_imap(ctx, account, mailbox, uid, background).await?,
+        (None, Some((client, id))) => {
+            let client = client?;
+            let (raw, flags) = fetch_jmap_body(&client, &id?).await?;
+            let entry = custody_entry_from_raw(uid, &raw, &flags);
+            (raw, flags, entry)
+        }
+        (None, None) => fetch_imap(ctx, account, mailbox, uid, background).await?,
     };
 
     // The server's own read state, not a hardcoded "seen": this name is what
@@ -750,6 +772,24 @@ async fn fetch_graph_mime(client: &crate::graph::GraphClient, id: &str) -> Resul
             other => return other.map_err(|e| format!("Graph fetch failed: {}", e)),
         }
     }
+}
+
+/// One body from JMAP: the email's blob, and its keywords as IMAP flags. The
+/// client bounds every request itself (60 s per API call, a read-idle bound
+/// on the download).
+async fn fetch_jmap_body(client: &crate::jmap::JmapClient, id: &str) -> Result<(Vec<u8>, Vec<String>), String> {
+    let got = client
+        .get_emails(&[id.to_string()], &["id", "blobId", "keywords"])
+        .await
+        .map_err(|e| format!("JMAP fetch failed: {}", e))?;
+    let email = got
+        .list
+        .into_iter()
+        .find(|e| e["id"].as_str() == Some(id))
+        .ok_or_else(|| "JMAP fetch failed: the email is no longer on the server".to_string())?;
+    let blob = email["blobId"].as_str().ok_or_else(|| "JMAP fetch failed: Email/get without blobId".to_string())?;
+    let raw = client.download(blob).await.map_err(|e| format!("JMAP fetch failed: {}", e))?;
+    Ok((raw, crate::jmap::headers::keywords_to_flags(&email["keywords"])))
 }
 
 // ── One fetched body into the vault, as archived ─────────────────────────────

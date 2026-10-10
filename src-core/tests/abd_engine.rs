@@ -2,6 +2,7 @@
 //! job-file tests. See docs/superpowers/plans/2026-09-29-part-d-design.md.
 
 mod abd_fake;
+mod common_jmap;
 
 use abd_fake::*;
 use mailvault_core::abd::*;
@@ -1631,4 +1632,73 @@ async fn progress_frames_carry_the_contract_shape() {
     // A frame can also be built from a job file alone (after a restart).
     let from_disk = progress_frame(&rig.env.last_saved(), &FrameInfo::default());
     assert_eq!(from_disk["counts"]["deleted"], 4);
+}
+
+// ── JMAP ────────────────────────────────────────────────────────────────────
+
+/// A full archive-and-delete of three INBOX emails through the real
+/// `JmapOps` against the mock JMAP server: plan, download, verify, move,
+/// empty Trash. e1 also carries the Work label, so only its INBOX label comes
+/// off and it lives on in Work; e2 and e4 are destroyed from Trash.
+#[tokio::test]
+async fn a_jmap_archive_and_delete_of_three_emails_keeps_a_second_label() {
+    use mailvault_core::abd::imap_ops::build_preview;
+    use mailvault_core::abd::jmap_ops::JmapOps;
+
+    let mut s = common_jmap::scenario();
+    s.accounts[0].mailboxes[0].emails.push(common_jmap::email("e4", "four", "2026-10-04T10:00:00Z"));
+    let m = mock_jmap::MockJmap::start(s);
+    let cfg: mailvault_core::imap::ImapConfig = serde_json::from_value(serde_json::json!({
+        "email": "alice@example.test", "imapHost": "127.0.0.1", "password": "pw",
+        "jmapSessionUrl": m.session_url(), "jmapAuth": "basic",
+    }))
+    .unwrap();
+    let mut ops = JmapOps::new(cfg);
+    let sh = Shared::new(start_ms());
+    let local = FakeLocal::new(sh.clone());
+    let env = FakeEnv::new(sh.clone());
+    let ctl = Control::new();
+
+    let mut progress = |_: &str, _: usize| {};
+    let preview = build_preview(&mut ops, "p1", sh.clock.get(), &mut progress).await.unwrap();
+    assert_eq!(preview.provider, Provider::Jmap);
+    let mut job = JobFile::create(NewJob {
+        account_id: "acc1".to_string(),
+        account_email: "alice@example.test".to_string(),
+        host: "127.0.0.1".to_string(),
+        provider: Provider::Jmap,
+        mode: Mode::ArchiveDelete,
+        timing: Timing::AfterAll,
+        delete_mode: DeleteMode::MoveToTrashAndEmpty,
+        scope: Scope {
+            folders: vec!["INBOX".to_string()],
+            dates: DateScope::All,
+            date_choice: "all".to_string(),
+            year_bounds: year_bounds(0, 2015, 2030),
+        },
+        now_ms: sh.clock.get(),
+    });
+    let mut plans = PlanStore::new();
+    assert_eq!(plan_job(&mut job, &preview, &mut plans, &mut ops, &local, &env, &ctl).await, RunExit::Completed);
+    // What the daemon's `JobOps::prepare` does before every run.
+    for name in plans.names() {
+        if let Some(p) = plans.get(&name) {
+            ops.remember_plan(p);
+        }
+    }
+    assert_eq!(run(&mut job, &plans, &mut ops, &local, &env, &ctl).await, RunExit::Completed);
+
+    let labels = |id: &str| m.read(|s| s.email("acc1", id).map(|e| e.mailbox_ids.iter().cloned().collect::<Vec<String>>()));
+    assert_eq!(labels("e1"), Some(vec!["mb-work".to_string()]), "e1 keeps its Work label and nothing else");
+    assert_eq!(labels("e2"), None, "destroyed from Trash");
+    assert_eq!(labels("e4"), None, "destroyed from Trash");
+    assert_eq!(labels("e3"), Some(vec!["mb-sub".to_string()]), "a folder outside the scope is untouched");
+    assert!(m.read(|s| s.emails_in("acc1", "mb-inbox").is_empty()));
+    assert!(m.read(|s| s.emails_in("acc1", "mb-trash").is_empty()), "Trash emptied of exactly what the job moved");
+    assert_eq!(local.vault_uids("INBOX").len(), 3, "every email archived before any delete");
+    let fs = job.folders.iter().find(|f| f.path == "INBOX").expect("INBOX state");
+    assert_eq!(fs.deleted.len(), 3);
+    assert_eq!(fs.emptied.len(), 3, "e1 counts as emptied: nothing of it is left in Trash");
+    assert_eq!(fs.kept_count(), 0);
+    assert!(job.status.is_finished());
 }

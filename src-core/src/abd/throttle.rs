@@ -78,3 +78,29 @@ pub fn classify_graph(err: &str) -> (Signal, Option<u64>) {
     }
     (Signal::Other, None)
 }
+
+/// Classify a JMAP error and carry its `Retry-After` (seconds) when the
+/// server sent one. Typed, so nothing is matched on text:
+/// - 401/403 (`Unauthorized`): sign in again.
+/// - 429/503 (`RateLimited`) and the RFC 8620 `serverUnavailable` method
+///   error: wait and try again.
+/// - A transport failure: a timeout, else a lost connection (both waited out).
+/// - Everything else (a refusal, a malformed answer, no Trash, a foreign
+///   host, `cannotCalculateChanges`) counts against the message.
+pub fn classify_jmap(err: &crate::jmap::JmapError) -> (Signal, Option<u64>) {
+    use crate::jmap::JmapError;
+    match err {
+        JmapError::Unauthorized => (Signal::SignIn, None),
+        JmapError::RateLimited { retry_after } => (Signal::Throttled, *retry_after),
+        JmapError::Method { kind, .. } if kind == "serverUnavailable" => (Signal::Throttled, None),
+        JmapError::Transport(m) => {
+            let m = m.to_ascii_lowercase();
+            if m.contains("timed out") || m.contains("timeout") {
+                (Signal::Timeout, None)
+            } else {
+                (Signal::ConnectionLost, None)
+            }
+        }
+        _ => (Signal::Other, None),
+    }
+}

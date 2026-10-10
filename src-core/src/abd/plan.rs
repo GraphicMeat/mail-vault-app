@@ -489,8 +489,8 @@ pub fn summarize(
         }
     }
 
-    let can_delete = p.trash.is_some() && (p.provider == Provider::Graph || p.caps.move_cmd || p.caps.uidplus);
-    let can_empty = p.provider == Provider::Graph || p.caps.uidplus;
+    let can_delete = p.trash.is_some() && (p.provider.is_id_based() || p.caps.move_cmd || p.caps.uidplus);
+    let can_empty = p.provider.is_id_based() || p.caps.uidplus;
 
     let mut warnings: Vec<String> = Vec::new();
     if multi_label {

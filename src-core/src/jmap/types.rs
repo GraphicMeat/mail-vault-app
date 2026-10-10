@@ -63,6 +63,9 @@ pub enum JmapError {
     Protocol(String),
     /// DNS, TLS, timeout or connection failure.
     Transport(String),
+    /// A delete had to move the email to Trash and the account has no Trash
+    /// mailbox (ruling R5): refused, never turned into a destroy.
+    NoTrash,
 }
 
 impl JmapError {
@@ -75,6 +78,7 @@ impl JmapError {
             JmapError::ForeignHost { .. } => "E_JMAP_FOREIGN_HOST",
             JmapError::Protocol(_) => "E_JMAP_PROTOCOL",
             JmapError::Transport(_) => "E_JMAP_TRANSPORT",
+            JmapError::NoTrash => "E_JMAP_NO_TRASH",
         }
     }
 }
@@ -91,6 +95,7 @@ impl std::fmt::Display for JmapError {
             JmapError::Method { kind, description: None } => write!(f, "{code}: {kind}"),
             JmapError::ForeignHost { host } => write!(f, "{code}: {host}"),
             JmapError::Protocol(m) | JmapError::Transport(m) => write!(f, "{code}: {m}"),
+            JmapError::NoTrash => write!(f, "{code}: no Trash mailbox to move the email to"),
         }
     }
 }

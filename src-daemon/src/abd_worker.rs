@@ -28,6 +28,7 @@ use crate::server::DaemonState;
 use futures::FutureExt;
 use mailvault_core::abd::graph_ops::{GraphOps, LeaseStore, TokenLease, LEASE_MARGIN_MS};
 use mailvault_core::abd::imap_ops::{build_preview, ImapOps};
+use mailvault_core::abd::jmap_ops::JmapOps;
 use mailvault_core::abd::state as jobfile;
 use mailvault_core::abd::{
     plan_job, progress_frame, run, AllMailMap, Control, Env, FolderPlan, FrameInfo, JobFile, JobStatus, Mode,
@@ -600,7 +601,8 @@ impl Env for DaemonEnv {
 
 /// What the driver needs from an ops object beyond `ServerOps`.
 trait JobOps: ServerOps {
-    /// Before every run: fresh credentials (IMAP) or the plan's uid -> Graph id map.
+    /// Before every run: fresh credentials (IMAP), the plan's uid -> Graph id
+    /// map (Graph), or both (JMAP).
     fn prepare(&mut self, plans: &PlanStore, cfg: &ImapConfig);
 }
 
@@ -612,6 +614,17 @@ impl JobOps for ImapOps {
 
 impl JobOps for GraphOps {
     fn prepare(&mut self, plans: &PlanStore, _cfg: &ImapConfig) {
+        for name in plans.names() {
+            if let Some(p) = plans.get(&name) {
+                self.remember_plan(p);
+            }
+        }
+    }
+}
+
+impl JobOps for JmapOps {
+    fn prepare(&mut self, plans: &PlanStore, cfg: &ImapConfig) {
+        self.set_config(cfg.clone());
         for name in plans.names() {
             if let Some(p) = plans.get(&name) {
                 self.remember_plan(p);
@@ -635,15 +648,25 @@ fn new_graph_ops(state: &Arc<DaemonState>, email: &str, account_id: &str) -> Gra
     GraphOps::new(email, leases).with_clock(Arc::new(move || st.clock.now_ms()))
 }
 
+/// A JMAP account's ops: its own session, from the keychain's credentials
+/// (`JobOps::prepare` hands it the latest before every run).
+fn new_jmap_ops(cfg: &ImapConfig) -> JmapOps {
+    JmapOps::new(cfg.clone())
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
     Password,
     ImapOauth,
     Graph,
+    /// Keychain credentials like `Password`, sent over JMAP.
+    Jmap,
 }
 
 fn kind_of(cfg: &ImapConfig) -> Kind {
-    if cfg.oauth2_transport.as_deref() == Some("graph") {
+    if cfg.uses_jmap() {
+        Kind::Jmap
+    } else if cfg.oauth2_transport.as_deref() == Some("graph") {
         Kind::Graph
     } else if cfg.is_oauth2() {
         Kind::ImapOauth
@@ -717,10 +740,13 @@ async fn job_main(state: Arc<DaemonState>, handle: Arc<JobHandle>, mut job: JobF
     };
     let kind = kind_of(&cfg);
     let env = DaemonEnv { graph: kind == Kind::Graph, ..env };
-    let local = DaemonLocal::new(Arc::clone(&state), &account_id, &job.account_email);
+    let local = DaemonLocal::new(Arc::clone(&state), &account_id, &job.account_email).with_jmap(kind == Kind::Jmap);
     let rt = Rt { state: Arc::clone(&state), handle: Arc::clone(&handle), env, local, kind, used_seq: Cell::new(0) };
     if kind == Kind::Graph {
         let mut ops = new_graph_ops(&state, &cfg.email, &account_id);
+        rt.drive(&mut job, &mut plans, &mut ops, preview, &cfg).await;
+    } else if kind == Kind::Jmap {
+        let mut ops = new_jmap_ops(&cfg);
         rt.drive(&mut job, &mut plans, &mut ops, preview, &cfg).await;
     } else {
         let (effective, seq) = with_lease(&state, cfg.clone(), &account_id);
@@ -904,7 +930,9 @@ impl Rt {
         let st = &self.state;
         match reason {
             PauseReason::SignInNeeded => {
-                if self.kind != Kind::Password {
+                // A token the app can push: Graph and OAuth IMAP. Password and
+                // JMAP accounts sign in with what the keychain holds.
+                if matches!(self.kind, Kind::Graph | Kind::ImapOauth) {
                     let provider = if self.kind == Kind::Graph { "graph" } else { "imap_oauth" };
                     st.events.emit(TOKEN_EVENT, json!({"accountId": account, "jobId": job.job_id, "provider": provider}));
                 }
@@ -919,7 +947,7 @@ impl Rt {
                         })
                         .await
                     }
-                    Kind::Password => self.wait_until(min, Some(SIGN_IN_RETRY), || false).await,
+                    Kind::Password | Kind::Jmap => self.wait_until(min, Some(SIGN_IN_RETRY), || false).await,
                 }
             }
             PauseReason::DriveUnavailable => {
@@ -1015,7 +1043,11 @@ async fn preview_inner(state: &Arc<DaemonState>, account_id: &str, preview_id: &
             if kind_of(&cfg) == Kind::Graph {
                 let mut ops = new_graph_ops(state, &cfg.email, account_id);
                 let p = build_preview(&mut ops, preview_id, now, &mut progress).await.map_err(|e| e.text())?;
-                fill_graph_uids(state, account_id, p).await
+                fill_graph_uids(state, account_id, p, false).await
+            } else if kind_of(&cfg) == Kind::Jmap {
+                let mut ops = new_jmap_ops(&cfg);
+                let p = build_preview(&mut ops, preview_id, now, &mut progress).await.map_err(|e| e.text())?;
+                fill_graph_uids(state, account_id, p, true).await
             } else {
                 let (effective, _) = with_lease(state, cfg.clone(), account_id);
                 let mut ops = new_imap_ops(state, effective);
@@ -1036,19 +1068,18 @@ async fn preview_inner(state: &Arc<DaemonState>, account_id: &str, preview_id: &
     }))
 }
 
-/// A Graph listing has no uids. For the "already archived" count only, give
-/// the messages the ledger already knows their uid. Read-only: a dry run never
-/// writes the ledger (the plan freeze allocates).
-async fn fill_graph_uids(state: &Arc<DaemonState>, account_id: &str, mut p: PreviewListing) -> Result<PreviewListing, String> {
+/// A Graph or JMAP listing has no uids. For the "already archived" count
+/// only, give the messages the ledger already knows their uid: Outlook's
+/// `graph_id_map.json`, or with `jmap` the `jmap_id_map.json` the bridge and
+/// the sync allocate from. Read-only: a dry run never writes the ledger (the
+/// plan freeze allocates).
+async fn fill_graph_uids(state: &Arc<DaemonState>, account_id: &str, mut p: PreviewListing, jmap: bool) -> Result<PreviewListing, String> {
     let Ok(root) = common::vault_root(state) else { return Ok(p) };
     let account = account_id.to_string();
     common::blocking(move || {
         for (info, _, msgs) in p.folders.iter_mut() {
-            // Graph-only: matches on `graph_id`, which only an Outlook listing carries.
-            let path = root
-                .join("email_cache")
-                .join(header_cache::cache_base_name(&account, &info.path))
-                .join(graph_ledger::LEDGER_FILE);
+            // Matches on `graph_id`: the Outlook message id or the JMAP email id.
+            let path = graph_ledger::ledger_path(&header_cache::sidecar_dir(&root, &account, &info.path), jmap);
             let Ok(ledger) = graph_ledger::load(&path) else { continue };
             let by_id: HashMap<&str, u32> = ledger.iter().map(|(uid, id)| (id.as_str(), *uid)).collect();
             for m in msgs.iter_mut() {
@@ -1060,4 +1091,92 @@ async fn fill_graph_uids(state: &Arc<DaemonState>, account_id: &str, mut p: Prev
         p
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mailvault_core::abd::{Caps, FolderInfo, FolderRole, ListedMsg, LocalStore, Provider};
+    use mailvault_core::vault_files;
+
+    fn config(v: Value) -> ImapConfig {
+        serde_json::from_value(v).expect("an account config")
+    }
+
+    #[test]
+    fn a_jmap_account_is_its_own_kind_whatever_else_it_says() {
+        let jmap = config(json!({
+            "email": "a@example.test", "imapHost": "jmap.example.test", "password": "tok",
+            "jmapSessionUrl": "https://jmap.example.test/.well-known/jmap", "jmapAuth": "bearer",
+            "authType": "oauth2", "oauth2Transport": "graph",
+        }));
+        assert_eq!(kind_of(&jmap), Kind::Jmap, "the session URL decides before any OAuth field");
+        let graph = config(json!({"email": "a@outlook.test", "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"}));
+        assert_eq!(kind_of(&graph), Kind::Graph);
+        let blank = config(json!({"email": "a@example.test", "imapHost": "imap.example.test", "password": "pw", "jmapSessionUrl": "  "}));
+        assert_eq!(kind_of(&blank), Kind::Password, "a blank session URL is not a JMAP account");
+    }
+
+    /// The plan freeze of a JMAP job takes its uids from the ledger the
+    /// bridge and the sync use, and never adopts a vault file's uid by
+    /// Message-ID (`AccountJmap::ids_to_uids` passes none either).
+    #[tokio::test]
+    async fn a_jmap_plan_takes_its_uids_from_the_jmap_ledger_without_adoption() {
+        let vault = tempfile::tempdir().unwrap();
+        let app = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        let sidecar = header_cache::sidecar_dir(vault.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&sidecar).unwrap();
+        std::fs::write(sidecar.join(graph_ledger::JMAP_LEDGER_FILE), br#"{"7":"e2"}"#).unwrap();
+        // An archived vault file no ledger row owns, carrying e9's Message-ID:
+        // the Outlook allocation would hand e9 its uid 3.
+        let cur = vault_files::cur_path(vault.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(vault_files::build_maildir_filename(3, &["archived".to_string()])), b"Message-ID: <e9@x>\r\n\r\nbody")
+            .unwrap();
+
+        let local = DaemonLocal::new(Arc::clone(&state), "acc", "a@example.test").with_jmap(true);
+        let listed = vec![("e2".to_string(), Some("e2@x".to_string())), ("e9".to_string(), Some("e9@x".to_string()))];
+        let uids = local.graph_uids("INBOX", &listed).await.expect("allocated");
+        assert_eq!(uids, vec![7, 8], "e2 keeps the bridge's uid; e9 gets a new one, not the vault file's 3");
+        let ledger = graph_ledger::load(&sidecar.join(graph_ledger::JMAP_LEDGER_FILE)).unwrap();
+        assert_eq!(ledger.get(&7).map(String::as_str), Some("e2"));
+        assert_eq!(ledger.get(&8).map(String::as_str), Some("e9"));
+        assert!(!sidecar.join(graph_ledger::LEDGER_FILE).exists(), "a JMAP account never writes the Outlook ledger");
+    }
+
+    /// The dry run's "already archived" count reads the JMAP ledger for a
+    /// JMAP account, and only for one.
+    #[tokio::test]
+    async fn the_dry_run_finds_jmap_uids_in_the_jmap_ledger() {
+        let vault = tempfile::tempdir().unwrap();
+        let app = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        let sidecar = header_cache::sidecar_dir(vault.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&sidecar).unwrap();
+        std::fs::write(sidecar.join(graph_ledger::JMAP_LEDGER_FILE), br#"{"7":"e2"}"#).unwrap();
+        let info = FolderInfo {
+            path: "INBOX".to_string(),
+            name: "INBOX".to_string(),
+            role: FolderRole::Normal,
+            graph_id: Some("mb-inbox".to_string()),
+            selectable: true,
+        };
+        let row = |id: &str| ListedMsg { graph_id: Some(id.to_string()), ..Default::default() };
+        let listing = PreviewListing {
+            preview_id: "p1".to_string(),
+            provider: Provider::Jmap,
+            caps: Caps::default(),
+            trash: None,
+            folders: vec![(info, None, vec![row("e2"), row("e5")])],
+            all_mail: None,
+            listed_at_ms: 0,
+        };
+        let uids = |p: &PreviewListing| p.folders[0].2.iter().map(|m| m.uid).collect::<Vec<u32>>();
+        let filled = fill_graph_uids(&state, "acc", listing.clone(), true).await.unwrap();
+        assert_eq!(uids(&filled), vec![7, 0], "e2 is known, e5 is not");
+        let outlook = fill_graph_uids(&state, "acc", listing, false).await.unwrap();
+        assert_eq!(uids(&outlook), vec![0, 0], "the Outlook ledger is not read for JMAP ids");
+        assert!(!sidecar.join(graph_ledger::LEDGER_FILE).exists(), "a dry run writes no ledger");
+    }
 }

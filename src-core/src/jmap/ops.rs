@@ -26,7 +26,7 @@ pub enum RemoveOutcome {
 ///   `mailbox_id` and Trash: patch `mailboxIds/<mailbox_id>: null` only.
 /// - Delete otherwise: move it to Trash alone (every other label null,
 ///   `mailboxIds/<trash>: true`). With no Trash mailbox this is refused
-///   (`Protocol`), never turned into a destroy.
+///   (`JmapError::NoTrash`), never turned into a destroy.
 /// - Permanent delete or expunge, when nothing but `mailbox_id` and Trash
 ///   holds the email: `destroy`.
 /// - Permanent delete otherwise: patch `mailboxIds/<mailbox_id>: null` (and
@@ -65,7 +65,7 @@ pub async fn remove_from(
         }
         (toggles, RemoveOutcome::LabelRemoved)
     } else {
-        let trash = trash_id.ok_or_else(|| JmapError::Protocol("no Trash mailbox to move the email to".into()))?;
+        let trash = trash_id.ok_or(JmapError::NoTrash)?;
         let mut toggles: Vec<(String, bool)> = current.iter().filter(|m| m.as_str() != trash).map(|m| (m.clone(), false)).collect();
         toggles.push((trash.to_string(), true));
         (toggles, RemoveOutcome::MovedToTrash)

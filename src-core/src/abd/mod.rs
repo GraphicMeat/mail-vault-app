@@ -4,10 +4,13 @@
 //! against in-memory fakes: `ops::ServerOps` (the mail server), `ops::LocalStore`
 //! (vault + backup drive) and `ops::Env` (clock, allowance, yield-to-UI, saves,
 //! events). The daemon supplies the real implementations. See the Part D design.
+//! `ServerOps` has three: `imap_ops` (IMAP and Gmail), `graph_ops` (Outlook)
+//! and `jmap_ops` (JMAP).
 
 pub mod engine;
 pub mod graph_ops;
 pub mod imap_ops;
+pub mod jmap_ops;
 pub mod ops;
 pub mod plan;
 pub mod state;
