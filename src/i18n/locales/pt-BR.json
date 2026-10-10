@@ -1,4 +1,9 @@
 {
+  "settings.icons.title": "Ícone do app",
+  "settings.icons.purple": "Roxo",
+  "settings.icons.teal": "Azul-petróleo",
+  "settings.icons.hint": "Escolha o ícone do MailVault. Aplica-se ao app em execução; atalhos fixados e lançadores podem manter o ícone roxo padrão.",
+  "settings.icons.error": "Não foi possível alterar o ícone do app. Tente novamente.",
   "account.accountAddedSuccessfully": "Conta adicionada!",
   "account.allEnteredDetailsWillLost": "Todos os dados inseridos serão perdidos.",
   "account.aolMail": "AOL Mail",

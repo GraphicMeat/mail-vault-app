@@ -1,4 +1,9 @@
 {
+  "settings.icons.title": "Icône de l'app",
+  "settings.icons.purple": "Violet",
+  "settings.icons.teal": "Sarcelle",
+  "settings.icons.hint": "Choisissez l'icône de MailVault. Elle s'applique à l'application en cours d'exécution ; les raccourcis épinglés et les lanceurs peuvent conserver l'icône violette par défaut.",
+  "settings.icons.error": "Impossible de changer l'icône de l'application. Veuillez réessayer.",
   "account.accountAddedSuccessfully": "Compte ajouté !",
   "account.allEnteredDetailsWillLost": "Toutes les informations saisies seront perdues.",
   "account.aolMail": "AOL Mail",

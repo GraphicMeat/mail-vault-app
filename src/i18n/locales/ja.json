@@ -1,4 +1,9 @@
 {
+  "settings.icons.title": "アプリアイコン",
+  "settings.icons.purple": "パープル",
+  "settings.icons.teal": "ティール",
+  "settings.icons.hint": "MailVault のアイコンを選びます。実行中のアプリに適用されます。固定したショートカットやランチャーには、既定のパープルのアイコンが残る場合があります。",
+  "settings.icons.error": "アプリアイコンを変更できませんでした。もう一度お試しください。",
   "account.accountAddedSuccessfully": "アカウントを追加しました",
   "account.allEnteredDetailsWillLost": "入力した内容はすべて失われます。",
   "account.aolMail": "AOL Mail",

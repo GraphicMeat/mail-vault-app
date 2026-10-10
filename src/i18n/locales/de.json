@@ -1,4 +1,9 @@
 {
+  "settings.icons.title": "App-Symbol",
+  "settings.icons.purple": "Violett",
+  "settings.icons.teal": "Petrol",
+  "settings.icons.hint": "Symbol für MailVault auswählen. Gilt für die laufende App; angeheftete Verknüpfungen und Starter zeigen eventuell weiter das violette Standardsymbol.",
+  "settings.icons.error": "Das App-Symbol konnte nicht geändert werden. Bitte erneut versuchen.",
   "account.accountAddedSuccessfully": "Konto hinzugefügt!",
   "account.allEnteredDetailsWillLost": "Alle eingegebenen Daten gehen verloren.",
   "account.aolMail": "AOL Mail",

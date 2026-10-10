@@ -1,4 +1,9 @@
 {
+  "settings.icons.title": "应用图标",
+  "settings.icons.purple": "紫色",
+  "settings.icons.teal": "青绿",
+  "settings.icons.hint": "选择 MailVault 的图标。仅应用于正在运行的应用；已固定的快捷方式和启动器可能仍显示默认的紫色图标。",
+  "settings.icons.error": "无法更改应用图标。请重试。",
   "account.accountAddedSuccessfully": "账户已添加",
   "account.allEnteredDetailsWillLost": "已输入的内容将全部丢失。",
   "account.aolMail": "AOL Mail",
