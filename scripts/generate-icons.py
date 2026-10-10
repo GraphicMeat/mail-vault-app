@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 ICONS = ROOT / 'src-tauri/icons'
-SOURCE = ROOT / 'src/assets/mailvault-icon-teal-concept.png'
+SOURCE = ROOT / 'src/assets/mailvault-icon-purple.png'
 master = Image.open(SOURCE).convert('RGBA')
 resample = Image.Resampling.LANCZOS
 
@@ -12,7 +12,7 @@ def resized(size):
     return master.resize((size, size), resample)
 
 def opaque(size):
-    canvas = Image.new('RGBA', (size, size), '#07535c')
+    canvas = Image.new('RGBA', (size, size), '#4f46e5')
     canvas.alpha_composite(resized(size))
     return canvas.convert('RGB')
 
@@ -57,5 +57,15 @@ for path, image in outputs.items():
 resized(1024).save(ICONS / 'icon.icns', format='ICNS')
 resized(256).save(ICONS / 'icon.ico', format='ICO', sizes=[(n, n) for n in (16, 24, 32, 48, 64, 128, 256)])
 resized(64).save(ROOT / 'website/favicon.ico', format='ICO', sizes=[(n, n) for n in (16, 32, 48, 64)])
-(ICONS / 'android/values/ic_launcher_background.xml').write_text('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_launcher_background">#07535c</color>\n</resources>\n')
+(ICONS / 'android/values/ic_launcher_background.xml').write_text('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_launcher_background">#4f46e5</color>\n</resources>\n')
 print(f'Generated {len(outputs) + 3} icon files from {SOURCE.name}')
+
+# Preserve the original teal design for the runtime icon picker.
+alternates = ICONS / 'alternates'
+alternates.mkdir(exist_ok=True)
+teal = Image.open(ROOT / 'src/assets/mailvault-icon-teal-concept.png').convert('RGBA')
+for name, image in [('purple', master), ('teal', teal)]:
+    image.resize((512, 512), resample).save(alternates / f'{name}.png')
+    image.crop(image.getchannel('A').getbbox()).resize((64, 64), resample).save(alternates / f'{name}-tray.png')
+
+teal.resize((256, 256), resample).save(ROOT / 'src/assets/mailvault-icon-teal.png')

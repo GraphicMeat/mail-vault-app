@@ -1,4 +1,5 @@
 import React from 'react';
+import { AppIconSettings } from './AppIconSettings';
 import { Check, Moon, Sun } from 'lucide-react';
 import { useThemeStore } from '../../stores/themeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -35,6 +36,7 @@ export function ColorSchemeSettings() {
           ))}
         </div>
       </SettingRow>
+      <AppIconSettings />
       <SettingRow label={t('settings.appearance.emailViewerTheme')} description={t('settings.colors.emailThemeHint')} preview={<EmailThemePreview />}>
         <select value={emailViewerTheme} onChange={event => setEmailViewerTheme(event.target.value)}>
           <option value="system">{t('settings.appearance.matchAppTheme')}</option>

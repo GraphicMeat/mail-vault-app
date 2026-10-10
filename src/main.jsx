@@ -1,4 +1,5 @@
 import './e2eMotion';
+import { watchAppIcon } from './utils/appIcon';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MotionConfig } from 'framer-motion';
@@ -30,6 +31,7 @@ if (!isAuxiliaryWindow) wireConnectivityEvents();
 watchTextAppearance(useSettingsStore);
 // Linux's menu bar, hidden or shown in every window (utils/menuBar.js).
 watchMenuBar(useSettingsStore);
+watchAppIcon(useSettingsStore);
 watchQuitShortcut();
 
 // Apply the persisted language once the store has hydrated — and NOT before.

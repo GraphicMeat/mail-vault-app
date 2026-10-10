@@ -1,4 +1,9 @@
 {
+  "settings.icons.title": "App icon",
+  "settings.icons.purple": "Purple",
+  "settings.icons.teal": "Teal",
+  "settings.icons.hint": "Choose the icon for MailVault. Applies to the running app; pinned shortcuts and launchers may keep the default purple icon.",
+  "settings.icons.error": "Could not change the app icon. Please try again.",
   "account.accountAddedSuccessfully": "Account added successfully!",
   "account.allEnteredDetailsWillLost": "All entered details will be lost.",
   "account.aolMail": "AOL Mail",

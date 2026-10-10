@@ -1,8 +1,10 @@
-import iconUrl from '../../../assets/mailvault-icon.png';
+import { APP_ICONS, normalizeAppIcon } from '../../../utils/appIcon';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import markUrl from '../../../assets/graphicmeat-watermark.webp';
 import { inkForBackground } from './socialBackgrounds';
 
 let pending = null;
+let pendingIcon = null;
 
 // The lockup's lettering. Part of the logo, not UI, so it stays English in
 // every locale; the heart is drawn as a shape where the glyph is.
@@ -21,7 +23,10 @@ const decode = async (src) => {
  * gives an image without it (null), and the next call tries again.
  */
 export function loadWatermark() {
-  if (pending) return pending;
+  const selected = normalizeAppIcon(useSettingsStore.getState().appIcon);
+  if (pending && pendingIcon === selected) return pending;
+  const iconUrl = APP_ICONS[selected];
+  pendingIcon = selected;
   // Cleared from outside the attempt: a throw before the first await would
   // otherwise clear `pending` before it is assigned and cache the failure.
   const attempt = Promise.all([decode(iconUrl), decode(markUrl)])

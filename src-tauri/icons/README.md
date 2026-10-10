@@ -1,6 +1,6 @@
 # MailVault Icons
 
-The master artwork is `src/assets/mailvault-icon-teal-concept.png`.
+The master artwork is `src/assets/mailvault-icon-purple.png`.
 
 Regenerate all desktop, mobile, tray, in-app, and website icons with Pillow:
 
@@ -15,3 +15,5 @@ python3 scripts/generate-icons.py
 - Website assets include PNG/WebP branding, multi-resolution favicons, and a 180×180 Apple touch icon.
 
 The generator preserves `dmg-background.png`, which is installer artwork rather than an app icon.
+
+`alternates/` contains Purple and original Teal runtime icons. Both master artworks are retained in `src/assets/`.

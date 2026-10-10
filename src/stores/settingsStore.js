@@ -202,6 +202,7 @@ const mergeShortcuts = (persisted) => {
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
+  appIcon: persisted?.appIcon === 'teal' ? 'teal' : 'purple',
   notificationSettings: {
     ...current.notificationSettings,
     ...persisted?.notificationSettings,
@@ -599,6 +600,7 @@ export const useSettingsStore = create(
       localeEpoch: 0,
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-label', // 'icon-only' | 'icon-label' | 'text-only'
+      appIcon: 'purple', // 'purple' | 'teal'
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
       appFont: DEFAULT_APP_FONT, // an APP_FONTS id (utils/appFont.js) — the app's own UI font
       showMenuBar: true, // Linux only: the File/Logs menu bar under the title bar (utils/menuBar.js)
@@ -1405,6 +1407,7 @@ export const useSettingsStore = create(
       })),
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
+      setAppIcon: (appIcon) => { if (['purple', 'teal'].includes(appIcon)) set({ appIcon }); },
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
       setShowMenuBar: (visible) => set({ showMenuBar: visible !== false }),
       setAppFont: (id) => set({ appFont: normalizeAppFont(id) }),
@@ -1658,6 +1661,7 @@ export const useSettingsStore = create(
           timeFormat: 'auto',
           signatureDisplay: 'smart',
           actionButtonDisplay: 'icon-label',
+          appIcon: 'purple', // 'purple' | 'teal'
           emailViewerTheme: 'system',
           appFont: DEFAULT_APP_FONT,
           showMenuBar: true,

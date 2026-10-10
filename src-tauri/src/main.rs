@@ -185,6 +185,7 @@ use tracing_subscriber::prelude::*;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
 mod abd;
+mod app_icon;
 mod autostart;
 mod backup;
 mod commands;
@@ -3564,6 +3565,7 @@ fn main() {
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
+            app_icon::set_app_icon,
             apply_menu_labels,
             set_menu_bar_visible,
             quit_app,
@@ -4021,7 +4023,7 @@ fn main() {
             let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon-color.png"))
                 .expect("Failed to load tray icon");
 
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id("mailvault-tray")
                 .icon(tray_icon_image)
                 .icon_as_template(true)
                 .menu(&tray_menu)
