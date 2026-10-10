@@ -46,11 +46,20 @@
 .sidebar-connection-actions > button + button { margin-left: 4px; }
 .sidebar-connection-notice .sidebar-cache-explanation { display: block; margin: 4px 0; overflow-wrap: anywhere; }
 .sidebar-footer { padding: 8px 12px 10px; border-top: 1px solid var(--mail-border); flex-shrink: 0; }
-.sidebar-footer-tools, .sidebar-footer-meta { display: flex; align-items: center; gap: 2px; }
-.sidebar-footer-meta { justify-content: space-between; margin-top: 2px; padding-left: 8px; }
-.sidebar-mail-count { display: flex; align-items: center; gap: 5px; color: var(--mail-text-muted); font-size: 11px; line-height: 1.5; }
+/* The six utility buttons are one segmented block: equal columns edge to edge, hairline dividers, no slack. */
+.sidebar-footer-actions { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin-top: 6px; overflow: hidden; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-surface); }
+.sidebar-footer-actions > button { min-width: 0; min-height: 34px; border-radius: 0; }
+.sidebar-footer-actions > button + button { border-inline-start: 1px solid var(--mail-border); }
+.sidebar-footer-actions > button:focus-visible { outline-offset: -2px; }
+.sidebar-status { margin-top: 10px; padding: 0 4px; color: var(--mail-text-muted); font-size: 11px; line-height: 1.5; }
+.sidebar-mail-count { display: flex; align-items: center; gap: 6px; }
 .sidebar-mail-count svg { flex-shrink: 0; }
-.sidebar-version { margin-top: 2px; color: var(--mail-text-muted); font-size: 11px; line-height: 1.5; }
+.sidebar-mail-count-label { min-width: 0; font-variant-numeric: tabular-nums; }
+.sidebar-mail-count-spin { margin-inline-start: auto; }
+.sidebar-fill-track { height: 2px; margin: 5px 0 1px; overflow: hidden; border-radius: 1px; background: var(--mail-border); }
+.sidebar-fill-bar { height: 100%; background: var(--mail-accent-text); transition: width 300ms ease-out; }
+.sidebar-version { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-version-build { display: block; overflow: hidden; text-overflow: ellipsis; font-family: var(--mail-font-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 10px; opacity: 0.8; }
 
 /* Alternate layouts keep the familiar account rows and reserve space for folders. */
 .sidebar-navigation-scroll[data-sidebar-layout="split"],

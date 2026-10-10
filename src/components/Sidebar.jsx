@@ -71,6 +71,11 @@ import {
   Clock,
 } from 'lucide-react';
 
+/* A nightly is `2.19.1-nightly.<stamp>.g<sha>`: far wider than the sidebar, and the
+   stamp is noise next to the number, so it drops to its own quiet line. */
+const [versionBase, ...versionRest] = version.split('-');
+const versionBuild = versionRest.join('-');
+
 const UNIFIED_FOLDERS = () => ([
   { id: 'INBOX', name: tr('sidebar.inbox'), icon: Inbox },
   { id: tr('list.sent'), name: tr('list.sent'), icon: Send, specialUse: '\\Sent' },
@@ -1356,30 +1361,36 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         renderAccount={renderAccount} unifiedRow={renderUnifiedRow(true)} onAddAccount={onAddAccount} />}
 
       <div className="sidebar-footer">
-        <div className="sidebar-footer-tools">
-          <div className="flex-1 min-w-0"><FocusTimerButton onUpgrade={() => onOpenSettings('billing')} /></div>
+        <FocusTimerButton onUpgrade={() => onOpenSettings('billing')} />
+        <div className="sidebar-footer-actions">
           <PrivacyModeButton onUpgrade={() => onOpenSettings('billing')} />
-          <Button variant="ghost" icon size="sm" onClick={onReportBug} title={t('sidebar.reportABug')} aria-label={t('sidebar.reportABug')}><Bug size={14} /></Button>
-          <Button variant="ghost" icon size="sm" onClick={onReferFriend} title={t('sidebar.referAFriend')} aria-label={t('sidebar.referAFriend')}><Gift size={14} /></Button>
-        </div>
-        <div className="sidebar-footer-meta">
-          <div className="min-w-0">
-            {totalEmails > 0 && <div className="sidebar-mail-count">
-              <HardDrive size={12} />
-              <span>{cacheFilling
-                ? t('sidebar.emailsDownloaded', { cachedCount: formatCount(cachedCount), totalEmails: formatCount(totalEmails) })
-                : t('sidebar.emails', { totalEmails: formatCount(totalEmails) })}</span>
-              {(loading || cacheFilling) && <RefreshCw size={10} className="animate-spin text-mail-accent-text" />}
-            </div>}
-            <div className="sidebar-version">{t('sidebar.mailvaultVersion', { version })}</div>
-            <PortableBadge onClick={() => onOpenSettings?.('portable')} />
-          </div>
-          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})} title={t('bugReport.joinDiscord')} aria-label={t('bugReport.joinDiscord')}><DiscordLogo size={14} /></Button>
-          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(X_PROFILE).catch(() => {})} title={t('bugReport.followX')} aria-label={t('bugReport.followX')}><XLogo size={12} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={onReportBug} title={t('sidebar.reportABug')} aria-label={t('sidebar.reportABug')}><Bug size={15} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={onReferFriend} title={t('sidebar.referAFriend')} aria-label={t('sidebar.referAFriend')}><Gift size={15} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})} title={t('bugReport.joinDiscord')} aria-label={t('bugReport.joinDiscord')}><DiscordLogo size={15} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={() => openInBrowser(X_PROFILE).catch(() => {})} title={t('bugReport.followX')} aria-label={t('bugReport.followX')}><XLogo size={13} /></Button>
           <Button variant="ghost" icon size="sm" onClick={toggleTheme}
-            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}>
+            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}
+            aria-label={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}>
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </Button>
+        </div>
+        <div className="sidebar-status">
+          {totalEmails > 0 && <div className="sidebar-mail-count">
+            <HardDrive size={12} />
+            <span className="sidebar-mail-count-label">{cacheFilling
+              ? t('sidebar.emailsDownloaded', { cachedCount: formatCount(cachedCount), totalEmails: formatCount(totalEmails) })
+              : t('sidebar.emails', { totalEmails: formatCount(totalEmails) })}</span>
+            {(loading || cacheFilling) && <RefreshCw size={10} className="sidebar-mail-count-spin animate-spin text-mail-accent-text" />}
+          </div>}
+          {totalEmails > 0 && cacheFilling && <div className="sidebar-fill-track" role="progressbar" aria-valuemin={0}
+            aria-valuemax={totalEmails} aria-valuenow={Math.min(cachedCount, totalEmails)}>
+            <div className="sidebar-fill-bar" style={{ width: `${Math.min(100, (cachedCount / totalEmails) * 100)}%` }} />
+          </div>}
+          <div className="sidebar-version" title={t('sidebar.mailvaultVersion', { version })}>
+            {t('sidebar.mailvaultVersion', { version: versionBase })}
+            {versionBuild && <span className="sidebar-version-build">{versionBuild}</span>}
+          </div>
+          <PortableBadge onClick={() => onOpenSettings?.('portable')} />
         </div>
       </div>
 

@@ -10,6 +10,9 @@
 - **Get reminded when nobody replies (Premium).** When you write an email, the bell next to Templates offers to remind you in 1 day, 3 days or a week. If nobody has answered by then, the email you sent is pinned above your inbox, unread, with one notification. Click it to read it again, or its x to dismiss the reminder; nothing in your mailbox is moved. Replies are looked for in the mail MailVault already holds in any folder but Sent and Drafts, and on the server in your inbox, archive and Trash; mail from your own addresses and aliases does not count, and neither do automatic out-of-office replies. Not offered for Outlook.com accounts signed in with Microsoft.
 - **MailVault has a Discord server.** Join it, or follow MailVault on X, from the icons at the bottom of the sidebar or from Report a bug, for questions and chat with other users.
 
+### Changed
+- **The sidebar footer is tidier.** The six icons (privacy mode, report a bug, refer a friend, Discord, X, light or dark) are one connected block with no gaps. Below it, the email count sits on a single line with a thin progress bar while mail downloads, and a nightly's long build tag moves to its own small line under the version instead of wrapping.
+
 ### Fixed
 - **IONOS accounts no longer get a false DKIM warning after Change server.** The check looks for your domain's DKIM key under a list of common selector names and did not know IONOS's `s1-ionos` and `s2-ionos`, so it warned that outgoing mail might be marked as spam even when DKIM was set up correctly. Both are checked now.
 - **No banner for mail you sent.** Replying in a thread that lives in your inbox no longer notifies you of your own message. Mail from your login address, default From or any alias is skipped; mail from others still notifies.
