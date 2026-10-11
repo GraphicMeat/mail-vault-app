@@ -1,6 +1,7 @@
 //! A small vCard 3.0/4.0 reader and writer that keeps what it does not
 //! understand: every content line is held verbatim as (group, name, params,
 //! value), so an edit rewrites only the lines it means to change.
+use crate::people::dedupe::{norm_name, phone_tail};
 use crate::people::message_addr::normalize;
 use crate::people::journal::{self, Step};
 use crate::people::model::{new_id, now_ms, RecordRow};
@@ -8,6 +9,7 @@ use crate::people::store::{create_person_steps, find_person_by_address, get_card
 use rusqlite::Connection;
 use serde::Serialize;
 use serde_json::json;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Line {
@@ -239,23 +241,65 @@ fn derr(e: rusqlite::Error) -> String { e.to_string() }
 /// chunk, so a 10k-card Takeout file never holds it for long.
 pub const IMPORT_CHUNK: usize = 200;
 
+/// Live people by normalized name: the lookup for cards with no address.
+fn people_by_name(conn: &Connection) -> Result<HashMap<String, Vec<String>>, String> {
+    let mut stmt = conn.prepare("SELECT id, display_name FROM person WHERE deleted_ms IS NULL").map_err(derr)?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).map_err(derr)?;
+    let mut map: HashMap<String, Vec<String>> = HashMap::new();
+    for row in rows {
+        let (id, name) = row.map_err(derr)?;
+        let key = norm_name(&name);
+        if !key.is_empty() {
+            map.entry(key).or_default().push(id);
+        }
+    }
+    Ok(map)
+}
+
+/// The person an email-less card is: same normalized name and, when the card has
+/// phones, one number in common (last 10 digits). Two people who share only a
+/// name stay two.
+fn owner_by_name(conn: &Connection, names: &HashMap<String, Vec<String>>, card: &VCard) -> Result<Option<String>, String> {
+    let keys: Vec<String> = card.phones().iter().map(|(n, _)| phone_tail(n)).filter(|k| !k.is_empty()).collect();
+    for id in names.get(&norm_name(&card.fn_name())).into_iter().flatten() {
+        if keys.is_empty() {
+            return Ok(Some(id.clone()));
+        }
+        let Some(existing) = get_card(conn, id)? else { continue };
+        if existing.phones.iter().any(|p| keys.contains(&phone_tail(&p.number))) {
+            return Ok(Some(id.clone()));
+        }
+    }
+    Ok(None)
+}
+
 /// Import already-parsed cards in ONE transaction, journaled as one entry in
 /// group `grp` (a caller importing in chunks gives every chunk the same group,
 /// so a single undo reverses the whole file). A card whose email already
 /// belongs to a person is added as a second record of that person
-/// (exact-address auto-link); a card that adds no name, address or phone to
+/// (exact-address auto-link); a card with no email is matched to a person by
+/// name and phone instead; a card that adds no name, address or phone to
 /// that person, one with no name, address or phone, and a duplicate are skipped. Nothing leaves the vault.
 pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<ImportReport, String> {
     let mut report = ImportReport::default();
     let tx = conn.unchecked_transaction().map_err(derr)?;
     let mut inverse: Vec<Step> = Vec::new();
+    let mut names: Option<HashMap<String, Vec<String>>> = None;
     for card in cards {
         let emails: Vec<String> = card.emails().into_iter().map(|(a, _)| a).collect();
         if emails.is_empty() && card.fn_name().is_empty() && card.phones().is_empty() {
             report.skipped += 1;
             continue;
         }
-        let owner = emails.iter().find_map(|a| find_person_by_address(&tx, a).ok().flatten());
+        let mut owner = emails.iter().find_map(|a| find_person_by_address(&tx, a).ok().flatten());
+        if owner.is_none() && emails.is_empty() {
+            if names.is_none() {
+                names = Some(people_by_name(&tx)?);
+            }
+            if let Some(map) = &names {
+                owner = owner_by_name(&tx, map, card)?;
+            }
+        }
         match owner {
             Some(pid) => {
                 let existing = get_card(&tx, &pid)?.ok_or("E_NOT_FOUND: person")?;
@@ -294,7 +338,13 @@ pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<Imp
                 report.linked += 1;
             }
             None => {
-                let (_, steps) = create_person_steps(&tx, &NewPerson { source_kind: "import".into(), raw: Some(card.to_text()), ..Default::default() })?;
+                let (pid, steps) = create_person_steps(&tx, &NewPerson { source_kind: "import".into(), raw: Some(card.to_text()), ..Default::default() })?;
+                if let Some(map) = names.as_mut() {
+                    let key = norm_name(&card.fn_name());
+                    if !key.is_empty() {
+                        map.entry(key).or_default().push(pid);
+                    }
+                }
                 for s in steps.into_iter().rev() {
                     inverse.insert(0, s);
                 }
@@ -503,6 +553,38 @@ mod tests {
             let r = import(&c, "BEGIN:VCARD\nFN:Jane\nEMAIL:jane@corp.com\nTEL:222\nEND:VCARD\n").unwrap();
             assert_eq!((r.created, r.linked, r.skipped), (0, 1, 0));
             assert_eq!(get_card(&c, &id).unwrap().unwrap().record_ids.len(), 2);
+        }
+
+        #[test]
+        fn phone_only_and_name_only_cards_are_not_created_again_by_a_second_import() {
+            let (_t, c) = conn();
+            let text = "BEGIN:VCARD\nFN:Phone Only\nTEL:+1 555 0100\nEND:VCARD\nBEGIN:VCARD\nFN:  Name   ONLY \nEND:VCARD\n";
+            let r = import(&c, text).unwrap();
+            assert_eq!((r.created, r.linked, r.skipped), (2, 0, 0));
+            let again = import(&c, text).unwrap();
+            assert_eq!((again.created, again.linked, again.skipped), (0, 0, 2));
+            let respaced = import(&c, "BEGIN:VCARD\nFN:phone   only\nTEL:+1 555 0100\nEND:VCARD\n").unwrap();
+            assert_eq!((respaced.created, respaced.linked, respaced.skipped), (0, 0, 1));
+            assert_eq!(crate::people::store::list(&c, None, false, crate::people::store::Sort::Name, 10, 0).unwrap().1, 2);
+        }
+
+        #[test]
+        fn two_people_with_one_name_and_different_phones_are_not_merged() {
+            let (_t, c) = conn();
+            let text = "BEGIN:VCARD\nFN:Sam\nTEL:+1 555 0100\nEND:VCARD\nBEGIN:VCARD\nFN:Sam\nTEL:+1 555 0200\nEND:VCARD\n";
+            assert_eq!(import(&c, text).unwrap().created, 2, "same name, other phone: another person");
+            let again = import(&c, text).unwrap();
+            assert_eq!((again.created, again.linked, again.skipped), (0, 0, 2));
+            assert_eq!(crate::people::store::list(&c, None, false, crate::people::store::Sort::Name, 10, 0).unwrap().1, 2);
+        }
+
+        #[test]
+        fn an_emailless_card_with_a_known_name_and_phone_and_a_new_number_is_linked_to_that_person() {
+            let (_t, c) = conn();
+            let id = create_person(&c, &NewPerson { display_name: "Sam".into(), phones: vec!["111".into()], ..Default::default() }).unwrap();
+            let r = import(&c, "BEGIN:VCARD\nFN:Sam\nTEL:111\nTEL:333\nEND:VCARD\n").unwrap();
+            assert_eq!((r.created, r.linked, r.skipped), (0, 1, 0));
+            assert_eq!(get_card(&c, &id).unwrap().unwrap().phones.len(), 2);
         }
 
         #[test]

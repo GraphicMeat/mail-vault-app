@@ -14,7 +14,13 @@ pub struct Proposal {
 
 fn digits(s: &str) -> String { s.chars().filter(char::is_ascii_digit).collect() }
 
-fn norm_name(s: &str) -> String { s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase() }
+pub(crate) fn norm_name(s: &str) -> String { s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase() }
+
+/// The last 10 digits of a phone number, the part two spellings of one number share.
+pub(crate) fn phone_tail(s: &str) -> String {
+    let d = digits(s);
+    d[d.len().saturating_sub(10)..].to_string()
+}
 
 /// What the matcher needs from one person: normalised name and phone keys.
 #[derive(Debug, Clone)]
