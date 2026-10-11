@@ -151,6 +151,14 @@ mod tests {
     }
 
     #[test]
+    fn a_nameless_keeper_takes_the_name_of_the_person_merged_into_it() {
+        let (_t, c) = conn();
+        let a = mk(&c, "", &["a@x.io"]);
+        let b = mk(&c, "Al Smith", &["b@x.io"]);
+        assert_eq!(merge(&c, &[a.clone(), b], &a).unwrap().display_name, "Al Smith");
+    }
+
+    #[test]
     fn preview_writes_nothing() {
         let (_t, c) = conn();
         let a = mk(&c, "Al", &["a@x.io"]);

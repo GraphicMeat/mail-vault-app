@@ -255,7 +255,10 @@ fn people_by_name(conn: &Connection) -> Result<HashMap<String, Vec<String>>, Str
     let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).map_err(derr)?;
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
     for row in rows {
-        let (id, name) = row.map_err(derr)?;
+        let (id, mut name) = row.map_err(derr)?;
+        if name.trim().is_empty() {
+            name = get_card(conn, &id)?.map(|c| c.display_name).unwrap_or(name);
+        }
         let key = norm_name(&name);
         if !key.is_empty() {
             map.entry(key).or_default().push(id);

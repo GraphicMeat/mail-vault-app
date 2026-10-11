@@ -91,7 +91,7 @@ pub fn create_person_steps(conn: &Connection, np: &NewPerson) -> Result<(String,
         card.to_text()
     });
     let first = VCard::parse_all(&raw).into_iter().next().unwrap_or_default();
-    let name = if np.display_name.trim().is_empty() { first.display_name() } else { np.display_name.trim().to_string() };
+    let name = if np.display_name.trim().is_empty() { first.fn_name() } else { np.display_name.trim().to_string() };
     let notes = if np.notes.is_empty() { first.note() } else { np.notes.clone() };
     journal::apply(
         conn,
@@ -166,6 +166,10 @@ pub fn get_card(conn: &Connection, id: &str) -> Result<Option<Card>, String> {
             }
             if card.org.is_empty() { card.org = c.org(); }
         }
+    }
+    // a contact with no name is shown by its first address, else its first number; the row stays blank
+    if card.display_name.trim().is_empty() {
+        card.display_name = card.emails.first().map(|e| e.address.clone()).or_else(|| card.phones.first().map(|p| p.number.clone())).unwrap_or_default();
     }
     Ok(Some(card))
 }
@@ -351,7 +355,10 @@ pub fn list_with_totals(
         )
         .map_err(err)?;
     let mut items: Vec<Summary> = Vec::with_capacity(base.len());
-    for (id, name, vip, pinned, blocked) in base {
+    for (id, mut name, vip, pinned, blocked) in base {
+        if name.trim().is_empty() {
+            name = get_card(conn, &id)?.map(|c| c.display_name).unwrap_or(name);
+        }
         let addrs: Vec<String> = addr_stmt
             .query_map([&id], |r| r.get::<_, String>(0))
             .map_err(err)?
@@ -461,16 +468,19 @@ mod tests {
     }
 
     #[test]
-    fn a_contact_with_no_name_is_shown_by_its_first_email_or_else_its_first_phone() {
+    fn a_contact_with_no_name_is_stored_blank_and_shown_by_its_first_email_or_else_its_first_phone() {
         let (_t, c) = conn();
         let by_mail = create_person(&c, &np("", &["Al@X.io", "b@x.io"])).unwrap();
         let by_phone = create_person(&c, &NewPerson { phones: vec!["+1 555 0100".into(), "222".into()], ..np(" ", &[]) }).unwrap();
         crate::people::vcard::import(&c, "BEGIN:VCARD\nEMAIL:z@x.io\nEND:VCARD\nBEGIN:VCARD\nTEL:+1 555 0300\nEND:VCARD\n").unwrap();
+        let named: i64 = c.query_row("SELECT count(*) FROM person WHERE trim(display_name)<>''", [], |r| r.get(0)).unwrap();
+        assert_eq!(named, 0, "the fallback is shown, never stored");
         assert_eq!(get_card(&c, &by_mail).unwrap().unwrap().display_name, "al@x.io");
         assert_eq!(get_card(&c, &by_phone).unwrap().unwrap().display_name, "+1 555 0100");
         let mut names: Vec<String> = list(&c, None, false, Sort::Name, 10, 0).unwrap().0.into_iter().map(|s| s.display_name).collect();
         names.sort();
         assert_eq!(names, ["+1 555 0100", "+1 555 0300", "al@x.io", "z@x.io"], "no blank row in the list");
+        assert!(crate::people::vcard::export(&c, None).unwrap().contains("FN:al@x.io"), "a card needs an FN");
     }
 
     #[test]
