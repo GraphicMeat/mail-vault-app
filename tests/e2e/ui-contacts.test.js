@@ -58,6 +58,35 @@ async function waitFor(condition, message, timeout = 15000) {
   await browser.waitUntil(condition, { timeout, interval: 150, timeoutMsg: message });
 }
 
+/** Failure-only probe: what sits on top of `selector`'s center, as JSON. */
+const coverReport = (selector) => browser.execute((sel) => {
+  const node = document.querySelector(sel);
+  if (!node) return { missing: sel };
+  const box = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+  const label = (el) => ({ tag: el.tagName, testid: el.getAttribute('data-testid'), cls: String(el.className?.baseVal ?? el.className).slice(0, 120) });
+  const rect = node.getBoundingClientRect();
+  const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  if (!hit || hit === node || node.contains(hit)) return { reachable: true, button: box(node) };
+  const chain = [];
+  for (let el = hit.parentElement; el && chain.length < 6; el = el.parentElement) chain.push(label(el));
+  const overlays = [...document.querySelectorAll('body *')].filter((el) => {
+    const position = getComputedStyle(el).position;
+    if (position !== 'fixed' && position !== 'absolute') return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom;
+  }).map((el) => ({ ...label(el), position: getComputedStyle(el).position, text: (el.textContent || '').trim().slice(0, 60) }));
+  return { hitHtml: hit.outerHTML.slice(0, 300), hit: label(hit), hitRect: box(hit), chain, button: box(node), viewport: { w: innerWidth, h: innerHeight }, overlays };
+}, selector);
+
+/** clickReachable, naming the covering element when the control never frees up. */
+async function clickReachableOrExplain(selector) {
+  try {
+    await clickReachable(selector);
+  } catch (error) {
+    throw new Error(`${error.message}\nCover probe: ${JSON.stringify(await coverReport(selector))}`);
+  }
+}
+
 /** data-testid of every list row whose text contains `text`. */
 const rowIds = (text) => browser.execute((needle) => [...document.querySelectorAll('[data-testid^="contact-row-"]')]
   .filter((row) => row.textContent.includes(needle)).map((row) => row.dataset.testid), text);
@@ -215,7 +244,7 @@ describe('Contacts', function () {
   });
 
   it('opens the review queue and leaves its contents alone', async () => {
-    await clickReachable(tid('contacts-review-tab'));
+    await clickReachableOrExplain(tid('contacts-review-tab'));
     await waitShown(tid('review-queue'), 15000);
     const rows = await browser.execute(() => document.querySelectorAll('[data-testid^="review-row-"]').length);
     if (rows === 0) {
