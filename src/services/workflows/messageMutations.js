@@ -27,7 +27,7 @@ import { mailboxLabel } from '../../utils/imapUtf7';
 import { formatPurgeEverywhereOutcome } from '../../utils/purgeOutcome';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
-import { t as tr } from '../../i18n/index.js';
+import { t as tr, tErr } from '../../i18n/index.js';
 
 
 /**
@@ -1233,6 +1233,16 @@ async function _restoreFromTrash(outcomes) {
           kept.add(_targetId(o));
           await stampVaultEntry(g.accountId, g.mailbox, o.uid, { serverDeleted: false });
         }
+        // The delete stamped the in-memory vault rows too; the copy is back
+        // under the same uid, so they must stop saying it is gone (the
+        // re-keyed rows get the same treatment in _rekeyRestored).
+        if (same.length) {
+          const ids = new Set(same.map(_targetId));
+          const now = useMailStore.getState();
+          useMailStore.setState({
+            localEmails: now.localEmails.map((e) => (ids.has(_rowId(e, now)) ? { ...e, serverDeleted: false } : e)),
+          });
+        }
         try {
           const rows = same.filter(o => o.row).map(o => o.row);
           if (rows.length) await db.saveEmailHeaders(g.accountId, g.mailbox, rows, null);
@@ -1334,7 +1344,7 @@ export async function undoLastAction() {
     await recoverFromBin(_lastBinned);
     return true;
   } catch (e) {
-    useMailStore.setState({ error: tr('undo.failed', { err: e?.message || String(e) }) });
+    useMailStore.setState({ error: tr('undo.failed', { err: tErr(e) }) });
     return false;
   }
 }
@@ -1906,7 +1916,7 @@ export async function markEmailReadStatus(uid, read) {
     // close button). Nothing reopens it either: the auto mark-as-read runs on
     // open, not on a flag write, so the message stays open and unread.
   } catch (error) {
-    useMailStore.setState({ error: tr('svc.messageMutations.couldChangeReadStatusServer', { error: error.message }) });
+    useMailStore.setState({ error: tr('svc.messageMutations.couldChangeReadStatusServer', { error: tErr(error) }) });
   }
 }
 
@@ -2066,7 +2076,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
           // The one branch with no journal behind it — replayOps cannot replay a
           // Graph op — so a failure here is the end of the road and has to say so.
           console.error('[applyFlag] Graph write failed:', e);
-          if (!detachTail) useMailStore.setState({ error: tr('svc.messageMutations.couldChangeFlagServer', { error: e.message }) });
+          if (!detachTail) useMailStore.setState({ error: tr('svc.messageMutations.couldChangeFlagServer', { error: tErr(e) }) });
         }
         continue;
       }

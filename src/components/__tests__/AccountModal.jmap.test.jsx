@@ -182,6 +182,20 @@ describe('AccountModal: JMAP accounts', () => {
     expect(submitted()).toMatchObject({ jmapSessionUrl: 'https://mail.other.net:8443/jmap/session', imapHost: 'mail.other.net' });
   });
 
+  it('the handler itself refuses an unconfirmed foreign host, not only the disabled button', async () => {
+    await addOther();
+    await autodetect({
+      jmapSessionUrl: 'https://mail.other.net:8443/jmap/session', jmapHost: 'mail.other.net:8443',
+      jmapNeedsHostConfirmation: true, jmapSource: 'well-known', source: 'jmap',
+    });
+    expect(addButton().disabled).toBe(true);
+
+    // A programmatic submit (Enter in a field, a stray event) skips the button.
+    await act(async () => { fireEvent.submit(addButton().closest('form')); });
+    expect(mockAddAccount).not.toHaveBeenCalled();
+    expect(mockTestConnection).not.toHaveBeenCalled();
+  });
+
   it('an SRV-only hit is offered with IMAP still preselected', async () => {
     await addOther();
     await autodetect({

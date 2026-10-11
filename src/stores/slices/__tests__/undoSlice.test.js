@@ -10,6 +10,7 @@ const search = { searchActive: false, performSearch: vi.fn() };
 vi.mock('../../searchStore', () => ({ useSearchStore: { getState: () => search } }));
 
 import { createUndoSlice } from '../undoSlice';
+import { t, tErr } from '../../../i18n/index.js';
 
 const store = create((set, get) => ({ error: null, ...createUndoSlice(set, get) }));
 
@@ -122,5 +123,15 @@ describe('undoSlice', () => {
 
     await expect(store.getState().runUndo()).resolves.toBe(true);
     expect(store.getState().error).toBeNull();
+  });
+
+  it('words a JMAP failure in the catalog inside the Undo failed sentence', async () => {
+    const raw = 'E_JMAP_METHOD: mailboxHasEmail: still has mail';
+    store.getState().setUndo({ labelKey: 'undo.moved', run: async () => { throw new Error(raw); } });
+
+    await expect(store.getState().runUndo()).resolves.toBe(false);
+
+    expect(store.getState().error).toBe(t('undo.failed', { err: tErr(raw) }));
+    expect(store.getState().error).not.toContain('E_JMAP');
   });
 });

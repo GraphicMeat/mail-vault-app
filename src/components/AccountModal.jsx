@@ -613,6 +613,9 @@ export function AccountModal({ onClose, onSuccess }) {
     console.log('[AccountModal] submitAccount called');
     setError(null);
     const jmapAccount = protocol === 'jmap' ? jmapAccountData(formDataToSubmit, jmap) : null;
+    // The button is disabled until the foreign host is ticked, but a submit
+    // that skips the button (Enter in a field) must not carry the secret there.
+    if (jmapAccount && !jmapReady(jmap)) return;
     if (jmapAccount && !jmapAccount.imapHost) {
       setError(t('account.jmapSessionUrlInvalid'));
       return;

@@ -136,6 +136,7 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { markAnswered, setDeleteUndo, undoLastAction, recoverFromBin } = await import('../messageMutations');
+const { t, tErr } = await import('../../../i18n/index.js');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
 
@@ -434,6 +435,20 @@ describe('undo after a delete', () => {
     mockDaemonCall.mockClear();
     await expect(undoLastAction()).resolves.toBe(false);
     expect(mockDaemonCall).not.toHaveBeenCalled();
+  });
+
+  it('Cmd+Z that fails on a JMAP error says it in catalog words, not the raw code', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    useMailStore.getState().clearUndo();
+    mockDaemonCall.mockRejectedValueOnce(new Error('E_JMAP_NO_TRASH: no trash mailbox'));
+
+    await expect(undoLastAction()).resolves.toBe(false);
+
+    const { error } = useMailStore.getState();
+    expect(error).toBe(t('undo.failed', { err: tErr('E_JMAP_NO_TRASH: no trash mailbox') }));
+    expect(error).not.toContain('E_JMAP');
   });
 
   it('Cmd+Z runs the slot while it holds the delete, and the restored message leaves the bin', async () => {
@@ -858,6 +873,19 @@ describe('undo puts the row back first, then the server follows', () => {
   });
 });
 
+describe('a flag change that fails on a JMAP error', () => {
+  it('words the error in the catalog, not the raw code', async () => {
+    primeStore({ emails: [row(7)] });
+    mockQueueOp.mockRejectedValueOnce(new Error('E_JMAP_NO_TRASH: no trash mailbox'));
+
+    await useMailStore.getState().markEmailReadStatus(7, true);
+
+    const { error } = useMailStore.getState();
+    expect(error).toBe(t('svc.messageMutations.couldChangeReadStatusServer', { error: tErr('E_JMAP_NO_TRASH: no trash mailbox') }));
+    expect(error).not.toContain('E_JMAP');
+  });
+});
+
 describe('undo after a flag change', () => {
   it('offers the star back, and taking it sets no new slot', async () => {
     primeStore({ emails: [row(7)] });
@@ -957,7 +985,13 @@ describe('undo after a delete on a JMAP account', () => {
 
   it('keeps both rows on screen when the labels come back under their old uids', async () => {
     primeStore({ emails: [row(7), row(8)], selected: [7, 8], accounts: [JMAP] });
+    useMailStore.setState({
+      localEmails: [row(7, { source: 'local' }), row(8, { source: 'local' })],
+      archivedEmailIds: new Set(['a1:INBOX:7', 'a1:INBOX:8']),
+    });
     await useMailStore.getState().deleteSelectedFromServer();
+    // The delete stamped the vault rows "we deleted the server copy".
+    expect(useMailStore.getState().localEmails.map(e => e.serverDeleted)).toEqual([true, true]);
     mockSaveEmailHeaders.mockClear();
     mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 2, newUids: [7, 8] });
 
@@ -972,6 +1006,8 @@ describe('undo after a delete on a JMAP account', () => {
     expect(mockSaveEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX',
       [expect.objectContaining({ uid: 7, subject: 'm7' }), expect.objectContaining({ uid: 8, subject: 'm8' })], null);
     for (const call of mockSaveEmailHeaders.mock.calls) expect(call[4]?.removedUids ?? []).toEqual([]);
+    // The server copy is back under the same uids: the viewer must stop saying it is gone.
+    expect(useMailStore.getState().localEmails.map(e => e.serverDeleted)).toEqual([false, false]);
   });
 
   it('pairs new uids by position, not by sorting', async () => {

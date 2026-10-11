@@ -70,3 +70,22 @@ it('a rediscovered session off the address\'s domain waits for the tick', async 
   await waitFor(() => expect(changeServer).toHaveBeenCalledTimes(1));
   expect(changeServer.mock.calls[0][1]).toMatchObject({ jmapSessionUrl: 'https://jmap.hoster.net/jmap/session' });
 });
+
+it('the handler itself refuses an unconfirmed foreign host, not only the disabled button', async () => {
+  resolveEmailSettings.mockResolvedValue({
+    source: 'jmap', jmapSessionUrl: 'https://jmap.hoster.net/jmap/session', jmapHost: 'jmap.hoster.net',
+    jmapNeedsHostConfirmation: true, jmapSource: 'srv',
+  });
+  render(<ChangeServerModal />);
+  await waitFor(() => expect(resolveEmailSettings).toHaveBeenCalledWith('example.org'));
+  await act(async () => {});
+
+  fireEvent.change(screen.getByLabelText(t('account.jmapApiToken')), { target: { value: 'new-tok' } });
+  expect(verify().disabled).toBe(true);
+
+  // React drops clicks on a disabled button, so reach the handler directly.
+  const btn = verify();
+  const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps'));
+  await act(async () => { await btn[propsKey].onClick(); });
+  expect(changeServer).not.toHaveBeenCalled();
+});

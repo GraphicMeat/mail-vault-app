@@ -201,6 +201,9 @@ export default function ChangeServerModal() {
   };
 
   const handleVerifySave = async () => {
+    // Same gate as the button's disabled state, held here too: the secret
+    // never goes to a session host the user has not ticked.
+    if (jmapAccount && !jmapReady(jmap)) return;
     setVerifyError(null);
     setBusyLeg('imap');
     try {
