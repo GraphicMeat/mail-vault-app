@@ -41,6 +41,19 @@ async function fill(selector, value) {
 const valueOf = (selector) => browser.execute((sel) => document.querySelector(sel)?.value ?? null, selector);
 const present = (selector) => browser.execute((sel) => !!document.querySelector(sel), selector);
 
+/** Exists, has a box and is not hidden. Selector is resolved inside the page. */
+const shown = (selector) => browser.execute((sel) => {
+  const node = document.querySelector(sel);
+  if (!node) return false;
+  const rect = node.getBoundingClientRect();
+  const style = getComputedStyle(node);
+  return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+}, selector);
+
+async function waitShown(selector, timeout = 15000) {
+  await browser.waitUntil(() => shown(selector), { timeout, interval: 150, timeoutMsg: `Never displayed: ${selector}` });
+}
+
 async function waitFor(condition, message, timeout = 15000) {
   await browser.waitUntil(condition, { timeout, interval: 150, timeoutMsg: message });
 }
@@ -78,7 +91,7 @@ async function openContacts() {
   await waitForApp();
   await dismissOnboardingNotice();
   await clickReachable(tid('open-contacts'));
-  await $(tid('contacts-view')).waitForDisplayed({ timeout: 30000 });
+  await waitShown(tid('contacts-view'), 30000);
 }
 
 async function createContact({ name, email }) {
@@ -101,9 +114,9 @@ describe('Contacts', function () {
 
   it('opens from the sidebar and shows the list controls', async () => {
     await openContacts();
-    assert.ok(await $(tid('contacts-new')).isDisplayed());
-    assert.ok(await $(tid('contacts-search')).isDisplayed());
-    assert.ok(await $(tid('contacts-import')).isDisplayed());
+    assert.ok(await shown(tid('contacts-new')));
+    assert.ok(await shown(tid('contacts-search')));
+    assert.ok(await shown(tid('contacts-import')));
     assert.equal(await browser.execute(() => document.querySelector('[data-testid="open-contacts"]')?.getAttribute('aria-current')), 'page');
   });
 
@@ -146,13 +159,13 @@ describe('Contacts', function () {
     await clickReachable(tid(await rowFor(ADA.name)));
     await waitFor(async () => (await valueOf(tid('person-name'))) === ADA.name, 'Ada card never opened');
     await clickReachable(tid('person-merge'));
-    await $(tid('merge-search')).waitForDisplayed({ timeout: 10000 });
+    await waitShown(tid('merge-search'), 10000);
     await fill(tid('merge-search'), BOB.name);
     await waitFor(() => browser.execute((label) => [...document.querySelectorAll('[data-testid="merge-other"] option')].some((o) => o.textContent === label), BOB.name),
       'Bob never appeared in the merge picker');
     const bobId = await browser.execute((label) => [...document.querySelectorAll('[data-testid="merge-other"] option')].find((o) => o.textContent === label).value, BOB.name);
     await setControl(tid('merge-other'), bobId);
-    await $(tid('merge-preview')).waitForDisplayed({ timeout: 10000 });
+    await waitShown(tid('merge-preview'), 10000);
     const previewed = await browser.execute(() => [...document.querySelectorAll('[data-testid="merge-preview-email"]')].map((n) => n.textContent));
     assert.deepEqual(previewed.sort(), [ADA.email, BOB.email].sort(), 'Preview combines both addresses');
     await clickReachable(tid('merge-confirm'));
@@ -168,7 +181,7 @@ describe('Contacts', function () {
 
   it('undoes the merge from the Activity tab and shows two rows again', async () => {
     await openPersonTab(2);
-    await $(tid('person-activity')).waitForDisplayed({ timeout: 10000 });
+    await waitShown(tid('person-activity'), 10000);
     await waitFor(() => browser.execute(() => document.querySelector('[data-testid="activity-undo"]')?.disabled === false), 'Undo was never offered');
     await clickReachable(tid('activity-undo'));
     await searchList(TAG);
@@ -194,7 +207,7 @@ describe('Contacts', function () {
       return true;
     }, vcf);
     assert.equal(ok, true, 'The import input exists');
-    await $(tid('contacts-import-result')).waitForDisplayed({ timeout: 20000 });
+    await waitShown(tid('contacts-import-result'), 20000);
     await searchList(TAG);
     const id = await rowFor(IMPORTED.name);
     const text = await browser.execute((sel) => document.querySelector(sel).textContent, tid(id));
@@ -203,7 +216,7 @@ describe('Contacts', function () {
 
   it('opens the review queue and leaves its contents alone', async () => {
     await clickReachable(tid('contacts-review-tab'));
-    await $(tid('review-queue')).waitForDisplayed({ timeout: 15000 });
+    await waitShown(tid('review-queue'), 15000);
     const rows = await browser.execute(() => document.querySelectorAll('[data-testid^="review-row-"]').length);
     if (rows === 0) {
       assert.equal(await present(tid('review-add-all')), false, 'An empty queue offers no bulk add');
@@ -211,14 +224,14 @@ describe('Contacts', function () {
       assert.ok(await present(tid('review-add-all')), 'A non-empty queue offers a bulk add');
     }
     await clickReachable(tid('contacts-review-tab'));
-    await $(tid('contacts-new')).waitForDisplayed({ timeout: 10000 });
+    await waitShown(tid('contacts-new'), 10000);
     assert.equal(await present(tid('review-queue')), false, 'The tab toggles back to the people list');
   });
 
   it('returns to mail with the back button', async () => {
     await clickReachable(tid('contacts-back'));
     await waitFor(async () => !(await present(tid('contacts-view'))), 'Contacts did not close');
-    assert.ok(await $(tid('sidebar')).isDisplayed());
+    assert.ok(await shown(tid('sidebar')));
     assert.notEqual(await browser.execute(() => document.querySelector('[data-testid="open-contacts"]')?.getAttribute('aria-current')), 'page');
   });
 });
