@@ -25,8 +25,10 @@
 //! (`hoard_account_jmap`): its folders come from the account's mailbox
 //! listing, each folder's ids from `Email/query`, uids from the folder's JMAP
 //! ledger (oldest first, as the bridge issues them), and each missing body
-//! from a blob download. No STATUS memo: an id listing is one small request
-//! per page, so every pass lists every folder.
+//! from a blob download. The STATUS memo is the folder's `totalEmails` from
+//! the pass's own mailbox listing: a folder left complete is relisted only
+//! when its count moved, or every `RELIST_EVERY`, so an idle account's pass
+//! lists no ids and spends no listing bytes.
 
 use crate::credentials;
 use crate::handlers::common::{blocking, with_mailbox_write};
@@ -158,6 +160,14 @@ struct FolderStatus {
 struct Complete {
     status: FolderStatus,
     listed_at: Instant,
+}
+
+/// A JMAP folder's memo status: its `totalEmails` where an IMAP folder has
+/// `UIDNEXT`, under the one generation a JMAP ledger has (the UIDVALIDITY
+/// `sync_jmap` writes). `listing_for` then reads a moved count as a changed
+/// folder; the JMAP pass lists any changed folder in full (no `From`).
+fn jmap_folder_status(total_emails: u32) -> FolderStatus {
+    FolderStatus { uid_validity: Some(1), uid_next: Some(total_emails) }
 }
 
 /// How much of a folder this pass lists.
@@ -677,6 +687,7 @@ async fn hoard_account_jmap(state: &Arc<DaemonState>, config: &ImapConfig, accou
         Err(_) => return Err("folder_list_timed_out".into()),
     };
     let folders = folders_to_hoard(boxes.infos.clone());
+    let totals: HashMap<&str, u32> = boxes.list.iter().map(|m| (m.id.as_str(), m.total_emails)).collect();
     let mut per_dir: HashMap<String, usize> = HashMap::new();
     for mailbox in &folders {
         *per_dir.entry(vault_dir_name(mailbox)).or_default() += 1;
@@ -687,6 +698,15 @@ async fn hoard_account_jmap(state: &Arc<DaemonState>, config: &ImapConfig, accou
             continue;
         }
         let Some(mailbox_id) = boxes.ids.get(mailbox) else { continue };
+        // The memo: a folder left complete whose count has not moved lists
+        // nothing, until `RELIST_EVERY` (a cache copy cleared by hand, or a
+        // delete and an arrival that cancelled out, come back within a day).
+        let status = totals.get(mailbox_id.as_str()).map(|total| jmap_folder_status(*total));
+        let done = state.hoarder_worker.complete(account_id, mailbox);
+        let now = Instant::now();
+        if listing_for(done, status, now) == Listing::Skip {
+            continue;
+        }
         if !hoarding(state, account_id).await {
             return Err("policy_changed".into());
         }
@@ -694,7 +714,11 @@ async fn hoard_account_jmap(state: &Arc<DaemonState>, config: &ImapConfig, accou
         if left == 0 {
             return Err(spent_reason(by_limit).into());
         }
-        hoard_mailbox_jmap(state, &acct, &config.host, account_id, mailbox, mailbox_id, out).await?;
+        if hoard_mailbox_jmap(state, &acct, &config.host, account_id, mailbox, mailbox_id, out).await? {
+            if let Some(status) = status {
+                state.hoarder_worker.mark_complete(account_id, mailbox, Complete { status, listed_at: now });
+            }
+        }
     }
     Ok(())
 }
@@ -1353,6 +1377,41 @@ mod tests {
         let again = hoard_account(&s, &config, ACCT).await;
         assert_eq!(again, Outcome { fetched: 0, failed: 0, stopped: None });
         assert_eq!(downloads(), 3, "what the vault holds is never downloaded again");
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// The JMAP STATUS memo (R14): a folder left complete is relisted only
+    /// when its `totalEmails` moved. A pass over an unchanged account lists no
+    /// ids and spends no listing bytes; one arrival in INBOX relists INBOX
+    /// alone.
+    #[tokio::test]
+    async fn jmap_a_pass_relists_only_the_folders_whose_count_moved() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let dir = std::env::temp_dir().join(format!("mv-hoard-jmap-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        hoarder(&dir, true);
+        let config = support::config(&m, port);
+        let queries = || m.count_calls("Email/query");
+        let used = || s.hoarder_worker.with_budget(&dir, ACCT, now_ms(), |b| b.used);
+
+        let first = hoard_account(&s, &config, ACCT).await;
+        assert_eq!(first, Outcome { fetched: 3, failed: 0, stopped: None });
+        assert!(queries() >= 4, "the first pass lists every folder: {}", queries());
+
+        let (listed, spent) = (queries(), used());
+        let quiet = hoard_account(&s, &config, ACCT).await;
+        assert_eq!(quiet, Outcome { fetched: 0, failed: 0, stopped: None });
+        assert_eq!(queries(), listed, "nothing moved: no Email/query");
+        assert_eq!(used(), spent, "and no listing bytes charged");
+
+        m.mutate(|st| st.add_email("acc1", "mb-inbox", support::email("e9", "nine", "2026-10-04T10:00:00Z")));
+        let arrival = hoard_account(&s, &config, ACCT).await;
+        assert_eq!(arrival, Outcome { fetched: 1, failed: 0, stopped: None });
+        assert_eq!(queries(), listed + 1, "only INBOX was relisted");
+        assert_eq!(uids(&dir, "INBOX"), vec![1, 2, 3]);
         assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

@@ -722,6 +722,57 @@ pub(crate) async fn fetch_by_uid(
     }
 }
 
+/// `fetch_by_uid` for several uids of one mailbox: the ledger is read once
+/// and the emails are read back with one `Email/get` (not once per uid), then
+/// each body is one blob download under the body ceiling. Only the uids that
+/// are still there come back, in the order given; a body that could not be
+/// downloaded is that uid's own `Err`, so one failure never hides the rest.
+pub(crate) async fn fetch_by_uids(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    account_id: &str,
+    mailbox: &str,
+    uids: &[u32],
+) -> Result<Vec<(u32, Result<Fetched, String>)>, String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let pairs = acct.uid_to_id(state, account_id, mailbox, uids, false).await?;
+    let ids: Vec<String> = pairs.iter().filter_map(|(_, id)| id.clone()).collect();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mailbox_id = acct.mailbox_id(mailbox).await.map_err(|e| e.to_string())?;
+    let mut got = by_id(
+        acct.client
+            .get_emails(&ids, &["id", "blobId", "mailboxIds", "keywords", "receivedAt"])
+            .await
+            .map_err(|e| e.to_string())?
+            .list,
+    );
+    let mut out = Vec::new();
+    for (uid, id) in pairs {
+        let Some(email) = id.and_then(|id| got.remove(&id)).filter(|email| in_mailbox(email, &mailbox_id)) else { continue };
+        let fetched = match email["blobId"].as_str() {
+            None => Err("E_JMAP_PROTOCOL: Email/get without blobId".to_string()),
+            Some(blob) => match tokio::time::timeout(BODY_FETCH_TIMEOUT, acct.client.download(blob)).await {
+                Ok(Ok(raw)) => Ok(Fetched {
+                    raw,
+                    flags: keywords_to_flags(&email["keywords"]),
+                    received_at: email["receivedAt"].as_str().map(str::to_string),
+                }),
+                Ok(Err(e)) => Err(e.to_string()),
+                Err(_) => Err(format!(
+                    "Timed out after {}s fetching message UID {} from {}",
+                    BODY_FETCH_TIMEOUT.as_secs(),
+                    uid,
+                    mailbox
+                )),
+            },
+        };
+        out.push((uid, fetched));
+    }
+    Ok(out)
+}
+
 /// `fetch_by_uid` for the deleted-mail bin (`deleted::capture`,
 /// `Source::Jmap`): the bytes and the flags.
 pub(crate) async fn fetch_for_capture(

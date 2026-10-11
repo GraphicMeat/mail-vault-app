@@ -230,13 +230,27 @@ async fn wake_row_jmap(state: &Arc<DaemonState>, account: ImapConfig, row: &snoo
         let found = crate::handlers::jmap_bridge::emails_with_message_id(&acct.client, Some(&holder_id), &row.message_id)
             .await
             .map_err(|e| e.to_string())?;
-        let Some(email_id) = found.into_iter().next() else { return Ok(false) };
+        // The stored uid wins when the Message-ID search confirms it (a
+        // duplicate copy of the same message may sit next to it), as
+        // `snooze::pick_uid` does for IMAP: its email id through the holder's
+        // ledger, re-checked to still be in the holder. Otherwise the newest.
+        let stored = match row.uid_in_snoozed {
+            Some(uid) => acct.uid_to_id(state, &row.account_id, holder, &[uid], true).await?.into_iter().find_map(|(_, id)| id),
+            None => None,
+        };
+        let Some(email_id) = stored.filter(|id| found.contains(id)).or_else(|| found.first().cloned()) else { return Ok(false) };
+        // The origin is resolved before the first write: a message must not
+        // be left unread in the holder because the move back cannot be made.
+        let from_id = if local {
+            None
+        } else {
+            Some(boxes.ids.get(&row.from_mailbox).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {}", row.from_mailbox))?)
+        };
         let unread = acct.client.set_keywords(&[(email_id.clone(), vec![("$seen".to_string(), false)])]).await.map_err(|e| e.to_string())?;
         if !landed(&unread, &email_id)? {
             return Ok(false);
         }
-        if !local {
-            let from_id = boxes.ids.get(&row.from_mailbox).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {}", row.from_mailbox))?;
+        if let Some(from_id) = from_id {
             let back = acct
                 .client
                 .set_mailboxes(&[(email_id.clone(), vec![(holder_id, false), (from_id, true)])])
@@ -567,6 +581,82 @@ mod tests {
         assert_eq!(s1.mailbox_ids, support::set(&["mb-inbox"]), "out of Snoozed, back in the inbox");
         assert!(!s1.keywords.contains("$seen"), "unread");
         assert_eq!(gone, WakeOutcome::NotFound);
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// The JMAP wake with `snoozed` holding the given emails; a server, a
+    /// daemon state and credentials for `acct1`. The caller removes the env.
+    fn jmap_wake_setup(snoozed: Vec<mock_jmap::ScenarioEmail>) -> (mock_jmap::MockJmap, std::net::TcpListener, std::path::PathBuf, Arc<DaemonState>) {
+        use crate::jmap_test_support as support;
+        let mut scenario = support::scenario();
+        scenario.accounts[0].mailboxes.push(mock_jmap::ScenarioMailbox {
+            id: "mb-snoozed".into(),
+            name: "Snoozed".into(),
+            parent_id: None,
+            role: None,
+            emails: snoozed,
+        });
+        let m = mock_jmap::MockJmap::start(scenario);
+        let (trap, port) = support::imap_trap();
+        let dir = app_dir();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let creds = dir.join("credentials.json");
+        std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        (m, trap, dir, state)
+    }
+
+    /// Two copies of one Message-ID sit in Snoozed: the wake takes the one
+    /// the row's stored uid names through the Snoozed ledger (as
+    /// `snooze::pick_uid` prefers the stored uid on IMAP), not the newest.
+    #[tokio::test]
+    async fn jmap_wake_row_prefers_the_stored_uid_over_the_newest_copy() {
+        use crate::jmap_test_support as support;
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let copy = |id: &str, received: &str| {
+            let mut e = support::email(id, "dup", received);
+            e.raw = e.raw.replace(&format!("<{id}@x>"), "<dup@x>");
+            e.keywords = vec!["$seen".into()];
+            e
+        };
+        let (m, trap, dir, state) = jmap_wake_setup(vec![copy("old", "2026-10-03T10:00:00Z"), copy("new", "2026-10-04T10:00:00Z")]);
+        let ledger = crate::jmap_sessions::jmap_ledger_path(&dir, "acct1", "Snoozed");
+        std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+        std::fs::write(&ledger, br#"{"5":"old","6":"new"}"#).unwrap();
+
+        app_db::with(&dir, |c| snooze::insert(c, "a", "acct1", "INBOX", "Snoozed", Some(5), "<dup@x>", 1_000)).unwrap();
+        let outcome = wake_row(&state, &row(&dir, "a"), true).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(outcome, WakeOutcome::Woken);
+        let old = m.read(|s| s.email("acc1", "old").cloned()).expect("old");
+        let new = m.read(|s| s.email("acc1", "new").cloned()).expect("new");
+        assert_eq!(old.mailbox_ids, support::set(&["mb-inbox"]), "the stored uid's copy went back");
+        assert!(!old.keywords.contains("$seen"));
+        assert_eq!(new.mailbox_ids, support::set(&["mb-snoozed"]), "the newer copy stayed");
+        assert!(new.keywords.contains("$seen"), "and stayed read");
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// An origin mailbox the account no longer has: nothing is written. The
+    /// message is not left unread in Snoozed with no way back.
+    #[tokio::test]
+    async fn jmap_wake_row_with_a_missing_origin_writes_nothing() {
+        use crate::jmap_test_support as support;
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let mut s1 = support::email("s1", "later", "2026-10-03T10:00:00Z");
+        s1.keywords = vec!["$seen".into()];
+        let (m, trap, dir, state) = jmap_wake_setup(vec![s1]);
+
+        app_db::with(&dir, |c| snooze::insert(c, "a", "acct1", "Deleted Folder", "Snoozed", None, "<s1@x>", 1_000)).unwrap();
+        let outcome = wake_row(&state, &row(&dir, "a"), true).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert!(matches!(outcome, WakeOutcome::Transient(_) | WakeOutcome::Wait(_)), "{outcome:?}");
+        let s1 = m.read(|s| s.email("acc1", "s1").cloned()).expect("s1");
+        assert!(s1.keywords.contains("$seen"), "keywords untouched");
+        assert_eq!(s1.mailbox_ids, support::set(&["mb-snoozed"]), "still in Snoozed");
+        assert_eq!(m.count_calls("Email/set"), 0, "no write at all");
         assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

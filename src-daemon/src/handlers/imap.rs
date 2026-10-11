@@ -167,17 +167,22 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
         return;
     }
     // A JMAP account's arrivals (its push, `jmap_push`): each body by blob
-    // download over the account's session, by the mailbox's ledger uid.
+    // download over the account's session, by the mailbox's ledger uid; the
+    // ledger is read once for the whole slice (`fetch_by_uids`).
     if account.imap_config.uses_jmap() {
-        for &uid in uids {
-            match crate::handlers::jmap_bridge::fetch_by_uid(state, &account.imap_config, &account.id, mailbox, uid).await {
-                Ok(Some(body)) => {
-                    let dated = crate::handlers::jmap_bridge::dated_ms(&body.raw, body.received_at.as_deref());
-                    auto_cache(state, account.id.clone(), mailbox.to_string(), uid, body.raw, dated, false).await;
+        match crate::handlers::jmap_bridge::fetch_by_uids(state, &account.imap_config, &account.id, mailbox, uids).await {
+            Ok(bodies) => {
+                for (uid, body) in bodies {
+                    match body {
+                        Ok(body) => {
+                            let dated = crate::handlers::jmap_bridge::dated_ms(&body.raw, body.received_at.as_deref());
+                            auto_cache(state, account.id.clone(), mailbox.to_string(), uid, body.raw, dated, false).await;
+                        }
+                        Err(e) => warn!("[push] {}: arrival body {} not cached: {}", account.email, uid, e),
+                    }
                 }
-                Ok(None) => {}
-                Err(e) => warn!("[push] {}: arrival body {} not cached: {}", account.email, uid, e),
             }
+            Err(e) => warn!("[push] {}: arrival bodies not cached: {}", account.email, e),
         }
         return;
     }
@@ -1651,6 +1656,36 @@ mod tests {
         assert_eq!(mailvault_core::maildir::vault_filename_uid(&files[0]), Some(2), "kept under the ledger uid: {files:?}");
         let kept = std::fs::read(dir.join("Maildir").join("acc1").join("INBOX").join("cur").join(&files[0])).unwrap();
         assert_eq!(kept, support::raw("e2", "two").as_bytes());
+        assert!(trap.accept().is_err(), "no IMAP dial");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Several arrivals in one slice (a push sync's): each body is kept under
+    /// its own ledger uid, with the ledger read and the emails read back once
+    /// for the slice, then one blob download per message.
+    #[tokio::test]
+    async fn jmap_cache_arrivals_reads_the_slice_once_and_downloads_each_body() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (dir, s) = light_state();
+        let ledger = crate::jmap_sessions::jmap_ledger_path(&dir, "acc1", "INBOX");
+        std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+        std::fs::write(&ledger, br#"{"1":"e1","2":"e2"}"#).unwrap();
+        let account: crate::sync_engine::SyncAccount = serde_json::from_value(json!({
+            "id": "acc1", "email": "alice@example.test", "imapConfig": support::account_json(&m, port),
+        }))
+        .unwrap();
+        write_settings(&dir, json!({"fetchMode": "hoarder"}));
+
+        // uid 7 was never issued: left out, not an error.
+        cache_arrivals(&s, &account, "INBOX", &[1, 2, 7]).await;
+
+        let mut uids: Vec<u32> = cached_files(&dir).iter().filter_map(|f| mailvault_core::maildir::vault_filename_uid(f)).collect();
+        uids.sort();
+        assert_eq!(uids, vec![1, 2]);
+        assert_eq!(m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count(), 2);
+        assert_eq!(m.count_calls("Email/get"), 1, "one read-back for the slice");
         assert!(trap.accept().is_err(), "no IMAP dial");
         let _ = std::fs::remove_dir_all(&dir);
     }
