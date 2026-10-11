@@ -13,7 +13,7 @@ use std::path::Path;
 
 /// Mail-data directories that live in the vault. Everything else under the app
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
-pub const VAULT_DIRS: [&str; 8] = [
+pub const VAULT_DIRS: [&str; 9] = [
     "Maildir",          // the messages
     "maildir",          // legacy per-mailbox index dirs (now .pre-db files), kept so a move carries them
     "email_cache",      // header sidecars
@@ -22,6 +22,7 @@ pub const VAULT_DIRS: [&str; 8] = [
     "search_index",     // offline search index (derived; rebuilt from Maildir)
     "custody",          // custody records (what each stored message is); never derived, never deleted
     "contacts_index",   // sender address book (derived; rebuilt from email_cache) — final fix wave I-1
+    "Contacts",         // contacts.vcf safety copy of the people in custody.db; a move carries it
 ];
 
 /// Marker written at the vault root so a re-selected folder can be recognised
@@ -119,14 +120,14 @@ pub fn new_vault_id() -> String {
     format!("{:x}-{:x}", now_millis(), std::process::id())
 }
 
-/// True if the folder already holds mail data, marker or not. A search index
-/// or contacts index alone is derived data, not mail — a stray
+/// True if the folder already holds mail data, marker or not. A search index,
+/// a contacts index or the contacts.vcf safety copy alone is not mail — a stray
 /// `contacts_index/` left behind by an old, ungated flush (final fix wave
 /// I-1) must not make an otherwise-empty folder look like a vault.
 pub fn looks_like_vault(dir: &Path) -> bool {
     VAULT_DIRS
         .iter()
-        .filter(|d| **d != "search_index" && **d != "contacts_index")
+        .filter(|d| **d != "search_index" && **d != "contacts_index" && **d != "Contacts")
         .any(|d| dir.join(d).exists())
 }
 
@@ -172,6 +173,20 @@ mod tests {
         std::fs::create_dir_all(dir.join("contacts_index")).unwrap();
         assert!(!looks_like_vault(&dir), "a derived contacts index alone is not mail");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_contacts_only_folder_does_not_look_like_a_vault() {
+        let dir = scratch("contacts-only");
+        std::fs::create_dir_all(dir.join("Contacts")).unwrap();
+        assert!(!looks_like_vault(&dir), "the contacts.vcf safety copy alone is not mail");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_move_carries_the_contacts_dir() {
+        assert!(VAULT_DIRS.contains(&"Contacts"), "a vault move must carry the contacts.vcf safety copy");
+        assert_eq!(VAULT_DIRS.len(), 9);
     }
 
     #[test]

@@ -295,6 +295,7 @@ pub async fn run_imap_account(ctx: BackupRunContext) -> Result<BackupResult, Str
         drain_purge_queue(&ctx.app_dir, Path::new(root));
     }
     mirror_local_folders_blocking(&ctx).await;
+    mirror_contacts_blocking(&ctx).await;
 
     // Every IMAP connection this run opens shows as "backup" on Network
     // Activity (the folder workers below are spawned: scoped again there).
@@ -663,6 +664,7 @@ pub async fn run_graph_account(ctx: BackupRunContext) -> Result<BackupResult, St
         drain_purge_queue(&ctx.app_dir, Path::new(root));
     }
     mirror_local_folders_blocking(&ctx).await;
+    mirror_contacts_blocking(&ctx).await;
 
     run_graph_backup_inner(ctx, start).await
 }
@@ -1827,6 +1829,47 @@ async fn mirror_local_folders_blocking(ctx: &BackupRunContext) {
     }
 }
 
+/// `mirror_contacts` off the runtime workers, for the vault and the backup drive.
+async fn mirror_contacts_blocking(ctx: &BackupRunContext) {
+    let Some(mirror_root) = ctx.mirror_root.clone() else { return };
+    let (root, gate) = (ctx.archive_ctx.root.clone(), Arc::clone(&ctx.archive_ctx.gate));
+    let done = tokio::task::spawn_blocking(move || mirror_contacts(&root, Path::new(&mirror_root), &gate)).await;
+    match done {
+        Ok(Err(e)) => warn!("backup: the contacts copy failed: {}", e),
+        Err(e) => warn!("backup: the contacts pass panicked: {}", e),
+        Ok(Ok(())) => {}
+    }
+}
+
+/// The contacts safety copy (`Contacts/contacts.vcf`, written by the daemon's
+/// people snapshot) rides along with the mail. Vault to backup whenever the
+/// bytes differ: custody is the truth, so the vault copy always wins. Backup to
+/// vault only when the vault has no copy at all (a restored or fresh vault);
+/// that write runs under the vault gate like every other vault write.
+fn mirror_contacts(vault_root: &Path, mirror_root: &Path, gate: &crate::archive::ArchiveGate) -> Result<(), String> {
+    let rel = Path::new("Contacts").join("contacts.vcf");
+    let (vault, mirror) = (vault_root.join(&rel), mirror_root.join(&rel));
+    let put = |dst: &Path, bytes: &[u8]| -> Result<(), String> {
+        if let Some(dir) = dst.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        write_durable(dst, bytes).map_err(|e| e.to_string())
+    };
+    match std::fs::read(&vault) {
+        Ok(bytes) => {
+            if std::fs::read(&mirror).map_or(true, |held| held != bytes) {
+                put(&mirror, &bytes)?;
+            }
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => match std::fs::read(&mirror) {
+            Ok(bytes) => gate(&mut || put(&vault, &bytes)),
+            Err(_) => Ok(()),
+        },
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Message-IDs the generation repair moved out of the uid namespace.
 ///
 /// `orphaned/` is the repair's own record that a file is not this generation's:
@@ -2575,6 +2618,49 @@ mod tests {
         assert_eq!(uids, HashSet::from([5]), "the import copy stays out of the vault");
         assert_eq!(crate::maildir::mirror_file_map(&mirror_cur).into_keys().collect::<HashSet<_>>(), HashSet::from([5]));
         assert!(mirror.path().join("INBOX").join(crate::maildir::ORPHAN_DIR).read_dir().unwrap().next().is_some(), "set aside in the mirror, not deleted");
+    }
+
+    // ── contacts safety copy ─────────────────────────────────────────────────
+
+    fn open_gate() -> crate::archive::ArchiveGate {
+        Arc::new(|f: &mut dyn FnMut() -> Result<(), String>| f())
+    }
+
+    fn contacts_file(root: &Path) -> PathBuf {
+        root.join("Contacts").join("contacts.vcf")
+    }
+
+    #[test]
+    fn contacts_vcf_round_trips_through_the_backup_mirror() {
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(vault.path().join("Contacts")).unwrap();
+        std::fs::write(contacts_file(vault.path()), b"BEGIN:VCARD\nFN:Al\nEND:VCARD\n").unwrap();
+
+        mirror_contacts(vault.path(), mirror.path(), &open_gate()).unwrap();
+        assert_eq!(std::fs::read(contacts_file(mirror.path())).unwrap(), b"BEGIN:VCARD\nFN:Al\nEND:VCARD\n");
+
+        // A changed vault copy replaces the drive copy: custody is the truth.
+        std::fs::write(contacts_file(vault.path()), b"BEGIN:VCARD\nFN:Bo\nEND:VCARD\n").unwrap();
+        mirror_contacts(vault.path(), mirror.path(), &open_gate()).unwrap();
+        assert_eq!(std::fs::read(contacts_file(mirror.path())).unwrap(), b"BEGIN:VCARD\nFN:Bo\nEND:VCARD\n");
+
+        // A fresh vault with no copy gets the drive copy back, and keeps it afterwards.
+        let fresh = tempfile::tempdir().unwrap();
+        mirror_contacts(fresh.path(), mirror.path(), &open_gate()).unwrap();
+        assert_eq!(std::fs::read(contacts_file(fresh.path())).unwrap(), b"BEGIN:VCARD\nFN:Bo\nEND:VCARD\n");
+        std::fs::write(contacts_file(fresh.path()), b"BEGIN:VCARD\nFN:Cy\nEND:VCARD\n").unwrap();
+        mirror_contacts(fresh.path(), mirror.path(), &open_gate()).unwrap();
+        assert_eq!(std::fs::read(contacts_file(mirror.path())).unwrap(), b"BEGIN:VCARD\nFN:Cy\nEND:VCARD\n");
+    }
+
+    #[test]
+    fn contacts_mirror_does_nothing_when_neither_side_has_a_copy() {
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        mirror_contacts(vault.path(), mirror.path(), &open_gate()).unwrap();
+        assert!(!vault.path().join("Contacts").exists());
+        assert!(!mirror.path().join("Contacts").exists());
     }
 
     // ── purge queue ──────────────────────────────────────────────────────────

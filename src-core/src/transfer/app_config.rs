@@ -19,7 +19,8 @@ pub struct TagDef {
     pub position: i64,
 }
 
-/// `default` so a bundle missing one of the four lists still reads.
+/// `default` so a bundle missing one of the lists (or `contacts`, which older
+/// bundles never had) still reads.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppConfig {
@@ -27,6 +28,9 @@ pub struct AppConfig {
     pub fields: Vec<fields::Field>,
     pub views: Vec<views::View>,
     pub auto_tag_rules: Vec<auto_tags::Rule>,
+    /// The people as one vCard text. Custody holds them, not app.db, so
+    /// `snapshot` leaves it `None` and the daemon fills and applies it.
+    pub contacts: Option<String>,
 }
 
 #[derive(Debug, Default, PartialEq, serde::Serialize)]
@@ -50,6 +54,7 @@ pub fn snapshot(conn: &Connection) -> Result<AppConfig, String> {
             fields: fields::list_all(conn)?,
             views: views::list(conn)?,
             auto_tag_rules: auto_tags::list(conn)?,
+            contacts: None,
         })
     })
 }
@@ -302,6 +307,16 @@ mod tests {
         assert!(!rules[0].enabled, "an imported rule must land disabled even though the source rule was enabled");
 
         assert_eq!(report, MergeReport { tags_added: 1, fields_added: 1, views_added: 1, rules_added: 1 });
+    }
+
+    #[test]
+    fn contacts_text_survives_the_json_round_trip_and_older_bundles_still_read() {
+        let cfg = AppConfig { contacts: Some("BEGIN:VCARD\nFN:Al\nEND:VCARD\n".into()), ..AppConfig::default() };
+        let back: AppConfig = serde_json::from_value(serde_json::to_value(&cfg).unwrap()).unwrap();
+        assert_eq!(back.contacts, cfg.contacts);
+        let old: AppConfig = serde_json::from_value(serde_json::json!({ "tags": [] })).unwrap();
+        assert_eq!(old.contacts, None);
+        assert_eq!(snapshot(&conn()).unwrap().contacts, None, "custody is the daemon's to read");
     }
 
     #[test]
