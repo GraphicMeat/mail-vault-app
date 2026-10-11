@@ -107,7 +107,11 @@ pub(crate) fn restore_if_empty(state: &DaemonState, root: &Path, mut yield_fn: i
     if !empty {
         return Ok(0);
     }
-    let Ok(text) = std::fs::read_to_string(file_in(root)) else { return Ok(0) };
+    let Ok(text) = std::fs::read_to_string(file_in(root)) else {
+        // a pending restore with no file to resume from is over, or the safety copy would never be written again
+        crate::custody::with_conn(state, |c| if meta_get(c, RESTORED_KEY).as_deref() == Some(PENDING) { meta_set(c, RESTORED_KEY, "1") } else { Ok(()) })?;
+        return Ok(0);
+    };
     let (cards, grp) = (vcard::VCard::parse_all(&text), new_id());
     crate::custody::with_conn(state, |c| meta_set(c, RESTORED_KEY, PENDING))?;
     let mut restored = 0;
@@ -269,6 +273,16 @@ mod tests {
         crate::custody::with_conn(&dst, |c| meta_set(c, RESTORED_KEY, PENDING)).unwrap();
         assert!(!write(&dst, dst_dir.path(), || {}).unwrap(), "a pending restore writes no snapshot");
         assert_eq!(std::fs::read_to_string(file_in(dst_dir.path())).unwrap(), full);
+    }
+
+    #[test]
+    fn a_pending_restore_whose_file_is_gone_ends_so_the_safety_copy_can_be_written_again() {
+        let (d, s) = state();
+        two_contacts(&s);
+        crate::custody::with_conn(&s, |c| meta_set(c, RESTORED_KEY, PENDING)).unwrap();
+        assert_eq!(restore_if_empty(&s, d.path(), || {}).unwrap(), 0);
+        assert_eq!(flag(&s).as_deref(), Some("1"));
+        assert!(write(&s, d.path(), || {}).unwrap(), "the snapshot is written again");
     }
 
     #[test]
