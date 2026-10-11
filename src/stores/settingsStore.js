@@ -651,6 +651,9 @@ export const useSettingsStore = create(
       // Update notification settings
       updateSnoozeUntil: null,
       updateSkippedVersion: null,
+      // Set by UpdateInstallFailedPrompt before the restart it offers; spent
+      // by the first update check after it (useUpdateAvailable).
+      updateResumeAfterRestart: false,
 
       // Email templates
       emailTemplates: [], // Each: { id: string, name: string, body: string, createdAt: string (ISO) }
@@ -1689,6 +1692,7 @@ export const useSettingsStore = create(
           filterUsageHistory: [],
           updateSnoozeUntil: null,
           updateSkippedVersion: null,
+          updateResumeAfterRestart: false,
           emailTemplates: [],
           quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS),
           keyboardShortcuts: { ...DEFAULT_SHORTCUTS },

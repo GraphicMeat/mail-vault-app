@@ -6,6 +6,7 @@
 - **A Teal color palette, to go with the teal app icon.** Pick it in Settings, Appearance, Colors, beside Indigo and Graphite, in light or dark. Dark gets teal-tinted ink and light gets cream paper, and controls, Insights charts and chat bubbles follow the accent. Graphite stays the default for new installs and your saved choice is not touched.
 
 ### Fixed
+- **An update that failed to install finishes after a restart.** On a Mac, the first update attempt after installing MailVault from a download could end with "An error occurred while running the updater": macOS refused Sparkle's installer its cache folder on the app's first run, so nothing was installed until MailVault was quit and reopened. MailVault now says what happened and offers Restart and install; after the restart the update, already downloaded, is offered ready to install.
 - **Delete everywhere says why it removed nothing.** From the reader, the row menu, the selection bar and the chat view, a purge that was refused by the server, or held back because the folder's UIDVALIDITY could not be trusted, showed no message and the mail simply came back. It now raises the same warning the list shows, with how many were removed and how many were not.
 
 ## [2.19.2] - 2026-10-10

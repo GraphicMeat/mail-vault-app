@@ -49,6 +49,7 @@ import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { SnoozePicker } from './components/SnoozePicker';
 import { MigrationToast } from './components/MigrationToast';
 import { SearchIndexReindexPrompt } from './components/SearchIndexReindexPrompt';
+import { UpdateInstallFailedPrompt } from './components/UpdateInstallFailedPrompt';
 import { KeychainToast } from './components/KeychainToast';
 import { KeychainUnlockCard } from './components/KeychainUnlockCard';
 import { PortableUnlockCard } from './components/PortableUnlockCard';
@@ -72,6 +73,7 @@ import RestoreModal from './components/RestoreModal.jsx';
 import ChangeServerModal from './components/ChangeServerModal.jsx';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
 import { useEmailScheduler } from './hooks/useEmailScheduler';
+import { useUpdateAvailable } from './hooks/useUpdateAvailable';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -630,7 +632,7 @@ function App() {
   const [showBugModal, setShowBugModal] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
-  const [updateInfo, setUpdateInfo] = useState(null);
+  const { updateInfo, setUpdateInfo } = useUpdateAvailable();
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [snoozeKeys, setSnoozeKeys] = useState(null);
   const mainContainerRef = useRef(null);
@@ -1181,51 +1183,6 @@ function App() {
     return () => { active = false; if (unlisten) unlisten(); };
   }, [handleReportBug]);
 
-  // Listen for update-available event from Rust updater.
-  // MAS builds rely on the App Store for updates — the event is never emitted there,
-  // but we also skip the listener to avoid pulling in the Sparkle plugin module.
-  useEffect(() => {
-    if (import.meta.env.VITE_MV_APPSTORE === '1') return;
-    let unlisten;
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('update-available', (event) => {
-        const { version: newVersion, isManualCheck } = event.payload;
-        const { updateSnoozeUntil, updateSkippedVersion } = useSettingsStore.getState();
-
-        // For auto-checks: respect snooze and skip-version
-        if (!isManualCheck) {
-          if (updateSnoozeUntil && Date.now() < updateSnoozeUntil) {
-            console.log('[App] Update snoozed until', new Date(updateSnoozeUntil).toISOString());
-            return;
-          }
-          if (updateSkippedVersion === newVersion) {
-            console.log('[App] Version', newVersion, 'skipped by user');
-            return;
-          }
-        }
-
-        // Manual check: clear stale snooze/skip so modal always shows
-        if (isManualCheck) {
-          useSettingsStore.getState().clearUpdateSnooze();
-          if (updateSkippedVersion === newVersion) {
-            useSettingsStore.getState().clearSkippedVersion();
-          }
-        }
-
-        // Deduplicate: ignore if modal is already showing for the same version
-        setUpdateInfo(prev => {
-          if (prev && prev.version === newVersion) return prev;
-          return event.payload;
-        });
-      }).then(fn => {
-        if (!active) fn();
-        else unlisten = fn;
-      });
-    }).catch(() => {});
-    return () => { active = false; if (unlisten) unlisten(); };
-  }, []);
-
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
   const quickLoadHadAccountsRef = useRef(false);
@@ -1699,6 +1656,7 @@ function App() {
       <AbdProgressPanel />
       <MigrationToast showSettings={showSettings} onOpenSettings={() => openSettings({ tab: 'migration' })} />
       <SearchIndexReindexPrompt />
+      <UpdateInstallFailedPrompt />
       <KeychainToast
         onRetry={() => useMailStore.getState().retryKeychainAccess()}
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}
