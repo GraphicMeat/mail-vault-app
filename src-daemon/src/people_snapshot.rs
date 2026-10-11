@@ -20,7 +20,11 @@ const PAGE: usize = 200;
 const SETTLE_MS: u64 = 30_000;
 const POLL: Duration = Duration::from_secs(5);
 const HASH_KEY: &str = "contacts_snapshot_hash";
+/// `1` once this vault has restored from, or written, a snapshot: the file is
+/// never read again. `pending` while a restore is running (or was cut short):
+/// the next start resumes it and nothing is written meanwhile.
 const RESTORED_KEY: &str = "people_restored";
+const PENDING: &str = "pending";
 
 /// When the last unsnapshotted change happened (0 = nothing waiting).
 static LAST_CHANGE_MS: AtomicU64 = AtomicU64::new(0);
@@ -51,7 +55,10 @@ fn render(state: &DaemonState, yield_fn: &mut impl FnMut()) -> Result<String, St
 
 /// Put `text` at `<root>/Contacts/contacts.vcf` (a `.part` file, then a
 /// rename) unless it is what the last write already put there. Never replaces
-/// the copy with nothing: an empty book leaves the file alone.
+/// the copy with nothing: an empty book leaves the file alone, and so does a
+/// restore that has not finished (its half book must not replace the full copy).
+/// A vault that has written a snapshot never restores from it again, so an undo
+/// that removes people is not undone by the next start.
 fn store_text(state: &DaemonState, root: &Path, text: &str) -> Result<bool, String> {
     if text.is_empty() {
         return Ok(false);
@@ -59,6 +66,9 @@ fn store_text(state: &DaemonState, root: &Path, text: &str) -> Result<bool, Stri
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     text.hash(&mut hasher);
     let hash = format!("{:016x}", hasher.finish());
+    if crate::custody::with_conn(state, |c| Ok(meta_get(c, RESTORED_KEY)))?.as_deref() == Some(PENDING) {
+        return Ok(false);
+    }
     let file = file_in(root);
     if file.is_file() && crate::custody::with_conn(state, |c| Ok(meta_get(c, HASH_KEY)))?.as_deref() == Some(hash.as_str()) {
         return Ok(false);
@@ -70,7 +80,10 @@ fn store_text(state: &DaemonState, root: &Path, text: &str) -> Result<bool, Stri
         let _ = std::fs::remove_file(&part);
         return Err(e.to_string());
     }
-    crate::custody::with_conn(state, |c| meta_set(c, HASH_KEY, &hash))?;
+    crate::custody::with_conn(state, |c| {
+        meta_set(c, HASH_KEY, &hash)?;
+        meta_set(c, RESTORED_KEY, "1")
+    })?;
     Ok(true)
 }
 
@@ -81,18 +94,22 @@ pub(crate) fn write(state: &DaemonState, root: &Path, mut yield_fn: impl FnMut()
 }
 
 /// A vault with no people at all but a `contacts.vcf` (a restore, a moved or
-/// copied vault) gets them back, once: `people_restored` is then set and the
-/// file is never read again. Returns how many people it brought back.
+/// copied vault) gets them back, once: `people_restored` is `pending` before the
+/// first chunk and `1` after the last, and the file is never read again. A
+/// restore cut short resumes on the next start; the import skips cards already
+/// in. Returns how many people it brought back.
 pub(crate) fn restore_if_empty(state: &DaemonState, root: &Path, mut yield_fn: impl FnMut()) -> Result<usize, String> {
     let empty = crate::custody::with_conn(state, |c| {
         let rows: i64 = c.query_row("SELECT count(*) FROM person", [], |r| r.get(0)).map_err(|e| e.to_string())?;
-        Ok(rows == 0 && meta_get(c, RESTORED_KEY).is_none())
+        let flag = meta_get(c, RESTORED_KEY);
+        Ok(flag.as_deref() == Some(PENDING) || (rows == 0 && flag.is_none()))
     })?;
     if !empty {
         return Ok(0);
     }
     let Ok(text) = std::fs::read_to_string(file_in(root)) else { return Ok(0) };
     let (cards, grp) = (vcard::VCard::parse_all(&text), new_id());
+    crate::custody::with_conn(state, |c| meta_set(c, RESTORED_KEY, PENDING))?;
     let mut restored = 0;
     for chunk in cards.chunks(vcard::IMPORT_CHUNK) {
         yield_fn();
@@ -209,6 +226,69 @@ mod tests {
         let flag = crate::custody::with_conn(&dst, |c| Ok(meta_get(c, RESTORED_KEY))).unwrap();
         assert_eq!(flag.as_deref(), Some("1"));
 
+    }
+
+    fn flag(s: &DaemonState) -> Option<String> {
+        crate::custody::with_conn(s, |c| Ok(meta_get(c, RESTORED_KEY))).unwrap()
+    }
+
+    #[test]
+    fn a_vault_that_wrote_a_snapshot_never_restores_from_it_even_after_every_person_is_gone() {
+        let (d, s) = state();
+        two_contacts(&s);
+        write(&s, d.path(), || {}).unwrap();
+        assert_eq!(flag(&s).as_deref(), Some("1"));
+        crate::custody::with_conn(&s, |c| {
+            for id in store::all_ids(c)? {
+                store::delete_person(c, &id)?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(restore_if_empty(&s, d.path(), || {}).unwrap(), 0);
+        assert_eq!(people(&s), 0);
+    }
+
+    #[test]
+    fn the_restore_is_pending_before_the_first_chunk_and_nothing_is_written_while_it_is() {
+        let (src_dir, src) = state();
+        two_contacts(&src);
+        write(&src, src_dir.path(), || {}).unwrap();
+        let (dst_dir, dst) = state();
+        std::fs::create_dir_all(dst_dir.path().join("Contacts")).unwrap();
+        std::fs::copy(file_in(src_dir.path()), file_in(dst_dir.path())).unwrap();
+        let full = std::fs::read_to_string(file_in(dst_dir.path())).unwrap();
+
+        let mut seen = Vec::new();
+        restore_if_empty(&dst, dst_dir.path(), || seen.push(flag(&dst))).unwrap();
+        assert_eq!(seen.first(), Some(&Some("pending".to_string())));
+        assert_eq!(flag(&dst).as_deref(), Some("1"));
+
+        crate::custody::with_conn(&dst, |c| meta_set(c, RESTORED_KEY, PENDING)).unwrap();
+        assert!(!write(&dst, dst_dir.path(), || {}).unwrap(), "a pending restore writes no snapshot");
+        assert_eq!(std::fs::read_to_string(file_in(dst_dir.path())).unwrap(), full);
+    }
+
+    #[test]
+    fn a_restore_cut_short_resumes_without_duplicating_what_is_already_in() {
+        let (src_dir, src) = state();
+        two_contacts(&src);
+        write(&src, src_dir.path(), || {}).unwrap();
+        let text = std::fs::read_to_string(file_in(src_dir.path())).unwrap();
+        let (dst_dir, dst) = state();
+        std::fs::create_dir_all(dst_dir.path().join("Contacts")).unwrap();
+        std::fs::write(file_in(dst_dir.path()), &text).unwrap();
+        // killed after the first chunk: one person in, flag still pending
+        crate::custody::with_conn(&dst, |c| {
+            vcard::import_cards(c, &vcard::VCard::parse_all(&text)[..1], "g")?;
+            meta_set(c, RESTORED_KEY, PENDING)
+        })
+        .unwrap();
+        assert_eq!(people(&dst), 1);
+
+        assert_eq!(restore_if_empty(&dst, dst_dir.path(), || {}).unwrap(), 1, "only the missing card is added");
+        assert_eq!(people(&dst), 2);
+        assert_eq!(flag(&dst).as_deref(), Some("1"));
     }
 
     #[test]
