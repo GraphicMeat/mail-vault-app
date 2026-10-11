@@ -419,6 +419,7 @@ async fn connect_transport(
     addrs: &[std::net::SocketAddr],
     slot: tokio::sync::OwnedSemaphorePermit,
 ) -> Result<(Box<dyn ImapTransport>, bool, crate::net_activity::Shared), String> {
+    pool::refuse_jmap(config)?;
     // One Network Activity event per connection, recorded when it closes
     // (a failed connect is recorded here, as it fails).
     let mut ev = NetEvent::out(Protocol::Imap, &config.host, config.effective_port(), crate::net_activity::purpose());

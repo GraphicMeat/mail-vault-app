@@ -21,6 +21,13 @@
 //! Keep Recent with window 0 and hidden accounts evict nothing. Graph
 //! accounts are skipped: the daemon cannot list a Graph folder on its own
 //! (it never refreshes an OAuth token), so their copies stay.
+//!
+//! A JMAP account's listing (`jmap_listing`) is the folder's ids from
+//! `Email/query` read against its JMAP ledger, never the IMAP pool: a uid is
+//! on the server when the ledger names it and that id is in the listing.
+//! The ledger is only read: an id it never issued a uid to has no vault copy
+//! to evict. Ledger uids are never renumbered, so the generation is 1, the
+//! UIDVALIDITY the JMAP sync records.
 
 use crate::credentials;
 use crate::handlers::common::{blocking, with_mailbox_write};
@@ -235,16 +242,21 @@ async fn evict_mailbox_inner(
     };
 
     // The fresh listing, on the background lane, with its UIDVALIDITY.
-    let mb = mailbox.to_string();
-    let fetch = state.imap_pool.run_read(config, false, |mut session| {
-        let mb = mb.clone();
-        async move {
-            let listing = imap::search_all_uid_flags_in_generation(&mut session, &mb).await?;
-            Ok((listing, session, Some(mb)))
-        }
-    });
-    let (server_validity, server) = match tokio::time::timeout(LISTING_TIMEOUT, fetch).await {
-        Ok(Ok((validity, rows))) => (validity, rows.into_iter().map(|(uid, _)| uid).collect::<HashSet<u32>>()),
+    let listing = if config.uses_jmap() {
+        tokio::time::timeout(LISTING_TIMEOUT, jmap_listing(state, config, account_id, mailbox)).await
+    } else {
+        let mb = mailbox.to_string();
+        let fetch = state.imap_pool.run_read(config, false, |mut session| {
+            let mb = mb.clone();
+            async move {
+                let (validity, rows) = imap::search_all_uid_flags_in_generation(&mut session, &mb).await?;
+                Ok(((validity, rows.into_iter().map(|(uid, _)| uid).collect::<HashSet<u32>>()), session, Some(mb)))
+            }
+        });
+        tokio::time::timeout(LISTING_TIMEOUT, fetch).await
+    };
+    let (server_validity, server) = match listing {
+        Ok(Ok(listed)) => listed,
         Ok(Err(e)) => return skip(total, format!("server_listing_failed: {e}")),
         Err(_) => return skip(total, "server_listing_timed_out".into()),
     };
@@ -289,6 +301,24 @@ async fn evict_mailbox_inner(
         }
     }
     Outcome { evicted, kept: total.saturating_sub(evicted), skipped: None }
+}
+
+/// A JMAP folder's listing: the uids of the folder's JMAP ledger whose id is
+/// in it now (`all_email_ids`), under generation 1. Read-only: nothing is
+/// allocated, so an id the ledger never issued a uid to is left out (no vault
+/// copy can carry a uid it never had).
+async fn jmap_listing(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    account_id: &str,
+    mailbox: &str,
+) -> Result<(Option<u32>, HashSet<u32>), String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let mailbox_id = acct.mailbox_id(mailbox).await.map_err(|e| e.to_string())?;
+    let ids: HashSet<String> = acct.client.all_email_ids(&mailbox_id).await.map_err(|e| e.to_string())?.into_iter().collect();
+    let path = crate::jmap_sessions::jmap_ledger_path(&crate::handlers::common::vault_root(state)?, account_id, mailbox);
+    let ledger = blocking(move || mailvault_core::graph_ledger::load(&path)).await??;
+    Ok((Some(1), ledger.into_iter().filter(|(_, id)| ids.contains(id)).map(|(uid, _)| uid).collect()))
 }
 
 #[cfg(test)]
@@ -551,5 +581,35 @@ mod tests {
         assert!(!disabled_by(None));
         assert!(!disabled_by(Some("0")));
         assert!(!disabled_by(Some("")));
+    }
+
+    /// The INBOX ledger of a JMAP account, as its listings left it.
+    fn jmap_ledger(dir: &Path, pairs: &[(u32, &str)]) {
+        let ledger: mailvault_core::graph_ledger::Ledger = pairs.iter().map(|(uid, id)| (*uid, id.to_string())).collect();
+        let path = crate::jmap_sessions::jmap_ledger_path(dir, ACCT, "INBOX");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, serde_json::to_vec(&ledger).unwrap()).unwrap();
+    }
+
+    /// A JMAP account (Task 9c): the listing is the folder's ids from
+    /// `Email/query` read against its ledger, never the IMAP pool. uid 1
+    /// (e1, on the server) goes; uid 2's email is gone from the server, so
+    /// its copy may be the last one and stays; uid 3 is archived and stays.
+    #[tokio::test]
+    async fn jmap_eviction_lists_through_the_ledger_and_keeps_the_archived_copy() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (dir, s) = state(&[1, 2, 3]);
+        jmap_ledger(&dir, &[(1, "e1"), (2, "gone"), (3, "e2")]);
+
+        let out = evict_mailbox(&s, &support::config(&m, port), ACCT, "INBOX", &policy(FetchMode::OnDemand, 3), now()).await;
+
+        assert_eq!(out, Outcome { evicted: 1, kept: 1, skipped: None });
+        assert_eq!(on_disk(&dir), vec![2, 3]);
+        assert!(m.count_calls("Email/query") >= 1, "listed over JMAP");
+        let ledger = mailvault_core::graph_ledger::load(&crate::jmap_sessions::jmap_ledger_path(&dir, ACCT, "INBOX")).unwrap();
+        assert_eq!(ledger.len(), 3, "the listing allocated nothing");
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

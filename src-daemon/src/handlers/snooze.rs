@@ -106,8 +106,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
 /// Resolve or create the Snoozed folder on the server; the app moves into
 /// whatever path this answers. An error starting `SNOOZE_FOLDER_REFUSED` is a
-/// server that will not host one, and the app snoozes locally instead.
+/// server that will not host one, and the app snoozes locally instead. A
+/// JMAP account's comes from `Mailbox/get`, made with `Mailbox/set` when
+/// missing (`jmap_bridge::ensure_snoozed_mailbox`).
 async fn ensure_folder(state: &Arc<DaemonState>, account: &ImapConfig) -> Result<String, String> {
+    if account.uses_jmap() {
+        let acct = state.jmap.get(account).await.map_err(|e| e.to_string())?;
+        return crate::handlers::jmap_bridge::ensure_snoozed_mailbox(&acct).await;
+    }
     let PooledSessionGuard { mut session, last_selected: _, _permit } = state.imap_pool.get_priority(account).await?;
     let path = imap::ensure_snoozed_mailbox(&mut session).await?;
     // CREATE changes the hierarchy under the socket: report nothing selected.
@@ -268,5 +274,21 @@ mod tests {
         let s = st();
         let resp = route(&s, "snooze.cancel", &json!({"id": "nope"}), json!(1)).await.expect("routed");
         assert!(resp.error.is_some());
+    }
+
+    /// A JMAP account's Snoozed folder (Task 9c): made with `Mailbox/set` the
+    /// first time, found by name after that, and no IMAP dialled.
+    #[tokio::test]
+    async fn jmap_ensure_folder_creates_snoozed_with_mailbox_set_once() {
+        use crate::jmap_test_support as support;
+        let s = st();
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let params = json!({"account": support::account_json(&m, port)});
+        assert_eq!(call(&s, "snooze.ensure_folder", params.clone()).await, json!("Snoozed"));
+        assert!(support::mailbox_named(&m, None, "Snoozed").is_some(), "made on the server");
+        assert_eq!(call(&s, "snooze.ensure_folder", params).await, json!("Snoozed"));
+        assert_eq!(m.count_calls("Mailbox/set"), 1, "found the second time, not made again");
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

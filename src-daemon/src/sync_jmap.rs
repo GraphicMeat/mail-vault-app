@@ -115,6 +115,7 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
         return failed(format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"));
     };
     publish(engine, &account.id, &run);
+    wake_hoarder(&state, &run);
     if let Err(e) = write_meta(&state, engine, &account.id, &path, total).await {
         return failed(e);
     }
@@ -156,6 +157,7 @@ pub async fn delta_only(state: &Arc<DaemonState>, cfg: &ImapConfig, account_id: 
     let _account_guard = lock.lock().await;
     let run = run_once(state, engine, cfg, account_id, None).await?;
     publish(engine, account_id, &run);
+    wake_hoarder(state, &run);
     Ok(())
 }
 
@@ -169,6 +171,15 @@ fn is_auth_failure(e: &str) -> bool {
 fn publish(engine: &SyncEngine, account_id: &str, run: &Run) {
     for (path, touch) in run.touched.iter().filter(|(_, t)| !t.uids.is_empty()) {
         engine.note_change(account_id, path, touch.arrival_uids.len(), touch.flags);
+    }
+}
+
+/// Arrivals in any mailbox the run touched wake the hoarder, not only the
+/// requested one's: one run applies the whole account's delta, and the
+/// caller's own wake (`handle_sync_now`) sees only the requested mailbox.
+fn wake_hoarder(state: &DaemonState, run: &Run) {
+    if run.touched.values().any(|t| !t.arrival_uids.is_empty()) {
+        state.hoarder_worker.wake();
     }
 }
 
@@ -936,5 +947,26 @@ mod tests {
         m.mutate(|s| s.add_email("acc1", "mb-inbox", email("e9", "nine", "2026-10-04T10:00:00Z")));
         let third = status(&state, &m).await;
         assert_eq!(third["exists"], json!(3), "a count that moved is fetched");
+    }
+
+    /// An arrival in a cached mailbox other than the requested one wakes the
+    /// hoarder (Task 9c): one run applies the whole account's delta, and
+    /// `handle_sync_now` sees only the requested mailbox's arrivals.
+    #[tokio::test]
+    async fn jmap_an_arrival_in_any_cached_mailbox_wakes_the_hoarder() {
+        use futures::FutureExt;
+        let (_dir, state, m, account) = setup().await;
+        sync(&state, &account, "INBOX").await;
+        sync(&state, &account, "Work").await;
+        let woken = || state.hoarder_worker.notify.notified().now_or_never().is_some();
+        let _ = woken();
+        let quiet = sync(&state, &account, "INBOX").await;
+        assert_eq!(quiet.arrivals, 0);
+        assert!(!woken(), "no arrival, no wake");
+
+        m.mutate(|s| s.add_email("acc1", "mb-work", email("e7", "seven", "2026-10-07T10:00:00Z")));
+        let r = sync(&state, &account, "INBOX").await;
+        assert_eq!(r.arrivals, 0, "nothing arrived in INBOX");
+        assert!(woken(), "the Work arrival wakes the hoarder");
     }
 }

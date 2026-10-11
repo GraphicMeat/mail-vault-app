@@ -20,11 +20,19 @@
 //! folder and every batch: a mode change or a Premium lapse stops the account
 //! after the batch in flight. Credentials are read quietly: a background pass
 //! never raises the keychain prompt.
+//!
+//! A JMAP account (`uses_jmap`) never reaches the IMAP pool here
+//! (`hoard_account_jmap`): its folders come from the account's mailbox
+//! listing, each folder's ids from `Email/query`, uids from the folder's JMAP
+//! ledger (oldest first, as the bridge issues them), and each missing body
+//! from a blob download. No STATUS memo: an id listing is one small request
+//! per page, so every pass lists every folder.
 
 use crate::credentials;
 use crate::handlers::common::{blocking, with_mailbox_write};
 use crate::handlers::imap::{auto_cache, email_date_ms, fetch_policy, now_ms, BODY_FETCH_TIMEOUT};
 use crate::imap::{self, has_attr, ImapConfig, MailboxInfo};
+use crate::jmap_sessions::{in_mailbox, AccountJmap};
 use crate::server::DaemonState;
 use futures::FutureExt;
 use mailvault_core::custody::cache;
@@ -417,13 +425,19 @@ pub(crate) fn is_sign_in_failure(e: &str) -> bool {
 }
 
 /// `Some(reason)` for an error that ends the whole account's pass, not just
-/// one folder or message. A bandwidth limit also spends the day's budget.
+/// one folder or message. A bandwidth limit also spends the day's budget. A
+/// JMAP server's refused credentials (`E_JMAP_AUTH`) end it like a refused
+/// sign-in, and its rate limit (`E_JMAP_RATE`) ends this pass only: the next
+/// wake tries again.
 fn account_stop(state: &Arc<DaemonState>, account_id: &str, e: &str) -> Option<String> {
     if imap::is_bandwidth_limited(e) {
         state.hoarder_worker.exhaust(&state.app_dir, account_id, now_ms());
         return Some(format!("bandwidth_limited: {e}"));
     }
-    is_sign_in_failure(e).then(|| format!("sign_in_failed: {e}"))
+    if e.starts_with("E_JMAP_RATE:") {
+        return Some(format!("rate_limited: {e}"));
+    }
+    (is_sign_in_failure(e) || e.starts_with("E_JMAP_AUTH:")).then(|| format!("sign_in_failed: {e}"))
 }
 
 /// Every selectable folder of one account, one at a time. Logs one `info!`
@@ -449,6 +463,9 @@ async fn hoard_account_inner(state: &Arc<DaemonState>, config: &ImapConfig, acco
     let (left, by_limit) = allowance_left(state, account_id, &config.host).await;
     if left == 0 {
         return Err(spent_reason(by_limit).into());
+    }
+    if config.uses_jmap() {
+        return hoard_account_jmap(state, config, account_id, out).await;
     }
     let list = state.imap_pool.run_read(config, false, |mut session| async move {
         let boxes = imap::list_mailboxes(&mut session).await?;
@@ -630,6 +647,175 @@ async fn hoard_mailbox(
                     warn!("[hoard] {account_id} {mailbox}: uid {uid} timed out");
                     false
                 }
+            };
+            if stored {
+                out.fetched += 1;
+                failures_in_a_row = 0;
+            } else {
+                out.failed += 1;
+                failed_any = true;
+                failures_in_a_row += 1;
+                if failures_in_a_row >= MAX_FAILURES_IN_A_ROW {
+                    warn!("[hoard] {account_id} {mailbox}: skipped_reason={failures_in_a_row}_failures_in_a_row");
+                    return Ok(false);
+                }
+            }
+        }
+    }
+    Ok(!failed_any)
+}
+
+/// `hoard_account_inner` for a JMAP account: every folder of the account's
+/// mailbox listing (`folders_to_hoard`, the shared-vault-folder rule
+/// included), one at a time, the policy and allowance read before each.
+async fn hoard_account_jmap(state: &Arc<DaemonState>, config: &ImapConfig, account_id: &str, out: &mut Outcome) -> Result<(), String> {
+    let stop = |e: String, what: &str| account_stop(state, account_id, &e).unwrap_or_else(|| format!("{what}: {e}"));
+    let acct = state.jmap.get(config).await.map_err(|e| stop(e.to_string(), "folder_list_failed"))?;
+    let boxes = match tokio::time::timeout(LISTING_TIMEOUT, acct.refresh()).await {
+        Ok(Ok(boxes)) => boxes,
+        Ok(Err(e)) => return Err(stop(e.to_string(), "folder_list_failed")),
+        Err(_) => return Err("folder_list_timed_out".into()),
+    };
+    let folders = folders_to_hoard(boxes.infos.clone());
+    let mut per_dir: HashMap<String, usize> = HashMap::new();
+    for mailbox in &folders {
+        *per_dir.entry(vault_dir_name(mailbox)).or_default() += 1;
+    }
+    for mailbox in &folders {
+        if per_dir[&vault_dir_name(mailbox)] > 1 {
+            info!("[hoard] {account_id} {mailbox}: skipped_reason=shared_vault_folder");
+            continue;
+        }
+        let Some(mailbox_id) = boxes.ids.get(mailbox) else { continue };
+        if !hoarding(state, account_id).await {
+            return Err("policy_changed".into());
+        }
+        let (left, by_limit) = allowance_left(state, account_id, &config.host).await;
+        if left == 0 {
+            return Err(spent_reason(by_limit).into());
+        }
+        hoard_mailbox_jmap(state, &acct, &config.host, account_id, mailbox, mailbox_id, out).await?;
+    }
+    Ok(())
+}
+
+/// `hoard_mailbox` for a JMAP folder: its ids (`all_email_ids`, newest
+/// first), their uids from the folder's ledger (handed it oldest first, so
+/// one listing issues uids in arrival order), the uids the vault lacks, then
+/// per `BATCH` one `Email/get` for the blob ids and one blob download per
+/// message, newest first, into `auto_cache` as a cache copy. `host` is the
+/// account's `imapHost`, which the daily limit is keyed by.
+async fn hoard_mailbox_jmap(
+    state: &Arc<DaemonState>,
+    acct: &AccountJmap,
+    host: &str,
+    account_id: &str,
+    mailbox: &str,
+    mailbox_id: &str,
+    out: &mut Outcome,
+) -> Result<bool, String> {
+    let ids = match tokio::time::timeout(LISTING_TIMEOUT, acct.client.all_email_ids(mailbox_id)).await {
+        Ok(Ok(ids)) => ids,
+        Ok(Err(e)) => {
+            let e = e.to_string();
+            if let Some(reason) = account_stop(state, account_id, &e) {
+                return Err(reason);
+            }
+            warn!("[hoard] {account_id} {mailbox}: skipped_reason=listing_failed: {e}");
+            return Ok(false);
+        }
+        Err(_) => {
+            warn!("[hoard] {account_id} {mailbox}: skipped_reason=listing_timed_out");
+            return Ok(false);
+        }
+    };
+    state.hoarder_worker.spend(&state.app_dir, account_id, ids.len() as u64 * LISTING_BYTES_PER_UID, now_ms());
+    let oldest_first: Vec<String> = ids.into_iter().rev().collect();
+    let uids = match acct.ids_to_uids(state, account_id, mailbox, &oldest_first).await {
+        Ok(uids) => uids,
+        Err(e) => {
+            warn!("[hoard] {account_id} {mailbox}: skipped_reason=ledger_unwritable: {e}");
+            return Ok(false);
+        }
+    };
+
+    // Any copy counts, cache or archived: never fetch what the vault holds.
+    let (st, acct_id, mbx) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
+    let local: HashSet<u32> = match blocking(move || with_mailbox_write(&st, &acct_id, &mbx, |root| vault_files::list_on_disk(root, &acct_id, &mbx, None))).await {
+        Ok(Ok(rows)) => rows.into_iter().map(|r| r.uid).collect(),
+        Ok(Err(e)) | Err(e) => {
+            warn!("[hoard] {account_id} {mailbox}: skipped_reason=vault_unreadable: {e}");
+            return Ok(false);
+        }
+    };
+    // Newest first: recent mail is what a search is likeliest to want.
+    let gap: Vec<(u32, String)> = uids.into_iter().zip(oldest_first).rev().filter(|(uid, _)| !local.contains(uid)).collect();
+    if gap.is_empty() {
+        return Ok(true);
+    }
+    info!("[hoard] {account_id} {mailbox}: to_fetch={}", gap.len());
+
+    let mut failures_in_a_row = 0usize;
+    let mut failed_any = false;
+    for (i, batch) in gap.chunks(BATCH).enumerate() {
+        if i > 0 {
+            tokio::time::sleep(BATCH_PAUSE).await;
+        }
+        if !hoarding(state, account_id).await {
+            return Err("policy_changed".into());
+        }
+        let ids: Vec<String> = batch.iter().map(|(_, id)| id.clone()).collect();
+        let got = match tokio::time::timeout(LISTING_TIMEOUT, acct.client.get_emails(&ids, &["id", "blobId", "mailboxIds", "receivedAt"])).await {
+            Ok(Ok(got)) => got,
+            Ok(Err(e)) => {
+                let e = e.to_string();
+                if let Some(reason) = account_stop(state, account_id, &e) {
+                    return Err(reason);
+                }
+                warn!("[hoard] {account_id} {mailbox}: skipped_reason=listing_failed: {e}");
+                return Ok(false);
+            }
+            Err(_) => {
+                warn!("[hoard] {account_id} {mailbox}: skipped_reason=listing_timed_out");
+                return Ok(false);
+            }
+        };
+        let emails: HashMap<String, serde_json::Value> =
+            got.list.into_iter().filter_map(|e| Some((e["id"].as_str()?.to_string(), e))).collect();
+        for (uid, id) in batch {
+            let (left, by_limit) = allowance_left(state, account_id, host).await;
+            if left == 0 {
+                return Err(spent_reason(by_limit).into());
+            }
+            // Gone, or out of this folder, since the listing: nothing to keep.
+            let Some(email) = emails.get(id).filter(|e| in_mailbox(e, mailbox_id)) else {
+                failures_in_a_row = 0;
+                continue;
+            };
+            let stored = match email["blobId"].as_str() {
+                None => {
+                    warn!("[hoard] {account_id} {mailbox}: uid {uid} not fetched: Email/get without blobId");
+                    false
+                }
+                Some(blob) => match tokio::time::timeout(BODY_FETCH_TIMEOUT, acct.client.download(blob)).await {
+                    Ok(Ok(raw)) => {
+                        state.hoarder_worker.spend(&state.app_dir, account_id, raw.len() as u64, now_ms());
+                        let dated = crate::handlers::jmap_bridge::dated_ms(&raw, email["receivedAt"].as_str());
+                        auto_cache(state, account_id.to_string(), mailbox.to_string(), *uid, raw, dated, false).await
+                    }
+                    Ok(Err(e)) => {
+                        let e = e.to_string();
+                        if let Some(reason) = account_stop(state, account_id, &e) {
+                            return Err(reason);
+                        }
+                        warn!("[hoard] {account_id} {mailbox}: uid {uid} not fetched: {e}");
+                        false
+                    }
+                    Err(_) => {
+                        warn!("[hoard] {account_id} {mailbox}: uid {uid} timed out");
+                        false
+                    }
+                },
             };
             if stored {
                 out.fetched += 1;
@@ -1126,5 +1312,47 @@ mod tests {
         assert_eq!(out.stopped.as_deref(), Some("daily_limit_reached"), "{out:?}");
         assert!(out.fetched >= 1 && out.fetched < 58, "some of the folder came down before the limit: {out:?}");
         assert_eq!(uids(&dir, "INBOX").len(), 2 + out.fetched, "what was fetched is kept (two copies were already there)");
+    }
+
+    /// A JMAP account (Task 9c): every folder of its mailbox listing, each
+    /// missing body by blob download into `cur/` as a cache copy, uids from
+    /// each folder's JMAP ledger in arrival order, and never an IMAP dial.
+    /// Inbox holds e1 and e2, Work holds e1 as a second label; Sent and Trash
+    /// are empty. A second pass downloads nothing.
+    #[tokio::test]
+    async fn jmap_hoards_every_folder_by_blob_download_and_never_dials_imap() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let dir = std::env::temp_dir().join(format!("mv-hoard-jmap-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        hoarder(&dir, true);
+        let config = support::config(&m, port);
+        let downloads = || m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count();
+
+        let out = hoard_account(&s, &config, ACCT).await;
+        assert_eq!(out, Outcome { fetched: 3, failed: 0, stopped: None });
+        assert_eq!(downloads(), 3, "one blob download per missing body");
+        assert_eq!(uids(&dir, "INBOX"), vec![1, 2], "e1 then e2: uids follow arrival");
+        assert_eq!(uids(&dir, "Work"), vec![1]);
+        assert!(uids(&dir, "Sent").is_empty() && uids(&dir, "Trash").is_empty());
+        for mailbox in ["INBOX", "Work"] {
+            for (uid, flags) in on_disk(&dir, mailbox) {
+                assert!(!flags.contains('A'), "{mailbox} uid {uid} is a cache copy, never archived: {flags:?}");
+            }
+        }
+        let cur = vault_files::cur_path(&dir, ACCT, "INBOX");
+        let second = std::fs::read_dir(&cur)
+            .unwrap()
+            .flatten()
+            .find(|e| vault_filename_uid(&e.file_name().to_string_lossy()) == Some(2))
+            .expect("INBOX uid 2");
+        assert_eq!(std::fs::read(second.path()).unwrap(), support::raw("e2", "two").as_bytes());
+
+        let again = hoard_account(&s, &config, ACCT).await;
+        assert_eq!(again, Outcome { fetched: 0, failed: 0, stopped: None });
+        assert_eq!(downloads(), 3, "what the vault holds is never downloaded again");
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

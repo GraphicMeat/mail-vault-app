@@ -666,4 +666,51 @@ mod tests {
         assert!(graph_scope.contains("Mail.Send") && !graph_scope.contains("IMAP"), "control: {graph_scope}");
         assert_ne!(field(&posts[0], "client_id").as_deref(), Some(mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID));
     }
+
+    /// A JMAP account's scheduled send (Task 9c pin): out through
+    /// `send_via_jmap` (the server files the Sent copy, so no APPEND), never
+    /// SMTP or IMAP, and its reminder is recorded and checked over JMAP.
+    #[tokio::test]
+    async fn jmap_a_scheduled_send_goes_through_jmap_and_its_reminder_is_checked_over_jmap() {
+        use crate::jmap_test_support as support;
+        use mailvault_core::app_db::follow_up;
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let s = st();
+        let dir = s.data_dir.clone();
+        let creds = dir.join("credentials.json");
+        std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        let raw = "From: alice@example.test\r\nTo: bob@example.test\r\nMessage-ID: <sched1@x>\r\nSubject: Later\r\nDate: Fri, 02 Oct 2026 09:00:00 +0000\r\n\r\nscheduled body\r\n";
+        let cur = vault_files::cur_path(&dir, "acct1", "Drafts");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(format!("7{}S.eml", mailvault_core::maildir::INFO_PREFIX)), raw).unwrap();
+        s.vault_registry.invalidate("acct1", "Drafts");
+        let envelope = json!({
+            "from": "alice@example.test", "to": "bob@example.test", "cc": "", "bcc": "",
+            "sentMailbox": "Sent", "remindDays": 3, "ownAddresses": ["alice@example.test"],
+        })
+        .to_string();
+        app_db::with(&s.app_dir, |c| scheduled::insert(c, "row1", "acct1", "Drafts", 7, &envelope, "2026-10-02T09:00", "UTC", 1_000)).unwrap();
+        let row = app_db::with(&s.app_dir, |c| scheduled::get(c, "row1")).unwrap().expect("the row");
+
+        let sent = send_one(&s, &row).await;
+        let reminders = app_db::with(&s.app_dir, |c| follow_up::list(c, Some("acct1"))).unwrap();
+        let checked = match reminders.first() {
+            Some(reminder) => Some(crate::follow_up_worker::check_row(&s, reminder).await),
+            None => None,
+        };
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert!(matches!(sent, Outcome::Sent), "the scheduled send went out");
+        assert_eq!(m.submitted().len(), 1, "one EmailSubmission");
+        assert_eq!(reminders.len(), 1, "the reminder is recorded");
+        assert_eq!(reminders[0].message_id, "<sched1@x>");
+        assert!(
+            matches!(checked, Some(follow_up::Outcome::NoReply { ref sent_mailbox, .. }) if sent_mailbox == "Sent"),
+            "no reply yet, and the Sent copy is the server's: {checked:?}"
+        );
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
 }

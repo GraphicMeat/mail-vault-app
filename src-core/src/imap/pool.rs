@@ -109,6 +109,20 @@ fn conn_key(config: &ImapConfig) -> String {
     format!("{}-{}:{}", config.email, config.host, config.effective_port())
 }
 
+/// `Err` for a JMAP account (`uses_jmap`): it has no IMAP server, and a path
+/// that reaches a session-opening entry with one forgot to branch on it. The
+/// first check of every such entry (`connection_slot`, `get_background`,
+/// `get_priority`, `get_background_fresh`, `run_retrying`) and of
+/// `connect_transport`, so a missed path fails with a stable code instead of
+/// sending the JMAP token to `imapHost`. Worded so `is_connection_lost` never
+/// takes it for a dead socket: no retry follows it.
+pub fn refuse_jmap(config: &ImapConfig) -> Result<(), String> {
+    if config.uses_jmap() {
+        return Err(format!("E_JMAP_NOT_IMAP: {} is a JMAP account; this path must branch on uses_jmap()", config.email));
+    }
+    Ok(())
+}
+
 /// True when the error text says the *connection* died rather than the server
 /// answering. A pooled socket the peer closed while it sat idle produces this
 /// on first use and nothing else, so it is the one failure worth trying again;
@@ -227,6 +241,7 @@ impl ImapPool {
     /// cost is up to `SLOT_POLL` of extra wait on a full budget; a Notify on
     /// return_to_pool is the upgrade if that ever shows up.
     pub async fn connection_slot(&self, config: &ImapConfig) -> Result<OwnedSemaphorePermit, String> {
+        refuse_jmap(config)?;
         let budget = get_or_create_sem(&self.budget, &conn_key(config), MAX_CONNECTIONS_PER_ACCOUNT).await;
         let mut logged = false;
         loop {
@@ -270,12 +285,14 @@ impl ImapPool {
     /// Get or create a background connection, guarded by a per-account semaphore.
     /// At most MAX_POOL_SIZE concurrent background sessions per account — excess callers queue.
     pub async fn get_background(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
+        refuse_jmap(config)?;
         self.checkout(config, false, false, None).await
     }
 
     /// Get or create a priority connection, guarded by a per-account semaphore.
     /// At most MAX_POOL_SIZE concurrent priority sessions per account — excess callers queue.
     pub async fn get_priority(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
+        refuse_jmap(config)?;
         self.checkout(config, true, false, None).await
     }
 
@@ -283,6 +300,7 @@ impl ImapPool {
     /// attempt of `retry_once_on_dead_socket` for callers that drive the
     /// session themselves rather than through `run_read`. See `checkout`.
     pub async fn get_background_fresh(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
+        refuse_jmap(config)?;
         self.checkout(config, false, true, None).await
     }
 
@@ -451,6 +469,7 @@ impl ImapPool {
         F: Fn(ImapSession) -> Fut,
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
+        refuse_jmap(config)?;
         retry_once_on_dead_socket(|fresh| self.attempt(config, priority, fresh, &f, timings)).await
     }
 
@@ -1219,5 +1238,73 @@ mod net_activity_tests {
         assert_ne!(e.result, "ok");
         assert!(e.result.contains("Login failed"), "the sign-in's own error: {}", e.result);
         assert!(!e.result.contains(ADDRESS), "raw address in the result: {}", e.result);
+    }
+}
+
+#[cfg(test)]
+mod jmap_refusal_tests {
+    use super::*;
+
+    /// A JMAP account as the app stores it, its `imapHost:imapPort` a
+    /// loopback port nothing listens on: a dial there fails at once with a
+    /// connect error, so any error but the refusal is a dial.
+    fn jmap_config() -> ImapConfig {
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        serde_json::from_value(serde_json::json!({
+            "email": "alice@example.test",
+            "password": "tok",
+            "imapHost": "127.0.0.1",
+            "imapPort": port,
+            "jmapSessionUrl": "https://jmap.example.test/.well-known/jmap",
+            "jmapAuth": "bearer",
+        }))
+        .unwrap()
+    }
+
+    fn assert_refused(e: &str) {
+        assert!(e.starts_with("E_JMAP_NOT_IMAP: alice@example.test is a JMAP account"), "{e}");
+        assert!(!is_connection_lost(e), "a refusal is never retried on a fresh connection: {e}");
+    }
+
+    #[tokio::test]
+    async fn get_priority_refuses_a_jmap_account() {
+        let Err(e) = ImapPool::new().get_priority(&jmap_config()).await else {
+            panic!("a JMAP account got an IMAP session");
+        };
+        assert_refused(&e);
+    }
+
+    #[tokio::test]
+    async fn every_session_opening_entry_refuses_a_jmap_account() {
+        let config = jmap_config();
+        let pool = ImapPool::new();
+        let Err(e) = pool.get_background(&config).await else { panic!("get_background") };
+        assert_refused(&e);
+        let Err(e) = pool.get_background_fresh(&config).await else { panic!("get_background_fresh") };
+        assert_refused(&e);
+        let Err(e) = pool.connection_slot(&config).await else { panic!("connection_slot") };
+        assert_refused(&e);
+        let read = pool.run_read(&config, false, |session| async move { Ok(((), session, None)) }).await;
+        assert_refused(&read.expect_err("run_read"));
+        let delete = pool.run_uid_delete(&config, true, |session| async move { Ok(((), session, None)) }).await;
+        assert_refused(&delete.expect_err("run_uid_delete"));
+        let Err(e) = crate::imap::create_imap_session(&config, &pool).await else { panic!("create_imap_session") };
+        assert_refused(&e);
+        let Err(e) = crate::imap::create_imap_session_no_compress(&config, &pool).await else {
+            panic!("create_imap_session_no_compress")
+        };
+        assert_refused(&e);
+    }
+
+    /// The control: the same account without a session URL (or with a blank
+    /// one, `uses_jmap`) is an IMAP account, which dials as before.
+    #[tokio::test]
+    async fn an_imap_account_still_dials() {
+        for url in [None, Some("   ".to_string())] {
+            let mut config = jmap_config();
+            config.jmap_session_url = url;
+            let Err(e) = ImapPool::new().get_priority(&config).await else { panic!("nothing listens there") };
+            assert!(!e.starts_with("E_JMAP_NOT_IMAP"), "an IMAP account is never refused: {e}");
+        }
     }
 }

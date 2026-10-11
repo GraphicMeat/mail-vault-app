@@ -260,7 +260,7 @@ async fn all_ids(acct: &AccountJmap, mailbox_id: &str) -> Result<Vec<String>, Jm
 
 /// `Email/query` with any filter, newest first: up to `limit` ids and the
 /// total match count.
-async fn query_ids(client: &JmapClient, filter: Value, limit: usize) -> Result<(Vec<String>, usize), JmapError> {
+pub(crate) async fn query_ids(client: &JmapClient, filter: Value, limit: usize) -> Result<(Vec<String>, usize), JmapError> {
     let args = json!({
         "accountId": client.account_id(),
         "filter": filter,
@@ -295,10 +295,10 @@ async fn mailbox_counts(acct: &AccountJmap, path: &str) -> Result<mailvault_core
 }
 
 /// A message body fetched by uid.
-struct Fetched {
-    raw: Vec<u8>,
-    flags: Vec<String>,
-    received_at: Option<String>,
+pub(crate) struct Fetched {
+    pub(crate) raw: Vec<u8>,
+    pub(crate) flags: Vec<String>,
+    pub(crate) received_at: Option<String>,
 }
 
 /// The raw message behind `uid` in `mailbox`, `None` when it is gone: the
@@ -628,10 +628,28 @@ fn is_keyword(keyword: &str) -> bool {
         && keyword.bytes().all(|b| (0x21..=0x7e).contains(&b) && !b"(){]%*\"\\".contains(&b))
 }
 
-/// The raw message and flags behind `uid` for the deleted-mail bin
-/// (`deleted::capture`, `Source::Jmap`): a blob download over the account's
-/// session, under the IMAP arms' body ceiling. `None`: gone (the ledger never
-/// issued the uid, the email no longer exists, or it left the mailbox).
+/// The raw message, flags and `receivedAt` behind `uid` in `mailbox`: a blob
+/// download over the account's session, under the IMAP arms' body ceiling.
+/// Every daemon path that reads one JMAP body by uid outside an RPC comes
+/// through here: the deleted-mail bin, the raw-message fallback, the arrival
+/// prefetch. `None`: gone (the ledger never issued the uid, the email no
+/// longer exists, or it left the mailbox).
+pub(crate) async fn fetch_by_uid(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+) -> Result<Option<Fetched>, String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    match fetch_body_timed(state, &acct, account_id, mailbox, uid).await {
+        Ok(fetched) => Ok(fetched),
+        Err(Fail::Params(e) | Fail::Rpc(e)) => Err(e),
+    }
+}
+
+/// `fetch_by_uid` for the deleted-mail bin (`deleted::capture`,
+/// `Source::Jmap`): the bytes and the flags.
 pub(crate) async fn fetch_for_capture(
     state: &Arc<DaemonState>,
     config: &ImapConfig,
@@ -639,11 +657,47 @@ pub(crate) async fn fetch_for_capture(
     mailbox: &str,
     uid: u32,
 ) -> Result<Option<(Vec<u8>, Vec<String>)>, String> {
-    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
-    match fetch_body_timed(state, &acct, account_id, mailbox, uid).await {
-        Ok(fetched) => Ok(fetched.map(|f| (f.raw, f.flags))),
-        Err(Fail::Params(e) | Fail::Rpc(e)) => Err(e),
+    Ok(fetch_by_uid(state, config, account_id, mailbox, uid).await?.map(|f| (f.raw, f.flags)))
+}
+
+/// A JMAP body's date in epoch ms, read as the download gates read an IMAP
+/// one (`email_date_ms`): its own `Date:` header, else `receivedAt`.
+pub(crate) fn dated_ms(raw: &[u8], received_at: Option<&str>) -> Option<i64> {
+    mailvault_core::import_rehome::head_of(raw)
+        .date_secs
+        .and_then(|secs| secs.checked_mul(1000))
+        .or_else(|| email_date_ms(None, received_at))
+}
+
+/// The emails whose Message-ID is `message_id` (bracketed or bare), in
+/// `mailbox_id` or, with `None`, anywhere in the account, newest first. The
+/// `header` filter matches a substring (RFC 8621 §4.4.1), so each hit is read
+/// back and only an equal id counts: `<pre-e1@x>` never stands in for
+/// `<e1@x>`.
+pub(crate) async fn emails_with_message_id(
+    client: &JmapClient,
+    mailbox_id: Option<&str>,
+    message_id: &str,
+) -> Result<Vec<String>, JmapError> {
+    let wanted = mailvault_core::maildir::normalize_message_id(message_id);
+    if wanted.is_empty() {
+        return Ok(Vec::new());
     }
+    let mut filter = json!({"header": ["Message-ID", wanted]});
+    if let Some(id) = mailbox_id {
+        filter["inMailbox"] = json!(id);
+    }
+    let (hits, _) = query_ids(client, filter, FIND_LIMIT).await?;
+    if hits.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut got = by_id(client.get_emails(&hits, &["id", "messageId"]).await?.list);
+    let equal = |email: &Value| {
+        email["messageId"]
+            .as_array()
+            .is_some_and(|ids| ids.iter().filter_map(Value::as_str).any(|m| mailvault_core::maildir::normalize_message_id(m) == wanted))
+    };
+    Ok(hits.into_iter().filter(|id| got.remove(id).is_some_and(|e| equal(&e))).collect())
 }
 
 /// Take `uids`' rows off the mailbox's header cache after the server took
@@ -665,7 +719,7 @@ async fn drop_header_rows(state: &Arc<DaemonState>, account_id: &str, mailbox: &
 }
 
 /// The path and id of the mailbox with `role` in a fresh listing.
-fn role_mailbox(boxes: &Mailboxes, role: &str) -> Option<(String, String)> {
+pub(crate) fn role_mailbox(boxes: &Mailboxes, role: &str) -> Option<(String, String)> {
     let id = &boxes.list.iter().find(|m| m.role.as_deref().is_some_and(|r| r.eq_ignore_ascii_case(role)))?.id;
     let (path, _) = boxes.ids.iter().find(|(_, mailbox_id)| *mailbox_id == id)?;
     Some((path.clone(), id.clone()))
@@ -1006,6 +1060,45 @@ async fn delete_mailbox(params: &Value, acct: &AccountJmap) -> Result<Value, Fai
         Some(f) => Err(f),
         None => Ok(json!({"success": true, "deleted": destroyed})),
     }
+}
+
+/// `snooze.ensure_folder` over JMAP: the path of the role=snoozed mailbox,
+/// else of one named "Snoozed" anywhere in the tree
+/// (`app_db::snooze::SNOOZED_MAILBOX`, as the IMAP side reuses
+/// `INBOX.Snoozed`), else of a new top-level one made with `Mailbox/set`. A
+/// create the server answers with a SetError is a server that will not host
+/// it: `E_SNOOZE_FOLDER_REFUSED:`, and the app snoozes on this computer.
+pub(crate) async fn ensure_snoozed_mailbox(acct: &AccountJmap) -> Result<String, String> {
+    let name = mailvault_core::app_db::snooze::SNOOZED_MAILBOX;
+    let boxes = acct.refresh().await.map_err(|e| e.to_string())?;
+    let existing = role_mailbox(&boxes, "snoozed").map(|(path, _)| path).or_else(|| {
+        let m = boxes.list.iter().find(|m| m.name.eq_ignore_ascii_case(name))?;
+        boxes.ids.iter().find(|(_, id)| **id == m.id).map(|(path, _)| path.clone())
+    });
+    if let Some(path) = existing {
+        return Ok(path);
+    }
+    let r = acct
+        .client
+        .mailbox_set(json!({"create": {"snoozed": {"name": name, "parentId": null, "isSubscribed": true}}}))
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some(e) = r["notCreated"].get("snoozed") {
+        return Err(format!(
+            "{} {}: {}",
+            crate::imap::SNOOZE_FOLDER_REFUSED,
+            e["type"].as_str().unwrap_or("serverFail"),
+            e["description"].as_str().unwrap_or("the server will not create a Snoozed folder")
+        ));
+    }
+    let created = r["created"]["snoozed"]["id"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| JmapError::Protocol("Mailbox/set did not create Snoozed".into()).to_string())?;
+    refresh_after_write(acct).await;
+    let path = acct.mailbox_ids.read().unwrap_or_else(|p| p.into_inner()).iter().find(|(_, id)| **id == created).map(|(p, _)| p.clone());
+    // A top-level mailbox's path is its name.
+    Ok(path.unwrap_or_else(|| name.to_string()))
 }
 
 /// `imap_ensure_sent_mailbox`: the path of the role=sent mailbox, else of a

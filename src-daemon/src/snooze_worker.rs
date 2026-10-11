@@ -19,12 +19,18 @@
 //! Graph accounts are not handled here: the daemon never refreshes an OAuth
 //! token (the app does), so a background Graph move cannot be relied on.
 //! The app does not offer Snooze on a Graph account.
+//!
+//! A JMAP account's wake (`wake_row_jmap`) never reaches the IMAP pool: the
+//! message is found by its exact Message-ID in the holder, `$seen` comes off,
+//! and the move back is one `mailboxIds` patch (the Snoozed label off, the
+//! origin's on).
 
 use crate::credentials;
 use crate::imap::{self, pool::PooledSessionGuard, ImapConfig};
 use crate::server::DaemonState;
 use crate::sync_engine::SyncAccount;
 use mailvault_core::app_db::{self, snooze};
+use mailvault_core::jmap::SetOutcome;
 use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
@@ -156,6 +162,9 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
             return if credentials::GATE.is_blocked() { Wait(msg) } else { Transient(msg) };
         }
     };
+    if account.uses_jmap() {
+        return wake_row_jmap(state, account, row).await;
+    }
     let checkout = if background {
         state.imap_pool.get_background(&account).await
     } else {
@@ -203,6 +212,73 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
     }
     announce(state, account, row).await;
     Woken
+}
+
+/// `wake_row` for a JMAP account (`uses_jmap`), on the account's session: the
+/// email in the holder whose Message-ID is the row's (the stored uid is not
+/// used), `$seen` removed, and unless the snooze was local one `mailboxIds`
+/// patch moving it back. No such email, or one the server no longer has:
+/// `NotFound`. Then the same sync and record as the IMAP wake.
+async fn wake_row_jmap(state: &Arc<DaemonState>, account: ImapConfig, row: &snooze::Snooze) -> snooze::WakeOutcome {
+    use snooze::WakeOutcome::*;
+    let local = row.snoozed_mailbox.is_empty();
+    let holder = if local { &row.from_mailbox } else { &row.snoozed_mailbox };
+    let woke = async {
+        let acct = state.jmap.get(&account).await.map_err(|e| e.to_string())?;
+        let boxes = acct.current().await.map_err(|e| e.to_string())?;
+        let Some(holder_id) = boxes.ids.get(holder.as_str()).cloned() else { return Ok(false) };
+        let found = crate::handlers::jmap_bridge::emails_with_message_id(&acct.client, Some(&holder_id), &row.message_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let Some(email_id) = found.into_iter().next() else { return Ok(false) };
+        let unread = acct.client.set_keywords(&[(email_id.clone(), vec![("$seen".to_string(), false)])]).await.map_err(|e| e.to_string())?;
+        if !landed(&unread, &email_id)? {
+            return Ok(false);
+        }
+        if !local {
+            let from_id = boxes.ids.get(&row.from_mailbox).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {}", row.from_mailbox))?;
+            let back = acct
+                .client
+                .set_mailboxes(&[(email_id.clone(), vec![(holder_id, false), (from_id, true)])])
+                .await
+                .map_err(|e| e.to_string())?;
+            if !landed(&back, &email_id)? {
+                return Ok(false);
+            }
+        }
+        Ok::<bool, String>(true)
+    }
+    .await;
+    match woke {
+        Ok(true) => {
+            announce(state, account, row).await;
+            Woken
+        }
+        Ok(false) => {
+            info!("[snooze] {} is no longer in {}; nothing to wake", row.id, holder);
+            NotFound
+        }
+        Err(e) => {
+            if state.net.note_failure(&e).await {
+                Transient(e)
+            } else {
+                Wait(e)
+            }
+        }
+    }
+}
+
+/// Did an `Email/set` apply to `email_id`? `false` when the server no longer
+/// has it (`notFound`); any other refusal is an error to retry.
+fn landed(out: &SetOutcome, email_id: &str) -> Result<bool, String> {
+    if out.ok.iter().any(|id| id == email_id) {
+        return Ok(true);
+    }
+    match out.failed.iter().find(|(id, _)| id == email_id) {
+        Some((_, kind)) if kind == "notFound" => Ok(false),
+        Some((_, kind)) => Err(format!("E_JMAP_METHOD: {kind}: the server refused the wake of {email_id}")),
+        None => Err("E_JMAP_PROTOCOL: Email/set did not answer for the email".to_string()),
+    }
 }
 
 /// Sync the destination and record the change as an IDLE arrival does, so the
@@ -452,5 +528,45 @@ mod tests {
         let (_, records) = state.sync_engine.wait_changes(gen0, 0).await;
         let announced: usize = records.iter().map(|r| r.new_emails).sum();
         assert_eq!(announced, 3, "{records:?}");
+    }
+
+    /// A JMAP account's wake (Task 9c): found in Snoozed by its Message-ID
+    /// (the stored uid is stale), `$seen` removed, moved back with one
+    /// `mailboxIds` patch, and no IMAP dialled. A message no longer there is
+    /// `NotFound`, not an error.
+    #[tokio::test]
+    async fn jmap_wake_row_moves_the_message_back_unread_by_mailbox_ids() {
+        use crate::jmap_test_support as support;
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let mut scenario = support::scenario();
+        let mut later = support::email("s1", "later", "2026-10-03T10:00:00Z");
+        later.keywords = vec!["$seen".into()];
+        scenario.accounts[0].mailboxes.push(mock_jmap::ScenarioMailbox {
+            id: "mb-snoozed".into(),
+            name: "Snoozed".into(),
+            parent_id: None,
+            role: None,
+            emails: vec![later],
+        });
+        let m = mock_jmap::MockJmap::start(scenario);
+        let (trap, port) = support::imap_trap();
+        let dir = app_dir();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let creds = dir.join("credentials.json");
+        std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+
+        app_db::with(&dir, |c| snooze::insert(c, "a", "acct1", "INBOX", "Snoozed", Some(99), "<s1@x>", 1_000)).unwrap();
+        let outcome = wake_row(&state, &row(&dir, "a"), true).await;
+        app_db::with(&dir, |c| snooze::insert(c, "b", "acct1", "INBOX", "Snoozed", Some(1), "<gone@x>", 1_000)).unwrap();
+        let gone = wake_row(&state, &row(&dir, "b"), true).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(outcome, WakeOutcome::Woken);
+        let s1 = m.read(|s| s.email("acc1", "s1").cloned()).expect("s1 still exists");
+        assert_eq!(s1.mailbox_ids, support::set(&["mb-inbox"]), "out of Snoozed, back in the inbox");
+        assert!(!s1.keywords.contains("$seen"), "unread");
+        assert_eq!(gone, WakeOutcome::NotFound);
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

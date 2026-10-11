@@ -22,8 +22,10 @@
 //!   count. After 3 failures in a row: sync every 2 min and try the stream
 //!   again every 10 min. A session without `eventSourceUrl` only polls.
 //!
-//! Arrival bodies are not fetched here: `cache_arrivals` and the hoarder go
-//! through the IMAP pool, which a JMAP account must never reach.
+//! The inbox arrivals a sync reports get their bodies kept as an IDLE
+//! watcher's do (`handlers::imap::cache_arrivals`, which downloads a JMAP
+//! account's by blob), on a task of their own so the stream is read again at
+//! once. Arrivals in other mailboxes wake the hoarder (`sync_jmap`).
 
 use crate::handlers::common::blocking;
 use crate::idle_watch::WatchStatus;
@@ -383,6 +385,14 @@ async fn sync_inbox(state: &Arc<DaemonState>, slot: &Mutex<SyncAccount>) {
     // Auto Tags' wake signal, as `handle_sync_now` sends it on new mail.
     if result.new_emails > 0 {
         state.auto_tag_worker.wake();
+    }
+    // The arrivals' bodies, as `idle_watch` keeps an IDLE arrival's: on a
+    // task of their own, so the stream is read again now.
+    if !result.arrival_uids.is_empty() {
+        let (state, mailbox, uids) = (Arc::clone(state), result.mailbox.clone(), result.arrival_uids);
+        tokio::spawn(async move {
+            crate::handlers::imap::cache_arrivals(&state, &account, &mailbox, &uids).await;
+        });
     }
 }
 
@@ -768,5 +778,32 @@ mod tests {
         assert_eq!(t.failures_before_poll, 3);
         assert_eq!(t.poll_every, Duration::from_secs(120));
         assert_eq!(t.stream_retry_every, Duration::from_secs(600));
+    }
+
+    /// A pushed inbox arrival has its body kept, as an IDLE arrival's is
+    /// (`cache_arrivals`, by blob download; Task 9c), and no IMAP is dialled.
+    #[tokio::test]
+    async fn jmap_a_pushed_arrival_body_is_kept_in_the_vault() {
+        let (dir, state, m, mut account) = setup(vec![], timing()).await;
+        std::fs::write(
+            dir.path().join("frontend-settings.json"),
+            json!({"mailvault-settings": {"state": {"fetchMode": "hoarder"}}}).to_string(),
+        )
+        .unwrap();
+        let (trap, port) = crate::jmap_test_support::imap_trap();
+        account.imap_config.port = Some(port);
+        watch(&state, &account).await;
+        wait_status(&state, |s| s.idling, 5_000, "the stream open and caught up").await;
+
+        m.mutate(|s| s.add_email("acc1", "mb-inbox", email("e9", "nine", "2026-10-04T10:00:00Z")));
+        let cur = mailvault_core::vault_files::cur_path(dir.path(), "acct-1", "INBOX");
+        let kept = || {
+            std::fs::read_dir(&cur)
+                .map(|d| d.flatten().any(|e| std::fs::read(e.path()).is_ok_and(|b| String::from_utf8_lossy(&b).contains("body of nine"))))
+                .unwrap_or(false)
+        };
+        wait_until(kept, 5_000, "the arrival's body in the vault").await;
+        assert_eq!(m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count(), 1, "the arrival only");
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

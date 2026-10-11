@@ -147,12 +147,13 @@ pub(crate) fn email_date_ms(date: Option<&str>, internal_date: Option<&str>) -> 
         .and_then(|secs| secs.checked_mul(1000))
 }
 
-/// Download the bodies of mail the IDLE watcher just announced and keep them
-/// the way an opened message is kept (`auto_cache`), so a new message reads
-/// offline and is searchable by its text within seconds. The account's
-/// download mode applies: none for a hidden account or On Demand (no body is
-/// even fetched), none for a message dated outside a Keep Recent / Index Only
-/// window (`auto_cache` decides that once the date is known).
+/// Download the bodies of mail the IDLE watcher, or a JMAP account's push
+/// (`jmap_push`), just announced and keep them the way an opened message is
+/// kept (`auto_cache`), so a new message reads offline and is searchable by
+/// its text within seconds. The account's download mode applies: none for a
+/// hidden account or On Demand (no body is even fetched), none for a message
+/// dated outside a Keep Recent / Index Only window (`auto_cache` decides that
+/// once the date is known).
 pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sync_engine::SyncAccount, mailbox: &str, uids: &[u32]) {
     if uids.is_empty() {
         return;
@@ -163,6 +164,21 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
         return;
     };
     if policy.mode == FetchMode::OnDemand {
+        return;
+    }
+    // A JMAP account's arrivals (its push, `jmap_push`): each body by blob
+    // download over the account's session, by the mailbox's ledger uid.
+    if account.imap_config.uses_jmap() {
+        for &uid in uids {
+            match crate::handlers::jmap_bridge::fetch_by_uid(state, &account.imap_config, &account.id, mailbox, uid).await {
+                Ok(Some(body)) => {
+                    let dated = crate::handlers::jmap_bridge::dated_ms(&body.raw, body.received_at.as_deref());
+                    auto_cache(state, account.id.clone(), mailbox.to_string(), uid, body.raw, dated, false).await;
+                }
+                Ok(None) => {}
+                Err(e) => warn!("[push] {}: arrival body {} not cached: {}", account.email, uid, e),
+            }
+        }
         return;
     }
     for &uid in uids {
@@ -1602,5 +1618,40 @@ mod tests {
     async fn another_domains_method_is_not_routed_here() {
         let s = st(true);
         assert!(route(&s, "sync.now", &json!({}), json!(1)).await.is_none());
+    }
+
+    /// A JMAP account's arrivals (its push, Task 9c): the body by blob
+    /// download, by the INBOX ledger's uid, kept when the mode keeps it. On
+    /// Demand downloads nothing. No IMAP is dialled.
+    #[tokio::test]
+    async fn jmap_cache_arrivals_downloads_the_new_body_when_the_mode_keeps_it() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (dir, s) = light_state();
+        let ledger = crate::jmap_sessions::jmap_ledger_path(&dir, "acc1", "INBOX");
+        std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+        std::fs::write(&ledger, br#"{"1":"e1","2":"e2"}"#).unwrap();
+        let account: crate::sync_engine::SyncAccount = serde_json::from_value(json!({
+            "id": "acc1", "email": "alice@example.test", "imapConfig": support::account_json(&m, port),
+        }))
+        .unwrap();
+        let downloads = || m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count();
+
+        write_settings(&dir, json!({"fetchMode": "onDemand"}));
+        cache_arrivals(&s, &account, "INBOX", &[2]).await;
+        assert_eq!(downloads(), 0, "On Demand fetches no body");
+        assert!(cached_files(&dir).is_empty());
+
+        write_settings(&dir, json!({"fetchMode": "hoarder"}));
+        cache_arrivals(&s, &account, "INBOX", &[2]).await;
+        assert_eq!(downloads(), 1);
+        let files = cached_files(&dir);
+        assert_eq!(files.len(), 1, "{files:?}");
+        assert_eq!(mailvault_core::maildir::vault_filename_uid(&files[0]), Some(2), "kept under the ledger uid: {files:?}");
+        let kept = std::fs::read(dir.join("Maildir").join("acc1").join("INBOX").join("cur").join(&files[0])).unwrap();
+        assert_eq!(kept, support::raw("e2", "two").as_bytes());
+        assert!(trap.accept().is_err(), "no IMAP dial");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

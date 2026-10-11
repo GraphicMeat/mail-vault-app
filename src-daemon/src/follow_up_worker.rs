@@ -29,10 +29,17 @@
 //!
 //! Graph accounts are not checked: the daemon holds no Graph token (the app
 //! refreshes it), and the app does not offer the reminder on one.
+//!
+//! A JMAP account's server check (`check_row_jmap`) asks the same questions
+//! over JMAP, never the IMAP pool: one `Email/query` for mail whose
+//! In-Reply-To or References names the message, outside Sent and Drafts,
+//! read back so a draft (`$draft`), the user's own mail and an automatic
+//! reply never count; then the Sent copy by exact Message-ID, its uid from
+//! that mailbox's JMAP ledger.
 
 use crate::credentials;
 use crate::handlers::common::blocking;
-use crate::imap::{self, pool::PooledSessionGuard};
+use crate::imap::{self, pool::PooledSessionGuard, ImapConfig};
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, follow_up};
 use mailvault_core::custody::cache as sql_cache;
@@ -372,6 +379,9 @@ pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::Fo
     if cached == CacheAnswer::Hit {
         return Replied;
     }
+    if account.uses_jmap() {
+        return check_row_jmap(state, row, &account, &own).await;
+    }
 
     let PooledSessionGuard { mut session, last_selected: _, _permit } = match state.imap_pool.get_background(&account).await {
         Ok(g) => g,
@@ -473,6 +483,112 @@ pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::Fo
         }
         // The session is dropped, not returned: a failed command can leave
         // unread bytes on it.
+        Err(e) => {
+            if state.net.note_failure(&e).await {
+                Transient(e)
+            } else {
+                Wait(e)
+            }
+        }
+    }
+}
+
+/// The most replies a JMAP reply search reads back.
+const JMAP_REPLY_HITS: usize = 50;
+
+/// The header properties a JMAP reply is read back with: the automatic-reply
+/// markers the IMAP search leaves out (`imap::reply_search_criteria`).
+const JMAP_REPLY_PROPS: [&str; 10] = [
+    "id",
+    "from",
+    "subject",
+    "keywords",
+    "inReplyTo",
+    "references",
+    "header:Auto-Submitted:asText",
+    "header:X-Autoreply:asText",
+    "header:X-Autorespond:asText",
+    "header:X-Auto-Response-Suppress:asText",
+];
+
+/// Is `email` (read with `JMAP_REPLY_PROPS`) an answer to `term` (a bare
+/// Message-ID) from someone else? It names the message in In-Reply-To or
+/// References (exactly, any case: the `header` filter matched a substring),
+/// is no draft, is not from one of `own` (folded like the app's
+/// `normalizeEmailIdentity`), and is neither marked nor titled like an
+/// automatic reply.
+fn jmap_reply_from_someone_else(email: &Value, term: &str, own: &[String]) -> bool {
+    let names_it = |prop: &str| {
+        email[prop]
+            .as_array()
+            .is_some_and(|ids| ids.iter().filter_map(Value::as_str).any(|m| mailvault_core::maildir::normalize_message_id(m).eq_ignore_ascii_case(term)))
+    };
+    let draft = email["keywords"]
+        .as_object()
+        .is_some_and(|k| k.iter().any(|(name, on)| name.eq_ignore_ascii_case("$draft") && on.as_bool() == Some(true)));
+    let automatic = email["header:Auto-Submitted:asText"].as_str().is_some_and(|v| !v.trim().eq_ignore_ascii_case("no"))
+        || ["header:X-Autoreply:asText", "header:X-Autorespond:asText", "header:X-Auto-Response-Suppress:asText"]
+            .iter()
+            .any(|prop| !email[*prop].is_null())
+        || sql_cache::is_auto_reply_subject(email["subject"].as_str().unwrap_or_default());
+    let from = email["from"].as_array().and_then(|a| a.first()).and_then(|f| f["email"].as_str()).unwrap_or_default();
+    let mine = own.iter().any(|a| mailvault_core::notes_to_self::normalize_identity(a) == mailvault_core::notes_to_self::normalize_identity(from));
+    (names_it("inReplyTo") || names_it("references")) && !draft && !automatic && !mine
+}
+
+/// `check_row_with`'s server check for a JMAP account (`uses_jmap`), on the
+/// account's session; the header cache already said no hit. A reply
+/// anywhere but Sent and Drafts (`jmap_reply_from_someone_else`) is
+/// `Replied`. Else the Sent copy by exact Message-ID, in the folder the app
+/// filed it in, then the role=sent mailbox: `NoReply` under the uid that
+/// mailbox's JMAP ledger gives it, `SentCopyGone` when neither holds it.
+async fn check_row_jmap(state: &Arc<DaemonState>, row: &follow_up::FollowUp, account: &ImapConfig, own: &[String]) -> follow_up::Outcome {
+    use follow_up::Outcome::*;
+    let term = mailvault_core::maildir::normalize_message_id(&row.message_id);
+    let checked = async {
+        let acct = state.jmap.get(account).await.map_err(|e| e.to_string())?;
+        let boxes = acct.current().await.map_err(|e| e.to_string())?;
+        let role = |r: &str| crate::handlers::jmap_bridge::role_mailbox(&boxes, r);
+        let skip: Vec<String> = [role("sent"), role("drafts")].into_iter().flatten().map(|(_, id)| id).collect();
+        let names_it = json!({"operator": "OR", "conditions": [{"header": ["In-Reply-To", term]}, {"header": ["References", term]}]});
+        let filter = if skip.is_empty() {
+            names_it
+        } else {
+            json!({"operator": "AND", "conditions": [{"inMailboxOtherThan": skip}, names_it]})
+        };
+        let (hits, _) = crate::handlers::jmap_bridge::query_ids(&acct.client, filter, JMAP_REPLY_HITS).await.map_err(|e| e.to_string())?;
+        if !hits.is_empty() {
+            let got = acct.client.get_emails(&hits, &JMAP_REPLY_PROPS).await.map_err(|e| e.to_string())?;
+            if got.list.iter().any(|e| jmap_reply_from_someone_else(e, &term, own)) {
+                return Ok::<_, String>(Replied);
+            }
+        }
+        let mut candidates: Vec<(String, String)> = Vec::new();
+        let filed = Some(row.sent_mailbox.clone()).filter(|m| !m.is_empty()).and_then(|path| Some((boxes.ids.get(&path)?.clone(), path)));
+        for (id, path) in filed.into_iter().chain(role("sent").map(|(path, id)| (id, path))) {
+            if !candidates.iter().any(|(_, known)| *known == id) {
+                candidates.push((path, id));
+            }
+        }
+        for (path, mailbox_id) in candidates {
+            let found = crate::handlers::jmap_bridge::emails_with_message_id(&acct.client, Some(&mailbox_id), &row.message_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            if let Some(email_id) = found.into_iter().next() {
+                let uids = acct.ids_to_uids(state, &row.account_id, &path, &[email_id]).await?;
+                if let Some(sent_uid) = uids.first().copied() {
+                    return Ok(NoReply { sent_mailbox: path, sent_uid });
+                }
+            }
+        }
+        Ok(SentCopyGone)
+    }
+    .await;
+    match checked {
+        Ok(outcome) => {
+            info!("[follow-up] {} checked over JMAP: {outcome:?}", row.id);
+            outcome
+        }
         Err(e) => {
             if state.net.note_failure(&e).await {
                 Transient(e)
@@ -1082,5 +1198,54 @@ mod tests {
         assert_eq!(rows[0].sent_mailbox, "Sent");
         assert_eq!(rows[0].own_addresses, own());
         assert_eq!(rows[0].remind_at - rows[0].sent_at, 3 * DAY_MS);
+    }
+
+    /// A JMAP account's check (Task 9c), over JMAP and never IMAP: a draft
+    /// reply (`$draft`) and the user's own reply are no answer, so the Sent
+    /// copy is found by Message-ID under its Sent ledger uid; a reply from
+    /// someone else is an answer.
+    #[tokio::test]
+    async fn jmap_a_reply_is_found_and_drafts_and_own_mail_are_not_replies() {
+        use crate::jmap_test_support as support;
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let reply = |id: &str, from: &str, keywords: &[&str]| mock_jmap::ScenarioEmail {
+            id: id.into(),
+            raw: format!("From: {from}\r\nMessage-ID: <{id}@x>\r\nIn-Reply-To: <sent1@x>\r\nReferences: <sent1@x>\r\nSubject: Re: Quote\r\n\r\nreply\r\n"),
+            keywords: keywords.iter().map(|k| k.to_string()).collect(),
+            received_at: "2026-10-05T10:00:00Z".into(),
+            also_in: vec![],
+        };
+        let mut scenario = support::scenario();
+        scenario.accounts[0].mailboxes[2].emails.push(mock_jmap::ScenarioEmail {
+            id: "sent1".into(),
+            raw: "From: alice@example.test\r\nTo: bob@example.test\r\nMessage-ID: <sent1@x>\r\nSubject: Quote\r\n\r\nquote\r\n".into(),
+            keywords: vec!["$seen".into()],
+            received_at: "2026-10-04T10:00:00Z".into(),
+            also_in: vec![],
+        });
+        scenario.accounts[0].mailboxes[0].emails.push(reply("d1", "Bob <bob@example.test>", &["$draft"]));
+        scenario.accounts[0].mailboxes[0].emails.push(reply("o1", "Alice <alice@example.test>", &[]));
+        let m = mock_jmap::MockJmap::start(scenario);
+        let (trap, port) = support::imap_trap();
+        let dir = app_dir();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let creds = dir.join("credentials.json");
+        std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        app_db::with(&dir, |c| {
+            follow_up::insert(c, "f1", "acct1", "<sent1@x>", "Quote", "bob@example.test", "Sent", &["alice@example.test".to_string()], 1_000, 2_000)
+        })
+        .unwrap();
+
+        let first = check_row_with(&state, &row(&dir, "f1"), CacheAnswer::Miss).await;
+        m.mutate(|s| s.add_email("acc1", "mb-inbox", reply("r1", "Bob <bob@example.test>", &[])));
+        let second = check_row_with(&state, &row(&dir, "f1"), CacheAnswer::Miss).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let sent_ledger = mailvault_core::graph_ledger::load(&crate::jmap_sessions::jmap_ledger_path(&dir, "acct1", "Sent")).unwrap();
+        let sent_uid = sent_ledger.iter().find(|(_, id)| *id == "sent1").map(|(uid, _)| *uid).expect("the Sent copy has a ledger uid");
+        assert_eq!(first, Outcome::NoReply { sent_mailbox: "Sent".into(), sent_uid });
+        assert_eq!(second, Outcome::Replied);
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

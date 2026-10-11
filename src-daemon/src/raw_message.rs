@@ -264,9 +264,14 @@ async fn listed_message_id(state: &Arc<DaemonState>, account_id: &str, mailbox: 
 }
 
 /// The whole message from the server. `Ok(None)`: the server proved the uid
-/// is gone (or answered for another uid).
+/// is gone (or answered for another uid). A JMAP account's comes by blob
+/// download, by the mailbox's ledger uid (`jmap_bridge::fetch_by_uid`).
 async fn from_server(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<Vec<u8>>, String> {
     let config = account_config(state, account_id).await?;
+    if config.uses_jmap() {
+        let fetched = crate::handlers::jmap_bridge::fetch_by_uid(state, &config, account_id, mailbox, uid).await?;
+        return Ok(fetched.map(|body| body.raw));
+    }
     if config.oauth2_transport.as_deref() == Some("graph") {
         return Err("a Graph account's message is fetched through the app's Graph token, which the daemon does not hold".to_string());
     }
@@ -788,6 +793,29 @@ mod tests {
         assert!(!orphan.exists(), "uid 5 is kept nowhere");
         assert!(vault_part.exists(), "uid 7 is in the vault");
         assert!(Path::new(in_memory.as_str().unwrap()).exists(), "uid 1 is in memory");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A JMAP account's message with no vault copy comes by blob download,
+    /// by the INBOX ledger's uid (Task 9c), and is checked against the header
+    /// row like an IMAP one. No IMAP is dialled.
+    #[tokio::test]
+    async fn jmap_a_message_with_no_vault_file_comes_by_blob_download() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (dir, s) = state("onDemand", None, "<e2@x>");
+        s.raw_messages.accounts.lock().unwrap().insert("acc1".into(), support::config(&m, port));
+        let ledger = crate::jmap_sessions::jmap_ledger_path(&dir, "acc1", "INBOX");
+        std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+        std::fs::write(&ledger, br#"{"1":"e2"}"#).unwrap();
+
+        let r = call(&s, "maildir_read_raw_source", json!({"accountId": "acc1", "mailbox": "INBOX", "uid": 1})).await;
+
+        assert_eq!(r.result, Some(b64(support::raw("e2", "two").as_bytes())), "{:?}", r.error);
+        assert_eq!(m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count(), 1);
+        assert!(vault_files_of(&dir).is_empty(), "On Demand writes no body");
+        assert!(trap.accept().is_err(), "no IMAP dial");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
