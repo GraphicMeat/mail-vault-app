@@ -1,7 +1,7 @@
 //! Counts and the by-date list of mail exchanged with a set of addresses (one
 //! person's linked addresses). Everything reads `message_addr`; own addresses
 //! come from the caller on every call, so aliases are always current.
-use rusqlite::{params_from_iter, types::Value as Sql, Connection};
+use rusqlite::{params_from_iter, types::Value as Sql, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -151,21 +151,8 @@ pub fn messages(
         ));
     }
     let lim = push(&mut args, Sql::Integer(limit as i64));
-    let fo = from_own(&own_ph);
-    let sql = format!(
-        "SELECT account_id, mailbox_path, uid, sort_ms, subject, direction FROM ( \
-           SELECT m.account_id AS account_id, m.mailbox_path AS mailbox_path, m.uid AS uid, \
-                  MAX(m.sort_ms) AS sort_ms, \
-                  COALESCE(json_extract(h.header_json,'$.subject'),'') AS subject, \
-                  CASE WHEN {fo} AND MAX(m.role IN ('to','bcc','cc')) THEN 'sent' \
-                       WHEN MAX(m.role='from') THEN 'received' \
-                       WHEN MAX(m.role='cc') THEN 'cc' ELSE 'other' END AS direction \
-           FROM message_addr m \
-           JOIN header_cache h ON h.account_id=m.account_id AND h.mailbox_path=m.mailbox_path AND h.uid=m.uid \
-           WHERE m.address IN ({addr_ph}) AND m.counted=1{inner} \
-           GROUP BY m.account_id, m.msg_key \
-         ) WHERE {outer} ORDER BY sort_ms DESC, account_id ASC, mailbox_path ASC, uid ASC LIMIT ?{lim}"
-    );
+    let with_subject = f.text.is_some_and(|t| !t.is_empty());
+    let sql = page_sql(&addr_ph, &own_ph, &inner, &outer, lim, with_subject);
     let mut stmt = conn.prepare(&sql).map_err(err)?;
     let rows = stmt
         .query_map(params_from_iter(args), |r| {
@@ -179,7 +166,50 @@ pub fn messages(
             })
         })
         .map_err(err)?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(err)
+    let mut page = rows.collect::<Result<Vec<_>, _>>().map_err(err)?;
+    if !with_subject {
+        // the subjects of this one page only, not of every row the grouping walked
+        let mut subject = conn
+            .prepare_cached("SELECT COALESCE(json_extract(header_json,'$.subject'),'') FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3")
+            .map_err(err)?;
+        for row in &mut page {
+            row.subject = subject
+                .query_row(rusqlite::params![row.account_id, row.mailbox_path, row.uid], |r| r.get(0))
+                .optional()
+                .map_err(err)?
+                .unwrap_or_default();
+        }
+    }
+    Ok(page)
+}
+
+/// The grouping query behind `messages`. The subject is read (and `header_cache`
+/// joined) only when the text filter needs it; otherwise the column is empty and
+/// the caller fills in the subjects of the page it picked.
+fn page_sql(addr_ph: &str, own_ph: &str, inner: &str, outer: &str, lim: usize, with_subject: bool) -> String {
+    let fo = from_own(own_ph);
+    let (subject, join) = if with_subject {
+        (
+            "COALESCE(json_extract(h.header_json,'$.subject'),'')",
+            "JOIN header_cache h ON h.account_id=m.account_id AND h.mailbox_path=m.mailbox_path AND h.uid=m.uid ",
+        )
+    } else {
+        ("''", "")
+    };
+    format!(
+        "SELECT account_id, mailbox_path, uid, sort_ms, subject, direction FROM ( \
+           SELECT m.account_id AS account_id, m.mailbox_path AS mailbox_path, m.uid AS uid, \
+                  MAX(m.sort_ms) AS sort_ms, \
+                  {subject} AS subject, \
+                  CASE WHEN {fo} AND MAX(m.role IN ('to','bcc','cc')) THEN 'sent' \
+                       WHEN MAX(m.role='from') THEN 'received' \
+                       WHEN MAX(m.role='cc') THEN 'cc' ELSE 'other' END AS direction \
+           FROM message_addr m \
+           {join}\
+           WHERE m.address IN ({addr_ph}) AND m.counted=1{inner} \
+           GROUP BY m.account_id, m.msg_key \
+         ) WHERE {outer} ORDER BY sort_ms DESC, account_id ASC, mailbox_path ASC, uid ASC LIMIT ?{lim}"
+    )
 }
 
 /// Message count and latest date per address that belongs to a person, for
@@ -322,6 +352,26 @@ mod tests {
         let cur = Cursor { sort_ms: last.sort_ms, account_id: last.account_id.clone(), mailbox_path: last.mailbox_path.clone(), uid: last.uid };
         let p2 = messages(&c, &a, &own, &MsgFilter::default(), Some(&cur), 10).unwrap();
         assert_eq!(p2.iter().map(|r| r.subject.as_str()).collect::<Vec<_>>(), ["m3", "m2", "m1"]);
+    }
+
+    #[test]
+    fn a_page_of_a_long_correspondence_has_the_right_subjects_and_the_grouping_skips_header_cache_without_a_text_filter() {
+        let (_t, c) = conn();
+        for i in 1..=300u32 { put(&c, "INBOX", i, 1_000 * i as i64, &format!("m{i}"), "al@x.io", &["me@h.io"], &[]); }
+        let (own, a) = (s(&["me@h.io"]), s(&["al@x.io"]));
+        let p1 = messages(&c, &a, &own, &MsgFilter::default(), None, 50).unwrap();
+        assert_eq!(p1.len(), 50);
+        assert_eq!((p1[0].subject.as_str(), p1[49].subject.as_str()), ("m300", "m251"));
+        assert!(p1.iter().all(|r| r.direction == "received"));
+        let last = p1.last().unwrap();
+        let cur = Cursor { sort_ms: last.sort_ms, account_id: last.account_id.clone(), mailbox_path: last.mailbox_path.clone(), uid: last.uid };
+        let p2 = messages(&c, &a, &own, &MsgFilter::default(), Some(&cur), 50).unwrap();
+        assert_eq!((p2[0].subject.as_str(), p2[49].subject.as_str()), ("m250", "m201"));
+        let hit = messages(&c, &a, &own, &MsgFilter { text: Some("m17"), ..Default::default() }, None, 50).unwrap();
+        assert_eq!(hit.iter().map(|r| r.subject.as_str()).collect::<Vec<_>>(), ["m179", "m178", "m177", "m176", "m175", "m174", "m173", "m172", "m171", "m170", "m17"]);
+
+        assert!(!page_sql("?1", "?2", "", "1=1", 3, false).contains("header_cache"));
+        assert!(page_sql("?1", "?2", "", "1=1", 3, true).contains("header_cache"));
     }
 
     #[test]
