@@ -109,6 +109,18 @@ pub(crate) fn put_as(root: &Path, raw: &[u8], id: String) -> Result<String, Stri
     Ok(id)
 }
 
+/// Makes an existing blob young again (mtime now), as `put` does for a blob it
+/// reuses, so the blob sweep's grace period covers a record about to name it.
+/// A blob that is not there is left alone (`Ok`): there is nothing to protect.
+pub(crate) fn touch(root: &Path, id: &str) -> Result<(), String> {
+    let path = blob_path(root, id);
+    match fs::File::options().write(true).open(&path).and_then(|f| f.set_modified(SystemTime::now())) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("blob touch {}: {e}", path.display())),
+    }
+}
+
 /// The bytes of blob `id`. A malformed id is `InvalidInput`.
 pub fn get(root: &Path, id: &str) -> io::Result<Vec<u8>> {
     if !is_valid_id(id) {

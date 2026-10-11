@@ -892,51 +892,62 @@ pub struct SweepStats {
 ///
 /// 1. Mark: every `Maildir/<account>/<dir>/jmap/<uid>.json` is read and its
 ///    blob id kept. A record that will not read as JSON stops the pass with
-///    an error, removing nothing: its blob cannot be told apart.
+///    an error, removing nothing: its blob cannot be told apart. So does a
+///    partial listing: a vault with blobs and no `Maildir/`, an account or
+///    mailbox directory that vanished or cannot be stated, or a mailbox
+///    whose `jmap/` is unreadable. Only a directory that exists may be empty.
 /// 2. Sweep: each blob not marked is stated again and removed only when its
 ///    mtime is still older than `min_age`.
 ///
-/// Why that is safe with writers running: `blobs::put` makes an existing
-/// blob young again before a record names it, and a new blob is young, so a
-/// blob a write reuses or adds during the walk is never old enough to go
-/// (`write_record` writes no record when that refresh fails). A record removed
-/// during the walk only keeps its blob until the next pass. Refcounts are never
+/// Why that is safe with writers running: the touch-before-name rule. A
+/// writer makes the blob young (`blobs::put` for an existing blob,
+/// `blobs::touch` in `rebind_uids`) before any record names it, and a new
+/// blob is young, so a blob a write reuses or adds, or a record that appears
+/// under a new name the mark walk had not listed, never names an old blob
+/// (`write_record` writes no record when that refresh fails). Any new writer
+/// of a record must keep the rule. A record removed during the walk only
+/// keeps its blob until the next pass. Refcounts are never
 /// stored: the vault registry is per host and droppable, and a vault on a NAS
 /// is shared by hosts.
 pub fn sweep_blobs(root: &Path, min_age: std::time::Duration) -> Result<SweepStats, String> {
     let mut stats = SweepStats::default();
     let mut marked: HashSet<String> = HashSet::new();
     let unlisted = |dir: &Path, e: io::Error| format!("could not list {}: {e}", dir.display());
-    let list = |dir: &Path| -> Result<Vec<PathBuf>, String> {
+    // `absent_ok`: a directory that is not there lists as empty (the blob
+    // store of a vault with no messages); the mark walk never allows it.
+    let list = |dir: &Path, absent_ok: bool| -> Result<Vec<PathBuf>, String> {
         match fs::read_dir(dir) {
             Ok(entries) => entries.map(|e| e.map(|e| e.path()).map_err(|e| unlisted(dir, e))).collect(),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) if absent_ok && e.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
             Err(e) => Err(unlisted(dir, e)),
         }
     };
-    for account in list(&root.join("Maildir"))?.into_iter().filter(|p| p.is_dir()) {
-        for mailbox in list(&account)?.into_iter().filter(|p| p.is_dir()) {
-            for path in list(&jmap_in(&mailbox))? {
-                if path.file_name().is_none_or(|n| record_uid(&n.to_string_lossy()).is_none()) {
-                    continue;
+    // A stat that fails is an error, never "not a directory".
+    let is_dir = |path: &Path| -> Result<bool, String> {
+        fs::metadata(path).map(|m| m.is_dir()).map_err(|e| format!("sweep stopped: could not stat {}: {e}", path.display()))
+    };
+    let maildir = root.join("Maildir");
+    if !maildir.exists() && root.join(blobs::BLOB_DIR).exists() {
+        return Err(format!("sweep stopped: {} is missing while message_blobs exists", maildir.display()));
+    }
+    if maildir.exists() {
+        for account in list(&maildir, false)? {
+            if !is_dir(&account)? {
+                continue;
+            }
+            for mailbox in list(&account, false)? {
+                if is_dir(&mailbox)? {
+                    mark_mailbox(&mailbox, &mut marked, &mut stats)?;
                 }
-                let bytes = match fs::read(&path) {
-                    Ok(bytes) => bytes,
-                    Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-                    Err(e) => return Err(format!("sweep stopped: the record {} will not read: {e}", path.display())),
-                };
-                let value: Value = serde_json::from_slice(&bytes)
-                    .map_err(|e| format!("sweep stopped: the record {} will not parse: {e}", path.display()))?;
-                if let Some(blob) = value.get("blob").and_then(Value::as_str) {
-                    marked.insert(blob.to_string());
-                }
-                stats.records += 1;
             }
         }
     }
     let now = SystemTime::now();
-    for shard in list(&root.join(blobs::BLOB_DIR))?.into_iter().filter(|p| p.is_dir()) {
-        for path in list(&shard)? {
+    for shard in list(&root.join(blobs::BLOB_DIR), true)? {
+        if !is_dir(&shard)? {
+            continue;
+        }
+        for path in list(&shard, true)? {
             let Some(hex) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".eml")).map(str::to_owned) else { continue };
             let id = format!("sha256-{hex}");
             if !blobs::is_valid_id(&id) {
@@ -964,6 +975,42 @@ pub fn sweep_blobs(root: &Path, min_age: std::time::Duration) -> Result<SweepSta
         }
     }
     Ok(stats)
+}
+
+/// The mark step for one mailbox: reads every record under its `jmap/` and
+/// adds each blob id to `marked`.
+fn mark_mailbox(mailbox: &Path, marked: &mut HashSet<String>, stats: &mut SweepStats) -> Result<(), String> {
+    let entries = match fs::read_dir(jmap_in(mailbox)) {
+        Ok(entries) => entries,
+        // No `jmap/` is "no records" only while the mailbox directory is
+        // there: a mailbox renamed since the account was listed has records.
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return match fs::metadata(mailbox) {
+                Ok(meta) if meta.is_dir() => Ok(()),
+                Ok(_) => Err(format!("sweep stopped: {} is not a directory", mailbox.display())),
+                Err(e) => Err(format!("sweep stopped: the mailbox {} is gone or unreadable: {e}", mailbox.display())),
+            };
+        }
+        Err(e) => return Err(format!("could not list {}: {e}", jmap_in(mailbox).display())),
+    };
+    for entry in entries {
+        let path = entry.map_err(|e| format!("could not list {}: {e}", jmap_in(mailbox).display()))?.path();
+        if path.file_name().is_none_or(|n| record_uid(&n.to_string_lossy()).is_none()) {
+            continue;
+        }
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("sweep stopped: the record {} will not read: {e}", path.display())),
+        };
+        let value: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("sweep stopped: the record {} will not parse: {e}", path.display()))?;
+        if let Some(blob) = value.get("blob").and_then(Value::as_str) {
+            marked.insert(blob.to_string());
+        }
+        stats.records += 1;
+    }
+    Ok(())
 }
 
 /// Turns every record of the mailbox directory back into a Maildir file (its
@@ -1110,6 +1157,12 @@ fn verify_records(
     let mut out = HashMap::new();
     for uid in uids {
         let Some((_, rec)) = records.get(uid) else { continue };
+        // The copy is the blob: a record whose blob is gone, unreadable or
+        // does not hash to its id is not a copy, whatever Message-ID is asked.
+        if !matches!(blobs::verify(root, &rec.blob), Ok(true)) {
+            out.insert(*uid, Verdict::Missing);
+            continue;
+        }
         let want = expected_ids.and_then(|m| m.get(uid)).map(|id| maildir::normalize_message_id(id)).filter(|id| !id.is_empty());
         let Some(want) = want else {
             out.insert(*uid, Verdict::Verified);
@@ -1230,6 +1283,9 @@ pub fn rebind_uids(root: &Path, account_id: &str, mailbox: &str, pairs: &[(u32, 
                 }
             }
             let json = serde_json::to_vec(&rec).map_err(|e| e.to_string())?;
+            // Touch before name (`sweep_blobs`): a sweep that listed `old`
+            // before this rebind never sees `new`, so its blob is young.
+            blobs::touch(root, &rec.blob)?;
             crate::fsx::write_atomic(&target, &json).map_err(|e| e.to_string())?;
             fs::remove_file(&path).map_err(|e| e.to_string())
         })();
@@ -3007,6 +3063,8 @@ mod tests {
     fn sweep_respects_grace_period() {
         let tmp = vault(Format::Jmap);
         let root = tmp.path();
+        // A vault with a mailbox tree but no record: `Maildir/` is there, so an empty mark is believable.
+        fs::create_dir_all(root.join("Maildir")).unwrap();
         let id = blobs::put(root, b"Subject: never named\r\n\r\nx").unwrap();
         let swept = sweep_blobs(root, DAY).unwrap();
         assert_eq!((swept.blobs, swept.young, swept.removed), (1, 1, 0));
@@ -3237,5 +3295,105 @@ mod tests {
         assert!(!jmap_in(&mbox).join("3.json").exists());
         assert!(blobs::blob_path(root, &blobs::blob_id(&eml("three"))).exists(), "never a blob");
         assert_eq!(demote_records(&mbox).unwrap(), 0);
+    }
+
+    // ── Task 7b fix round 1 ──────────────────────────────────────────────────
+
+    /// I1: an archived record whose blob is gone, or does not hash to its id,
+    /// is not an archived copy: no Message-ID to compare is no excuse.
+    #[test]
+    fn a_record_without_its_blob_never_verifies() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &flags(&["archived"])).unwrap();
+        write(root, ACCT, MBOX, 2, &eml("two"), &flags(&["archived"])).unwrap();
+        write(root, ACCT, MBOX, 3, &eml("three"), &flags(&["archived"])).unwrap();
+        let listing = archived_paths(root, ACCT, MBOX);
+        let none = HashMap::new();
+        let ids = HashMap::from([(1, "<one@x.test>".to_string()), (2, "<two@x.test>".to_string()), (3, "<three@x.test>".to_string())]);
+        let uids = [1, 2, 3];
+        assert_eq!(verify_archived_strict(root, ACCT, MBOX, &listing, &uids, &ids), (vec![1, 2, 3], vec![], vec![]), "intact blobs verify");
+
+        fs::remove_file(blobs::blob_path(root, &blobs::blob_id(&eml("one")))).unwrap();
+        fs::write(blobs::blob_path(root, &blobs::blob_id(&eml("two"))), b"truncated").unwrap();
+        for expected in [Some(&ids), Some(&none), None] {
+            assert_eq!(verify_archived(root, ACCT, MBOX, &[1, 2], expected), (vec![], vec![1, 2], vec![]), "{expected:?}");
+        }
+        assert_eq!(verify_archived_strict(root, ACCT, MBOX, &listing, &[1, 2], &ids), (vec![], vec![1, 2], vec![]));
+        assert_eq!(verify_archived_strict(root, ACCT, MBOX, &listing, &[1, 2], &none), (vec![], vec![1, 2], vec![]), "no expected id either");
+        assert_eq!(verify_archived_strict(root, ACCT, MBOX, &listing, &uids, &ids), (vec![3], vec![1, 2], vec![]));
+    }
+
+    /// I2: a mailbox that vanished between the account listing and its
+    /// `jmap/` read is not "no records".
+    #[test]
+    fn marking_a_vanished_mailbox_is_an_error_not_an_empty_mark() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        let mut marked = HashSet::new();
+        let mut stats = SweepStats::default();
+        let gone = mailbox_dir(root, ACCT, "Renamed");
+        assert!(mark_mailbox(&gone, &mut marked, &mut stats).is_err(), "the mailbox directory is gone");
+        // A mailbox that exists and has no records yet is fine.
+        let bare = mailbox_dir(root, ACCT, "Bare");
+        fs::create_dir_all(&bare).unwrap();
+        assert!(mark_mailbox(&bare, &mut marked, &mut stats).is_ok());
+        assert!(marked.is_empty() && stats.records == 0);
+    }
+
+    /// I2: a vault with a blob store and no `Maildir/` (a half-mounted
+    /// volume) aborts: every blob would look unreferenced.
+    #[test]
+    fn sweep_aborts_when_maildir_is_missing_but_blobs_exist() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        let blob = blobs::blob_path(root, &blobs::blob_id(&eml("one")));
+        age(&blob, 2 * DAY);
+        fs::remove_dir_all(root.join("Maildir")).unwrap();
+        let err = sweep_blobs(root, DAY).unwrap_err();
+        assert!(err.contains("Maildir"), "{err}");
+        assert!(blob.exists(), "nothing is removed");
+    }
+
+    /// I2: an account directory whose entries cannot be stated is an error,
+    /// not a directory to skip.
+    #[cfg(unix)]
+    #[test]
+    fn sweep_aborts_on_a_directory_it_cannot_state() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        let blob = blobs::blob_path(root, &blobs::blob_id(&eml("one")));
+        age(&blob, 2 * DAY);
+        let maildir = root.join("Maildir");
+        // Readable but not searchable: the listing works, a stat of an entry fails.
+        fs::set_permissions(&maildir, fs::Permissions::from_mode(0o400)).unwrap();
+        if fs::metadata(maildir.join(ACCT)).is_ok() {
+            fs::set_permissions(&maildir, fs::Permissions::from_mode(0o700)).unwrap();
+            return; // privileged: permissions do not apply
+        }
+        let result = sweep_blobs(root, DAY);
+        fs::set_permissions(&maildir, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(result.is_err(), "{result:?}");
+        assert!(blob.exists(), "nothing is removed");
+    }
+
+    /// I3: a rebound record names its blob under a new name a running sweep
+    /// has not listed, so the blob is made young first.
+    #[test]
+    fn rebind_uids_refreshes_the_blob_before_naming_it() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 3, &eml("three"), &flags(&["archived"])).unwrap();
+        let blob = blobs::blob_path(root, &blobs::blob_id(&eml("three")));
+        age(&blob, 2 * DAY);
+        assert_eq!(rebind_uids(root, ACCT, MBOX, &[(3, 12)]), vec![(3, 12)]);
+        let since = SystemTime::now().duration_since(fs::metadata(&blob).unwrap().modified().unwrap()).unwrap_or_default();
+        assert!(since < DAY, "the blob is young again: {since:?}");
+        // A sweep keeps it.
+        assert_eq!(sweep_blobs(root, DAY).unwrap().removed, 0);
     }
 }
