@@ -314,12 +314,12 @@ pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<Imp
                 let known: Vec<_> = existing.emails.iter().map(|e| e.address.clone()).collect();
                 // a record the person already holds (this file imported before) knows the card's name or is the card
                 let (name, text) = (card.fn_name(), card.to_text());
-                let mut same_name = name.trim().eq_ignore_ascii_case(existing.display_name.trim());
+                let mut same_name = norm_name(&name) == norm_name(&existing.display_name);
                 let mut same_card = false;
                 for rid in &existing.record_ids {
                     let Some(r) = journal::snapshot_record(&tx, rid)? else { continue };
                     same_card |= r.raw == text;
-                    same_name |= VCard::parse_all(&r.raw).first().is_some_and(|c| c.fn_name().trim().eq_ignore_ascii_case(name.trim()));
+                    same_name |= VCard::parse_all(&r.raw).first().is_some_and(|c| norm_name(&c.fn_name()) == norm_name(&name));
                 }
                 let has_phone = |n: &str| existing.phones.iter().any(|p| p.number.trim() == n);
                 if same_card || (same_name && emails.iter().all(|a| known.contains(a)) && card.phones().iter().all(|(n, _)| has_phone(n))) {
