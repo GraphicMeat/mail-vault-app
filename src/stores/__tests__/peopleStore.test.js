@@ -56,6 +56,13 @@ describe('peopleStore', () => {
     expect(harness.daemonCall).toHaveBeenCalledWith('people.stats', { ids: ['p1'], ownAddresses: ['me@h.io', 'from@h.io', 'alias@h.io'] });
   });
 
+  it('selecting the new-contact draft does not ask the daemon for a card', async () => {
+    await usePeopleStore.getState().select('new');
+    expect(usePeopleStore.getState().selectedId).toBe('new');
+    expect(harness.daemonCall).not.toHaveBeenCalled();
+    expect(usePeopleStore.getState().error).toBeNull();
+  });
+
   it('merge refreshes list and card and surfaces errors as state, not exceptions', async () => {
     harness.daemonCall.mockRejectedValueOnce(new Error('E_INVALID: nope'));
     await expect(usePeopleStore.getState().merge(['a', 'b'], 'a')).resolves.toBeNull();

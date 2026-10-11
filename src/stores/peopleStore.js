@@ -60,7 +60,7 @@ export const usePeopleStore = create((set, get) => {
 
     select: async (id) => {
       set({ selectedId: id, card: null, mail: [], mailNext: null });
-      if (!id) return;
+      if (!id || id === 'new') return; // 'new' is the unsaved draft: nothing to fetch
       const card = await run(() => daemonCall('people.get', { id }));
       if (get().selectedId !== id) return;
       set({ card });
