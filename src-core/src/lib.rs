@@ -32,6 +32,7 @@ pub mod vault_registry;
 pub mod op_journal;
 pub mod pgp;
 pub mod custody;
+pub mod people;
 pub mod mime;
 pub mod imap;
 pub mod graph;

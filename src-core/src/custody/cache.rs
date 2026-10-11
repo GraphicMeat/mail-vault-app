@@ -13,7 +13,7 @@ fn now_ms() -> i64 {
         .map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
-fn sort_ms(row: &Value) -> i64 {
+pub(crate) fn sort_ms(row: &Value) -> i64 {
     ["internalDate", "date"].iter()
         .filter_map(|k| row.get(*k).and_then(Value::as_str))
         .find_map(|s| DateTime::parse_from_rfc3339(s).or_else(|_| DateTime::parse_from_rfc2822(s)).ok())
@@ -65,12 +65,24 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
         ).map_err(err)?;
         for row in rows {
             let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
-            stmt.execute(params![account, mailbox, uid, sort_ms(row), written_at, serde_json::to_string(row).map_err(|e| e.to_string())?]).map_err(err)?;
+            let json = serde_json::to_string(row).map_err(|e| e.to_string())?;
+            // An unchanged header costs one primary-key read and no index work.
+            let stored: Option<String> = tx.query_row(
+                "SELECT header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3",
+                params![account, mailbox, uid], |r| r.get(0),
+            ).ok();
+            stmt.execute(params![account, mailbox, uid, sort_ms(row), written_at, json]).map_err(err)?;
+            if stored.as_deref() != Some(json.as_str()) {
+                crate::people::message_addr::index_row(&tx, account, mailbox, uid, sort_ms(row), row)?;
+            }
         }
     }
     if let Some(uids) = removed {
         let mut stmt = tx.prepare_cached("DELETE FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3").map_err(err)?;
-        for uid in uids.iter().filter_map(Value::as_u64) { stmt.execute(params![account, mailbox, uid as i64]).map_err(err)?; }
+        for uid in uids.iter().filter_map(Value::as_u64) {
+            stmt.execute(params![account, mailbox, uid as i64]).map_err(err)?;
+            crate::people::message_addr::forget_row(&tx, account, mailbox, uid as u32)?;
+        }
     }
     if let Some(before) = rows_before {
         let net_removed = before.saturating_sub(counted(&tx)?) as u64;
@@ -840,12 +852,18 @@ pub fn clear_headers(conn: &Connection, account: Option<&str>, mailbox: Option<&
         (Some(a), Some(m)) => {
             conn.execute("DELETE FROM header_cache WHERE account_id=?1 AND mailbox_path=?2", params![a,m]).map_err(err)?;
             conn.execute("DELETE FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2", params![a,m]).map_err(err)?;
+            crate::people::message_addr::forget_mailbox(conn, Some(a), Some(m))?;
         }
         (Some(a), None) => {
             conn.execute("DELETE FROM header_cache WHERE account_id=?1", [a]).map_err(err)?;
             conn.execute("DELETE FROM header_cache_meta WHERE account_id=?1", [a]).map_err(err)?;
+            crate::people::message_addr::forget_mailbox(conn, Some(a), None)?;
         }
-        (None, _) => { conn.execute("DELETE FROM header_cache", []).map_err(err)?; conn.execute("DELETE FROM header_cache_meta", []).map_err(err)?; }
+        (None, _) => {
+            conn.execute("DELETE FROM header_cache", []).map_err(err)?;
+            conn.execute("DELETE FROM header_cache_meta", []).map_err(err)?;
+            crate::people::message_addr::forget_mailbox(conn, None, None)?;
+        }
     }
     Ok(())
 }
@@ -861,6 +879,7 @@ pub fn prune_headers(conn: &Connection, account: &str, mailbox: &str, live_uids:
     let mut delete = tx.prepare_cached("DELETE FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3").map_err(err)?;
     for uid in cached.into_iter().filter(|uid| !live.contains(uid)) {
         removed += delete.execute(params![account, mailbox, uid]).map_err(err)?;
+        crate::people::message_addr::forget_row(&tx, account, mailbox, uid)?;
     }
     drop(delete);
     tx.commit().map_err(err)?;
@@ -876,6 +895,7 @@ pub fn remove_headers(conn: &Connection, account: &str, mailbox: &str, uids: &[u
     let mut delete = tx.prepare_cached("DELETE FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3").map_err(err)?;
     for uid in uids {
         removed += delete.execute(params![account, mailbox, uid]).map_err(err)?;
+        crate::people::message_addr::forget_row(&tx, account, mailbox, *uid)?;
     }
     drop(delete);
     tx.commit().map_err(err)?;
@@ -899,6 +919,7 @@ pub fn restore_missing_headers(conn: &Connection, account: &str, mailbox: &str, 
             let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
             let json = serde_json::to_string(row).map_err(|e| e.to_string())?;
             if stmt.execute(params![account, mailbox, uid, sort_ms(row), written_at, json]).map_err(err)? == 1 {
+                crate::people::message_addr::index_row(&tx, account, mailbox, uid, sort_ms(row), row)?;
                 restored.push(uid);
             }
         }
@@ -910,6 +931,7 @@ pub fn restore_missing_headers(conn: &Connection, account: &str, mailbox: &str, 
 pub fn rename_mailbox(conn: &Connection, account: &str, from: &str, to: &str) -> Result<(), String> {
     conn.execute("UPDATE OR REPLACE header_cache SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
     conn.execute("UPDATE OR REPLACE header_cache_meta SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
+    crate::people::message_addr::rename_mailbox(conn, account, from, to)?;
     Ok(())
 }
 
@@ -1575,5 +1597,90 @@ mod tests {
         save_headers(&c, "a", "Sent", r#"{"emails": [], "uidValidity": 1}"#).unwrap();
         assert_eq!(recorded_count(&c, "a", "Sent").unwrap(), (None, None));
         assert_eq!(recorded_count(&c, "a", "Nowhere").unwrap(), (None, None));
+    }
+
+    mod message_addr_hooks {
+        use super::*;
+        use crate::custody::db;
+        use crate::people::message_addr as ma;
+
+        fn open() -> (tempfile::TempDir, Connection) {
+            let t = tempfile::tempdir().unwrap();
+            let c = db::open(t.path()).unwrap();
+            (t, c)
+        }
+        fn count(c: &Connection) -> i64 { c.query_row("SELECT count(*) FROM message_addr", [], |r| r.get(0)).unwrap() }
+        fn emails(uids: &[u32]) -> String {
+            let rows: Vec<Value> = uids.iter().map(|u| json!({"uid": u, "date": "2024-01-02T03:04:05Z", "from": {"address": format!("s{u}@x.io")}, "to": [{"address": "me@h.io"}]})).collect();
+            json!({"emails": rows}).to_string()
+        }
+
+        #[test]
+        fn save_adds_and_removed_uids_forget() {
+            let (_t, c) = open();
+            save_headers(&c, "a", "INBOX", &emails(&[1, 2, 3])).unwrap();
+            assert_eq!(count(&c), 6);
+            save_headers(&c, "a", "INBOX", &json!({"removedUids": [2]}).to_string()).unwrap();
+            assert_eq!(count(&c), 4);
+        }
+
+        #[test]
+        fn remove_prune_clear_and_rename_keep_it_in_step() {
+            let (_t, c) = open();
+            save_headers(&c, "a", "INBOX", &emails(&[1, 2, 3, 4])).unwrap();
+            remove_headers(&c, "a", "INBOX", &[1]).unwrap();
+            assert_eq!(count(&c), 6);
+            prune_headers(&c, "a", "INBOX", &[2, 3]).unwrap();
+            assert_eq!(count(&c), 4);
+            rename_mailbox(&c, "a", "INBOX", "Trash").unwrap();
+            let counted: i64 = c.query_row("SELECT max(counted) FROM message_addr", [], |r| r.get(0)).unwrap();
+            assert_eq!(counted, 0);
+            clear_headers(&c, Some("a"), Some("Trash")).unwrap();
+            assert_eq!(count(&c), 0);
+        }
+
+        #[test]
+        fn rewriting_an_identical_header_does_not_redo_the_index_work() {
+            let (_t, c) = open();
+            save_headers(&c, "a", "INBOX", &emails(&[1, 2])).unwrap();
+            // knock a row out behind the hook's back; an identical re-save must not resurrect it
+            c.execute("DELETE FROM message_addr WHERE uid=1", []).unwrap();
+            save_headers(&c, "a", "INBOX", &emails(&[1, 2])).unwrap();
+            let n: i64 = c.query_row("SELECT count(*) FROM message_addr WHERE uid=1", [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "identical header_json is skipped");
+            // a changed header IS re-indexed
+            let changed = json!({"emails": [{"uid": 1, "date": "2024-01-02T03:04:05Z", "from": {"address": "other@x.io"}}]}).to_string();
+            save_headers(&c, "a", "INBOX", &changed).unwrap();
+            let a: String = c.query_row("SELECT address FROM message_addr WHERE uid=1 AND role='from'", [], |r| r.get(0)).unwrap();
+            assert_eq!(a, "other@x.io");
+        }
+
+        #[test]
+        #[ignore = "perf budget; run with --ignored on the runner"]
+        fn the_hook_adds_little_to_a_5k_row_save() {
+            let (_t, c) = open();
+            let uids: Vec<u32> = (1..=5000).collect();
+            let data = emails(&uids);
+            let t0 = std::time::Instant::now();
+            save_headers(&c, "a", "INBOX", &data).unwrap();
+            let first = t0.elapsed();
+            let t1 = std::time::Instant::now();
+            save_headers(&c, "a", "INBOX", &data).unwrap();
+            let again = t1.elapsed();
+            eprintln!("first save {first:?}, identical re-save {again:?}");
+            assert!(again < first, "an identical re-save is cheaper than the first");
+            assert!(first < std::time::Duration::from_secs(5), "first save took {first:?}");
+        }
+
+        #[test]
+        fn restore_missing_indexes_only_what_it_wrote() {
+            let (_t, c) = open();
+            save_headers(&c, "a", "INBOX", &emails(&[1])).unwrap();
+            let rows: Vec<Value> = serde_json::from_str::<Value>(&emails(&[1, 2])).unwrap()["emails"].as_array().unwrap().clone();
+            let wrote = restore_missing_headers(&c, "a", "INBOX", &rows).unwrap();
+            assert_eq!(wrote, vec![2]);
+            assert_eq!(count(&c), 4);
+            let _ = ma::normalize("x@y.z");
+        }
     }
 }
