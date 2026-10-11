@@ -32,8 +32,10 @@ pub(crate) async fn blocking_db<T: Send + 'static>(
         .map_err(|e| format!("task join error: {e}"))?
 }
 
-// The three paged loops below take the custody lock once per page and wait for
-// a quiet UI between pages, so a scan never starves foreground reads.
+// The paged loops below take the custody lock once per page. `people.list` and
+// `people.review.list` are foreground requests themselves, so their loops never
+// wait for a quiet UI (they would wait on their own marker); only the
+// background-ish `people.proposals` scan does.
 
 async fn all_totals(state: &Arc<DaemonState>) -> Result<std::collections::HashMap<String, (u64, i64)>, String> {
     let (mut all, mut cursor) = (std::collections::HashMap::new(), String::new());
@@ -43,7 +45,6 @@ async fn all_totals(state: &Arc<DaemonState>) -> Result<std::collections::HashMa
         all.extend(page);
         let Some(n) = next else { return Ok(all) };
         cursor = n;
-        crate::search_index::wait_foreground_quiet(&state.search_index).await;
     }
 }
 
@@ -55,7 +56,6 @@ async fn review_candidates(state: &Arc<DaemonState>, own: Vec<String>, limit: us
         pool.extend(page);
         let Some(n) = next else { break };
         cursor = n;
-        crate::search_index::wait_foreground_quiet(&state.search_index).await;
     }
     let ranked = review::rank(pool, limit * 4 + 50);
     // drop bulk senders 25 candidates per lock until `limit` are kept
@@ -66,7 +66,6 @@ async fn review_candidates(state: &Arc<DaemonState>, own: Vec<String>, limit: us
         }
         let (chunk, want) = (chunk.to_vec(), limit - kept.len());
         kept.extend(blocking_db(state, move |c| review::finalize(c, chunk, want)).await?);
-        crate::search_index::wait_foreground_quiet(&state.search_index).await;
     }
     Ok(kept)
 }
@@ -222,6 +221,25 @@ mod tests {
         let v = call(&state, "people.list", json!({})).await;
         assert_eq!(v["result"]["total"], 0);
         assert!(v["result"]["indexReady"].is_boolean());
+    }
+
+    #[tokio::test]
+    async fn a_paged_list_by_total_does_not_wait_on_its_own_foreground_marker() {
+        let (_d, state) = state(true);
+        let n = 520; // two totals pages of 500 addresses
+        crate::custody::with_conn(&state, |c| {
+            for i in 0..n {
+                let a = format!("p{i:04}@x.io");
+                mailvault_core::people::store::create_person(c, &mailvault_core::people::store::NewPerson { display_name: format!("P{i}"), emails: vec![a.clone()], ..Default::default() })?;
+                mailvault_core::people::message_addr::index_row(c, "acc", "INBOX", i as u32 + 1, 1000, &json!({"uid": i + 1, "from": {"address": a}}))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let t = std::time::Instant::now();
+        let v = call(&state, "people.list", json!({"sort": "total", "limit": 5})).await;
+        assert_eq!(v["result"]["total"], n);
+        assert!(t.elapsed() < std::time::Duration::from_millis(350), "waited on itself: {:?}", t.elapsed());
     }
 
     #[tokio::test]
