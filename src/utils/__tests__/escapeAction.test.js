@@ -10,7 +10,7 @@
 // selection was the one that destroyed it. Caught by the e2e suite on real
 // hardware, not by any unit test.
 import { describe, it, expect, afterEach } from 'vitest';
-import { resolveEscapeAction, escapeBelongsToField } from '../escapeAction';
+import { resolveEscapeAction, escapeBelongsToField, resolveContactsEscape } from '../escapeAction';
 
 describe('resolveEscapeAction', () => {
   it('does nothing while the bulk modal is open, even with a selection', () => {
@@ -81,5 +81,24 @@ describe('escapeBelongsToField', () => {
     expect(escapeBelongsToField(document.body)).toBe(true);
     document.getElementById('d').setAttribute('aria-hidden', 'true');
     expect(escapeBelongsToField(document.body)).toBe(false);
+  });
+});
+
+describe('resolveContactsEscape', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('blurs a focused field first and does not close', () => {
+    expect(resolveContactsEscape(document.createElement('input'))).toBe('blur');
+    expect(resolveContactsEscape(document.createElement('textarea'))).toBe('blur');
+  });
+
+  it('closes the view when focus is not in a field', () => {
+    expect(resolveContactsEscape(document.body)).toBe('close');
+    expect(resolveContactsEscape(null)).toBe('close');
+  });
+
+  it('does nothing while a dialog is open, leaving Escape to the dialog', () => {
+    document.body.innerHTML = '<div role="dialog"></div>';
+    expect(resolveContactsEscape(document.body)).toBe('none');
   });
 });

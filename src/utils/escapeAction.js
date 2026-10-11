@@ -35,12 +35,23 @@ export function resolveEscapeAction({
   return 'none';
 }
 
+const isEditableField = el => !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || !!el.isContentEditable);
+
 /**
  * True when Escape is meant for a text field or an open dialog (the Contacts
  * details form, its merge dialog), not for the full page behind them.
  */
 export function escapeBelongsToField(el, doc = typeof document === 'undefined' ? null : document) {
-  if (el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable)) return true;
+  if (isEditableField(el)) return true;
   return !!doc && [...doc.querySelectorAll('[role="dialog"], [role="alertdialog"]')].some(dialog =>
     !dialog.closest('[hidden], [inert], [aria-hidden="true"]'));
+}
+
+/**
+ * What Escape does on the Contacts page: the first press leaves a focused
+ * field, an open dialog handles its own, and only then does it close the view.
+ */
+export function resolveContactsEscape(el, doc) {
+  if (isEditableField(el)) return 'blur';
+  return escapeBelongsToField(el, doc) ? 'none' : 'close';
 }
