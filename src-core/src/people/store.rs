@@ -323,10 +323,18 @@ pub fn list_with_totals(
     let total: i64 = conn
         .query_row(&format!("SELECT count(*) FROM person p WHERE {wher}"), params_from_iter(args.clone()), |r| r.get(0))
         .map_err(err)?;
+    // by name the page is cut in SQL and only its people get addresses; total/last sorts need every person's numbers first
+    let by_name = sort == Sort::Name;
+    let mut paging = String::new();
+    if by_name {
+        args.push(Sql::Integer(limit.min(i64::MAX as usize) as i64));
+        args.push(Sql::Integer(offset.min(i64::MAX as usize) as i64));
+        paging = format!(" LIMIT ?{} OFFSET ?{}", args.len() - 1, args.len());
+    }
     let mut stmt = conn
         .prepare(&format!(
             "SELECT p.id, p.display_name, p.vip, p.pinned, p.blocked FROM person p WHERE {wher} \
-             ORDER BY p.pinned DESC, lower(p.display_name), p.id"
+             ORDER BY p.pinned DESC, lower(p.display_name), p.id{paging}"
         ))
         .map_err(err)?;
     let base = stmt
@@ -378,7 +386,7 @@ pub fn list_with_totals(
         Sort::Total => items.sort_by(|a, b| b.total.cmp(&a.total).then_with(|| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()))),
         Sort::Last => items.sort_by(|a, b| b.last_ms.cmp(&a.last_ms).then_with(|| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()))),
     }
-    let page = items.into_iter().skip(offset).take(limit).collect();
+    let page = if by_name { items } else { items.into_iter().skip(offset).take(limit).collect() };
     Ok((page, total as usize))
 }
 
@@ -537,6 +545,18 @@ mod tests {
         assert_eq!(page2[0].display_name, "Zed");
         let (hit, _) = list(&c, Some("corp"), false, Sort::Name, 10, 0).unwrap();
         assert_eq!(hit.len(), 2);
+    }
+
+    #[test]
+    fn a_name_sorted_page_is_cut_in_sql_and_keeps_the_total_and_everyones_addresses() {
+        let (_t, c) = conn();
+        for (n, e) in [("Cy", "c@x.io"), ("Al", "a@x.io"), ("Bo", "b@x.io")] {
+            create_person(&c, &np(n, &[e])).unwrap();
+        }
+        let (page, total) = list(&c, None, false, Sort::Name, 1, 1).unwrap();
+        assert_eq!((total, page.len(), page[0].display_name.as_str(), page[0].primary_email.as_str()), (3, 1, "Bo", "b@x.io"));
+        assert!(list(&c, None, false, Sort::Name, 10, 5).unwrap().0.is_empty());
+        assert_eq!(list(&c, None, false, Sort::Name, usize::MAX, 0).unwrap().0.len(), 3);
     }
 
     #[test]

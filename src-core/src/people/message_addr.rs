@@ -1,7 +1,7 @@
 //! One derived row per message and address. Kept in step with `header_cache`
 //! by the write functions in `custody::cache` (same transaction), backfilled
 //! for older vaults by `backfill_chunk`.
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 
 fn err(e: rusqlite::Error) -> String { e.to_string() }
@@ -23,10 +23,11 @@ pub fn counts_mailbox(mailbox: &str) -> bool {
     let excluded_leaf = matches!(
         leaf,
         "trash" | "deleted" | "deleted items" | "deleted messages" | "junk" | "junk e-mail" | "junk email"
-            | "spam" | "bulk" | "drafts" | "draft" | "outbox" | "templates"
+            | "spam" | "bulk" | "drafts" | "draft" | "outbox" | "templates" | "bin"
     );
     !(excluded_leaf
         || lower.starts_with("[gmail]/trash")
+        || lower.starts_with("[gmail]/bin")
         || lower.starts_with("[gmail]/spam")
         || lower.starts_with("[gmail]/drafts"))
 }
@@ -125,23 +126,26 @@ pub fn backfill_chunk(conn: &Connection, limit: usize) -> Result<Progress, Strin
     if backfill_done(conn) {
         return Ok(Progress { indexed: 0, done: true });
     }
-    let mut boxes = crate::custody::cache::mailboxes_with_headers(conn, None)?;
-    boxes.sort();
-    let cursor = meta_get(conn, CURSOR_KEY).and_then(|s| parse_cursor(&s));
-    let mut start = 0;
-    let mut after_uid = 0u32;
-    if let Some((a, m, uid)) = &cursor {
-        match boxes.iter().position(|(ba, bm)| (ba, bm) >= (a, m)) {
-            Some(i) => {
-                start = i;
-                if boxes[i].0 == *a && boxes[i].1 == *m { after_uid = *uid; }
-            }
-            None => start = boxes.len(),
-        }
-    }
-    let mut i = start;
-    while i < boxes.len() {
-        let (account, mailbox) = &boxes[i];
+    // seek the next mailbox from the cursor instead of listing every mailbox each chunk
+    let (mut a, mut m, mut after_uid) = meta_get(conn, CURSOR_KEY).and_then(|s| parse_cursor(&s)).unwrap_or_default();
+    let mut strict = false;
+    loop {
+        let found: Option<(String, String)> = conn
+            .query_row(
+                if strict {
+                    "SELECT DISTINCT account_id, mailbox_path FROM header_cache WHERE (account_id, mailbox_path) > (?1, ?2) ORDER BY account_id, mailbox_path LIMIT 1"
+                } else {
+                    "SELECT DISTINCT account_id, mailbox_path FROM header_cache WHERE (account_id, mailbox_path) >= (?1, ?2) ORDER BY account_id, mailbox_path LIMIT 1"
+                },
+                [&a, &m],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(err)?;
+        let Some((account, mailbox)) = found else { break };
+        if (&account, &mailbox) != (&a, &m) { after_uid = 0; }
+        (a, m) = (account.clone(), mailbox.clone());
+        let (account, mailbox) = (&account, &mailbox);
         let rows: Vec<(u32, i64, String)> = {
             let mut stmt = conn
                 .prepare_cached("SELECT uid, sort_ms, header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid>?3 ORDER BY uid LIMIT ?4")
@@ -152,7 +156,7 @@ pub fn backfill_chunk(conn: &Connection, limit: usize) -> Result<Progress, Strin
             mapped.collect::<Result<_, _>>().map_err(err)?
         };
         if rows.is_empty() {
-            i += 1;
+            strict = true;
             after_uid = 0;
             continue;
         }
@@ -206,7 +210,7 @@ mod tests {
         for m in ["INBOX", "Sent", "Archive", "Work/Clients", "INBOX.Sent Items", "[Gmail]/All Mail", "[Gmail]/Important"] {
             assert!(counts_mailbox(m), "{m}");
         }
-        for m in ["Trash", "Junk E-mail", "Spam", "Drafts", "[Gmail]/Trash", "[Gmail]/Spam", "[Gmail]/Drafts", "Deleted Items", "Work/Trash", "INBOX.Trash", "INBOX.Junk"] {
+        for m in ["Trash", "Junk E-mail", "Spam", "Drafts", "[Gmail]/Trash", "[Gmail]/Spam", "[Gmail]/Drafts", "[Gmail]/Bin", "Bin", "Deleted Items", "Work/Trash", "INBOX.Trash", "INBOX.Junk"] {
             assert!(!counts_mailbox(m), "{m}");
         }
     }
@@ -313,6 +317,22 @@ mod tests {
         while !backfill_chunk(&c, 500).unwrap().done {}
         let n: i64 = c.query_row("SELECT count(*) FROM message_addr", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1400);
+    }
+
+    #[test]
+    fn backfill_walks_mailboxes_in_order_and_skips_one_that_vanished_between_chunks() {
+        let (_t, c) = conn();
+        seed_headers(&c, "A", 3);
+        seed_headers(&c, "B", 3);
+        seed_headers(&c, "C", 3);
+        assert_eq!(backfill_chunk(&c, 2).unwrap().indexed, 2);
+        assert_eq!(backfill_chunk(&c, 2).unwrap().indexed, 1, "the rest of A, one mailbox per chunk");
+        c.execute("DELETE FROM header_cache WHERE mailbox_path='B'", []).unwrap();
+        assert_eq!(backfill_chunk(&c, 2).unwrap().indexed, 2, "B is gone: C starts from its first uid");
+        while !backfill_chunk(&c, 2).unwrap().done {}
+        let boxes: Vec<String> = c.prepare("SELECT DISTINCT mailbox_path FROM message_addr ORDER BY 1").unwrap()
+            .query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+        assert_eq!(boxes, ["A", "C"]);
     }
 
     #[test]
