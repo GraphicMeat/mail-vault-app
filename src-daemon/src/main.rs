@@ -38,6 +38,7 @@ mod mbox_upload;
 mod mbox_upload_job;
 mod migration;
 mod netgate;
+mod people_index;
 mod raw_message;
 pub mod llm;
 mod restore;
@@ -607,6 +608,9 @@ async fn daemon_main() {
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));
+
+    // message_addr backfill for vaults that predate it: background QoS, yields to the UI.
+    people_index::spawn_backfill(Arc::clone(&state));
 
     // Insights' 300s snapshot expiry sweeper (Task 3.6), same 30s loop and
     // Weak-reference exit condition as the app's version.
