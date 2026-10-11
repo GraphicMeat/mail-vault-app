@@ -607,7 +607,11 @@ pub fn write_replacing(root: &Path, account_id: &str, mailbox: &str, uid: u32, r
         }
         return Err(format!("The new copy of uid {uid} did not verify: {e}"));
     }
-    if let Err(e) = drop_format_files(&mailbox, uid, other) {
+    #[cfg(test)]
+    let dropped = if FAIL_DROP_OTHER.with(|fail| fail.get()) { Err("removal refused by the test hook".to_string()) } else { drop_format_files(&mailbox, uid, other) };
+    #[cfg(not(test))]
+    let dropped = drop_format_files(&mailbox, uid, other);
+    if let Err(e) = dropped {
         warn!("message_store: the other format's copy of uid {uid} could not be removed: {e}");
     }
     Ok(entry)
@@ -633,6 +637,12 @@ fn holds_in(mailbox_dir: &Path, uid: u32, format: Format) -> bool {
         Format::Maildir => !leaf_names(&messages_in(mailbox_dir), uid).is_empty(),
         Format::Jmap => jmap_in(mailbox_dir).join(record_name(uid)).exists(),
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test hook: makes `write_replacing`'s removal of the other format's copy fail on this thread.
+    pub(crate) static FAIL_DROP_OTHER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]

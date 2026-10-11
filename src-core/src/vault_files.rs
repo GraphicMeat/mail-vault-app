@@ -249,6 +249,14 @@ fn store_record(
     let entry = crate::message_store::write_replacing(root, account_id, mailbox, uid, raw, flags)?;
     let record = crate::message_store::listed_path(&crate::message_store::mailbox_dir(root, account_id, mailbox), &entry.name);
     reg.upsert(account_id, mailbox, uid, &record);
+    // A verified write whose old record would not go leaves a record that wins
+    // every listing over the file this row names: relist rather than serve the
+    // file the listings do not.
+    if crate::message_store::vault_format(root) == crate::message_store::Format::Maildir
+        && crate::message_store::holds_record(root, account_id, mailbox, uid)
+    {
+        reg.invalidate(account_id, mailbox);
+    }
     info!("Stored email UID {} to {:?} ({} bytes)", uid, record, raw.len());
     Ok(true)
 }
@@ -1908,6 +1916,29 @@ mod tests {
         let (_app2, fresh) = registry(root);
         assert_eq!(read_eml(&fresh, root, "acct", "INBOX", 7).unwrap(), new);
         assert_eq!(sets(&fresh, root), (vec![7], vec![]));
+    }
+
+    /// The record that will not go (its removal fails after the new file
+    /// verified) still wins every listing: the registry must not keep serving
+    /// the file it does not name, so the mailbox is relisted.
+    #[test]
+    fn a_record_that_will_not_go_does_not_split_the_registry_from_the_listings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"Subject: old\r\n\r\nold", &[], true).unwrap());
+        assert_eq!(sets(&reg, root), (vec![7], vec![]));
+        crate::message_store::set_vault_format(root, Format::Maildir).unwrap();
+
+        crate::message_store::FAIL_DROP_OTHER.with(|fail| fail.set(true));
+        let stored = store(&reg, root, "acct", "INBOX", 7, b"Subject: new\r\n\r\nnew", &[], true);
+        crate::message_store::FAIL_DROP_OTHER.with(|fail| fail.set(false));
+        assert!(stored.unwrap());
+        assert!(crate::message_store::mailbox_dir(root, "acct", "INBOX").join("jmap").join("7.json").is_file(), "the record stayed");
+        // Listings serve the record; so must the registry.
+        assert_eq!(held_bytes(root, 7), Some(b"Subject: old\r\n\r\nold".to_vec()));
+        assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), b"Subject: old\r\n\r\nold");
     }
 
     /// `maildir_store_raw` (no overwrite) must see a record as "already held"
