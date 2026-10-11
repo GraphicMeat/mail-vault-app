@@ -1,46 +1,12 @@
 //! Phase 5: which messages the header cache lists that the vault holds no
 //! full copy of. The daemon (`src-daemon/src/vault_gap.rs`) reads the header
 //! cache a page at a time (`custody::cache::uid_dates_after`, `dated_page`)
-//! and a vault folder's uids from its directory (`held_uids`), and walks the
-//! two here (`Gap`).
+//! and a vault folder's uids from the store (`message_store::held_uids`), and
+//! walks the two here (`Gap`).
 
 use crate::custody::Connection;
-use crate::maildir::{vault_filename_uid, IMPORT_UID_BASE};
+use crate::message_store;
 use rusqlite::params;
-use std::path::Path;
-
-/// The uids a vault folder's `cur/` holds, ascending: one names-only listing
-/// that takes no lock. (The vault registry's listing stats every file and
-/// holds its locks for the whole folder, and opening a message waits on
-/// those.) A regular file named `<uid>:2,...` is a copy; a symlink, a
-/// directory, a dot-prefixed temp name (`vault_filename_uid` refuses it) or
-/// any other name is not. No `cur/` under a vault root that is there is an
-/// empty folder; a root that is gone, or a listing that fails at any point,
-/// is `None`: unknown, never empty.
-pub fn held_uids(root: &Path, cur: &Path) -> Option<Vec<u32>> {
-    let entries = match std::fs::read_dir(cur) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound && root.is_dir() => return Some(Vec::new()),
-        Err(_) => return None,
-    };
-    let mut uids = Vec::new();
-    for entry in entries {
-        // An error part way ends the listing: a shorter folder it is not.
-        let entry = entry.ok()?;
-        // The type comes with the listing on most file systems. Where it
-        // needs a stat and that fails (a flag rename in between), the name
-        // still says a copy was there.
-        if !entry.file_type().map(|t| t.is_file()).unwrap_or(true) {
-            continue;
-        }
-        if let Some(uid) = vault_filename_uid(&entry.file_name().to_string_lossy()) {
-            uids.push(uid);
-        }
-    }
-    uids.sort_unstable();
-    uids.dedup();
-    Some(uids)
-}
 
 /// Up to `limit` of `mailbox`'s cached uids after `after`, ascending, each
 /// with the two dates the download gate judges a message by
@@ -90,18 +56,18 @@ pub struct Gap<'a> {
 }
 
 impl<'a> Gap<'a> {
-    /// `held`: the vault folder's uids, ascending (`held_uids`).
+    /// `held`: the vault folder's uids, ascending (`message_store::held_uids`).
     pub fn new(held: &'a [u32]) -> Self {
         Gap { held, at: 0, missing: Vec::new() }
     }
 
     /// `page` continues the ascending uid order of the pages before it. A uid
-    /// in the import range (`IMPORT_UID_BASE` and up: mail an mbox import
-    /// wrote, never a server's), or one `promised` says the download mode
-    /// leaves on the server, is never missing.
+    /// in the mbox import range (`message_store::is_import_uid`: mail an mbox
+    /// import wrote, never a server's), or one `promised` says the download
+    /// mode leaves on the server, is never missing.
     pub fn feed(&mut self, page: &[(u32, Option<i64>)], promised: impl Fn(Option<i64>) -> bool) {
         for &(uid, date_ms) in page {
-            if uid >= IMPORT_UID_BASE || !promised(date_ms) {
+            if message_store::is_import_uid(uid) || !promised(date_ms) {
                 continue;
             }
             while self.held.get(self.at).is_some_and(|&h| h < uid) {
@@ -117,6 +83,7 @@ impl<'a> Gap<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::IMPORT_UID_BASE;
     use std::collections::HashSet;
 
     fn walk(cached: &[(u32, Option<i64>)], held: &[u32], page: usize, promised: impl Fn(Option<i64>) -> bool + Copy) -> Vec<u32> {
@@ -181,44 +148,6 @@ mod tests {
         for page in [1, 2, 7, 1000, 99_999, 100_000, 100_001] {
             assert_eq!(walk(&cached, &held, page, all), expected, "page {page}");
         }
-    }
-
-    /// Only regular files named for a uid are copies: not a temp name, a
-    /// non-canonical or legacy name, junk, a directory or a symlink. An
-    /// import-range file is a vault copy like any other.
-    #[test]
-    fn held_uids_are_the_uid_files_and_nothing_else() {
-        let root = tempfile::tempdir().unwrap();
-        let cur = root.path().join("Maildir").join("acc").join("INBOX").join("cur");
-        std::fs::create_dir_all(&cur).unwrap();
-        let sep = crate::maildir::INFO_PREFIX;
-        for name in [
-            format!("7{sep}S.eml"),
-            format!("3{sep}AS.eml"),
-            format!("{IMPORT_UID_BASE}{sep}A.eml"),
-            format!(".9{sep}S.eml.tmp-1234"),
-            format!("012{sep}S.eml"),
-            "12.eml".to_string(),
-            "notes.txt".to_string(),
-        ] {
-            std::fs::write(cur.join(name), b"x").unwrap();
-        }
-        std::fs::create_dir(cur.join(format!("5{sep}S.eml"))).unwrap();
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(cur.join(format!("7{sep}S.eml")), cur.join(format!("8{sep}S.eml"))).unwrap();
-
-        assert_eq!(held_uids(root.path(), &cur), Some(vec![3, 7, IMPORT_UID_BASE]));
-    }
-
-    /// No `cur/` under a vault that is there: an empty folder. The vault gone:
-    /// unknown, never empty.
-    #[test]
-    fn a_missing_folder_is_empty_and_a_missing_vault_is_unknown() {
-        let root = tempfile::tempdir().unwrap();
-        let cur = root.path().join("Maildir").join("acc").join("Never").join("cur");
-        assert_eq!(held_uids(root.path(), &cur), Some(Vec::new()));
-        let gone = root.path().join("unplugged");
-        assert_eq!(held_uids(&gone, &gone.join("Maildir").join("acc").join("INBOX").join("cur")), None);
     }
 
     /// The Date header wins over the arrival for a Graph row (`messageDate`

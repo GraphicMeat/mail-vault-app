@@ -168,6 +168,47 @@ pub fn highest_uid(root: &Path, account_id: &str, mailbox: &str) -> io::Result<u
     Ok(uids(root, account_id, mailbox)?.last().copied().unwrap_or(0))
 }
 
+/// The uids of the messages `mailbox` holds, ascending: one names-only
+/// listing of its message directory that takes no lock. (The vault
+/// registry's listing stats every file and holds its locks for the whole
+/// folder, and opening a message waits on those.) A regular file named
+/// `<uid>:2,...` is a copy; a symlink, a directory, a dot-prefixed temp name
+/// (`maildir::vault_filename_uid` refuses it) or any other name is not, and
+/// `orphaned/` is never read: a set-aside copy is not held. No message
+/// directory under a vault `root` that is there is an empty folder; a root
+/// that is gone, or a listing that fails at any point, is `None`: unknown,
+/// never empty. The vault gap walks this (`vault_gap::Gap`).
+pub fn held_uids(root: &Path, account_id: &str, mailbox: &str) -> Option<Vec<u32>> {
+    let entries = match fs::read_dir(messages_dir(root, account_id, mailbox)) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound && root.is_dir() => return Some(Vec::new()),
+        Err(_) => return None,
+    };
+    let mut uids = Vec::new();
+    for entry in entries {
+        // An error part way ends the listing: a shorter folder it is not.
+        let entry = entry.ok()?;
+        // The type comes with the listing on most file systems. Where it
+        // needs a stat and that fails (a flag rename in between), the name
+        // still says a copy was there.
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(true) {
+            continue;
+        }
+        if let Some(uid) = maildir::vault_filename_uid(&entry.file_name().to_string_lossy()) {
+            uids.push(uid);
+        }
+    }
+    uids.sort_unstable();
+    uids.dedup();
+    Some(uids)
+}
+
+/// Whether `uid` is in the mbox import range (`maildir::IMPORT_UID_BASE` and
+/// up): a number the vault gave an imported message, never a server's.
+pub fn is_import_uid(uid: u32) -> bool {
+    uid >= maildir::IMPORT_UID_BASE
+}
+
 /// (uid, normalized Message-ID) for cur/ + jmap/ (+ orphaned/): graph_ledger adoption, mbox dedupe.
 /// One pair per file `uids` counts, message directory first, then
 /// `orphaned/`, each by uid; a uid can appear twice (a held copy and a
@@ -605,6 +646,44 @@ mod tests {
         // No blank line within `max` bytes: all of them.
         assert_eq!(read_header_section(root, ACCT, MBOX, 4, 9).unwrap(), Some(b"From: a@x".to_vec()));
         assert_eq!(read_header_section(root, ACCT, MBOX, 6, 1024).unwrap(), None);
+    }
+
+    /// Only regular files named for a uid are copies: not a temp name, a
+    /// non-canonical or legacy name, junk, a directory or a symlink. An
+    /// import-range file is a vault copy like any other.
+    #[test]
+    fn held_uids_are_the_uid_files_and_nothing_else() {
+        use crate::maildir::IMPORT_UID_BASE;
+        let root = tempfile::tempdir().unwrap();
+        let cur = messages_dir(root.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        let sep = INFO_PREFIX;
+        for name in [
+            format!("7{sep}S.eml"),
+            format!("3{sep}AS.eml"),
+            format!("{IMPORT_UID_BASE}{sep}A.eml"),
+            format!(".9{sep}S.eml.tmp-1234"),
+            format!("012{sep}S.eml"),
+            "12.eml".to_string(),
+            "notes.txt".to_string(),
+        ] {
+            std::fs::write(cur.join(name), b"x").unwrap();
+        }
+        std::fs::create_dir(cur.join(format!("5{sep}S.eml"))).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(cur.join(format!("7{sep}S.eml")), cur.join(format!("8{sep}S.eml"))).unwrap();
+
+        assert_eq!(held_uids(root.path(), "acc", "INBOX"), Some(vec![3, 7, IMPORT_UID_BASE]));
+    }
+
+    /// No message directory under a vault that is there: an empty folder.
+    /// The vault gone: unknown, never empty.
+    #[test]
+    fn a_missing_folder_is_empty_and_a_missing_vault_is_unknown() {
+        let root = tempfile::tempdir().unwrap();
+        assert_eq!(held_uids(root.path(), "acc", "Never"), Some(Vec::new()));
+        let gone = root.path().join("unplugged");
+        assert_eq!(held_uids(&gone, "acc", "INBOX"), None);
     }
 
     #[test]

@@ -27,7 +27,7 @@
 //! `CACHE_CHUNK` uids or one small listing per custody unit, never a whole
 //! folder under the lock every foreground header read waits on. A vault
 //! folder's uids come from one names-only listing of its `cur/` that takes no
-//! lock at all (`vault_gap::held_uids`; never the registry, whose listing
+//! lock at all (`message_store::held_uids`; never the registry, whose listing
 //! holds the locks a message open waits on), and the difference is a merge
 //! over the two sorted lists (`vault_gap::Gap`). It writes nothing. It does
 //! not run the generation repair (a write): a folder whose UIDVALIDITY changed
@@ -64,6 +64,7 @@ use mailvault_core::backup::BackupProgress;
 use mailvault_core::custody::cache;
 use mailvault_core::fetch_mode::{FetchMode, FetchPolicy};
 use mailvault_core::imap::{ImapConfig, MailboxInfo};
+use mailvault_core::message_store;
 use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::vault_files;
 use mailvault_core::vault_gap::{self as core_gap, Gap};
@@ -223,7 +224,7 @@ fn plan(state: &DaemonState, account_id: &str, now_ms: i64) -> Result<Plan, Unkn
 fn folder_gap(state: &DaemonState, account_id: &str, mailbox: &str, policy: &FetchPolicy, chunk: usize, now_ms: i64) -> Result<Folder, Unknown> {
     let chunk = chunk.max(1);
     let root = &state.data_dir;
-    let Some(held) = core_gap::held_uids(root, &vault_files::cur_path(root, account_id, mailbox)) else {
+    let Some(held) = message_store::held_uids(root, account_id, mailbox) else {
         return Ok(Folder { mailbox: mailbox.to_string(), missing: Vec::new(), partial: true });
     };
     let (server, uid_next) = crate::custody::with_conn(state, |c| cache::recorded_count(c, account_id, mailbox)).map_err(Unknown::Cache)?;

@@ -55,7 +55,6 @@ const PENDING: &[&str] = &[
     "src-core/src/graph_ledger.rs",
     "src-core/src/import_rehome.rs",
     "src-core/src/vault_flags.rs",
-    "src-core/src/vault_gap.rs",
     "src-daemon/src/abd_local.rs",
     "src-daemon/src/backup_zip.rs",
     "src-daemon/src/handlers/abd.rs",
@@ -73,7 +72,6 @@ const PENDING: &[&str] = &[
     "src-daemon/src/mbox_upload_job.rs",
     "src-daemon/src/restore.rs",
     "src-daemon/src/snapshot.rs",
-    "src-daemon/src/vault_gap.rs",
 ];
 
 fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
