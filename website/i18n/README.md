@@ -138,6 +138,19 @@ temporelle, Cápsula del tiempo, Capsula del tempo, タイムカプセル, 타�
 - Numbers keep their digits; adapt only the separators and units the language
   genuinely writes differently.
 
+## Clips
+
+The feature clips are recorded per language, in the app of that language. A locale page
+names `/assets/clips/<dir>/<clip>.mp4` where the English page names `/assets/clips/en/<clip>.mp4`
+(video `src`, `poster` and poster `<img>`, light cuts included, the generator rewrites them),
+and its captions and `aria-label`s are translated like any other string. The English clips are
+in git; the other languages' files are not (`website/assets/clips/<dir>/` is ignored). They are
+built from the published clip sets with `scripts/footage/site-set.py` and put on the website
+host with `scripts/website-clips-upload.sh`, and the deploy's rsync keeps them. A locale page
+that names a clip must not go live before its upload. `verify` accepts a locale clip when the
+English file of the same name exists. A language whose recording could not be made (zh
+`ai-writing`) gets the English files copied in with `site-set.py --fallback`.
+
 ## Adding a locale
 
 Append an entry to `LOCALES` in `i18n.mjs` (`dir`, `hreflang`, `htmlLang`,

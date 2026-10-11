@@ -89,3 +89,7 @@ __pycache__/
 
 # Linux screenshot run output (scripts/screenshots/run-linux.sh)
 /snap-screenshots/
+
+# Recorded clips of the other languages live on the website host, outside git (scripts/website-clips-upload.sh)
+/website/assets/clips/*/
+!/website/assets/clips/en/

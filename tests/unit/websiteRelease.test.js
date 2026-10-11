@@ -81,10 +81,11 @@ describe('demo navigation and locale handoff', () => {
 
   it.each(LOCALES)('ships the localized homepage handoff for $dir', (locale) => {
     const html = read(`${locale.dir}/index.html`);
-    const link = new JSDOM(html).window.document.querySelector('.mv-demo-card .mv-shot');
+    const link = new JSDOM(html).window.document.querySelector('.hm-hero a[data-acquisition-destination="demo"]');
     expect(link?.getAttribute('href')).toBe(`/demo/?lang=${locale.app}`);
     expect(link?.getAttribute('target')).toBe('_blank');
-    expect(html).toContain('mv-demo-caption');
+    expect(link?.getAttribute('aria-label')).not.toBe('Open the demo in a new window');
+    expect(link?.querySelector('.mv-demo-launch')).not.toBeNull();
   });
 });
 
@@ -270,7 +271,7 @@ describe.skipIf(!hasAwk)('Caddy 404 patch', () => {
 it('keeps the homepage demo handoff source strings in the corpus', () => {
   const corpus = JSON.parse(readFileSync(resolve(root, 'i18n/corpus.json'), 'utf8'));
   const strings = Object.values(corpus).flatMap((chunk) => Object.entries(chunk));
-  for (const text of ['A real inbox. Ready to explore.', 'Search mail, switch views, and try archiving.', 'Interactive demo', 'Open the demo', 'Open the demo in a new window', 'Try the live demo in a new window', '3 accounts · 300 sample emails', 'No signup. No installation.', 'Try the live demo ↗']) {
+  for (const text of ['Open the demo', 'Open the demo in a new window', 'Try the live demo in a new window', 'Try the live demo ↗', 'A real inbox with 300 sample emails. No signup.']) {
     expect(strings).toContainEqual([keyOf(text), text]);
   }
 });

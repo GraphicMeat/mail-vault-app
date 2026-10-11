@@ -3,10 +3,10 @@ import { JSDOM } from 'jsdom';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { LOCALES, render, loadDict, sourceHtml } from '../i18n/i18n.mjs';
 
-// Short muted clips recorded in the app. English only until the owner
-// approves them: each feature page's figure carries data-i18n-en-only, and the
-// locale homepages are built from a frozen snapshot of the English homepage
-// from before the clips, so no locale page gets an untranslated caption.
+// Short muted clips recorded in the app, in every site language. The English pages name
+// /assets/clips/en/<clip>.mp4; each locale page is generated from them and names
+// /assets/clips/<dir>/<clip>.mp4 (the files sit on the website host, outside git, see
+// scripts/website-clips-upload.sh), with its caption and aria-label translated.
 // Clip => the English feature page that shows it.
 const CLIPS = {
   'archive-delete': 'archive-and-delete',
@@ -155,7 +155,6 @@ describe.each(Object.entries(CLIPS))('feature page for %s', (clip, page) => {
   it('puts it right after the hero, before the first content section', () => {
     const spot = figures[0].closest('.mv-clip-spot');
     expect(spot).not.toBeNull();
-    expect(spot.hasAttribute('data-i18n-en-only')).toBe(true);
     const hero = doc.querySelector('main .fp-hero, main header');
     expect(hero.nextElementSibling).toBe(spot);
   });
@@ -168,23 +167,44 @@ describe.each(Object.entries(CLIPS))('feature page for %s', (clip, page) => {
   });
 });
 
-describe('locale pages stay free of the English clips', () => {
+describe('locale pages carry their own clips', () => {
   const pages = ['index.html', ...Object.values(CLIPS).map((p) => `features/${p}.html`)];
-  const english = [...home.querySelectorAll('.hm-clip-group figcaption')].map((n) => n.textContent.replace(/\s+/g, ' ').trim());
+  const clipsOf = (html) => [...new JSDOM(html).window.document.querySelectorAll('figure.mv-clip')];
+  const caption = (fig) => fig.querySelector('figcaption')?.textContent.replace(/\s+/g, ' ').trim() ?? '';
 
-  it.each(LOCALES.map((l) => l.dir))('%s renders no clip, no marker and no clip caption', (dir) => {
+  it.each(LOCALES.map((l) => l.dir))('%s renders every clip from its own folder with the caption translated', (dir) => {
     const loc = LOCALES.find((l) => l.dir === dir);
     const dict = loadDict(loc);
     for (const rel of pages) {
+      const en = clipsOf(sourceHtml(rel));
       const out = render(sourceHtml(rel), rel, loc, dict);
-      expect(out, `${dir}/${rel}`).not.toMatch(/mv-clip|data-i18n-en-only|\/assets\/clips\//);
-      const text = new JSDOM(out).window.document.body.textContent.replace(/\s+/g, ' ');
-      for (const s of english) expect(text, `${dir}/${rel}`).not.toContain(s);
+      const figs = clipsOf(out);
+      expect(figs, `${dir}/${rel}`).toHaveLength(en.length);
+      expect(out.replace(/<!--[\s\S]*?-->/g, ''), `${dir}/${rel}`).not.toContain('/assets/clips/en/');
+      expect(out, `${dir}/${rel}`).not.toContain('data-i18n-en-only');
+      figs.forEach((fig, i) => {
+        const clip = fig.dataset.clip;
+        expect(clip).toBe(en[i].dataset.clip);
+        const v = fig.querySelector('video');
+        expect(v.querySelector('source').getAttribute('src'), `${dir}/${rel} ${clip}`).toBe(`/assets/clips/${dir}/${clip}.mp4`);
+        const poster = v.getAttribute('poster') || fig.querySelector('img.mv-clip-poster')?.getAttribute('src');
+        expect(poster, `${dir}/${rel} ${clip}`).toMatch(new RegExp(`^/assets/clips/${dir}/${clip}(-poster)?\\.jpg$`));
+        if (caption(en[i])) {
+          expect(caption(fig), `${dir}/${rel} ${clip} caption`).not.toBe(caption(en[i]));
+          expect(v.getAttribute('aria-label'), `${dir}/${rel} ${clip} aria-label`).not.toBe(en[i].querySelector('video').getAttribute('aria-label'));
+        }
+      });
     }
   });
 
-  it.each(LOCALES.map((l) => l.dir))('%s committed pages carry no clip', (dir) => {
-    for (const rel of pages) expect(readFileSync(`website/${dir}/${rel}`, 'utf8'), `${dir}/${rel}`).not.toMatch(/mv-clip|\/assets\/clips\//);
+  it.each(LOCALES.map((l) => l.dir))('%s committed pages match what the generator renders', (dir) => {
+    const loc = LOCALES.find((l) => l.dir === dir);
+    const dict = loadDict(loc);
+    for (const rel of pages) {
+      const built = readFileSync(`website/${dir}/${rel}`, 'utf8');
+      expect(clipsOf(built).map((f) => f.dataset.clip), `${dir}/${rel}`).toEqual(clipsOf(render(sourceHtml(rel), rel, loc, dict)).map((f) => f.dataset.clip));
+      expect(built, `${dir}/${rel}`).toContain(`/assets/clips/${dir}/`);
+    }
   });
 });
 

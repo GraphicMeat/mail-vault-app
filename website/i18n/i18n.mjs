@@ -60,23 +60,19 @@ const EXCLUDE = new Set([
 const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
 
 /*
- * Frozen pages: the English page was redesigned before its translation, so the
- * locale pages are still built from a snapshot of the English page as it stood
- * when they were last translated (i18n/frozen/<page>, not deployed). build,
- * extract and verify read the snapshot, so the locale pages and the corpus stay
- * exactly as committed while the live English page moves on; inject and nav
- * still edit only the live page, so a header or footer change made while frozen
- * goes into the snapshot by hand. To localize the new page: delete its entry
- * here and its snapshot, run extract, translate the new keys, then build.
+ * Frozen pages: a page redesigned in English before its translation can be built from
+ * a snapshot (i18n/frozen/<page>, not deployed) until the new copy is translated.
+ * build, extract and verify read the snapshot; inject and nav still edit the live page.
+ * To localize the new page: delete its entry and its snapshot, run extract, translate
+ * the new keys, then build. No page is frozen now.
  */
-export const FROZEN = { 'index.html': 'i18n/frozen/index.html' };
+export const FROZEN = {};
 export function sourceHtml(rel) {
   return fs.readFileSync(path.join(ROOT, FROZEN[rel] || rel), 'utf8');
 }
 
-// The clips change is measured on English pages only; their locale copies show
-// no clips and keep the tag they had. Drop the pair when the clips are localized.
-const LOCALE_TAG = { 'clips-2026-10': 'conversion-2026-10' };
+// Tags a locale page carries under another name (none now: locale pages use the English tags).
+const LOCALE_TAG = {};
 
 export function sourcePages() {
   const out = [];
@@ -430,7 +426,15 @@ function shotsFor(dir) {
   return SHOT_INDEX.get(dir);
 }
 
+/*
+ * The feature clips are recorded per language: /assets/clips/en/<clip>.mp4 on the
+ * English page is /assets/clips/<dir>/<clip>.mp4 on a locale page (the light cuts and
+ * posters follow the same names). The files live on the website host, outside git
+ * (scripts/website-clips-upload.sh), so every locale page names them without checking.
+ */
 export function localizeShot(abs, loc) {
+  const clip = /^\/assets\/clips\/en\/([^/]+)$/.exec(abs);
+  if (clip) return `/assets/clips/${loc.dir}/${clip[1]}`;
   const m = /^\/screenshots\/([^/]+)$/.exec(abs);
   if (!m) return abs;
   return shotsFor(loc.dir).has(m[1]) ? `/screenshots/${loc.dir}/${m[1]}` : abs;
@@ -593,7 +597,7 @@ export function render(html, pageRel, loc, dict) {
       if (attrIsTranslatable(tag, name) && isTranslatable(at.value)) {
         edits.push({ start: at.vs, end: at.ve, text: ESC(tr(at.value)) });
       }
-      if ((name === 'href' || name === 'src') && !('data-i18n-abs' in a)) {
+      if ((name === 'href' || name === 'src' || name === 'poster') && !('data-i18n-abs' in a)) {
         const r = absolutize(at.value, pageRel);
         if (!r) continue;
         const localized = localizePath(r.abs, loc);
@@ -622,7 +626,7 @@ export function rewriteUrls(fragment, pageRel, loc) {
   const edits = [];
   for (const tag of scan(fragment).tags) {
     if ('data-i18n-abs' in tag.attrs) continue;
-    for (const name of ['href', 'src']) {
+    for (const name of ['href', 'src', 'poster']) {
       const at = tag.attrs[name];
       if (!at || at.vs < 0) continue;
       const r = absolutize(at.value, pageRel);
@@ -995,6 +999,17 @@ function buildSitemap() {
 }
 
 /*
+ * The recorded clips of a locale (/assets/clips/<dir>/) live on the website host, outside
+ * git, so a checkout cannot hold them. A locale page may name one when the English page
+ * names the same file under /assets/clips/en/ (which is in git).
+ */
+function clipExists(urlPath) {
+  const m = /^\/assets\/clips\/([^/]+)\/([^/]+)$/.exec(urlPath);
+  if (m && LOCALES.some((l) => l.dir === m[1])) return fs.existsSync(path.join(ROOT, 'assets', 'clips', 'en', m[2]));
+  return fs.existsSync(path.join(ROOT, urlPath.slice(1)));
+}
+
+/*
  * End-to-end check on the generated pages, not the strings. Two invariants:
  * a translated page must contain exactly the same tags as its English source,
  * and every root-relative link must resolve to a file that exists.
@@ -1033,7 +1048,7 @@ export function verify() {
           const target = p.endsWith('/') ? `${p}index.html` : p;
           // /gm.js is injected in production only; it is legitimately absent here.
           if (target === '/gm.js') continue;
-          if (!fs.existsSync(path.join(ROOT, target.slice(1)))) {
+          if (!clipExists(target)) {
             problems.push(`${loc.dir}/${rel}: dead link ${v}`);
           }
         }
@@ -1054,7 +1069,7 @@ export function verify() {
               problems.push(`${loc.dir}/${rel}: relative srcset candidate ${url}`);
               continue;
             }
-            if (!fs.existsSync(path.join(ROOT, url.split(/[?#]/)[0].slice(1)))) {
+            if (!clipExists(url.split(/[?#]/)[0])) {
               problems.push(`${loc.dir}/${rel}: missing image ${url}`);
             }
           }

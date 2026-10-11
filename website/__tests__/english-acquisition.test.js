@@ -397,8 +397,7 @@ describe('English acquisition journey', () => {
     }
     expect(tagged(readFileSync(resolve('src/demo/index.html'), 'utf8').replace('src="/gm.js"', 'src="/gm.js?v=x"'))).toBe(true);
   });
-  // The clips change: the English homepage and the twenty-two English pages with
-  // a clip. Their locale copies have no clips and keep the conversion tag.
+  // The clips change: the homepage and the twenty-two pages with a clip, in every language.
   it('tags exactly the pages of the conversion and clips changes, in every language', () => {
     const TAG = 'conversion-2026-10';
     const CLIPS_TAG = 'clips-2026-10';
@@ -418,7 +417,7 @@ describe('English acquisition journey', () => {
     for (const file of walk('')) {
       const tag = tagOf(readFileSync(resolve(root, file), 'utf8'));
       if (!tag) continue;
-      if (expected.has(file)) { seen.add(file); expect(tag, file).toBe(clipPages.has(file) ? CLIPS_TAG : TAG); }
+      if (expected.has(file)) { seen.add(file); expect(tag, file).toBe(clipPages.has(file.replace(/^(?:de|fr|es|it|ja|ko|zh|pt-br)\//, '')) ? CLIPS_TAG : TAG); }
       else expect(tag, file).toBe('redesign-2026-09');
     }
     expect([...expected].filter(f => !seen.has(f))).toEqual([]);

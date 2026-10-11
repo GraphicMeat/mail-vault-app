@@ -294,21 +294,31 @@ describe('data-i18n-en-only', () => {
   });
 });
 
-// Pages redesigned in English before translation: the locale pages are built
-// from a frozen snapshot of the English page, and the English-only clips tag
-// falls back to the tag the locale pages already carry.
-describe('frozen pages and the clips tag', () => {
-  it('builds frozen pages from their snapshot and every other page from the live source', async () => {
+// A page redesigned in English before its translation can be built from a frozen
+// snapshot (FROZEN); none is frozen now. The feature clips are recorded per language.
+describe('clips on locale pages', () => {
+  it('builds every page from its live source', async () => {
     const { FROZEN, sourceHtml } = await import('../../website/i18n/i18n.mjs');
     const { readFileSync } = await import('node:fs');
-    expect(Object.keys(FROZEN)).toEqual(['index.html']);
-    expect(sourceHtml('index.html')).toBe(readFileSync('website/' + FROZEN['index.html'], 'utf8'));
+    expect(FROZEN).toEqual({});
+    expect(sourceHtml('index.html')).toBe(readFileSync('website/index.html', 'utf8'));
     expect(sourceHtml('pricing.html')).toBe(readFileSync('website/pricing.html', 'utf8'));
   });
 
-  it('keeps the conversion tag on a locale copy of a clips page, and other tags as they are', () => {
+  it('points clip sources and posters at the locale folder, and nothing else under assets', () => {
+    const page = '<figure><video poster="/assets/clips/en/undo-send.jpg"><source src="/assets/clips/en/undo-send.mp4" type="video/mp4"></video>'
+      + '<img src="/assets/clips/en/undo-send-poster.light.jpg"></figure><img src="/assets/icon.png">';
+    const out = render(page, 'features/undo-send.html', de, {});
+    expect(out).toContain('poster="/assets/clips/de/undo-send.jpg"');
+    expect(out).toContain('src="/assets/clips/de/undo-send.mp4"');
+    expect(out).toContain('src="/assets/clips/de/undo-send-poster.light.jpg"');
+    expect(out).toContain('src="/assets/icon.png"');
+    expect(out).not.toContain('/assets/clips/en/');
+  });
+
+  it('keeps the page tag on a locale page', () => {
     const tag = (t) => `<script defer src="/gm.js?v=1" data-site="mailvault" data-tag="${t}">\n</script>`;
-    expect(render(tag('clips-2026-10'), 'features/undo-send.html', de, {})).toBe(render(tag('conversion-2026-10'), 'features/undo-send.html', de, {}));
+    expect(render(tag('clips-2026-10'), 'features/undo-send.html', de, {})).toContain('data-tag="clips-2026-10"');
     expect(render(tag('redesign-2026-09'), 'blog.html', de, {})).toContain('data-tag="redesign-2026-09"');
   });
 });

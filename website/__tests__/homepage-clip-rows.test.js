@@ -88,14 +88,14 @@ describe('clip rows: markup', () => {
     expect(hero.closest('.hm-clip-group')).toBeNull();
   });
 
-  it('loads the poster script on this page only, deferred, before the clip player', () => {
+  it('loads the poster script on the homepage of every language, deferred, before the clip player', () => {
     const scripts = [...doc.querySelectorAll('script[src]')].map((s) => s.getAttribute('src'));
     const at = scripts.findIndex((s) => /^\/assets\/home-clips\.js\?v=[\w-]+$/.test(s));
     expect(at).toBeGreaterThan(-1);
     expect(at).toBeLessThan(scripts.findIndex((s) => s.startsWith('/assets/english-site.js?')));
     expect(doc.querySelector('script[src^="/assets/home-clips.js"]').hasAttribute('defer')).toBe(true);
     expect(html).not.toContain('home-clips.js?v=1"');
-    for (const l of ['de', 'fr', 'es', 'it', 'ja', 'ko', 'zh', 'pt-br']) expect(read(`website/${l}/index.html`), l).not.toContain('home-clips.js');
+    for (const l of ['de', 'fr', 'es', 'it', 'ja', 'ko', 'zh', 'pt-br']) expect(read(`website/${l}/index.html`), l).toContain('home-clips.js?v=');
   });
 });
 

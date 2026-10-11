@@ -3,11 +3,11 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import * as i18n from '../i18n/i18n.mjs';
 
-// The English homepage, laid out as clip cards: a hero with the price card, one
+// The homepage, laid out as clip cards: a hero with the price card, one
 // download and the hero clip, four key points, six groups of clip cards, the
 // small-things group and its row of links, a spec card, then the comparison, feedback and the
-// closing download. English only for now: the locale homepages are built from a
-// frozen snapshot of the previous English page and do not change.
+// closing download. The locale homepages are built from this page, with the clips and
+// captions of their own language.
 const read = (f) => readFileSync(f, 'utf8');
 const load = (f) => new JSDOM(read(f)).window.document;
 const html = read('website/index.html');
@@ -394,8 +394,7 @@ describe('hero', () => {
     expect(starter).toBeGreaterThan(-1);
     expect(starter).toBeLessThan(player);
     expect(doc.querySelector('script[src^="/assets/home-hero.js"]').hasAttribute('defer')).toBe(true);
-    for (const l of LOCALES) expect(read(`website/${l}/index.html`), l).not.toContain('home-hero.js');
-    expect(read('website/i18n/frozen/index.html')).not.toContain('home-hero.js');
+    for (const l of LOCALES) expect(read(`website/${l}/index.html`), l).toContain('home-hero.js');
   });
 
   it('lays the visual left and the card right on desktop, in DOM order on phones', () => {
@@ -770,18 +769,18 @@ describe('page order', () => {
 describe('Meatlytics tag and stylesheet', () => {
   const tagOf = (h) => (h.match(/<script defer src="\/gm\.js[^"]*" data-site="mailvault" data-tag="([^"]+)">\s*<\/script>/) || [])[1];
 
-  it('tags the English homepage and the English clip pages clips-2026-10, their locale copies conversion-2026-10', () => {
+  it('tags the homepage and the clip pages clips-2026-10, in every language', () => {
     expect(PAGES).toHaveLength(22);
     for (const f of ['website/index.html', 'index.html', ...PAGES.map((p) => `website/features/${p}.html`)]) expect(tagOf(read(f)), f).toBe('clips-2026-10');
     for (const l of LOCALES) {
-      for (const rel of ['index.html', ...PAGES.map((p) => `features/${p}.html`)]) expect(tagOf(read(`website/${l}/${rel}`)), `${l}/${rel}`).toBe('conversion-2026-10');
+      for (const rel of ['index.html', ...PAGES.map((p) => `features/${p}.html`)]) expect(tagOf(read(`website/${l}/${rel}`)), `${l}/${rel}`).toBe('clips-2026-10');
     }
   });
 
-  it('loads the section styles on the English homepage only, at a new cache key', () => {
+  it('loads the section styles on the homepage of every language, at a new cache key', () => {
     expect(html).toMatch(/<link rel="stylesheet" href="\/assets\/home-sections\.css\?v=[\w-]+">/);
     expect(html).not.toMatch(/home-sections\.css\?v=(?:[3-9]|10)"/);
-    for (const l of LOCALES) expect(read(`website/${l}/index.html`)).not.toContain('home-sections.css');
+    for (const l of LOCALES) expect(read(`website/${l}/index.html`)).toContain('home-sections.css');
   });
 
   it('keeps mobile out of the structured data: the apps are coming, not available', () => {
@@ -797,26 +796,36 @@ describe('Meatlytics tag and stylesheet', () => {
   });
 });
 
-describe('locale homepages stay as they are', () => {
-  it('builds them from a frozen snapshot of the previous English page', () => {
-    expect(i18n.FROZEN?.['index.html']).toBe('i18n/frozen/index.html');
-    expect(existsSync('website/i18n/frozen/index.html')).toBe(true);
-    expect(i18n.sourceHtml('index.html')).toBe(read('website/i18n/frozen/index.html'));
-    expect(i18n.sourceHtml('features.html')).toBe(read('website/features.html'));
+describe('locale homepages are built from this page', () => {
+  it('has no frozen snapshot left', () => {
+    expect(i18n.FROZEN).toEqual({});
+    expect(existsSync('website/i18n/frozen')).toBe(false);
+    expect(i18n.sourceHtml('index.html')).toBe(html);
   });
 
   it.each(i18n.LOCALES.map((l) => l.dir))('%s: the build reproduces the committed homepage and clip pages byte for byte', (dir) => {
     const loc = i18n.LOCALES.find((l) => l.dir === dir);
     const dict = i18n.loadDict(loc);
     for (const rel of ['index.html', ...PAGES.map((p) => `features/${p}.html`)]) {
-      const out = i18n.render(i18n.sourceHtml?.(rel) ?? read(`website/${rel}`), rel, loc, dict);
+      const out = i18n.render(i18n.sourceHtml(rel), rel, loc, dict);
       expect(out === read(`website/${dir}/${rel}`), `${dir}/${rel}`).toBe(true);
     }
   });
 
-  it('keeps every string of the frozen page in the corpus', () => {
+  it('keeps every string of the page in the corpus, translated in every language', () => {
     const corpus = Object.assign({}, ...Object.values(JSON.parse(read('website/i18n/corpus.json'))));
-    const missing = i18n.collect(read('website/i18n/frozen/index.html')).filter((f) => !(f.key in corpus)).map((f) => f.text);
+    const missing = i18n.collect(html).filter((f) => !(f.key in corpus)).map((f) => f.text);
     expect(missing).toEqual([]);
+    for (const loc of i18n.LOCALES) {
+      const dict = i18n.loadDict(loc);
+      const open = i18n.collect(html).filter((f) => !(dict[f.key] || '').trim()).map((f) => f.text.slice(0, 60));
+      expect(open, loc.dir).toEqual([]);
+    }
+  });
+
+  it.each(i18n.LOCALES.map((l) => l.dir))('%s: the hero montage and the chosen cards come from its own clip folder', (dir) => {
+    const page = read(`website/${dir}/index.html`);
+    expect(page).toContain(`/assets/clips/${dir}/hero-montage.mp4`);
+    expect(page.replace(/<!--[\s\S]*?-->/g, '')).not.toContain('/assets/clips/en/');
   });
 });

@@ -43,44 +43,12 @@ function ruleFor(css, selector) {
 const PHONE = '@media (max-width:760px)';
 const phoneCss = mediaBlocks(homeCss, PHONE).join('\n');
 
-// The English homepage's phone order (badge, headline, lead, price card with the
-// form, links, then the visual) is in homepage-clips-layout.test.js; the locale
-// homepages are still built from the frozen snapshot of the previous layout.
+// The homepage's phone order (badge, headline, lead, price card with the form, links,
+// then the visual) is in homepage-clips-layout.test.js; the locale homepages follow the
+// English structure (homepage-order.test.js).
 describe('website/index.html final section on phones', () => {
   it('opens the final section with the form, then the price line', () => {
     const final = load('website/index.html').getElementById('download');
-    const form = final.querySelector('#send-link-final');
-    expect(before(final.querySelector('h2'), form)).toBe(true);
-    expect(before(form, final.querySelector('.hm-price'))).toBe(true);
-  });
-});
-
-describe.each(['website/i18n/frozen/index.html', ...LOCALES.map((l) => `website/${l}/index.html`)])('%s phone order', (file) => {
-  const doc = load(file);
-
-  it('puts the hero form, price line and text links before the product shot', () => {
-    const hero = doc.querySelector('.hm-hero');
-    const inner = hero.querySelector('.hm-hero-inner');
-    const shot = hero.querySelector('.hm-hero-shot');
-    const sequence = [
-      inner.querySelector('.mv-eyebrow'),
-      inner.querySelector('h1'),
-      inner.querySelector('.hm-lead'),
-      inner.querySelector('#send-link-hero'),
-      inner.querySelector('.hm-price'),
-      inner.querySelector('a.mv-text-link[href$="#platforms"]'),
-      shot,
-    ];
-    sequence.forEach((el) => expect(el).not.toBeNull());
-    sequence.slice(1).forEach((el, i) => expect(before(sequence[i], el)).toBe(true));
-  });
-
-  it('keeps the three proof chips in the static HTML', () => {
-    expect(doc.querySelectorAll('.hm-hero .hm-facts li')).toHaveLength(3);
-  });
-
-  it('opens the final section with the form, then the price line', () => {
-    const final = doc.getElementById('download');
     const form = final.querySelector('#send-link-final');
     expect(before(final.querySelector('h2'), form)).toBe(true);
     expect(before(form, final.querySelector('.hm-price'))).toBe(true);
