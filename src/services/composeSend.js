@@ -17,6 +17,7 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { zonedTimeToEpoch } from '../utils/scheduledTime';
 import { daemonCall } from './daemonClient';
 import { isGraphAccount } from './graphConfig';
+import { serverSavesSent } from './providerKind.js';
 import { ownAddresses } from '../utils/ownAddresses';
 import { t } from '../i18n/index.js';
 
@@ -93,7 +94,6 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
   const fullText = quotedHtml
     ? `${htmlToText(snapshot.body)}\n\n-------- Original Message --------\n${htmlToText(quotedHtml)}`
     : htmlToText(snapshot.body);
-  const isGraph = account.oauth2Transport === 'graph';
   const resolved = await resolveSentMailboxForAccount(account);
   const sentFolderPath = resolved.path;
 
@@ -102,7 +102,9 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
     fromAddress,
     sendAsEmail,
     accountForSend: resolved.account,
-    sentMailbox: isGraph ? null : sentFolderPath,
+    // Graph and JMAP servers file their own Sent copy: the daemon must not
+    // append a second one.
+    sentMailbox: serverSavesSent(account) ? null : sentFolderPath,
     sentFolderPath,
     bodyText: htmlToText(snapshot.body),
     outgoingPayload: {

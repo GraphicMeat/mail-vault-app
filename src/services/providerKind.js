@@ -23,3 +23,20 @@ export function isJmapAccount(account) {
 export function serverSavesSent(account) {
   return isGraphAccount(account) || isJmapAccount(account);
 }
+
+/**
+ * The host a JMAP account is keyed by (`imapHost`, so `accountLogicalKey`
+ * needs no JMAP branch): the session URL's hostname, lowercased. '' for
+ * anything but an https URL, so a typo or a plain-http URL never becomes an
+ * account. The port is not part of it, as `JmapClient` trusts hosts, not ports.
+ * @param {string|null|undefined} url
+ * @returns {string}
+ */
+export function jmapSessionHost(url) {
+  try {
+    const parsed = new URL(String(url ?? '').trim());
+    return parsed.protocol === 'https:' ? parsed.hostname.toLowerCase() : '';
+  } catch {
+    return '';
+  }
+}

@@ -331,3 +331,15 @@ describe('looking for aliases', () => {
     expect(screen.queryByTestId('aliases-suggestions')).toBeNull();
   });
 });
+
+describe('a JMAP account', () => {
+  const JMAP = { id: 'studio', name: 'Studio', email: 'studio@example.test', password: 'tok', imapHost: 'api.example.test',
+    jmapSessionUrl: 'https://api.example.test/jmap/session', jmapAuth: 'bearer' };
+
+  it('says the server lists the addresses, and asks it with the whole account', async () => {
+    render(<AliasesSection account={JMAP} />);
+    await settle();
+    expect(screen.getByTestId('aliases-provider-hint').textContent).toBe(t('settings.accounts.aliases.hintJmap'));
+    expect(refreshAliases).toHaveBeenCalledWith(JMAP);
+  });
+});

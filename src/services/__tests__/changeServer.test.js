@@ -224,3 +224,83 @@ describe('changeServer', () => {
     await expect(changeServer('does-not-exist', NEW_PARAMS)).rejects.toThrow(/not found/i);
   });
 });
+
+// A JMAP account stays JMAP: the session URL and the secret change, the
+// daemon's imap_test_connection proves them over JMAP, and there is no SMTP
+// leg to run (JMAP sends through EmailSubmission).
+describe('changeServer on a JMAP account', () => {
+  const JMAP = {
+    id: 'acc-1', email: 'me@example.org', authType: 'password', password: 'old-token',
+    imapHost: 'old.example.org', jmapSessionUrl: 'https://old.example.org/jmap/session', jmapAuth: 'bearer',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTestConnection.mockResolvedValue({ success: true });
+    mockStorePassword.mockResolvedValue(undefined);
+    mockSaveAccount.mockResolvedValue(undefined);
+    mockActivateAccount.mockResolvedValue(undefined);
+    storeState = { accounts: [{ ...JMAP }], activeAccountId: 'acc-1', activeMailbox: 'INBOX', activateAccount: mockActivateAccount };
+  });
+
+  it('verifies the new session once, never over SMTP, and keys the account on the session host', async () => {
+    const result = await changeServer('acc-1', { jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', password: 'new-token' });
+
+    expect(result).toEqual({ ok: true, hostChanged: true });
+    expect(mockSmtpTestConnection).not.toHaveBeenCalled();
+    expect(mockTestConnection).toHaveBeenCalledTimes(1);
+    expect(mockTestConnection.mock.calls[0][0]).toMatchObject({
+      id: 'acc-1', jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', jmapAuth: 'bearer',
+      imapHost: 'jmap.new.example.org', password: 'new-token',
+    });
+    expect(mockStorePassword).toHaveBeenCalledWith('acc-1', 'new-token');
+    const saved = mockSaveAccount.mock.calls[0][0];
+    expect(saved).toMatchObject({ id: 'acc-1', jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', imapHost: 'jmap.new.example.org' });
+    expect(storeState.accounts[0].imapHost).toBe('jmap.new.example.org');
+    expect(mockActivateAccount).toHaveBeenCalledWith('acc-1', 'INBOX');
+  });
+
+  it('keeps the session URL when only the secret changes', async () => {
+    const result = await changeServer('acc-1', { password: 'new-token' });
+
+    expect(result).toEqual({ ok: true, hostChanged: false });
+    expect(mockSaveAccount.mock.calls[0][0]).toMatchObject({ jmapSessionUrl: JMAP.jmapSessionUrl, imapHost: 'old.example.org', password: 'new-token' });
+    expect(mockActivateAccount).not.toHaveBeenCalled();
+  });
+
+  it('refuses a session URL that is not https before anything is tested', async () => {
+    await expect(changeServer('acc-1', { jmapSessionUrl: 'http://jmap.new.example.org/jmap', password: 'x' }))
+      .rejects.toThrow('Enter the full https:// address of the JMAP session.');
+    expect(mockTestConnection).not.toHaveBeenCalled();
+    expect(mockSaveAccount).not.toHaveBeenCalled();
+  });
+
+  it('persists nothing when the server refuses the new secret', async () => {
+    mockTestConnection.mockRejectedValue(Object.assign(new Error('E_JMAP_AUTH: authentication failed'), { errorCode: 'E_JMAP_AUTH' }));
+
+    await expect(changeServer('acc-1', { password: 'wrong' })).rejects.toThrow();
+    expect(mockSmtpTestConnection).not.toHaveBeenCalled();
+    expect(mockStorePassword).not.toHaveBeenCalled();
+    expect(mockSaveAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe('changeServer on a JMAP account: the Basic login', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTestConnection.mockResolvedValue({ success: true });
+    storeState = {
+      accounts: [{ id: 'acc-1', email: 'me@example.org', authType: 'password', password: 'p', imapHost: 'mail.example.org',
+        jmapSessionUrl: 'https://mail.example.org/jmap/session', jmapAuth: 'basic', jmapUsername: 'old-login' }],
+      activeAccountId: 'acc-1', activeMailbox: 'INBOX', activateAccount: mockActivateAccount,
+    };
+  });
+
+  it('stores a new login, and drops it when it is the address again', async () => {
+    await changeServer('acc-1', { jmapUsername: ' alice ', password: 'p2' });
+    expect(mockSaveAccount.mock.calls[0][0].jmapUsername).toBe('alice');
+
+    await changeServer('acc-1', { jmapUsername: 'me@example.org', password: 'p3' });
+    expect(mockSaveAccount.mock.calls[1][0]).not.toHaveProperty('jmapUsername');
+  });
+});

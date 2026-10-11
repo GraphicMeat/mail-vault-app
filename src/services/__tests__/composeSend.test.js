@@ -175,6 +175,21 @@ describe('buildOutgoingPayload', () => {
   });
 });
 
+// Graph and JMAP file their own Sent copy, so the daemon is told not to
+// APPEND one: `sentMailbox` is null for them, the folder path for IMAP.
+describe('the Sent folder a send names', () => {
+  it('is null for a JMAP account, whose server saves the copy itself', async () => {
+    const jmap = { ...account, jmapSessionUrl: 'https://api.example.test/jmap/session', jmapAuth: 'bearer' };
+    const built = await buildOutgoingPayload({ snapshot, account: jmap, settings: {} });
+    expect(built.sentMailbox).toBeNull();
+  });
+
+  it('is null for a Graph account and the folder for an IMAP one', async () => {
+    expect((await buildOutgoingPayload({ snapshot, account: { ...account, oauth2Transport: 'graph' }, settings: {} })).sentMailbox).toBeNull();
+    expect((await buildOutgoingPayload({ snapshot, account, settings: {} })).sentMailbox).toBe('Sent');
+  });
+});
+
 describe('createComposeSend', () => {
   it('reuses the staged MIME and uid when the queued closure retries', async () => {
     sendEmail.mockRejectedValueOnce(new Error('offline'));

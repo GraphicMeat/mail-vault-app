@@ -4,6 +4,8 @@
   "account.outlookCom",
   "account.outlookMicrosoft365",
   "account.passwordRequired",
+  "account.protocolImap",
+  "account.protocolJmap",
   "account.smtpExampleCom",
   "account.sslTls",
   "account.starttls",

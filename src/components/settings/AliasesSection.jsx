@@ -11,6 +11,7 @@ import { signatureHasContent } from '../../utils/signatureImages';
 import { useT } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
+import { isJmapAccount } from '../../services/providerKind';
 
 // Settings > Accounts > Aliases: every address one account sends from. The
 // login comes first and always stays; the aliases after it are the settings
@@ -170,7 +171,10 @@ export function AliasesSection({ account, displayName = '' }) {
             {t('settings.accounts.aliases.listTitle')}
           </h4>
           <p data-testid="aliases-provider-hint" className="text-sm text-mail-text-muted">
-            {t(isGoogleSignIn(account) ? 'settings.accounts.aliases.hintGmail' : 'settings.accounts.aliases.hintOther')}
+            {/* A JMAP server lists its identities (aliases.discover asks it, with
+                the account's password or token), as Google does. */}
+            {isJmapAccount(account) ? t('settings.accounts.aliases.hintJmap')
+              : t(isGoogleSignIn(account) ? 'settings.accounts.aliases.hintGmail' : 'settings.accounts.aliases.hintOther')}
           </p>
         </div>
         <Button variant="subtle" size="sm" onClick={lookFor} loading={running} aria-busy={running}

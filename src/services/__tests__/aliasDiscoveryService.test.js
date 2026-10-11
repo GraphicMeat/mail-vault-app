@@ -120,3 +120,20 @@ describe('scheduleAliasRefresh', () => {
     await vi.waitFor(() => expect(discoverAliases).toHaveBeenCalledTimes(1));
   });
 });
+
+// The daemon asks a JMAP server for its identities with the account JSON it
+// is handed, and looks up no keychain entry: without the password or token
+// in it, the answer would be `denied`. The real ensureFreshToken hands a
+// password account back as it is.
+describe('a JMAP account', () => {
+  it('reaches the daemon with its secret, session URL and id', async () => {
+    const { ensureFreshToken: real } = await vi.importActual('../authUtils');
+    ensureFreshToken.mockImplementation(real);
+    const jmap = {
+      id: 'j1', email: 'me@fastmail.com', authType: 'password', password: 'fmu1-tok',
+      imapHost: 'api.fastmail.com', jmapSessionUrl: 'https://api.fastmail.com/jmap/session', jmapAuth: 'bearer',
+    };
+    await refreshAliases(jmap);
+    expect(discoverAliases).toHaveBeenCalledWith(jmap, 'j1');
+  });
+});

@@ -9,7 +9,7 @@ vi.mock('../../stores/settingsStore.js', () => ({
   hasPremiumAccess: () => true,
 }));
 
-const { isJmapAccount, serverSavesSent } = await import('../providerKind.js');
+const { isJmapAccount, serverSavesSent, jmapSessionHost } = await import('../providerKind.js');
 const { toSyncAccount } = await import('../syncService.js');
 
 describe('providerKind', () => {
@@ -43,5 +43,19 @@ describe('providerKind', () => {
     });
     expect(s.imapConfig.jmapUsername).toBe('alice');
     expect(s.imapConfig).not.toHaveProperty('password');
+  });
+});
+
+describe('jmapSessionHost', () => {
+  it('is the lowercased hostname of an https session URL, without its port', () => {
+    expect(jmapSessionHost('https://API.Fastmail.com/jmap/session')).toBe('api.fastmail.com');
+    expect(jmapSessionHost(' https://jmap.example.test:8443/.well-known/jmap ')).toBe('jmap.example.test');
+  });
+
+  it('is empty for plain http, a bare host, or nothing', () => {
+    expect(jmapSessionHost('http://jmap.example.test/jmap')).toBe('');
+    expect(jmapSessionHost('jmap.example.test')).toBe('');
+    expect(jmapSessionHost('')).toBe('');
+    expect(jmapSessionHost(undefined)).toBe('');
   });
 });

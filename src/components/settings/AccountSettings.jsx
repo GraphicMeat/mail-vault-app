@@ -15,6 +15,7 @@ import {
 } from '../../services/googleClient';
 import { findSentMailboxPath } from '../../utils/sentFolder';
 import { isFastmailAccount } from '../AccountModal.jsx';
+import { isJmapAccount } from '../../services/providerKind';
 import { AliasesSection } from './AliasesSection';
 import { Send } from 'lucide-react';
 import { SettingsTabs } from '../ui/SettingsTabs';
@@ -121,6 +122,10 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
 
   const orderedAccounts = getOrderedAccounts(accounts);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+  // A JMAP account shows its session, sign-in kind and login, never IMAP/SMTP
+  // hosts: those fields would turn it into an IMAP account.
+  const selectedIsJmap = isJmapAccount(selectedAccount);
+  const jmapToken = selectedIsJmap && selectedAccount?.jmapAuth === 'bearer';
   const isActiveAccount = selectedAccountId === activeAccountId;
   const hasConnectionError = isActiveAccount && connectionStatus === 'error';
   const needsSignIn = hasConnectionError && ['passwordMissing', 'oauthExpired'].includes(connectionErrorType);
@@ -645,7 +650,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   {selectedAccount.authType === 'oauth2' ? (
                     <><Shield size={12} /> {t('settings.accounts.providerOauth2', { provider: selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft' })}</>
                   ) : (
-                    <><Key size={12} /> {t('settings.accounts.password')}</>
+                    <><Key size={12} /> {jmapToken ? t('account.jmapApiToken') : t('settings.accounts.password')}</>
                   )}
                 </span>
               </div>
@@ -725,9 +730,9 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-mail-text mb-2">
-                          {t('settings.accounts.newPassword')}
+                          {selectedIsJmap ? t('account.jmapReplaceSecret') : t('settings.accounts.newPassword')}
                         </label>
-                        <input aria-label={t('settings.accounts.newPassword')}
+                        <input aria-label={selectedIsJmap ? t('account.jmapReplaceSecret') : t('settings.accounts.newPassword')}
                           type="password"
                           autoFocus
                           value={newPassword}
@@ -762,7 +767,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   ) : (
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="font-medium text-mail-text">{t('settings.accounts.password')}</div>
+                        <div className="font-medium text-mail-text">{jmapToken ? t('account.jmapApiToken') : t('settings.accounts.password')}</div>
                         <div className="text-sm text-mail-text-muted">
                           {selectedAccount.password ? t('settings.accounts.storedSecurelySystemKeychain') : t('settings.accounts.configured')}
                         </div>
@@ -771,7 +776,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                         onClick={() => setEditingPassword(true)}
                       >
                         <Key size={16} />
-                        {selectedAccount.password ? t('settings.accounts.update') : t('settings.accounts.setPassword')}
+                        {selectedIsJmap ? t('account.jmapReplaceSecret')
+                          : selectedAccount.password ? t('settings.accounts.update') : t('settings.accounts.setPassword')}
                       </Button>
                     </div>
                   )}
@@ -792,6 +798,15 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                 </p>
 
                 <div className="flex items-center justify-between">
+                  {selectedIsJmap ? (
+                  <div className="text-sm text-mail-text-muted space-y-0.5 min-w-0" data-testid="jmap-server-details">
+                    <div className="break-all">{t('account.jmapSessionUrl')} <code className="text-mail-text">{selectedAccount.jmapSessionUrl}</code></div>
+                    <div>{jmapToken ? t('account.jmapApiToken') : t('settings.accounts.password')}</div>
+                    {!jmapToken && (
+                      <div>{t('account.jmapUsername')} <code className="text-mail-text">{pa(selectedAccount.jmapUsername || selectedAccount.email, 'email')}</code></div>
+                    )}
+                  </div>
+                  ) : (
                   <div className="text-sm text-mail-text-muted space-y-0.5">
                     <div>
                       {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '-'}:{selectedAccount.imapPort || 993}</code>
@@ -801,6 +816,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                     </div>
                     <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '-'}:{selectedAccount.smtpPort || 587}</code></div>
                   </div>
+                  )}
                   <button
                     onClick={() => openChangeServer(selectedAccountId)}
                     className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border text-mail-text

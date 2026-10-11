@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+// React in scope: vitest compiles JSX with the classic runtime.
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Server, Loader2, CheckCircle2, AlertTriangle, UploadCloud, Minus } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
@@ -14,6 +15,8 @@ import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { t as tr, useT  } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { T } from '../i18n/T.jsx';
+import { isJmapAccount, jmapSessionHost } from '../services/providerKind.js';
+import { JmapFields, EMPTY_JMAP, jmapReady } from './account/JmapFields';
 
 const inputClass = 'w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:outline-none focus:border-mail-accent';
 
@@ -27,6 +30,9 @@ export default function ChangeServerModal() {
   const changeServer = useMailStore((s) => s.changeServer);
 
   const account = accounts.find((a) => a.id === accountId);
+  // A JMAP account changes its session URL and secret, never IMAP/SMTP hosts:
+  // editing it as IMAP would corrupt it.
+  const jmapAccount = isJmapAccount(account);
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ imapHost: '', imapPort: 993, imapSecurity: 'ssl', smtpHost: '', smtpPort: 587, password: '' });
@@ -35,6 +41,7 @@ export default function ChangeServerModal() {
   const [verifyError, setVerifyError] = useState(null); // { leg, text }
   const [folders, setFolders] = useState([]);
   const [dnsHealth, setDnsHealth] = useState({ loading: false, warnings: null, failed: false });
+  const [jmap, setJmap] = useState(EMPTY_JMAP);
 
   const detectRanFor = useRef(null);
   const titleId = useId();
@@ -71,6 +78,16 @@ export default function ChangeServerModal() {
     setVerifyError(null);
     setFolders([]);
     setDnsHealth({ loading: false, warnings: null, failed: false });
+    // The auth kind stays what the account has: no token switch here.
+    setJmap(isJmapAccount(account) ? {
+      ...EMPTY_JMAP,
+      sessionUrl: account.jmapSessionUrl,
+      auth: account.jmapAuth === 'bearer' ? 'bearer' : 'basic',
+      username: account.jmapUsername || '',
+      host: jmapSessionHost(account.jmapSessionUrl),
+      lockedAuth: true,
+      discovered: true,
+    } : EMPTY_JMAP);
     // Stale progress from an earlier restore would make step 2 open on its
     // finished view instead of the upload prompt.
     if (!resuming) useSettingsStore.getState().clearActiveRestore();
@@ -83,6 +100,27 @@ export default function ChangeServerModal() {
 
     const domain = (account.email || '').split('@')[1]?.toLowerCase();
     if (!domain) return;
+
+    // JMAP: discovery again, for the session URL only. The IMAP suggestion
+    // below (the Fastmail preset included) would write IMAP hosts onto it.
+    // A host off the address's domain waits for the tick in JmapFields.
+    if (isJmapAccount(account)) {
+      resolveEmailSettings(domain)
+        .then((dns) => {
+          const url = dns?.jmapSessionUrl;
+          if (!url || url === account.jmapSessionUrl) return;
+          setJmap((j) => ({
+            ...j,
+            sessionUrl: url,
+            host: dns.jmapHost || jmapSessionHost(url),
+            needsHostConfirmation: !!dns.jmapNeedsHostConfirmation,
+            hostConfirmed: false,
+          }));
+          setSuggestionNote({ type: 'info', text: tr('changeServer.detectedDomainSDnsVerify') });
+        })
+        .catch(() => { /* silent: keep the current session URL */ });
+      return;
+    }
 
     const applySuggestion = (detected) => {
       const current = { imapHost: account.imapHost, smtpHost: account.smtpHost };
@@ -138,7 +176,7 @@ export default function ChangeServerModal() {
     const domain = (account.email || '').split('@')[1]?.toLowerCase();
     if (!domain) { setDnsHealth({ loading: false, warnings: null, failed: true }); return; }
     setDnsHealth({ loading: true, warnings: null, failed: false });
-    dnsMailHealth(domain, form.imapHost)
+    dnsMailHealth(domain, isJmapAccount(account) ? jmapSessionHost(jmap.sessionUrl) : form.imapHost)
       .then((health) => setDnsHealth({ loading: false, warnings: health?.warnings || [], failed: false }))
       .catch(() => setDnsHealth({ loading: false, warnings: null, failed: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,7 +204,9 @@ export default function ChangeServerModal() {
     setVerifyError(null);
     setBusyLeg('imap');
     try {
-      await changeServer(account.id, { ...form });
+      await changeServer(account.id, jmapAccount
+        ? { jmapSessionUrl: jmap.sessionUrl, jmapUsername: jmap.username, password: form.password }
+        : { ...form });
       setBusyLeg('smtp'); // best-effort UI signal; changeServer verifies both legs internally
       const gathered = await gatherLocalFolders(account).catch(() => []);
       setFolders(gathered);
@@ -230,6 +270,13 @@ export default function ChangeServerModal() {
               </div>
             )}
 
+            {jmapAccount && (
+              <div className="mb-3">
+                <JmapFields value={jmap} onChange={(patch) => setJmap((j) => ({ ...j, ...patch }))} email={account.email || ''} />
+              </div>
+            )}
+
+            {!jmapAccount && (
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.imapHost')}</label>
@@ -256,10 +303,11 @@ export default function ChangeServerModal() {
                 </select>
               </div>
             </div>
+            )}
 
             <div className="mb-3">
-              <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.password')}</label>
-              <input aria-label={t('changeServer.password')}
+              <label className="block text-xs text-mail-text-muted mb-1">{jmapAccount && jmap.auth === 'bearer' ? t('account.jmapApiToken') : t('changeServer.password')}</label>
+              <input aria-label={jmapAccount && jmap.auth === 'bearer' ? t('account.jmapApiToken') : t('changeServer.password')}
                 type="password"
                 className={inputClass}
                 value={form.password}
@@ -289,12 +337,12 @@ export default function ChangeServerModal() {
               <button
                 className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors disabled:opacity-50"
                 onClick={handleVerifySave}
-                disabled={!form.password || !!busyLeg}
+                disabled={!form.password || !!busyLeg || (jmapAccount && !jmapReady(jmap))}
               >
                 {busyLeg ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="animate-spin" size={14} />
-                    {tr('changeServer.verifyingLeg', { leg: busyLeg === 'imap' ? 'IMAP' : 'SMTP' })}
+                    {tr('changeServer.verifyingLeg', { leg: jmapAccount ? 'JMAP' : busyLeg === 'imap' ? 'IMAP' : 'SMTP' })}
                   </span>
                 ) : tr('changeServer.verifySave')}
               </button>

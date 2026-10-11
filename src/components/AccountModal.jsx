@@ -15,6 +15,8 @@ import { t as tr, t, useT   } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
 import { appLink } from '../services/appLink.js';
+import { jmapSessionHost } from '../services/providerKind';
+import { JmapFields, EMPTY_JMAP, jmapReady } from './account/JmapFields';
 
 // Common email provider configurations
 export const PROVIDER_CONFIGS = () => ({
@@ -101,9 +103,61 @@ export const PROVIDER_CONFIGS = () => ({
     imapPort: 993,
     smtpHost: 'smtp.fastmail.com',
     smtpPort: 587,
-    note: tr('account.useAppPasswordSignFastmail')
+    note: tr('account.useAppPasswordSignFastmail'),
+    // New adds speak JMAP with an API token: an app password does not sign
+    // in to JMAP. "Use IMAP with an app password instead" keeps the path
+    // above, and existing IMAP accounts are never converted.
+    jmapSessionUrl: 'https://api.fastmail.com/jmap/session',
+    jmapAuth: 'bearer',
+    jmapHelpUrl: 'https://www.fastmail.help/hc/en-us/articles/5254602856719'
   }
 });
+
+// The JMAP form state a provider preset starts from. A token-only preset
+// (Fastmail) hides the token switch and links to where tokens are made.
+function presetJmap(config) {
+  return {
+    ...EMPTY_JMAP,
+    sessionUrl: config.jmapSessionUrl,
+    auth: config.jmapAuth === 'bearer' ? 'bearer' : 'basic',
+    lockedAuth: config.jmapAuth === 'bearer',
+    host: jmapSessionHost(config.jmapSessionUrl),
+    helpUrl: config.jmapHelpUrl || null,
+    discovered: true,
+  };
+}
+
+/**
+ * The account a JMAP add saves (Task 3's shape). `imapHost` holds the session
+ * host, read off the URL as it is at submit time (Advanced may have changed
+ * it), so `accountLogicalKey` needs no JMAP branch; '' when the URL is not
+ * https. The secret, password or token, lives in `password`. `jmapUsername`
+ * only when a Basic login differs from the address.
+ */
+export function jmapAccountData(form, jmap) {
+  const jmapSessionUrl = String(jmap?.sessionUrl || '').trim();
+  const jmapAuth = jmap?.auth === 'bearer' ? 'bearer' : 'basic';
+  const login = String(jmap?.username || '').trim();
+  const data = {
+    name: form.name,
+    email: form.email,
+    password: form.password,
+    authType: 'password',
+    jmapSessionUrl,
+    jmapAuth,
+    imapHost: jmapSessionHost(jmapSessionUrl),
+  };
+  if (jmapAuth === 'basic' && login && login.toLowerCase() !== String(form.email || '').trim().toLowerCase()) {
+    data.jmapUsername = login;
+  }
+  return data;
+}
+
+function openExternal(url) {
+  import('@tauri-apps/plugin-shell')
+    .then(({ open }) => open(url))
+    .catch(() => window.open(url, '_blank'));
+}
 
 // Try to detect provider from email domain
 export function detectProvider(email) {
@@ -164,6 +218,11 @@ export function AccountModal({ onClose, onSuccess }) {
   const [detectedProvider, setDetectedProvider] = useState(null);
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // 'imap' | 'jmap'. JMAP is on offer for a preset that has it (Fastmail),
+  // after autodetect found a session, and on "Other" for a URL typed by hand.
+  const [protocol, setProtocol] = useState('imap');
+  const [jmap, setJmap] = useState(EMPTY_JMAP);
+  const patchJmap = (patch) => setJmap(prev => ({ ...prev, ...patch }));
 
   // OAuth2 state
   const [authType, setAuthType] = useState('password'); // 'password' | 'oauth2'
@@ -248,6 +307,14 @@ export function AccountModal({ onClose, onSuccess }) {
       setAuthType('password');
     }
 
+    if (config.jmapSessionUrl) {
+      setProtocol('jmap');
+      setJmap(presetJmap(config));
+    } else {
+      setProtocol('imap');
+      setJmap(EMPTY_JMAP);
+    }
+
     if (key === 'custom') {
       setShowManualConfig(false);
     }
@@ -315,6 +382,10 @@ export function AccountModal({ onClose, onSuccess }) {
         smtpHost: detected.config.smtpHost,
         smtpPort: detected.config.smtpPort
       }));
+      if (detected.config.jmapSessionUrl) {
+        setProtocol('jmap');
+        setJmap(presetJmap(detected.config));
+      }
       setDetectedProvider(detected);
       setAutoDetecting(false);
       return;
@@ -326,6 +397,23 @@ export function AccountModal({ onClose, onSuccess }) {
       if (domain) {
         console.log('[AccountModal] Trying DNS resolution for %s', domain);
         const dnsResult = await resolveEmailSettings(domain);
+        // JMAP discovery rides along with the IMAP answer, and can be the
+        // only answer (source "jmap", no IMAP fields), so it is read before
+        // the IMAP guard below. An SRV-only hit is offered with IMAP still
+        // preselected; a preset or well-known hit preselects JMAP. The
+        // Fastmail session (by MX, for a custom domain) gets the token preset.
+        const jmapFound = !!dnsResult?.jmapSessionUrl;
+        if (jmapFound) {
+          const fastmail = PROVIDER_CONFIGS().fastmail;
+          setJmap(dnsResult.jmapSessionUrl === fastmail.jmapSessionUrl ? presetJmap(fastmail) : {
+            ...EMPTY_JMAP,
+            sessionUrl: dnsResult.jmapSessionUrl,
+            host: dnsResult.jmapHost || jmapSessionHost(dnsResult.jmapSessionUrl),
+            needsHostConfirmation: !!dnsResult.jmapNeedsHostConfirmation,
+            discovered: true,
+          });
+          setProtocol(dnsResult.jmapSource === 'srv' ? 'imap' : 'jmap');
+        }
         if (dnsResult && (dnsResult.imapHost || dnsResult.smtpHost)) {
           console.log('[AccountModal] DNS resolved: %s (source: %s)', dnsResult.imapHost, dnsResult.source);
           setFormData(prev => ({
@@ -336,6 +424,14 @@ export function AccountModal({ onClose, onSuccess }) {
             smtpPort: dnsResult.smtpPort || prev.smtpPort,
           }));
           setDetectedProvider({ key: 'custom', config: { name: dnsResult.provider || domain } });
+          setAutoDetecting(false);
+          return;
+        }
+        if (jmapFound) {
+          // JMAP only: no IMAP guessing with the password. The IMAP fields
+          // stay one click away on the protocol row.
+          setDetectedProvider({ key: 'custom', config: { name: dnsResult.provider || domain } });
+          setShowManualConfig(true);
           setAutoDetecting(false);
           return;
         }
@@ -516,10 +612,15 @@ export function AccountModal({ onClose, onSuccess }) {
   const submitAccount = async (formDataToSubmit) => {
     console.log('[AccountModal] submitAccount called');
     setError(null);
+    const jmapAccount = protocol === 'jmap' ? jmapAccountData(formDataToSubmit, jmap) : null;
+    if (jmapAccount && !jmapAccount.imapHost) {
+      setError(t('account.jmapSessionUrlInvalid'));
+      return;
+    }
     setTesting(true);
 
     try {
-      const accountData = { ...formDataToSubmit };
+      const accountData = jmapAccount || { ...formDataToSubmit };
 
       // Set the auth type properly
       if (authType === 'oauth2') {
@@ -564,6 +665,19 @@ export function AccountModal({ onClose, onSuccess }) {
   const providerConfig = provider && PROVIDER_CONFIGS()[provider];
   const showOAuth2Option = providerConfig?.supportsOAuth2;
   const isFastmail = provider === 'fastmail' || isFastmailAccount(formData);
+  const isJmap = protocol === 'jmap';
+  const jmapOffered = !!providerConfig?.jmapSessionUrl
+    || (provider === 'custom' && (showManualConfig || !!detectedProvider));
+  const protocolOption = (value, label) => (
+    <label
+      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-all
+                  ${protocol === value ? 'border-mail-accent bg-mail-accent/10 text-mail-text' : 'border-mail-border text-mail-text-muted hover:text-mail-text'}`}
+    >
+      <input type="radio" name="account-protocol" value={value} checked={protocol === value}
+        onChange={() => { setProtocol(value); setError(null); }} className="sr-only" />
+      {label}
+    </label>
+  );
 
   return (
     <Dialog
@@ -628,7 +742,7 @@ export function AccountModal({ onClose, onSuccess }) {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Provider Note */}
-              {provider && providerConfig?.note && (
+              {provider && providerConfig?.note && !isJmap && (
                 <div className="flex items-start gap-3 p-3 bg-mail-accent/10 rounded-lg text-sm">
                   <AlertCircle size={16} className="text-mail-accent-text mt-0.5 flex-shrink-0" />
                   <div className="text-mail-text">
@@ -648,6 +762,23 @@ export function AccountModal({ onClose, onSuccess }) {
                         {providerConfig.helpLabel || 'Learn more'} &rarr;
                       </button>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* JMAP token note (Fastmail): which scopes, and where tokens are made */}
+              {isJmap && jmap.helpUrl && (
+                <div className="flex items-start gap-3 p-3 bg-mail-accent/10 rounded-lg text-sm" data-testid="jmap-token-note">
+                  <AlertCircle size={16} className="text-mail-accent-text mt-0.5 flex-shrink-0" />
+                  <div className="text-mail-text">
+                    <span>{t('account.jmapFastmailToken')}</span>
+                    <button
+                      type="button"
+                      className="ml-2 text-mail-accent-text hover:underline font-medium"
+                      onClick={() => openExternal(jmap.helpUrl)}
+                    >
+                      {t('account.jmapTokenHelp')} &rarr;
+                    </button>
                   </div>
                 </div>
               )}
@@ -799,6 +930,14 @@ export function AccountModal({ onClose, onSuccess }) {
                 </div>
               )}
 
+              {/* Protocol: JMAP or IMAP, wherever JMAP is on offer */}
+              {jmapOffered && (
+                <div role="radiogroup" aria-label={t('account.protocol')} className="flex gap-2" data-testid="account-protocol">
+                  {protocolOption('jmap', t('account.protocolJmap'))}
+                  {protocolOption('imap', t('account.protocolImap'))}
+                </div>
+              )}
+
               {/* Display Name — always shown */}
               <div>
                 <label className="block text-sm text-mail-text-muted mb-1.5">
@@ -846,11 +985,11 @@ export function AccountModal({ onClose, onSuccess }) {
               {authType === 'password' && (
                 <div>
                   <label className="block text-sm text-mail-text-muted mb-1.5">
-                    {t('account.passwordRequired')}
+                    {isJmap && jmap.auth === 'bearer' ? <>{t('account.jmapApiToken')} *</> : t('account.passwordRequired')}
                   </label>
                   <div className="relative">
                     <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
-                    <input aria-label={t('account.passwordRequired')}
+                    <input aria-label={isJmap && jmap.auth === 'bearer' ? t('account.jmapApiToken') : t('account.passwordRequired')}
                       type={showPassword ? 'text' : 'password'}
                       name="password"
                       value={formData.password}
@@ -873,7 +1012,17 @@ export function AccountModal({ onClose, onSuccess }) {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
+                  {isJmap && jmap.lockedAuth && (
+                    <Button variant="link" size="sm" className="mt-1.5" onClick={() => { setProtocol('imap'); setError(null); }}>
+                      <ChevronRight size={14} />{t('account.jmapUseImapInstead')}
+                    </Button>
+                  )}
                 </div>
+              )}
+
+              {/* JMAP: token switch, host confirmation, session URL and login */}
+              {isJmap && (
+                <JmapFields value={jmap} onChange={patchJmap} email={formData.email} />
               )}
 
               {/* Auto-detect button for custom provider */}
@@ -907,7 +1056,7 @@ export function AccountModal({ onClose, onSuccess }) {
               )}
 
               {/* Server Settings (for custom provider or after auto-detect) */}
-              {(provider === 'custom' && (showManualConfig || detectedProvider)) && (
+              {(provider === 'custom' && !isJmap && (showManualConfig || detectedProvider)) && (
                 <>
                   <div className="border-t border-mail-border pt-4 mt-4">
                     <h3 className="text-sm font-medium text-mail-text mb-3 flex items-center gap-2">
@@ -1055,6 +1204,8 @@ export function AccountModal({ onClose, onSuccess }) {
                     setAuthType('password');
                     setOauthConnected(false);
                     setOauthLoading(false);
+                    setProtocol('imap');
+                    setJmap(EMPTY_JMAP);
                   }}
                   className="px-4 py-2.5 text-mail-text-muted hover:text-mail-text
                             transition-colors"
@@ -1066,7 +1217,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   variant="primary"
                   size="lg"
                   className="flex-1"
-                  disabled={testing || success || (authType === 'oauth2' && !oauthConnected)}
+                  disabled={testing || success || (authType === 'oauth2' && !oauthConnected) || (isJmap && !jmapReady(jmap))}
                   loading={testing}
                 >
                   {testing ? t('account.testingConnection') : success ? (
