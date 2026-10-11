@@ -53,14 +53,9 @@ const OWNERS: &[&str] = &[
 /// Files that still reach the Maildir layout directly. Delete a row when its
 /// task moves the file behind `message_store`; never add one.
 const PENDING: &[&str] = &[
-    "src-core/src/archive.rs",
     "src-core/src/backup.rs",
     "src-core/src/vault_flags.rs",
-    "src-daemon/src/abd_local.rs",
     "src-daemon/src/backup_zip.rs",
-    "src-daemon/src/handlers/abd.rs",
-    "src-daemon/src/handlers/archive.rs",
-    "src-daemon/src/handlers/custody.rs",
     "src-daemon/src/mbox.rs",
     "src-daemon/src/mbox_upload.rs",
     "src-daemon/src/mbox_upload_job.rs",

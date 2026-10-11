@@ -4,7 +4,8 @@
 //! - Vault writes go through `archive::store_archived` (mailbox lock + the
 //!   daemon's write gate, registry upsert) and then a custody append.
 //! - The engine lists a folder's archived files once; every batch is verified
-//!   against that listing with `maildir::verify_listed_strict` (a per-file
+//!   against that listing with `message_store::verify_archived_strict`
+//!   (`maildir::verify_listed_strict`'s per-file
 //!   check on current disk: an expected Message-ID must be read and equal), so
 //!   no directory is read per batch.
 //! - The mirror is copied with `backup::copy_uids_to_mirror_from` against one
@@ -20,7 +21,7 @@ use crate::handlers::common;
 use crate::server::DaemonState;
 use mailvault_core::abd::{Fetched, LocalError, LocalStore, StoreOutcome, Stored, Verify};
 use mailvault_core::backup::{copy_uids_to_mirror_from, MirrorListing};
-use mailvault_core::{archive, graph_ledger, header_cache, maildir, vault_files};
+use mailvault_core::{archive, graph_ledger, header_cache, maildir, message_store};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -96,15 +97,15 @@ impl DaemonLocal {
     }
 
     fn mirror_cur(&self, root: &Path, folder: &str) -> PathBuf {
-        root.join(&self.email).join(folder).join("cur")
+        maildir::mirror_cur(root, &self.email, folder)
     }
 }
 
 impl LocalStore for DaemonLocal {
     async fn archived_listing(&self, folder: &str) -> Result<HashMap<u32, PathBuf>, LocalError> {
         let root = self.vault()?;
-        let cur = vault_files::cur_path(&root, &self.account_id, folder);
-        common::blocking(move || maildir::archived_file_map(&cur)).await.map_err(LocalError::Io)
+        let (account, mailbox) = (self.account_id.clone(), folder.to_string());
+        common::blocking(move || message_store::archived_paths(&root, &account, &mailbox)).await.map_err(LocalError::Io)
     }
 
     async fn store_archived(&self, folder: &str, uid: u32, f: Fetched) -> Result<Stored, LocalError> {
@@ -133,8 +134,8 @@ impl LocalStore for DaemonLocal {
 
     async fn vault_generation(&self, folder: &str) -> Result<Option<u32>, LocalError> {
         let root = self.vault()?;
-        let cur = vault_files::cur_path(&root, &self.account_id, folder);
-        common::blocking(move || cur.parent().and_then(maildir::read_generation)).await.map_err(LocalError::Io)
+        let mailbox_dir = message_store::mailbox_dir(&root, &self.account_id, folder);
+        common::blocking(move || maildir::read_generation(&mailbox_dir)).await.map_err(LocalError::Io)
     }
 
     async fn read_file(&self, path: &Path) -> Result<Vec<u8>, LocalError> {
@@ -153,12 +154,12 @@ impl LocalStore for DaemonLocal {
         expected: &HashMap<u32, String>,
     ) -> Result<Verify, LocalError> {
         let root = self.vault()?;
-        let cur = vault_files::cur_path(&root, &self.account_id, folder);
+        let (account, mailbox) = (self.account_id.clone(), folder.to_string());
         // Only the batch's own entries cross to the blocking thread.
         let sub: HashMap<u32, PathBuf> = uids.iter().filter_map(|u| listing.get(u).map(|p| (*u, p.clone()))).collect();
         let (uids, expected) = (uids.to_vec(), expected.clone());
         common::blocking(move || {
-            let (ok, missing, mismatched) = maildir::verify_listed_strict(&cur, &sub, &uids, &expected);
+            let (ok, missing, mismatched) = message_store::verify_archived_strict(&root, &account, &mailbox, &sub, &uids, &expected);
             Verify { ok, missing, mismatched }
         })
         .await
@@ -217,7 +218,7 @@ impl LocalStore for DaemonLocal {
         let vault = self.vault()?;
         let mirror = self.mirror_root()?;
         let cur = self.mirror_cur(&mirror, folder);
-        let vault_cur = vault_files::cur_path(&vault, &self.account_id, folder);
+        let (account, mailbox) = (self.account_id.clone(), folder.to_string());
         let cached = lock(&self.mirror_maps).remove(folder);
         let (files, expected) = (files.to_vec(), expected.clone());
         #[cfg(test)]
@@ -256,7 +257,7 @@ impl LocalStore for DaemonLocal {
                     // No Message-ID to compare: byte for byte against the
                     // vault copy, found by uid (a flag change may have renamed
                     // it). No vault copy to compare with is not proof.
-                    None => match maildir::find_listed_by_uid(&vault_cur, *uid, &vault_cur.join(name)) {
+                    None => match message_store::raw_path_listed(&vault, &account, &mailbox, *uid, &message_store::entry_path(&vault, &account, &mailbox, name)) {
                         None => v.missing.push(*uid),
                         Some(src) => match (std::fs::read(&path), std::fs::read(&src)) {
                             (Ok(a), Ok(b)) if !a.is_empty() && a == b => v.ok.push(*uid),
@@ -287,7 +288,7 @@ impl LocalStore for DaemonLocal {
     async fn graph_uids(&self, folder: &str, listed: &[(String, Option<String>)]) -> Result<Vec<u32>, LocalError> {
         let root = self.vault()?;
         let ledger = graph_ledger::ledger_path(&header_cache::sidecar_dir(&root, &self.account_id, folder), self.jmap);
-        let cur = vault_files::cur_path(&root, &self.account_id, folder);
+        let (account, mailbox) = (self.account_id.clone(), folder.to_string());
         let listed: Vec<(String, Option<String>)> = if self.jmap {
             listed.iter().map(|(id, _)| (id.clone(), None)).collect()
         } else {
@@ -295,7 +296,7 @@ impl LocalStore for DaemonLocal {
         };
         let state = Arc::clone(&self.state);
         common::blocking(move || {
-            common::with_vault_write(&state, |_root| graph_ledger::allocate(&ledger, &cur, &listed))
+            common::with_vault_write(&state, |_root| graph_ledger::allocate_in(&ledger, &root, &account, &mailbox, &listed))
         })
         .await
         .map_err(LocalError::Io)?

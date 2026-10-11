@@ -31,7 +31,7 @@ use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vau
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::custody::{cache, entries};
-use mailvault_core::{import_rehome, maildir, vault_files};
+use mailvault_core::{import_rehome, maildir, message_store, vault_files};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -150,7 +150,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let rebound = with_mailbox_write(&state, &account_id, &mailbox, |root| {
-                        let rebound = maildir::rebind_uids(&vault_files::cur_path(root, &account_id, &mailbox), &pairs);
+                        let rebound = message_store::rebind_uids(root, &account_id, &mailbox, &pairs);
                         if !rebound.is_empty() {
                             state.vault_registry.invalidate(&account_id, &mailbox);
                             if let Err(e) = daemon_custody::with_conn(&state, |c| entries::remap(c, &account_id, &mailbox, &rebound, &[])) {
@@ -230,10 +230,7 @@ pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, 
         let Some(uid_validity) = cached_uv else {
             return Ok(maildir::GenerationRepair::default());
         };
-        let mailbox_dir = vault_files::cur_path(root, account_id, mailbox)
-            .parent()
-            .map(|p| p.to_path_buf())
-            .ok_or_else(|| "Maildir path has no parent".to_string())?;
+        let mailbox_dir = message_store::mailbox_dir(root, account_id, mailbox);
         if maildir::read_generation(&mailbox_dir) == Some(uid_validity) {
             return Ok(maildir::GenerationRepair { generation: uid_validity, ..Default::default() });
         }
@@ -318,7 +315,7 @@ pub(crate) fn rehome_imports_soon(state: &Arc<DaemonState>, account_id: &str, ma
 }
 
 fn mailbox_dir(root: &std::path::Path, account_id: &str, mailbox: &str) -> Option<std::path::PathBuf> {
-    vault_files::cur_path(root, account_id, mailbox).parent().map(|p| p.to_path_buf())
+    Some(message_store::mailbox_dir(root, account_id, mailbox))
 }
 
 /// The folder's pass (`import_rehome`), now, on the caller's thread: after an

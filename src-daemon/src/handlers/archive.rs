@@ -422,9 +422,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let root = common::vault_root(&state)?;
-                    let cur_dir = mailvault_core::vault_files::cur_path(&root, &account_id, &mailbox);
                     let (verified, missing, mismatched) =
-                        mailvault_core::maildir::verify_copies(&cur_dir, &uids, expected_ids.as_ref());
+                        mailvault_core::message_store::verify_archived(&root, &account_id, &mailbox, &uids, expected_ids.as_ref());
                     Ok(serde_json::json!({
                         "verified": verified,
                         "missing": missing,

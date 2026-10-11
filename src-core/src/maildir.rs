@@ -149,6 +149,13 @@ pub fn mirror_cur_in(mirror_mailbox_dir: &Path) -> PathBuf {
     mirror_mailbox_dir.join("cur")
 }
 
+/// The mirror's file name for `uid` under `flags`: the vault's Maildir name
+/// (`<uid>:2,<FLAGS>.eml`), so the flags survive a restore from the mirror.
+/// The mirror stays Maildir `.eml` whatever the vault's format.
+pub fn mirror_filename(uid: u32, flags: &[String]) -> String {
+    crate::vault_files::build_maildir_filename(uid, flags)
+}
+
 /// The uid a message filename carries by the external mirror's rule: the text
 /// before the first `:`, `;`, `.` or `_`. The mirror has held
 /// `<uid>:2,<flags>[.eml]` (`;`-spelled on Windows, same as every other vault

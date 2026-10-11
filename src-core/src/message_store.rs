@@ -319,6 +319,106 @@ pub fn write_decrypted_copy(root: &Path, account_id: &str, mailbox: &str, uid: u
     crate::pgp::write_copy(&messages_dir(root, account_id, mailbox), uid, decrypted)
 }
 
+// ── Archive and Archive & delete ─────────────────────────────────────────────
+//
+// The archive runs, the Archive & delete job and custody take one listing of a
+// folder and then work file by file against it, so a 300k folder stays linear.
+// These keep exactly the `maildir` rules those callers used on `cur/`.
+
+/// `raw_path` for a caller that listed the mailbox earlier (`raw_paths_at`,
+/// `archived_paths`): `listed` while that file is still there, else one rescan
+/// by uid (`maildir::find_listed_by_uid`). A flag change renames a file after
+/// the listing; a caller never asks for a uid its listing lacked.
+pub fn raw_path_listed(root: &Path, account_id: &str, mailbox: &str, uid: u32, listed: &Path) -> Option<PathBuf> {
+    maildir::find_listed_by_uid(&messages_dir(root, account_id, mailbox), uid, listed)
+}
+
+/// The path of the entry `name` (an `Entry.name`, or a vault registry row's
+/// name) in the mailbox. No disk access: the file need not exist.
+pub fn entry_path(root: &Path, account_id: &str, mailbox: &str, name: &str) -> PathBuf {
+    messages_dir(root, account_id, mailbox).join(name)
+}
+
+/// Every archived copy (`A` in its name) the mailbox holds, keyed by uid, from
+/// one listing (`maildir::archived_file_map`): a uid with a working-cache copy
+/// beside an archived one maps to the archived one.
+pub fn archived_paths(root: &Path, account_id: &str, mailbox: &str) -> HashMap<u32, PathBuf> {
+    maildir::archived_file_map(&messages_dir(root, account_id, mailbox))
+}
+
+/// The name of an archived copy of `uid`, by one listing of the mailbox: for a
+/// mailbox the vault registry could not verify.
+pub fn archived_name(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<String> {
+    fs::read_dir(messages_dir(root, account_id, mailbox))
+        .ok()?
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .find(|n| maildir::vault_filename_uid(n) == Some(uid) && maildir::carries_archived(n))
+}
+
+/// Which of `uids` the mailbox holds an archived copy of, as `(verified,
+/// missing, mismatched)` by `maildir::verify_copies`' rules.
+pub fn verify_archived(
+    root: &Path,
+    account_id: &str,
+    mailbox: &str,
+    uids: &[u32],
+    expected_ids: Option<&HashMap<u32, String>>,
+) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    maildir::verify_copies(&messages_dir(root, account_id, mailbox), uids, expected_ids)
+}
+
+/// `verify_archived` against a listing an earlier `archived_paths` took, by
+/// `maildir::verify_listed_strict`'s rules: for a caller about to delete the
+/// server's copy.
+pub fn verify_archived_strict(
+    root: &Path,
+    account_id: &str,
+    mailbox: &str,
+    listing: &HashMap<u32, PathBuf>,
+    uids: &[u32],
+    expected_ids: &HashMap<u32, String>,
+) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    maildir::verify_listed_strict(&messages_dir(root, account_id, mailbox), listing, uids, expected_ids)
+}
+
+/// Re-files copies under the uids a move gave their messages
+/// (`maildir::rebind_uids`): the `(old, new)` pairs renamed. The caller
+/// invalidates the mailbox's registry rows when any moved.
+pub fn rebind_uids(root: &Path, account_id: &str, mailbox: &str, pairs: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    maildir::rebind_uids(&messages_dir(root, account_id, mailbox), pairs)
+}
+
+/// Makes the directory `write_new` writes the mailbox's messages into.
+pub fn create_messages_dir(root: &Path, account_id: &str, mailbox: &str) -> io::Result<()> {
+    fs::create_dir_all(messages_dir(root, account_id, mailbox))
+}
+
+/// Writes `raw` as a new file of `uid` under the name `flags` builds, into the
+/// directory `create_messages_dir` made, and returns its path. Removes
+/// nothing: another file of `uid` stays where it is. `atomic`: through a temp
+/// file and a rename (`fsx::write_atomic`), so a failure leaves nothing
+/// behind; otherwise one plain `fs::write` (the backup runners'), which can
+/// leave a partial file, so the caller invalidates the folder on an error.
+pub fn write_new(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8], flags: &[String], atomic: bool) -> io::Result<PathBuf> {
+    let path = messages_dir(root, account_id, mailbox).join(vault_files::build_maildir_filename(uid, flags));
+    if atomic {
+        crate::fsx::write_atomic(&path, raw)?;
+    } else {
+        fs::write(&path, raw)?;
+    }
+    Ok(path)
+}
+
+/// Removes the file an earlier listing gave for `uid` (`raw_path_listed`'s
+/// rule), if one is still there. A failure is ignored: the caller writes the
+/// uid's new copy next.
+pub fn remove_listed(root: &Path, account_id: &str, mailbox: &str, uid: u32, listed: &Path) {
+    if let Some(existing) = raw_path_listed(root, account_id, mailbox, uid, listed) {
+        let _ = fs::remove_file(&existing);
+    }
+}
+
 // ── Mailbox-directory level, for the derived stores ──────────────────────────
 //
 // The search index and the vault registry key a mailbox by the directory's
@@ -883,5 +983,50 @@ mod tests {
         // Never a message: neither the listing nor the uid space sees it.
         assert_eq!(list(root, ACCT, MBOX).unwrap(), Vec::new());
         assert!(uids(root, ACCT, MBOX).unwrap().is_empty());
+    }
+
+    #[test]
+    fn archive_side_reads_and_writes_keep_their_maildir_rules() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = messages_dir(root, ACCT, MBOX);
+        assert!(archived_paths(root, ACCT, MBOX).is_empty(), "no folder yet");
+        assert_eq!(archived_name(root, ACCT, MBOX, 3), None);
+        create_messages_dir(root, ACCT, MBOX).unwrap();
+        assert!(dir.is_dir());
+
+        // A working-cache copy of 3, then an archived one beside it: write_new removes nothing.
+        let three = b"Message-ID: <three@x.test>\r\n\r\nthree".to_vec();
+        let cache = write_new(root, ACCT, MBOX, 3, &three, &flags(&["seen"]), false).unwrap();
+        let archived = write_new(root, ACCT, MBOX, 3, &three, &flags(&["archived", "seen"]), true).unwrap();
+        assert_eq!(cache, dir.join(format!("3{INFO_PREFIX}S.eml")));
+        assert_eq!(archived, entry_path(root, ACCT, MBOX, &format!("3{INFO_PREFIX}AS.eml")));
+        assert!(cache.exists() && archived.exists());
+        assert_eq!(fs::read(&archived).unwrap(), three);
+        assert_eq!(maildir::mirror_filename(3, &flags(&["archived", "seen"])), format!("3{INFO_PREFIX}AS.eml"));
+        assert_eq!(archived_paths(root, ACCT, MBOX), HashMap::from([(3, archived.clone())]), "the archived copy wins");
+        assert_eq!(archived_name(root, ACCT, MBOX, 3), Some(format!("3{INFO_PREFIX}AS.eml")));
+        assert_eq!(archived_name(root, ACCT, MBOX, 4), None);
+
+        // 3 is archived with the expected id, 4 is not held, 5 holds another message.
+        write_new(root, ACCT, MBOX, 5, b"Message-ID: <other@x.test>\r\n\r\nfive", &flags(&["archived"]), true).unwrap();
+        let expected = HashMap::from([(3, "<three@x.test>".to_string()), (5, "<five@x.test>".to_string())]);
+        assert_eq!(verify_archived(root, ACCT, MBOX, &[3, 4, 5], Some(&expected)), (vec![3], vec![4], vec![5]));
+        let listing = archived_paths(root, ACCT, MBOX);
+        assert_eq!(verify_archived_strict(root, ACCT, MBOX, &listing, &[3, 4, 5], &expected), (vec![3], vec![4], vec![5]));
+
+        // A listed path renamed since resolves by uid once more.
+        let renamed = set_flags(root, ACCT, MBOX, 5, &flags(&["archived", "seen"])).unwrap().unwrap();
+        let renamed_path = entry_path(root, ACCT, MBOX, &renamed.name);
+        assert_eq!(raw_path_listed(root, ACCT, MBOX, 5, &listing[&5]), Some(renamed_path.clone()));
+        assert_eq!(raw_path_listed(root, ACCT, MBOX, 5, &renamed_path), Some(renamed_path.clone()));
+        remove_listed(root, ACCT, MBOX, 5, &listing[&5]);
+        assert_eq!(find(root, ACCT, MBOX, 5), None, "the renamed copy is the one removed");
+        assert_eq!(raw_path_listed(root, ACCT, MBOX, 5, &listing[&5]), None);
+        remove_listed(root, ACCT, MBOX, 5, &listing[&5]);
+
+        // An undone delete re-filed under its new uid keeps its flags.
+        assert_eq!(rebind_uids(root, ACCT, MBOX, &[(3, 12), (8, 13)]).len(), 1);
+        assert!(find(root, ACCT, MBOX, 12).is_some());
     }
 }

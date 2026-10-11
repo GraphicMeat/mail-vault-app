@@ -12,6 +12,7 @@ use crate::server::handle_request_for_test;
 use mailvault_core::abd::graph_ops::TokenLease as Lease;
 use mailvault_core::abd::{FolderPlan, FolderRole, FolderState, JobStatus, LocalStore, Phase, ServerCaps, TrashInfo};
 use mock_imap::state::{Mailbox, Message};
+use mailvault_core::vault_files;
 use mock_imap::{Action, GmailMsg, MockImap, Scenario, Trigger};
 use std::path::PathBuf;
 

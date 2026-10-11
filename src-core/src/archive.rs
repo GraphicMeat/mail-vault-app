@@ -255,12 +255,11 @@ pub async fn run_with_backup(
         let uses_jmap = jmap.is_some();
         let (acct, mbox) = (account_id.clone(), mailbox.clone());
         let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
-            std::path::PathBuf::from(bp).join(addr).join(&mailbox).join("cur")
+            crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox)
         });
         tokio::task::spawn_blocking(move || {
             let vault_listing: HashMap<u32, std::path::PathBuf> = if remove_existing {
-                let cur = vault_files::cur_path(&root, &acct, &mbox);
-                crate::maildir::uid_file_map(&cur)
+                crate::message_store::raw_paths_at(&crate::message_store::mailbox_dir(&root, &acct, &mbox))
             } else {
                 HashMap::new()
             };
@@ -558,8 +557,7 @@ async fn fetch_and_store(
     // The server's own read state, not a hardcoded "seen": this name is what
     // restore uploads, what the mirror copies, and what a vault row reads back.
     let flags = crate::vault_flags::store_flags(&server_flags);
-    // Path computation only — no disk touched, so it stays off the blocking pool.
-    let cur_dir = vault_files::cur_path(&ctx.root, account_id, mailbox);
+    let root = ctx.root.clone();
     let raw_len = raw_bytes.len();
 
     // Every fs call below is synchronous std::fs. On a runtime worker, an
@@ -569,7 +567,7 @@ async fn fetch_and_store(
     // blocking pool instead.
     let mailbox_owned = mailbox.to_string();
     let mirror = backup_path.zip(account_email).map(|(bp, addr)| {
-        std::path::PathBuf::from(bp).join(addr).join(&mailbox_owned).join("cur")
+        crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox_owned)
     });
     let gate = Arc::clone(&ctx.gate);
     let registry = Arc::clone(&ctx.registry);
@@ -599,24 +597,25 @@ async fn fetch_and_store(
             // order), so a delete of this uid never lands between the write
             // and its row.
             registry.serialized(&account_key, &mailbox_owned, || gate(&mut || {
-                fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
+                crate::message_store::create_messages_dir(&root, &account_key, &mailbox_owned).map_err(|e| format!("mkdir: {}", e))?;
 
                 if let Some(listed) = &listed {
-                    if let Some(existing) = crate::maildir::find_listed_by_uid(&cur_dir, uid, listed) {
-                        let _ = fs::remove_file(&existing);
-                    }
+                    crate::message_store::remove_listed(&root, &account_key, &mailbox_owned, uid, listed);
                 }
 
-                filename = vault_files::build_maildir_filename(uid, &flags);
+                // The vault copy's name, which the mirror copy below takes too.
+                filename = crate::maildir::mirror_filename(uid, &flags);
                 started = std::time::Instant::now();
                 // Atomic: a kill (or a drive that vanishes) mid-write must not leave
                 // a half file behind for the next run's resume scan to trust.
-                let written = cur_dir.join(&filename);
-                if let Err(e) = crate::fsx::write_atomic(&written, &raw_bytes) {
-                    // The listed copy may already be gone: its row must not outlive it.
-                    registry.invalidate(&account_key, &mailbox_owned);
-                    return Err(format!("write .eml: {}", e));
-                }
+                let written = match crate::message_store::write_new(&root, &account_key, &mailbox_owned, uid, &raw_bytes, &flags, true) {
+                    Ok(written) => written,
+                    Err(e) => {
+                        // The listed copy may already be gone: its row must not outlive it.
+                        registry.invalidate(&account_key, &mailbox_owned);
+                        return Err(format!("write .eml: {}", e));
+                    }
+                };
                 registry.upsert(&account_key, &mailbox_owned, uid, &written);
                 Ok(())
             }))?;
@@ -872,7 +871,6 @@ pub async fn store_archived(
     let server_flags: Vec<String> = imap_flags.to_vec();
 
     tokio::task::spawn_blocking(move || -> Result<(std::path::PathBuf, serde_json::Value, StoreOutcome), String> {
-        let cur_dir = vault_files::cur_path(&root, &account_key, &mailbox_owned);
         let entry = custody_entry_from_raw(uid, &raw, &server_flags);
 
         // Verify the mailbox in the registry before the lock: the verification
@@ -887,10 +885,10 @@ pub async fn store_archived(
                 let existing = match registry.known(&account_key, &mailbox_owned, uid) {
                     Some(Some(name)) => Some(name).filter(|n| crate::maildir::carries_archived(n)),
                     Some(None) => None,
-                    None => archived_name_by_scan(&cur_dir, uid),
+                    None => crate::message_store::archived_name(&root, &account_key, &mailbox_owned, uid),
                 };
                 if let Some(name) = existing {
-                    let path = cur_dir.join(name);
+                    let path = crate::message_store::entry_path(&root, &account_key, &mailbox_owned, &name);
                     // Read under the lock: the comparison is about this file.
                     let same = std::fs::read(&path).map_or(false, |held| held == raw);
                     let outcome = if same { StoreOutcome::FoundSame } else { StoreOutcome::FoundDifferent };
@@ -898,7 +896,8 @@ pub async fn store_archived(
                     return Ok(());
                 }
                 vault_files::store(&registry, &root, &account_key, &mailbox_owned, uid, &raw, &flags, true)?;
-                written = Some((cur_dir.join(vault_files::build_maildir_filename(uid, &flags)), StoreOutcome::Wrote));
+                let name = crate::message_store::entry_name(uid, &flags);
+                written = Some((crate::message_store::entry_path(&root, &account_key, &mailbox_owned, &name), StoreOutcome::Wrote));
                 Ok(())
             })
         })?;
@@ -907,16 +906,6 @@ pub async fn store_archived(
     })
     .await
     .map_err(|e| format!("store UID {uid} panicked: {e}"))?
-}
-
-/// The name of an archived file for `uid` in `cur_dir`, by one directory scan.
-/// Only for a mailbox the registry could not verify.
-fn archived_name_by_scan(cur_dir: &std::path::Path, uid: u32) -> Option<String> {
-    std::fs::read_dir(cur_dir)
-        .ok()?
-        .flatten()
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .find(|n| crate::maildir::vault_filename_uid(n) == Some(uid) && crate::maildir::carries_archived(n))
 }
 
 /// Extract In-Reply-To and References headers from raw email bytes for threading

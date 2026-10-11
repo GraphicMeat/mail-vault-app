@@ -26,7 +26,7 @@ use mailvault_core::abd::state as jobfile;
 use mailvault_core::abd::{
     summarize, DateScope, DeleteMode, JobFile, LocalCounts, Mode, NewJob, Provider, Scope, Selection, Timing, YearBounds,
 };
-use mailvault_core::{maildir, transfer_limits, vault_files};
+use mailvault_core::{maildir, message_store, transfer_limits};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -143,10 +143,9 @@ fn local_counts(
         paths.push(info.path.as_str());
     }
     for path in paths {
-        let cur = vault_files::cur_path(&root, account, path);
-        counts.archived.insert(path.to_string(), maildir::archived_file_map(&cur).into_keys().collect());
+        counts.archived.insert(path.to_string(), message_store::archived_paths(&root, account, path).into_keys().collect());
         if let (Some(map), Some(m)) = (on_drive.as_mut(), mirror_root) {
-            let dir = Path::new(m).join(&entry.email).join(path).join("cur");
+            let dir = maildir::mirror_cur(Path::new(m), &entry.email, path);
             map.insert(path.to_string(), maildir::mirror_file_map(&dir).into_keys().collect());
         }
     }
