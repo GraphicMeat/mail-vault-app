@@ -427,7 +427,7 @@ pub fn settle_unlisted_folders(coverage: &mut ScopeCoverage, maildir: &Path, acc
             // A directory of this name with no `cur/` holds nothing the
             // index or the fallback scan reads; one whose `cur/` cannot be
             // checked is unknown, so it is not absent.
-            !same_name || matches!(std::fs::metadata(path.join("cur")), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+            !same_name || matches!(crate::message_store::has_message_dir(path), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
         })
     };
     let settled: BTreeSet<String> = coverage.unlisted_vault_dirs.iter().filter(|dir| absent(dir)).cloned().collect();

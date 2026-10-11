@@ -37,7 +37,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use tracing::warn;
 
-use crate::search_index::reconcile::{read_cur, DiskFile};
+use crate::search_index::reconcile::{read_mailbox, DiskFile};
 use crate::search_index::text::vault_dir_name;
 use crate::vault_eml::{light_row_json, parse_flags_from_filename};
 
@@ -599,14 +599,14 @@ impl VaultRegistry {
         None
     }
 
-    /// Lists `cur`. A missing `cur` under a present vault root is an empty
-    /// folder; any other error, or a missing root (an unmounted drive), is
-    /// `None`: unknown.
+    /// Lists the mailbox through the store (`message_store::scan_dir`). No
+    /// message directory under a present vault root is an empty folder; any
+    /// other error, or a missing root (an unmounted drive), is `None`: unknown.
     pub(crate) fn list_mailbox(&self, root: &Path, account: &str, dir: &str) -> Option<Listing> {
         let s0 = self.seq.load(Ordering::SeqCst);
         let e0 = guard(&self.verified).epoch(&(account.to_string(), dir.to_string()));
         self.listings.fetch_add(1, Ordering::SeqCst);
-        let (files, unstatted) = match read_cur(&cur_dir(root, account, dir)) {
+        let (files, unstatted) = match read_mailbox(&crate::message_store::mailbox_dir_at(&root.join("Maildir"), account, dir)) {
             Ok(listing) => listing,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && root.is_dir() => Default::default(),
             Err(e) => {

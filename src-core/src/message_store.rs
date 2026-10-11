@@ -56,7 +56,13 @@ pub fn mailbox_dir(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
 
 /// The mailbox's Maildir message directory. Private: callers ask by uid.
 fn messages_dir(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
-    vault_files::cur_path(root, account_id, mailbox)
+    messages_in(&mailbox_dir(root, account_id, mailbox))
+}
+
+/// The Maildir message directory inside the mailbox directory `mailbox_dir`.
+/// The one place the store names it.
+fn messages_in(mailbox_dir: &Path) -> PathBuf {
+    mailbox_dir.join("cur")
 }
 
 fn mtime_ns(meta: &fs::Metadata) -> i128 {
@@ -239,6 +245,130 @@ pub fn remove(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<
 /// JMAP format. `None` when the mailbox holds no file for it.
 pub fn raw_path(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<PathBuf> {
     path_of(&messages_dir(root, account_id, mailbox), uid)
+}
+
+// ── Mailbox-directory level, for the derived stores ──────────────────────────
+//
+// The search index and the vault registry key a mailbox by the directory's
+// name on disk (`vault_dir`), read back from `read_dir` or from their own
+// rows. That name need not survive `vault_dir_name` unchanged (an NFD name
+// read back from an HFS+ or SMB volume has combining marks it would rewrite),
+// so these take the mailbox directory itself instead of a mailbox name.
+
+/// `<maildir_root>/<account dir>/<vault_dir>`: the mailbox directory named by
+/// its on-disk name, which is used as is.
+pub fn mailbox_dir_at(maildir_root: &Path, account_id: &str, vault_dir: &str) -> PathBuf {
+    vault_files::account_dir(maildir_root, account_id).join(vault_dir)
+}
+
+/// Whether the mailbox directory holds a message directory: `Ok(true)` for a
+/// directory, `Ok(false)` for anything else at that name, and the stat's error
+/// otherwise (`NotFound`: the mailbox holds no messages and never did).
+pub fn has_message_dir(mailbox_dir: &Path) -> io::Result<bool> {
+    fs::metadata(messages_in(mailbox_dir)).map(|meta| meta.is_dir())
+}
+
+/// One strict listing of a mailbox's messages, for a store that reconciles its
+/// rows against it (the search index, the vault registry).
+#[derive(Debug, Default)]
+pub struct Scan {
+    /// One entry per uid, by uid: the first file `read_dir` returned for it
+    /// that would stat.
+    pub entries: Vec<Entry>,
+    /// The uids of files whose stat failed (typically a flag rename between
+    /// `read_dir` and the stat): still held under another name, so their rows
+    /// must not be removed.
+    pub unstatted: BTreeSet<u32>,
+}
+
+/// Disk only. Lists the mailbox directory `mailbox_dir` by the strict reader
+/// rule (`maildir::vault_filename_uid`).
+///
+/// Unlike `list`, nothing is papered over:
+/// - The message directory's own `read_dir` error is returned with its kind, so
+///   a caller tells `NotFound` (no messages yet) from an unreadable folder.
+/// - An error mid-iteration ends the listing (the Unix `ReadDir` stops after
+///   one), so it is the whole listing's error, never a shorter folder:
+///   `flatten()` here once turned a truncated listing into verified truth that
+///   pruned every row after the break. It is re-kinded to `Other`, because a
+///   caller reads `NotFound` as "no messages", which is only true of the
+///   `read_dir` open. (Not injectable in a test: there is no way to fail
+///   `readdir` part-way on a real directory.)
+/// - A file that will not stat is in `unstatted`, not an entry of size 0.
+pub fn scan_dir(mailbox_dir: &Path) -> io::Result<Scan> {
+    let listing = fs::read_dir(messages_in(mailbox_dir))?;
+    let mut held: std::collections::HashMap<u32, Entry> = std::collections::HashMap::new();
+    let mut unstatted = BTreeSet::new();
+    for item in listing {
+        let item = item.map_err(io::Error::other)?;
+        let name = item.file_name().to_string_lossy().into_owned();
+        let Some(uid) = maildir::vault_filename_uid(&name) else { continue };
+        let Ok(meta) = item.metadata() else {
+            unstatted.insert(uid);
+            continue;
+        };
+        held.entry(uid).or_insert_with(|| entry_of(uid, name, Some(meta)));
+    }
+    let mut entries: Vec<Entry> = held.into_values().collect();
+    entries.sort_by_key(|e| e.uid);
+    Ok(Scan { entries, unstatted })
+}
+
+/// How many files of the mailbox directory carry a uid, counted from
+/// `read_dir` alone: no stat, no dedupe, entries that fail to read skipped. A
+/// cheap upper bound on what `scan_dir` will find, for a progress total.
+pub fn count_files(mailbox_dir: &Path) -> io::Result<usize> {
+    Ok(fs::read_dir(messages_in(mailbox_dir))?
+        .flatten()
+        .filter(|e| maildir::vault_filename_uid(&e.file_name().to_string_lossy()).is_some())
+        .count())
+}
+
+/// Disk only. The entry for `uid` in the mailbox directory `mailbox_dir`, or
+/// `None` when it holds no file for it (`find`'s rule).
+pub fn find_at(mailbox_dir: &Path, uid: u32) -> Option<Entry> {
+    let path = path_of(&messages_in(mailbox_dir), uid)?;
+    let name = path.file_name()?.to_string_lossy().into_owned();
+    Some(entry_of(uid, name, fs::metadata(&path).ok()))
+}
+
+/// The readable bytes of the entry `name` (of `uid`) that a `scan_dir` or
+/// `find_at` of `mailbox_dir` returned: its decrypted copy when there is one
+/// (`pgp::readable`), so an encrypted message is indexed and shown in clear.
+/// No rescan: a name gone since the listing (a flag rename) is `NotFound`.
+/// A name that can never be read as a file is `IsADirectory` or
+/// `NotADirectory`. On Windows, opening a directory with `File::open` fails
+/// with neither kind, so a failed read whose path is a directory is re-kinded
+/// to `IsADirectory`. Any other error may pass (permissions, a flaky drive).
+pub fn read_listed(mailbox_dir: &Path, uid: u32, name: &str) -> io::Result<Vec<u8>> {
+    let dir = messages_in(mailbox_dir);
+    let path = dir.join(name);
+    match fs::read(&path) {
+        Ok(raw) => Ok(crate::pgp::readable(&dir, uid, raw)),
+        Err(e) if matches!(e.kind(), io::ErrorKind::NotFound | io::ErrorKind::IsADirectory | io::ErrorKind::NotADirectory) => Err(e),
+        Err(e) if path.is_dir() => Err(io::Error::new(io::ErrorKind::IsADirectory, e)),
+        Err(e) => Err(e),
+    }
+}
+
+/// The flags `Entry.flags` holds for an entry named `name`. For a derived
+/// store that kept only `Entry.name` (a search index row) and must answer
+/// with the flags it was listed under.
+pub fn flags_in_name(name: &str) -> Vec<String> {
+    parse_flags_from_filename(name)
+}
+
+/// The flag letters (`ADFRST`) `flags` names, in `flags`' order, as the search
+/// index stores them. Takes what `Entry.flags` holds and what a writer passes
+/// (`seen` or `s`, any case); a flag no letter carries (`\Seen`) adds none.
+pub fn flag_letters(flags: &[String]) -> String {
+    flags.iter().filter_map(|f| vault_files::flag_letter(f)).collect()
+}
+
+/// The `Entry.name` a Maildir entry of `uid` under `flags` carries, for a
+/// derived store's row of a message no file holds yet (a header-only row).
+pub fn entry_name(uid: u32, flags: &[String]) -> String {
+    vault_files::build_maildir_filename(uid, flags)
 }
 
 // ── Path-level helpers for `vault_files` ─────────────────────────────────────
@@ -484,5 +614,49 @@ mod tests {
             maildir::mirror_cur(mirror, "me@x.test", "Work/Clients"),
             mirror.join("me@x.test").join("Work/Clients").join("cur")
         );
+    }
+
+    #[test]
+    fn mailbox_dir_level_reads_keep_what_derived_stores_need() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let mbox = mailbox_dir_at(&root.join("Maildir"), ACCT, MBOX);
+        assert_eq!(mbox, mailbox_dir(root, ACCT, MBOX));
+        // No message directory yet: NotFound is kept, never an empty listing.
+        assert_eq!(scan_dir(&mbox).unwrap_err().kind(), io::ErrorKind::NotFound);
+        assert_eq!(count_files(&mbox).unwrap_err().kind(), io::ErrorKind::NotFound);
+        assert_eq!(has_message_dir(&mbox).unwrap_err().kind(), io::ErrorKind::NotFound);
+
+        write(root, ACCT, MBOX, 3, b"three", &flags(&["seen", "flagged"])).unwrap();
+        write(root, ACCT, MBOX, 4, b"four", &[]).unwrap();
+        let dir = messages_dir(root, ACCT, MBOX);
+        fs::write(dir.join("notes.txt"), b"stray").unwrap();
+        // A second name for uid 4 that is a directory: listed, never readable.
+        let odd = format!("4{INFO_PREFIX}T.eml");
+        fs::create_dir(dir.join(&odd)).unwrap();
+        assert!(has_message_dir(&mbox).unwrap());
+        assert_eq!(count_files(&mbox).unwrap(), 3, "every uid-named entry, the directory too");
+
+        let scan = scan_dir(&mbox).unwrap();
+        assert!(scan.unstatted.is_empty());
+        assert_eq!(scan.entries.iter().map(|e| e.uid).collect::<Vec<_>>(), vec![3, 4], "one entry per uid");
+        let three = find(root, ACCT, MBOX, 3).unwrap();
+        assert_eq!((scan.entries[0].uid, &scan.entries[0].name, &scan.entries[0].flags), (3, &three.name, &three.flags));
+        assert_eq!(scan.entries[0].size, 5);
+        assert_eq!(find_at(&mbox, 3), Some(three));
+        assert_eq!(find_at(&mbox, 9), None);
+
+        assert_eq!(read_listed(&mbox, 3, &scan.entries[0].name).unwrap(), b"three".to_vec());
+        assert_eq!(read_listed(&mbox, 3, &format!("3{INFO_PREFIX}.eml")).unwrap_err().kind(), io::ErrorKind::NotFound);
+        let dir_err = read_listed(&mbox, 4, &odd).unwrap_err().kind();
+        assert!(matches!(dir_err, io::ErrorKind::IsADirectory | io::ErrorKind::NotADirectory), "{dir_err:?}");
+
+        // The flags of a stored name, and the letters the index keeps for them.
+        let name = format!("7{INFO_PREFIX}FS.eml");
+        assert_eq!(flags_in_name(&name), flags(&["flagged", "seen", "\\Seen", "\\Flagged"]));
+        assert_eq!(flag_letters(&flags_in_name(&name)), "FS");
+        assert_eq!(flag_letters(&flags(&["Seen", "a", "\\Answered", "replied"])), "SAR", "in order, case-blind, letters too");
+        assert_eq!(entry_name(7, &flags(&["seen", "flagged"])), name);
+        assert_eq!(flag_letters(&flags_in_name(&entry_name(7, &flags(&["replied", "draft"])))), "DR");
     }
 }

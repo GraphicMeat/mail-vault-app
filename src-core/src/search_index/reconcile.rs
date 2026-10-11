@@ -9,11 +9,12 @@
 use super::db::{meta_get, meta_set};
 use super::text::{cap_chars, cjk_units};
 use super::{lock, SharedConn};
-use crate::maildir::vault_filename_uid;
+use crate::message_store;
 use crate::search_index::query::MSG_KEY_SQL;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+#[cfg(test)]
 use std::time::UNIX_EPOCH;
 
 pub const BATCH: usize = 500;
@@ -126,16 +127,35 @@ fn db_err(e: rusqlite::Error) -> String {
     e.to_string()
 }
 
+/// One listed message (a `message_store::Entry`) as the index and the vault
+/// registry store it.
 pub(crate) struct DiskFile {
     pub(crate) uid: u32,
+    /// `Entry.name`: with size and mtime, what change detection compares.
     pub(crate) filename: String,
     pub(crate) size: i64,
     pub(crate) mtime_ns: i64,
+    /// `Entry.flags` as the letters the index stores (`messages.flags`).
+    pub(crate) flags: String,
+}
+
+impl DiskFile {
+    fn of(entry: message_store::Entry) -> Self {
+        DiskFile {
+            uid: entry.uid,
+            size: i64::try_from(entry.size).unwrap_or(i64::MAX),
+            mtime_ns: entry.mtime_ns as i64,
+            flags: message_store::flag_letters(&entry.flags),
+            filename: entry.name,
+        }
+    }
 }
 
 struct Row {
     id: i64,
     filename: String,
+    /// The flag letters stored with the row (`messages.flags`).
+    flags: String,
     size: i64,
     mtime_ns: i64,
     body_state: i64,
@@ -151,12 +171,14 @@ struct Row {
 /// What `apply_ops` does to one row.
 enum Op<'a> {
     Remove,
-    Rename(&'a str),
+    /// The listed file under its new name and flags.
+    Rename(&'a DiskFile),
     /// The file is gone and the server still lists the message: keep the row
     /// and its FTS terms, force a re-read when a file comes back, and take its
     /// body and attachments out of the queues that need the file. Carries the
-    /// row's name without the archived flag: the local archived copy is gone.
-    Keep(String),
+    /// row's name and flag letters without the archived flag: the local
+    /// archived copy is gone.
+    Keep { filename: String, flags: String },
 }
 
 /// `mtime_ns` of a row whose file must be read again whatever its size and
@@ -201,7 +223,7 @@ pub fn list_vault_dirs(maildir_root: &Path) -> Result<Vec<(String, String)>, Str
     for account in accounts {
         let account_path = maildir_root.join(&account);
         for dir in subdirs(&account_path).map_err(|e| format!("list {}: {e}", account_path.display()))? {
-            if account_path.join(&dir).join("cur").is_dir() {
+            if matches!(message_store::has_message_dir(&account_path.join(&dir)), Ok(true)) {
                 out.push((account.clone(), dir));
             }
         }
@@ -217,46 +239,22 @@ fn subdirs(path: &Path) -> std::io::Result<Vec<String>> {
         .collect())
 }
 
-/// `<uid>:` files in `cur`, first entry per uid wins, plus the uids whose
-/// `metadata()` failed. `None` when `cur` cannot be read at all, missing
-/// included: the caller never mistakes that for "every message deleted" (a
-/// folder that is gone is `prune_missing_dirs`'s job).
-fn list_cur(cur: &Path) -> Option<(HashMap<u32, DiskFile>, HashSet<u32>)> {
-    read_cur(cur).ok()
+/// The mailbox's messages, first file per uid, plus the uids whose stat
+/// failed. `None` when the mailbox cannot be listed at all, no message
+/// directory included: the caller never mistakes that for "every message
+/// deleted" (a folder that is gone is `prune_missing_dirs`'s job).
+fn list_files(mailbox_dir: &Path) -> Option<(HashMap<u32, DiskFile>, HashSet<u32>)> {
+    read_mailbox(mailbox_dir).ok()
 }
 
-/// `list_cur` with the `read_dir` error kept, for the vault registry: there a
-/// missing `cur` is a verified-empty folder, and only other errors are unknown.
-pub(crate) fn read_cur(cur: &Path) -> std::io::Result<(HashMap<u32, DiskFile>, HashSet<u32>)> {
-    let entries = std::fs::read_dir(cur)?;
-    let mut files = HashMap::new();
-    let mut unstatted = HashSet::new();
-    // An error mid-iteration ends the listing (the Unix `ReadDir` stops after
-    // one), so it is the whole listing's error, never a shorter folder:
-    // `flatten()` here once turned a truncated listing into verified truth
-    // that pruned every row after the break. Re-kinded to `Other`, because
-    // the registry reads `NotFound` as "no cur, an empty folder", which is
-    // only true of the `read_dir` open above. Not injectable in a test (no
-    // way to fail `readdir` part-way on a real directory), hence this note.
-    for entry in entries {
-        let entry = entry.map_err(std::io::Error::other)?;
-        let filename = entry.file_name().to_string_lossy().into_owned();
-        let Some(uid) = vault_filename_uid(&filename) else { continue };
-        let Ok(meta) = entry.metadata() else {
-            // Typically a flag rename between read_dir and stat: the message
-            // is still there under another name, so its row must not be removed.
-            unstatted.insert(uid);
-            continue;
-        };
-        let mtime_ns = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map_or(0, |d| d.as_nanos() as i64);
-        let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
-        files.entry(uid).or_insert(DiskFile { uid, filename, size, mtime_ns });
-    }
-    Ok((files, unstatted))
+/// `list_files` with the listing's error kept, for the vault registry: there a
+/// `NotFound` is a verified-empty folder, and only other errors are unknown.
+/// The strict listing is `message_store::scan_dir`'s (a failure part way is
+/// the whole listing's error, never a shorter folder).
+pub(crate) fn read_mailbox(mailbox_dir: &Path) -> std::io::Result<(HashMap<u32, DiskFile>, HashSet<u32>)> {
+    let scan = message_store::scan_dir(mailbox_dir)?;
+    let files = scan.entries.into_iter().map(|entry| (entry.uid, DiskFile::of(entry))).collect();
+    Ok((files, scan.unstatted.into_iter().collect()))
 }
 
 /// The connection at a later lock point, only if it is still the database
@@ -304,9 +302,9 @@ pub fn reconcile_mailbox_guarded(
     progress: &mut dyn FnMut(usize),
 ) -> Result<ReconcileStats, String> {
     let mut stats = ReconcileStats::default();
-    let cur = crate::vault_files::account_dir(maildir_root, account_id).join(vault_dir).join("cur");
+    let mailbox_dir = message_store::mailbox_dir_at(maildir_root, account_id, vault_dir);
     // Missing or unreadable folder: touch nothing.
-    let Some((files, unstatted)) = list_cur(&cur) else { return Ok(stats) };
+    let Some((files, unstatted)) = list_files(&mailbox_dir) else { return Ok(stats) };
 
     let (rows, db_path) = {
         let guard = lock(db);
@@ -321,7 +319,7 @@ pub fn reconcile_mailbox_guarded(
     };
 
     let mut to_parse: Vec<&DiskFile> = Vec::new();
-    let mut renames: Vec<(i64, &str)> = Vec::new();
+    let mut renames: Vec<(i64, &DiskFile)> = Vec::new();
     for file in files.values() {
         match rows.get(&file.uid) {
             Some(row)
@@ -335,7 +333,7 @@ pub fn reconcile_mailbox_guarded(
                 if row.filename == file.filename {
                     stats.unchanged += 1;
                 } else {
-                    renames.push((row.id, file.filename.as_str()));
+                    renames.push((row.id, file));
                 }
             }
             _ => to_parse.push(file),
@@ -357,12 +355,12 @@ pub fn reconcile_mailbox_guarded(
                 stats.kept += 1;
                 // Marked once; again only when a bodies-on toggle made it pending.
                 if row.mtime_ns != EVICTED || row.body_state == BODY_PENDING {
-                    ops.push((row.id, Op::Keep(without_archived(&row.filename))));
+                    ops.push((row.id, Op::Keep { filename: without_archived(&row.filename), flags: row.flags.replace('A', "") }));
                 }
             }
         }
     }
-    ops.extend(renames.iter().map(|&(id, name)| (id, Op::Rename(name))));
+    ops.extend(renames.iter().map(|&(id, file)| (id, Op::Rename(file))));
 
     // One transaction per chunk, so a folder emptied of 20k files never holds
     // the lock for all of them.
@@ -392,8 +390,8 @@ pub fn reconcile_mailbox_guarded(
         }
         let mut docs = Vec::with_capacity(batch.len());
         for &file in batch {
-            let path = cur.join(&file.filename);
-            let raw = match std::fs::read(&path) {
+            // An encrypted message is indexed from its decrypted copy, so it is searchable.
+            let raw = match message_store::read_listed(&mailbox_dir, file.uid, &file.filename) {
                 Ok(raw) => raw,
                 // Renamed (a flag change) or deleted since the listing: recording it
                 // under the old name and stat would pin an empty body on a message
@@ -404,15 +402,12 @@ pub fn reconcile_mailbox_guarded(
                 }
                 // Never readable at this path (a directory, or a path through a file):
                 // recorded as unparseable, so it counts as indexed and is not re-read.
-                // `IsADirectory`/`NotADirectory` is unix's EISDIR/ENOTDIR, reliably
-                // mapped by std; Windows opening a directory with plain `File::open`
-                // does not reliably land on either kind (observed: the read fails,
-                // but not with a kind this match caught, so the entry fell through to
-                // the catch-all below and was silently dropped forever instead of
-                // being recorded as unparseable-and-not-retried). `path.is_dir()` is
-                // the one check that is unambiguous on every platform regardless of
-                // which OS error a failed read happened to surface.
-                Err(e) if matches!(e.kind(), std::io::ErrorKind::IsADirectory | std::io::ErrorKind::NotADirectory) || path.is_dir() => {
+                // `read_listed` reports a directory as `IsADirectory` on every
+                // platform: Windows opening one with plain `File::open` lands on
+                // neither kind by itself (observed: the entry fell through to the
+                // catch-all below and was silently dropped forever instead of being
+                // recorded as unparseable-and-not-retried).
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::IsADirectory | std::io::ErrorKind::NotADirectory) => {
                     stats.failed += 1;
                     docs.push((file, None));
                     continue;
@@ -424,8 +419,6 @@ pub fn reconcile_mailbox_guarded(
                     continue;
                 }
             };
-            // An encrypted message is indexed from its decrypted copy, so it is searchable.
-            let raw = crate::pgp::readable(&cur, file.uid, raw);
             let doc = parse(&raw, file.uid, &file.filename).map(|mut d| {
                 // Cap before taking the lock: less memory per batch, shorter commits.
                 d.body_text = if config.bodies { cap_chars(d.body_text, MAX_BODY_CHARS) } else { String::new() };
@@ -462,7 +455,7 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
     let mut st = conn.prepare_cached(
         "SELECT m.id, m.uid, m.filename, m.size, m.mtime_ns, m.body_state,
                 m.has_attachments AND NOT EXISTS (SELECT 1 FROM attachments a WHERE a.message_row = m.id),
-                m.snippet IS NULL, m.message_id
+                m.snippet IS NULL, m.message_id, m.flags
          FROM messages m WHERE m.account_id = ?1 AND m.vault_dir = ?2",
     )?;
     let rows = st.query_map(params![account_id, vault_dir], |r| {
@@ -471,6 +464,7 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
             Row {
                 id: r.get(0)?,
                 filename: r.get(2)?,
+                flags: r.get(9)?,
                 size: r.get(3)?,
                 mtime_ns: r.get(4)?,
                 body_state: r.get(5)?,
@@ -502,20 +496,20 @@ fn apply_ops(conn: &mut Connection, ops: &[(i64, Op)]) -> rusqlite::Result<Vec<S
                 delete_fts(&tx, id)?;
                 tx.prepare_cached("DELETE FROM messages WHERE id = ?1")?.execute([id])?;
             }
-            Op::Rename(filename) => {
+            Op::Rename(file) => {
                 // The flags ride the name, so a rename is how a star, a read
                 // receipt or an archive reaches the index at all.
                 tx.prepare_cached("UPDATE messages SET filename = ?1, flags = ?2 WHERE id = ?3")?
-                    .execute(params![filename, flags_of(filename), id])?;
+                    .execute(params![file.filename, file.flags, id])?;
             }
-            Op::Keep(filename) => {
+            Op::Keep { filename, flags } => {
                 // A body still pending can never be read without the file:
                 // recorded as unreadable, so the index can report complete.
                 tx.prepare_cached(
                     "UPDATE messages SET mtime_ns = ?1, filename = ?2, flags = ?3,
                             body_state = CASE WHEN body_state = ?4 THEN ?5 ELSE body_state END WHERE id = ?6",
                 )?
-                .execute(params![EVICTED, filename, flags_of(filename), BODY_PENDING, BODY_UNPARSEABLE, id])?;
+                .execute(params![EVICTED, filename, flags, BODY_PENDING, BODY_UNPARSEABLE, id])?;
                 tx.prepare_cached("UPDATE attachments SET state = ?1 WHERE message_row = ?2 AND state = 'pending'")?
                     .execute(params![ATTACHMENT_EVICTED, id])?;
             }
@@ -592,7 +586,7 @@ fn commit_batch(
                     d.has_attachments,
                     body_state,
                     d.row_json,
-                    flags_of(&file.filename),
+                    file.flags,
                     d.to_addrs.join("\n").to_lowercase(),
                     snippet,
                 ],
@@ -825,8 +819,9 @@ fn addr_text(v: &serde_json::Value) -> String {
     }
 }
 
-/// A header-only row for a message the header cache lists and no file holds.
-fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String) {
+/// A header-only row for a message the header cache lists and no file holds:
+/// the doc, the name its file would carry, and the flag letters.
+fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String, String) {
     let text = |key: &str| header.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string();
     // An address field is a list, or one address (Reply-To): either is read.
     let list = |key: &str| match header.get(key) {
@@ -848,7 +843,9 @@ fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String) {
         .and_then(|v| v.as_array())
         .map(|l| l.iter().filter_map(|f| f.as_str()).filter(|f| !f.eq_ignore_ascii_case("archived")).map(str::to_owned).collect())
         .unwrap_or_default();
-    let filename = crate::vault_files::build_maildir_filename(uid, &crate::vault_flags::merge_flags(&[], &imap));
+    let flags = crate::vault_flags::merge_flags(&[], &imap);
+    let filename = message_store::entry_name(uid, &flags);
+    let letters = message_store::flag_letters(&flags);
     let mut row = header.clone();
     if let Some(obj) = row.as_object_mut() {
         for key in ["text", "html", "flags"] {
@@ -867,7 +864,7 @@ fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String) {
         row_json: row.to_string(),
         ..IndexDoc::default()
     };
-    (doc, filename)
+    (doc, filename, letters)
 }
 
 /// After a fresh index is built from `cur/` (a rebuild, corruption recovery,
@@ -888,18 +885,18 @@ pub fn add_listed_rows(
     listed: &[serde_json::Value],
     keep_going: &dyn Fn() -> bool,
 ) -> Result<usize, String> {
-    let cur = crate::vault_files::account_dir(maildir_root, account_id).join(vault_dir).join("cur");
+    let mailbox_dir = message_store::mailbox_dir_at(maildir_root, account_id, vault_dir);
     // Unreadable or missing: nothing to compare against, and reconcile leaves
     // such a folder alone too. Not an error, so it never pins the fresh-index
     // mark (and a whole-cache re-read on every pass) for good.
-    let Some((files, unstatted)) = list_cur(&cur) else { return Ok(0) };
-    let rows: Vec<(u32, IndexDoc, String)> = listed
+    let Some((files, unstatted)) = list_files(&mailbox_dir) else { return Ok(0) };
+    let rows: Vec<(u32, IndexDoc, String, String)> = listed
         .iter()
         .filter_map(|h| {
             let uid = h.get("uid").and_then(|v| v.as_u64()).and_then(|u| u32::try_from(u).ok())?;
             (!files.contains_key(&uid) && !unstatted.contains(&uid)).then(|| {
-                let (doc, filename) = listed_row(uid, h);
-                (uid, doc, filename)
+                let (doc, filename, letters) = listed_row(uid, h);
+                (uid, doc, filename, letters)
             })
         })
         .collect();
@@ -927,7 +924,7 @@ pub fn add_listed_rows(
     };
     let rows: Vec<_> = rows
         .into_iter()
-        .filter(|(_, d, _)| match d.message_id.as_deref().map(crate::maildir::normalize_message_id).filter(|id| !id.is_empty()) {
+        .filter(|(_, d, _, _)| match d.message_id.as_deref().map(crate::maildir::normalize_message_id).filter(|id| !id.is_empty()) {
             Some(id) => known.insert(id),
             None => true,
         })
@@ -955,7 +952,7 @@ pub fn add_listed_rows(
                      ON CONFLICT(account_id, vault_dir, uid) DO NOTHING RETURNING id",
                 )
                 .map_err(db_err)?;
-            for (uid, d, filename) in batch {
+            for (uid, d, filename, letters) in batch {
                 let addrs = d.addrs.join("\n");
                 let id: Option<i64> = insert
                     .query_row(
@@ -974,7 +971,7 @@ pub fn add_listed_rows(
                             d.has_attachments,
                             BODY_UNPARSEABLE,
                             d.row_json,
-                            flags_of(filename),
+                            letters,
                             d.to_addrs.join("\n").to_lowercase(),
                         ],
                         |r| r.get(0),
@@ -1089,6 +1086,12 @@ mod tests {
         let cur = v.root.join("Maildir").join(account).join(dir).join("cur");
         std::fs::create_dir_all(&cur).unwrap();
         std::fs::write(cur.join(name), content).unwrap();
+    }
+
+    /// A listed file as `read_mailbox` builds one, its flags read off the name.
+    fn disk_file(uid: u32, filename: &str, size: i64, mtime_ns: i64) -> DiskFile {
+        let flags = crate::message_store::flag_letters(&crate::message_store::flags_in_name(filename));
+        DiskFile { uid, filename: filename.to_string(), size, mtime_ns, flags }
     }
 
     fn run(v: &Vault, account: &str, dir: &str, cfg: IndexConfig, counter: &AtomicUsize) -> ReconcileStats {
@@ -1738,7 +1741,7 @@ mod tests {
     fn commit_batch_writes_pending_attachment_rows_for_each_candidate() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc = IndexDoc {
             subject: "Invoice".into(),
             has_attachments: true,
@@ -1765,7 +1768,7 @@ mod tests {
     fn commit_batch_writes_no_attachment_rows_when_attachments_are_disabled() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc = IndexDoc {
             attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 1 }],
             ..IndexDoc::default()
@@ -1779,7 +1782,7 @@ mod tests {
     fn reparsing_a_changed_message_replaces_its_attachment_rows() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc1 = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "old.pdf".into(), mime: "application/pdf".into(), size: 1 }], ..IndexDoc::default() };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc1))]).unwrap();
         let doc2 = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "new.pdf".into(), mime: "application/pdf".into(), size: 2 }], ..IndexDoc::default() };
@@ -1792,7 +1795,7 @@ mod tests {
     fn run_pending_extractions_fills_in_ok_text_and_rewrites_fts() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc = IndexDoc {
             subject: "Invoice".into(),
             attachment_candidates: vec![AttachmentMeta { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11 }],
@@ -1823,7 +1826,7 @@ mod tests {
     fn run_pending_extractions_with_bodies_off_drops_body_text_from_fts() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc = IndexDoc {
             subject: "Invoice".into(),
             body_text: "a very secret body about quokkas".into(),
@@ -1857,7 +1860,7 @@ mod tests {
     fn a_transient_extraction_error_leaves_the_row_pending() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc = IndexDoc {
             attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }],
             ..IndexDoc::default()
@@ -1899,7 +1902,7 @@ mod tests {
         use crate::search_index::attachments::{tests::Hangs, AttachmentInput, BoundedExtractor};
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let image = |name: &str| AttachmentMeta { filename: name.into(), mime: "image/png".into(), size: 20_000 };
         let doc = IndexDoc { attachment_candidates: vec![image("a.png"), image("b.png")], ..IndexDoc::default() };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
@@ -1937,7 +1940,7 @@ mod tests {
     fn a_missing_file_leaves_the_row_pending_without_looping_forever_in_one_call() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc = IndexDoc {
             attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }],
             ..IndexDoc::default()
@@ -2152,7 +2155,7 @@ mod tests {
     fn attachment_read_part_runs_without_holding_the_shared_connection() {
         let tmp = tempfile::tempdir().unwrap();
         let mut conn = db::open(tmp.path()).unwrap();
-        let file = DiskFile { uid: 1, filename: format!("1{INFO_PREFIX}"), size: 10, mtime_ns: 0 };
+        let file = disk_file(1, &format!("1{INFO_PREFIX}"), 10, 0);
         let doc = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }], ..IndexDoc::default() };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
         let shared = Mutex::new(Some(conn));

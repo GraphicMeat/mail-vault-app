@@ -7,8 +7,10 @@
 //! that is there, until the daemon restarts.
 //!
 //! The rule, per non-test `fn` body (from its opening `{`, brace-matched) in
-//! `src-core/src` and `src-daemon/src` that names a vault message dir
-//! (`VAULT`, or the word `cur`):
+//! `src-core/src` and `src-daemon/src` that either names a vault message dir
+//! (`VAULT`, or the word `cur`) and writes a file (`CREATE`, `MOVE`), or
+//! calls a `message_store` writer (the `message_store::` needles of `CREATE`
+//! and `MOVE`), which needs no vault dir named: the store hides the path.
 //! - a body that CREATES a file (`CREATE`) must call `upsert(` on a registry
 //!   receiver (`reg.` / `registry.`). An `invalidate` alone does not do:
 //!   every create writer today pairs its success-path `upsert` with an
@@ -23,7 +25,13 @@
 //! - A write inside a helper that takes a bare path (`vault_flags::rename_for`,
 //!   `maildir::rename_dir_add_eml`, `do_move`) is invisible: the helper names
 //!   no vault dir and its caller holds no fs call. Only the fn that has both
-//!   in one body is checked.
+//!   in one body is checked. `message_store`'s own fns are such helpers; their
+//!   callers are watched through the `message_store::` needles instead.
+//! - A `message_store` writer is seen only when called by that path
+//!   (`message_store::write(`, with any `crate::` or `mailvault_core::`
+//!   before it): a `use message_store::write` and a bare `write(` call, or an
+//!   alias, hides it. A body watched only for a store call also counts its
+//!   plain `fs::write(`-style creates as creates.
 //! - A registry call anywhere in the body counts, whether or not it follows
 //!   the write it answers for, and a registry call in a trailing `//` comment
 //!   counts too (only whole-line comments are blanked).
@@ -40,8 +48,31 @@
 use std::path::{Path, PathBuf};
 
 const WATCHED: &[&str] = &["src-core/src", "src-daemon/src"];
-const CREATE: &[&str] = &["fs::write(", "write_atomic(", "fs::copy(", "File::create", "File::options", "OpenOptions"];
-const MOVE: &[&str] = &["fs::rename(", "fsx::retire(", "fs::remove_file(", "fs::remove_dir_all("];
+const CREATE: &[&str] = &[
+    "fs::write(",
+    "write_atomic(",
+    "fs::copy(",
+    "File::create",
+    "File::options",
+    "OpenOptions",
+    "message_store::put(",
+    "message_store::write(",
+    "message_store::write_replacing(",
+];
+const MOVE: &[&str] = &[
+    "fs::rename(",
+    "fsx::retire(",
+    "fs::remove_file(",
+    "fs::remove_dir_all(",
+    "message_store::rename_onto(",
+    "message_store::unlink(",
+    "message_store::unlink_stale(",
+    "message_store::set_flags(",
+    "message_store::remove(",
+];
+/// The `CREATE`/`MOVE` needles that are `message_store` writers: one alone
+/// makes a body a vault writer.
+const STORE: &str = "message_store::";
 const VAULT: &[&str] = &["cur_path", "cur_dir", "\"cur\"", "find_by_uid", "find_file_by_uid", "uid_file_map"];
 const RECEIVERS: &[&str] = &["reg.", "registry."];
 
@@ -169,10 +200,10 @@ fn registry_call(body: &str, verbs: &[&str]) -> bool {
 }
 
 /// Whether the rule looks at this body at all: it names a vault dir and holds
-/// a file write.
+/// a file write, or it calls a `message_store` writer.
 fn inspected(body: &str) -> bool {
-    (VAULT.iter().any(|v| body.contains(v)) || has_word(body, "cur"))
-        && CREATE.iter().chain(MOVE).any(|w| body.contains(w))
+    let writes = |store: bool| CREATE.iter().chain(MOVE).any(|w| w.starts_with(STORE) == store && body.contains(w));
+    writes(true) || ((VAULT.iter().any(|v| body.contains(v)) || has_word(body, "cur")) && writes(false))
 }
 
 fn violation(body: &str) -> Option<&'static str> {
@@ -214,7 +245,7 @@ fn scan() -> (usize, Vec<(String, String, &'static str)>) {
 #[test]
 fn every_vault_writer_keeps_the_registry_current() {
     let (count, flagged) = scan();
-    // A renamed vault-dir helper would blind the matcher; today it sees 19.
+    // A renamed vault-dir helper would blind the matcher; today it sees 30.
     assert!(count >= 15, "the guard inspected only {count} vault writers; did a VAULT or CREATE/MOVE needle go stale?");
     let bad: Vec<String> = flagged
         .iter()
@@ -266,4 +297,46 @@ fn the_matcher_flags_a_create_writer_without_an_upsert() {
     assert!(fn_bodies(&non_test_text(&in_test_mod)).is_empty(), "a test module's fns are skipped");
     let commented = "fn f(p: &Path) {\n    // reg.upsert(a, m, u, &p);\n    fs::write(p.join(\"cur\"), b)?;\n}\n";
     assert!(one(commented).is_some(), "a whole-line comment does not count as a registry call");
+}
+
+/// Non-vacuity for the `message_store` needles: a body that calls a store
+/// writer is inspected with no vault dir named, a create needs an upsert, and
+/// a rename or remove needs any registry call. The path-level helpers
+/// `vault_files` calls are watched the same way.
+#[test]
+fn the_matcher_watches_message_store_writers() {
+    let one = |src: &str| {
+        let text = non_test_text(src);
+        let bodies = fn_bodies(&text);
+        assert_eq!(bodies.len(), 1, "{bodies:?}");
+        assert!(inspected(bodies[0].1), "a message_store writer must be inspected: {src}");
+        violation(bodies[0].1)
+    };
+    let write = "fn archive(root: &Path) {\n    message_store::write_replacing(root, a, m, uid, raw, f)?;\n}\n";
+    assert!(one(write).is_some(), "a store write with no registry call must be flagged");
+    assert_eq!(one(&write.replace("f)?;", "f)?;\n    reg.upsert(a, m, uid, &p);")), None, "a store write with an upsert must pass");
+    assert!(one(&write.replace("f)?;", "f)?;\n    reg.invalidate(a, m);")).is_some(), "an invalidate alone must not pass for a store write");
+    let plain = "fn import(root: &Path) {\n    crate::message_store::write(root, a, m, uid, raw, f)?;\n}\n";
+    assert!(one(plain).is_some(), "`message_store::write(` is a create");
+    assert_eq!(one(&plain.replace("f)?;", "f)?;\n    state.vault_registry.upsert(a, m, uid, &p);")), None);
+
+    let starred = "fn star(root: &Path) {\n    mailvault_core::message_store::set_flags(root, a, m, uid, f)?;\n    state.vault_registry.rename(a, m, uid, &n);\n}\n";
+    assert_eq!(one(starred), None, "a store flag change with a registry rename must pass");
+    assert!(one(&starred.replace("state.vault_registry.rename", "names.rename")).is_some(), "a non-registry `.rename(` must not count");
+    let removed = "fn drop_uid(root: &Path) {\n    message_store::remove(root, a, m, uid)?;\n    reg.invalidate(a, m);\n}\n";
+    assert_eq!(one(removed), None, "a store remove with an invalidate must pass");
+    assert!(one(&removed.replace("    reg.invalidate(a, m);\n", "")).is_some(), "a store remove with no registry call must be flagged");
+
+    for call in [
+        "message_store::put(&dir, uid, raw, f)?;",
+        "message_store::unlink_stale(&dir, &n, &stale);",
+        "message_store::rename_onto(&old, uid, f)?;",
+        "message_store::unlink(&path, uid)?;",
+    ] {
+        assert!(one(&format!("fn f(dir: &Path) {{\n    crate::{call}\n}}\n")).is_some(), "{call} with no registry call must be flagged");
+    }
+
+    let read = "fn show(root: &Path) {\n    message_store::read_raw(root, a, m, uid)?;\n    fs::write(out, b)?;\n}\n";
+    let text = non_test_text(read);
+    assert!(!inspected(fn_bodies(&text)[0].1), "a store read next to an unrelated write is no vault writer");
 }

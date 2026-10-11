@@ -13,7 +13,6 @@ use crate::server::DaemonState;
 use mailvault_core::app_db::{self, tags};
 use mailvault_core::notes_to_self::{self, normalize_identity, Column};
 use mailvault_core::search_index::query::NoteAttachment;
-use mailvault_core::vault_eml::parse_flags_from_filename;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -152,7 +151,7 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         let (column, display_subject) = notes_to_self::classify(&candidate.subject, &snippet, &attachment_pairs);
         let links = notes_to_self::links(&candidate.subject, &snippet);
         let flags: Vec<String> =
-            parse_flags_from_filename(&candidate.filename).into_iter().filter(|f| f.starts_with('\\')).collect();
+            mailvault_core::message_store::flags_in_name(&candidate.filename).into_iter().filter(|f| f.starts_with('\\')).collect();
         let starred = flags.iter().any(|f| f == "\\Flagged");
         let msg_key = app_db::identity::msg_key(candidate.message_id.as_deref(), &candidate.vault_dir, candidate.uid);
         let key = dedupe_key(candidate.message_id.as_deref(), &candidate.from_addr_lc, &display_subject, candidate.date_utc);

@@ -11,8 +11,8 @@ use mailvault_core::search_index::plan::{bodies_action, collect_burst, needs_ful
 use mailvault_core::search_index::reconcile::{self, AttachmentMeta, IndexConfig, IndexDoc};
 use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
 use mailvault_core::search_index::{self as core, db, lock, SharedConn};
-use mailvault_core::maildir::vault_filename_uid;
-use mailvault_core::vault_eml::{collect_attachment_parts, find_file_by_uid, parse_eml_bytes_light, parse_flags_from_filename, part_filename};
+use mailvault_core::message_store;
+use mailvault_core::vault_eml::{collect_attachment_parts, parse_eml_bytes_light, part_filename};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use rusqlite::OptionalExtension;
@@ -205,8 +205,10 @@ fn encoded_part_size(part: &mailparse::ParsedMail) -> u64 {
 }
 
 /// `ParseFn` for core: the list-row parser, so rows and the index agree on one parser.
+/// `filename` is the listed `Entry.name`; its flags are the ones the store
+/// listed it under (`message_store::flags_in_name`).
 pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<IndexDoc> {
-    let email = parse_eml_bytes_light(raw, uid, parse_flags_from_filename(filename)).ok()?;
+    let email = parse_eml_bytes_light(raw, uid, message_store::flags_in_name(filename)).ok()?;
     let mut row = serde_json::to_value(&email).ok()?;
     let body_text = body_of(&row);
     let obj = row.as_object_mut()?;
@@ -273,10 +275,10 @@ pub(crate) fn read_attachment_part(
     _filename: &str,
     part_index: usize,
 ) -> Option<(mailvault_core::search_index::attachments::AttachmentInput, IndexDoc)> {
-    let cur = mailvault_core::vault_files::account_dir(maildir_root, account_id).join(vault_dir).join("cur");
-    let path = find_file_by_uid(&cur, uid)?;
-    let raw = mailvault_core::pgp::readable(&cur, uid, std::fs::read(&path).ok()?);
-    let current_filename = path.file_name()?.to_string_lossy().into_owned();
+    let mailbox_dir = message_store::mailbox_dir_at(maildir_root, account_id, vault_dir);
+    let entry = message_store::find_at(&mailbox_dir, uid)?;
+    let raw = message_store::read_listed(&mailbox_dir, uid, &entry.name).ok()?;
+    let current_filename = entry.name;
     let parsed = mailparse::parse_mail(&raw).ok()?;
     let mut parts = Vec::new();
     collect_attachment_parts(&parsed, &mut parts);
@@ -345,7 +347,7 @@ pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {
             if h.attach_matched {
                 matched_in.push("attachment");
             }
-            let flags = parse_flags_from_filename(&h.filename);
+            let flags = message_store::flags_in_name(&h.filename);
             let obj = row.as_object_mut()?;
             obj.insert("uid".into(), h.uid.into());
             obj.insert("vaultDir".into(), h.vault_dir.clone().into());
@@ -702,7 +704,7 @@ pub fn rows_reply(st: &SearchIndexState, account_id: &str, mailbox: &str, uids: 
         for uid in uids {
             let Some((filename, row_json)) = stmt.query_row((account_id, vault_dir.as_str(), *uid), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).optional().map_err(|e| e.to_string())? else { continue };
             let Ok(mut row) = serde_json::from_str::<serde_json::Value>(&row_json) else { continue };
-            let flags = parse_flags_from_filename(&filename);
+            let flags = message_store::flags_in_name(&filename);
             let Some(obj) = row.as_object_mut() else { continue };
             obj.insert("uid".into(), (*uid).into());
             obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());
@@ -1323,10 +1325,11 @@ fn rebuild_index(st: &SearchIndexState, operation_gen: u64) -> Result<(), String
 /// checks `keep_going` before each folder, so a queued destroy, configure or
 /// vault move never waits out the whole walk.
 ///
-/// Same filename filter as `reconcile::list_cur`'s uid parse, but `list_cur`
-/// dedupes by uid and drops stat failures from its count while this counts
-/// directory entries — so this count is never FEWER than what that later,
-/// authoritative listing finds (it can be more, corrected on the real visit).
+/// Same filename filter as reconcile's listing (`message_store::scan_dir`),
+/// but that listing dedupes by uid and drops stat failures from its count
+/// while this counts directory entries (`message_store::count_files`), so
+/// this count is never FEWER than what that later, authoritative listing
+/// finds (it can be more, corrected on the real visit).
 /// An unreadable folder is skipped: `reconcile_mailbox` will report or skip it
 /// too, so there is nothing here worth prefilling.
 fn prescan_folder_counts(
@@ -1352,9 +1355,7 @@ fn prescan_folder_counts(
         if known.contains(&(account.clone(), dir.clone())) {
             continue; // already has a real, authoritative count from a previous pass
         }
-        let cur = mailvault_core::vault_files::account_dir(&maildir, &account).join(dir).join("cur");
-        let Ok(entries) = std::fs::read_dir(&cur) else { continue };
-        let n = entries.flatten().filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()).is_some()).count();
+        let Ok(n) = message_store::count_files(&message_store::mailbox_dir_at(maildir, account, dir)) else { continue };
         #[cfg(test)]
         st.prescan_reads.fetch_add(1, SeqCst);
         let guard = lock(&st.db);

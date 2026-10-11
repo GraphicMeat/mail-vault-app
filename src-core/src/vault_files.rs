@@ -69,21 +69,27 @@ pub fn cur_path(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
     crate::message_store::mailbox_dir(root, account_id, mailbox).join("cur")
 }
 
+/// The Maildir flag letter a flag names (`archived` or `a` → `A`, `draft` →
+/// `D`, `flagged` → `F`, `replied` → `R`, `seen` → `S`, `trashed` → `T`, any
+/// case), `None` for a flag no letter carries (`\Seen`, a keyword). The one
+/// word-to-letter mapping: `build_maildir_filename` and
+/// `message_store::flag_letters` both use it.
+pub(crate) fn flag_letter(flag: &str) -> Option<char> {
+    match flag.to_lowercase().as_str() {
+        "archived" | "a" => Some('A'),
+        "draft" | "d" => Some('D'),
+        "flagged" | "f" => Some('F'),
+        "replied" | "r" => Some('R'),
+        "seen" | "s" => Some('S'),
+        "trashed" | "t" => Some('T'),
+        _ => None,
+    }
+}
+
 /// Build a vault filename from UID and flags: `{uid}:2,{letters}.eml` (`;2,`
 /// on Windows, see `maildir::INFO_SEP`), letters sorted and deduped (A D F R S T).
 pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
-    let mut flag_chars: Vec<char> = Vec::new();
-    for f in flags {
-        match f.to_lowercase().as_str() {
-            "archived" | "a" => flag_chars.push('A'),
-            "draft" | "d" => flag_chars.push('D'),
-            "flagged" | "f" => flag_chars.push('F'),
-            "replied" | "r" => flag_chars.push('R'),
-            "seen" | "s" => flag_chars.push('S'),
-            "trashed" | "t" => flag_chars.push('T'),
-            _ => {}
-        }
-    }
+    let mut flag_chars: Vec<char> = flags.iter().filter_map(|f| flag_letter(f)).collect();
     flag_chars.sort();
     flag_chars.dedup();
     let flag_str: String = flag_chars.into_iter().collect();
