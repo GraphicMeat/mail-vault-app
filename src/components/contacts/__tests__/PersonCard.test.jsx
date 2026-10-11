@@ -104,6 +104,19 @@ describe('PersonCard', () => {
     expect(h.s.getState().update).toHaveBeenCalledWith('p1', { notes: 'met in Vilnius' });
   });
 
+  it('after save the form shows what the daemon stored, so Save goes back to disabled', async () => {
+    const stored = { ...CARD, emails: [{ address: 'jane@x.io', label: '', recordId: 'r1' }] };
+    h.s.setState({ update: vi.fn(async () => { h.s.setState({ card: stored }); return stored; }) });
+    select(CARD);
+    render(<PersonCard />);
+    fireEvent.change(screen.getByTestId('person-email-0'), { target: { value: 'Jane@X.io' } });
+    expect(screen.getByTestId('person-save').disabled).toBe(false);
+    await act(async () => { fireEvent.click(screen.getByTestId('person-save')); });
+    expect(screen.getByTestId('person-email-0').value).toBe('jane@x.io');
+    expect(screen.getByTestId('person-save').disabled).toBe(true);
+    expect(screen.queryByTestId('person-cancel')).toBeNull();
+  });
+
   it('shows the provenance label of an existing email read-only', () => {
     select(CARD);
     render(<PersonCard />);

@@ -80,7 +80,10 @@ export function PersonDetails({ draft }) {
 
   const save = async () => {
     if (draft) await create({ displayName: form.name.trim(), emails, phones, org: form.org.trim(), notes: form.notes });
-    else await update(card.id, patch);
+    else {
+      const saved = await update(card.id, patch);
+      if (saved) setForm(fromCard(saved)); // show what the daemon stored (lowercased, invalid dropped)
+    }
   };
   const cancel = () => (draft ? select(null) : setForm(base));
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
