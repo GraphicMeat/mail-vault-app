@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 vi.mock('../../../i18n', () => ({
   useT: () => (k, v) => (v?.count != null ? `${k}:${v.count}` : k),
   tErr: (e) => String(e),
 }));
-vi.mock('lucide-react', () => new Proxy({}, { get: () => () => null }));
+vi.mock('lucide-react', () => new Proxy({}, {
+  get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : () => null),
+  has: () => true,
+}));
 const h = vi.hoisted(() => ({ store: null }));
 vi.mock('../../../stores/peopleStore', async () => {
   const { create } = await import('zustand');
@@ -18,7 +21,11 @@ vi.mock('../../../stores/peopleStore', async () => {
   return { usePeopleStore: h.store, initPeople: vi.fn() };
 });
 
+vi.mock('../PersonCard', () => ({ PersonCard: () => null }));
+
 import { ContactsView } from '../ContactsView';
+
+afterEach(cleanup);
 
 describe('ContactsView', () => {
   beforeEach(() => h.store.setState({ items: [], total: 0, indexReady: true, indexing: false }));

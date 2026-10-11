@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 vi.mock('../../../i18n', () => ({ useT: () => (k) => k }));
-vi.mock('lucide-react', () => new Proxy({}, { get: () => () => null }));
+vi.mock('lucide-react', () => new Proxy({}, {
+  get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : () => null),
+  has: () => true,
+}));
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }) => ({ getTotalSize: () => count * 56, getVirtualItems: () => Array.from({ length: count }, (_, i) => ({ index: i, start: i * 56, size: 56, key: i })), measureElement: () => {} }),
 }));
@@ -21,6 +24,8 @@ vi.mock('../../../stores/peopleStore', async () => {
   return { usePeopleStore: h.s };
 });
 import { ContactsList } from '../ContactsList';
+
+afterEach(cleanup);
 
 describe('ContactsList', () => {
   it('renders a row per contact, shows a total from stats and handles a contact with no email', () => {
