@@ -741,10 +741,18 @@ pub fn prepare(
     received_at: Option<&str>,
     format: Format,
 ) -> Result<Prepared, String> {
+    prepare_at(root, &mailbox_dir(root, account_id, mailbox), uid, raw, flags, received_at, format)
+}
+
+/// `prepare` for the mailbox directory `mailbox_dir`, named as it is on disk
+/// (`mailbox_dir_at`), for a folder whose name does not survive
+/// `vault_dir_name`. The conversion job addresses every folder this way.
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_at(root: &Path, mailbox_dir: &Path, uid: u32, raw: Vec<u8>, flags: &[String], received_at: Option<&str>, format: Format) -> Result<Prepared, String> {
     let record = match format {
         Format::Maildir => None,
         Format::Jmap => {
-            let rec = build_record(&mailbox_dir(root, account_id, mailbox), uid, &raw, flags, received_at)?;
+            let rec = build_record(mailbox_dir, uid, &raw, flags, received_at)?;
             blobs::put_as(root, &raw, rec.blob.clone())?;
             Some(rec)
         }
@@ -760,11 +768,17 @@ pub fn prepare(
 /// checks nothing: a caller about to remove that copy verifies first
 /// (`verify_prepared`).
 pub fn commit(root: &Path, account_id: &str, mailbox: &str, prepared: &Prepared, flags: &[String]) -> Result<Entry, String> {
+    commit_at(root, &mailbox_dir(root, account_id, mailbox), prepared, flags)
+}
+
+/// `commit` for the mailbox directory `mailbox_dir`, named as it is on disk
+/// (`mailbox_dir_at`).
+pub fn commit_at(root: &Path, mailbox_dir: &Path, prepared: &Prepared, flags: &[String]) -> Result<Entry, String> {
     let uid = prepared.uid;
     if let Some(rec) = &prepared.record {
-        return commit_record(root, &mailbox_dir(root, account_id, mailbox), uid, rec, flags);
+        return commit_record(root, mailbox_dir, uid, rec, flags);
     }
-    let dir = messages_dir(root, account_id, mailbox);
+    let dir = messages_in(mailbox_dir);
     let stale = leaf_names(&dir, uid);
     let entry = put(&dir, uid, &prepared.raw, flags)?;
     if unlink_stale(&dir, &entry.name, &stale) {
@@ -808,11 +822,17 @@ pub fn commit_replacing(root: &Path, account_id: &str, mailbox: &str, prepared: 
 /// exists and hashes to its id; a Maildir file re-reads as exactly the bytes.
 /// The record arm hashes the stored blob once.
 pub fn verify_prepared(root: &Path, account_id: &str, mailbox: &str, prepared: &Prepared) -> Result<(), String> {
+    verify_prepared_at(root, &mailbox_dir(root, account_id, mailbox), prepared)
+}
+
+/// `verify_prepared` for the mailbox directory `mailbox_dir`, named as it is
+/// on disk (`mailbox_dir_at`).
+pub fn verify_prepared_at(root: &Path, mailbox_dir: &Path, prepared: &Prepared) -> Result<(), String> {
     let expected = match &prepared.record {
         Some(rec) => Expect::Record { blob: &rec.blob },
         None => Expect::File { raw: &prepared.raw },
     };
-    verify_entry(root, &mailbox_dir(root, account_id, mailbox), prepared.uid, expected)
+    verify_entry(root, mailbox_dir, prepared.uid, expected)
 }
 
 /// The prefix of a store error the disk itself gave (no space left, a quota,
@@ -942,19 +962,24 @@ fn drop_format_files(mailbox_dir: &Path, uid: u32, format: Format) -> Result<boo
 ///
 /// `Ok(true)` when a file went.
 pub fn remove_other_format(root: &Path, account_id: &str, mailbox: &str, uid: u32, keep: Format) -> Result<bool, String> {
-    let mailbox = mailbox_dir(root, account_id, mailbox);
+    remove_other_format_at(root, &mailbox_dir(root, account_id, mailbox), uid, keep)
+}
+
+/// `remove_other_format` for the mailbox directory `mailbox`, named as it is
+/// on disk (`mailbox_dir_at`).
+pub fn remove_other_format_at(root: &Path, mailbox: &Path, uid: u32, keep: Format) -> Result<bool, String> {
     match keep {
         Format::Jmap => {
-            if record_of(&mailbox, uid).map_err(|e| e.to_string())?.is_none() {
+            if record_of(mailbox, uid).map_err(|e| e.to_string())?.is_none() {
                 return Err(format!("uid {uid} has no {keep:?} copy to keep"));
             }
-            verify_record(root, &mailbox, uid, None).map_err(|e| format!("uid {uid}: the record to keep did not verify: {e}"))?;
+            verify_record(root, mailbox, uid, None).map_err(|e| format!("uid {uid}: the record to keep did not verify: {e}"))?;
         }
         Format::Maildir => {
-            let Some(file) = path_of(&messages_in(&mailbox), uid) else {
+            let Some(file) = path_of(&messages_in(mailbox), uid) else {
                 return Err(format!("uid {uid} has no {keep:?} copy to keep"));
             };
-            if let Some((_, rec)) = record_of(&mailbox, uid).map_err(|e| e.to_string())? {
+            if let Some((_, rec)) = record_of(mailbox, uid).map_err(|e| e.to_string())? {
                 let raw = fs::read(&file).map_err(|e| format!("uid {uid}: the file to keep will not read: {e}"))?;
                 if blobs::blob_id(&raw) != rec.blob {
                     return Err(format!("uid {uid}: the file to keep does not hold the record's message"));
@@ -962,7 +987,7 @@ pub fn remove_other_format(root: &Path, account_id: &str, mailbox: &str, uid: u3
             }
         }
     }
-    drop_format_files(&mailbox, uid, other_format(keep))
+    drop_format_files(mailbox, uid, other_format(keep))
 }
 
 // ── The conversion job's reads ───────────────────────────────────────────────
@@ -985,7 +1010,9 @@ pub fn held_in(root: &Path, account_id: &str, mailbox: &str, uid: u32, format: F
     held_at(&mailbox_dir(root, account_id, mailbox), uid, format)
 }
 
-fn held_at(mailbox_dir: &Path, uid: u32, format: Format) -> Option<Held> {
+/// `held_in` for the mailbox directory `mailbox_dir`, named as it is on disk
+/// (`mailbox_dir_at`).
+pub fn held_at(mailbox_dir: &Path, uid: u32, format: Format) -> Option<Held> {
     match format {
         Format::Maildir => {
             let path = path_of(&messages_in(mailbox_dir), uid)?;
@@ -1007,7 +1034,13 @@ fn held_at(mailbox_dir: &Path, uid: u32, format: Format) -> Option<Held> {
 /// stamp under the lock), or a record's blob, refused as `InvalidData` when it
 /// does not hash to the id the record names. `Ok(None)`: no such copy.
 pub fn read_held(root: &Path, account_id: &str, mailbox: &str, uid: u32, format: Format) -> io::Result<Option<(Held, Vec<u8>)>> {
-    let Some(held) = held_at(&mailbox_dir(root, account_id, mailbox), uid, format) else { return Ok(None) };
+    read_held_at(root, &mailbox_dir(root, account_id, mailbox), uid, format)
+}
+
+/// `read_held` for the mailbox directory `mailbox_dir`, named as it is on disk
+/// (`mailbox_dir_at`).
+pub fn read_held_at(root: &Path, mailbox_dir: &Path, uid: u32, format: Format) -> io::Result<Option<(Held, Vec<u8>)>> {
+    let Some(held) = held_at(mailbox_dir, uid, format) else { return Ok(None) };
     let raw = match format {
         Format::Maildir => match fs::read(&held.path) {
             Ok(raw) => raw,
@@ -1029,9 +1062,14 @@ pub fn read_held(root: &Path, account_id: &str, mailbox: &str, uid: u32, format:
 /// (the file's sha256 is the record's blob id). `None` unless the mailbox
 /// holds the uid in both formats and both read.
 pub fn same_content(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<bool> {
-    let mailbox = mailbox_dir(root, account_id, mailbox);
-    let (_, rec) = record_of(&mailbox, uid).ok().flatten()?;
-    let raw = fs::read(path_of(&messages_in(&mailbox), uid)?).ok()?;
+    same_content_at(&mailbox_dir(root, account_id, mailbox), uid)
+}
+
+/// `same_content` for the mailbox directory `mailbox`, named as it is on disk
+/// (`mailbox_dir_at`).
+pub fn same_content_at(mailbox: &Path, uid: u32) -> Option<bool> {
+    let (_, rec) = record_of(mailbox, uid).ok().flatten()?;
+    let raw = fs::read(path_of(&messages_in(mailbox), uid)?).ok()?;
     Some(blobs::blob_id(&raw) == rec.blob)
 }
 
@@ -1039,10 +1077,15 @@ pub fn same_content(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> O
 /// names-only listing of that format's directory: a missing directory holds
 /// none, a listing that fails is the error.
 pub fn uids_in_format(root: &Path, account_id: &str, mailbox: &str, format: Format) -> io::Result<Vec<u32>> {
-    let mailbox = mailbox_dir(root, account_id, mailbox);
+    uids_in_format_at(&mailbox_dir(root, account_id, mailbox), format)
+}
+
+/// `uids_in_format` for the mailbox directory `mailbox`, named as it is on
+/// disk (`mailbox_dir_at`).
+pub fn uids_in_format_at(mailbox: &Path, format: Format) -> io::Result<Vec<u32>> {
     let (dir, uid_of): (PathBuf, UidOf) = match format {
-        Format::Maildir => (messages_in(&mailbox), maildir::vault_filename_uid),
-        Format::Jmap => (jmap_in(&mailbox), record_uid),
+        Format::Maildir => (messages_in(mailbox), maildir::vault_filename_uid),
+        Format::Jmap => (jmap_in(mailbox), record_uid),
     };
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
@@ -1117,9 +1160,16 @@ pub fn mailbox_dirs(root: &Path) -> io::Result<Vec<(String, String)>> {
     let mut out = Vec::new();
     for account in dirs_in(&root.join("Maildir"))? {
         for mailbox in dirs_in(&account)? {
-            if matches!(has_message_dir(&mailbox), Ok(true)) {
-                let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                out.push((name(&account), name(&mailbox)));
+            // A directory without either message directory is no mailbox; one
+            // that cannot be looked into is an error, never an empty folder.
+            match has_message_dir(&mailbox) {
+                Ok(true) => {
+                    let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    out.push((name(&account), name(&mailbox)));
+                }
+                Ok(false) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => return Err(io::Error::new(e.kind(), format!("could not look into {}: {e}", mailbox.display()))),
             }
         }
     }
@@ -1133,17 +1183,22 @@ pub fn mailbox_dirs(root: &Path) -> io::Result<Vec<(String, String)>> {
 /// from the mailbox; a file an earlier try already kept there is replaced.
 /// Returns how many it kept.
 pub fn retire_format(root: &Path, account_id: &str, mailbox: &str, uid: u32, format: Format, dest: &Path, link: bool) -> Result<usize, String> {
-    let mailbox = mailbox_dir(root, account_id, mailbox);
+    retire_format_at(&mailbox_dir(root, account_id, mailbox), uid, format, dest, link)
+}
+
+/// `retire_format` for the mailbox directory `mailbox`, named as it is on
+/// disk (`mailbox_dir_at`).
+pub fn retire_format_at(mailbox: &Path, uid: u32, format: Format, dest: &Path, link: bool) -> Result<usize, String> {
     let files: Vec<PathBuf> = match format {
         Format::Maildir => {
-            let dir = messages_in(&mailbox);
+            let dir = messages_in(mailbox);
             leaf_names(&dir, uid).into_iter().map(|leaf| dir.join(leaf)).collect()
         }
-        Format::Jmap => Some(jmap_in(&mailbox).join(record_name(uid))).filter(|p| p.is_file()).into_iter().collect(),
+        Format::Jmap => Some(jmap_in(mailbox).join(record_name(uid))).filter(|p| p.is_file()).into_iter().collect(),
     };
     let mut kept = 0;
     for src in files {
-        let rel = src.strip_prefix(&mailbox).map_err(|e| e.to_string())?;
+        let rel = src.strip_prefix(mailbox).map_err(|e| e.to_string())?;
         let to = dest.join(rel);
         if let Some(parent) = to.parent() {
             fs::create_dir_all(parent).map_err(|e| io_failure(&format!("Failed to create {}", parent.display()), &e))?;
@@ -3951,5 +4006,27 @@ mod tests {
         assert!(io_failure("w", &io::Error::from_raw_os_error(5)).starts_with("E_DISK: "));
         let denied = io_failure("w", &io::Error::from(io::ErrorKind::PermissionDenied));
         assert!(denied.starts_with("w: ") && !denied.contains(E_DISK), "{denied}");
+    }
+
+    /// A mailbox directory the listing cannot stat into is an error, not an
+    /// empty folder: a conversion that planned without it would end `done`
+    /// with the folder still in the old format.
+    #[cfg(unix)]
+    #[test]
+    fn mailbox_dirs_fails_on_a_directory_it_cannot_stat() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        write(root, ACCT, "Work", 2, &eml("two"), &[]).unwrap();
+        let locked = mailbox_dir(root, ACCT, "Work");
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let answer = mailbox_dirs(root);
+        let readable = fs::metadata(locked.join("cur")).is_ok();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        if readable {
+            return; // root: permissions do not apply
+        }
+        assert!(answer.is_err(), "an unreadable folder must not read as an empty one: {answer:?}");
     }
 }

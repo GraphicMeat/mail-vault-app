@@ -62,6 +62,7 @@ const CREATE: &[&str] = &[
     "message_store::copy_in(",
     "message_store::write_named_at(",
     "message_store::commit(",
+    "message_store::commit_at(",
     "message_store::commit_replacing(",
 ];
 const MOVE: &[&str] = &[
@@ -80,6 +81,7 @@ const MOVE: &[&str] = &[
     "message_store::set_record_flags(",
     "message_store::unlink_other_format(",
     "message_store::remove_other_format(",
+    "message_store::remove_other_format_at(",
 ];
 /// The `CREATE`/`MOVE` needles that are `message_store` writers: one alone
 /// makes a body a vault writer.
@@ -347,6 +349,8 @@ fn the_matcher_watches_message_store_writers() {
         "message_store::set_flags_at(&path, uid, |f| f.to_vec())?;",
         "message_store::write_named_at(&folder, &name, raw)?;",
         "message_store::commit(root, a, m, &prepared, f)?;",
+        "message_store::commit_at(root, &folder, &prepared, f)?;",
+        "message_store::remove_other_format_at(root, &folder, uid, keep)?;",
         "message_store::commit_replacing(root, a, m, &prepared, f)?;",
     ] {
         assert!(one(&format!("fn f(dir: &Path) {{\n    crate::{call}\n}}\n")).is_some(), "{call} with no registry call must be flagged");

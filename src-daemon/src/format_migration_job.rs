@@ -28,6 +28,7 @@ use crate::handlers::common::{vault_root, with_mailbox_write, with_vault_write};
 use crate::server::DaemonState;
 use mailvault_core::custody::cache;
 use mailvault_core::message_store;
+use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::{import_rehome, local_folder, vault_gap};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -73,8 +74,6 @@ const E_BLOB_VERIFY: &str = "E_BLOB_VERIFY";
 const E_FORMAT_CONFLICT: &str = "E_FORMAT_CONFLICT";
 /// One message changed under every try to convert it.
 const E_FORMAT_CHANGED: &str = "E_FORMAT_CHANGED";
-/// A folder the store cannot address by its on-disk name.
-const E_FORMAT_FOLDER_NAME: &str = "E_FORMAT_FOLDER_NAME";
 
 /// The vault marker row naming the job of a conversion in progress: set
 /// while one runs or is paused, the empty string when none is.
@@ -928,7 +927,11 @@ fn convert(runner: &mut Runner) -> Ended {
         runner.journal.mailboxes[i].state = state.to_string();
         if state != MAILBOX_WAITING {
             // Every row was upserted as it went; a relist settles the rest.
-            runner.state.vault_registry.invalidate(&account, &dir);
+            if vault_dir_name(&dir) == dir {
+                runner.state.vault_registry.invalidate(&account, &dir);
+            } else {
+                runner.state.vault_registry.invalidate_all();
+            }
         }
         runner.checkpoint();
     }
@@ -972,6 +975,14 @@ fn outcome_of(e: String) -> Outcome {
 
 /// Where retire mode keeps a mailbox's old files:
 /// `<vault>/retired/format-<stamp>/<account>/<dir>`.
+/// The folder `dir` of `account` (both on-disk names) in the vault `root`,
+/// addressed by its directory as it is on disk: a name that does not survive
+/// `vault_dir_name` (an NFD name read back from an HFS+ or SMB volume) is
+/// still the folder it is.
+fn folder_of(root: &Path, account: &str, dir: &str) -> PathBuf {
+    message_store::mailbox_dir_at(&root.join("Maildir"), account, dir)
+}
+
 fn retired_dir(root: &Path, stamp: &str, account: &str, dir: &str) -> PathBuf {
     root.join(RETIRED_DIR).join(format!("{RETIRED_PREFIX}{stamp}")).join(account).join(dir)
 }
@@ -1073,7 +1084,7 @@ impl Runner {
             let done = self.journal.mailboxes.iter().any(|m| m.account == account && m.dir == dir && m.state == MAILBOX_DONE);
             if !done {
                 let uids = with_vault_write(&self.state, |root| {
-                    message_store::uids_in_format(root, &account, &dir, from).map_err(|e| format!("{account}/{dir}: {e}"))
+                    message_store::uids_in_format_at(&folder_of(root, &account, &dir), from).map_err(|e| format!("{account}/{dir}: {e}"))
                 })
                 .map_err(unreadable)?;
                 left += uids.len() as u64;
@@ -1099,10 +1110,6 @@ impl Runner {
     fn convert_mailbox(&mut self, account: &str, dir: &str) -> Result<&'static str, Ended> {
         let to = self.journal.to;
         let from = other(to);
-        if message_store::mailbox_dir(&self.root, account, dir) != message_store::mailbox_dir_at(&self.root.join("Maildir"), account, dir) {
-            self.fail(account, dir, 0, format!("{E_FORMAT_FOLDER_NAME}: {account}/{dir}"));
-            return Ok(MAILBOX_DONE);
-        }
         let servers = server_mailboxes(&self.state, account, dir);
         if to == message_store::Format::Jmap && !rehome_done(&self.state, &self.root, account, dir, servers.as_deref()) {
             info!("[format_migration] {account}/{dir}: waits for its first import rehome");
@@ -1113,7 +1120,7 @@ impl Runner {
         let mut first = true;
         loop {
             let listed = with_vault_write(&self.state, |root| {
-                message_store::uids_in_format(root, account, dir, from).map_err(|e| format!("{account}/{dir}: {e}"))
+                message_store::uids_in_format_at(&folder_of(root, account, dir), from).map_err(|e| format!("{account}/{dir}: {e}"))
             })
             .map_err(|e| Ended::Failed(failed(E_FORMAT_UNREADABLE, "a folder could not be listed", e)))?;
             let pending: Vec<u32> = listed.into_iter().filter(|uid| !skip.contains(uid)).collect();
@@ -1166,7 +1173,8 @@ impl Runner {
         let from = other(to);
         for attempt in 0..ATTEMPTS {
             let read = with_vault_write(&self.state, |root| {
-                let Some((seen, raw)) = message_store::read_held(root, account, mailbox, uid, from).map_err(|e| match e.kind() {
+                let folder = folder_of(root, account, mailbox);
+                let Some((seen, raw)) = message_store::read_held_at(root, &folder, uid, from).map_err(|e| match e.kind() {
                     std::io::ErrorKind::InvalidData => format!("{E_BLOB_VERIFY}: {e}"),
                     _ => format!("{E_FORMAT_UNREADABLE}: could not read uid {uid}: {e}"),
                 })?
@@ -1175,7 +1183,7 @@ impl Runner {
                 };
                 // A record already there (a crash between a write and a
                 // removal, a writer of the new format) stays as it is.
-                if to == message_store::Format::Jmap && message_store::held_in(root, account, mailbox, uid, to).is_some() {
+                if to == message_store::Format::Jmap && message_store::held_at(&folder, uid, to).is_some() {
                     return Ok(Some((seen, None)));
                 }
                 #[cfg(test)]
@@ -1183,7 +1191,7 @@ impl Runner {
                     return Err(format!("{}: blob write: No space left on device", message_store::E_DISK));
                 }
                 let flags = seen.flags.clone();
-                message_store::prepare(root, account, mailbox, uid, raw, &flags, received_at, to).map(|prepared| Some((seen, Some(prepared))))
+                message_store::prepare_at(root, &folder, uid, raw, &flags, received_at, to).map(|prepared| Some((seen, Some(prepared))))
             });
             let (seen, prepared) = match read {
                 Ok(Some(read)) => read,
@@ -1230,34 +1238,39 @@ impl Runner {
     ) -> Result<Step, String> {
         let to = self.journal.to;
         let from = other(to);
-        let Some(now) = message_store::held_in(root, account, mailbox, uid, from) else { return Ok(Step::Done(Outcome::Gone)) };
+        let folder = folder_of(root, account, mailbox);
+        let Some(now) = message_store::held_at(&folder, uid, from) else { return Ok(Step::Done(Outcome::Gone)) };
         if now.stamp != seen.stamp {
             return Ok(Step::Changed);
         }
         let retire = self.journal.old_files == OldFiles::Retire;
         let dest = retired_dir(root, &self.journal.stamp, account, mailbox);
         let write = |prepared: &message_store::Prepared| -> Result<Option<Outcome>, String> {
-            message_store::commit(root, account, mailbox, prepared, &now.flags)?;
-            let verified = message_store::verify_prepared(root, account, mailbox, prepared);
+            message_store::commit_at(root, &folder, prepared, &now.flags)?;
+            let verified = message_store::verify_prepared_at(root, &folder, prepared);
             #[cfg(test)]
             let verified = if faults(&self.state).verify_fails_at == Some(self.seen) { Err("refused by the test hook".to_string()) } else { verified };
             if let Err(e) = verified {
                 // The old copy stays the one every reader reads.
-                message_store::remove_other_format(root, account, mailbox, uid, from)?;
+                message_store::remove_other_format_at(root, &folder, uid, from)?;
                 return Ok(Some(Outcome::Failed(format!("{E_BLOB_VERIFY}: {e}"))));
             }
             Ok(None)
         };
-        let both = message_store::held_in(root, account, mailbox, uid, to).is_some();
-        let same = both && message_store::same_content(root, account, mailbox, uid) == Some(true);
+        let both = message_store::held_at(&folder, uid, to).is_some();
+        let same = both && message_store::same_content_at(&folder, uid) == Some(true);
         if both && !same && !retire {
             return Ok(Step::Done(Outcome::Failed(format!("{E_FORMAT_CONFLICT}: uid {uid}"))));
         }
-        if !both || (!same && to == message_store::Format::Maildir) {
+        // Converting to Maildir with the uid in both formats: the record is what
+        // every reader read, so the file is written again under the record's
+        // flags (the same message, the flags only the record may hold: local A
+        // and T especially); a file of another message is set aside first.
+        if !both || to == message_store::Format::Maildir {
             let Some(prepared) = prepared else { return Ok(Step::Changed) };
-            if both {
+            if both && !same {
                 // The Maildir file beside the record loses to it: set aside first.
-                message_store::retire_format(root, account, mailbox, uid, message_store::Format::Maildir, &dest, self.link)?;
+                message_store::retire_format_at(&folder, uid, message_store::Format::Maildir, &dest, self.link)?;
             }
             if let Some(failed) = write(prepared)? {
                 return Ok(Step::Done(failed));
@@ -1268,11 +1281,16 @@ impl Runner {
             panic!("test hook: the worker dies between the new copy and the removal of the old one");
         }
         if retire {
-            message_store::retire_format(root, account, mailbox, uid, from, &dest, self.link)?;
+            message_store::retire_format_at(&folder, uid, from, &dest, self.link)?;
         }
-        message_store::remove_other_format(root, account, mailbox, uid, to)?;
-        if let Some(kept) = message_store::held_in(root, account, mailbox, uid, to) {
-            self.state.vault_registry.upsert(account, mailbox, uid, &kept.path);
+        message_store::remove_other_format_at(root, &folder, uid, to)?;
+        // The registry keys a folder by `vault_dir_name` of its name: a folder
+        // named otherwise on disk has no row to upsert, and is invalidated whole
+        // when it is finished.
+        if vault_dir_name(mailbox) == mailbox {
+            if let Some(kept) = message_store::held_at(&folder, uid, to) {
+                self.state.vault_registry.upsert(account, mailbox, uid, &kept.path);
+            }
         }
         Ok(Step::Done(Outcome::Converted))
     }
@@ -1823,5 +1841,89 @@ mod tests {
         for ((account, mailbox, uid), raw) in &messages {
             assert_eq!(message_store::read_raw(root, account, mailbox, *uid).unwrap().as_ref(), Some(raw));
         }
+    }
+
+    /// A uid held in both formats with the same bytes, the record flagged
+    /// archived and the file not: the conversion to Maildir keeps the record's
+    /// flags (the record is what every reader read), so the file ends up named
+    /// with the A.
+    #[test]
+    fn a_both_format_uid_converted_to_maildir_keeps_the_records_flags() {
+        let (v, _a, s) = st();
+        let root = v.path();
+        let raw = b"Subject: both\r\n\r\nboth";
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        message_store::write(root, "acct", "INBOX", 1, raw, &["archived".to_string(), "seen".to_string()]).unwrap();
+        message_store::set_vault_format(root, Format::Maildir).unwrap();
+        message_store::write(root, "acct", "INBOX", 1, raw, &[]).unwrap();
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        assert!(record_of(root, "acct", "INBOX", 1).is_some() && file_of(root, "acct", "INBOX", 1).is_some());
+
+        let end = run(&s, root, Format::Maildir, OldFiles::Delete);
+        assert_eq!(end["state"], json!("done"), "{end}");
+        assert!(record_of(root, "acct", "INBOX", 1).is_none(), "the record went");
+        let file = file_of(root, "acct", "INBOX", 1).expect("the file stays");
+        assert!(file.flags.contains(&"archived".to_string()), "the file carries the record's A: {:?}", file.flags);
+        assert!(file.flags.contains(&"seen".to_string()), "and its S: {:?}", file.flags);
+        assert_eq!(message_store::read_raw(root, "acct", "INBOX", 1).unwrap(), Some(raw.to_vec()));
+    }
+
+    /// A folder whose directory cannot be read ends the run `failed` with
+    /// `E_FORMAT_UNREADABLE`, journal kept, nothing removed or converted:
+    /// it must not read as a folder without messages.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_folder_fails_the_run_instead_of_dropping_out_of_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let (v, _a, s) = st();
+        let root = v.path();
+        message_store::write(root, "acct", "INBOX", 1, b"Subject: one\r\n\r\none", &[]).unwrap();
+        message_store::write(root, "acct", "Work", 2, b"Subject: two\r\n\r\ntwo", &[]).unwrap();
+        let locked = message_store::mailbox_dir(root, "acct", "Work");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let unlock = || std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+        if std::fs::metadata(locked.join("cur")).is_ok() {
+            unlock();
+            return; // root: permissions do not apply
+        }
+        let end = run(&s, root, Format::Jmap, OldFiles::Delete);
+        let journal = pending_journal(&s.app_dir, root);
+        unlock();
+        assert_eq!(end["state"], json!("failed"), "{end}");
+        assert_eq!(end["error"], json!(format!("{E_FORMAT_UNREADABLE}: see the daemon log")), "{end}");
+        assert_eq!(journal.expect("the journal is kept").state, FAILED);
+        assert!(file_of(root, "acct", "INBOX", 1).is_some() && record_of(root, "acct", "INBOX", 1).is_none(), "nothing converted");
+        assert!(file_of(root, "acct", "Work", 2).is_some(), "nothing removed");
+    }
+
+    /// A folder whose on-disk name does not survive `vault_dir_name` (an NFD
+    /// name from an HFS+ or SMB volume) converts both ways, addressed by its
+    /// directory, and the run ends done.
+    #[test]
+    fn a_folder_named_in_nfd_converts_both_ways() {
+        let (v, _a, s) = st();
+        let root = v.path();
+        let nfd = "Cafe\u{301}";
+        assert_ne!(mailvault_core::search_index::text::vault_dir_name(nfd), nfd, "the name must not round-trip");
+        for (uid, flags) in [(1u32, vec![]), (2, vec!["seen".to_string(), "flagged".to_string()]), (3, vec!["archived".to_string()])] {
+            message_store::write(root, "acct", "Tmp", uid, format!("Subject: nfd {uid}\r\n\r\nnfd {uid}").as_bytes(), &flags).unwrap();
+        }
+        let maildir = root.join("Maildir");
+        let folder = message_store::mailbox_dir_at(&maildir, "acct", nfd);
+        std::fs::rename(message_store::mailbox_dir(root, "acct", "Tmp"), &folder).unwrap();
+        let before = files_under(root, "cur");
+        assert_eq!(before.len(), 3);
+
+        let end = run(&s, root, Format::Jmap, OldFiles::Delete);
+        assert_eq!((end["state"].clone(), end["done"].clone(), end["total"].clone()), (json!("done"), json!(3), json!(3)), "{end}");
+        assert!(files_under(root, "cur").is_empty(), "no old file left");
+        let records = files_under(root, "jmap");
+        assert_eq!(records.len(), 3, "{:?}", records.keys().collect::<Vec<_>>());
+        assert!(records.keys().all(|k| k.contains(nfd)), "the records are in the folder, under its own name");
+
+        let end = run(&s, root, Format::Maildir, OldFiles::Delete);
+        assert_eq!(end["state"], json!("done"), "{end}");
+        assert!(files_under(root, "jmap").is_empty());
+        assert_eq!(files_under(root, "cur"), before, "the Maildir tree is the one it was");
     }
 }
