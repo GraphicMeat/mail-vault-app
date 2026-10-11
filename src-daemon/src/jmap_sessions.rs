@@ -233,6 +233,14 @@ impl AccountJmap {
         self.mailbox_ids.read().unwrap_or_else(|p| p.into_inner()).get(path).cloned()
     }
 
+    /// The last `refresh`'s answer, with no request: `None` before the
+    /// first. For a caller that needs only paths, ids and roles, which a
+    /// count change (what moves the Mailbox state on most mail traffic)
+    /// leaves as they were.
+    pub fn last_listing(&self) -> Option<Mailboxes> {
+        self.listed.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|(_, boxes)| boxes.clone())
+    }
+
     /// The JMAP id of the mailbox at `path`. A miss refreshes the map once
     /// (a folder made since the last listing); still missing is an error.
     pub async fn mailbox_id(&self, path: &str) -> Result<String, JmapError> {

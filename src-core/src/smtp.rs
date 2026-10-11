@@ -766,17 +766,23 @@ fn pick_identity<'a>(identities: &'a [Identity], from: &str) -> Option<&'a Ident
 /// imported copy may be destroyed. `None` is the send's own clock running out.
 ///
 /// Only an answer is a refusal: a method error or SetError
-/// (`E_JMAP_SUBMIT:<type>`), or a 401/403 or 429/503 the server answered
-/// instead. No answer (a transport failure or the clock) and an answer that
-/// does not read (`Protocol`) mean the request may have reached the server and
-/// the message may be out, `onSuccessUpdateEmail` may already have filed it in
-/// Sent: worded `MAY_HAVE_GONE_OUT` (terminal, never retried) and kept.
+/// (`E_JMAP_SUBMIT:<type>`), a 401/403 or 429/503 the server answered
+/// instead, or another 3xx or 4xx status (`Protocol("HTTP 3xx/4xx")`): the
+/// request was turned away before any method ran (RFC 8620 §3.6.1), so
+/// nothing was sent (`E_JMAP_SUBMIT:serverFail`). No answer (a transport
+/// failure or the clock), a 5xx, and an answer that does not read
+/// (`Protocol`) mean the request may have reached the server and the message
+/// may be out, `onSuccessUpdateEmail` may already have filed it in Sent:
+/// worded `MAY_HAVE_GONE_OUT` (terminal, never retried) and kept.
 fn jmap_submit_failure(err: Option<&JmapError>) -> (String, bool) {
     match err {
         None => (
             format!("The mail server did not confirm the send in time (timed out). Check Sent before trying again: {MAY_HAVE_GONE_OUT}."),
             false,
         ),
+        Some(JmapError::Protocol(m)) if http_refusal(m) => {
+            (format!("E_JMAP_SUBMIT:serverFail: the server turned the request away ({m})"), true)
+        }
         Some(e @ (JmapError::Transport(_) | JmapError::Protocol(_))) => (
             format!("The mail server did not confirm the send ({e}). Check Sent before trying again: {MAY_HAVE_GONE_OUT}."),
             false,
@@ -787,6 +793,12 @@ fn jmap_submit_failure(err: Option<&JmapError>) -> (String, bool) {
         ),
         Some(e) => (e.to_string(), true),
     }
+}
+
+/// `Protocol("HTTP <status>")` for a 3xx or 4xx status: the client's own
+/// wording of a status line with no JMAP problem body (`check_status`).
+fn http_refusal(m: &str) -> bool {
+    m.strip_prefix("HTTP ").and_then(|s| s.trim().parse::<u16>().ok()).is_some_and(|s| (300..500).contains(&s))
 }
 
 /// JSON Pointer escaping for a patch path segment (RFC 6901).
@@ -1682,6 +1694,25 @@ mod tests {
             assert!(!destroy, "{err:?}: the copy may be the Sent copy of a message that went");
             assert!(is_terminal_send_error(&msg), "{msg}");
             assert!(!msg.contains('\u{2014}'), "{msg}");
+        }
+    }
+
+    /// A 3xx or 4xx status line without a JMAP problem body is a request the
+    /// server turned away before any method ran: a refusal, so the unsent
+    /// copy goes and the send may be tried again. A 5xx may have run the
+    /// submission: kept, and worded as possibly sent.
+    #[test]
+    fn a_jmap_http_3xx_or_4xx_answer_is_a_refusal_and_5xx_may_have_gone_out() {
+        for status in ["HTTP 302", "HTTP 400", "HTTP 404", "HTTP 413"] {
+            let (msg, destroy) = jmap_submit_failure(Some(&JmapError::Protocol(status.into())));
+            assert_eq!(msg, format!("E_JMAP_SUBMIT:serverFail: the server turned the request away ({status})"));
+            assert!(destroy, "{status}: nothing was sent, the copy goes");
+            assert!(!is_terminal_send_error(&msg), "{status}: worth another try");
+        }
+        for status in ["HTTP 500", "HTTP 502", "HTTP x"] {
+            let (msg, destroy) = jmap_submit_failure(Some(&JmapError::Protocol(status.into())));
+            assert!(msg.contains(MAY_HAVE_GONE_OUT), "{status} -> {msg}");
+            assert!(!destroy, "{status}: may be the Sent copy of a message that went");
         }
     }
 

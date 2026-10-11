@@ -1534,4 +1534,33 @@ mod tests {
         assert!(!lock(&WALKS).contains_key(&key), "a finished walk leaves no entry");
         assert!(gap_once(&r.s, ACCT).await.1, "a later count walks again");
     }
+
+    /// A JMAP account's "Save them now" (Task 9c pin): the missing uid comes
+    /// by blob download through the archive runner's JMAP path (the uid's
+    /// ledger id), as an archived copy, and no IMAP is dialled.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_save_fetches_the_missing_uids_by_blob_download() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let r = rig();
+        cached(&r.s, "INBOX", [1, 2]);
+        in_vault(&r.s, "INBOX", &[1]);
+        let ledger = crate::jmap_sessions::jmap_ledger_path(&r.s.data_dir, ACCT, "INBOX");
+        std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+        std::fs::write(&ledger, br#"{"1":"e1","2":"e2"}"#).unwrap();
+        let mut rx = r.s.events.subscribe();
+
+        let started = handle_request_for_test(&r.s, "vault_gap_save", json!({"accountId": ACCT, "accountJson": support::account_json(&m, port).to_string()})).await;
+        assert_eq!(ok(started), json!({"runId": ACCT, "started": true}));
+        let done = terminal(&mut rx).await;
+        released(&r.s).await;
+
+        assert_eq!((done["completed_emails"].clone(), done["errors"].clone()), (json!(1), json!(0)), "{done}");
+        let held = on_disk(&r.s, "INBOX");
+        assert!(held.get(&2).is_some_and(|flags| flags.contains('A')), "uid 2 saved as an archived copy: {held:?}");
+        assert_eq!(m.requests().iter().filter(|q| q.path.starts_with("/jmap/download/")).count(), 1, "only the missing one");
+        assert_eq!(count_of(&r.s).await["count"], json!(0));
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
 }

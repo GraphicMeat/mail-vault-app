@@ -836,4 +836,34 @@ mod tests {
             assert_eq!(resp.error.expect("refused").code, ipc::INVALID_PARAMS, "{method}");
         }
     }
+
+    /// A vault with a JMAP account (Task 9c pin): the local mbox import, the
+    /// import as a vault-only folder, and the local folder list are
+    /// vault-only, so they work as for any account and reach no server. The
+    /// account's stored credentials point IMAP at a trap.
+    #[tokio::test]
+    async fn jmap_local_imports_and_local_folders_never_reach_a_server() {
+        use crate::jmap_test_support as support;
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (_v, a, s) = st(true);
+        let creds = a.path().join("credentials.json");
+        std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        let dir = tempfile::tempdir().unwrap();
+        let mbox_path = dir.path().join("in.mbox");
+        std::fs::write(&mbox_path, "From sender@test.com Mon Jan  1 00:00:00 2026\nSubject: hi\r\n\r\nbody\n\n").unwrap();
+
+        let local = call(&s, "import_mbox", json!({"sourcePath": mbox_path.to_string_lossy(), "accountId": "acct1", "mailbox": "INBOX"})).await;
+        let folder = call(&s, "import_mbox", json!({"sourcePath": mbox_path.to_string_lossy(), "accountId": "acct1", "mode": "folder"})).await;
+        let listed = call(&s, "list_local_folders", json!({"accountId": "acct1"})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(local.result.expect("local import")["emailCount"], json!(1));
+        assert_eq!(folder.result.expect("folder import")["emailCount"], json!(1));
+        assert_eq!(listed.result.expect("local folders").as_array().map(Vec::len), Some(1));
+        assert!(m.requests().is_empty(), "no JMAP request");
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
 }

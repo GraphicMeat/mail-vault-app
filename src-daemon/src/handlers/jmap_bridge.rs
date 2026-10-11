@@ -15,7 +15,7 @@
 use crate::handlers::common::{blocking, vault_root};
 use crate::handlers::deleted::{self, Source};
 use crate::handlers::imap::{auto_cache, backfill_refusal, email_date_ms, opened_intent, SearchFilters, BODY_FETCH_TIMEOUT};
-use crate::imap::{EmailHeader, ImapConfig, MailboxStatus, MessageIdLocation, MessageIdProbe};
+use crate::imap::{EmailHeader, ImapConfig, MailboxStatus, MessageIdLocation, MessageIdProbe, ServerSearch};
 use crate::ipc::{self, RpcResponse};
 use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
 use crate::server::DaemonState;
@@ -88,7 +88,12 @@ impl From<JmapError> for Fail {
 
 /// An expired or revoked session: forget it and connect once more.
 fn is_auth_failure(f: &Fail) -> bool {
-    matches!(f, Fail::Rpc(e) if e.starts_with(&format!("{}:", JmapError::Unauthorized.code())))
+    matches!(f, Fail::Rpc(e) if is_auth_error(e))
+}
+
+/// `E_JMAP_AUTH:`, the code of `JmapError::Unauthorized`.
+fn is_auth_error(e: &str) -> bool {
+    e.starts_with(&format!("{}:", JmapError::Unauthorized.code()))
 }
 
 fn param<T: DeserializeOwned>(params: &Value, key: &str) -> Result<T, Fail> {
@@ -530,38 +535,15 @@ async fn answer(
             let mailbox = mailbox_param(params);
             let query: Option<String> = opt_param(params, "query");
             let filters: SearchFilters = opt_param(params, "filters").unwrap_or_default();
-            let mut conditions: Vec<Value> = Vec::new();
-            for (key, value) in [("text", &query), ("from", &filters.from), ("subject", &filters.subject)] {
-                if let Some(v) = value.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
-                    let mut condition = serde_json::Map::new();
-                    condition.insert(key.to_string(), json!(v));
-                    conditions.push(Value::Object(condition));
-                }
-            }
-            if let Some(after) = day_start(filters.since.as_deref()) {
-                conditions.push(json!({"after": after}));
-            }
-            if let Some(before) = day_start(filters.before.as_deref()) {
-                conditions.push(json!({"before": before}));
-            }
-            // Nothing asked: nothing found, as the IMAP arm answers.
-            if conditions.is_empty() {
-                return Ok(json!({"success": true, "emails": [], "total": 0}));
-            }
-            let mailbox_id = acct.mailbox_id(&mailbox).await?;
-            conditions.insert(0, json!({"inMailbox": mailbox_id}));
-            let filter = json!({"operator": "AND", "conditions": conditions});
-            let (ids, total) = query_ids(&acct.client, filter, SEARCH_LIMIT).await?;
-            let uids = uids_for(state, acct, &account_id, &mailbox, &ids).await?;
-            let mut got = by_id(acct.client.get_emails(&ids, HEADER_PROPS).await?.list);
-            let emails: Vec<EmailHeader> = ids
-                .iter()
-                .filter_map(|id| {
-                    let mut header = to_header(&got.remove(id)?, *uids.get(id)?);
-                    header.source = Some("server-search".to_string());
-                    Some(header)
-                })
-                .collect();
+            let search = ServerSearch {
+                query: query.as_deref(),
+                from: filters.from.as_deref(),
+                subject: filters.subject.as_deref(),
+                since: filters.since.as_deref(),
+                before: filters.before.as_deref(),
+                ..Default::default()
+            };
+            let (emails, total) = search_mailbox(state, acct, &account_id, &mailbox, &search).await?;
             Ok(json!({"success": true, "emails": emails, "total": total}))
         }
 
@@ -610,6 +592,98 @@ async fn answer(
 
         other => Err(Fail::Rpc(format!("E_JMAP_UNSUPPORTED: {other}"))),
     }
+}
+
+/// The `Email/query` conditions for a server search, the keys the IMAP side
+/// sends as `UID SEARCH` (`ServerSearch::criteria`): text, from, to and
+/// subject as JMAP's filters of those names, `since` (inclusive) and
+/// `before` (exclusive) as `after`/`before` at UTC midnight, unread as
+/// `notKeyword $seen`, and each excluded term as a `NOT` text condition.
+/// Empty: nothing was asked.
+fn search_conditions(search: &ServerSearch<'_>) -> Vec<Value> {
+    let mut conditions: Vec<Value> = Vec::new();
+    for (key, value) in [("text", search.query), ("from", search.from), ("to", search.to), ("subject", search.subject)] {
+        if let Some(v) = value.map(str::trim).filter(|v| !v.is_empty()) {
+            let mut condition = serde_json::Map::new();
+            condition.insert(key.to_string(), json!(v));
+            conditions.push(Value::Object(condition));
+        }
+    }
+    if let Some(after) = day_start(search.since) {
+        conditions.push(json!({"after": after}));
+    }
+    if let Some(before) = day_start(search.before) {
+        conditions.push(json!({"before": before}));
+    }
+    if search.unseen {
+        conditions.push(json!({"notKeyword": "$seen"}));
+    }
+    for term in search.exclude.iter().map(|t| t.trim()).filter(|t| !t.is_empty()) {
+        conditions.push(json!({"operator": "NOT", "conditions": [{"text": term}]}));
+    }
+    conditions
+}
+
+/// One mailbox searched on the server, newest first: the matching headers
+/// (`source: "server-search"`, the newest `SEARCH_LIMIT`, as the IMAP arm
+/// keeps) and the match count. Nothing asked: nothing found, as the IMAP
+/// side answers a search with no keys.
+async fn search_mailbox(
+    state: &Arc<DaemonState>,
+    acct: &AccountJmap,
+    account_id: &str,
+    mailbox: &str,
+    search: &ServerSearch<'_>,
+) -> Result<(Vec<EmailHeader>, usize), Fail> {
+    let mut conditions = search_conditions(search);
+    if conditions.is_empty() {
+        return Ok((Vec::new(), 0));
+    }
+    let mailbox_id = acct.mailbox_id(mailbox).await?;
+    conditions.insert(0, json!({"inMailbox": mailbox_id}));
+    let filter = json!({"operator": "AND", "conditions": conditions});
+    let (ids, total) = query_ids(&acct.client, filter, SEARCH_LIMIT).await?;
+    let uids = uids_for(state, acct, account_id, mailbox, &ids).await?;
+    let mut got = by_id(acct.client.get_emails(&ids, HEADER_PROPS).await?.list);
+    let emails: Vec<EmailHeader> = ids
+        .iter()
+        .filter_map(|id| {
+            let mut header = to_header(&got.remove(id)?, *uids.get(id)?);
+            header.source = Some("server-search".to_string());
+            Some(header)
+        })
+        .collect();
+    Ok((emails, total))
+}
+
+/// The search screen's server lane for a JMAP account
+/// (`mail_search::run_server_lane`), on the account's session: the matching
+/// headers of `mailbox` (`search_mailbox`) and the mailbox's count. An
+/// expired or revoked session is forgotten and the search runs once more,
+/// as a bridged RPC does (`answer_with_retry`).
+pub(crate) async fn server_search(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    account_id: &str,
+    mailbox: &str,
+    search: &ServerSearch<'_>,
+) -> Result<(Vec<EmailHeader>, u32), String> {
+    let once = || async {
+        let acct = state.jmap.get(config).await?;
+        let exists = mailbox_counts(&acct, mailbox).await?.total_emails;
+        let (emails, _) = search_mailbox(state, &acct, account_id, mailbox, search).await?;
+        Ok::<_, Fail>((emails, exists))
+    };
+    let answer = match once().await {
+        Err(f) if is_auth_failure(&f) => {
+            state.jmap.forget(config);
+            once().await
+        }
+        other => other,
+    };
+    answer.map_err(|f| match f {
+        Fail::Params(e) | Fail::Rpc(e) => e,
+    })
 }
 
 // ── write side ──────────────────────────────────────────────────────────────
@@ -839,6 +913,10 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
     let binned = if opt_param::<bool>(params, "bin").unwrap_or(true) {
         match deleted::capture(state, &account_id, &mailbox, uid, Source::Jmap { config: account }).await {
             Ok(binned) => binned,
+            // An expired or revoked session read nothing: answered as itself,
+            // so `answer_with_retry` connects again and runs the delete once
+            // more, capture first.
+            Err(e) if permanent && is_auth_error(&e) => return Err(Fail::Rpc(e)),
             Err(e) if permanent => {
                 tracing::error!("[jmap] delete uid={} not deleted: could not keep a copy first: {}", uid, e);
                 return Err(Fail::Rpc(format!("E_BIN_CAPTURE: {e}")));
@@ -884,6 +962,11 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
 /// The header row goes whenever the email is no longer in the mailbox; the
 /// ledger row stays.
 ///
+/// The mailbox and Trash ids come from the last listing (`last_listing`):
+/// a delete moves counts, never ids or roles, so a full `Mailbox/get` per
+/// delete would only fetch the same answer. A listing that lacks the
+/// mailbox or a Trash (or none yet) is fetched again first.
+///
 /// No `ifInState` guard on the read-then-set in `remove_from` (Task 2's
 /// deferred minor, decided here): the JMAP Email state is account-wide, so
 /// any arrival anywhere in the account would fail the guard and turn deletes
@@ -900,7 +983,11 @@ async fn remove_one(
     uid: u32,
     permanent: bool,
 ) -> Result<Removed, Fail> {
-    let boxes = acct.refresh().await?;
+    let listed = acct.last_listing().filter(|b| b.ids.contains_key(mailbox) && role_mailbox(b, "trash").is_some());
+    let boxes = match listed {
+        Some(boxes) => boxes,
+        None => acct.refresh().await?,
+    };
     let mailbox_id = boxes
         .ids
         .get(mailbox)
@@ -1952,6 +2039,40 @@ second body";
         let r = ok(call(&state, "imap_fetch_changed_flags", json!({"account": a, "mailbox": "INBOX", "sinceModseq": modseq0})).await);
         assert_eq!(r["changes"], json!([{"uid": e1, "flags": ["\\Seen", "\\Flagged"]}]));
         assert!(r["highestModseq"].as_u64().unwrap() > modseq0);
+    }
+
+    // ── Task 9c ────────────────────────────────────────────────────────────
+
+    /// A delete reads the mailbox list it already holds: two deletes in a row
+    /// send no `Mailbox/get`, though each moves the counts.
+    #[tokio::test]
+    async fn jmap_a_delete_reads_the_mailbox_list_without_a_full_mailbox_get() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let listing = list(&state, &a, "INBOX").await;
+        let (e1, e2) = (uid_in(&listing, "<e1@x>"), uid_in(&listing, "<e2@x>"));
+        let before = m.count_calls("Mailbox/get");
+        ok(call(&state, "imap_delete_email", json!({"account": a, "uid": e1, "mailbox": "INBOX", "permanent": false})).await);
+        let r = ok(call(&state, "imap_delete_email", json!({"account": a, "uid": e2, "mailbox": "INBOX", "permanent": false})).await);
+        assert_eq!(r["trash"], json!("Trash"), "the Trash the last listing named");
+        assert_eq!(m.count_calls("Mailbox/get"), before, "no full listing per delete");
+        assert_eq!(labels(&m, "e1"), set(&["mb-work"]));
+        assert_eq!(labels(&m, "e2"), set(&["mb-trash"]));
+    }
+
+    /// A permanent delete on a revoked session: the capture's `E_JMAP_AUTH`
+    /// is answered as itself, so the delete connects again once, never
+    /// `E_BIN_CAPTURE` (which no retry follows). Nothing is destroyed.
+    #[tokio::test]
+    async fn jmap_a_permanent_delete_on_a_revoked_session_reconnects_instead_of_failing_the_capture() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        let e2 = uid_in(&list(&state, &a, "INBOX").await, "<e2@x>");
+        m.mutate(|s| s.account_mut("acc1").password = "revoked".into());
+        let message = err(call(&state, "imap_delete_email", json!({"account": a, "uid": e2, "mailbox": "INBOX", "permanent": true})).await);
+        assert!(message.starts_with("E_JMAP_AUTH:"), "{message}");
+        assert_eq!(session_fetches(&m), 2, "the retry connected again");
+        assert_eq!(labels(&m, "e2"), set(&["mb-inbox"]), "nothing destroyed");
     }
 }
 

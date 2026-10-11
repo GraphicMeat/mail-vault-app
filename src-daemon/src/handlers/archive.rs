@@ -24,6 +24,11 @@
 //! (`server.rs`'s `imap_pool`) while the app's own pool still serves
 //! interactive IMAP. Documented, accepted ceiling (plan decision 6), not
 //! something to fix here.
+//!
+//! A JMAP account's bulk delete never reaches either pool
+//! (`bulk_delete_jmap`): its captures carry the bytes (`Source::Jmap`, never
+//! byte-less: a label taken off leaves no Trash copy to recover from), and
+//! each email leaves the mailbox by the label semantics rule.
 
 use crate::handlers::common::{self, blocking, cancel_kind, done, str_arg, vec_arg, with_vault_write, RunGuard};
 use crate::ipc::{self, RpcResponse};
@@ -113,7 +118,11 @@ async fn capture_all(
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return None;
             }
-            let source = crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false };
+            let source = if config.uses_jmap() {
+                crate::handlers::deleted::Source::Jmap { config }
+            } else {
+                crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false }
+            };
             match crate::handlers::deleted::capture(state, account_id, mailbox, uid, source).await {
                 Ok(_) => Some(uid),
                 Err(e) => {
@@ -156,6 +165,86 @@ async fn end_follow_ups_at(state: &Arc<DaemonState>, account_id: &str, mailbox: 
         }
         Err(e) => tracing::warn!("[bulk-delete] could not end the follow-up reminders of deleted copies: {e}"),
     }
+}
+
+/// `bulk_delete_emails` for a JMAP account (`uses_jmap`), on the account's
+/// session, never the IMAP pool. Each uid's email comes from the mailbox's
+/// ledger and leaves the mailbox by the label semantics rule for a permanent
+/// delete (`jmap::ops::remove_from`): only this mailbox's label comes off
+/// when another mailbox holds it, else it is destroyed. An email already gone
+/// (or a uid the ledger never issued) counts as deleted, as an IMAP uid the
+/// server no longer has does. Five at a time, with the IMAP run's
+/// `bulk-operation-progress` frames and reply.
+async fn bulk_delete_jmap(
+    state: &Arc<DaemonState>,
+    account_id: String,
+    config: &crate::imap::ImapConfig,
+    mailbox: String,
+    uids: Vec<u32>,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
+) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
+    use futures::StreamExt;
+    use mailvault_core::jmap::{remove_from, RemoveOutcome};
+    use std::sync::atomic::Ordering;
+    let total = uids.len();
+    let progress = |completed: usize, errors: usize, active: bool| {
+        state.events.emit(
+            "bulk-operation-progress",
+            serde_json::json!({"phase": "delete", "total": total, "completed": completed, "errors": errors, "active": active}),
+        );
+    };
+    progress(0, 0, true);
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let boxes = acct.current().await.map_err(|e| e.to_string())?;
+    let mailbox_id = boxes.ids.get(&mailbox).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"))?;
+    let trash_id = crate::handlers::jmap_bridge::role_mailbox(&boxes, "trash").map(|(_, id)| id);
+    let pairs = acct.uid_to_id(state, &account_id, &mailbox, &uids, false).await?;
+    let (client, mailbox_ref, trash_ref, cancel_ref) = (&acct.client, mailbox_id.as_str(), trash_id.as_deref(), &cancel);
+    let mut results = futures::stream::iter(pairs)
+        .map(|(uid, email_id)| async move {
+            if cancel_ref.load(Ordering::Relaxed) {
+                return None;
+            }
+            let outcome = match email_id {
+                None => Ok(RemoveOutcome::Gone),
+                Some(id) => remove_from(client, &id, mailbox_ref, trash_ref, true).await,
+            };
+            Some((uid, outcome))
+        })
+        .buffer_unordered(5);
+    let (mut completed, mut errors, mut deleted) = (0usize, 0usize, Vec::new());
+    while let Some(done) = results.next().await {
+        let Some((uid, outcome)) = done else { continue };
+        match outcome {
+            Ok(_) => {
+                deleted.push(uid);
+                completed += 1;
+            }
+            Err(e) => {
+                errors += 1;
+                warn!("bulk_delete: UID {uid} failed: {e}");
+            }
+        }
+        progress(completed, errors, !cancel.load(Ordering::Relaxed) && completed + errors < total);
+    }
+    tracing::info!("bulk_delete: JMAP done, {completed}/{total} deleted, {errors} errors");
+    Ok((
+        archive::ArchiveProgress {
+            total,
+            completed,
+            errors,
+            active: false,
+            last_error: None,
+            last_uid: None,
+            external_copy_failures: 0,
+            bandwidth_limited: false,
+            slow_drive_ms: None,
+            operation: "bulk_delete",
+            account_id,
+            mailbox,
+        },
+        deleted,
+    ))
 }
 
 /// Cleanup lists what is classified: a deleted message must leave that list.
@@ -260,7 +349,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 (uids, 0)
             };
             let (acct, mb) = (account_id.clone(), mailbox.clone());
-            let result = archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await;
+            let result = match serde_json::from_str::<crate::imap::ImapConfig>(&account_json) {
+                Ok(config) if config.uses_jmap() => bulk_delete_jmap(&state, account_id, &config, mailbox, uids, cancel).await,
+                _ => archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await,
+            };
             drop(guard);
             let result = match result {
                 Ok((mut p, deleted)) => {

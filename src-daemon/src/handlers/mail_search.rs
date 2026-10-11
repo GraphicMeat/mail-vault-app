@@ -1047,48 +1047,54 @@ async fn run_server_lane(
                     return None;
                 }
                 let account_id = job.account_id.clone();
-                let result = state
-                    .imap_pool
-                    .run_read(&job.account, false, |mut session| {
-                        let account_id = account_id.clone();
-                        let mailbox = job.mailbox.clone();
-                        let query = query.clone();
-                        let filters = filters.clone();
-                        let to = to.clone();
-                        let exclude = exclude.clone();
-                        async move {
-                            let search = mailvault_core::imap::ServerSearch {
-                                query: nonempty(&query),
-                                from: filters.from.as_deref(),
-                                to: to.as_deref(),
-                                since: filters.since.as_deref(),
-                                before: filters.before.as_deref(),
-                                unseen,
-                                exclude: &exclude,
-                                ..Default::default()
-                            };
-                            let (emails, _, exists) = mailvault_core::imap::search_emails_counted(&mut session, &mailbox, &search)
-                                .await
-                                .map_err(|error| format!("Failed to search emails: {error}"))?;
-                            let mut rows = Vec::new();
-                            for email in emails {
-                                if has_attachments && !email.has_attachments {
-                                    continue;
-                                }
-                                let mut row = serde_json::to_value(email)
-                                    .map_err(|error| error.to_string())?;
-                                if let Some(object) = row.as_object_mut() {
-                                    object.insert("_accountId".into(), account_id.clone().into());
-                                    object.insert("_mailbox".into(), mailbox.clone().into());
-                                    object.insert("isLocal".into(), false.into());
-                                    object.insert("source".into(), "server-search".into());
-                                }
-                                rows.push(row);
+                // A JMAP account: `Email/query` over its session, never IMAP.
+                let result = if job.account.uses_jmap() {
+                    let search = mailvault_core::imap::ServerSearch {
+                        query: nonempty(&query),
+                        from: filters.from.as_deref(),
+                        to: to.as_deref(),
+                        since: filters.since.as_deref(),
+                        before: filters.before.as_deref(),
+                        unseen,
+                        exclude: &exclude,
+                        ..Default::default()
+                    };
+                    crate::handlers::jmap_bridge::server_search(&state, &job.account, &account_id, &job.mailbox, &search)
+                        .await
+                        .map_err(|error| format!("Failed to search emails: {error}"))
+                        .and_then(|(emails, exists)| {
+                            Ok((server_rows(emails, &account_id, &job.mailbox, has_attachments)?, u64::from(exists)))
+                        })
+                } else {
+                    state
+                        .imap_pool
+                        .run_read(&job.account, false, |mut session| {
+                            let account_id = account_id.clone();
+                            let mailbox = job.mailbox.clone();
+                            let query = query.clone();
+                            let filters = filters.clone();
+                            let to = to.clone();
+                            let exclude = exclude.clone();
+                            async move {
+                                let search = mailvault_core::imap::ServerSearch {
+                                    query: nonempty(&query),
+                                    from: filters.from.as_deref(),
+                                    to: to.as_deref(),
+                                    since: filters.since.as_deref(),
+                                    before: filters.before.as_deref(),
+                                    unseen,
+                                    exclude: &exclude,
+                                    ..Default::default()
+                                };
+                                let (emails, _, exists) = mailvault_core::imap::search_emails_counted(&mut session, &mailbox, &search)
+                                    .await
+                                    .map_err(|error| format!("Failed to search emails: {error}"))?;
+                                let rows = server_rows(emails, &account_id, &mailbox, has_attachments)?;
+                                Ok(((rows, u64::from(exists)), session, Some(mailbox)))
                             }
-                            Ok(((rows, u64::from(exists)), session, Some(mailbox)))
-                        }
-                    })
-                    .await;
+                        })
+                        .await
+                };
                 Some(ServerMailboxOutcome { job, result })
             }
         }
@@ -1142,6 +1148,32 @@ async fn run_server_lane(
     report
 }
 
+/// One server lane folder's matches as the rows the search screen lists,
+/// IMAP or JMAP alike: each labelled with its account and folder, as server
+/// rows, without the ones the attachment filter leaves out.
+fn server_rows(
+    emails: Vec<mailvault_core::imap::EmailHeader>,
+    account_id: &str,
+    mailbox: &str,
+    has_attachments: bool,
+) -> Result<Vec<Value>, String> {
+    let mut rows = Vec::new();
+    for email in emails {
+        if has_attachments && !email.has_attachments {
+            continue;
+        }
+        let mut row = serde_json::to_value(email).map_err(|error| error.to_string())?;
+        if let Some(object) = row.as_object_mut() {
+            object.insert("_accountId".into(), account_id.into());
+            object.insert("_mailbox".into(), mailbox.into());
+            object.insert("isLocal".into(), false.into());
+            object.insert("source".into(), "server-search".into());
+        }
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
 fn nonempty(value: &str) -> Option<&str> {
     let trimmed = value.trim();
     (!trimmed.is_empty()).then_some(trimmed)
@@ -1151,6 +1183,7 @@ fn server_failure(account_id: &str, mailbox: &str, error: &str) -> SearchFailure
     let lowered = error.to_ascii_lowercase();
     let code = if [
         "authentication",
+        "e_jmap_auth",
         "login failed",
         "invalid credentials",
         "password missing",
@@ -1162,7 +1195,7 @@ fn server_failure(account_id: &str, mailbox: &str, error: &str) -> SearchFailure
     {
         "credentials"
     } else if mailvault_core::imap::pool::is_retryable_connect_error(error)
-        || ["failed to connect", "connection refused", "timed out"]
+        || ["failed to connect", "connection refused", "timed out", "e_jmap_transport", "e_jmap_rate"]
             .iter()
             .any(|needle| lowered.contains(needle))
     {
@@ -3033,6 +3066,66 @@ mod tests {
             let frames = collect_until_terminal(&mut rx, "server-after-local").await;
             assert_eq!(frames[0]["lane"], "local");
             assert!(frames.iter().any(|frame| frame["lane"] == "server"));
+        }
+
+        /// A JMAP account's server lane (Task 9c): `Email/query` with a
+        /// text filter over the account's session, never IMAP; the hit
+        /// carries the uid the INBOX ledger gave it.
+        #[tokio::test]
+        async fn jmap_server_lane_answers_with_email_query() {
+            use crate::jmap_test_support as support;
+            let m = mock_jmap::MockJmap::start(support::scenario());
+            let (trap, port) = support::imap_trap();
+            let (_tmp, state) = state();
+            let mut rx = state.events.subscribe();
+            let started = call(
+                &state,
+                "mail_search_start",
+                json!({
+                    "searchId": "jmap-server",
+                    "query": "two",
+                    "location": "server",
+                    "concurrency": 1,
+                    "targets": [{
+                        "accountId": "acct1",
+                        "account": support::account_json(&m, port),
+                        "localMailboxes": [],
+                        "knownMailboxes": ["INBOX"],
+                        "serverMailboxes": ["INBOX"]
+                    }]
+                }),
+            )
+            .await;
+            assert_eq!(started.result.unwrap()["started"], true);
+            let frames = collect_until_terminal(&mut rx, "jmap-server").await;
+
+            let rows = frames.iter().flat_map(|frame| frame["rows"].as_array().into_iter().flatten()).collect::<Vec<_>>();
+            assert_eq!(rows.len(), 1, "{frames:?}");
+            assert_eq!(rows[0]["messageId"], json!("<e2@x>"));
+            assert_eq!(rows[0]["source"], json!("server-search"));
+            assert_eq!(rows[0]["_accountId"], json!("acct1"));
+            let root = crate::handlers::common::vault_root(&state).unwrap();
+            let ledger = mailvault_core::graph_ledger::load(&crate::jmap_sessions::jmap_ledger_path(&root, "acct1", "INBOX")).unwrap();
+            let uid = rows[0]["uid"].as_u64().unwrap() as u32;
+            assert_eq!(ledger.get(&uid).map(String::as_str), Some("e2"));
+            let terminal = frames.last().unwrap();
+            assert_eq!(terminal["terminal"], "complete");
+            assert_eq!(terminal["failures"], json!([]));
+            assert!(m.requests().iter().any(|r| r.body_contains("\"text\":\"two\"")), "an Email/query text filter");
+            assert!(trap.accept().is_err(), "no IMAP dial");
+        }
+
+        #[test]
+        fn jmap_server_failures_use_the_same_public_codes() {
+            let cases = [
+                ("Failed to search emails: E_JMAP_AUTH: authentication failed", "credentials"),
+                ("Failed to search emails: E_JMAP_TRANSPORT: connection refused", "connection"),
+                ("Failed to search emails: E_JMAP_RATE: rate limited", "connection"),
+                ("Failed to search emails: E_JMAP_PROTOCOL: no mailbox Archive", "mailbox"),
+            ];
+            for (error, code) in cases {
+                assert_eq!(server_failure("acct", "Archive", error).code, code, "{error}");
+            }
         }
     }
 }

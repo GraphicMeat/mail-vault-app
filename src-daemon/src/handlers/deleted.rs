@@ -19,6 +19,14 @@
 //! to the folder it came from) or into the vault as a local copy the user
 //! keeps. Graph accounts recover locally only: the daemon holds no Graph
 //! token.
+//!
+//! A JMAP account recovers over its session, never IMAP
+//! (`recover_on_jmap`). Its mail is label-like, so the email often still
+//! exists: a delete that took one label off, or moved it to Trash. Found by
+//! its exact Message-ID, it gets the original mailbox's label back (and
+//! Trash's off), under the uid the ledger issued it before. Destroyed, the
+//! bin's bytes are imported into the original mailbox
+//! (`JmapSessions::import_raw`), which is made again when it is gone.
 use crate::handlers::common::{blocking, done, vec_arg, with_mailbox_write};
 use crate::imap::{self, ImapConfig};
 use crate::ipc::RpcResponse;
@@ -258,6 +266,9 @@ async fn from_trash(state: &Arc<DaemonState>, d: &Deleted) -> Result<Vec<u8>, St
     let (Some(trash), Some(mid)) = (d.trash.clone(), bare_message_id(d)) else {
         return Err("deletedBin.goneFromTrash".to_string());
     };
+    if config.uses_jmap() {
+        return from_trash_jmap(state, &config, &trash, &mid).await;
+    }
     let fetched = crate::handlers::imap::with_priority(&state.imap_pool, &config, |mut session| async move {
         imap::select_mailbox(&mut session, &trash).await?;
         let raw = match imap::uid_of_message_id(&mut session, &mid).await? {
@@ -279,39 +290,24 @@ async fn from_trash(state: &Arc<DaemonState>, d: &Deleted) -> Result<Vec<u8>, St
 /// has only the Trash copy: gone from there, it cannot come back.
 async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, String> {
     let config = imap_config(state, &d.account_id).await?;
-    let raw = if d.has_eml {
-        let (app_dir, id) = (state.app_dir.clone(), d.id.clone());
-        Some(blocking(move || bin::read_eml(&app_dir, &id)).await.and_then(|r| r)?)
+    let new_uid = if config.uses_jmap() {
+        recover_on_jmap(state, &d, &config).await?
     } else {
-        None
+        recover_on_imap(state, &d, &config).await?
     };
-    let flags = d.flags.iter().filter(|f| !matches!(f.to_ascii_lowercase().as_str(), "\\deleted" | "\\recent")).cloned().collect::<Vec<_>>().join(" ");
-    let message_id = bare_message_id(&d);
-    let (pool, cfg) = (&state.imap_pool, &config);
-    let (trash, mailbox) = (d.trash.clone(), d.mailbox.clone());
-    let new_uid = crate::handlers::imap::with_priority(pool, cfg, |mut session| async move {
-        if let (Some(trash), Some(mid)) = (trash.as_deref(), message_id.as_deref()) {
-            imap::select_mailbox(&mut session, trash).await?;
-            if let Some(in_trash) = imap::uid_of_message_id(&mut session, mid).await? {
-                let has_move = pool.has_capability(cfg, "MOVE").await;
-                let has_uidplus = pool.has_capability(cfg, "UIDPLUS").await;
-                let moved = imap::move_uids(&mut session, trash, &mailbox, &[in_trash], has_move, has_uidplus).await?;
-                return Ok((moved.new_uids.and_then(|u| u.first().copied()), session, Some(trash.to_string())));
-            }
-        }
-        let Some(raw) = raw else { return Err("deletedBin.goneFromTrash".to_string()) };
-        let (_, _, found) = imap::append_email_verified(&mut session, &mailbox, &raw, &flags, message_id.as_deref(), None).await?;
-        Ok((found, session, Some(mailbox)))
-    })
-    .await?;
 
     // A kept vault copy is filed under the uid the delete retired, and
     // custody says the server lost it. Re-file it under the new uid, or it
     // renders as a second, "only copy" message beside the one just restored.
+    // A JMAP label put back keeps the uid it had (ledger rows are never
+    // removed): the copy is filed right already, only its stamp is wrong.
     if let Some(new_uid) = new_uid {
-        let rebind = json!({ "accountId": d.account_id, "mailbox": d.mailbox, "pairs": [[d.uid, new_uid]] });
-        let rebound = crate::handlers::custody::route(state, "vault_rebind_uids", &rebind, Value::Null).await;
-        if rebound.and_then(|r| r.result).is_some_and(|r| r["rebound"].as_array().is_some_and(|a| !a.is_empty())) {
+        let refiled = new_uid == d.uid || {
+            let rebind = json!({ "accountId": d.account_id, "mailbox": d.mailbox, "pairs": [[d.uid, new_uid]] });
+            let rebound = crate::handlers::custody::route(state, "vault_rebind_uids", &rebind, Value::Null).await;
+            rebound.and_then(|r| r.result).is_some_and(|r| r["rebound"].as_array().is_some_and(|a| !a.is_empty()))
+        };
+        if refiled {
             let (st, acct, mb) = (Arc::clone(state), d.account_id.clone(), d.mailbox.clone());
             let restamped = blocking(move || {
                 crate::custody::with_conn(&st, |c| {
@@ -340,6 +336,106 @@ async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, S
     blocking(move || app_db::with(&app_dir, |c| bin::remove(c, &app_dir, &id))).await.and_then(|r| r)?;
     info!("[deleted] recovered {} to {}/{} (uid {:?})", d.id, d.account_id, d.mailbox, new_uid);
     Ok(json!({ "id": d.id, "accountId": d.account_id, "mailbox": d.mailbox, "uid": new_uid }))
+}
+
+/// `recover_server` on an IMAP account: moved back out of Trash when the
+/// delete put it there and it still is, else APPENDed to the folder it was
+/// deleted from. Returns the uid the server gave it, when it said.
+async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
+    let raw = if d.has_eml {
+        let (app_dir, id) = (state.app_dir.clone(), d.id.clone());
+        Some(blocking(move || bin::read_eml(&app_dir, &id)).await.and_then(|r| r)?)
+    } else {
+        None
+    };
+    let flags = d.flags.iter().filter(|f| !matches!(f.to_ascii_lowercase().as_str(), "\\deleted" | "\\recent")).cloned().collect::<Vec<_>>().join(" ");
+    let message_id = bare_message_id(d);
+    let (pool, cfg) = (&state.imap_pool, config);
+    let (trash, mailbox) = (d.trash.clone(), d.mailbox.clone());
+    crate::handlers::imap::with_priority(pool, cfg, |mut session| async move {
+        if let (Some(trash), Some(mid)) = (trash.as_deref(), message_id.as_deref()) {
+            imap::select_mailbox(&mut session, trash).await?;
+            if let Some(in_trash) = imap::uid_of_message_id(&mut session, mid).await? {
+                let has_move = pool.has_capability(cfg, "MOVE").await;
+                let has_uidplus = pool.has_capability(cfg, "UIDPLUS").await;
+                let moved = imap::move_uids(&mut session, trash, &mailbox, &[in_trash], has_move, has_uidplus).await?;
+                return Ok((moved.new_uids.and_then(|u| u.first().copied()), session, Some(trash.to_string())));
+            }
+        }
+        let Some(raw) = raw else { return Err("deletedBin.goneFromTrash".to_string()) };
+        let (_, _, found) = imap::append_email_verified(&mut session, &mailbox, &raw, &flags, message_id.as_deref(), None).await?;
+        Ok((found, session, Some(mailbox)))
+    })
+    .await
+}
+
+/// `recover_server` on a JMAP account (`uses_jmap`), over its session:
+/// - The email still exists (a label taken off, or moved to Trash), found by
+///   its exact Message-ID anywhere in the account: the original mailbox's
+///   label goes back on and Trash's comes off, one `mailboxIds` patch.
+/// - It is gone: the bin's bytes are imported into the original mailbox with
+///   the captured flags as keywords and the message's own Date as
+///   `receivedAt` (`JmapSessions::import_raw`: deduped by Message-ID, the new
+///   id recorded as this daemon's own, so the sync never announces it).
+///   A byte-less row has nothing to import (`deletedBin.goneFromTrash`).
+///
+/// The original mailbox is made again when it is gone
+/// (`migration::ensure_dest_folder_jmap`). Returns the uid the mailbox's
+/// ledger gives the email: the old one for a label put back.
+async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
+    use mailvault_core::jmap::ImportResult;
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let mailbox_id = crate::migration::ensure_dest_folder_jmap(&acct, &d.mailbox).await.map_err(|e| e.to_string())?;
+    let boxes = acct.current().await.map_err(|e| e.to_string())?;
+    let trash_id = crate::handlers::jmap_bridge::role_mailbox(&boxes, "trash").map(|(_, id)| id).filter(|t| *t != mailbox_id);
+    let existing = match d.message_id.as_deref() {
+        Some(mid) => crate::handlers::jmap_bridge::emails_with_message_id(&acct.client, None, mid).await.map_err(|e| e.to_string())?,
+        None => Vec::new(),
+    };
+    let email_id = match existing.into_iter().next() {
+        Some(id) => {
+            let mut toggles = vec![(mailbox_id.clone(), true)];
+            toggles.extend(trash_id.map(|t| (t, false)));
+            let out = acct.client.set_mailboxes(&[(id.clone(), toggles)]).await.map_err(|e| e.to_string())?;
+            if !out.ok.contains(&id) {
+                let kind = out.failed.iter().find(|(f, _)| *f == id).map_or("serverFail", |(_, k)| k.as_str());
+                return Err(format!("E_JMAP_METHOD: {kind}: {} was not put back in {}", id, d.mailbox));
+            }
+            id
+        }
+        None => {
+            if !d.has_eml {
+                return Err("deletedBin.goneFromTrash".to_string());
+            }
+            let (app_dir, bin_id) = (state.app_dir.clone(), d.id.clone());
+            let raw = blocking(move || bin::read_eml(&app_dir, &bin_id)).await.and_then(|r| r)?;
+            let keywords = mailvault_core::jmap::headers::flags_to_keywords(d.flags.iter().map(String::as_str));
+            let received_at = mailvault_core::jmap::client::received_at_of(&raw);
+            match state.jmap.import_raw(config, &raw, &mailbox_id, &keywords, received_at.as_deref()).await.map_err(|e| e.to_string())? {
+                ImportResult::Created(imported) => imported.id,
+                ImportResult::AlreadyExists { existing_id } => existing_id,
+            }
+        }
+    };
+    let uids = acct.ids_to_uids(state, &d.account_id, &d.mailbox, &[email_id]).await?;
+    Ok(uids.first().copied())
+}
+
+/// A byte-less row's bytes on a JMAP account: the email in `trash` whose
+/// Message-ID is `mid`, by blob download.
+async fn from_trash_jmap(state: &Arc<DaemonState>, config: &ImapConfig, trash: &str, mid: &str) -> Result<Vec<u8>, String> {
+    let gone = || "deletedBin.goneFromTrash".to_string();
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let boxes = acct.current().await.map_err(|e| e.to_string())?;
+    let trash_id = boxes.ids.get(trash).ok_or_else(gone)?;
+    let found = crate::handlers::jmap_bridge::emails_with_message_id(&acct.client, Some(trash_id), mid).await.map_err(|e| e.to_string())?;
+    let email_id = found.into_iter().next().ok_or_else(gone)?;
+    let got = acct.client.get_emails(&[email_id], &["id", "blobId"]).await.map_err(|e| e.to_string())?;
+    let blob = got.list.first().and_then(|e| e["blobId"].as_str()).ok_or_else(gone)?;
+    tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, acct.client.download(blob))
+        .await
+        .map_err(|_| format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()))?
+        .map_err(|e| e.to_string())
 }
 
 /// One purge pass. Settings that cannot be read purge nothing: a pass that
@@ -675,5 +771,144 @@ mod tests {
         app_db::with(&s.app_dir, |c| c.execute("UPDATE deleted_messages SET deleted_at = deleted_at - 2 * 86400000", []).map_err(|e| e.to_string())).unwrap();
         let listed = handle_request_for_test(&s, "deleted.list", json!({})).await.result.unwrap();
         assert_eq!(listed, json!([]));
+    }
+
+    // ── JMAP (Task 9c) ─────────────────────────────────────────────────────
+
+    /// A daemon whose recover reads the JMAP account `support::config`
+    /// names, and the INBOX uids a listing issued (e1 then e2).
+    async fn jmap_state(m: &mock_jmap::MockJmap, port: u16) -> (Arc<DaemonState>, u32, u32) {
+        use crate::jmap_test_support as support;
+        let dir = std::env::temp_dir().join(format!("mv-deleted-jmap-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let s = DaemonState::for_test(dir.clone(), dir, true);
+        s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), support::config(m, port));
+        let listing = handle_request_for_test(&s, "imap_get_emails", json!({"account": support::account_json(m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
+            .await
+            .result
+            .expect("listed");
+        let uid = |mid: &str| listing["emails"].as_array().unwrap().iter().find(|e| e["messageId"] == mid).unwrap()["uid"].as_u64().unwrap() as u32;
+        let (e1, e2) = (uid("<e1@x>"), uid("<e2@x>"));
+        (s, e1, e2)
+    }
+
+    fn jmap_labels(m: &mock_jmap::MockJmap, email_id: &str) -> std::collections::BTreeSet<String> {
+        m.read(|st| st.email("acc1", email_id).map(|e| e.mailbox_ids.clone()).unwrap_or_default())
+    }
+
+    /// e1 sits in INBOX and Work. Deleted from INBOX it only lost that label;
+    /// the recover puts the label back, under the uid it had, and imports
+    /// nothing.
+    #[tokio::test]
+    async fn jmap_recover_puts_the_label_back_on_an_email_that_still_exists() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, e1, _) = jmap_state(&m, port).await;
+        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e1, "mailbox": "INBOX", "permanent": false}))
+            .await
+            .result
+            .expect("deleted");
+        assert_eq!(jmap_labels(&m, "e1"), support::set(&["mb-work"]));
+        assert!(binned(&s)[0].has_eml, "a JMAP capture keeps the bytes");
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]));
+        assert_eq!(out["recovered"][0]["uid"], json!(e1), "the uid it had: ledger rows are never removed");
+        assert_eq!(jmap_labels(&m, "e1"), support::set(&["mb-inbox", "mb-work"]));
+        assert_eq!(m.count_calls("Email/import"), 0, "nothing imported: the email was there");
+        assert!(binned(&s).is_empty());
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// e2 sits in INBOX alone: a permanent delete destroys it. The recover
+    /// imports the bin's bytes back into INBOX under the message's own date,
+    /// as this daemon's own (never announced as an arrival), and answers the
+    /// uid the INBOX ledger gives the new email.
+    #[tokio::test]
+    async fn jmap_recover_imports_a_destroyed_email_into_its_mailbox() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, _, e2) = jmap_state(&m, port).await;
+        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e2, "mailbox": "INBOX", "permanent": true}))
+            .await
+            .result
+            .expect("deleted");
+        assert!(m.read(|st| st.email("acc1", "e2").is_none()), "destroyed");
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]));
+        let back = support::emails_in(&m, "mb-inbox").into_iter().find(|e| e.raw == support::raw("e2", "two")).expect("imported back into INBOX");
+        assert_ne!(back.id, "e2", "a new email");
+        assert_eq!(back.received_at, "2019-03-05T08:15:00Z", "its own Date");
+        assert_eq!(m.count_calls("Email/import"), 1);
+        let ledger = mailvault_core::graph_ledger::load(&crate::jmap_sessions::jmap_ledger_path(&s.data_dir, "acct1", "INBOX")).unwrap();
+        let new_uid = ledger.iter().find(|(_, id)| **id == back.id).map(|(uid, _)| *uid).expect("a ledger uid");
+        assert_eq!(out["recovered"][0]["uid"], json!(new_uid));
+        assert!(s.jmap.is_own(&support::config(&m, port), &back.id), "never announced as an arrival");
+        assert!(binned(&s).is_empty());
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// A byte-less row of a JMAP account recovers locally from the Trash copy,
+    /// found by Message-ID and downloaded by blob, never over IMAP.
+    #[tokio::test]
+    async fn jmap_a_byte_less_row_recovers_locally_from_the_trash_copy() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, _, e2) = jmap_state(&m, port).await;
+        m.mutate(|st| st.set_mailboxes("acc1", "e2", &["mb-trash"]));
+        let row = json!({"uid": e2, "messageId": "<e2@x>"});
+        let capture = Capture { account_id: "acct1", mailbox: "INBOX", uid: e2, message_id: Some("<e2@x>"), flags: &[], row: &row, deleted_at: now_ms() };
+        let (id, _) = app_db::with(&s.app_dir, |c| bin::capture(c, &s.app_dir, &capture, None)).unwrap();
+        app_db::with(&s.app_dir, |c| bin::set_trash(c, &id, Some("Trash"), None)).unwrap();
+
+        let out = recover(&s, "local").await;
+
+        assert_eq!(out["failed"], json!([]));
+        let cur = vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
+        let kept = std::fs::read_dir(&cur)
+            .unwrap()
+            .flatten()
+            .find(|e| mailvault_core::maildir::vault_filename_uid(&e.file_name().to_string_lossy()) == Some(e2))
+            .expect("a vault file under the uid the row had");
+        assert_eq!(std::fs::read(kept.path()).unwrap(), support::raw("e2", "two").as_bytes());
+        assert_eq!(m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count(), 1);
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// A JMAP account's bulk delete (Task 9c), never the IMAP pool: each
+    /// email into the bin with its bytes first, then the label semantics
+    /// rule. e1 sits in INBOX and Work, so it loses only its INBOX label; e2
+    /// sits in INBOX alone, so it is destroyed. Both uids count as deleted.
+    #[tokio::test]
+    async fn jmap_bulk_delete_applies_the_label_rule_and_keeps_the_bytes() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, e1, e2) = jmap_state(&m, port).await;
+
+        let r = handle_request_for_test(
+            &s,
+            "bulk_delete_emails",
+            json!({"accountId": "acct1", "accountJson": support::account_json(&m, port).to_string(), "mailbox": "INBOX", "uids": [e1, e2]}),
+        )
+        .await
+        .result
+        .expect("ran");
+
+        assert_eq!((r["completed"].clone(), r["errors"].clone()), (json!(2), json!(0)), "{r}");
+        assert_eq!(jmap_labels(&m, "e1"), support::set(&["mb-work"]), "e1 keeps its Work label");
+        assert!(m.read(|st| st.email("acc1", "e2").is_none()), "e2 had no other label: destroyed");
+        let rows = binned(&s);
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|d| d.has_eml), "no byte-less capture: a label taken off leaves no Trash copy");
+        let e2_row = rows.iter().find(|d| d.uid == e2).expect("e2 binned");
+        assert_eq!(bin::read_eml(&s.app_dir, &e2_row.id).unwrap(), support::raw("e2", "two").as_bytes());
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

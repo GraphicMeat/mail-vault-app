@@ -136,6 +136,25 @@ describe('buildSearchTargets', () => {
     expect(auth.ensureFreshToken).not.toHaveBeenCalled();
   });
 
+  // The daemon answers a JMAP account's server lane with `Email/query` over
+  // its session (Task 9c): it keeps the lane like an IMAP account.
+  it('keeps a JMAP account on the server lane', async () => {
+    const jmap = account('jmap', { jmapSessionUrl: 'https://api.example.test/jmap/session', jmapAuth: 'bearer', password: 'token' });
+    const mail = {
+      accounts: [jmap],
+      activeAccountId: 'jmap',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      mailboxes: [box('INBOX', 'INBOX')],
+    };
+
+    const [target] = await buildSearchTargets(mail, settings(), filters('current'));
+
+    expect(target.account).toEqual(jmap);
+    expect(target.serverMailboxes).toEqual(['INBOX']);
+    expect(auth.ensureFreshToken).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps local-only targets token-free even when server credentials exist', async () => {
     const mail = {
       accounts: [account('a')],

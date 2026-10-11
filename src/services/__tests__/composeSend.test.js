@@ -383,6 +383,18 @@ describe('a send with a follow-up reminder', () => {
     expect(mailStore.useMailStore.getState().sentEmails).toHaveLength(1);
   });
 
+  // The daemon checks a JMAP account's reminder over JMAP (Task 9c), so it
+  // is recorded exactly as an IMAP account's.
+  it('records the reminder on a JMAP account', async () => {
+    sendEmail.mockResolvedValueOnce({ messageId: 'jmap-submission-1' });
+    const jmap = { ...account, jmapSessionUrl: 'https://api.example.test/jmap/session', jmapAuth: 'bearer' };
+    await createComposeSend({ snapshot: { ...snapshot, _remindDays: 2 }, mode: 'new', account: jmap, settings: {} })();
+
+    expect(created()).toHaveLength(1);
+    expect(created()[0]).toMatchObject({ accountId: 'acct-1', messageId: '<one@example.test>' });
+    expect(created()[0].remindAt - created()[0].sentAt).toBe(2 * DAY);
+  });
+
   it('records nothing when the send fails', async () => {
     sendEmail.mockRejectedValueOnce(new Error('offline'));
     await expect(createComposeSend({ snapshot: { ...snapshot, _remindDays: 3 }, mode: 'new', account, settings: {} })()).rejects.toThrow('offline');

@@ -115,7 +115,7 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
         return failed(format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"));
     };
     publish(engine, &account.id, &run);
-    wake_hoarder(&state, &run);
+    wake_workers(&state, &run);
     if let Err(e) = write_meta(&state, engine, &account.id, &path, total).await {
         return failed(e);
     }
@@ -157,7 +157,7 @@ pub async fn delta_only(state: &Arc<DaemonState>, cfg: &ImapConfig, account_id: 
     let _account_guard = lock.lock().await;
     let run = run_once(state, engine, cfg, account_id, None).await?;
     publish(engine, account_id, &run);
-    wake_hoarder(state, &run);
+    wake_workers(state, &run);
     Ok(())
 }
 
@@ -174,12 +174,17 @@ fn publish(engine: &SyncEngine, account_id: &str, run: &Run) {
     }
 }
 
-/// Arrivals in any mailbox the run touched wake the hoarder, not only the
-/// requested one's: one run applies the whole account's delta, and the
-/// caller's own wake (`handle_sync_now`) sees only the requested mailbox.
-fn wake_hoarder(state: &DaemonState, run: &Run) {
+/// The workers a run's changes wake, for every mailbox it touched, not only
+/// the requested one: one run applies the whole account's delta, and the
+/// caller's own wakes (`handle_sync_now`, `jmap_push`) see only the
+/// requested mailbox. Arrivals wake the hoarder; header rows written wake
+/// Auto Tags (the signal `handle_sync_now` sends on `new_emails`).
+fn wake_workers(state: &DaemonState, run: &Run) {
     if run.touched.values().any(|t| !t.arrival_uids.is_empty()) {
         state.hoarder_worker.wake();
+    }
+    if run.touched.values().any(|t| t.written > 0) {
+        state.auto_tag_worker.wake();
     }
 }
 
@@ -968,5 +973,26 @@ mod tests {
         let r = sync(&state, &account, "INBOX").await;
         assert_eq!(r.arrivals, 0, "nothing arrived in INBOX");
         assert!(woken(), "the Work arrival wakes the hoarder");
+    }
+
+    /// Rows written in a cached mailbox other than the requested one wake
+    /// Auto Tags (Task 9c): the requested mailbox's `new_emails`, all
+    /// `handle_sync_now` and the push see, is 0.
+    #[tokio::test]
+    async fn jmap_rows_written_in_any_cached_mailbox_wake_auto_tags() {
+        use futures::FutureExt;
+        let (_dir, state, m, account) = setup().await;
+        sync(&state, &account, "INBOX").await;
+        sync(&state, &account, "Work").await;
+        let woken = || state.auto_tag_worker.notify.notified().now_or_never().is_some();
+        let _ = woken();
+        let quiet = sync(&state, &account, "INBOX").await;
+        assert_eq!(quiet.new_emails, 0);
+        assert!(!woken(), "nothing written, no wake");
+
+        m.mutate(|s| s.add_email("acc1", "mb-work", email("e7", "seven", "2026-10-07T10:00:00Z")));
+        let r = sync(&state, &account, "INBOX").await;
+        assert_eq!(r.new_emails, 0, "nothing written in INBOX");
+        assert!(woken(), "the Work row wakes Auto Tags");
     }
 }
