@@ -283,8 +283,13 @@ fn import_monolithic_header_cache(
         ).map_err(|e| e.to_string())?;
         for row in value.get("emails").and_then(Value::as_array).into_iter().flatten() {
             let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
-            imported += stmt.execute(params![account, mailbox, uid, sort_key(row, uid), serde_json::to_string(row).map_err(|e| e.to_string())?])
+            let sort_ms = sort_key(row, uid);
+            let wrote = stmt.execute(params![account, mailbox, uid, sort_ms, serde_json::to_string(row).map_err(|e| e.to_string())?])
                 .map_err(|e| e.to_string())?;
+            if wrote > 0 {
+                crate::people::message_addr::index_row(tx, account, mailbox, uid, sort_ms, row)?;
+            }
+            imported += wrote;
         }
         Ok(imported)
     })();
@@ -331,8 +336,18 @@ fn import_header_dir(
         let Some(uid) = crate::header_cache::is_header_file(&name) else { continue };
         let text = match std::fs::read_to_string(&path) { Ok(v) => v, Err(e) => { errors.push((path, e.to_string())); continue; } };
         let row: Value = match serde_json::from_str(&text) { Ok(v) => v, Err(e) => { errors.push((path, e.to_string())); continue; } };
-        match stmt.execute(params![account, mailbox, uid, sort_key(&row, uid), 0, text]) {
-            Ok(n) => { imported += n; snapshots.push(path); }
+        let sort_ms = sort_key(&row, uid);
+        match stmt.execute(params![account, mailbox, uid, sort_ms, 0, text]) {
+            Ok(n) => {
+                if n > 0 {
+                    if let Err(e) = crate::people::message_addr::index_row(tx, account, mailbox, uid, sort_ms, &row) {
+                        errors.push((path, e));
+                        continue;
+                    }
+                }
+                imported += n;
+                snapshots.push(path);
+            }
             Err(e) => errors.push((path, e.to_string())),
         }
     }
@@ -645,6 +660,26 @@ mod tests {
         assert!(inbox.join("2.json").exists(), "malformed cache must remain recoverable");
     }
 
+
+    #[test]
+    fn imported_header_rows_are_indexed_into_message_addr() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(root, "mailboxes/acct/mailboxes.json", &json!({"mailboxes": [{"path":"INBOX"}]}).to_string());
+        let inbox = crate::header_cache::sidecar_dir(root, "acct", "INBOX");
+        write(&inbox, "1.json", &json!({"uid":1,"subject":"one","date":"2026-09-19T00:00:00Z","from":{"address":"Al@X.io"},"to":[{"address":"me@h.io"}]}).to_string());
+
+        let conn = open(root).unwrap();
+        import_legacy(&conn, root);
+        let addrs: Vec<(String, String)> = conn
+            .prepare("SELECT address, role FROM message_addr WHERE account_id='acct' AND mailbox_path='INBOX' AND uid=1 ORDER BY role, address")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(addrs, vec![("al@x.io".to_string(), "from".to_string()), ("me@h.io".to_string(), "to".to_string())]);
+    }
 
     /// The 2026-09-20 field report: a vault whose sidecar caches are still on
     /// disk re-walked, re-read and re-inserted all 66k of them on EVERY start
