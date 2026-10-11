@@ -163,20 +163,11 @@ case "$cmd" in
     SRC="$ROOT/.webclip-src"
     rm -rf "$SRC"; mkdir -p "$SRC"
     trap 'rm -rf "$SRC"' EXIT
+    # cuts resolved against this run's own takes (flat takes/<clip>.mov + .webclip.json), like the job does
+    node scripts/footage/lib/heroSpec.mjs "$ROOT/scripts/footage/hero-montage.json" "$D/takes" > "$SRC/hero-montage.webclip.json" || exit 1
     for c in $(node -e 'const h=require(process.argv[1]);console.log([...new Set(h.segments.map((s)=>s.take))].join(" "))' "$ROOT/scripts/footage/hero-montage.json"); do
-      [ -f "$D/takes/$c/$c.mov" ] || { echo "hero: no take $D/takes/$c/$c.mov"; exit 1; }
-      cp "$D/takes/$c/$c.mov" "$SRC/"
+      cp "$D/takes/$c.mov" "$SRC/$c.mov"
     done
-    node -e '
-      const h = require(process.argv[1]);
-      const spec = { ...h, segments: h.segments.map(({ take: t, ...s }) => ({ ...s, src: `${t}.mov` })) };
-      let at = 0; spec.inspect = [];
-      for (const s of spec.segments) { spec.inspect.push(Number((at + 0.15).toFixed(2)), Number((at + (s.t1 - s.t0) / 2).toFixed(2))); at += s.t1 - s.t0; }
-      spec.crop = spec.segments[0].crop;
-      spec.durationSeconds = Number(at.toFixed(3));
-      require("fs").writeFileSync(process.argv[2], JSON.stringify(spec, null, 2));
-      console.log(`hero: ${spec.segments.length} segments, ${at.toFixed(2)} s`);
-    ' "$ROOT/scripts/footage/hero-montage.json" "$SRC/hero-montage.webclip.json"
     if git check-ignore -q "$SRC/x.mov"; then echo ".webclip-src is ignored; it would not ship"; exit 1; fi
     stamp="$(date +%H%M%S)"
     TESTQ_TIMEOUT=3600 ~/.claude/bin/testq --lane mini-e2e ~/.claude/bin/minijob \

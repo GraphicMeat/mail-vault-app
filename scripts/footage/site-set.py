@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """Build the website file set of one locale from the published clips.
 
-  python3 scripts/footage/site-set.py <published dir> <out dir> [--accept clip,clip]
+  python3 scripts/footage/site-set.py <published dir> <out dir> [--accept clip,clip] [--fallback <dir>]
 
 <published dir> is a ~/Movies/MailVault Website Clips/<set> folder written by
 `web-clips.sh publish` (dark <clip>.mp4 / .jpg and, beside them, the
 <clip>.light.mp4 / .light.jpg of `publish <locale>.light`). Clips the output
 check or a reviewer held sit in _needs-decision/; --accept names the ones that
-ship anyway (a held clip never ships by itself).
+ship anyway (a held clip never ships by itself). --fallback names a folder (the English
+clips, website/assets/clips/en) whose file of the same name stands in for a card clip this
+set does not have (a language whose recording could not be made); its poster is copied too.
 
 <out dir> gets, for every card clip, exactly what the site asks for:
 
   <clip>.mp4  <clip>.jpg  <clip>-poster.jpg                (dark)
   <clip>.light.mp4  <clip>.light.jpg  <clip>-poster.light.jpg   (light)
 
+plus the hero montage (dark only, hero-montage.mp4 and hero-montage.jpg as recorded),
 and manifest.json (name, bytes) for the tests and the upload script. The card
 poster is the 960x660 still resized to 640x440, progressive, at the highest
 JPEG quality that stays under 44 KB (the site test allows 45 KB).
@@ -21,6 +24,7 @@ Needs Pillow. The hero montage is dark only and is not part of this set.
 """
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -31,10 +35,13 @@ POSTER_MAX = 44000
 
 def main(argv):
     args = [a for a in argv if not a.startswith('--')]
-    accept = set()
+    accept, fallback = set(), None
     if '--accept' in argv:
         accept = set(argv[argv.index('--accept') + 1].split(','))
         args = [a for a in args if a != argv[argv.index('--accept') + 1]]
+    if '--fallback' in argv:
+        fallback = argv[argv.index('--fallback') + 1]
+        args = [a for a in args if a != fallback]
     if len(args) != 2:
         print(__doc__)
         return 64
@@ -53,6 +60,22 @@ def main(argv):
         if os.path.isdir(os.path.join(src, '_needs-decision')) else []
     clips = [c for c in dict.fromkeys(clips) if c != 'hero-montage']
     manifest, problems = [], []
+    if fallback:
+        for f in sorted(os.listdir(fallback)):
+            m = re.match(r'^([a-z0-9-]+?)(-poster)?(\.light)?\.(mp4|jpg)$', f)
+            if not m or m.group(1) == 'hero-montage' or m.group(1) in clips:
+                continue
+            shutil.copy(os.path.join(fallback, f), os.path.join(out, f))
+            manifest.append({'name': f, 'bytes': os.path.getsize(os.path.join(out, f))})
+            if f == f'{m.group(1)}.mp4':
+                print(f'NOTE {m.group(1)}: not in this set, the English files stand in')
+    hero = os.path.join(src, 'hero-montage.mp4')
+    if os.path.exists(hero):
+        for n in ('hero-montage.mp4', 'hero-montage.jpg'):
+            shutil.copy(os.path.join(src, n), os.path.join(out, n))
+            manifest.append({'name': n, 'bytes': os.path.getsize(os.path.join(out, n))})
+    else:
+        problems.append('hero-montage.mp4 missing (run web-clips.sh hero and publish it)')
     for clip in clips:
         for suffix in ('', '.light'):
             mp4, held = find(f'{clip}{suffix}.mp4', clip)

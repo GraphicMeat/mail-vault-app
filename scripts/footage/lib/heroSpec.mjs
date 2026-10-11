@@ -46,7 +46,9 @@ const segments = hero.segments.map(({ take, seg, ...s }, i) => {
     const [anchor, off = 0] = v;
     return (anchor === 'end' ? ref.t1 : ref.t0) + off;
   };
-  const t0 = Number(at(s.t0, 't0').toFixed(3)), t1 = Number(at(s.t1, 't1').toFixed(3));
+  let t0 = Number(at(s.t0, 't0').toFixed(3)), t1 = Number(at(s.t1, 't1').toFixed(3));
+  // A re-take whose length differs by a frame or two: the cut ends where the take does.
+  if (ts.movSeconds && t1 > ts.movSeconds && t1 - ts.movSeconds <= 0.1) t1 = Number(ts.movSeconds.toFixed(3));
   if (!(t1 > t0 + 0.2)) fail(`cut ${i} (${s.label}): ${t0}..${t1} is empty`);
   if (t0 < 0 || (ts.movSeconds && t1 > ts.movSeconds)) fail(`cut ${i} (${s.label}): ${t0}..${t1} outside ${take} (0..${ts.movSeconds})`);
   return { ...s, t0, t1, src: `${take}.mov` };
