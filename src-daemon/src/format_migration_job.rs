@@ -42,6 +42,13 @@ pub const E_FORMAT_BUSY: &str = "E_FORMAT_BUSY";
 pub const E_FORMAT_SAME: &str = "E_FORMAT_SAME";
 /// No conversion to pause, resume or cancel.
 pub const E_FORMAT_NOT_FOUND: &str = "E_FORMAT_NOT_FOUND";
+/// The conversion's journal, marker or thread could not be written or
+/// started. The cause is logged here; the app shows a catalog sentence.
+pub const E_FORMAT_IO: &str = "E_FORMAT_IO";
+/// The blob sweep could not run to its end.
+pub const E_FORMAT_RECLAIM_FAILED: &str = "E_FORMAT_RECLAIM_FAILED";
+/// Some of the old files set aside could not be deleted.
+pub const E_FORMAT_PURGE_FAILED: &str = "E_FORMAT_PURGE_FAILED";
 
 /// The vault marker row naming the job of a conversion in progress: set
 /// while one runs or is paused, the empty string when none is.
@@ -234,6 +241,13 @@ impl Migrations {
     }
 }
 
+/// Logs the cause and answers a stable code: what the app shows is a catalog
+/// sentence for the code, never this process's English or a path.
+fn failed(code: &str, what: &str, cause: impl std::fmt::Display) -> String {
+    warn!("[format_migration] {what}: {cause}");
+    format!("{code}: see the daemon log")
+}
+
 fn busy(job_id: &str) -> String {
     format!("{E_FORMAT_BUSY}: {job_id}")
 }
@@ -350,10 +364,20 @@ fn stopped_view(j: &Journal) -> Value {
     view(j, false, state)
 }
 
-/// The vault takes the target format, and names the job as in progress.
+/// The vault names the job as in progress, then takes the target format.
+/// That order matters: if the second write fails, the first is taken back
+/// and the vault is as it was. The other way round, a failed second write
+/// left the vault flipped with no job and no journal, and a retry answered
+/// `E_FORMAT_SAME`.
 fn mark_started(root: &Path, j: &Journal) -> Result<(), String> {
-    message_store::set_vault_format(root, j.to)?;
-    mailvault_core::vault_layout::write_marker_value(root, MIGRATION_KEY, &j.job_id)
+    mailvault_core::vault_layout::write_marker_value(root, MIGRATION_KEY, &j.job_id)?;
+    if let Err(e) = message_store::set_vault_format(root, j.to) {
+        if let Err(undo) = mark_stopped(root) {
+            warn!("[format_migration] job {}: the job row was not taken back: {undo}", j.job_id);
+        }
+        return Err(e);
+    }
+    Ok(())
 }
 
 fn mark_stopped(root: &Path) -> Result<(), String> {
@@ -410,10 +434,10 @@ pub(crate) fn start(state: &Arc<DaemonState>, root: &Path, to: message_store::Fo
         error: None,
         updated_at: now_ms(),
     };
-    write_journal(&state.app_dir, &journal)?;
+    write_journal(&state.app_dir, &journal).map_err(|e| failed(E_FORMAT_IO, "the journal was not written", e))?;
     if let Err(e) = mark_started(root, &journal) {
         remove_journal(&state.app_dir, &journal.job_id);
-        return Err(e);
+        return Err(failed(E_FORMAT_IO, "the marker was not written", e));
     }
     if let Some(old) = stopped {
         remove_journal(&state.app_dir, &old.job_id);
@@ -452,8 +476,8 @@ pub(crate) fn resume(state: &Arc<DaemonState>, root: &Path) -> Result<Value, Str
     journal.state = RUNNING.to_string();
     journal.error = None;
     journal.updated_at = now_ms();
-    write_journal(&state.app_dir, &journal)?;
-    mark_started(root, &journal)?;
+    write_journal(&state.app_dir, &journal).map_err(|e| failed(E_FORMAT_IO, "the journal was not written", e))?;
+    mark_started(root, &journal).map_err(|e| failed(E_FORMAT_IO, "the marker was not written", e))?;
     let id = journal.job_id.clone();
     info!("[format_migration] job {id}: resumed at {} of {}", journal.done, journal.total);
     spawn(state, &mut live, root, journal)?;
@@ -472,9 +496,9 @@ pub(crate) fn cancel(state: &DaemonState, root: &Path) -> Result<Value, String> 
     if journal.state == RUNNING || journal.state == PAUSED {
         journal.state = CANCELLED.to_string();
         journal.updated_at = now_ms();
-        write_journal(&state.app_dir, &journal)?;
+        write_journal(&state.app_dir, &journal).map_err(|e| failed(E_FORMAT_IO, "the journal was not written", e))?;
     }
-    mark_stopped(root)?;
+    mark_stopped(root).map_err(|e| failed(E_FORMAT_IO, "the marker was not written", e))?;
     Ok(json!({"jobId": journal.job_id, "cancelled": true}))
 }
 
@@ -542,7 +566,8 @@ pub(crate) fn purge_retired(state: &DaemonState, root: &Path) -> Result<Value, S
     for dir in retired_dirs(root) {
         let (mut b, mut c) = (0u64, 0u64);
         tally(&dir, &mut b, &mut c);
-        std::fs::remove_dir_all(&dir).map_err(|e| format!("Failed to delete {}: {e}", dir.display()))?;
+        std::fs::remove_dir_all(&dir)
+            .map_err(|e| failed(E_FORMAT_PURGE_FAILED, "an old files directory was not deleted", format!("{}: {e}", dir.display())))?;
         bytes += b;
         count += c;
     }
@@ -558,7 +583,7 @@ pub(crate) fn reclaim(state: &DaemonState, root: &Path) -> Result<Value, String>
     if let Some(job) = state.format_migration.live() {
         return Err(busy(&job.id));
     }
-    let swept = message_store::sweep_blobs(root, SWEEP_GRACE)?;
+    let swept = message_store::sweep_blobs(root, SWEEP_GRACE).map_err(|e| failed(E_FORMAT_RECLAIM_FAILED, "the blob sweep stopped", e))?;
     info!("[format_migration] reclaim: {} blob(s) removed, {} bytes", swept.removed, swept.freed_bytes);
     Ok(json!({"removed": swept.removed, "bytes": swept.freed_bytes}))
 }
@@ -578,7 +603,7 @@ fn spawn(state: &Arc<DaemonState>, live: &mut Option<Arc<Job>>, root: &Path, jou
             let _registered = Registered(Arc::clone(&runner.state), Arc::clone(&runner.job));
             runner.run();
         })
-        .map_err(|e| format!("the conversion could not start: {e}"))?;
+        .map_err(|e| failed(E_FORMAT_IO, "the worker thread did not start", e))?;
     *live = Some(job);
     Ok(())
 }

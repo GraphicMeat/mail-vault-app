@@ -338,6 +338,99 @@ mod tests {
         assert!(blobs::blob_path(v.path(), &young).exists(), "inside the 24h grace");
     }
 
+    /// Makes the marker refuse one row, as a busy or full marker database does.
+    fn refuse_marker_row(root: &Path, key: &str, value_is: &str) {
+        mailvault_core::vault_layout::write_marker_value(root, "storageMigration", "").unwrap();
+        let conn = rusqlite::Connection::open(root.join(mailvault_core::vault_layout::MARKER_FILE)).unwrap();
+        conn.execute_batch(&format!(
+            "DROP TRIGGER IF EXISTS refuse; CREATE TRIGGER refuse BEFORE INSERT ON marker \
+             WHEN NEW.key = '{key}' AND NEW.value = '{value_is}' BEGIN SELECT RAISE(ABORT, 'refused'); END;"
+        ))
+        .unwrap();
+    }
+
+    fn allow_marker_rows(root: &Path) {
+        let conn = rusqlite::Connection::open(root.join(mailvault_core::vault_layout::MARKER_FILE)).unwrap();
+        conn.execute_batch("DROP TRIGGER IF EXISTS refuse;").unwrap();
+    }
+
+    fn journals(app_dir: &Path) -> usize {
+        std::fs::read_dir(app_dir.join("format_migrations")).map_or(0, |d| d.flatten().filter(|e| e.file_name().to_string_lossy().ends_with(".json")).count())
+    }
+
+    /// A marker write that fails in the middle of a start must not leave the
+    /// vault in the target format with no job: a retry would answer
+    /// E_FORMAT_SAME and the conversion could never be started.
+    #[tokio::test]
+    async fn storage_format_a_start_whose_job_row_write_fails_leaves_the_vault_unflipped_and_retryable() {
+        let (v, a, s) = st(true);
+        // Any job id: the row write that names a job is the refused one.
+        mailvault_core::vault_layout::write_marker_value(v.path(), "storageMigration", "").unwrap();
+        let conn = rusqlite::Connection::open(v.path().join(mailvault_core::vault_layout::MARKER_FILE)).unwrap();
+        conn.execute_batch(
+            "CREATE TRIGGER refuse BEFORE INSERT ON marker WHEN NEW.key = 'storageMigration' AND NEW.value <> '' \
+             BEGIN SELECT RAISE(ABORT, 'refused'); END;",
+        )
+        .unwrap();
+
+        let msg = err(call(&s, "storage_format_convert", json!({"to": "jmap", "oldFiles": "retire"})).await);
+        assert_eq!(message_store::vault_format(v.path()), message_store::Format::Maildir, "not flipped: {msg}");
+        assert!(msg.starts_with("E_FORMAT_IO:"), "{msg}");
+        assert_eq!(journals(a.path()), 0, "no journal for a job that never started");
+
+        allow_marker_rows(v.path());
+        let retry = ok(call(&s, "storage_format_convert", json!({"to": "jmap", "oldFiles": "retire"})).await);
+        assert!(retry["jobId"].is_string(), "{retry}");
+        cancel_and_wait(&s).await;
+    }
+
+    /// The format row is the second write: when it fails, the job row written
+    /// before it is taken back, so no move is blocked by a job that is not there.
+    #[tokio::test]
+    async fn storage_format_a_start_whose_format_row_write_fails_takes_the_job_row_back() {
+        let (v, a, s) = st(true);
+        refuse_marker_row(v.path(), "storageFormat", "jmap");
+
+        let msg = err(call(&s, "storage_format_convert", json!({"to": "jmap", "oldFiles": "retire"})).await);
+        assert!(msg.starts_with("E_FORMAT_IO:"), "{msg}");
+        assert_eq!(message_store::vault_format(v.path()), message_store::Format::Maildir);
+        assert_eq!(marker(v.path(), "storageMigration").as_deref(), Some(""), "the job row is cleared");
+        assert_eq!(journals(a.path()), 0);
+
+        allow_marker_rows(v.path());
+        start(&s, "jmap").await;
+        cancel_and_wait(&s).await;
+    }
+
+    /// The refusals and failures the app shows carry a stable code, never the
+    /// daemon's English detail: the app maps the code to a catalog sentence.
+    #[tokio::test]
+    async fn storage_format_a_failed_reclaim_answers_its_code() {
+        use mailvault_core::jmap_store::blobs;
+        let (v, _a, s) = st(true);
+        // Blobs and no Maildir/: the sweep refuses to run on a partial listing.
+        blobs::put(v.path(), b"a blob").unwrap();
+        let msg = err(call(&s, "storage_reclaim_space", json!({})).await);
+        assert!(msg.starts_with("E_FORMAT_RECLAIM_FAILED:"), "{msg}");
+        assert!(!msg.contains(&*v.path().to_string_lossy()), "no path in what the app gets: {msg}");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn storage_format_a_failed_purge_answers_its_code() {
+        use std::os::unix::fs::PermissionsExt;
+        let (v, _a, s) = st(true);
+        let dir = v.path().join("retired/format-20261009-141200");
+        std::fs::create_dir_all(dir.join("acct")).unwrap();
+        std::fs::write(dir.join("acct/1.eml"), b"x").unwrap();
+        // A directory that cannot be emptied.
+        std::fs::set_permissions(dir.join("acct"), std::fs::Permissions::from_mode(0o555)).unwrap();
+        let msg = err(call(&s, "storage_format_purge_retired", json!({})).await);
+        std::fs::set_permissions(dir.join("acct"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(msg.starts_with("E_FORMAT_PURGE_FAILED:"), "{msg}");
+        assert!(!msg.contains(&*v.path().to_string_lossy()), "no path in what the app gets: {msg}");
+    }
+
     #[tokio::test]
     async fn storage_format_every_route_refuses_while_the_vault_is_unavailable() {
         let (_v, _a, s) = st(false);

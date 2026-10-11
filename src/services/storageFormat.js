@@ -38,6 +38,11 @@ const ERRORS = [
   ['E_FORMAT_BUSY:', 'errors.formatBusy'],
   [NO_SPACE, 'errors.formatNoSpace'],
   ['E_FORMAT_MOVE_BLOCKED:', 'errors.formatMoveBlocked'],
+  ['E_FORMAT_SAME:', 'errors.formatSame'],
+  ['E_FORMAT_NOT_FOUND:', 'errors.formatNotFound'],
+  ['E_FORMAT_RECLAIM_FAILED:', 'errors.formatReclaimFailed'],
+  ['E_FORMAT_PURGE_FAILED:', 'errors.formatPurgeFailed'],
+  ['E_FORMAT_IO:', 'errors.formatIo'],
 ];
 
 /** A refused call, in the user's words. Anything uncatalogued goes through tErr. */

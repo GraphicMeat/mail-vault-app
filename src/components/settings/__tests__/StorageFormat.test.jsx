@@ -163,6 +163,43 @@ describe('Settings > Storage > Message format', () => {
     await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('A conversion is already running.'));
   });
 
+  it('shows every other refusal in its catalog words, never the daemon text', async () => {
+    convert.mockRejectedValue(new Error('E_FORMAT_SAME: the vault is in this format already'));
+    render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Convert' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Convert' }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Start conversion' }));
+    await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('The vault is already in this format.'));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('shows a failed pause, reclaim and purge in their catalog words', async () => {
+    get.mockResolvedValue({ format: 'jmap', migration: job() });
+    pause.mockRejectedValue(new Error('E_FORMAT_NOT_FOUND: no conversion to steer'));
+    const { unmount } = render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('There is no conversion to pause, resume or cancel.'));
+    unmount();
+
+    get.mockResolvedValue(JMAP);
+    reclaimSpace.mockRejectedValue(new Error('E_FORMAT_RECLAIM_FAILED: the sweep stopped'));
+    render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Reclaim space' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reclaim space' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Could not reclaim space. Check that the vault folder is reachable and try again.'));
+  });
+
+  it('shows a failed purge in its catalog words', async () => {
+    retired.mockResolvedValue({ bytes: 10, count: 1 });
+    purgeRetired.mockRejectedValue(new Error('E_FORMAT_PURGE_FAILED: some files stayed'));
+    render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Delete old files' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete old files' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete permanently' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Could not delete all the old files. Check that the vault folder is reachable and try again.'));
+  });
+
   it('names the space to free when the old files will not fit', async () => {
     convert.mockRejectedValue(new Error(`E_FORMAT_NO_SPACE: ${5 * GB}`));
     render(<StorageFormatSettings usage={null} />);

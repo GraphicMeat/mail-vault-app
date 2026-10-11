@@ -41,6 +41,11 @@ const ENGLISH = {
   'errors.formatNoSpace': 'Not enough free space to keep the old files aside. Free {{size}} or choose to delete them after verification.',
   'errors.formatFailed': 'Conversion stopped: {{reason}}. Nothing was deleted for the messages that failed.',
   'errors.formatMoveBlocked': 'Finish or cancel the format conversion before moving the vault.',
+  'errors.formatSame': 'The vault is already in this format.',
+  'errors.formatNotFound': 'There is no conversion to pause, resume or cancel.',
+  'errors.formatReclaimFailed': 'Could not reclaim space. Check that the vault folder is reachable and try again.',
+  'errors.formatPurgeFailed': 'Could not delete all the old files. Check that the vault folder is reachable and try again.',
+  'errors.formatIo': 'The conversion could not be updated. Check that the vault folder is reachable and try again.',
 };
 const KEYS = Object.keys(ENGLISH);
 const placeholders = (s) => (String(s).match(/\{\{(\w+)\}\}/g) || []).sort().join();
