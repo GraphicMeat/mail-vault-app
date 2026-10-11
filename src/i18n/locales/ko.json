@@ -539,7 +539,7 @@
   "contacts.activity.op.merge": "연락처 병합됨",
   "contacts.activity.op.split": "연락처 분리됨",
   "contacts.activity.op.import_link": "가져온 카드가 연락처에 추가됨",
-  "contacts.activity.op.import": "연락처를 가져왔음",
+  "contacts.activity.op.import": "연락처 가져옴",
   "contacts.import": "vCard 가져오기",
   "contacts.import.done": "새로 {{created}}개를 가져오고, 기존 연락처에 {{linked}}개를 연결했으며, {{skipped}}개를 건너뛰었습니다.",
   "contacts.export": "vCard 내보내기",
