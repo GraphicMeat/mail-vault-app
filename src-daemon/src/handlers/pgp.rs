@@ -11,8 +11,8 @@ use crate::credentials;
 use crate::handlers::common::{str_arg, vault_root, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
+use mailvault_core::message_store;
 use mailvault_core::pgp::{self as core_pgp, KeyInfo, StoredKey};
-use mailvault_core::vault_files::cur_path;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -31,9 +31,9 @@ pub(crate) fn render(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
     if !core_pgp::is_encrypted(&raw) {
         return (raw, None);
     }
-    let cur = vault_root(state).ok().map(|root| cur_path(&root, account_id, mailbox));
+    let root = vault_root(state).ok();
     if in_vault {
-        if let Some(copy) = cur.as_deref().and_then(|c| core_pgp::read_copy(c, uid, &raw)) {
+        if let Some(copy) = root.as_deref().and_then(|root| message_store::read_decrypted_copy(root, account_id, mailbox, uid, &raw)) {
             return (copy, Some(DECRYPTED));
         }
     }
@@ -50,7 +50,7 @@ pub(crate) fn render(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
     };
     if in_vault {
         let kept = with_mailbox_write(state, account_id, mailbox, |root| {
-            core_pgp::write_copy(&cur_path(root, account_id, mailbox), uid, &decrypted)
+            message_store::write_decrypted_copy(root, account_id, mailbox, uid, &decrypted)
         });
         match kept {
             // Size and mtime of the original did not change, so the sweep

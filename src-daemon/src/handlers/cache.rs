@@ -27,7 +27,7 @@ use crate::handlers::common::{blocking, done, opt_f64_arg, opt_str_arg, str_arg,
 use crate::custody as daemon_custody;
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
-use mailvault_core::{graph_ledger, header_cache, vault_files};
+use mailvault_core::{graph_ledger, header_cache};
 use mailvault_core::custody::cache as sql_cache;
 use serde_json::Value;
 use std::sync::Arc;
@@ -296,8 +296,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // listing path (here) and the app's own Graph backup (Phase 3, still
         // in-app) allocate from the SAME file under the SAME lock, so moving
         // only this half cannot reopen the double-uid bug the lock exists to
-        // close. `ledger`/`cur` mirror main.rs:1040-1051 verbatim (deviation:
-        // none — same paths, same core fn).
+        // close. `ledger` mirrors main.rs:1040-1051 verbatim; the uid space is
+        // the same mailbox's, read through the store (`allocate_in`).
         "graph_allocate_uids" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
@@ -312,8 +312,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             .join("email_cache")
                             .join(header_cache::cache_base_name(&account_id, &mailbox))
                             .join(graph_ledger::LEDGER_FILE);
-                        let cur = vault_files::cur_path(root, &account_id, &mailbox);
-                        graph_ledger::allocate(&ledger, &cur, &entries)
+                        graph_ledger::allocate_in(&ledger, root, &account_id, &mailbox, &entries)
                     })?;
                     serde_json::to_value(uids).map_err(|e| e.to_string())
                 })

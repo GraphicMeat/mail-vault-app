@@ -8,7 +8,7 @@
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vault_root, vec_arg, with_mailbox_write, with_vault_write};
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
-use mailvault_core::{maildir, vault_eml, vault_files};
+use mailvault_core::{maildir, message_store, vault_eml, vault_files};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -132,7 +132,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let root = vault_root(&state)?;
                     let Some((name, raw)) = vault_files::read_resolved(&state.vault_registry, &root, &account_id, &mailbox, uid)? else { return Ok(Value::Null) };
                     let (raw, pgp) = crate::handlers::pgp::render(&state, &account_id, &mailbox, uid, raw, true);
-                    let email = vault_eml::parse_eml_bytes(&raw, uid, vault_eml::parse_flags_from_filename(&name))?;
+                    let email = vault_eml::parse_eml_bytes(&raw, uid, message_store::flags_in_name(&name))?;
                     let mut email = serde_json::to_value(email).map_err(|e| e.to_string())?;
                     crate::handlers::pgp::badge(&mut email, pgp);
                     Ok(email)
@@ -152,7 +152,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let root = vault_root(&state)?;
                     let Some((name, raw)) = vault_files::read_resolved(&state.vault_registry, &root, &account_id, &mailbox, uid)? else { return Ok(Value::Null) };
                     let (raw, pgp) = crate::handlers::pgp::render(&state, &account_id, &mailbox, uid, raw, true);
-                    let email = vault_eml::parse_eml_bytes_light(&raw, uid, vault_eml::parse_flags_from_filename(&name))?;
+                    let email = vault_eml::parse_eml_bytes_light(&raw, uid, message_store::flags_in_name(&name))?;
                     let mut email = serde_json::to_value(email).map_err(|e| e.to_string())?;
                     crate::handlers::pgp::badge(&mut email, pgp);
                     Ok(email)

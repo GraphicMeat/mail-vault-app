@@ -529,15 +529,6 @@ const UPSERT: &str = "INSERT INTO messages (account_id, vault_dir, uid, filename
     row_json=excluded.row_json, flags=excluded.flags, to_lc=excluded.to_lc, snippet=excluded.snippet
   RETURNING id";
 
-/// The Maildir flag letters a vault file name carries, as stored: the part
-/// after `:2,` with the extension off. Kept here rather than derived from the
-/// parsed message, because a flag change is a RENAME and the name is the truth
-/// — an unparseable message still has flags.
-pub fn flags_of(filename: &str) -> String {
-    let Some(rest) = crate::maildir::info_flags(filename) else { return String::new() };
-    rest.trim_end_matches(".eml").to_string()
-}
-
 /// One transaction per batch. `docs` bodies are already capped (or emptied
 /// when bodies are off) by the caller.
 fn commit_batch(

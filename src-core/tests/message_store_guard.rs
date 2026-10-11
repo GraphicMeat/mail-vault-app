@@ -9,6 +9,10 @@
 //! `no_new_direct_cur_access`, and a listed file that no longer offends fails
 //! `pending_list_only_shrinks` until its row is deleted.
 //!
+//! Every file but the store calls it by path (`message_store::write(`):
+//! `no_store_item_imports` refuses a `use` of a store item or an alias of
+//! the module, which would hide a writer call from `vault_registry_guard`.
+//!
 //! Matching is text: a token in a comment or a string counts. Inline
 //! `#[cfg(test)] mod x {` bodies and `*_tests.rs` files are skipped. Paths
 //! are relative to the repo root with `/` separators on every platform.
@@ -56,11 +60,7 @@ const PENDING: &[&str] = &[
     "src-daemon/src/backup_zip.rs",
     "src-daemon/src/handlers/abd.rs",
     "src-daemon/src/handlers/archive.rs",
-    "src-daemon/src/handlers/cache.rs",
     "src-daemon/src/handlers/custody.rs",
-    "src-daemon/src/handlers/pgp.rs",
-    "src-daemon/src/handlers/vault_files.rs",
-    "src-daemon/src/handlers/views.rs",
     "src-daemon/src/mbox.rs",
     "src-daemon/src/mbox_upload.rs",
     "src-daemon/src/mbox_upload_job.rs",
@@ -114,9 +114,9 @@ fn non_test_text(src: &str) -> String {
     out
 }
 
-/// Every watched file with a forbidden token, keyed by its repo-relative
-/// path, with its `line: text` hits.
-fn offenders() -> BTreeMap<String, Vec<String>> {
+/// Every watched file but `*_tests.rs`: its repo-relative path and its
+/// `non_test_text`.
+fn watched_texts() -> Vec<(String, String)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     for w in WATCHED {
         assert!(root.join(w).exists(), "watched path missing: {w}");
@@ -124,10 +124,20 @@ fn offenders() -> BTreeMap<String, Vec<String>> {
     let mut files = Vec::new();
     for w in WATCHED { rust_files(&root.join(w), &mut files); }
     files.retain(|f| !f.to_string_lossy().ends_with("_tests.rs"));
+    files
+        .iter()
+        .map(|f| {
+            let rel = f.strip_prefix(root).unwrap().display().to_string().replace('\\', "/");
+            (rel, non_test_text(&std::fs::read_to_string(f).unwrap()))
+        })
+        .collect()
+}
+
+/// Every watched file with a forbidden token, keyed by its repo-relative
+/// path, with its `line: text` hits.
+fn offenders() -> BTreeMap<String, Vec<String>> {
     let mut hits: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for f in &files {
-        let rel = f.strip_prefix(root).unwrap().display().to_string().replace('\\', "/");
-        let text = non_test_text(&std::fs::read_to_string(f).unwrap());
+    for (rel, text) in watched_texts() {
         for (n, line) in text.lines().enumerate() {
             if FORBIDDEN.iter().any(|t| line.contains(t)) {
                 hits.entry(rel.clone()).or_default().push(format!("{}: {}", n + 1, line.trim()));
@@ -135,6 +145,90 @@ fn offenders() -> BTreeMap<String, Vec<String>> {
         }
     }
     hits
+}
+
+/// The `use` statements of `text`, each from its `use` to its `;` joined
+/// onto one line, with the 1-based line it starts on.
+fn use_statements(text: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut open: Option<(usize, String)> = None;
+    for (n, line) in text.lines().enumerate() {
+        let t = line.trim();
+        if open.is_none() {
+            let bare = t.trim_start_matches("pub(crate) ").trim_start_matches("pub(super) ").trim_start_matches("pub ");
+            if !bare.starts_with("use ") {
+                continue;
+            }
+            open = Some((n + 1, String::new()));
+        }
+        let (start, mut stmt) = open.take().unwrap();
+        stmt.push_str(t);
+        stmt.push(' ');
+        if t.contains(';') {
+            out.push((start, stmt));
+        } else {
+            open = Some((start, stmt));
+        }
+    }
+    out
+}
+
+/// Whether the `use` statement `stmt` brings in an item of `message_store`
+/// (`message_store::write`, `message_store::{list, write}`, a glob) or
+/// renames the module (`message_store as store`). Either hides a writer
+/// call from `vault_registry_guard`, which sees a store writer only by its
+/// path (`message_store::write(`). Importing the module itself is fine.
+fn imports_store_item(stmt: &str) -> bool {
+    stmt.contains("message_store::") || stmt.contains("message_store as ")
+}
+
+/// Store calls stay path-qualified everywhere but in the store itself,
+/// owners included (`vault_files` calls the crate-private writers).
+#[test]
+fn no_store_item_imports() {
+    let mut hits = Vec::new();
+    for (rel, text) in watched_texts() {
+        if rel == "src-core/src/message_store.rs" {
+            continue;
+        }
+        for (n, stmt) in use_statements(&text) {
+            if imports_store_item(&stmt) {
+                hits.push(format!("{rel}:{n}: {}", stmt.trim()));
+            }
+        }
+    }
+    assert!(
+        hits.is_empty(),
+        "imports of message_store items (call them as `message_store::name(` instead, so vault_registry_guard sees every store writer):\n{}",
+        hits.join("\n")
+    );
+}
+
+/// Non-vacuity for `no_store_item_imports`, on synthetic sources.
+#[test]
+fn the_import_matcher_catches_store_items_and_aliases() {
+    let caught = [
+        "use mailvault_core::message_store::write;\n",
+        "use crate::message_store::{list, write};\n",
+        "pub(crate) use crate::message_store::*;\n",
+        "use mailvault_core::message_store as store;\n",
+        "use mailvault_core::{\n    header_cache,\n    message_store::write_replacing,\n};\n",
+    ];
+    for src in caught {
+        let stmts = use_statements(src);
+        assert_eq!(stmts.len(), 1, "one statement: {src}");
+        assert!(imports_store_item(&stmts[0].1), "must be caught: {src}");
+    }
+    let fine = [
+        "use crate::message_store;\n",
+        "use mailvault_core::{header_cache, message_store};\n",
+        "use mailvault_core::{\n    graph_ledger,\n    message_store,\n};\n",
+        "    let e = message_store::write(root, a, m, uid, raw, f)?;\n",
+    ];
+    for src in fine {
+        assert!(!use_statements(src).iter().any(|(_, s)| imports_store_item(s)), "must pass: {src}");
+    }
+    assert_eq!(use_statements("fn f() {}\nuse a::{\n    b,\n};\n")[0].0, 2, "a statement keeps the line it starts on");
 }
 
 #[test]

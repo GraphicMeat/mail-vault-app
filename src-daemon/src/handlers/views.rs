@@ -374,8 +374,8 @@ fn overlay_server_flags(state: &DaemonState, account_id: &str, rows: &mut [Value
                 .and_then(Value::as_array)
                 .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect())
                 .unwrap_or_default();
-            let name = mailvault_core::vault_files::build_maildir_filename(uid, &mailvault_core::vault_flags::merge_flags(&[], &imap));
-            server.insert((mailbox.clone(), uid), mailvault_core::vault_eml::parse_flags_from_filename(&name));
+            let name = mailvault_core::message_store::entry_name(uid, &mailvault_core::vault_flags::merge_flags(&[], &imap));
+            server.insert((mailbox.clone(), uid), mailvault_core::message_store::flags_in_name(&name));
         }
     }
     for row in rows.iter_mut() {
@@ -483,7 +483,7 @@ mod tests {
                 subject.to_lowercase(),
                 attachments,
                 row.to_string(),
-                mailvault_core::search_index::reconcile::flags_of(filename),
+                mailvault_core::message_store::flag_letters(&mailvault_core::message_store::flags_in_name(filename)),
             ],
         )
         .unwrap();

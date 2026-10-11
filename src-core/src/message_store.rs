@@ -306,6 +306,19 @@ pub fn raw_path(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Optio
     path_of(&messages_dir(root, account_id, mailbox), uid)
 }
 
+/// `uid`'s decrypted copy (`pgp`'s `.decrypted/<uid>.eml` in the mailbox
+/// directory), when there is one made from exactly `original`.
+pub fn read_decrypted_copy(root: &Path, account_id: &str, mailbox: &str, uid: u32, original: &[u8]) -> Option<Vec<u8>> {
+    crate::pgp::read_copy(&messages_dir(root, account_id, mailbox), uid, original)
+}
+
+/// Keeps `decrypted` as `uid`'s decrypted copy, beside the message: never a
+/// second message, since no listing reads `.decrypted/`. The caller holds the
+/// mailbox's write lock.
+pub fn write_decrypted_copy(root: &Path, account_id: &str, mailbox: &str, uid: u32, decrypted: &[u8]) -> Result<(), String> {
+    crate::pgp::write_copy(&messages_dir(root, account_id, mailbox), uid, decrypted)
+}
+
 // ── Mailbox-directory level, for the derived stores ──────────────────────────
 //
 // The search index and the vault registry key a mailbox by the directory's
@@ -851,5 +864,24 @@ mod tests {
             assert!(err.to_string().starts_with("could not list "), "{err}");
             assert!(raw_paths_at(&broken).is_empty(), "lenient: an unlistable directory is empty");
         }
+    }
+
+    #[test]
+    fn decrypted_copy_round_trips_beside_the_message_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let original = b"Subject: sealed\r\n\r\n-----BEGIN PGP MESSAGE-----\r\n".to_vec();
+        assert_eq!(read_decrypted_copy(root, ACCT, MBOX, 7, &original), None, "no copy yet");
+
+        let copy = format!("X-MailVault-Source: {}\r\nSubject: sealed\r\n\r\nplain", crate::pgp::source_tag(&original));
+        write_decrypted_copy(root, ACCT, MBOX, 7, copy.as_bytes()).unwrap();
+        // Where `pgp` and every vault reader look for it.
+        let dir = messages_dir(root, ACCT, MBOX);
+        assert_eq!(fs::read(crate::pgp::copy_path(&dir, 7)).unwrap(), copy.as_bytes());
+        assert_eq!(read_decrypted_copy(root, ACCT, MBOX, 7, b"other bytes"), None, "made from other bytes");
+        assert_eq!(read_decrypted_copy(root, ACCT, MBOX, 7, &original), Some(copy.into_bytes()));
+        // Never a message: neither the listing nor the uid space sees it.
+        assert_eq!(list(root, ACCT, MBOX).unwrap(), Vec::new());
+        assert!(uids(root, ACCT, MBOX).unwrap().is_empty());
     }
 }
