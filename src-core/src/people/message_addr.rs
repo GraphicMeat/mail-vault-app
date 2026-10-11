@@ -96,6 +96,83 @@ pub fn rename_mailbox(conn: &Connection, account: &str, from: &str, to: &str) ->
     Ok(())
 }
 
+use crate::custody::db::{meta_get, meta_set};
+
+pub const DONE_KEY: &str = "message_addr_backfilled";
+const CURSOR_KEY: &str = "message_addr_cursor";
+const SEP: char = '\u{1f}';
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Progress {
+    pub indexed: u64,
+    pub done: bool,
+}
+
+pub fn backfill_done(conn: &Connection) -> bool {
+    meta_get(conn, DONE_KEY).as_deref() == Some("1")
+}
+
+fn parse_cursor(s: &str) -> Option<(String, String, u32)> {
+    let mut it = s.split(SEP);
+    Some((it.next()?.to_string(), it.next()?.to_string(), it.next()?.parse().ok()?))
+}
+
+/// Index up to `limit` header rows from ONE mailbox and move the cursor. The
+/// caller holds the custody lock for this one call only, so the work is a small
+/// unit by construction. Live writes and this backfill both use `index_row`,
+/// which replaces, so the overlap is harmless.
+pub fn backfill_chunk(conn: &Connection, limit: usize) -> Result<Progress, String> {
+    if backfill_done(conn) {
+        return Ok(Progress { indexed: 0, done: true });
+    }
+    let mut boxes = crate::custody::cache::mailboxes_with_headers(conn, None)?;
+    boxes.sort();
+    let cursor = meta_get(conn, CURSOR_KEY).and_then(|s| parse_cursor(&s));
+    let mut start = 0;
+    let mut after_uid = 0u32;
+    if let Some((a, m, uid)) = &cursor {
+        match boxes.iter().position(|(ba, bm)| (ba, bm) >= (a, m)) {
+            Some(i) => {
+                start = i;
+                if boxes[i].0 == *a && boxes[i].1 == *m { after_uid = *uid; }
+            }
+            None => start = boxes.len(),
+        }
+    }
+    let mut i = start;
+    while i < boxes.len() {
+        let (account, mailbox) = &boxes[i];
+        let rows: Vec<(u32, i64, String)> = {
+            let mut stmt = conn
+                .prepare_cached("SELECT uid, sort_ms, header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid>?3 ORDER BY uid LIMIT ?4")
+                .map_err(err)?;
+            let mapped = stmt
+                .query_map(params![account, mailbox, after_uid, limit as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .map_err(err)?;
+            mapped.collect::<Result<_, _>>().map_err(err)?
+        };
+        if rows.is_empty() {
+            i += 1;
+            after_uid = 0;
+            continue;
+        }
+        let tx = conn.unchecked_transaction().map_err(err)?;
+        let mut last = after_uid;
+        for (uid, sort_ms, json) in &rows {
+            if let Ok(h) = serde_json::from_str::<Value>(json) {
+                index_row(&tx, account, mailbox, *uid, *sort_ms, &h)?;
+            }
+            last = *uid;
+        }
+        meta_set(&tx, CURSOR_KEY, &format!("{account}{SEP}{mailbox}{SEP}{last}"))?;
+        tx.commit().map_err(err)?;
+        return Ok(Progress { indexed: rows.len() as u64, done: false });
+    }
+    meta_set(conn, DONE_KEY, "1")?;
+    conn.execute("DELETE FROM meta WHERE key=?1", [CURSOR_KEY]).map_err(err)?;
+    Ok(Progress { indexed: 0, done: true })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +270,57 @@ mod tests {
         forget_mailbox(&c, None, None).unwrap();
         let n: i64 = c.query_row("SELECT count(*) FROM message_addr", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    fn seed_headers(c: &Connection, mailbox: &str, n: u32) {
+        let tx = c.unchecked_transaction().unwrap();
+        for uid in 1..=n {
+            let h = json!({"uid": uid, "from": {"address": format!("s{uid}@x.io")}, "to": [{"address": "me@h.io"}]});
+            tx.execute(
+                "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES ('a',?1,?2,?3,0,?4)",
+                params![mailbox, uid, 1000 + uid as i64, h.to_string()],
+            ).unwrap();
+        }
+        tx.commit().unwrap();
+    }
+
+    #[test]
+    fn backfill_runs_in_bounded_chunks_to_completion() {
+        let (_t, c) = conn();
+        seed_headers(&c, "INBOX", 1200);
+        seed_headers(&c, "Sent", 10);
+        let mut calls = 0;
+        loop {
+            let p = backfill_chunk(&c, 500).unwrap();
+            calls += 1;
+            assert!(p.indexed <= 500, "a chunk never exceeds its limit");
+            if p.done { break; }
+            assert!(calls < 20);
+        }
+        assert!(backfill_done(&c));
+        let n: i64 = c.query_row("SELECT count(*) FROM message_addr", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 2 * 1210);
+        assert!(calls >= 4, "1200 rows need at least three chunks plus the second mailbox");
+    }
+
+    #[test]
+    fn backfill_resumes_after_an_interruption_and_is_idempotent() {
+        let (_t, c) = conn();
+        seed_headers(&c, "INBOX", 700);
+        backfill_chunk(&c, 500).unwrap();
+        // simulate a crash: a live write re-indexes a row already done
+        index_row(&c, "a", "INBOX", 3, 1003, &json!({"uid": 3, "from": {"address": "s3@x.io"}, "to": [{"address": "me@h.io"}]})).unwrap();
+        while !backfill_chunk(&c, 500).unwrap().done {}
+        let n: i64 = c.query_row("SELECT count(*) FROM message_addr", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1400);
+    }
+
+    #[test]
+    fn a_finished_backfill_stays_finished() {
+        let (_t, c) = conn();
+        assert!(backfill_chunk(&c, 500).unwrap().done);
+        seed_headers(&c, "INBOX", 5);
+        let p = backfill_chunk(&c, 500).unwrap();
+        assert!(p.done && p.indexed == 0);
     }
 }
