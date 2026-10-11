@@ -1,8 +1,10 @@
+use futures::future::BoxFuture;
 use hickory_resolver::TokioResolver;
 use hickory_resolver::proto::rr::RData;
 use serde::Serialize;
 use tracing::info;
 
+use crate::jmap::discover::{self, Discovered, Fetch};
 use crate::net_activity::{self, NetEvent, Pending, Protocol};
 
 /// `lookup` as one Network Activity DNS event: host is the name asked
@@ -20,7 +22,7 @@ async fn traced<T, E: std::fmt::Display>(
     out
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, Default)]
 pub struct EmailServerSettings {
     #[serde(rename = "imapHost")]
     pub imap_host: Option<String>,
@@ -32,6 +34,105 @@ pub struct EmailServerSettings {
     pub smtp_port: Option<u16>,
     pub source: String,
     pub provider: Option<String>,
+    /// The JMAP session URL `jmap::discover` found, or the Fastmail preset:
+    /// the final URL after redirects, ready for `JmapClient::connect`.
+    #[serde(rename = "jmapSessionUrl")]
+    pub jmap_session_url: Option<String>,
+    /// The session host is not on the address's domain (an SRV target or a
+    /// redirect elsewhere): the user must confirm `jmapHost` before the first
+    /// authenticated request.
+    #[serde(rename = "jmapNeedsHostConfirmation")]
+    pub jmap_needs_host_confirmation: bool,
+    /// The session URL's host for that confirmation, with a non-default port.
+    #[serde(rename = "jmapHost")]
+    pub jmap_host: Option<String>,
+    /// "preset", "well-known" or "srv". The UI preselects JMAP for the first
+    /// two only; an SRV-only hit is offered with IMAP still preselected.
+    #[serde(rename = "jmapSource")]
+    pub jmap_source: Option<String>,
+}
+
+impl EmailServerSettings {
+    fn set_jmap(&mut self, d: Discovered) {
+        self.jmap_session_url = Some(d.session_url);
+        self.jmap_needs_host_confirmation = d.needs_host_confirmation;
+        self.jmap_host = Some(d.host);
+        self.jmap_source = Some(d.source.to_string());
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MxRecord {
+    pub preference: u16,
+    /// Without the trailing dot.
+    pub exchange: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SrvRecord {
+    pub priority: u16,
+    pub weight: u16,
+    pub port: u16,
+    /// Without the trailing dot; "" for the RFC 2782 "." (no service).
+    pub target: String,
+}
+
+/// The DNS lookups account setup makes, injectable for tests. Records come
+/// back in answer order. `Err` for any failure, NXDOMAIN included.
+pub trait Resolver: Send + Sync {
+    fn mx<'a>(&'a self, domain: &'a str) -> BoxFuture<'a, Result<Vec<MxRecord>, String>>;
+    fn srv<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<Vec<SrvRecord>, String>>;
+}
+
+/// The system resolver, every lookup one Network Activity DNS event.
+pub struct SystemResolver(TokioResolver);
+
+impl SystemResolver {
+    pub fn new() -> Result<Self, String> {
+        let resolver = TokioResolver::builder_tokio()
+            .map_err(|e| format!("Failed to create DNS resolver: {}", e))?
+            .build()
+            .map_err(|e| format!("Failed to build DNS resolver: {}", e))?;
+        Ok(SystemResolver(resolver))
+    }
+}
+
+impl Resolver for SystemResolver {
+    fn mx<'a>(&'a self, domain: &'a str) -> BoxFuture<'a, Result<Vec<MxRecord>, String>> {
+        Box::pin(async move {
+            let resp = traced(domain, self.0.mx_lookup(domain)).await.map_err(|e| e.to_string())?;
+            Ok(resp
+                .answers()
+                .iter()
+                .filter_map(|r| match &r.data {
+                    RData::MX(mx) => Some(MxRecord {
+                        preference: mx.preference,
+                        exchange: mx.exchange.to_ascii().trim_end_matches('.').to_string(),
+                    }),
+                    _ => None,
+                })
+                .collect())
+        })
+    }
+
+    fn srv<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<Vec<SrvRecord>, String>> {
+        Box::pin(async move {
+            let resp = traced(name, self.0.srv_lookup(name)).await.map_err(|e| e.to_string())?;
+            Ok(resp
+                .answers()
+                .iter()
+                .filter_map(|r| match &r.data {
+                    RData::SRV(srv) => Some(SrvRecord {
+                        priority: srv.priority,
+                        weight: srv.weight,
+                        port: srv.port,
+                        target: srv.target.to_ascii().trim_end_matches('.').to_string(),
+                    }),
+                    _ => None,
+                })
+                .collect())
+        })
+    }
 }
 
 fn match_mx_to_provider(mx_host: &str) -> Option<EmailServerSettings> {
@@ -55,6 +156,7 @@ fn match_mx_to_provider(mx_host: &str) -> Option<EmailServerSettings> {
             smtp_port: Some(1025),
             source: "mx".into(),
             provider: Some("protonmail".into()),
+            ..Default::default()
         });
     } else if mx.contains("fastmail") || mx.contains("messagingengine.com") {
         ("imap.fastmail.com", "smtp.fastmail.com", "fastmail")
@@ -62,14 +164,21 @@ fn match_mx_to_provider(mx_host: &str) -> Option<EmailServerSettings> {
         return None;
     };
 
-    Some(EmailServerSettings {
+    let mut settings = EmailServerSettings {
         imap_host: Some(imap.into()),
         imap_port: Some(993),
         smtp_host: Some(smtp.into()),
         smtp_port: Some(587),
         source: "mx".into(),
         provider: Some(provider.into()),
-    })
+        ..Default::default()
+    };
+    // Kept here as well as in `discover`, so the preset survives a discovery
+    // that timed out while this MX lookup answered.
+    if provider == "fastmail" {
+        settings.set_jmap(discover::fastmail_preset());
+    }
+    Some(settings)
 }
 
 fn patterns_from_mx(mx_host: &str) -> EmailServerSettings {
@@ -87,18 +196,56 @@ fn patterns_from_mx(mx_host: &str) -> EmailServerSettings {
         smtp_port: Some(587),
         source: "mx-pattern".into(),
         provider: None,
+        ..Default::default()
     }
 }
 
+/// IMAP/SMTP settings for `domain`, plus any JMAP session it offers.
 pub async fn resolve_email_settings(domain: &str) -> Result<EmailServerSettings, String> {
-    let resolver = TokioResolver::builder_tokio()
-        .map_err(|e| format!("Failed to create DNS resolver: {}", e))?
-        .build()
-        .map_err(|e| format!("Failed to build DNS resolver: {}", e))?;
+    let resolver = SystemResolver::new()?;
+    resolve_email_settings_with(domain, &resolver, &discover::HttpFetch::new()).await
+}
 
+/// `resolve_email_settings` over an injected resolver and JMAP fetcher. The
+/// IMAP cascade returns at its first hit (SRV, autoconfig, MX), so JMAP
+/// discovery is not a cascade step: it runs alongside and is merged in.
+/// Every discovery step is bounded by `discover::PROBE_TIMEOUT` and they run
+/// concurrently, so the IMAP answer waits at most that long for it.
+/// Autoconfig is not injected: it keeps its own client, which follows
+/// redirects, exactly as before.
+pub async fn resolve_email_settings_with(
+    domain: &str,
+    resolver: &dyn Resolver,
+    fetch: &dyn Fetch,
+) -> Result<EmailServerSettings, String> {
+    let (cascade, jmap) = tokio::join!(imap_cascade(resolver, domain), discover::discover_with(domain, resolver, fetch));
+    merge_jmap(cascade, jmap)
+}
+
+/// The cascade's answer with discovery's added. A preset the MX row already
+/// set stays. JMAP alone still answers (`source: "jmap"`, no IMAP fields);
+/// only both failing is an error.
+fn merge_jmap(
+    cascade: Result<EmailServerSettings, String>,
+    jmap: Option<Discovered>,
+) -> Result<EmailServerSettings, String> {
+    let mut settings = match cascade {
+        Ok(s) => s,
+        Err(e) if jmap.is_none() => return Err(e),
+        Err(_) => EmailServerSettings { source: "jmap".into(), ..Default::default() },
+    };
+    if settings.jmap_session_url.is_none() {
+        if let Some(d) = jmap {
+            settings.set_jmap(d);
+        }
+    }
+    Ok(settings)
+}
+
+async fn imap_cascade(resolver: &dyn Resolver, domain: &str) -> Result<EmailServerSettings, String> {
     // 1. Try SRV records (RFC 6186)
     info!("[dns] Checking SRV records for {}", domain);
-    if let Ok(settings) = try_srv_records(&resolver, domain).await {
+    if let Ok(settings) = try_srv_records(resolver, domain).await {
         info!("[dns] Found SRV records for {}: imap={:?}", domain, settings.imap_host);
         return Ok(settings);
     }
@@ -112,56 +259,44 @@ pub async fn resolve_email_settings(domain: &str) -> Result<EmailServerSettings,
 
     // 3. Try MX record -> known provider mapping
     info!("[dns] Checking MX records for {}", domain);
-    if let Ok(mx_response) = traced(domain, resolver.mx_lookup(domain)).await {
-        let mut first_mx_host: Option<String> = None;
-
-        for record in mx_response.answers() {
-            let RData::MX(mx) = &record.data else { continue };
-            let mx_host = mx.exchange.to_ascii().trim_end_matches('.').to_string();
-            info!("[dns] MX record: {} (priority {})", mx_host, mx.preference);
-
-            if first_mx_host.is_none() {
-                first_mx_host = Some(mx_host.clone());
-            }
-
-            if let Some(settings) = match_mx_to_provider(&mx_host) {
-                return Ok(settings);
-            }
-        }
-
-        // No known provider — derive patterns from first MX
-        if let Some(mx_host) = first_mx_host {
-            return Ok(patterns_from_mx(&mx_host));
+    if let Ok(records) = resolver.mx(domain).await {
+        if let Some(settings) = settings_from_mx(&records) {
+            return Ok(settings);
         }
     }
 
     Err(format!("Could not resolve email settings for {}", domain))
 }
 
-async fn try_srv_records(resolver: &TokioResolver, domain: &str) -> Result<EmailServerSettings, String> {
+/// Cascade step 3: the first MX naming a known provider, else patterns
+/// derived from the first MX.
+fn settings_from_mx(records: &[MxRecord]) -> Option<EmailServerSettings> {
+    for mx in records {
+        info!("[dns] MX record: {} (priority {})", mx.exchange, mx.preference);
+        if let Some(settings) = match_mx_to_provider(&mx.exchange) {
+            return Some(settings);
+        }
+    }
+    // No known provider — derive patterns from first MX
+    records.first().map(|mx| patterns_from_mx(&mx.exchange))
+}
+
+async fn try_srv_records(resolver: &dyn Resolver, domain: &str) -> Result<EmailServerSettings, String> {
     let imap_srv = format!("_imaps._tcp.{}", domain);
     let smtp_srv = format!("_submission._tcp.{}", domain);
 
-    let imap = traced(&imap_srv, resolver.srv_lookup(&imap_srv)).await
+    let imap = resolver.srv(&imap_srv).await
         .map_err(|e| format!("SRV lookup failed: {}", e))?;
 
-    let imap_record = imap.answers().iter()
-        .find_map(|r| match &r.data { RData::SRV(srv) => Some(srv.clone()), _ => None })
+    let imap_record = imap.into_iter().next()
         .ok_or_else(|| "No IMAP SRV records".to_string())?;
 
-    let imap_host = imap_record.target.to_ascii().trim_end_matches('.').to_string();
+    let imap_host = imap_record.target;
     let imap_port = imap_record.port;
 
-    let (smtp_host, smtp_port) = if let Ok(smtp) = traced(&smtp_srv, resolver.srv_lookup(&smtp_srv)).await {
-        if let Some(r) = smtp.answers().iter()
-            .find_map(|r| match &r.data { RData::SRV(srv) => Some(srv.clone()), _ => None })
-        {
-            (r.target.to_ascii().trim_end_matches('.').to_string(), r.port)
-        } else {
-            (imap_host.replace("imap", "smtp"), 587)
-        }
-    } else {
-        (imap_host.replace("imap", "smtp"), 587)
+    let (smtp_host, smtp_port) = match resolver.srv(&smtp_srv).await.ok().and_then(|r| r.into_iter().next()) {
+        Some(r) => (r.target, r.port),
+        None => (imap_host.replace("imap", "smtp"), 587),
     };
 
     Ok(EmailServerSettings {
@@ -171,6 +306,7 @@ async fn try_srv_records(resolver: &TokioResolver, domain: &str) -> Result<Email
         smtp_port: Some(smtp_port),
         source: "srv".into(),
         provider: None,
+        ..Default::default()
     })
 }
 
@@ -244,6 +380,7 @@ fn parse_autoconfig_xml(xml: &str) -> Result<EmailServerSettings, String> {
             smtp_port: smtp_port.or(Some(587)),
             source: "autoconfig".into(),
             provider: None,
+            ..Default::default()
         })
     } else {
         Err("No IMAP/SMTP settings found in autoconfig XML".into())
@@ -667,6 +804,130 @@ mod tests {
     #[test]
     fn warnings_all_healthy() {
         assert!(build_warnings(Some(true), true, true, true, 16).is_empty());
+    }
+
+    #[test]
+    fn fastmail_mx_row_carries_the_jmap_preset() {
+        let s = match_mx_to_provider("in1-smtp.messagingengine.com").unwrap();
+        assert_eq!(s.imap_host.as_deref(), Some("imap.fastmail.com"));
+        assert_eq!(s.smtp_host.as_deref(), Some("smtp.fastmail.com"));
+        assert_eq!(s.source, "mx");
+        assert_eq!(s.jmap_session_url.as_deref(), Some("https://api.fastmail.com/jmap/session"));
+        assert_eq!(s.jmap_host.as_deref(), Some("api.fastmail.com"));
+        assert_eq!(s.jmap_source.as_deref(), Some("preset"));
+        assert!(!s.jmap_needs_host_confirmation);
+        let g = match_mx_to_provider("aspmx.l.google.com").unwrap();
+        assert_eq!(g.imap_host.as_deref(), Some("imap.gmail.com"));
+        assert_eq!(g.jmap_session_url, None);
+        assert_eq!(g.jmap_source, None);
+    }
+
+    #[test]
+    fn mx_step_prefers_a_known_provider_then_patterns_from_the_first() {
+        let mx = |preference, exchange: &str| MxRecord { preference, exchange: exchange.to_string() };
+        let s = settings_from_mx(&[mx(10, "mx.example.test"), mx(20, "aspmx.l.google.com")]).unwrap();
+        assert_eq!(s.provider.as_deref(), Some("google"));
+        assert_eq!(s.source, "mx");
+        let s = settings_from_mx(&[mx(10, "mx1.example.test"), mx(20, "mx2.other.test")]).unwrap();
+        assert_eq!(s.imap_host.as_deref(), Some("imap.example.test"));
+        assert_eq!(s.smtp_host.as_deref(), Some("smtp.example.test"));
+        assert_eq!(s.source, "mx-pattern");
+        assert!(settings_from_mx(&[]).is_none());
+    }
+
+    #[derive(Default)]
+    struct FakeDns {
+        srv: Vec<(String, Vec<SrvRecord>)>,
+    }
+
+    impl Resolver for FakeDns {
+        fn mx<'a>(&'a self, _domain: &'a str) -> BoxFuture<'a, Result<Vec<MxRecord>, String>> {
+            Box::pin(async { Err("NXDOMAIN".to_string()) })
+        }
+        fn srv<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<Vec<SrvRecord>, String>> {
+            let out = self.srv.iter().find(|(n, _)| n == name).map(|(_, r)| r.clone()).ok_or_else(|| "NXDOMAIN".to_string());
+            Box::pin(async move { out })
+        }
+    }
+
+    fn srv_rec(target: &str, port: u16) -> SrvRecord {
+        SrvRecord { priority: 10, weight: 0, port, target: target.to_string() }
+    }
+
+    #[tokio::test]
+    async fn srv_step_reads_the_first_imaps_record_and_guesses_smtp() {
+        let dns = FakeDns {
+            srv: vec![(
+                "_imaps._tcp.example.test".into(),
+                vec![srv_rec("imap.example.test", 993), srv_rec("imap2.example.test", 994)],
+            )],
+        };
+        let s = try_srv_records(&dns, "example.test").await.unwrap();
+        assert_eq!((s.imap_host.as_deref(), s.imap_port), (Some("imap.example.test"), Some(993)));
+        assert_eq!((s.smtp_host.as_deref(), s.smtp_port), (Some("smtp.example.test"), Some(587)));
+        assert_eq!(s.source, "srv");
+        assert_eq!(s.jmap_session_url, None);
+    }
+
+    #[tokio::test]
+    async fn srv_step_takes_submission_when_published_and_fails_without_imaps() {
+        let dns = FakeDns {
+            srv: vec![
+                ("_imaps._tcp.example.test".into(), vec![srv_rec("mail.example.test", 993)]),
+                ("_submission._tcp.example.test".into(), vec![srv_rec("out.example.test", 465)]),
+            ],
+        };
+        let s = try_srv_records(&dns, "example.test").await.unwrap();
+        assert_eq!((s.smtp_host.as_deref(), s.smtp_port), (Some("out.example.test"), Some(465)));
+        assert!(try_srv_records(&FakeDns::default(), "example.test").await.is_err());
+    }
+
+    fn discovered(source: &'static str) -> Discovered {
+        Discovered {
+            session_url: "https://jmap.example.test:8443/jmap/session".into(),
+            host: "jmap.example.test:8443".into(),
+            needs_host_confirmation: false,
+            source,
+        }
+    }
+
+    #[test]
+    fn merge_keeps_the_cascade_and_adds_discovery() {
+        let cascade = EmailServerSettings { imap_host: Some("imap.example.test".into()), source: "srv".into(), ..Default::default() };
+        let s = merge_jmap(Ok(cascade), Some(discovered("well-known"))).unwrap();
+        assert_eq!(s.imap_host.as_deref(), Some("imap.example.test"));
+        assert_eq!(s.source, "srv");
+        assert_eq!(s.jmap_session_url.as_deref(), Some("https://jmap.example.test:8443/jmap/session"));
+        assert_eq!(s.jmap_host.as_deref(), Some("jmap.example.test:8443"));
+        assert_eq!(s.jmap_source.as_deref(), Some("well-known"));
+    }
+
+    #[test]
+    fn merge_answers_jmap_alone_when_the_cascade_failed() {
+        let s = merge_jmap(Err("Could not resolve".into()), Some(discovered("srv"))).unwrap();
+        assert_eq!(s.imap_host, None);
+        assert_eq!(s.smtp_host, None);
+        assert_eq!(s.source, "jmap");
+        assert_eq!(s.jmap_source.as_deref(), Some("srv"));
+        assert_eq!(merge_jmap(Err("Could not resolve".into()), None).unwrap_err(), "Could not resolve");
+    }
+
+    #[test]
+    fn merge_keeps_the_mx_row_preset_over_discovery() {
+        let cascade = match_mx_to_provider("in1-smtp.messagingengine.com").unwrap();
+        let s = merge_jmap(Ok(cascade), Some(discovered("well-known"))).unwrap();
+        assert_eq!(s.jmap_session_url.as_deref(), Some("https://api.fastmail.com/jmap/session"));
+        assert_eq!(s.jmap_source.as_deref(), Some("preset"));
+    }
+
+    #[test]
+    fn email_server_settings_serialize_the_jmap_keys() {
+        let v = serde_json::to_value(merge_jmap(Err("x".into()), Some(discovered("srv"))).unwrap()).unwrap();
+        assert_eq!(v["jmapSessionUrl"], "https://jmap.example.test:8443/jmap/session");
+        assert_eq!(v["jmapNeedsHostConfirmation"], false);
+        assert_eq!(v["jmapHost"], "jmap.example.test:8443");
+        assert_eq!(v["jmapSource"], "srv");
+        assert!(v["imapHost"].is_null());
     }
 
     #[test]

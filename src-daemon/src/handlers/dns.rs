@@ -156,10 +156,14 @@ mod tests {
             smtp_port: Some(587),
             source: "mx".to_string(),
             provider: Some("hostinger".to_string()),
+            ..Default::default()
         };
         let v = serde_json::to_value(&settings).unwrap();
         let obj = v.as_object().unwrap();
-        for key in ["imapHost", "imapPort", "smtpHost", "smtpPort", "source", "provider"] {
+        for key in [
+            "imapHost", "imapPort", "smtpHost", "smtpPort", "source", "provider",
+            "jmapSessionUrl", "jmapNeedsHostConfirmation", "jmapHost", "jmapSource",
+        ] {
             assert!(obj.contains_key(key), "missing key {key}");
         }
     }

@@ -8,9 +8,12 @@
 //! - `mailbox_map`: JMAP mailboxes as the flat `MailboxInfo` list the app keeps.
 //! - `headers`: `Email/get` properties as an `EmailHeader`, keywords as flags.
 //! - `ops`: the label semantics rule every delete path goes through.
+//! - `discover`: which session URL an address's domain offers, and whether
+//!   its host needs the user's confirmation (the host trust rule).
 
 pub mod base;
 pub mod client;
+pub mod discover;
 pub mod headers;
 pub mod mailbox_map;
 pub mod ops;
