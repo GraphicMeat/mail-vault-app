@@ -200,6 +200,12 @@ fn patterns_from_mx(mx_host: &str) -> EmailServerSettings {
     }
 }
 
+/// How long JMAP discovery may keep running once the IMAP cascade has
+/// answered. The cascade is what the user waits for; discovery only adds the
+/// JMAP fields when it is quick. When the cascade finds nothing, discovery
+/// keeps its whole `discover::PROBE_TIMEOUT` budget.
+pub const JMAP_GRACE: std::time::Duration = std::time::Duration::from_millis(750);
+
 /// IMAP/SMTP settings for `domain`, plus any JMAP session it offers.
 pub async fn resolve_email_settings(domain: &str) -> Result<EmailServerSettings, String> {
     let resolver = SystemResolver::new()?;
@@ -210,7 +216,10 @@ pub async fn resolve_email_settings(domain: &str) -> Result<EmailServerSettings,
 /// IMAP cascade returns at its first hit (SRV, autoconfig, MX), so JMAP
 /// discovery is not a cascade step: it runs alongside and is merged in.
 /// Every discovery step is bounded by `discover::PROBE_TIMEOUT` and they run
-/// concurrently, so the IMAP answer waits at most that long for it.
+/// concurrently. Once the cascade has answered, discovery gets at most
+/// `JMAP_GRACE` more, so the IMAP answer the user waits for is never held up
+/// by a slow JMAP probe; when the cascade finds nothing, discovery keeps its
+/// whole budget.
 /// Autoconfig is not injected: it keeps its own client, which follows
 /// redirects, exactly as before.
 pub async fn resolve_email_settings_with(
@@ -218,8 +227,19 @@ pub async fn resolve_email_settings_with(
     resolver: &dyn Resolver,
     fetch: &dyn Fetch,
 ) -> Result<EmailServerSettings, String> {
-    let (cascade, jmap) = tokio::join!(imap_cascade(resolver, domain), discover::discover_with(domain, resolver, fetch));
-    merge_jmap(cascade, jmap)
+    use futures::future::{select, Either};
+    let cascade = Box::pin(imap_cascade(resolver, domain));
+    let jmap = Box::pin(discover::discover_with(domain, resolver, fetch));
+    match select(cascade, jmap).await {
+        // The IMAP cascade answered first. With an answer, JMAP discovery gets
+        // a short grace and then the result goes without it; with none, it is
+        // the only answer left and keeps its whole budget.
+        Either::Left((cascade, jmap)) => {
+            let jmap = if cascade.is_ok() { tokio::time::timeout(JMAP_GRACE, jmap).await.unwrap_or(None) } else { jmap.await };
+            merge_jmap(cascade, jmap)
+        }
+        Either::Right((jmap, cascade)) => merge_jmap(cascade.await, jmap),
+    }
 }
 
 /// The cascade's answer with discovery's added. A preset the MX row already

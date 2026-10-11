@@ -783,6 +783,7 @@
   "errors.jmapSendRefused": "服务器拒绝发送此邮件。请检查收件人后重试。",
   "errors.jmapUnsupported": "MailVault 暂时无法在 JMAP 账户上执行此操作。",
   "errors.jmapFolderNotEmpty": "此文件夹中仍有邮件，因此服务器保留了它。请先移动或删除其中的邮件。",
+  "errors.jmapServerFault": "JMAP 服务器返回了意外的响应。请稍后重试。",
   "errors.folderLocked": "收件箱和特殊文件夹无法重命名或删除。",
   "errors.localFolderDeleteFailed": "无法删除此文件夹。请重试。",
   "errors.folderNameInvalid": "文件夹名称不能为空，也不能包含“{{delimiter}}”。",

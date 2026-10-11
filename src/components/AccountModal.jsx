@@ -177,7 +177,10 @@ export function detectProvider(email) {
 // so its forms call the field what it is. Matched on the IMAP host (shared
 // by custom-domain logins); the domain check covers the add form before a
 // host is filled in.
-export function isFastmailAccount({ email = '', imapHost = '' } = {}) {
+export function isFastmailAccount({ email = '', imapHost = '', jmapSessionUrl = '' } = {}) {
+  // A JMAP account signs in at its session host, with a token or a password
+  // for the address: its host (api.fastmail.com) is no IMAP login.
+  if (typeof jmapSessionUrl === 'string' && jmapSessionUrl.trim() !== '') return false;
   return /(^|\.)fastmail\.com$/i.test(imapHost) || detectProvider(email)?.key === 'fastmail';
 }
 
@@ -721,7 +724,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium text-mail-text text-sm">{config.name}</div>
-                    <div className="text-xs text-mail-text-muted truncate">{config.imapHost}</div>
+                    <div className="text-xs text-mail-text-muted truncate">{config.jmapSessionUrl ? jmapSessionHost(config.jmapSessionUrl) : config.imapHost}</div>
                   </div>
                 </button>
               ))}

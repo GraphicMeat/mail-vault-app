@@ -140,8 +140,11 @@ export function describeConnectionError(err) {
   // A JMAP account's failure (jmapErrors.js JMAP_BY_CODE), by its code or the
   // code its message starts with. Before RULES: "E_JMAP_AUTH: authentication
   // failed" would read as the IMAP app-password problem there.
+  // A server fault (E_JMAP_PROTOCOL: a URL that is not a JMAP session, say) is
+  // left to the generic rules below: in this form "check the settings above"
+  // is the useful advice, and the raw text stays as the detail.
   const jmapKey = jmapErrorKey(err?.errorCode) || jmapErrorKey(raw);
-  if (jmapKey) return { message: t(jmapKey), detail: raw || null };
+  if (jmapKey && jmapKey !== 'errors.jmapServerFault') return { message: t(jmapKey), detail: raw || null };
 
   const byCode = BY_CODE[err?.errorCode];
   if (byCode) {

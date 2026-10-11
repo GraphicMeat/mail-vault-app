@@ -783,6 +783,7 @@
   "errors.jmapSendRefused": "Le serveur a refusé d'envoyer ce message. Vérifiez les destinataires et réessayez.",
   "errors.jmapUnsupported": "MailVault ne peut pas encore faire cela sur un compte JMAP.",
   "errors.jmapFolderNotEmpty": "Ce dossier contient encore du courrier, donc le serveur l'a gardé. Déplacez ou supprimez d'abord ses messages.",
+  "errors.jmapServerFault": "Le serveur JMAP a donné une réponse inattendue. Réessayez dans un instant.",
   "errors.folderLocked": "La boîte de réception et les dossiers spéciaux ne peuvent pas être renommés ni supprimés.",
   "errors.localFolderDeleteFailed": "Impossible de supprimer ce dossier. Réessayez.",
   "errors.folderNameInvalid": "Un nom de dossier ne peut pas être vide ni contenir « {{delimiter}} ».",

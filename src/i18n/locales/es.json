@@ -783,6 +783,7 @@
   "errors.jmapSendRefused": "El servidor rechazó enviar este mensaje. Revisa los destinatarios e inténtalo de nuevo.",
   "errors.jmapUnsupported": "MailVault todavía no puede hacer esto en una cuenta JMAP.",
   "errors.jmapFolderNotEmpty": "Esta carpeta aún tiene correo, así que el servidor la conservó. Mueve o elimina sus mensajes primero.",
+  "errors.jmapServerFault": "El servidor JMAP dio una respuesta inesperada. Inténtalo de nuevo en un momento.",
   "errors.folderLocked": "La bandeja de entrada y las carpetas especiales no se pueden renombrar ni eliminar.",
   "errors.localFolderDeleteFailed": "No se pudo eliminar esta carpeta. Inténtalo de nuevo.",
   "errors.folderNameInvalid": "Los nombres de carpeta no pueden estar vacíos ni contener «{{delimiter}}».",

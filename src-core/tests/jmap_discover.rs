@@ -3,7 +3,7 @@
 //! `dns::resolve_email_settings_with`, over a fake resolver and either a
 //! scripted fetcher or the loopback mock behind a host-mapping fetcher.
 use futures::future::BoxFuture;
-use mailvault_core::dns::{resolve_email_settings_with, MxRecord, Resolver, SrvRecord};
+use mailvault_core::dns::{resolve_email_settings_with, MxRecord, Resolver, SrvRecord, JMAP_GRACE};
 use mailvault_core::jmap::discover::{discover_with, host_is_trusted, Fetch, FetchReply, PROBE_TIMEOUT};
 use mock_jmap::MockJmap;
 use std::collections::HashMap;
@@ -265,10 +265,41 @@ async fn slow_probe_does_not_delay_the_imap_result() {
     assert_eq!(s.jmap_session_url, None);
     // Apex, jmap. and SRV probes all started and all hung.
     assert_eq!(fetch.calls.load(Ordering::SeqCst), 3);
+    // Once the IMAP cascade has answered, discovery gets a short grace, not
+    // its whole probe budget.
     assert!(
-        elapsed < PROBE_TIMEOUT + Duration::from_secs(1),
-        "IMAP result waited {elapsed:?} on a hung JMAP probe"
+        elapsed < JMAP_GRACE + Duration::from_millis(750),
+        "IMAP result waited {elapsed:?} on a hung JMAP probe (grace {JMAP_GRACE:?})"
     );
+    assert!(JMAP_GRACE < PROBE_TIMEOUT);
+}
+
+/// Replies to the apex well-known with a challenge after a delay; any other
+/// URL fails to connect at once.
+struct Delayed(Duration);
+
+impl Fetch for Delayed {
+    fn get<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<FetchReply, String>> {
+        let hit = url == "https://late.test/.well-known/jmap";
+        let wait = self.0;
+        Box::pin(async move {
+            if !hit {
+                return Err("connect refused".to_string());
+            }
+            tokio::time::sleep(wait).await;
+            Ok(challenge())
+        })
+    }
+}
+
+/// With nothing from the IMAP cascade, JMAP discovery is the only answer
+/// there is: it keeps its full budget, well past the post-IMAP grace.
+#[tokio::test]
+async fn jmap_discovery_keeps_its_full_budget_when_the_cascade_found_nothing() {
+    let fetch = Delayed(JMAP_GRACE + Duration::from_millis(800));
+    let s = resolve_email_settings_with("late.test", &FakeDns::default(), &fetch).await.expect("JMAP alone answers");
+    assert_eq!(s.source, "jmap");
+    assert!(s.jmap_session_url.is_some(), "a probe that answers inside its budget is kept: {s:?}");
 }
 
 #[tokio::test]

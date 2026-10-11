@@ -876,6 +876,35 @@ pub(crate) fn role_mailbox(boxes: &Mailboxes, role: &str) -> Option<(String, Str
     Some((path.clone(), id.clone()))
 }
 
+/// One `mailboxIds` patch: `mailbox_id`'s label on, Trash's off.
+pub(crate) async fn put_back(acct: &AccountJmap, id: &str, mailbox_id: &str, trash_id: Option<String>, mailbox: &str) -> Result<(), String> {
+    let mut toggles = vec![(mailbox_id.to_string(), true)];
+    toggles.extend(trash_id.map(|t| (t, false)));
+    let out = acct.client.set_mailboxes(&[(id.to_string(), toggles)]).await.map_err(|e| e.to_string())?;
+    if !out.ok.iter().any(|ok| ok == id) {
+        let kind = out.failed.iter().find(|(f, _)| f == id).map_or("serverFail", |(_, k)| k.as_str());
+        return Err(format!("E_JMAP_METHOD: {kind}: {id} was not put back in {mailbox}"));
+    }
+    Ok(())
+}
+
+/// A server dedupe (`ImportResult::AlreadyExists`) named `existing_id` as the
+/// copy of a message imported into `mailbox_id` (`mailbox` is its path, for the
+/// error text). The copy may sit only in another mailbox, so the mailbox the
+/// import was for gets its label, exactly as a recover relabels an email found
+/// by Message-ID (`put_back`): the target on, Trash off, every other label as
+/// it was. A copy that already carries the label, or that is gone, is left alone.
+pub(crate) async fn adopt_deduped(acct: &AccountJmap, existing_id: &str, mailbox_id: &str, mailbox: &str) -> Result<(), String> {
+    let got = acct.client.get_emails(&[existing_id.to_string()], &["id", "mailboxIds"]).await.map_err(|e| e.to_string())?;
+    let Some(copy) = got.list.iter().find(|e| e["id"].as_str() == Some(existing_id)) else { return Ok(()) };
+    if in_mailbox(copy, mailbox_id) {
+        return Ok(());
+    }
+    let boxes = acct.current().await.map_err(|e| e.to_string())?;
+    let trash_id = role_mailbox(&boxes, "trash").map(|(_, id)| id).filter(|t| t != mailbox_id);
+    put_back(acct, existing_id, mailbox_id, trash_id, mailbox).await
+}
+
 /// `imap_set_flags`: the flags as keywords on the email behind `uid`, after
 /// a re-check that it is still in the mailbox (gone: `E_UID_GONE:`).
 /// `written` is what the server kept, as the IMAP arm's PERMANENTFLAGS

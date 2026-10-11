@@ -8,7 +8,7 @@
 // Both go through jmapErrorKey. No imports here: i18n/index.js reads this file
 // (tErr), and connectionError.js does too.
 
-/** `E_JMAP_<CODE>` -> catalog key. Codes not listed keep the generic paths. */
+/** `E_JMAP_<CODE>` -> catalog key. A code not listed here keeps the generic paths. */
 export const JMAP_BY_CODE = {
   E_JMAP_AUTH: 'errors.jmapAuthFailed',
   E_JMAP_TRANSPORT: 'errors.jmapConnect',
@@ -21,6 +21,13 @@ export const JMAP_BY_CODE = {
   // IMAP pool's refusal of a JMAP account (NOT_IMAP). Same words to the user.
   E_JMAP_UNSUPPORTED: 'errors.jmapUnsupported',
   E_JMAP_NOT_IMAP: 'errors.jmapUnsupported',
+  // A throttled server is the provider limiting this account (the words the
+  // IMAP connection check already uses).
+  E_JMAP_RATE: 'errors.conn.problem.providerThrottling',
+  // The server broke the protocol, or lost the state a sync stood on: one
+  // fault in words, nothing for the user to fix but trying again.
+  E_JMAP_PROTOCOL: 'errors.jmapServerFault',
+  E_JMAP_CHANGES: 'errors.jmapServerFault',
 };
 
 // `E_JMAP_SUBMIT:<SetError type>` (RFC 8621 §7.5): a From the server will not
@@ -31,7 +38,8 @@ const SUBMIT_BY_KIND = {
   tooLarge: 'errors.jmapTooLarge',
 };
 
-// `E_JMAP_METHOD: <SetError type>: …` kinds worth their own words.
+// `E_JMAP_METHOD: <SetError type>: …` kinds worth their own words; any other
+// kind is a server fault.
 const METHOD_BY_KIND = {
   mailboxHasEmail: 'errors.jmapFolderNotEmpty',
 };
@@ -50,6 +58,6 @@ export function jmapErrorKey(input) {
   if (!m) return null;
   const [, code, kind] = m;
   if (code === 'E_JMAP_SUBMIT') return SUBMIT_BY_KIND[kind] || 'errors.jmapSendRefused';
-  if (code === 'E_JMAP_METHOD') return METHOD_BY_KIND[kind] || null;
+  if (code === 'E_JMAP_METHOD') return METHOD_BY_KIND[kind] || 'errors.jmapServerFault';
   return JMAP_BY_CODE[code] || null;
 }

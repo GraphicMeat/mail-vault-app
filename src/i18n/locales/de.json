@@ -783,6 +783,7 @@
   "errors.jmapSendRefused": "Der Server hat das Senden dieser Nachricht abgelehnt. Prüfe die Empfänger und versuche es erneut.",
   "errors.jmapUnsupported": "MailVault kann das bei einem JMAP-Konto noch nicht.",
   "errors.jmapFolderNotEmpty": "Dieser Ordner enthält noch E-Mails, daher hat der Server ihn behalten. Verschiebe oder lösche zuerst seine Nachrichten.",
+  "errors.jmapServerFault": "Der JMAP-Server hat unerwartet geantwortet. Versuche es gleich noch einmal.",
   "errors.folderLocked": "Der Posteingang und besondere Ordner können nicht umbenannt oder gelöscht werden.",
   "errors.localFolderDeleteFailed": "Der Ordner konnte nicht gelöscht werden. Versuch es noch einmal.",
   "errors.folderNameInvalid": "Ordnernamen dürfen nicht leer sein und kein „{{delimiter}}“ enthalten.",

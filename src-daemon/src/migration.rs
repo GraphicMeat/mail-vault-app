@@ -730,7 +730,13 @@ async fn migrate_email_jmap(
                 .map_err(|e| e.to_string())?;
             match imported {
                 ImportResult::Created(_) => JmapMoved::Written,
-                ImportResult::AlreadyExists { .. } => JmapMoved::Present,
+                // Present on the server, maybe only in another mailbox: that
+                // copy gets the destination mailbox's label.
+                ImportResult::AlreadyExists { existing_id } => {
+                    let acct = state.jmap.get(dest_config).await.map_err(|e| e.to_string())?;
+                    crate::handlers::jmap_bridge::adopt_deduped(&acct, &existing_id, mailbox_id, dst_path).await?;
+                    JmapMoved::Present
+                }
             }
         }
         "imap" => {
@@ -2137,6 +2143,36 @@ mod tests {
 
         assert_eq!((again.migrated_emails, again.skipped_emails, again.failed_emails), (0, 2, 0));
         assert_eq!(m.count_calls("Email/import"), imports, "nothing imported twice");
+    }
+
+    /// The server dedupes the import to a copy it holds in another mailbox
+    /// (Work): the message counts as present, and the copy gets the
+    /// destination mailbox's label so the folder lists it. Its other labels
+    /// stay.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_migration_labels_the_copy_a_server_dedupe_names() {
+        let (_v, _a, s) = st();
+        let source = imap_source();
+        let mut scenario = support::scenario();
+        scenario.faults.push(mock_jmap::Fault::ImportAlreadyExists);
+        scenario.accounts[0].mailboxes[1].emails.push(mock_jmap::ScenarioEmail {
+            id: "w1".into(),
+            raw: support::raw("m1", "first"),
+            keywords: vec![],
+            received_at: "2026-10-03T10:00:00Z".into(),
+            also_in: vec![],
+        });
+        let m = MockJmap::start(scenario);
+        let (_trap, port) = support::imap_trap();
+
+        let done = migrate(&s, &imap_config(&source, "source@example.com"), &support::config(&m, port), vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!(done.status, "completed");
+        // m1 is deduped to w1 (present); m2 is deduped by the same fault only
+        // when the server holds it, which it does not.
+        assert_eq!((done.skipped_emails, done.failed_emails), (1, 0), "{done:?}");
+        let labels = m.read(|st| st.email("acc1", "w1").map(|e| e.mailbox_ids.clone()).unwrap_or_default());
+        assert_eq!(labels, support::set(&["mb-inbox", "mb-work"]), "relabelled into the destination, Work kept");
     }
 
     #[tokio::test(flavor = "multi_thread")]

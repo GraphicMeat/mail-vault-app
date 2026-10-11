@@ -40,6 +40,11 @@ describe('isFastmailAccount', () => {
     expect(isFastmailAccount({ email: 'someone@mock.test', imapHost: '127.0.0.1' })).toBe(false);
   });
 
+  it('leaves a JMAP account alone: its sign-in is a token or a password at the JMAP host, not a login address', () => {
+    expect(isFastmailAccount({ email: 'butcher@fastmail.com', imapHost: 'api.fastmail.com', jmapSessionUrl: 'https://api.fastmail.com/jmap/session' }))
+      .toBe(false);
+  });
+
   it('says no rather than throwing on a missing or empty account', () => {
     expect(isFastmailAccount()).toBe(false);
     expect(isFastmailAccount({})).toBe(false);

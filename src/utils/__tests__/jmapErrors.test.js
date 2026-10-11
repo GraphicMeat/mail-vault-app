@@ -26,6 +26,13 @@ describe('jmapErrorKey', () => {
       'E_JMAP_UNSUPPORTED: imap_not_bridged': 'errors.jmapUnsupported',
       'E_JMAP_NOT_IMAP: a@x.test is a JMAP account; this path must branch on uses_jmap()': 'errors.jmapUnsupported',
       'E_JMAP_METHOD: mailboxHasEmail: Trash/Old: 3 emails': 'errors.jmapFolderNotEmpty',
+      // A throttled server is the provider limiting this account.
+      'E_JMAP_RATE: rate limited': 'errors.conn.problem.providerThrottling',
+      // Everything else the server or the exchange got wrong is one fault, in words.
+      'E_JMAP_PROTOCOL: no apiUrl': 'errors.jmapServerFault',
+      'E_JMAP_CHANGES: cannotCalculateChanges': 'errors.jmapServerFault',
+      'E_JMAP_METHOD: invalidArguments: x': 'errors.jmapServerFault',
+      'E_JMAP_METHOD: serverFail': 'errors.jmapServerFault',
     };
     for (const [input, key] of Object.entries(cases)) {
       expect(jmapErrorKey(input), input).toBe(key);
@@ -39,7 +46,7 @@ describe('jmapErrorKey', () => {
   });
 
   it('is null for what it does not word: other codes, other errors, nothing', () => {
-    for (const input of ['E_JMAP_PROTOCOL: no apiUrl', 'E_JMAP_METHOD: invalidArguments: x', 'E_JMAP_RATE: rate limited',
+    for (const input of ['E_JMAP_SOMETHING_NEW: x',
       'E_UID_GONE: Message UID 4 is no longer in INBOX', 'auth', 'socket closed', '', null, undefined]) {
       expect(jmapErrorKey(input), String(input)).toBeNull();
     }

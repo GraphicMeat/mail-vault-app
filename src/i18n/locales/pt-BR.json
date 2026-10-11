@@ -783,6 +783,7 @@
   "errors.jmapSendRefused": "O servidor recusou enviar esta mensagem. Confira os destinatários e tente de novo.",
   "errors.jmapUnsupported": "O MailVault ainda não consegue fazer isso em uma conta JMAP.",
   "errors.jmapFolderNotEmpty": "Esta pasta ainda tem e-mails, então o servidor a manteve. Mova ou exclua as mensagens dela primeiro.",
+  "errors.jmapServerFault": "O servidor JMAP deu uma resposta inesperada. Tente novamente em instantes.",
   "errors.folderLocked": "A Caixa de Entrada e as pastas especiais não podem ser renomeadas nem excluídas.",
   "errors.localFolderDeleteFailed": "Não foi possível excluir esta pasta. Tente de novo.",
   "errors.folderNameInvalid": "Nomes de pasta não podem ficar vazios nem conter \"{{delimiter}}\".",

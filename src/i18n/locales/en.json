@@ -783,6 +783,7 @@
   "errors.jmapSendRefused": "The server refused to send this message. Check the recipients and try again.",
   "errors.jmapUnsupported": "MailVault cannot do this on a JMAP account yet.",
   "errors.jmapFolderNotEmpty": "This folder still has mail, so the server kept it. Move or delete its messages first.",
+  "errors.jmapServerFault": "The JMAP server gave an unexpected answer. Try again in a moment.",
   "errors.folderLocked": "INBOX and special folders cannot be renamed or deleted.",
   "errors.localFolderDeleteFailed": "Could not delete this folder. Try again.",
   "errors.folderNameInvalid": "Folder names cannot be empty or contain \"{{delimiter}}\".",

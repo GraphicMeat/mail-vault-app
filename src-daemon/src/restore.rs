@@ -281,7 +281,8 @@ async fn restore_folder(
 /// keywords and its Date as `receivedAt`. Counted as the IMAP path counts:
 /// a new email is uploaded; one the mailbox already holds by Message-ID, or
 /// that the server dedupes itself (`AlreadyExists`), is skipped, never
-/// failed. Each new id is this daemon's own, so the sync never announces it.
+/// failed; the copy the server names also gets this mailbox's label, so the
+/// folder lists it. Each new id is this daemon's own, so the sync never announces it.
 async fn restore_folder_jmap(
     state: &Arc<DaemonState>,
     account: &ImapConfig,
@@ -290,11 +291,11 @@ async fn restore_folder_jmap(
     cancel: &AtomicBool,
 ) -> (u32, u32, u32) {
     let made = match state.jmap.get(account).await {
-        Ok(acct) => migration::ensure_dest_folder_jmap(&acct, folder).await,
+        Ok(acct) => migration::ensure_dest_folder_jmap(&acct, folder).await.map(|id| (acct, id)),
         Err(e) => Err(e),
     };
-    let mailbox_id = match made {
-        Ok(id) => id,
+    let (acct, mailbox_id) = match made {
+        Ok(made) => made,
         Err(e) => {
             warn!("[restore] JMAP mailbox {} unavailable, skipping folder: {}", folder, e);
             return (0, 0, msgs.len() as u32);
@@ -311,7 +312,14 @@ async fn restore_folder_jmap(
         let received_at = received_at_of(&raw);
         match state.jmap.import_raw(account, &raw, &mailbox_id, &keywords, received_at.as_deref()).await {
             Ok(ImportResult::Created(_)) => uploaded += 1,
-            Ok(ImportResult::AlreadyExists { .. }) => skipped += 1,
+            // The server holds it already, maybe only in another mailbox: that
+            // copy gets this folder's label, and the message counts as present.
+            Ok(ImportResult::AlreadyExists { existing_id }) => {
+                match crate::handlers::jmap_bridge::adopt_deduped(&acct, &existing_id, &mailbox_id, folder).await {
+                    Ok(()) => skipped += 1,
+                    Err(e) => { warn!("[restore] could not label the copy of uid {} in {}: {}", msg.uid, folder, e); failed += 1; }
+                }
+            }
             Err(e) => { warn!("[restore] import of uid {} to {} failed: {}", msg.uid, folder, e); failed += 1; }
         }
     }

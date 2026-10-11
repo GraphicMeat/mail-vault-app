@@ -783,6 +783,7 @@
   "errors.jmapSendRefused": "サーバーがこのメッセージの送信を拒否しました。宛先を確認してもう一度お試しください。",
   "errors.jmapUnsupported": "MailVault は JMAP アカウントではまだこの操作ができません。",
   "errors.jmapFolderNotEmpty": "このフォルダにはまだメールがあるため、サーバーが削除しませんでした。先にメッセージを移動するか削除してください。",
+  "errors.jmapServerFault": "JMAPサーバーから想定外の応答がありました。しばらくしてからもう一度お試しください。",
   "errors.folderLocked": "受信トレイと特殊フォルダは名前の変更や削除ができません。",
   "errors.localFolderDeleteFailed": "このフォルダを削除できませんでした。もう一度お試しください。",
   "errors.folderNameInvalid": "フォルダ名を空にすることはできません。「{{delimiter}}」も使用できません。",

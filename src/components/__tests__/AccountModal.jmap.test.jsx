@@ -91,6 +91,15 @@ afterEach(() => {
 });
 
 describe('AccountModal: JMAP accounts', () => {
+  it('the Fastmail card names the JMAP session host, not the IMAP host, since JMAP is its default', () => {
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    const card = screen.getByText('Fastmail').closest('button');
+    expect(card.textContent).toContain('api.fastmail.com');
+    expect(card.textContent).not.toContain('imap.fastmail.com');
+    const gmail = screen.getByText('Gmail').closest('button');
+    expect(gmail.textContent).toContain('imap.gmail.com');
+  });
+
   it('fastmail preset defaults to JMAP with token field', async () => {
     openProvider('Fastmail');
 

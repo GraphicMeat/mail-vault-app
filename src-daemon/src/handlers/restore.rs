@@ -415,7 +415,11 @@ mod tests {
 
         assert_eq!(counts(&done), (0, 1, 0), "present, never failed: {done}");
         assert_eq!(m.count_calls("Email/import"), 1, "the server was asked and said alreadyExists");
-        assert!(restored(&m, "mb-inbox").is_empty());
+        // The copy the server named is the restored message: it carries the
+        // target mailbox now (the folder lists it), and keeps its Work label.
+        let labels = m.read(|st| st.email("acc1", "w1").map(|e| e.mailbox_ids.clone()).unwrap_or_default());
+        assert_eq!(labels, support::set(&["mb-inbox", "mb-work"]), "relabelled into the restored mailbox, nothing else touched");
+        assert_eq!(restored(&m, "mb-inbox").len(), 1, "one email, not a duplicate");
     }
 
     #[tokio::test(flavor = "multi_thread")]
