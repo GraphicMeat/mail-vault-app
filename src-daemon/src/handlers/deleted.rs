@@ -383,8 +383,13 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
 /// (`migration::ensure_dest_folder_jmap`). Returns the uid the mailbox's
 /// ledger gives the email: the old one for a label put back.
 async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
+    crate::handlers::jmap_bridge::with_session_retry(state, config, |acct| recover_jmap_once(state, d, config, acct)).await
+}
+
+/// One pass of `recover_on_jmap` on `acct`. Safe to run twice: a second pass
+/// finds the email the first one put back (or imported) and relabels it again.
+async fn recover_jmap_once(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig, acct: Arc<crate::jmap_sessions::AccountJmap>) -> Result<Option<u32>, String> {
     use mailvault_core::jmap::ImportResult;
-    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
     let mailbox_id = crate::migration::ensure_dest_folder_jmap(&acct, &d.mailbox).await.map_err(|e| e.to_string())?;
     let boxes = acct.current().await.map_err(|e| e.to_string())?;
     let trash_id = crate::handlers::jmap_bridge::role_mailbox(&boxes, "trash").map(|(_, id)| id).filter(|t| *t != mailbox_id);
@@ -394,13 +399,7 @@ async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
     };
     let email_id = match existing.into_iter().next() {
         Some(id) => {
-            let mut toggles = vec![(mailbox_id.clone(), true)];
-            toggles.extend(trash_id.map(|t| (t, false)));
-            let out = acct.client.set_mailboxes(&[(id.clone(), toggles)]).await.map_err(|e| e.to_string())?;
-            if !out.ok.contains(&id) {
-                let kind = out.failed.iter().find(|(f, _)| *f == id).map_or("serverFail", |(_, k)| k.as_str());
-                return Err(format!("E_JMAP_METHOD: {kind}: {} was not put back in {}", id, d.mailbox));
-            }
+            put_back(&acct, &id, &mailbox_id, trash_id, &d.mailbox).await?;
             id
         }
         None => {
@@ -411,9 +410,15 @@ async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
             let raw = blocking(move || bin::read_eml(&app_dir, &bin_id)).await.and_then(|r| r)?;
             let keywords = mailvault_core::jmap::headers::flags_to_keywords(d.flags.iter().map(String::as_str));
             let received_at = mailvault_core::jmap::client::received_at_of(&raw);
-            match state.jmap.import_raw(config, &raw, &mailbox_id, &keywords, received_at.as_deref()).await.map_err(|e| e.to_string())? {
+            match state.jmap.import_raw_on(config, &acct, &raw, &mailbox_id, &keywords, received_at.as_deref()).await.map_err(|e| e.to_string())? {
                 ImportResult::Created(imported) => imported.id,
-                ImportResult::AlreadyExists { existing_id } => existing_id,
+                // The server held the message already (a copy another client
+                // or an earlier pass made): it may sit in another mailbox, so
+                // it gets the label back like an email found by Message-ID.
+                ImportResult::AlreadyExists { existing_id } => {
+                    put_back(&acct, &existing_id, &mailbox_id, trash_id, &d.mailbox).await?;
+                    existing_id
+                }
             }
         }
     };
@@ -421,21 +426,35 @@ async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
     Ok(uids.first().copied())
 }
 
+/// One `mailboxIds` patch: `mailbox_id`'s label on, Trash's off.
+async fn put_back(acct: &crate::jmap_sessions::AccountJmap, id: &str, mailbox_id: &str, trash_id: Option<String>, mailbox: &str) -> Result<(), String> {
+    let mut toggles = vec![(mailbox_id.to_string(), true)];
+    toggles.extend(trash_id.map(|t| (t, false)));
+    let out = acct.client.set_mailboxes(&[(id.to_string(), toggles)]).await.map_err(|e| e.to_string())?;
+    if !out.ok.iter().any(|ok| ok == id) {
+        let kind = out.failed.iter().find(|(f, _)| f == id).map_or("serverFail", |(_, k)| k.as_str());
+        return Err(format!("E_JMAP_METHOD: {kind}: {id} was not put back in {mailbox}"));
+    }
+    Ok(())
+}
+
 /// A byte-less row's bytes on a JMAP account: the email in `trash` whose
-/// Message-ID is `mid`, by blob download.
+/// Message-ID is `mid`, by blob download. An expired session reconnects once.
 async fn from_trash_jmap(state: &Arc<DaemonState>, config: &ImapConfig, trash: &str, mid: &str) -> Result<Vec<u8>, String> {
-    let gone = || "deletedBin.goneFromTrash".to_string();
-    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
-    let boxes = acct.current().await.map_err(|e| e.to_string())?;
-    let trash_id = boxes.ids.get(trash).ok_or_else(gone)?;
-    let found = crate::handlers::jmap_bridge::emails_with_message_id(&acct.client, Some(trash_id), mid).await.map_err(|e| e.to_string())?;
-    let email_id = found.into_iter().next().ok_or_else(gone)?;
-    let got = acct.client.get_emails(&[email_id], &["id", "blobId"]).await.map_err(|e| e.to_string())?;
-    let blob = got.list.first().and_then(|e| e["blobId"].as_str()).ok_or_else(gone)?;
-    tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, acct.client.download(blob))
-        .await
-        .map_err(|_| format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()))?
-        .map_err(|e| e.to_string())
+    crate::handlers::jmap_bridge::with_session_retry(state, config, |acct| async move {
+        let gone = || "deletedBin.goneFromTrash".to_string();
+        let boxes = acct.current().await.map_err(|e| e.to_string())?;
+        let trash_id = boxes.ids.get(trash).ok_or_else(gone)?;
+        let found = crate::handlers::jmap_bridge::emails_with_message_id(&acct.client, Some(trash_id), mid).await.map_err(|e| e.to_string())?;
+        let email_id = found.into_iter().next().ok_or_else(gone)?;
+        let got = acct.client.get_emails(&[email_id], &["id", "blobId"]).await.map_err(|e| e.to_string())?;
+        let blob = got.list.first().and_then(|e| e["blobId"].as_str()).ok_or_else(gone)?;
+        tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, acct.client.download(blob))
+            .await
+            .map_err(|_| format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()))?
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// One purge pass. Settings that cannot be read purge nothing: a pass that
@@ -909,6 +928,107 @@ mod tests {
         assert!(rows.iter().all(|d| d.has_eml), "no byte-less capture: a label taken off leaves no Trash copy");
         let e2_row = rows.iter().find(|d| d.uid == e2).expect("e2 binned");
         assert_eq!(bin::read_eml(&s.app_dir, &e2_row.id).unwrap(), support::raw("e2", "two").as_bytes());
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+    fn session_fetches(m: &mock_jmap::MockJmap) -> usize {
+        m.requests().iter().filter(|r| r.path.starts_with("/jmap/session")).count()
+    }
+
+    /// The import dedupes to an email the account holds in another mailbox
+    /// (the row has no Message-ID to find it by first): it gets the original
+    /// mailbox's label too, or the recover would answer a uid the mailbox
+    /// does not list.
+    #[tokio::test]
+    async fn jmap_recover_labels_the_copy_an_import_deduped_to() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, e1, _) = jmap_state(&m, port).await;
+        m.mutate(|st| {
+            st.set_mailboxes("acc1", "e1", &["mb-work"]);
+            st.faults.push(mock_jmap::Fault::ImportAlreadyExists);
+        });
+        let row = json!({"uid": e1});
+        let capture = Capture { account_id: "acct1", mailbox: "INBOX", uid: e1, message_id: None, flags: &[], row: &row, deleted_at: now_ms() };
+        app_db::with(&s.app_dir, |c| bin::capture(c, &s.app_dir, &capture, Some(support::raw("e1", "one").as_bytes()))).unwrap();
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]));
+        assert_eq!(m.count_calls("Email/import"), 1, "the dedupe came from the server");
+        assert_eq!(jmap_labels(&m, "e1"), support::set(&["mb-inbox", "mb-work"]), "the copy carries the target mailbox");
+        assert_eq!(out["recovered"][0]["uid"], json!(e1), "the uid the ledger issued it");
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// An expired session (the server answers 401 once): the recover forgets
+    /// it, connects again once and succeeds.
+    #[tokio::test]
+    async fn jmap_recover_reconnects_once_on_an_expired_session() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, e1, _) = jmap_state(&m, port).await;
+        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e1, "mailbox": "INBOX", "permanent": false}))
+            .await
+            .result
+            .expect("deleted");
+        let fetches = session_fetches(&m);
+        m.mutate(|st| st.faults.push(mock_jmap::Fault::UnauthorizedOnce));
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(session_fetches(&m), fetches + 1, "exactly one reconnect");
+        assert_eq!(jmap_labels(&m, "e1"), support::set(&["mb-inbox", "mb-work"]));
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// The same for a byte-less row's local recover (`from_trash_jmap`).
+    #[tokio::test]
+    async fn jmap_from_trash_reconnects_once_on_an_expired_session() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, _, e2) = jmap_state(&m, port).await;
+        m.mutate(|st| st.set_mailboxes("acc1", "e2", &["mb-trash"]));
+        let row = json!({"uid": e2, "messageId": "<e2@x>"});
+        let capture = Capture { account_id: "acct1", mailbox: "INBOX", uid: e2, message_id: Some("<e2@x>"), flags: &[], row: &row, deleted_at: now_ms() };
+        let (id, _) = app_db::with(&s.app_dir, |c| bin::capture(c, &s.app_dir, &capture, None)).unwrap();
+        app_db::with(&s.app_dir, |c| bin::set_trash(c, &id, Some("Trash"), None)).unwrap();
+        let fetches = session_fetches(&m);
+        m.mutate(|st| st.faults.push(mock_jmap::Fault::UnauthorizedOnce));
+
+        let out = recover(&s, "local").await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(session_fetches(&m), fetches + 1, "exactly one reconnect");
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// A bulk delete whose session expired before the first copy was kept:
+    /// the capture connects again once, the run completes.
+    #[tokio::test]
+    async fn jmap_bulk_delete_reconnects_once_on_an_expired_session() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, e1, e2) = jmap_state(&m, port).await;
+        let fetches = session_fetches(&m);
+        m.mutate(|st| st.faults.push(mock_jmap::Fault::UnauthorizedOnce));
+
+        let r = handle_request_for_test(
+            &s,
+            "bulk_delete_emails",
+            json!({"accountId": "acct1", "accountJson": support::account_json(&m, port).to_string(), "mailbox": "INBOX", "uids": [e1, e2]}),
+        )
+        .await
+        .result
+        .expect("ran");
+
+        assert_eq!((r["completed"].clone(), r["errors"].clone()), (json!(2), json!(0)), "{r}");
+        assert_eq!(session_fetches(&m), fetches + 1, "exactly one reconnect");
+        assert_eq!(binned(&s).len(), 2);
         assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

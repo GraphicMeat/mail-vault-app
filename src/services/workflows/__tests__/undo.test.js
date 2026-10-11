@@ -405,6 +405,22 @@ describe('undo after a delete', () => {
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
   });
 
+  // A JMAP server recover answers the uid the delete tombstoned when the
+  // email still existed (a label put back keeps its ledger uid), so the
+  // tombstone must lift for a server recover too.
+  it('a server recover that answers the tombstoned uid shows the message again', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: null, trashUid: null, binId: 'b7' });
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
+    mockDaemonCall.mockResolvedValueOnce({ recovered: [{ id: 'b7', accountId: 'a1', mailbox: 'INBOX', uid: 7 }], failed: [] });
+
+    await recoverFromBin(['b7'], 'server');
+
+    expect(mockDaemonCall).toHaveBeenCalledWith('deleted.recover', { ids: ['b7'], target: 'server' });
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
+  });
+
   it('Cmd+Z after the slot is gone brings the last delete back from the bin, once', async () => {
     mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
     primeStore({ emails: [row(7)] });

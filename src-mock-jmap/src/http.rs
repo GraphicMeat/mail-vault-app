@@ -340,6 +340,10 @@ fn api(stream: &TcpStream, shared: &Shared, auth: Option<&str>, req: &Request) -
         drop(st);
         return unauthorized(stream);
     };
+    if st.take_unauthorized_once() {
+        drop(st);
+        return unauthorized(stream);
+    }
     if let Some(secs) = st.take_rate_limit() {
         drop(st);
         let p = json!({"type": "about:blank", "status": 429, "detail": "rate limited"});

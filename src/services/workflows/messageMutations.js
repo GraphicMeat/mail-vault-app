@@ -1279,13 +1279,13 @@ export async function recoverFromBin(ids, target = 'server') {
   const res = await daemonCall('deleted.recover', { ids, target });
   if (res?.recovered?.length) {
     const { useMailStore } = await import('../../stores/mailStore');
-    // A local recover keeps the uid the delete tombstoned; the server's
-    // gives a new one, and the retired uid stays hidden.
-    if (target === 'local') {
-      const ts = new Set(useMailStore.getState().deleteTombstones);
-      for (const r of res.recovered) ts.delete(_targetId(r));
-      useMailStore.setState({ deleteTombstones: ts });
-    }
+    // A recover that answers the uid the delete tombstoned (a local one, or a
+    // JMAP label put back under its ledger uid) shows that row again. An IMAP
+    // server recover answers the new uid, so this deletes nothing there and
+    // the retired uid stays hidden.
+    const ts = new Set(useMailStore.getState().deleteTombstones);
+    for (const r of res.recovered) ts.delete(_targetId(r));
+    useMailStore.setState({ deleteTombstones: ts });
     if (useMailStore.getState().accounts?.length) await reloadListInView();
   }
   if (res?.failed?.length && !res?.recovered?.length) {

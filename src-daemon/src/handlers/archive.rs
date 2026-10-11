@@ -118,12 +118,21 @@ async fn capture_all(
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return None;
             }
-            let source = if config.uses_jmap() {
-                crate::handlers::deleted::Source::Jmap { config }
-            } else {
-                crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false }
+            let source = || {
+                if config.uses_jmap() {
+                    crate::handlers::deleted::Source::Jmap { config }
+                } else {
+                    crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false }
+                }
             };
-            match crate::handlers::deleted::capture(state, account_id, mailbox, uid, source).await {
+            let mut captured = crate::handlers::deleted::capture(state, account_id, mailbox, uid, source()).await;
+            // A JMAP session that expired or was revoked read nothing: forgotten,
+            // and the copy is tried once more on a fresh one.
+            if config.uses_jmap() && matches!(&captured, Err(e) if crate::handlers::jmap_bridge::is_auth_error(e)) {
+                state.jmap.forget(config);
+                captured = crate::handlers::deleted::capture(state, account_id, mailbox, uid, source()).await;
+            }
+            match captured {
                 Ok(_) => Some(uid),
                 Err(e) => {
                     warn!("bulk_delete: UID {uid} not deleted, no copy could be kept: {e}");
@@ -194,38 +203,66 @@ async fn bulk_delete_jmap(
         );
     };
     progress(0, 0, true);
-    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
-    let boxes = acct.current().await.map_err(|e| e.to_string())?;
-    let mailbox_id = boxes.ids.get(&mailbox).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"))?;
-    let trash_id = crate::handlers::jmap_bridge::role_mailbox(&boxes, "trash").map(|(_, id)| id);
-    let pairs = acct.uid_to_id(state, &account_id, &mailbox, &uids, false).await?;
-    let (client, mailbox_ref, trash_ref, cancel_ref) = (&acct.client, mailbox_id.as_str(), trash_id.as_deref(), &cancel);
-    let mut results = futures::stream::iter(pairs)
-        .map(|(uid, email_id)| async move {
-            if cancel_ref.load(Ordering::Relaxed) {
-                return None;
-            }
-            let outcome = match email_id {
-                None => Ok(RemoveOutcome::Gone),
-                Some(id) => remove_from(client, &id, mailbox_ref, trash_ref, true).await,
-            };
-            Some((uid, outcome))
-        })
-        .buffer_unordered(5);
     let (mut completed, mut errors, mut deleted) = (0usize, 0usize, Vec::new());
-    while let Some(done) = results.next().await {
-        let Some((uid, outcome)) = done else { continue };
-        match outcome {
-            Ok(_) => {
-                deleted.push(uid);
-                completed += 1;
-            }
-            Err(e) => {
-                errors += 1;
-                warn!("bulk_delete: UID {uid} failed: {e}");
-            }
+    let mut pending = uids;
+    // An expired or revoked session (`E_JMAP_AUTH:`) is forgotten and what it
+    // refused runs once more on a fresh one: a pass over uids already
+    // handled finds them gone, which counts as deleted.
+    let mut retried = false;
+    loop {
+        let setup = async {
+            let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+            let boxes = acct.current().await.map_err(|e| e.to_string())?;
+            let mailbox_id = boxes.ids.get(&mailbox).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"))?;
+            let trash_id = crate::handlers::jmap_bridge::role_mailbox(&boxes, "trash").map(|(_, id)| id);
+            let pairs = acct.uid_to_id(state, &account_id, &mailbox, &pending, false).await?;
+            Ok::<_, String>((acct, mailbox_id, trash_id, pairs))
         }
-        progress(completed, errors, !cancel.load(Ordering::Relaxed) && completed + errors < total);
+        .await;
+        let (acct, mailbox_id, trash_id, pairs) = match setup {
+            Err(e) if !retried && crate::handlers::jmap_bridge::is_auth_error(&e) => {
+                state.jmap.forget(config);
+                retried = true;
+                continue;
+            }
+            other => other?,
+        };
+        let (client, mailbox_ref, trash_ref, cancel_ref) = (&acct.client, mailbox_id.as_str(), trash_id.as_deref(), &cancel);
+        let mut results = futures::stream::iter(pairs)
+            .map(|(uid, email_id)| async move {
+                if cancel_ref.load(Ordering::Relaxed) {
+                    return None;
+                }
+                let outcome = match email_id {
+                    None => Ok(RemoveOutcome::Gone),
+                    Some(id) => remove_from(client, &id, mailbox_ref, trash_ref, true).await,
+                };
+                Some((uid, outcome))
+            })
+            .buffer_unordered(5);
+        let mut refused = Vec::new();
+        while let Some(done) = results.next().await {
+            let Some((uid, outcome)) = done else { continue };
+            match outcome {
+                Ok(_) => {
+                    deleted.push(uid);
+                    completed += 1;
+                }
+                Err(e) if !retried && crate::handlers::jmap_bridge::is_auth_error(&e.to_string()) => refused.push(uid),
+                Err(e) => {
+                    errors += 1;
+                    warn!("bulk_delete: UID {uid} failed: {e}");
+                }
+            }
+            progress(completed, errors, !cancel.load(Ordering::Relaxed) && completed + errors + refused.len() < total);
+        }
+        drop(results);
+        if refused.is_empty() {
+            break;
+        }
+        state.jmap.forget(config);
+        retried = true;
+        pending = refused;
     }
     tracing::info!("bulk_delete: JMAP done, {completed}/{total} deleted, {errors} errors");
     Ok((
@@ -1057,4 +1094,37 @@ mod tests {
         assert!(result["lastError"].as_str().unwrap_or_default().contains("429"), "{result}");
         assert_eq!(crate::handlers::graph::test_graph_requests().len(), 3, "two retries, then give up");
     }
+    /// The delete step of a JMAP bulk delete on a session that expired after
+    /// it connected (the server answers 401 once): it connects again once and
+    /// every uid still counts, none as an error.
+    #[tokio::test]
+    async fn jmap_bulk_delete_connects_again_once_when_the_session_expired() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (_v, s) = st(true);
+        let listing = handle_request_for_test(&s, "imap_get_emails", json!({"account": support::account_json(&m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
+            .await
+            .result
+            .expect("listed");
+        let uids: Vec<u32> = listing["emails"].as_array().unwrap().iter().map(|e| e["uid"].as_u64().unwrap() as u32).collect();
+        assert_eq!(uids.len(), 2);
+        let fetches = m.requests().iter().filter(|r| r.path.starts_with("/jmap/session")).count();
+        m.mutate(|st| st.faults.push(mock_jmap::Fault::UnauthorizedOnce));
+
+        let config = support::config(&m, port);
+        let (p, deleted) = bulk_delete_jmap(&s, "acct1".into(), &config, "INBOX".into(), uids.clone(), Arc::new(std::sync::atomic::AtomicBool::new(false)))
+            .await
+            .expect("ran");
+
+        assert_eq!((p.completed, p.errors), (2, 0));
+        let mut deleted = deleted;
+        deleted.sort();
+        let mut want = uids;
+        want.sort();
+        assert_eq!(deleted, want);
+        assert_eq!(m.requests().iter().filter(|r| r.path.starts_with("/jmap/session")).count(), fetches + 1, "exactly one reconnect");
+        assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
 }

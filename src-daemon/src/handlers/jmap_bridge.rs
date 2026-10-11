@@ -92,8 +92,34 @@ fn is_auth_failure(f: &Fail) -> bool {
 }
 
 /// `E_JMAP_AUTH:`, the code of `JmapError::Unauthorized`.
-fn is_auth_error(e: &str) -> bool {
+pub(crate) fn is_auth_error(e: &str) -> bool {
     e.starts_with(&format!("{}:", JmapError::Unauthorized.code()))
+}
+
+/// Run `attempt` on the account's session. An expired or revoked session
+/// (`E_JMAP_AUTH:`, from the connect or from `attempt`) is forgotten and
+/// `attempt` runs once more on a fresh one, as a bridged RPC does
+/// (`answer_with_retry`). For work that is safe to repeat: a second pass
+/// finds what the first one did already done.
+pub(crate) async fn with_session_retry<T, F, Fut>(state: &Arc<DaemonState>, config: &ImapConfig, mut attempt: F) -> Result<T, String>
+where
+    F: FnMut(Arc<AccountJmap>) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    let mut forgot = false;
+    loop {
+        let result = match state.jmap.get(config).await {
+            Ok(acct) => attempt(acct).await,
+            Err(e) => Err(e.to_string()),
+        };
+        match result {
+            Err(e) if !forgot && is_auth_error(&e) => {
+                state.jmap.forget(config);
+                forgot = true;
+            }
+            other => return other,
+        }
+    }
 }
 
 fn param<T: DeserializeOwned>(params: &Value, key: &str) -> Result<T, Fail> {
@@ -973,7 +999,7 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
                 return Err(Fail::Rpc(format!("E_BIN_CAPTURE: {e}")));
             }
             Err(e) => {
-                warn!("[jmap] delete uid={} goes ahead without a bin copy (the server keeps it): {}", uid, e);
+                warn!("[jmap] delete uid={} goes ahead: could not keep a bin copy first (the server keeps it): {}", uid, e);
                 None
             }
         }

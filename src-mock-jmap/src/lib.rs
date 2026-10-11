@@ -81,6 +81,9 @@ pub enum Fault {
     CannotCalculateChanges,
     /// Every authenticated endpoint answers 401, whatever the credentials.
     Unauthorized,
+    /// The next `POST /jmap/api` answers 401 and the fault is used up: a session that expired
+    /// after it connected, where connecting again works.
+    UnauthorizedOnce,
     /// The next API call answers HTTP 429 with `Retry-After: <secs>`.
     RateLimited { retry_after_secs: u64 },
     /// `Email/import` stores the message with "\r\n" appended: blobId and size differ from the upload.

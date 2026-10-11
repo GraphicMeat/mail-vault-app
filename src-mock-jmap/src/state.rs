@@ -444,6 +444,17 @@ impl State {
         }
     }
 
+    /// Use up an `UnauthorizedOnce` fault.
+    pub fn take_unauthorized_once(&mut self) -> bool {
+        match self.faults.iter().position(|f| matches!(f, Fault::UnauthorizedOnce)) {
+            Some(i) => {
+                self.faults.remove(i);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn drop_event_source_after(&self) -> Option<usize> {
         self.faults.iter().find_map(|f| match f {
             Fault::DropEventSourceAfter { events } => Some(*events),
