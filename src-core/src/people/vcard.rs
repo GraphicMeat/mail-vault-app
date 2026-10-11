@@ -260,9 +260,17 @@ pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<Imp
             Some(pid) => {
                 let existing = get_card(&tx, &pid)?.ok_or("E_NOT_FOUND: person")?;
                 let known: Vec<_> = existing.emails.iter().map(|e| e.address.clone()).collect();
-                let same_name = card.fn_name().trim().eq_ignore_ascii_case(existing.display_name.trim());
+                // a record the person already holds (this file imported before) knows the card's name or is the card
+                let (name, text) = (card.fn_name(), card.to_text());
+                let mut same_name = name.trim().eq_ignore_ascii_case(existing.display_name.trim());
+                let mut same_card = false;
+                for rid in &existing.record_ids {
+                    let Some(r) = journal::snapshot_record(&tx, rid)? else { continue };
+                    same_card |= r.raw == text;
+                    same_name |= VCard::parse_all(&r.raw).first().is_some_and(|c| c.fn_name().trim().eq_ignore_ascii_case(name.trim()));
+                }
                 let has_phone = |n: &str| existing.phones.iter().any(|p| p.number.trim() == n);
-                if same_name && emails.iter().all(|a| known.contains(a)) && card.phones().iter().all(|(n, _)| has_phone(n)) {
+                if same_card || (same_name && emails.iter().all(|a| known.contains(a)) && card.phones().iter().all(|(n, _)| has_phone(n))) {
                     report.skipped += 1;
                     continue;
                 }
@@ -272,7 +280,7 @@ pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<Imp
                     source_kind: "import".into(),
                     remote_id: String::new(),
                     etag: String::new(),
-                    raw: card.to_text(),
+                    raw: text,
                     tombstone: false,
                     fetched_ms: now_ms(),
                 };
@@ -471,6 +479,19 @@ mod tests {
             let r = import(&c, text).unwrap();
             assert_eq!((r.created, r.linked, r.skipped), (2, 1, 1));
             assert_eq!(get_card(&c, &existing).unwrap().unwrap().record_ids.len(), 2, "linked as a second record, not a new person");
+        }
+
+        #[test]
+        fn a_card_linked_only_for_its_name_is_not_linked_again_by_the_same_file_or_its_export() {
+            let (_t, c) = conn();
+            let id = create_person(&c, &NewPerson { display_name: "Jane".into(), emails: vec!["jane@corp.com".into()], ..Default::default() }).unwrap();
+            let text = "BEGIN:VCARD\nFN:Jane D\nEMAIL:jane@corp.com\nEND:VCARD\n";
+            assert_eq!(import(&c, text).unwrap().linked, 1);
+            let again = import(&c, text).unwrap();
+            assert_eq!((again.created, again.linked), (0, 0));
+            let exported = import(&c, &export(&c, None).unwrap()).unwrap();
+            assert_eq!((exported.created, exported.linked), (0, 0));
+            assert_eq!(get_card(&c, &id).unwrap().unwrap().record_ids.len(), 2);
         }
 
         #[test]
