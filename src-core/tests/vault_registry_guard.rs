@@ -61,6 +61,8 @@ const CREATE: &[&str] = &[
     "message_store::write_new(",
     "message_store::copy_in(",
     "message_store::write_named_at(",
+    "message_store::commit(",
+    "message_store::commit_replacing(",
 ];
 const MOVE: &[&str] = &[
     "fs::rename(",
@@ -344,6 +346,8 @@ fn the_matcher_watches_message_store_writers() {
         "message_store::copy_in(&dir, uid, &flags, &src)?;",
         "message_store::set_flags_at(&path, uid, |f| f.to_vec())?;",
         "message_store::write_named_at(&folder, &name, raw)?;",
+        "message_store::commit(root, a, m, &prepared, f)?;",
+        "message_store::commit_replacing(root, a, m, &prepared, f)?;",
     ] {
         assert!(one(&format!("fn f(dir: &Path) {{\n    crate::{call}\n}}\n")).is_some(), "{call} with no registry call must be flagged");
     }

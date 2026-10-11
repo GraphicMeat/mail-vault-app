@@ -709,7 +709,11 @@ async fn daemon_main() {
         // Alongside it, every mbox upload holds at its next message boundary
         // and checkpoints (1.2s at most, all jobs at once): killed mid-message,
         // one without a Message-ID would go up again on resume.
+        // A storage format conversion holds first, at its next message (one
+        // message is milliseconds), its journal left `running` so the next
+        // start carries on.
         let uploads = tokio::task::spawn_blocking(move || {
+            format_migration_job::pause_all_and_wait(&uploads_cleanup, std::time::Duration::from_millis(600));
             mbox_upload_job::pause_all_and_wait(&uploads_cleanup, std::time::Duration::from_millis(1200))
         });
         let _ = tokio::join!(
@@ -734,6 +738,8 @@ async fn daemon_main() {
     // occupied, not earlier: everything above (the search index worker's
     // signal sender, the classification worker, the insights sweeper) must be
     // installed before the first request can land.
+    // `state` moves into the server below.
+    let resume_state = Arc::clone(&state);
     {
         let thread_data_dir = data_dir.clone();
         let spawned = server::spawn_on_own_thread(state, socket_path.clone(), move |why| {
@@ -747,6 +753,10 @@ async fn daemon_main() {
             std::process::exit(1);
         }
     }
+
+    // A storage format conversion a quit or a crash cut off carries on, now
+    // that the socket answers (`format_migration_job::resume_journaled`).
+    tokio::task::spawn_blocking(move || format_migration_job::resume_journaled(&resume_state));
 
     // Nothing left to await here: the shutdown task above owns exiting the
     // process, and the server runs on its own thread until it does.

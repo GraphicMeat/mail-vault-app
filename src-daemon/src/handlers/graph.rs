@@ -189,8 +189,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // row and the registry's hook nudges the index.
             let write = blocking(move || -> Result<bool, String> {
                 let registry = &write_state.vault_registry;
+                // Built and its blob stored before the mailbox lock (Plan B
+                // 7a D3); the lock covers the commit alone.
+                let prepared = vault_files::prepare_store(&root, &write_account, &write_mailbox, uid, raw_for_write, &[])?;
                 registry.serialized(&write_account, &write_mailbox, || {
-                    vault_files::store(registry, &root, &write_account, &write_mailbox, uid, &raw_for_write, &[], false)
+                    vault_files::store_prepared(registry, &root, &write_account, &write_mailbox, &prepared, &[], false)
                 })
             })
             .await;

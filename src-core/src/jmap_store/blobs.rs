@@ -99,13 +99,13 @@ pub(crate) fn put_as(root: &Path, raw: &[u8], id: String) -> Result<String, Stri
             .write(true)
             .open(&path)
             .and_then(|f| f.set_modified(SystemTime::now()))
-            .map_err(|e| format!("blob touch {}: {e}", path.display()))?;
+            .map_err(|e| failure(&format!("blob touch {}", path.display()), &e))?;
         return Ok(id);
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("blob dir {}: {e}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|e| failure(&format!("blob dir {}", parent.display()), &e))?;
     }
-    crate::fsx::write_atomic(&path, raw).map_err(|e| format!("blob write {}: {e}", path.display()))?;
+    crate::fsx::write_atomic(&path, raw).map_err(|e| failure(&format!("blob write {}", path.display()), &e))?;
     Ok(id)
 }
 
@@ -117,8 +117,14 @@ pub(crate) fn touch(root: &Path, id: &str) -> Result<(), String> {
     match fs::File::options().write(true).open(&path).and_then(|f| f.set_modified(SystemTime::now())) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(format!("blob touch {}: {e}", path.display())),
+        Err(e) => Err(failure(&format!("blob touch {}", path.display()), &e)),
     }
+}
+
+/// `what: e`, marked as the disk's own failure (`message_store::E_DISK`) when
+/// it is one: a conversion stops on it.
+fn failure(what: &str, e: &io::Error) -> String {
+    crate::message_store::io_failure(what, e)
 }
 
 /// The bytes of blob `id`. A malformed id is `InvalidInput`.

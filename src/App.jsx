@@ -61,6 +61,7 @@ import { PortableDriveBanner } from './components/PortableIndicators';
 import { SearchIndexProgress } from './components/SearchIndexProgress';
 import { ViewsReindexNotice } from './components/ViewsReindexNotice';
 import { MboxUploadProgress } from './components/MboxUploadProgress';
+import { FormatMigrationProgress } from './components/FormatMigrationProgress';
 import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import { FocusLock } from './components/FocusLock';
@@ -1713,6 +1714,7 @@ function App() {
       <SearchIndexProgress />
       <ViewsReindexNotice />
       <MboxUploadProgress onOpenAccounts={(accountId) => openSettings({ tab: 'accounts', accountId })} />
+      <FormatMigrationProgress />
       <ShareUnlockModal onSubscribe={() => openSettings({ tab: 'billing' })} />
       <BackupUpsellModal onUpgrade={() => openSettings({ tab: 'billing' })} />
 

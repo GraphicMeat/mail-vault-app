@@ -217,6 +217,52 @@ pub fn store(
     Ok(true)
 }
 
+/// `store`'s heavy half, for a caller about to take the mailbox lock
+/// (Plan B 7a D3): in a JMAP vault the record is built and its blob stored
+/// here, outside the lock (`message_store::prepare`); in a Maildir vault
+/// nothing happens ahead. `store_prepared` does the rest under the lock.
+pub fn prepare_store(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: Vec<u8>, flags: &[String]) -> Result<crate::message_store::Prepared, String> {
+    let format = crate::message_store::vault_format(root);
+    crate::message_store::prepare(root, account_id, mailbox, uid, raw, flags, None, format)
+}
+
+/// `store` of a message `prepare_store` made ready: the same answer and the
+/// same registry upkeep, with only the commit under the caller's mailbox lock
+/// (`message_store::commit_replacing`: no parse, no hash unless an old copy
+/// in the other format has to be replaced). A message prepared in another
+/// format or under another root than the vault has now (a conversion started,
+/// the vault moved), or for a Maildir vault, is stored the plain way.
+#[allow(clippy::too_many_arguments)]
+pub fn store_prepared(
+    reg: &VaultRegistry,
+    root: &Path,
+    account_id: &str,
+    mailbox: &str,
+    prepared: &crate::message_store::Prepared,
+    flags: &[String],
+    overwrite: bool,
+) -> Result<bool, String> {
+    let uid = prepared.uid();
+    let jmap = crate::message_store::Format::Jmap;
+    if prepared.format() != jmap || crate::message_store::vault_format(root) != jmap || prepared.root() != root {
+        return store(reg, root, account_id, mailbox, uid, prepared.raw(), flags, overwrite);
+    }
+    if !overwrite {
+        let held = match reg.known(account_id, mailbox, uid) {
+            Some(row) => row.is_some(),
+            None => crate::message_store::find(root, account_id, mailbox, uid).is_some(),
+        };
+        if held {
+            return Ok(false);
+        }
+    }
+    let entry = crate::message_store::commit_replacing(root, account_id, mailbox, prepared, flags)?;
+    let record = crate::message_store::listed_path(&crate::message_store::mailbox_dir(root, account_id, mailbox), &entry.name);
+    reg.upsert(account_id, mailbox, uid, &record);
+    info!("Stored email UID {} to {:?} ({} bytes)", uid, record, prepared.raw().len());
+    Ok(true)
+}
+
 /// `store` in a JMAP vault, or of a uid a record holds in a Maildir vault:
 /// the uid's file through `message_store::write_replacing` in the vault's
 /// format, so the other format's copy of the uid goes only once the new one
@@ -226,8 +272,9 @@ pub fn store(
 /// Hashing: the message is hashed once (the record build's digest names the
 /// blob), and once more when the other format's copy has to be replaced (the
 /// stored blob, re-read to verify it). The build, the blob write and the
-/// verify all run inside the caller's per-message lock; moving them out is
-/// Task 9's carry for the sync and fetch callers.
+/// verify all run inside the caller's per-message lock; the fetch's cache
+/// writes run the build and the blob write before it instead
+/// (`prepare_store`, `store_prepared`).
 #[allow(clippy::too_many_arguments)]
 fn store_record(
     reg: &VaultRegistry,
@@ -2069,6 +2116,55 @@ mod tests {
         assert!(store(&reg, root, "acct", "INBOX", 7, &raw, &[], true).unwrap(), "replaces the Maildir copy of uid 7");
         assert_eq!(crate::jmap_store::blobs::hash_count(), 2, "the digest, and the verify of the stored blob");
         assert!(!crate::message_store::mailbox_dir(root, "acct", "INBOX").join("cur").join(format!("7{INFO_PREFIX}.eml")).exists());
+    }
+
+    /// Plan B 7a D3 for the fetch's cache writes: the parse, the hash and the
+    /// blob write happen in `prepare_store`, before the mailbox lock; the
+    /// part under the lock (`store_prepared`) hashes nothing and writes the
+    /// record, with `store`'s answer and registry upkeep.
+    #[test]
+    fn a_prepared_store_does_its_hashing_before_the_lock() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        let (_app, reg) = registry(root);
+        let raw = light_batch_eml("prepared");
+        let blob = crate::jmap_store::blobs::blob_path(root, &crate::jmap_store::blobs::blob_id(&raw));
+
+        crate::jmap_store::blobs::reset_hash_count();
+        let prepared = prepare_store(root, "acct", "INBOX", 7, raw.clone(), &["seen".to_string()]).unwrap();
+        assert_eq!(crate::jmap_store::blobs::hash_count(), 1, "the one digest is made ahead");
+        assert!(blob.is_file(), "the blob is stored ahead");
+        assert!(crate::message_store::find(root, "acct", "INBOX", 7).is_none(), "no record before the commit");
+
+        crate::jmap_store::blobs::reset_hash_count();
+        assert!(store_prepared(&reg, root, "acct", "INBOX", &prepared, &["seen".to_string()], false).unwrap());
+        assert_eq!(crate::jmap_store::blobs::hash_count(), 0, "nothing is hashed under the lock");
+        let entry = crate::message_store::find(root, "acct", "INBOX", 7).unwrap();
+        assert_eq!((entry.name.as_str(), entry.flags.contains(&"seen".to_string())), ("7.json", true));
+        assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), raw);
+        assert_eq!(reg.known("acct", "INBOX", 7), Some(Some("7.json".to_string())), "the registry row follows");
+
+        // Held already, no overwrite: nothing written, as `store` answers.
+        let again = prepare_store(root, "acct", "INBOX", 7, light_batch_eml("other"), &[]).unwrap();
+        assert!(!store_prepared(&reg, root, "acct", "INBOX", &again, &[], false).unwrap());
+        assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), raw);
+    }
+
+    /// A message prepared for a JMAP vault that turned Maildir before the
+    /// commit (a conversion back started) lands as a Maildir file.
+    #[test]
+    fn a_store_prepared_for_another_format_is_stored_the_plain_way() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        let (_app, reg) = registry(root);
+        let raw = light_batch_eml("switched");
+        let prepared = prepare_store(root, "acct", "INBOX", 7, raw.clone(), &[]).unwrap();
+        crate::message_store::set_vault_format(root, Format::Maildir).unwrap();
+        assert!(store_prepared(&reg, root, "acct", "INBOX", &prepared, &[], false).unwrap());
+        assert_eq!(crate::message_store::find(root, "acct", "INBOX", 7).unwrap().name, format!("7{INFO_PREFIX}.eml"));
+        assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), raw);
     }
 
     /// `migrate_json_to_eml` runs at every app start and removes a `.json`

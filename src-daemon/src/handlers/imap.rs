@@ -29,7 +29,7 @@
 //! and `run_read` adds a dead-socket retry `with_background` never had.
 //! `imap_get_email`/`imap_get_email_light` already used `run_read` as Tauri
 //! commands (`commands.rs`), so they keep doing so here, unchanged.
-use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_mailbox_write};
+use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_mailbox_write, with_vault_write};
 use crate::imap::{self, pool::ImapPool, ImapConfig};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -112,8 +112,12 @@ pub(crate) async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mai
     }
     let state2 = Arc::clone(state);
     let cache_result = blocking(move || -> Result<bool, String> {
+        // The parse, the hash and the blob write run before the mailbox lock,
+        // so an open of this folder never waits on them (Plan B 7a D3); the
+        // lock covers the commit alone.
+        let prepared = with_vault_write(&state2, |root| vault_files::prepare_store(root, &account_id, &mailbox, uid, raw, &[]))?;
         with_mailbox_write(&state2, &account_id, &mailbox, |root| {
-            vault_files::store(&state2.vault_registry, root, &account_id, &mailbox, uid, &raw, &[], false)
+            vault_files::store_prepared(&state2.vault_registry, root, &account_id, &mailbox, &prepared, &[], false)
         })
     })
     .await;

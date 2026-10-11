@@ -136,7 +136,7 @@ export function StorageFormatSettings({ usage }) {
               </div>
               {migration.state === 'failed' && (
                 <div className="text-xs text-mail-danger">
-                  {t('errors.formatFailed', { reason: migration.error || '' })}
+                  {t('errors.formatFailed', { reason: storageFormat.failureText(migration.error) })}
                 </div>
               )}
             </div>

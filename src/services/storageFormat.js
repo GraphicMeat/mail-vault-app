@@ -1,6 +1,7 @@
 import { send } from './transport.js';
 import { t, tErr } from '../i18n/index.js';
 import { formatBytes } from '../utils/formatBytes';
+import { formatCount } from '../utils/formatCount';
 
 /**
  * Settings > Storage > Message format. The vault's storage format lives in
@@ -52,6 +53,25 @@ export function errorMessage(e) {
   if (!key) return tErr(e);
   if (raw.startsWith(NO_SPACE)) return t(key, { size: formatBytes(Number(raw.slice(NO_SPACE.length).trim()) || 0) });
   return t(key);
+}
+
+// Why a conversion stopped (`migration.error`), by the codes its worker ends
+// with (format_migration_job.rs); a count follows the two that leave
+// messages or folders behind. Any other code is a refused call's.
+const STOPPED = [
+  ['E_FORMAT_UNVERIFIED:', 'errors.formatUnverified'],
+  ['E_FORMAT_REHOME_PENDING:', 'errors.formatRehomePending'],
+  ['E_FORMAT_UNREADABLE:', 'errors.formatUnreadable'],
+  ['E_FORMAT_DISK:', 'errors.formatDisk'],
+];
+
+/** A stopped conversion's reason, in the user's words. */
+export function failureText(error) {
+  const raw = text(error);
+  const hit = STOPPED.find(([prefix]) => raw.startsWith(prefix));
+  if (!hit) return raw ? errorMessage(raw) : '';
+  const count = Number(raw.slice(hit[0].length).trim().split(/\s/)[0]) || 0;
+  return t(hit[1], { count: formatCount(count) });
 }
 
 // One load of the event API, shared by every listener (mboxUpload.js has
