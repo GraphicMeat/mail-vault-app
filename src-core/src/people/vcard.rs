@@ -31,7 +31,7 @@ fn unescape(v: &str) -> String {
 }
 
 fn escape(v: &str) -> String {
-    v.replace('\\', "\\\\").replace('\n', "\\n").replace(',', "\\,").replace(';', "\;")
+    v.replace('\\', "\\\\").replace('\n', "\\n").replace(',', "\\,").replace(';', "\\;")
 }
 
 /// First ':' that is not inside a double-quoted parameter value.
