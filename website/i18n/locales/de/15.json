@@ -272,8 +272,6 @@
   "5a7f5fcf612f": "Die Schaltfläche öffnet die neueste Release-Seite. Wähle dort die Datei, die auf -setup.exe endet.",
   "e19b0b03f776": "Der Download konnte nicht von selbst starten. Die Schaltfläche öffnet die neueste Release-Seite; wähle dort die Datei, die auf -setup.exe endet.",
   "b8a88fbf1d7d": "Downloads auf GitHub",
-  "8c546f54e5a0": "50.000 Nachrichten in unter 15 ms durchsucht",
-  "a2a406478007": "Einfache .eml-Dateien, die sich in anderen Mail-Apps öffnen",
   "5045dc377704": "26. September 2026",
   "0f497e6a5d00": "Wie viel Arbeitsspeicher braucht MailVault unter Windows? Wir haben es gemessen",
   "e0cc3fda9538": "Wir haben unter Windows 11 denselben Speichertest mit 10.000 Nachrichten durchgeführt wie schon auf dem Mac: rund 210 MB beim Start, ein kurzer Höchstwert von knapp 365 MB beim Öffnen eines großen Postfachs und rund 23 MB für den Hintergrundhelfer. Jeder Prozess im Diagramm.",

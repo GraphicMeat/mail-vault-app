@@ -1,0 +1,14 @@
+{
+  "b570e0776694": "<strong class=\"mv-clip-title\">按账户、按文件夹</strong><span class=\"mv-clip-text\">选择每个账户中哪些文件夹可以通知你。这里勾选了一个文件夹，另一个账户则已关闭。</span>",
+  "b5daa0f29e4b": "<strong class=\"mv-clip-title\">已保存的视图</strong><span class=\"mv-clip-text\">点击一个已保存的视图，列表只显示符合它的邮件，这里先是“附件”，再是“待回复”。</span>",
+  "2bcc07c859a6": "<strong class=\"mv-clip-title\">定时备份</strong><span class=\"mv-clip-text\">开启自动备份并选择“在指定时间（空闲时）”。这里设为在 07、13 和 22 点运行。</span>",
+  "6ccb8318b591": "<strong class=\"mv-clip-title\">定时发送</strong><span class=\"mv-clip-text\">选择“明天上午8点”并点击“定时发送”，邮件就会在“定时发送”中等到那个时间。</span>",
+  "8c9f6d80391c": "<strong class=\"mv-clip-title\">发件人验证</strong><span class=\"mv-clip-text\">绿色盾牌表示 SPF、DKIM 和 DMARC 检查已通过。如果回复会发往与发件人不同的地址，琥珀色警告会提醒你。</span>",
+  "9e89bca92e7e": "<strong class=\"mv-clip-title\">用日常说法写规则</strong><span class=\"mv-clip-text\">像平时说话那样写一条自动标签规则。这里收件箱顶部的发票带上了“发票”标签。</span>",
+  "3db93965fafd": "<strong class=\"mv-clip-title\">给任何邮件打标签</strong><span class=\"mv-clip-text\">在打开的邮件上点击标签快捷操作，发件人下方就会出现“收据”标签。</span>",
+  "7b8cdf05fbe3": "<strong class=\"mv-clip-title\">写一次就够</strong><span class=\"mv-clip-text\">在新邮件中打开“模板”并选择“印刷报价”，它的文字就会填进邮件里。</span>",
+  "52d22ac60775": "<strong class=\"mv-clip-title\">时间胶囊</strong><span class=\"mv-clip-text\">“创建快照”会在你的快照中添加一张新卡片。打开较早的一张，就会显示它的收件箱列表。</span>",
+  "5e35a9b65afe": "<strong class=\"mv-clip-title\">撤销发送</strong><span class=\"mv-clip-text\">发送一封回复，它会等待 15 秒，并带有“撤销”按钮。点击“撤销”，草稿就回来了。</span>",
+  "cacbc05bcd14": "<strong class=\"mv-clip-title\">统一收件箱</strong><span class=\"mv-clip-text\">点击“所有收件箱”，三个账户的邮件共用一个列表，每一行都标着所属账户的颜色。</span>",
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">聊天视图</strong><span class=\"mv-clip-text\">以聊天视图打开一段对话，来回的邮件就显示为聊天气泡，按人物和话题分组。</span>"
+}

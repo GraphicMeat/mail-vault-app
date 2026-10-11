@@ -1,0 +1,14 @@
+{
+  "b570e0776694": "<strong class=\"mv-clip-title\">Per account, per cartella</strong><span class=\"mv-clip-text\">Scegli quali cartelle di ogni account possono avvisarti. Qui una cartella è selezionata e un altro account è disattivato.</span>",
+  "b5daa0f29e4b": "<strong class=\"mv-clip-title\">Viste salvate</strong><span class=\"mv-clip-text\">Clicca una vista salvata e l’elenco mostra solo ciò che le corrisponde, qui Allegati e poi Da rispondere.</span>",
+  "2bcc07c859a6": "<strong class=\"mv-clip-title\">Backup pianificati</strong><span class=\"mv-clip-text\">Attiva il backup automatico e scegli A orari prestabiliti. Qui è impostato per le 07, le 13 e le 22.</span>",
+  "6ccb8318b591": "<strong class=\"mv-clip-title\">Invio programmato</strong><span class=\"mv-clip-text\">Scegli Domani alle 8 e premi Programma invio, e il messaggio aspetta in Programmati fino a quel momento.</span>",
+  "8c9f6d80391c": "<strong class=\"mv-clip-title\">Verifica del mittente</strong><span class=\"mv-clip-text\">Uno scudo verde significa che i controlli SPF, DKIM e DMARC sono riusciti. Quando le risposte andrebbero a un indirizzo diverso da quello del mittente, un avviso ambra te lo segnala.</span>",
+  "9e89bca92e7e": "<strong class=\"mv-clip-title\">Regole scritte a parole tue</strong><span class=\"mv-clip-text\">Scrivi una regola dei Tag automatici come la diresti a voce. Qui la fattura in cima alla Posta in arrivo porta il tag Fatture.</span>",
+  "3db93965fafd": "<strong class=\"mv-clip-title\">Tagga qualsiasi messaggio</strong><span class=\"mv-clip-text\">Premi l’azione rapida del tag su un messaggio aperto e sotto il mittente compare un tag Ricevute.</span>",
+  "7b8cdf05fbe3": "<strong class=\"mv-clip-title\">Scrivilo una volta sola</strong><span class=\"mv-clip-text\">In un nuovo messaggio apri Modelli e scegli Preventivo di stampa: il suo testo entra nel messaggio.</span>",
+  "52d22ac60775": "<strong class=\"mv-clip-title\">Capsula del tempo</strong><span class=\"mv-clip-text\">Scatta uno snapshot aggiunge una nuova scheda ai tuoi snapshot. Aprine uno più vecchio e compare l’elenco della sua posta in arrivo.</span>",
+  "5e35a9b65afe": "<strong class=\"mv-clip-title\">Annulla invio</strong><span class=\"mv-clip-text\">Invia una risposta e aspetta 15 secondi con un pulsante Annulla. Clicca Annulla e la bozza torna indietro.</span>",
+  "cacbc05bcd14": "<strong class=\"mv-clip-title\">Posta in arrivo unificata</strong><span class=\"mv-clip-text\">Clicca Tutte le caselle e la posta di tre account condivide un unico elenco, con ogni riga marcata dal colore del suo account.</span>",
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">Vista chat</strong><span class=\"mv-clip-text\">Apri una conversazione nella vista chat e il botta e risposta si legge come fumetti di chat, raggruppati per persona e argomento.</span>"
+}

@@ -1,0 +1,14 @@
+{
+  "b570e0776694": "<strong class=\"mv-clip-title\">계정별, 폴더별</strong><span class=\"mv-clip-text\">계정마다 어느 폴더가 알림을 보낼 수 있는지 고릅니다. 여기서는 폴더 하나가 체크되어 있고 다른 계정은 꺼져 있습니다.</span>",
+  "b5daa0f29e4b": "<strong class=\"mv-clip-title\">저장된 보기</strong><span class=\"mv-clip-text\">저장된 보기를 클릭하면 목록에 조건에 맞는 메일만 표시됩니다. 여기서는 첨부 파일, 그다음 답장 필요입니다.</span>",
+  "2bcc07c859a6": "<strong class=\"mv-clip-title\">예약 백업</strong><span class=\"mv-clip-text\">자동 백업을 켜고 지정한 시각에를 고릅니다. 여기서는 07시, 13시, 22시에 실행되도록 설정했습니다.</span>",
+  "6ccb8318b591": "<strong class=\"mv-clip-title\">예약 발송</strong><span class=\"mv-clip-text\">내일 오전 8시를 고르고 예약 보내기를 누르면 메시지는 그때까지 예약됨에서 기다립니다.</span>",
+  "8c9f6d80391c": "<strong class=\"mv-clip-title\">발신자 검증</strong><span class=\"mv-clip-text\">녹색 방패는 SPF, DKIM, DMARC 검사를 통과했다는 뜻입니다. 답장이 보낸 사람과 다른 주소로 가게 되면 주황색 경고가 알려 줍니다.</span>",
+  "9e89bca92e7e": "<strong class=\"mv-clip-title\">쉬운 말로 쓰는 규칙</strong><span class=\"mv-clip-text\">자동 태그 규칙을 말하듯이 적습니다. 여기서는 받은편지함 맨 위의 청구서에 청구서 태그가 붙어 있습니다.</span>",
+  "3db93965fafd": "<strong class=\"mv-clip-title\">모든 메시지에 태그</strong><span class=\"mv-clip-text\">열린 메시지에서 태그 빠른 작업을 누르면 보낸 사람 아래에 영수증 태그가 나타납니다.</span>",
+  "7b8cdf05fbe3": "<strong class=\"mv-clip-title\">한 번만 쓰세요</strong><span class=\"mv-clip-text\">새 메시지에서 템플릿을 열고 인쇄 견적을 고르면 그 내용이 메시지에 삽입됩니다.</span>",
+  "52d22ac60775": "<strong class=\"mv-clip-title\">타임캡슐</strong><span class=\"mv-clip-text\">스냅숏 만들기를 누르면 스냅숏에 새 카드가 추가됩니다. 이전 스냅숏을 열면 그 시점의 받은편지함 목록이 나타납니다.</span>",
+  "5e35a9b65afe": "<strong class=\"mv-clip-title\">발송 취소</strong><span class=\"mv-clip-text\">답장을 보내면 실행 취소 버튼과 함께 15초 동안 대기합니다. 실행 취소를 클릭하면 초안이 돌아옵니다.</span>",
+  "cacbc05bcd14": "<strong class=\"mv-clip-title\">통합 받은편지함</strong><span class=\"mv-clip-text\">모든 받은편지함을 클릭하면 계정 세 개의 메일이 하나의 목록에 모이고, 각 행에 계정 색이 표시됩니다.</span>",
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">채팅 보기</strong><span class=\"mv-clip-text\">대화를 채팅 보기로 열면 오가는 메시지가 사람과 주제별로 묶인 채팅 말풍선으로 보입니다.</span>"
+}

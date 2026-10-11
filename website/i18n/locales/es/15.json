@@ -272,8 +272,6 @@
   "5a7f5fcf612f": "El botón abre la página de la última versión. Elige allí el archivo que termina en -setup.exe.",
   "e19b0b03f776": "La descarga no pudo empezar sola. El botón abre la página de la última versión; elige allí el archivo que termina en -setup.exe.",
   "b8a88fbf1d7d": "descargas en GitHub",
-  "8c546f54e5a0": "50.000 mensajes buscados en menos de 15 ms",
-  "a2a406478007": "Archivos .eml normales que se abren en otras apps de correo",
   "5045dc377704": "26 de septiembre de 2026",
   "0f497e6a5d00": "¿Cuánta memoria usa MailVault en Windows? Lo medimos",
   "e0cc3fda9538": "Hicimos en Windows 11 la misma prueba de memoria con 10.000 mensajes que hicimos en el Mac: unos 210 MB al iniciar, un pico breve cercano a 365 MB mientras se abre un buzón grande, y unos 23 MB para el proceso en segundo plano. Cada proceso, en un gráfico.",

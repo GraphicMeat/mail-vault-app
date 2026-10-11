@@ -1,0 +1,14 @@
+{
+  "b570e0776694": "<strong class=\"mv-clip-title\">アカウントごと、フォルダごと</strong><span class=\"mv-clip-text\">アカウントごとに、通知を出すフォルダを選べます。ここでは 1 つのフォルダにチェックを入れ、別のアカウントの通知をオフにしています。</span>",
+  "b5daa0f29e4b": "<strong class=\"mv-clip-title\">保存したビュー</strong><span class=\"mv-clip-text\">保存したビューをクリックすると、一覧には条件に合うメールだけが表示されます。ここでは「添付ファイル」、続いて「要返信」です。</span>",
+  "2bcc07c859a6": "<strong class=\"mv-clip-title\">スケジュールバックアップ</strong><span class=\"mv-clip-text\">自動バックアップをオンにして「指定した時刻」を選びます。ここでは 07 時、13 時、22 時に実行する設定です。</span>",
+  "6ccb8318b591": "<strong class=\"mv-clip-title\">送信の予約</strong><span class=\"mv-clip-text\">「明日 8時」を選んで「予約送信」を押すと、メッセージはその時刻まで「予約済み」に入って待機します。</span>",
+  "8c9f6d80391c": "<strong class=\"mv-clip-title\">送信者の確認</strong><span class=\"mv-clip-text\">緑の盾は、SPF、DKIM、DMARC の確認に通ったことを示します。返信先が送信者と別のアドレスの場合は、黄色の警告で知らせます。</span>",
+  "9e89bca92e7e": "<strong class=\"mv-clip-title\">ふつうの言葉で書くルール</strong><span class=\"mv-clip-text\">自動タグのルールを、口で説明するように書きます。ここでは受信トレイの先頭にある請求書に「請求書」タグが付いています。</span>",
+  "3db93965fafd": "<strong class=\"mv-clip-title\">どのメッセージにもタグを</strong><span class=\"mv-clip-text\">開いているメッセージでタグのクイックアクションを押すと、送信者の下に「領収書」タグが表示されます。</span>",
+  "7b8cdf05fbe3": "<strong class=\"mv-clip-title\">一度書けば何度でも</strong><span class=\"mv-clip-text\">新規メッセージで「テンプレート」を開き、「印刷のお見積もり」を選ぶと、その文面がメッセージに入ります。</span>",
+  "52d22ac60775": "<strong class=\"mv-clip-title\">タイムカプセル</strong><span class=\"mv-clip-text\">「スナップショットを撮る」を押すと、スナップショットの一覧に新しいカードが加わります。古いものを開くと、その時点の受信トレイの一覧が表示されます。</span>",
+  "5e35a9b65afe": "<strong class=\"mv-clip-title\">送信の取り消し</strong><span class=\"mv-clip-text\">返信を送信すると、「取り消す」ボタンが付いたまま 15 秒間待機します。「取り消す」をクリックすると、下書きに戻ります。</span>",
+  "cacbc05bcd14": "<strong class=\"mv-clip-title\">統合受信トレイ</strong><span class=\"mv-clip-text\">「すべての受信トレイ」をクリックすると、3 つのアカウントのメールが 1 つの一覧にまとまり、各行にアカウントの色が付きます。</span>",
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">チャット表示</strong><span class=\"mv-clip-text\">会話をチャット表示で開くと、やり取りが人と話題ごとにまとまったチャットの吹き出しとして表示されます。</span>"
+}

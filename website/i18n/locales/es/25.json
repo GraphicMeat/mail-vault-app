@@ -1,0 +1,14 @@
+{
+  "b570e0776694": "<strong class=\"mv-clip-title\">Por cuenta y por carpeta</strong><span class=\"mv-clip-text\">Elige qué carpetas de cada cuenta pueden notificarte. Aquí hay una carpeta marcada y otra cuenta desactivada.</span>",
+  "b5daa0f29e4b": "<strong class=\"mv-clip-title\">Vistas guardadas</strong><span class=\"mv-clip-text\">Haz clic en una vista guardada y la lista muestra solo lo que coincide, aquí Adjuntos y luego Necesita respuesta.</span>",
+  "2bcc07c859a6": "<strong class=\"mv-clip-title\">Copias programadas</strong><span class=\"mv-clip-text\">Activa la copia automática y elige A horas concretas. Aquí está configurada para las 07, 13 y 22.</span>",
+  "6ccb8318b591": "<strong class=\"mv-clip-title\">Envío programado</strong><span class=\"mv-clip-text\">Elige Mañana 8:00 y pulsa Programar envío, y el mensaje espera en Programados hasta entonces.</span>",
+  "8c9f6d80391c": "<strong class=\"mv-clip-title\">Verificación del remitente</strong><span class=\"mv-clip-text\">Un escudo verde significa que las comprobaciones SPF, DKIM y DMARC se superaron. Si las respuestas irían a una dirección distinta de la del remitente, un aviso ámbar lo indica.</span>",
+  "9e89bca92e7e": "<strong class=\"mv-clip-title\">Reglas escritas con palabras sencillas</strong><span class=\"mv-clip-text\">Escribe una regla de Etiquetas automáticas como la dirías en voz alta. Aquí la factura de arriba de la bandeja de entrada lleva la etiqueta Facturas.</span>",
+  "3db93965fafd": "<strong class=\"mv-clip-title\">Etiqueta cualquier mensaje</strong><span class=\"mv-clip-text\">Pulsa la acción rápida de etiqueta en un mensaje abierto y aparece una etiqueta Recibos bajo el remitente.</span>",
+  "7b8cdf05fbe3": "<strong class=\"mv-clip-title\">Escríbelo una vez</strong><span class=\"mv-clip-text\">En un mensaje nuevo, abre Plantillas y elige Presupuesto de impresión, y su texto se inserta en el mensaje.</span>",
+  "52d22ac60775": "<strong class=\"mv-clip-title\">Cápsula del tiempo</strong><span class=\"mv-clip-text\">Al pulsar Tomar una instantánea se añade una tarjeta nueva a tus instantáneas. Abre una anterior y aparece la lista de su bandeja de entrada.</span>",
+  "5e35a9b65afe": "<strong class=\"mv-clip-title\">Deshacer envío</strong><span class=\"mv-clip-text\">Envía una respuesta y espera 15 segundos con un botón Deshacer. Haz clic en Deshacer y tu borrador vuelve.</span>",
+  "cacbc05bcd14": "<strong class=\"mv-clip-title\">Bandeja unificada</strong><span class=\"mv-clip-text\">Haz clic en Todas las bandejas y el correo de tres cuentas comparte una lista, con cada fila marcada con el color de su cuenta.</span>",
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">Vista de chat</strong><span class=\"mv-clip-text\">Abre una conversación en la vista de chat y el ida y vuelta se lee como burbujas de chat, agrupadas por persona y tema.</span>"
+}

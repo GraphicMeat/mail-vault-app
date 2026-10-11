@@ -1,0 +1,14 @@
+{
+  "b570e0776694": "<strong class=\"mv-clip-title\">Pro Konto, pro Ordner</strong><span class=\"mv-clip-text\">Wähle, welche Ordner jedes Kontos dich benachrichtigen dürfen. Hier ist ein Ordner angehakt und ein anderes Konto ausgeschaltet.</span>",
+  "b5daa0f29e4b": "<strong class=\"mv-clip-title\">Gespeicherte Ansichten</strong><span class=\"mv-clip-text\">Klicke auf eine gespeicherte Ansicht, und die Liste zeigt nur, was dazu passt, hier Anhänge, dann Antwort nötig.</span>",
+  "2bcc07c859a6": "<strong class=\"mv-clip-title\">Geplante Sicherungen</strong><span class=\"mv-clip-text\">Schalte das automatische Backup ein und wähle Zu festgelegten Zeiten. Hier läuft es um 07, 13 und 22 Uhr.</span>",
+  "6ccb8318b591": "<strong class=\"mv-clip-title\">Geplanter Versand</strong><span class=\"mv-clip-text\">Wähle Morgen 8 Uhr und drücke Senden planen, und die Nachricht wartet bis dahin unter Geplant.</span>",
+  "8c9f6d80391c": "<strong class=\"mv-clip-title\">Absenderprüfung</strong><span class=\"mv-clip-text\">Ein grünes Schild bedeutet, dass die Prüfungen SPF, DKIM und DMARC bestanden sind. Würden Antworten an eine andere Adresse als die des Absenders gehen, weist eine orange Warnung darauf hin.</span>",
+  "9e89bca92e7e": "<strong class=\"mv-clip-title\">Regeln in einfachen Worten</strong><span class=\"mv-clip-text\">Schreibe eine Auto-Tags-Regel so, wie du sie sagen würdest. Hier trägt die Rechnung ganz oben im Posteingang das Tag Rechnungen.</span>",
+  "3db93965fafd": "<strong class=\"mv-clip-title\">Jede Nachricht taggen</strong><span class=\"mv-clip-text\">Drücke die Tag-Schnellaktion an einer geöffneten Nachricht, und unter dem Absender erscheint das Tag Belege.</span>",
+  "7b8cdf05fbe3": "<strong class=\"mv-clip-title\">Einmal schreiben</strong><span class=\"mv-clip-text\">Öffne in einer neuen Nachricht Vorlagen und wähle Druckangebot, und sein Text landet in der Nachricht.</span>",
+  "52d22ac60775": "<strong class=\"mv-clip-title\">Zeitkapsel</strong><span class=\"mv-clip-text\">Schnappschuss machen fügt deinen Schnappschüssen eine neue Karte hinzu. Öffne einen älteren, und seine Posteingangsliste erscheint.</span>",
+  "5e35a9b65afe": "<strong class=\"mv-clip-title\">Senden rückgängig</strong><span class=\"mv-clip-text\">Sende eine Antwort, und sie wartet 15 Sekunden mit einem Rückgängig-Button. Klicke auf Rückgängig, und dein Entwurf ist zurück.</span>",
+  "cacbc05bcd14": "<strong class=\"mv-clip-title\">Gemeinsamer Posteingang</strong><span class=\"mv-clip-text\">Klicke auf Alle Posteingänge, und E-Mails von drei Konten teilen sich eine Liste, jede Zeile in der Farbe ihres Kontos markiert.</span>",
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">Chat-Ansicht</strong><span class=\"mv-clip-text\">Öffne eine Unterhaltung in der Chat-Ansicht, und das Hin und Her liest sich wie Chat-Blasen, gruppiert nach Person und Thema.</span>"
+}

@@ -272,8 +272,6 @@
   "5a7f5fcf612f": "Le bouton ouvre la page de la dernière version. Choisissez-y le fichier qui se termine par -setup.exe.",
   "e19b0b03f776": "Le téléchargement n’a pas pu démarrer automatiquement. Le bouton ouvre la page de la dernière version ; choisissez-y le fichier qui se termine par -setup.exe.",
   "b8a88fbf1d7d": "téléchargements sur GitHub",
-  "8c546f54e5a0": "50 000 messages parcourus en moins de 15 ms",
-  "a2a406478007": "Des fichiers .eml simples qui s'ouvrent dans d'autres apps mail",
   "5045dc377704": "26 septembre 2026",
   "0f497e6a5d00": "Combien de mémoire MailVault utilise-t-il sous Windows ? Nous l'avons mesurée",
   "e0cc3fda9538": "Nous avons fait tourner sous Windows 11 le même test de mémoire avec 10 000 messages que sur le Mac : environ 210 MB au démarrage, un pic bref proche de 365 MB pendant l'ouverture d'une grande boîte, et environ 23 MB pour l'assistant en arrière-plan. Chaque processus, sur un graphique.",

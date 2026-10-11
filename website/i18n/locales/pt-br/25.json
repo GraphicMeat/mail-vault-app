@@ -1,0 +1,14 @@
+{
+  "b570e0776694": "<strong class=\"mv-clip-title\">Por conta, por pasta</strong><span class=\"mv-clip-text\">Escolha quais pastas de cada conta podem te notificar. Aqui uma pasta está marcada e outra conta está desativada.</span>",
+  "b5daa0f29e4b": "<strong class=\"mv-clip-title\">Visões salvas</strong><span class=\"mv-clip-text\">Clique numa visão salva e a lista mostra só o que corresponde a ela, aqui Anexos e depois Precisa de resposta.</span>",
+  "2bcc07c859a6": "<strong class=\"mv-clip-title\">Backups agendados</strong><span class=\"mv-clip-text\">Ative o backup automático e escolha Em horários definidos. Aqui ele está programado para as 07, 13 e 22.</span>",
+  "6ccb8318b591": "<strong class=\"mv-clip-title\">Envio agendado</strong><span class=\"mv-clip-text\">Escolha Amanhã às 8h e clique em Agendar envio, e a mensagem espera em Agendados até lá.</span>",
+  "8c9f6d80391c": "<strong class=\"mv-clip-title\">Verificação do remetente</strong><span class=\"mv-clip-text\">Um escudo verde significa que as verificações de SPF, DKIM e DMARC passaram. Quando as respostas iriam para um endereço diferente do remetente, um aviso âmbar diz isso.</span>",
+  "9e89bca92e7e": "<strong class=\"mv-clip-title\">Regras escritas em palavras simples</strong><span class=\"mv-clip-text\">Escreva uma regra de Etiquetas automáticas do jeito que você a diria. Aqui a fatura no topo da Caixa de entrada leva a tag Faturas.</span>",
+  "3db93965fafd": "<strong class=\"mv-clip-title\">Marque qualquer mensagem</strong><span class=\"mv-clip-text\">Clique na ação rápida de tag numa mensagem aberta e uma tag Recibos aparece sob o remetente.</span>",
+  "7b8cdf05fbe3": "<strong class=\"mv-clip-title\">Escreva uma vez</strong><span class=\"mv-clip-text\">Numa nova mensagem, abra Modelos e escolha Orçamento de impressão, e o texto dele entra na mensagem.</span>",
+  "52d22ac60775": "<strong class=\"mv-clip-title\">Cápsula do tempo</strong><span class=\"mv-clip-text\">Tirar um snapshot adiciona um novo cartão aos seus snapshots. Abra um mais antigo e a lista da caixa de entrada dele aparece.</span>",
+  "5e35a9b65afe": "<strong class=\"mv-clip-title\">Desfazer envio</strong><span class=\"mv-clip-text\">Envie uma resposta e ela espera 15 segundos com um botão Desfazer. Clique em Desfazer e o seu rascunho volta.</span>",
+  "cacbc05bcd14": "<strong class=\"mv-clip-title\">Caixa de entrada unificada</strong><span class=\"mv-clip-text\">Clique em Todas as caixas e os e-mails de três contas dividem uma lista, cada linha marcada com a cor da sua conta.</span>",
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">Visão de chat</strong><span class=\"mv-clip-text\">Abra uma conversa na visão de chat e o vai e vem aparece como balões de chat, agrupados por pessoa e assunto.</span>"
+}
