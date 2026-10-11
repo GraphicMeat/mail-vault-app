@@ -140,17 +140,21 @@ pub fn suggest(conn: &Connection, query: &str, own: &[String], from_account: Opt
     }
 
     if !own_lc.is_empty() && !q.is_empty() {
+        let upper = own_lc.len() + 2;
         let ph = (1..=own_lc.len()).map(|i| format!("?{}", i + 1)).collect::<Vec<_>>().join(",");
+        // Address prefix only, as a range the (address, sort_ms) index serves: a not-in-book
+        // recipient is found by the start of its address, not by its name or a mid-address substring.
         let sql = format!(
             "SELECT m.address, MAX(m.name) FROM message_addr m \
-             WHERE m.counted=1 AND m.role IN ('to','bcc') AND (m.address LIKE ?1 ESCAPE '\\' OR lower(m.name) LIKE ?1 ESCAPE '\\') \
+             WHERE m.counted=1 AND m.role IN ('to','bcc') AND m.address >= ?1 AND m.address < ?{upper} \
                AND m.address NOT IN (SELECT address FROM record_address) \
                AND EXISTS(SELECT 1 FROM message_addr f WHERE f.account_id=m.account_id AND f.mailbox_path=m.mailbox_path AND f.uid=m.uid AND f.role='from' AND f.address IN ({ph})) \
              GROUP BY m.address LIMIT 60"
         );
         let mut stmt = conn.prepare(&sql).map_err(err)?;
-        let mut args: Vec<rusqlite::types::Value> = vec![rusqlite::types::Value::Text(like(&q))];
+        let mut args: Vec<rusqlite::types::Value> = vec![rusqlite::types::Value::Text(q.clone())];
         args.extend(own_lc.iter().map(|a| rusqlite::types::Value::Text(a.clone())));
+        args.push(rusqlite::types::Value::Text(format!("{q}\u{10FFFF}")));
         let rows = stmt
             .query_map(rusqlite::params_from_iter(args), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
             .map_err(err)?
@@ -255,6 +259,17 @@ mod tests {
         assert!(!addrs.iter().any(|(a, _)| *a == "annoying@y.io"));
         assert!(!addrs.iter().any(|(a, _)| *a == "ab@x.io"));
         assert_eq!(out.iter().find(|s| s.address == "anna@x.io").unwrap().person_id.as_deref(), Some(known.as_str()));
+    }
+
+    #[test]
+    fn an_unknown_recipient_is_found_by_its_address_prefix_not_by_its_name_or_the_middle_of_its_address() {
+        let (_t, c) = conn();
+        let own = vec!["me@h.io".to_string()];
+        put(&c, "Sent", 1, 5_000, "me@h.io", "zoe@y.io"); // its name is "To Name"
+        let found = |q: &str| suggest(&c, q, &own, None, 10, 6_000).unwrap().iter().any(|s| s.address == "zoe@y.io" && !s.in_book);
+        assert!(found("zo") && found("ZOE@y") && found("zoe@y.io"));
+        assert!(!found("to name"), "the name of a not-in-book address is not searched");
+        assert!(!found("oe@y"), "nor the middle of its address");
     }
 
     #[test]
