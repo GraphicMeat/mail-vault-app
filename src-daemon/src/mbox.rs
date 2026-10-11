@@ -8,8 +8,8 @@
 //! deleting it.
 //!
 //! The archived-flag fix (plan decision 3, the point of this task):
-//! `import_mbox` used to write new vault files with `build_maildir_filename(uid,
-//! &[] as &[String])`, zero flags, no `archived`. `vault_files::clear_cache`
+//! `import_mbox` used to write new vault files under the name zero flags
+//! build (`&[] as &[String]`), no `archived`. `vault_files::clear_cache`
 //! deletes any file without the `archived` flag, so an mbox-imported message
 //! was silently eligible for deletion by "Clear cached emails". Fixed here:
 //! every imported message is written with `vec!["archived".to_string()]`.
@@ -34,10 +34,10 @@ use crate::handlers::deleted::{capture, Source};
 use crate::server::DaemonState;
 use mailvault_core::import_rehome;
 use mailvault_core::local_folder;
-use mailvault_core::maildir::{has_info, info_flags, is_info_sep, IMPORT_UID_BASE};
+use mailvault_core::maildir::info_flags;
+use mailvault_core::message_store;
 use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::takeout;
-use mailvault_core::vault_files::build_maildir_filename;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -155,15 +155,10 @@ fn account_folders(state: &Arc<DaemonState>, account_id: &str) -> Result<Vec<tak
     Ok(listing.map(|l| takeout::folder_refs_from_listing(&l)).unwrap_or_default())
 }
 
-/// The uid a vault file name starts with: `<uid>:2,...` (`;2,` on Windows)
-/// or a bare `<uid>.eml`.
-fn name_uid(name: &str) -> Option<u32> {
-    name.split(|c| is_info_sep(c) || c == '.').next()?.parse().ok()
-}
-
-/// Whether any file in `cur_dir` is named for `uid`, whatever its flags.
-fn uid_on_disk(cur_dir: &Path, uid: u32) -> bool {
-    std::fs::read_dir(cur_dir).into_iter().flatten().flatten().any(|e| name_uid(&e.file_name().to_string_lossy()) == Some(uid))
+/// Whether any file of the mailbox directory `folder` is named for `uid`,
+/// whatever its flags (`message_store::named_uids_at`'s rule).
+fn uid_on_disk(folder: &Path, uid: u32) -> bool {
+    message_store::named_uids_at(folder).any(|named| named == uid)
 }
 
 /// Escape "From " at the start of lines in an email body for mbox format.
@@ -338,43 +333,32 @@ pub fn export_mbox_all(
                     if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
                         continue;
                     }
-                    let cur_dir = mailbox_dir.path().join("cur");
-                    if !cur_dir.exists() {
-                        continue;
-                    }
+                    for (fname, path) in message_store::info_files_at(&mailbox_dir.path()) {
+                        if archived_only && !info_flags(&fname).map(|f| f.contains('A')).unwrap_or(false) {
+                            continue;
+                        }
 
-                    if let Ok(files) = std::fs::read_dir(&cur_dir) {
-                        for file_entry in files.flatten() {
-                            let fname = file_entry.file_name().to_string_lossy().to_string();
-                            if !has_info(&fname) {
+                        let raw = match std::fs::read(&path) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                warn!("Failed to read {}: {}", path.display(), e);
                                 continue;
                             }
-                            if archived_only && !info_flags(&fname).map(|f| f.contains('A')).unwrap_or(false) {
-                                continue;
-                            }
+                        };
 
-                            let raw = match std::fs::read(file_entry.path()) {
-                                Ok(c) => c,
-                                Err(e) => {
-                                    warn!("Failed to read {}: {}", file_entry.path().display(), e);
-                                    continue;
-                                }
-                            };
+                        let from_line = mbox_from_line(&raw);
+                        writeln!(file, "{}", from_line).map_err(|e| format!("Failed to write mbox: {}", e))?;
 
-                            let from_line = mbox_from_line(&raw);
-                            writeln!(file, "{}", from_line).map_err(|e| format!("Failed to write mbox: {}", e))?;
+                        let escaped = mbox_escape_from(&raw);
+                        file.write_all(&escaped).map_err(|e| format!("Failed to write mbox: {}", e))?;
 
-                            let escaped = mbox_escape_from(&raw);
-                            file.write_all(&escaped).map_err(|e| format!("Failed to write mbox: {}", e))?;
+                        writeln!(file).map_err(|e| format!("Failed to write mbox: {}", e))?;
 
-                            writeln!(file).map_err(|e| format!("Failed to write mbox: {}", e))?;
+                        email_count += 1;
+                        account_has_emails = true;
 
-                            email_count += 1;
-                            account_has_emails = true;
-
-                            if email_count % 100 == 0 {
-                                emit("mbox-export-progress", json!({"total": 0, "completed": email_count, "active": true}));
-                            }
+                        if email_count % 100 == 0 {
+                            emit("mbox-export-progress", json!({"total": 0, "completed": email_count, "active": true}));
                         }
                     }
                 }
@@ -500,12 +484,9 @@ impl Dest {
     /// mailbox lock and never held for a whole folder.
     fn open(state: &Arc<DaemonState>, account_dir: &Path, account_id: &str, mailbox: String, dir: String) -> Self {
         let folder = account_dir.join(&dir);
-        let mut max_uid: u32 = IMPORT_UID_BASE - 1;
-        for f in std::fs::read_dir(folder.join("cur")).into_iter().flatten().flatten() {
-            if let Some(uid) = name_uid(&f.file_name().to_string_lossy()) {
-                max_uid = max_uid.max(uid);
-            }
-        }
+        // The highest import-range uid a file is named for, or the range's
+        // first uid less one when none is (`u32::MAX` once the range is full).
+        let mut max_uid: u32 = message_store::next_import_uid(message_store::named_uids_at(&folder)).map_or(u32::MAX, |next| next - 1);
         if let Some(recorded) = import_rehome::highest_recorded_import_uid(&folder) {
             max_uid = max_uid.max(recorded);
         }
@@ -594,7 +575,7 @@ fn import_from(
         // the server lists there. Each folder answers for itself.
         let head = import_rehome::head_of(&unescaped);
         if let Some(id) = &head.id {
-            let copies = d.known.get_or_insert_with(|| folder_message_ids(&account_dir.join(&d.dir).join("cur")));
+            let copies = d.known.get_or_insert_with(|| folder_message_ids(&account_dir.join(&d.dir)));
             let body = import_rehome::body_of(&unescaped);
             // A copy in the folder decides by its content; with none, the
             // server's header decides by Subject and Date.
@@ -638,8 +619,10 @@ fn import_from(
         // row right after its write. A write that fails inside the gate is
         // `Ok(Err(..))`: the folder's own failure, or a full disk.
         let write_result = common::with_mailbox_write(state, &safe_account_id, &d.dir, |root| -> Result<Result<PathBuf, WriteFail>, String> {
-            let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&d.dir).join("cur");
-            if let Err(e) = std::fs::create_dir_all(&cur_dir) {
+            // `d.dir` is a `vault_dir_name` output, which that function keeps
+            // as it is, so the store's mailbox directory is this folder's.
+            let folder = message_store::mailbox_dir(root, &safe_account_id, &d.dir);
+            if let Err(e) = message_store::create_messages_dir(root, &safe_account_id, &d.dir) {
                 return Ok(Err(WriteFail::of("Failed to create maildir", e)));
             }
 
@@ -655,7 +638,7 @@ fn import_from(
                     Some(row) => row.is_some(),
                     None => {
                         d.listed = false;
-                        uid_on_disk(&cur_dir, uid)
+                        uid_on_disk(&folder, uid)
                     }
                 };
                 if !taken {
@@ -664,7 +647,6 @@ fn import_from(
             }
             // Spent even if the write below fails: a uid is never reused.
             d.max_uid = uid;
-            let dest = cur_dir.join(build_maildir_filename(uid, &flags));
             #[cfg(test)]
             if let Some(kind) = WRITE_FAULT.with(|f| f.borrow().as_ref().filter(|(dir, _)| *dir == d.dir).map(|(_, kind)| *kind)) {
                 return Ok(Err(WriteFail::of("Failed to write .eml", kind.into())));
@@ -674,9 +656,10 @@ fn import_from(
             // uid name appears only with the whole message behind it. A failed
             // write leaves nothing under it: at most a dot-prefixed temp no
             // uid scanner reads, so the registry has nothing to correct.
-            if let Err(e) = mailvault_core::fsx::write_atomic(&dest, &unescaped) {
-                return Ok(Err(WriteFail::of("Failed to write .eml", e)));
-            }
+            let dest = match message_store::write_new(root, &safe_account_id, &d.dir, uid, &unescaped, &flags, true) {
+                Ok(dest) => dest,
+                Err(e) => return Ok(Err(WriteFail::of("Failed to write .eml", e))),
+            };
             state.vault_registry.upsert(&safe_account_id, &d.dir, uid, &dest);
             Ok(Ok(dest))
         });
@@ -924,16 +907,13 @@ async fn kept_as_is(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, u
     .unwrap_or(false)
 }
 
-/// Message-ID -> every vault file in `cur_dir` carrying it, one bounded
-/// header read per file.
-fn folder_message_ids(cur_dir: &Path) -> HashMap<String, Vec<PathBuf>> {
+/// Message-ID -> every vault file of the mailbox directory `folder` carrying
+/// it (`message_store::info_files_at`), one bounded header read per file.
+fn folder_message_ids(folder: &Path) -> HashMap<String, Vec<PathBuf>> {
     let mut ids: HashMap<String, Vec<PathBuf>> = HashMap::new();
-    for entry in std::fs::read_dir(cur_dir).into_iter().flatten().flatten() {
-        if !has_info(&entry.file_name().to_string_lossy()) {
-            continue;
-        }
-        if let Some(id) = mailvault_core::maildir::read_message_id(&entry.path()) {
-            ids.entry(id).or_default().push(entry.path());
+    for (_, path) in message_store::info_files_at(folder) {
+        if let Some(id) = mailvault_core::maildir::read_message_id(&path) {
+            ids.entry(id).or_default().push(path);
         }
     }
     ids
@@ -942,6 +922,8 @@ fn folder_message_ids(cur_dir: &Path) -> HashMap<String, Vec<PathBuf>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mailvault_core::maildir::{is_info_sep, IMPORT_UID_BASE};
+    use mailvault_core::vault_files::build_maildir_filename;
 
     fn state(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let vault = tempfile::tempdir().unwrap();

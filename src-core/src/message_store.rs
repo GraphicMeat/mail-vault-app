@@ -766,6 +766,90 @@ pub(crate) fn copy_in(dir: &Path, uid: u32, flags: &[String], src: &Path) -> io:
     fs::copy(src, dir.join(vault_files::build_maildir_filename(uid, flags)))
 }
 
+// ── Import, export and restore ───────────────────────────────────────────────
+//
+// The mbox and backup ZIP exports, the mbox import's allocator and dedupe, and
+// the IMAP restore walk a mailbox's Maildir message directory as a whole, by
+// file name, each by its own rule. They take the mailbox directory
+// (`mailbox_dir`, or `mailbox_dir_at` for one named by its on-disk name).
+
+/// The uid a file name starts with by the loosest rule: the digits before the
+/// first info separator or `.` (`12:2,S.eml`, `12;2,S.eml` and a legacy
+/// `12.eml` all name 12; `12_S.eml` and a dot-prefixed temp name none).
+fn leading_uid(name: &str) -> Option<u32> {
+    name.split(|c| maildir::is_info_sep(c) || c == '.').next()?.parse().ok()
+}
+
+/// Every uid the files of the mailbox directory `mailbox_dir` are named for,
+/// by `leading_uid`'s rule, one per file in `read_dir` order, directories
+/// included: for the mbox import's allocator, which never hands out a uid a
+/// file name already carries. One lazy listing of the message directory; a
+/// directory that is missing or will not list names none, and an entry that
+/// will not read is skipped.
+pub fn named_uids_at(mailbox_dir: &Path) -> impl Iterator<Item = u32> {
+    fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(|entry| leading_uid(&entry.file_name().to_string_lossy()))
+}
+
+/// Every regular file of the mailbox directory `mailbox_dir` that
+/// `leading_uid` reads a uid from, as `(uid, name, path)` in `read_dir` order:
+/// what a restore uploads. One lazy listing of the message directory; a
+/// directory that is missing or will not list holds none, and an entry that
+/// will not read, or whose type will not read, is skipped.
+pub fn named_files_at(mailbox_dir: &Path) -> impl Iterator<Item = (u32, String, PathBuf)> {
+    fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(|entry| {
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            return None;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let uid = leading_uid(&name)?;
+        Some((uid, name, entry.path()))
+    })
+}
+
+/// Every file of the mailbox directory `mailbox_dir` whose name carries a
+/// Maildir info part (`maildir::has_info`), as `(name, path)` in `read_dir`
+/// order: what an mbox or backup ZIP export copies, and what an mbox import
+/// reads Message-IDs from. One lazy listing of the message directory; a
+/// directory that is missing or will not list holds none, and an entry that
+/// will not read is skipped.
+pub fn info_files_at(mailbox_dir: &Path) -> impl Iterator<Item = (String, PathBuf)> {
+    fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(|entry| {
+        let name = entry.file_name().to_string_lossy().to_string();
+        maildir::has_info(&name).then(|| (name, entry.path()))
+    })
+}
+
+/// `create_messages_dir` of the mailbox directory `mailbox_dir`, used as is.
+pub fn create_messages_dir_at(mailbox_dir: &Path) -> io::Result<()> {
+    fs::create_dir_all(messages_in(mailbox_dir))
+}
+
+/// `entry_path` in the mailbox directory `mailbox_dir`. No disk access: the
+/// file need not exist.
+pub fn entry_path_at(mailbox_dir: &Path, name: &str) -> PathBuf {
+    messages_in(mailbox_dir).join(name)
+}
+
+/// Writes `raw` as the entry `name` of the mailbox directory `mailbox_dir`,
+/// exactly as named (a backup ZIP's entry, which need not carry a uid), into
+/// the directory `create_messages_dir_at` made, and returns its path. One
+/// plain `fs::write`: it overwrites a file already under `name` and can leave
+/// a partial file on an error, so the caller checks first and invalidates the
+/// folder after a failure. Removes nothing else.
+pub fn write_named_at(mailbox_dir: &Path, name: &str, raw: &[u8]) -> io::Result<PathBuf> {
+    let path = entry_path_at(mailbox_dir, name);
+    fs::write(&path, raw)?;
+    Ok(path)
+}
+
+/// The uid the entry name `name` carries by the strict reader rule
+/// (`maildir::vault_filename_uid`), `None` for a name no listing reads a uid
+/// from: whether a file written under `name` is a message the vault registry
+/// keeps a row for.
+pub fn uid_in_name(name: &str) -> Option<u32> {
+    maildir::vault_filename_uid(name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1203,5 +1287,70 @@ mod tests {
         mirrored.sort_unstable();
         assert_eq!(mirrored, vec![4, 5]);
         assert!(maildir::mirror_files(&root.join("gone")).is_empty());
+    }
+
+    #[test]
+    fn import_export_and_restore_walks_keep_their_name_rules() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        // Nothing on disk yet: every walk is empty.
+        assert_eq!(named_uids_at(&mbox).count(), 0);
+        assert_eq!(named_files_at(&mbox).count(), 0);
+        assert_eq!(info_files_at(&mbox).count(), 0);
+
+        create_messages_dir_at(&mbox).unwrap();
+        let dir = maildir_messages_dir(&mbox);
+        // A message, a legacy name, a temp, a name with no uid, an underscore
+        // name, a directory and a stray.
+        let seven = write_named_at(&mbox, &entry_name(7, &flags(&["seen"])), b"seven").unwrap();
+        assert_eq!(seven, entry_path_at(&mbox, &format!("7{INFO_PREFIX}S.eml")));
+        assert_eq!(raw_path(root, ACCT, MBOX, 7), Some(seven.clone()));
+        fs::write(dir.join("12.eml"), b"legacy").unwrap();
+        fs::write(dir.join(format!(".8{INFO_PREFIX}S.eml.tmp-1-2")), b"temp").unwrap();
+        fs::write(dir.join(format!("x{INFO_PREFIX}A.eml")), b"no uid").unwrap();
+        fs::write(dir.join("13_S.eml"), b"underscore").unwrap();
+        fs::create_dir(dir.join(format!("15{INFO_PREFIX}S.eml"))).unwrap();
+        fs::write(dir.join("notes.txt"), b"stray").unwrap();
+
+        let mut named: Vec<u32> = named_uids_at(&mbox).collect();
+        named.sort_unstable();
+        assert_eq!(named, vec![7, 12, 15], "digits before the first separator or dot, a directory too");
+        let mut files: Vec<(u32, String)> = named_files_at(&mbox)
+            .map(|(uid, name, path)| {
+                assert_eq!(path, dir.join(&name));
+                (uid, name)
+            })
+            .collect();
+        files.sort();
+        assert_eq!(files, vec![(7, format!("7{INFO_PREFIX}S.eml")), (12, "12.eml".to_string())], "regular files only");
+        let mut infos: Vec<String> = info_files_at(&mbox)
+            .map(|(name, path)| {
+                assert_eq!(path, dir.join(&name));
+                name
+            })
+            .collect();
+        infos.sort();
+        let mut want = vec![
+            format!(".8{INFO_PREFIX}S.eml.tmp-1-2"),
+            format!("15{INFO_PREFIX}S.eml"),
+            format!("7{INFO_PREFIX}S.eml"),
+            format!("x{INFO_PREFIX}A.eml"),
+        ];
+        want.sort();
+        assert_eq!(infos, want, "every name with an info part, whatever else it is");
+
+        assert_eq!(uid_in_name(&format!("7{INFO_PREFIX}S.eml")), Some(7));
+        assert_eq!(uid_in_name(&format!("x{INFO_PREFIX}A.eml")), None);
+        assert_eq!(uid_in_name("12.eml"), None);
+
+        // A name as given lands as is.
+        let odd = format!("9{INFO_PREFIX}SA.eml");
+        assert_eq!(write_named_at(&mbox, &odd, b"nine").unwrap(), dir.join(&odd));
+        assert_eq!(read_raw(root, ACCT, MBOX, 9).unwrap(), Some(b"nine".to_vec()));
+        // A directory named as is: `mailbox_dir_at` keeps a `..` the store's own names never hold.
+        let raw_named = mailbox_dir_at(&root.join("Maildir"), ACCT, "..");
+        create_messages_dir_at(&raw_named).unwrap();
+        assert_eq!(entry_path_at(&raw_named, "1.eml"), vault_files::account_dir(&root.join("Maildir"), ACCT).join("..").join("cur").join("1.eml"));
     }
 }

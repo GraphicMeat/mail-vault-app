@@ -1565,11 +1565,10 @@ impl Runner {
         #[cfg(test)]
         lock(&self.job.rehomed).push(folder.to_string());
         if let Ok(root) = crate::handlers::common::vault_root(&self.state) {
-            if let Some(dir) = mailvault_core::vault_files::cur_path(&root, account_id, folder).parent() {
-                if let Err(e) = std::fs::remove_file(dir.join(mailvault_core::import_rehome::DONE_FILE)) {
-                    if e.kind() != std::io::ErrorKind::NotFound {
-                        return false;
-                    }
+            let dir = mailvault_core::message_store::mailbox_dir(&root, account_id, folder);
+            if let Err(e) = std::fs::remove_file(dir.join(mailvault_core::import_rehome::DONE_FILE)) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    return false;
                 }
             }
         }

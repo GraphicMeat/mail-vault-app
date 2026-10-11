@@ -60,6 +60,7 @@ const CREATE: &[&str] = &[
     "message_store::write_replacing(",
     "message_store::write_new(",
     "message_store::copy_in(",
+    "message_store::write_named_at(",
 ];
 const MOVE: &[&str] = &[
     "fs::rename(",
@@ -95,9 +96,6 @@ const ALLOWED: &[(&str, &str, &str)] = &[
     ("src-core/src/pgp.rs", "write_copy", "writes the decrypted copy into .decrypted/ beside cur/, which holds no registry row"),
     ("src-core/src/pgp.rs", "remove_copy", "removes the decrypted copy from .decrypted/ beside cur/, which holds no registry row"),
     ("src-core/src/vault_files.rs", "migrate_json_to_eml", "whole-vault legacy migration; one invalidate_all after the walk"),
-    ("src-daemon/src/backup_zip.rs", "export", "reads the vault's cur/ and creates the zip outside it"),
-    ("src-daemon/src/mbox.rs", "export_mbox_all", "reads the vault's cur/ and creates the mbox outside it"),
-    ("src-daemon/src/mbox_upload_job.rs", "rehome", "removes only the folder's .import-rehome-done stamp beside cur/, never a message file; the pass it then runs, rehome_imports_for, invalidates when anything moved"),
 ];
 
 fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
@@ -342,6 +340,7 @@ fn the_matcher_watches_message_store_writers() {
         "message_store::rebind_uids(root, a, m, &pairs);",
         "message_store::copy_in(&dir, uid, &flags, &src)?;",
         "message_store::set_flags_at(&path, uid, |f| f.to_vec())?;",
+        "message_store::write_named_at(&folder, &name, raw)?;",
     ] {
         assert!(one(&format!("fn f(dir: &Path) {{\n    crate::{call}\n}}\n")).is_some(), "{call} with no registry call must be flagged");
     }

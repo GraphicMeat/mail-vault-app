@@ -55,7 +55,7 @@ use crate::jmap_sessions::AccountJmap;
 use mailvault_core::jmap::{ImportResult, JmapClient, JmapError};
 use mailvault_core::search_index::text::vault_dir_name;
 use mailvault_core::takeout::{self, FolderRef, Home, Role};
-use mailvault_core::{maildir, vault_files};
+use mailvault_core::{maildir, message_store, vault_files};
 use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
@@ -741,7 +741,7 @@ impl MboxUpload {
                 }
             }
             let kept = common::with_mailbox_write(&st, &account, &p, |root| {
-                let cur = vault_files::cur_path(root, &account, &p);
+                let folder = message_store::mailbox_dir(root, &account, &p);
                 // A folder the vault held no files for gets its generation
                 // with its first copy, as the generation repair stamps a
                 // folder it finds without `cur/`. Left unstamped, the first
@@ -750,21 +750,21 @@ impl MboxUpload {
                 // every copy whose Message-ID its bounded header read cannot
                 // find (one past the first 128 KiB). A folder that already
                 // held files is left for that repair to judge.
-                let fresh = !cur.exists();
+                let fresh = message_store::has_message_dir(&folder).is_err();
                 if vault_files::store(&st.vault_registry, root, &account, &p, uid, &raw, &flags, false)? {
-                    if let (true, Some(v), Some(dir)) = (fresh, validity, cur.parent()) {
-                        if let Err(e) = maildir::write_generation(dir, v) {
+                    if let (true, Some(v)) = (fresh, validity) {
+                        if let Err(e) = maildir::write_generation(&folder, v) {
                             warn!("[mbox_upload] a new vault folder of {account} was not stamped with its generation: {e}");
                         }
                     }
                     return Ok(None);
                 }
-                let there = maildir::find_by_uid(&cur, uid);
+                let there = message_store::raw_path(root, &account, &p, uid);
                 if there.is_some_and(|copy| import_rehome::same_as_copy(&head, &import_rehome::body_of(&raw), &copy)) {
                     return Ok(None);
                 }
-                let name = vault_files::build_maildir_filename(uid, &flags);
-                maildir::set_aside_copy(cur.parent().unwrap_or(&cur), &name, &raw).map(Some)
+                let name = message_store::entry_name(uid, &flags);
+                maildir::set_aside_copy(&folder, &name, &raw).map(Some)
             });
             (kept, st.vault_registry.known(&account, &p, uid).is_some())
         })

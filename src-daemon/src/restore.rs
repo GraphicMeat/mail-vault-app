@@ -88,23 +88,12 @@ pub fn parse_local_flags(filename: &str) -> String {
     out.join(" ")
 }
 
-/// List uploadable messages in a Maildir `cur` directory. Skips trashed
-/// messages and non-message files. Returns messages sorted by UID.
-pub fn list_messages_in_dir(cur_dir: &std::path::Path) -> Vec<LocalMsg> {
+/// List uploadable messages in the mailbox directory `mailbox_dir`
+/// (`message_store::named_files_at`). Skips trashed messages and non-message
+/// files. Returns messages sorted by UID.
+pub fn list_messages_in_dir(mailbox_dir: &std::path::Path) -> Vec<LocalMsg> {
     let mut msgs: Vec<LocalMsg> = Vec::new();
-    let entries = match std::fs::read_dir(cur_dir) {
-        Ok(e) => e,
-        Err(_) => return msgs,
-    };
-    for entry in entries.flatten() {
-        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().to_string();
-        let uid = match name.split(|c| is_info_sep(c) || c == '.').next().and_then(|s| s.parse::<u32>().ok()) {
-            Some(u) => u,
-            None => continue,
-        };
+    for (uid, name, path) in mailvault_core::message_store::named_files_at(mailbox_dir) {
         let is_trashed = info_flags(&name)
             .map(|l| l.split(is_info_sep).next().unwrap_or("").contains('T'))
             .unwrap_or(false)
@@ -115,7 +104,7 @@ pub fn list_messages_in_dir(cur_dir: &std::path::Path) -> Vec<LocalMsg> {
         msgs.push(LocalMsg {
             uid,
             imap_flags: parse_local_flags(&name),
-            path: entry.path(),
+            path,
         });
     }
     msgs.sort_by_key(|m| m.uid);
@@ -123,7 +112,7 @@ pub fn list_messages_in_dir(cur_dir: &std::path::Path) -> Vec<LocalMsg> {
 }
 
 /// List uploadable messages for an account mailbox (real mailbox name).
-/// Forward-maps the real name to its sanitized on-disk `cur` path. Read-only:
+/// Forward-maps the real name to its sanitized on-disk mailbox directory. Read-only:
 /// a single `common::vault_root` resolution, no write gate (decision 10 --
 /// this never writes the vault).
 pub fn list_local_messages(
@@ -132,8 +121,8 @@ pub fn list_local_messages(
     mailbox: &str,
 ) -> Result<Vec<LocalMsg>, String> {
     let root = crate::handlers::common::vault_root(state)?;
-    let cur = mailvault_core::vault_files::cur_path(&root, account_id, mailbox);
-    Ok(list_messages_in_dir(&cur))
+    let mailbox_dir = mailvault_core::message_store::mailbox_dir(&root, account_id, mailbox);
+    Ok(list_messages_in_dir(&mailbox_dir))
 }
 
 /// Re-upload local Maildir messages for `folders` (real mailbox names) to the
@@ -377,8 +366,9 @@ mod tests {
     #[test]
     fn test_list_messages_in_dir() {
         use mailvault_core::maildir::{INFO_PREFIX, INFO_SEP};
-        let dir = std::env::temp_dir().join("mailvault-test-restore-list");
-        let _ = std::fs::remove_dir_all(&dir);
+        let mailbox = std::env::temp_dir().join("mailvault-test-restore-list");
+        let dir = mailbox.join("cur");
+        let _ = std::fs::remove_dir_all(&mailbox);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(format!("10{INFO_PREFIX}S.eml")), b"a").unwrap();
         std::fs::write(dir.join(format!("2{INFO_PREFIX}.eml")), b"b").unwrap();
@@ -386,13 +376,13 @@ mod tests {
         std::fs::write(dir.join(format!("40{INFO_PREFIX}T.eml")), b"d").unwrap();
         std::fs::write(dir.join("local-index.json"), b"{}").unwrap();
 
-        let msgs = list_messages_in_dir(&dir);
+        let msgs = list_messages_in_dir(&mailbox);
         let uids: Vec<u32> = msgs.iter().map(|m| m.uid).collect();
         assert_eq!(uids, vec![2, 10, 30]);
         let m30 = msgs.iter().find(|m| m.uid == 30).unwrap();
         assert_eq!(m30.imap_flags, "\\Seen \\Flagged");
 
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&mailbox);
     }
 
     /// Task 1b: the `;`-spelled sibling of `test_list_messages_in_dir`,
@@ -404,8 +394,9 @@ mod tests {
     /// legacy-Core-format spellings, which the brief does list).
     #[test]
     fn test_list_messages_in_dir_semicolon() {
-        let dir = std::env::temp_dir().join("mailvault-test-restore-list-semicolon");
-        let _ = std::fs::remove_dir_all(&dir);
+        let mailbox = std::env::temp_dir().join("mailvault-test-restore-list-semicolon");
+        let dir = mailbox.join("cur");
+        let _ = std::fs::remove_dir_all(&mailbox);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("10;2,S.eml"), b"a").unwrap();
         std::fs::write(dir.join("2;2,.eml"), b"b").unwrap();
@@ -413,12 +404,12 @@ mod tests {
         std::fs::write(dir.join("40;2,T.eml"), b"d").unwrap();
         std::fs::write(dir.join("local-index.json"), b"{}").unwrap();
 
-        let msgs = list_messages_in_dir(&dir);
+        let msgs = list_messages_in_dir(&mailbox);
         let uids: Vec<u32> = msgs.iter().map(|m| m.uid).collect();
         assert_eq!(uids, vec![2, 10, 30], "uid 40 (trashed) must still be excluded, and every uid must parse");
         let m30 = msgs.iter().find(|m| m.uid == 30).unwrap();
         assert_eq!(m30.imap_flags, "\\Seen \\Flagged");
 
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&mailbox);
     }
 }

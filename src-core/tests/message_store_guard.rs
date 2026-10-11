@@ -4,10 +4,8 @@
 //! path, finds a file by uid, parses or builds a vault filename, or scans the
 //! uid space itself.
 //!
-//! `PENDING` is the to-do list of files that still do (Tasks 2-5 empty it).
-//! It can only shrink: a file not listed that offends fails
-//! `no_new_direct_cur_access`, and a listed file that no longer offends fails
-//! `pending_list_only_shrinks` until its row is deleted.
+//! Tasks 2-5 moved every other file behind the store, so any file outside
+//! `OWNERS` that offends fails `no_new_direct_cur_access`.
 //!
 //! Every file but the store calls it by path (`message_store::write(`):
 //! `no_store_item_imports` refuses a `use` of a store item or an alias of
@@ -48,16 +46,6 @@ const OWNERS: &[&str] = &[
     "src-core/src/vault_eml.rs",
     "src-core/src/vault_files.rs",
     "src-core/src/vault_registry.rs",
-];
-
-/// Files that still reach the Maildir layout directly. Delete a row when its
-/// task moves the file behind `message_store`; never add one.
-const PENDING: &[&str] = &[
-    "src-daemon/src/backup_zip.rs",
-    "src-daemon/src/mbox.rs",
-    "src-daemon/src/mbox_upload.rs",
-    "src-daemon/src/mbox_upload_job.rs",
-    "src-daemon/src/restore.rs",
 ];
 
 fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
@@ -227,7 +215,7 @@ fn the_import_matcher_catches_store_items_and_aliases() {
 #[test]
 fn no_new_direct_cur_access() {
     let hits = offenders();
-    let new: Vec<&String> = hits.keys().filter(|f| !OWNERS.contains(&f.as_str()) && !PENDING.contains(&f.as_str())).collect();
+    let new: Vec<&String> = hits.keys().filter(|f| !OWNERS.contains(&f.as_str())).collect();
     let detail: Vec<String> = new.iter().flat_map(|f| hits[*f].iter().map(move |h| format!("{f}:{h}"))).collect();
     assert!(
         new.is_empty(),
@@ -236,11 +224,4 @@ fn no_new_direct_cur_access() {
         new.iter().map(|f| format!("    \"{f}\",")).collect::<Vec<_>>().join("\n"),
         detail.join("\n")
     );
-}
-
-#[test]
-fn pending_list_only_shrinks() {
-    let hits = offenders();
-    let stale: Vec<&str> = PENDING.iter().copied().filter(|p| !hits.contains_key(*p)).collect();
-    assert!(stale.is_empty(), "PENDING rows that no longer offend (delete them):\n{}", stale.join("\n"));
 }

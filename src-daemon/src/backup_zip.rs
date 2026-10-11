@@ -40,6 +40,7 @@
 use crate::handlers::common;
 use crate::server::DaemonState;
 use mailvault_core::maildir::{has_info, info_flags};
+use mailvault_core::message_store;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -161,27 +162,17 @@ pub fn export(
                         if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
                             continue;
                         }
-                        let cur_dir = mailbox_dir.path().join("cur");
-                        if !cur_dir.exists() {
-                            continue;
-                        }
-                        if let Ok(files) = std::fs::read_dir(&cur_dir) {
-                            for file_entry in files.flatten() {
-                                let fname = file_entry.file_name().to_string_lossy().to_string();
-                                if !has_info(&fname) {
-                                    continue;
-                                }
-                                if archived_only {
-                                    if let Some(flags_part) = info_flags(&fname) {
-                                        if !flags_part.contains('A') {
-                                            continue;
-                                        }
-                                    } else {
+                        for (fname, _) in message_store::info_files_at(&mailbox_dir.path()) {
+                            if archived_only {
+                                if let Some(flags_part) = info_flags(&fname) {
+                                    if !flags_part.contains('A') {
                                         continue;
                                     }
+                                } else {
+                                    continue;
                                 }
-                                total_files += 1;
                             }
+                            total_files += 1;
                         }
                     }
                 }
@@ -217,49 +208,37 @@ pub fn export(
                             continue;
                         }
                         let mailbox_name = mailbox_dir.file_name().to_string_lossy().to_string();
-                        let cur_dir = mailbox_dir.path().join("cur");
-                        if !cur_dir.exists() {
-                            continue;
-                        }
-
-                        if let Ok(files) = std::fs::read_dir(&cur_dir) {
-                            for file_entry in files.flatten() {
-                                let filename = file_entry.file_name().to_string_lossy().to_string();
-                                if !has_info(&filename) {
+                        for (filename, path) in message_store::info_files_at(&mailbox_dir.path()) {
+                            if archived_only {
+                                if let Some(flags_part) = info_flags(&filename) {
+                                    if !flags_part.contains('A') {
+                                        continue;
+                                    }
+                                } else {
                                     continue;
                                 }
-
-                                if archived_only {
-                                    if let Some(flags_part) = info_flags(&filename) {
-                                        if !flags_part.contains('A') {
-                                            continue;
-                                        }
-                                    } else {
-                                        continue;
-                                    }
-                                }
-
-                                let zip_path = format!("mailvault-backup/emails/{}/{}/{}", email_addr, mailbox_name, filename);
-
-                                let content = match std::fs::read(file_entry.path()) {
-                                    Ok(c) => c,
-                                    Err(e) => {
-                                        warn!("Failed to read {}: {}", file_entry.path().display(), e);
-                                        continue;
-                                    }
-                                };
-
-                                zip.start_file(&zip_path, options).map_err(|e| format!("Failed to add file to ZIP: {}", e))?;
-                                zip.write_all(&content).map_err(|e| format!("Failed to write to ZIP: {}", e))?;
-
-                                email_count += 1;
-                                account_has_emails = true;
-
-                                emit(
-                                    "export-progress",
-                                    serde_json::json!({"total": total_files, "completed": email_count, "active": true}),
-                                );
                             }
+
+                            let zip_path = format!("mailvault-backup/emails/{}/{}/{}", email_addr, mailbox_name, filename);
+
+                            let content = match std::fs::read(&path) {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    warn!("Failed to read {}: {}", path.display(), e);
+                                    continue;
+                                }
+                            };
+
+                            zip.start_file(&zip_path, options).map_err(|e| format!("Failed to add file to ZIP: {}", e))?;
+                            zip.write_all(&content).map_err(|e| format!("Failed to write to ZIP: {}", e))?;
+
+                            email_count += 1;
+                            account_has_emails = true;
+
+                            emit(
+                                "export-progress",
+                                serde_json::json!({"total": total_files, "completed": email_count, "active": true}),
+                            );
                         }
                     }
                 }
@@ -444,7 +423,7 @@ pub fn import(
         // Windows is not an error — NTFS reads the `:` as an
         // alternate-data-stream separator and silently creates a hidden
         // stream under the bare uid instead of a real file. Respell it to
-        // this platform's own `INFO_PREFIX` before it ever touches disk.
+        // this platform's own info separator before it ever touches disk.
         let filename_owned = mailvault_core::maildir::respell_for_platform(filename);
 
         // Decision 10: the gate is re-acquired here, inside the loop, once
@@ -459,15 +438,17 @@ pub fn import(
         // listing reads a uid from lands as a row right after its write; any
         // other name is not a vault message to it, as on a relisting.
         let wrote = match common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<bool, String> {
-            let cur_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &safe_account_id).join(&safe_mailbox).join("cur");
-            std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
-            let dest_path = cur_dir.join(&filename_owned);
+            // The directory named as is: `safe_mailbox` keeps a `.` or `..`
+            // that `message_store::mailbox_dir` would rename.
+            let folder = message_store::mailbox_dir_at(&root.join("Maildir"), &safe_account_id, &safe_mailbox);
+            message_store::create_messages_dir_at(&folder).map_err(|e| format!("Failed to create directory: {}", e))?;
+            let dest_path = message_store::entry_path_at(&folder, &filename_owned);
             if dest_path.exists() {
                 info!("Skipping existing file: {:?}", dest_path);
                 return Ok(false);
             }
-            let uid = mailvault_core::maildir::vault_filename_uid(&filename_owned);
-            if let Err(e) = std::fs::write(&dest_path, &content) {
+            let uid = message_store::uid_in_name(&filename_owned);
+            if let Err(e) = message_store::write_named_at(&folder, &filename_owned, &content) {
                 if uid.is_some() {
                     // A failed plain write can leave a partial file.
                     state.vault_registry.invalidate(&safe_account_id, &safe_mailbox);
