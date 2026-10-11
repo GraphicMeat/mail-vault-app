@@ -251,7 +251,7 @@ pub const IMPORT_CHUNK: usize = 200;
 
 /// Live people by normalized name: the lookup for cards with no address.
 fn people_by_name(conn: &Connection) -> Result<HashMap<String, Vec<String>>, String> {
-    let mut stmt = conn.prepare("SELECT id, display_name FROM person WHERE deleted_ms IS NULL").map_err(derr)?;
+    let mut stmt = conn.prepare("SELECT id, display_name FROM person WHERE deleted_ms IS NULL ORDER BY id").map_err(derr)?;
     let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).map_err(derr)?;
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
     for row in rows {
@@ -266,15 +266,23 @@ fn people_by_name(conn: &Connection) -> Result<HashMap<String, Vec<String>>, Str
 
 /// The person an email-less card is: same normalized name and, when the card has
 /// phones, one number in common (last 10 digits). Two people who share only a
-/// name stay two.
+/// name stay two, so a card with a name and no phone matches only a person who
+/// already holds that very card (this file imported before).
 fn owner_by_name(conn: &Connection, names: &HashMap<String, Vec<String>>, card: &VCard) -> Result<Option<String>, String> {
     let keys: Vec<String> = card.phones().iter().map(|(n, _)| phone_tail(n)).filter(|k| !k.is_empty()).collect();
+    let text = card.to_text();
     for id in names.get(&norm_name(&card.display_name())).into_iter().flatten() {
-        if keys.is_empty() {
-            return Ok(Some(id.clone()));
-        }
         let Some(existing) = get_card(conn, id)? else { continue };
-        if existing.phones.iter().any(|p| keys.contains(&phone_tail(&p.number))) {
+        let hit = if keys.is_empty() {
+            let mut held = false;
+            for rid in &existing.record_ids {
+                held |= journal::snapshot_record(conn, rid)?.is_some_and(|r| r.raw == text);
+            }
+            held
+        } else {
+            existing.phones.iter().any(|p| keys.contains(&phone_tail(&p.number)))
+        };
+        if hit {
             return Ok(Some(id.clone()));
         }
     }
@@ -602,6 +610,16 @@ mod tests {
             assert_eq!(import(&c, text).unwrap().created, 1);
             let again = import(&c, text).unwrap();
             assert_eq!((again.created, again.linked, again.skipped), (0, 0, 1));
+        }
+
+        #[test]
+        fn two_name_only_cards_with_one_name_and_different_details_are_two_people_and_stay_two() {
+            let (_t, c) = conn();
+            let text = "BEGIN:VCARD\nFN:John\nNOTE:from work\nEND:VCARD\nBEGIN:VCARD\nFN:John\nNOTE:from school\nEND:VCARD\n";
+            assert_eq!(import(&c, text).unwrap().created, 2, "nothing says they are one person");
+            let again = import(&c, text).unwrap();
+            assert_eq!((again.created, again.linked, again.skipped), (0, 0, 2));
+            assert_eq!(crate::people::store::list(&c, None, false, crate::people::store::Sort::Name, 10, 0).unwrap().1, 2);
         }
 
         #[test]
