@@ -24,6 +24,9 @@ export function serverSavesSent(account) {
   return isGraphAccount(account) || isJmapAccount(account);
 }
 
+// Loopback hosts an e2e build accepts over plain http (see jmapSessionHost).
+const E2E_LOOPBACK_HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
+
 /**
  * The host a JMAP account is keyed by (`imapHost`, so `accountLogicalKey`
  * needs no JMAP branch): the session URL's hostname, lowercased. '' for
@@ -35,7 +38,16 @@ export function serverSavesSent(account) {
 export function jmapSessionHost(url) {
   try {
     const parsed = new URL(String(url ?? '').trim());
-    return parsed.protocol === 'https:' ? parsed.hostname.toLowerCase() : '';
+    if (parsed.protocol === 'https:') return parsed.hostname.toLowerCase();
+    // E2E builds only: the mock JMAP server is plain http on loopback.
+    // VITE_E2E is a build-time constant, so a shipped build drops this branch,
+    // and the daemon still refuses http unless its own debug-only
+    // MAILVAULT_JMAP_BASE is set (src-core jmap/base.rs `url_allowed`).
+    if (import.meta.env.VITE_E2E === '1' && parsed.protocol === 'http:'
+      && E2E_LOOPBACK_HOSTS.includes(parsed.hostname)) {
+      return parsed.hostname;
+    }
+    return '';
   } catch {
     return '';
   }

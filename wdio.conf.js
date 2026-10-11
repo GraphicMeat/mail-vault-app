@@ -30,6 +30,7 @@ import {
   SLOW_APPEND_MARKER,
 } from './tests/e2e/mockImap.js';
 import { startMockGraph } from './tests/e2e/mockGraph.js';
+import { startMockJmap } from './tests/e2e/mockJmap.js';
 
 // App binary path (debug build with webdriver feature). Cargo builds into the
 // workspace target dir, not src-tauri/target — the old path pointed at a binary
@@ -286,9 +287,20 @@ export function configureMockAccounts(accounts) {
   MOCK_ACCOUNTS = accounts;
 }
 
+// The mock JMAP server is opt-in: only wdio.jmap.conf.js asks for it, so the
+// default runs never build or start it. Its origin goes to the app as
+// MAILVAULT_JMAP_BASE, which tauri-wd only inherits if the mock is up before
+// tauri-wd spawns, hence here and not in the dedicated conf.
+let MOCK_JMAP_SCENARIO = null;
+export function configureMockJmap(scenario) {
+  if (!scenario || !Array.isArray(scenario.accounts)) throw new Error('A mock JMAP scenario is required');
+  MOCK_JMAP_SCENARIO = scenario;
+}
+
 let tauriWd;
 let mockServers = [];
 let mockGraph = null;
+let mockJmap = null;
 let credentialsPath;
 let seededAccounts = [];
 
@@ -386,10 +398,12 @@ export const config = {
   // Keep broad/default suites on their existing Luke/Vader fixtures.
   // The graph-* specs need the German Outlook mailbox only wdio.graph.conf.js
   // loads into the mock, so they are never part of a default selection.
+  // The jmap-* specs need the mock JMAP server only wdio.jmap.conf.js starts.
   exclude: [
     './tests/e2e/connected-insights.test.js',
     './tests/e2e/ui-insights.test.js',
     './tests/e2e/graph-*.test.js',
+    './tests/e2e/jmap-*.test.js',
     // Measurement, not a test: 45 minutes of deliberate idling, asserts
     // nothing. wdio.ram.conf.js selects it by name.
     './tests/e2e/ram-*.test.js',
@@ -479,7 +493,7 @@ export const config = {
     if (IS_WIN) {
       winPids({ underRepo: true }).forEach(winKillTree);
     } else {
-      for (const name of ['tauri-wd', 'mailvault', 'mock-imap-server']) {
+      for (const name of ['tauri-wd', 'mailvault', 'mock-imap-server', 'mock-jmap-server']) {
         try { execFileSync('pkill', ['-x', name]); } catch { /* none running */ }
       }
     }
@@ -515,6 +529,10 @@ export const config = {
     // them reach this stand-in through MAILVAULT_GRAPH_BASE (loopback only).
     mockGraph = await startMockGraph();
 
+    // JMAP accounts reach this mock at their own session URL; the env var below
+    // only lets a debug build send credentials to it over plain http.
+    if (MOCK_JMAP_SCENARIO) mockJmap = await startMockJmap(MOCK_JMAP_SCENARIO);
+
     // onPrepare runs in the launcher, before() runs in each worker — module state
     // does not cross that boundary, but the environment workers are spawned with does.
     //
@@ -532,9 +550,13 @@ export const config = {
     process.env.E2E_MOCK_SERVERS = JSON.stringify(mockServers.map((s) => s ? { host: s.host, port: s.port, smtpPort: s.smtpPort } : null));
     process.env.E2E_MOCK_INBOX_SIZES = JSON.stringify(MOCK_ACCOUNTS.map((a) => a.inbox || 40));
     process.env.E2E_MOCK_GRAPH = JSON.stringify({ base: mockGraph.base, origin: mockGraph.origin });
+    process.env.E2E_MOCK_JMAP = mockJmap
+      ? JSON.stringify({ origin: mockJmap.origin, port: mockJmap.port, downloadPort: mockJmap.downloadPort })
+      : 'null';
 
     mockServers.forEach((s, i) => { if (s) console.log(`[wdio] Mock for ${MOCK_ACCOUNTS[i].email}: IMAP ${s.host}:${s.port}, SMTP ${s.host}:${s.smtpPort}`); });
     console.log(`[wdio] Mock Graph: ${mockGraph.base}`);
+    if (mockJmap) console.log(`[wdio] Mock JMAP: ${mockJmap.origin}/jmap/session`);
 
     return new Promise((resolve) => {
       // Trace level in CI: tauri-wd relays the app's stdout lines at
@@ -571,6 +593,9 @@ export const config = {
           // only (a release binary never looks at it), and even then honoured
           // only for a loopback base.
           MAILVAULT_GRAPH_BASE: mockGraph.base,
+          // Same rule for JMAP (src-core jmap/base.rs): debug builds only,
+          // loopback http only. Set only when wdio.jmap.conf.js started the mock.
+          ...(mockJmap ? { MAILVAULT_JMAP_BASE: mockJmap.origin } : {}),
           // Debug daemons pause this long after every 500 indexed files, so an index
           // pass over a seeded backlog lasts long enough to see and to interrupt.
           // Vaults under 500 files never pause. Release builds ignore it.
@@ -599,6 +624,7 @@ export const config = {
   onComplete: function () {
     mockServers.forEach((s) => s?.stop());
     mockGraph?.stop();
+    mockJmap?.stop();
 
     if (tauriWd && IS_WIN) {
       winKillTree(tauriWd.pid);
@@ -671,6 +697,7 @@ export const config = {
     browser.mockImap = JSON.parse(process.env.E2E_MOCK_SERVERS || '[]');
     browser.mockInboxSizes = JSON.parse(process.env.E2E_MOCK_INBOX_SIZES || '[]');
     browser.mockGraph = JSON.parse(process.env.E2E_MOCK_GRAPH || 'null');
+    browser.mockJmap = JSON.parse(process.env.E2E_MOCK_JMAP || 'null');
     browser.hasCredentials = true;
     browser.testDataDir = testDataDir;
   },
