@@ -502,7 +502,8 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if !state.mail_dir_ok
         && (req.method.starts_with("sync.")
             || req.method.starts_with("snapshot.")
-            || req.method.starts_with("contacts_index."))
+            || req.method.starts_with("contacts_index.")
+            || req.method.starts_with("people."))
     {
         return RpcResponse::error(
             id,
@@ -653,6 +654,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         return resp;
     }
     if let Some(resp) = crate::handlers::aliases::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+    if let Some(resp) = crate::handlers::people::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
 
@@ -992,6 +996,7 @@ mod tests {
             ("sync.watch_status", json!({})),
             ("snapshot.list", json!({"accountId": "a"})),
             ("contacts_index.get", json!({"accountIds": ["a"]})),
+            ("people.list", json!({})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
             assert!(msg.contains("Mail storage folder"), "{method} was not refused, got: {msg:?}");
