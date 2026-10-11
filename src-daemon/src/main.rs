@@ -39,6 +39,7 @@ mod mbox_upload_job;
 mod migration;
 mod netgate;
 mod people_index;
+mod people_snapshot;
 mod raw_message;
 pub mod llm;
 mod restore;
@@ -611,6 +612,10 @@ async fn daemon_main() {
 
     // message_addr backfill for vaults that predate it: background QoS, yields to the UI.
     people_index::spawn_backfill(Arc::clone(&state));
+
+    // contacts.vcf safety copy: restores into a vault with no people, then
+    // rewrites 30 s after the last change. Custody stays the truth.
+    people_snapshot::spawn(Arc::clone(&state));
 
     // Insights' 300s snapshot expiry sweeper (Task 3.6), same 30s loop and
     // Weak-reference exit condition as the app's version.

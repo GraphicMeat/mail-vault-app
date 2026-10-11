@@ -10,6 +10,7 @@
 //! never on the async worker.
 use crate::credentials;
 use crate::handlers::common::{blocking, str_arg};
+use crate::handlers::people_write;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use base64::Engine;
@@ -61,10 +62,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let include_app_config = params.get("includeAppConfig").and_then(Value::as_bool).unwrap_or(false);
             if include_app_config {
                 let app_dir = state.app_dir.clone();
-                let cfg = match blocking(move || app_db::with(&app_dir, |conn| app_config::snapshot(conn))).await {
+                let mut cfg = match blocking(move || app_db::with(&app_dir, |conn| app_config::snapshot(conn))).await {
                     Ok(Ok(cfg)) => cfg,
                     Ok(Err(e)) | Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
                 };
+                // The people live in custody, not app.db: one vCard text, paged
+                // like the Contacts export so a big book never holds the lock long.
+                match people_write::export_text(state, None, |_, _| {}).await {
+                    Ok(text) => cfg.contacts = (!text.is_empty()).then_some(text),
+                    Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+                }
                 let cfg_json = match serde_json::to_value(cfg) {
                     Ok(v) => v,
                     Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e.to_string())),
@@ -144,9 +151,27 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
 
             let app_dir = state.app_dir.clone();
+            let contacts = cfg.contacts.clone();
             let report = match blocking(move || app_db::with(&app_dir, |conn| app_config::merge(conn, &cfg, &account_map))).await {
                 Ok(Ok(r)) => r,
                 Ok(Err(e)) | Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+            };
+
+            // The people go into custody, one undoable import, a chunk of cards
+            // per lock. Like the AI key below, a failure here must not read as
+            // "nothing merged": the app.db half already committed.
+            let contacts_error = match contacts {
+                Some(text) => match people_write::import_chunked(state, text).await {
+                    Ok(_) => {
+                        crate::people_snapshot::note_change();
+                        false
+                    }
+                    Err(e) => {
+                        tracing::warn!("transfer: contacts not imported: {e}");
+                        true
+                    }
+                },
+                None => false,
             };
 
             // The app.db merge above already committed. A keychain hiccup on
@@ -174,6 +199,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             body.insert("aiKeyStored".to_string(), Value::Bool(ai_key_stored));
             body.insert("aiKeyError".to_string(), Value::Bool(ai_key_error));
+            body.insert("contactsError".to_string(), Value::Bool(contacts_error));
             RpcResponse::success(id, Value::Object(body))
         }
 
@@ -333,6 +359,55 @@ mod tests {
         let resp2 = call(&s, "transfer.apply_config", json!({ "appConfig": {}, "accountMap": {}, "aiEndpointKey": "sk-other" })).await;
         assert_eq!(resp2.result.unwrap()["aiKeyStored"], false);
         assert_eq!(credentials::resolve_ai_endpoint_key_guarded().await.unwrap().as_deref(), Some("sk-imported"));
+
+        std::env::remove_var("MAILVAULT_TEST_AI_KEY");
+    }
+
+    /// The people live in custody.db, which app.db's snapshot/merge cannot
+    /// reach: they travel as one vCard text in `appConfig.contacts`.
+    #[tokio::test]
+    async fn contacts_travel_in_the_app_config_and_a_second_apply_adds_nothing() {
+        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MAILVAULT_TEST_AI_KEY", dir.path().join("ai_key"));
+        let rpc = |s: &Arc<DaemonState>, m: &'static str, p: Value| {
+            let s = Arc::clone(s);
+            async move { serde_json::to_value(crate::server::handle_request_for_test(&s, m, p).await).unwrap() }
+        };
+
+        let src = st();
+        let al = rpc(&src, "people.create", json!({ "displayName": "Al", "emails": ["a@x.io"], "notes": "met at the fair" })).await["result"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        rpc(&src, "people.update", json!({ "id": al, "patch": { "vip": true } })).await;
+        rpc(&src, "people.create", json!({ "displayName": "Bo", "emails": ["b@x.io"] })).await;
+
+        let exported = call(
+            &src,
+            "transfer.export",
+            json!({ "password": "correct horse battery", "bundle": sample_bundle(), "includeAppConfig": true }),
+        )
+        .await;
+        let data = exported.result.expect("export must succeed")["data"].as_str().unwrap().to_string();
+        let out = call(&src, "transfer.decrypt", json!({ "password": "correct horse battery", "data": data })).await.result.unwrap();
+        let cfg = out["appConfig"].clone();
+        let text = cfg["contacts"].as_str().expect("contacts carried").to_string();
+        assert!(text.contains("FN:Al") && text.contains("FN:Bo") && text.contains("NOTE:met at the fair"), "{text}");
+
+        let dst = st();
+        for round in 0..2 {
+            let resp = call(&dst, "transfer.apply_config", json!({ "appConfig": cfg.clone(), "accountMap": {} })).await;
+            assert_eq!(resp.result.expect("apply_config must succeed")["contactsError"], false, "round {round}");
+            let list = rpc(&dst, "people.list", json!({})).await;
+            assert_eq!(list["result"]["total"], 2, "round {round}: the second apply must add nothing");
+        }
+        let list = rpc(&dst, "people.list", json!({})).await;
+        let al = list["result"]["items"].as_array().unwrap().iter().find(|p| p["displayName"] == "Al").expect("Al came across").clone();
+        assert_eq!(al["vip"], true);
+        let card = rpc(&dst, "people.get", json!({ "id": al["id"] })).await;
+        assert_eq!(card["result"]["notes"], "met at the fair");
+        assert_eq!(card["result"]["emails"][0]["address"], "a@x.io");
 
         std::env::remove_var("MAILVAULT_TEST_AI_KEY");
     }

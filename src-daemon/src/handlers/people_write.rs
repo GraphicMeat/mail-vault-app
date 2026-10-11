@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 const EXPORT_PAGE: usize = 200;
 
-async fn import_chunked(state: &Arc<DaemonState>, text: String) -> Result<Value, String> {
+pub(crate) async fn import_chunked(state: &Arc<DaemonState>, text: String) -> Result<Value, String> {
     let cards = tokio::task::spawn_blocking(move || vcard::VCard::parse_all(&text))
         .await
         .map_err(|e| format!("task join error: {e}"))?;
@@ -28,8 +28,8 @@ async fn import_chunked(state: &Arc<DaemonState>, text: String) -> Result<Value,
 
 /// One vCard text for `ids` (every person when `None`), built a page of people
 /// per custody call with a quiet-UI wait between pages, so a big book never
-/// holds the lock for long. Reports progress on `job` page by page.
-async fn export_text(state: &Arc<DaemonState>, ids: Option<Vec<String>>, job: &mut super::vault_files::ExportJob) -> Result<String, String> {
+/// holds the lock for long. Calls `on_page(done, total)` after each page.
+pub(crate) async fn export_text(state: &Arc<DaemonState>, ids: Option<Vec<String>>, mut on_page: impl FnMut(usize, usize)) -> Result<String, String> {
     let ids = match ids {
         Some(i) => i,
         None => db_blocking(state, store::all_ids).await?,
@@ -39,7 +39,7 @@ async fn export_text(state: &Arc<DaemonState>, ids: Option<Vec<String>>, job: &m
         let page = page.to_vec();
         done += page.len();
         text.push_str(&db_blocking(state, move |c| vcard::export(c, Some(page.as_slice()))).await?);
-        job.step(done, ids.len(), None);
+        on_page(done, ids.len());
         if done < ids.len() {
             crate::search_index::wait_foreground_quiet(&state.search_index).await;
         }
@@ -149,7 +149,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, p: &Value, id:
             let mut job = super::vault_files::ExportJob::new(state, job_id.clone(), 1);
             let state = Arc::clone(state);
             tokio::spawn(async move {
-                let text = match export_text(&state, ids, &mut job).await {
+                let text = match export_text(&state, ids, |done, total| job.step(done, total, None)).await {
                     Ok(t) => t,
                     Err(_) => return job.finish(Err("contacts.exportFailed".into())),
                 };
@@ -176,6 +176,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, p: &Value, id:
         }
         _ => return None,
     };
+    if res.is_ok() {
+        crate::people_snapshot::note_change();
+    }
     Some(done(id, res))
 }
 
