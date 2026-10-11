@@ -244,6 +244,7 @@ describe('Contacts', function () {
   });
 
   it('opens the review queue and leaves its contents alone', async () => {
+    await dismissOnboardingNotice();
     await clickReachableOrExplain(tid('contacts-review-tab'));
     await waitShown(tid('review-queue'), 15000);
     const rows = await browser.execute(() => document.querySelectorAll('[data-testid^="review-row-"]').length);
@@ -252,7 +253,8 @@ describe('Contacts', function () {
     } else {
       assert.ok(await present(tid('review-add-all')), 'A non-empty queue offers a bulk add');
     }
-    await clickReachable(tid('contacts-review-tab'));
+    await dismissOnboardingNotice();
+    await clickReachableOrExplain(tid('contacts-review-tab'));
     await waitShown(tid('contacts-new'), 10000);
     assert.equal(await present(tid('review-queue')), false, 'The tab toggles back to the people list');
   });
