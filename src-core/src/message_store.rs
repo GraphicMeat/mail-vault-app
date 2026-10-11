@@ -12,7 +12,7 @@
 //!
 //! Task 1: one format, Maildir (`cur/<uid>:2,<FLAGS>.eml`). `vault_format`
 //! always answers `Maildir`, and `write` and `write_replacing` are the same.
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -100,7 +100,13 @@ fn open_by_uid(dir: &Path, uid: u32) -> io::Result<Option<fs::File>> {
 /// One entry per vault file (`maildir::vault_filename_uid`'s rule), by uid then
 /// name. An entry that will not stat counts as size and mtime 0.
 pub fn list(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<Entry>> {
-    let entries = match fs::read_dir(messages_dir(root, account_id, mailbox)) {
+    list_at(&mailbox_dir(root, account_id, mailbox))
+}
+
+/// `list` of the mailbox directory `mailbox_dir`, for a caller that walks the
+/// mailbox directories by their on-disk names (a snapshot).
+pub fn list_at(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
+    let entries = match fs::read_dir(messages_in(mailbox_dir)) {
         Ok(entries) => entries,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(e),
@@ -122,33 +128,38 @@ pub fn find(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<En
     Some(entry_of(uid, name, fs::metadata(&path).ok()))
 }
 
-/// Every file of the mailbox that names a uid: `(in orphaned/, uid, path)`,
-/// its message directory first, then `orphaned/`, each by uid then path. The
-/// uid is read by the loosest rule any reader uses (`maildir::mirror_filename_uid`:
-/// legacy `12.eml`, `.regen` leftovers, `orphaned/`'s `.1` dedupe suffixes),
-/// exactly as `graph_ledger`'s allocator has always counted a uid as taken.
-/// A missing directory is empty; any other listing failure, including one
-/// unreadable entry, is an error: reading it as empty would hand out a uid a
-/// file on disk already carries.
-fn taken_files(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<(bool, u32, PathBuf)>> {
-    let dirs = [
-        (false, messages_dir(root, account_id, mailbox)),
-        (true, mailbox_dir(root, account_id, mailbox).join(maildir::ORPHAN_DIR)),
-    ];
+/// Every file of the mailbox directory `mailbox_dir` that names a uid:
+/// `(in orphaned/, uid, path)`, its message directory first, then
+/// `orphaned/`, each in `read_dir` order. The uid is read by the loosest rule
+/// any reader uses (`maildir::mirror_filename_uid`: legacy `12.eml`, `.regen`
+/// leftovers, `orphaned/`'s `.1` dedupe suffixes), exactly as `graph_ledger`'s
+/// allocator has always counted a uid as taken. A missing directory is empty;
+/// any other listing failure, including one unreadable entry, is an error
+/// that names the directory (`could not list <dir>: <cause>`, its kind kept):
+/// reading it as empty would hand out a uid a file on disk already carries.
+fn taken_files_at(mailbox_dir: &Path) -> io::Result<Vec<(bool, u32, PathBuf)>> {
+    let dirs = [(false, messages_in(mailbox_dir)), (true, mailbox_dir.join(maildir::ORPHAN_DIR))];
     let mut out = Vec::new();
     for (orphaned, dir) in dirs {
+        let unlisted = |e: io::Error| io::Error::new(e.kind(), format!("could not list {}: {}", dir.display(), e));
         let entries = match fs::read_dir(&dir) {
             Ok(entries) => entries,
             Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e),
+            Err(e) => return Err(unlisted(e)),
         };
         for entry in entries {
-            let entry = entry?;
+            let entry = entry.map_err(unlisted)?;
             if let Some(uid) = maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()) {
                 out.push((orphaned, uid, entry.path()));
             }
         }
     }
+    Ok(out)
+}
+
+/// `taken_files_at` of the mailbox, each directory by uid then path.
+fn taken_files(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<(bool, u32, PathBuf)>> {
+    let mut out = taken_files_at(&mailbox_dir(root, account_id, mailbox))?;
     out.sort();
     Ok(out)
 }
@@ -156,8 +167,8 @@ fn taken_files(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<(
 /// Every uid this mailbox holds or held: cur/ + jmap/ + orphaned/. The ONLY source for "which uids are taken".
 /// Task 1: the message directory plus `orphaned/` (no `jmap/` yet), by the
 /// loose rule `taken_files` documents. Includes the mbox import range
-/// (`maildir::IMPORT_UID_BASE` and up); a caller that allocates server-range
-/// uids takes `range(..IMPORT_UID_BASE)` of this set.
+/// (`is_import_uid`); a caller that allocates server-range uids leaves those
+/// out.
 pub fn uids(root: &Path, account_id: &str, mailbox: &str) -> io::Result<BTreeSet<u32>> {
     Ok(taken_files(root, account_id, mailbox)?.into_iter().map(|(_, uid, _)| uid).collect())
 }
@@ -207,6 +218,13 @@ pub fn held_uids(root: &Path, account_id: &str, mailbox: &str) -> Option<Vec<u32
 /// up): a number the vault gave an imported message, never a server's.
 pub fn is_import_uid(uid: u32) -> bool {
     uid >= maildir::IMPORT_UID_BASE
+}
+
+/// The next uid of the mbox import range above every import-range uid in
+/// `taken`: the range's first uid when `taken` holds none of them, `None`
+/// once the range is full. For an allocator of import-range uids.
+pub fn next_import_uid(taken: impl IntoIterator<Item = u32>) -> Option<u32> {
+    taken.into_iter().filter(|uid| is_import_uid(*uid)).max().map_or(Some(maildir::IMPORT_UID_BASE), |m| m.checked_add(1))
 }
 
 /// (uid, normalized Message-ID) for cur/ + jmap/ (+ orphaned/): graph_ledger adoption, mbox dedupe.
@@ -410,6 +428,52 @@ pub fn flag_letters(flags: &[String]) -> String {
 /// derived store's row of a message no file holds yet (a header-only row).
 pub fn entry_name(uid: u32, flags: &[String]) -> String {
     vault_files::build_maildir_filename(uid, flags)
+}
+
+/// A mailbox's uid space read once, for a uid allocator: what `uids` counts,
+/// and the held copies a reader finds by uid.
+#[derive(Debug, Default)]
+pub struct UidSpace {
+    /// Every uid a file carries (`uids`' set): the message directory and
+    /// `orphaned/`, by the loose rule.
+    pub taken: BTreeSet<u32>,
+    /// uid -> the file `raw_path` finds for it: the message directory only,
+    /// by the strict rule (`maildir::vault_filename_uid`), the first file
+    /// `read_dir` returned for the uid.
+    pub held: HashMap<u32, PathBuf>,
+}
+
+/// Disk only. The `UidSpace` of the mailbox directory `mailbox_dir`, from one
+/// listing of each directory, with `uids`' errors: a missing directory is
+/// empty, any other listing failure is an error that names the directory.
+pub fn uid_space_at(mailbox_dir: &Path) -> io::Result<UidSpace> {
+    let mut space = UidSpace::default();
+    for (orphaned, uid, path) in taken_files_at(mailbox_dir)? {
+        space.taken.insert(uid);
+        if orphaned {
+            continue;
+        }
+        if let Some(held) = path.file_name().and_then(|name| maildir::vault_filename_uid(&name.to_string_lossy())) {
+            space.held.entry(held).or_insert(path);
+        }
+    }
+    Ok(space)
+}
+
+/// Every held uid's file (`raw_path`'s file) in the mailbox directory
+/// `mailbox_dir`, from one listing: the first file `read_dir` returns per
+/// uid, no stat. Lenient, for a reader that walks a whole folder: a directory
+/// that is missing or will not list is empty, and an entry that will not
+/// read is skipped.
+pub fn raw_paths_at(mailbox_dir: &Path) -> HashMap<u32, PathBuf> {
+    maildir::uid_file_map(&messages_in(mailbox_dir))
+}
+
+/// The Maildir message directory of the mailbox directory `mailbox_dir`, for
+/// a pass that re-checks and renames Maildir files by name (the import
+/// rehome). Every other caller asks by uid.
+pub(crate) fn maildir_messages_dir(mailbox_dir: &Path) -> PathBuf {
+    messages_in(mailbox_dir)
 }
 
 // ── Path-level helpers for `vault_files` ─────────────────────────────────────
@@ -737,5 +801,55 @@ mod tests {
         assert_eq!(flag_letters(&flags(&["Seen", "a", "\\Answered", "replied"])), "SAR", "in order, case-blind, letters too");
         assert_eq!(entry_name(7, &flags(&["seen", "flagged"])), name);
         assert_eq!(flag_letters(&flags_in_name(&entry_name(7, &flags(&["replied", "draft"])))), "DR");
+    }
+
+    #[test]
+    fn uid_space_raw_paths_and_list_at_a_mailbox_dir() {
+        use crate::maildir::IMPORT_UID_BASE;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        // Nothing on disk yet: an empty space, an empty map, an empty listing.
+        let empty = uid_space_at(&mbox).unwrap();
+        assert!(empty.taken.is_empty() && empty.held.is_empty());
+        assert!(raw_paths_at(&mbox).is_empty());
+        assert_eq!(list_at(&mbox).unwrap(), Vec::new());
+
+        write(root, ACCT, MBOX, 3, b"Message-ID: <three@x.test>\r\n\r\nthree", &flags(&["seen"])).unwrap();
+        write(root, ACCT, MBOX, IMPORT_UID_BASE + 2, b"imported", &[]).unwrap();
+        let dir = messages_dir(root, ACCT, MBOX);
+        assert_eq!(maildir_messages_dir(&mbox), dir);
+        // A legacy name: taken by the loose rule, never held.
+        fs::write(dir.join("12.eml"), b"legacy").unwrap();
+        let orphaned = mbox.join(maildir::ORPHAN_DIR);
+        fs::create_dir_all(&orphaned).unwrap();
+        fs::write(orphaned.join(format!("20{INFO_PREFIX}S.eml")), b"set aside").unwrap();
+
+        let space = uid_space_at(&mbox).unwrap();
+        assert_eq!(space.taken, uids(root, ACCT, MBOX).unwrap());
+        assert_eq!(space.taken, BTreeSet::from([3, 12, 20, IMPORT_UID_BASE + 2]));
+        let held: BTreeSet<u32> = space.held.keys().copied().collect();
+        assert_eq!(held, BTreeSet::from([3, IMPORT_UID_BASE + 2]));
+        assert_eq!(space.held.get(&3), raw_path(root, ACCT, MBOX, 3).as_ref());
+        let paths = raw_paths_at(&mbox);
+        assert_eq!(paths.get(&3), raw_path(root, ACCT, MBOX, 3).as_ref());
+        assert_eq!(paths.len(), 2, "held copies only: {paths:?}");
+        assert_eq!(list_at(&mbox).unwrap(), list(root, ACCT, MBOX).unwrap());
+
+        // The import range: past its highest uid, its first uid when empty, None when full.
+        assert_eq!(next_import_uid(space.taken.iter().copied()), Some(IMPORT_UID_BASE + 3));
+        assert_eq!(next_import_uid([3, 12]), Some(IMPORT_UID_BASE));
+        assert_eq!(next_import_uid([u32::MAX]), None);
+
+        // A message directory that will not list is an error that names it.
+        #[cfg(unix)]
+        {
+            let broken = mailbox_dir(root, ACCT, "Broken");
+            fs::create_dir_all(&broken).unwrap();
+            fs::write(broken.join("cur"), b"not a directory").unwrap();
+            let err = uid_space_at(&broken).unwrap_err();
+            assert!(err.to_string().starts_with("could not list "), "{err}");
+            assert!(raw_paths_at(&broken).is_empty(), "lenient: an unlistable directory is empty");
+        }
     }
 }

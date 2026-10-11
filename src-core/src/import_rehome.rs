@@ -1,6 +1,6 @@
 //! Old mbox imports moved out of the server's uid range.
 //!
-//! Before imports got a range of their own (`maildir::IMPORT_UID_BASE`), mbox
+//! Before imports got a range of their own (`message_store::is_import_uid`), mbox
 //! import numbered its messages from `max local uid + 1`: uids the server has
 //! or will give its own mail. Such a file sits at `cur/<U>:2,A…` and hides the
 //! server's message U three ways: the list shows the server row and drops the
@@ -23,7 +23,8 @@
 //! which `replay` applies to the backup folder too: the backup's pre-sync copies
 //! by uid in both directions, and would otherwise put U straight back.
 
-use crate::maildir::{self, IMPORT_UID_BASE, ORPHAN_DIR};
+use crate::maildir::{self, ORPHAN_DIR};
+use crate::message_store;
 use crate::pgp::DECRYPTED_DIR;
 use mailparse::MailHeaderMap;
 use serde::{Deserialize, Serialize};
@@ -248,8 +249,8 @@ pub struct Plan {
 /// mail the server holds under another uid.
 pub fn plan(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: &HashSet<u32>) -> Plan {
     let mut plan = Plan::default();
-    let files = maildir::uid_file_map(&mailbox_dir.join("cur"));
-    let mut uids: Vec<u32> = files.keys().copied().filter(|u| *u < IMPORT_UID_BASE && !protected.contains(u)).collect();
+    let files = message_store::raw_paths_at(mailbox_dir);
+    let mut uids: Vec<u32> = files.keys().copied().filter(|u| !message_store::is_import_uid(*u) && !protected.contains(u)).collect();
     uids.sort_unstable();
     let mut confirmed = 0u32;
     for uid in uids {
@@ -303,7 +304,7 @@ fn import_twins(server: &ServerView, is_graph: bool, protected: &HashSet<u32>, f
     if is_graph {
         return Vec::new();
     }
-    let mut uids: Vec<u32> = files.keys().copied().filter(|u| *u >= IMPORT_UID_BASE && !protected.contains(u)).collect();
+    let mut uids: Vec<u32> = files.keys().copied().filter(|u| message_store::is_import_uid(*u) && !protected.contains(u)).collect();
     uids.sort_unstable();
     let mut out = Vec::new();
     for uid in uids {
@@ -325,7 +326,7 @@ fn import_twins(server: &ServerView, is_graph: bool, protected: &HashSet<u32>, f
 /// A plan of the import copies alone (`import_twins`), for a folder whose
 /// server-range files were sorted for good by an earlier pass.
 pub fn plan_import_twins(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: &HashSet<u32>) -> Plan {
-    let files = maildir::uid_file_map(&mailbox_dir.join("cur"));
+    let files = message_store::raw_paths_at(mailbox_dir);
     Plan { set_aside: import_twins(server, is_graph, protected, &files), ..Default::default() }
 }
 
@@ -414,7 +415,7 @@ pub fn apply(mailbox_dir: &Path, plan: &Plan) -> Result<Report, String> {
 /// A pass cut short after this leaves entries whose files never moved, which
 /// `replay` completes: the ledger is written once per pass, never per chunk.
 pub fn record(mailbox_dir: &Path, plan: &Plan) -> Result<(Vec<Step>, u32), String> {
-    let cur = mailbox_dir.join("cur");
+    let cur = message_store::maildir_messages_dir(mailbox_dir);
     let still_there = |p: &&Planned| cur.join(&p.name).is_file();
     let moves: Vec<&Planned> = plan.to_import.iter().filter(still_there).collect();
     let asides: Vec<&Planned> = plan.set_aside.iter().filter(still_there).collect();
@@ -426,7 +427,7 @@ pub fn record(mailbox_dir: &Path, plan: &Plan) -> Result<(Vec<Step>, u32), Strin
     let mut steps = Vec::with_capacity(moves.len() + asides.len());
     if !moves.is_empty() {
         // A full listing of `cur/`: only a pass that moves anything needs it.
-        let mut next = next_import_uid(&cur, &ledger);
+        let mut next = next_import_uid(mailbox_dir, &ledger);
         for p in &moves {
             let to = next.ok_or("The import uid range is full")?;
             next = to.checked_add(1);
@@ -451,7 +452,7 @@ pub fn record(mailbox_dir: &Path, plan: &Plan) -> Result<(Vec<Step>, u32), Strin
 /// still sits at a recorded uid.
 pub fn carry_out(mailbox_dir: &Path, steps: &[Step]) -> Report {
     let mut report = Report::default();
-    let cur = mailbox_dir.join("cur");
+    let cur = message_store::maildir_messages_dir(mailbox_dir);
     // Read once per call, and only when it moves anything.
     let mut taken: Option<HashSet<u32>> = None;
     for step in steps {
@@ -460,7 +461,7 @@ pub fn carry_out(mailbox_dir: &Path, steps: &[Step]) -> Report {
             report.skipped += 1;
             continue;
         }
-        let target = step.to.filter(|to| !taken.get_or_insert_with(|| maildir::uid_file_map(&cur).into_keys().collect()).contains(to));
+        let target = step.to.filter(|to| !taken.get_or_insert_with(|| message_store::raw_paths_at(mailbox_dir).into_keys().collect()).contains(to));
         let result = match target {
             Some(to) => fs::rename(&src, cur.join(maildir::with_uid(&step.name, to))).map_err(|e| e.to_string()),
             None => set_aside(mailbox_dir, &src, &step.name),
@@ -488,25 +489,18 @@ pub fn carry_out(mailbox_dir: &Path, steps: &[Step]) -> Report {
 }
 
 /// One past every import-range uid in `cur/` and in the ledger (moved to, or
-/// set aside from), or the base. `None` once the range is full.
-fn next_import_uid(cur: &Path, ledger: &[LedgerEntry]) -> Option<u32> {
-    let in_cur = fs::read_dir(cur)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| maildir::vault_filename_uid(&e.file_name().to_string_lossy()));
-    in_cur
-        .chain(ledger_import_uids(ledger))
-        .filter(|u| *u >= IMPORT_UID_BASE)
-        .max()
-        .map_or(Some(IMPORT_UID_BASE), |m| m.checked_add(1))
+/// set aside from), or the range's first uid (`message_store::next_import_uid`).
+/// `None` once the range is full.
+fn next_import_uid(mailbox_dir: &Path, ledger: &[LedgerEntry]) -> Option<u32> {
+    let in_cur = message_store::raw_paths_at(mailbox_dir).into_keys();
+    message_store::next_import_uid(in_cur.chain(ledger_import_uids(ledger)))
 }
 
 /// Every import-range uid the ledger names, as a target or as a copy set
 /// aside from it: none of them may be handed out again, or `replay` would
 /// act on the new file at that uid.
 fn ledger_import_uids(ledger: &[LedgerEntry]) -> impl Iterator<Item = u32> + '_ {
-    ledger.iter().flat_map(|e| [Some(e.from), e.to]).flatten().filter(|u| *u >= IMPORT_UID_BASE)
+    ledger.iter().flat_map(|e| [Some(e.from), e.to]).flatten().filter(|u| message_store::is_import_uid(*u))
 }
 
 /// The highest import-range uid the folder's ledger names, for an importer
@@ -564,13 +558,16 @@ pub fn replay(vault_mailbox_dir: &Path, mirror_mailbox_dir: &Path) -> bool {
             return false;
         }
     };
-    let vault_touched = replay_into(vault_mailbox_dir, maildir::uid_file_map(&vault_mailbox_dir.join("cur")), &ledger);
-    replay_into(mirror_mailbox_dir, maildir::mirror_file_map(&mirror_mailbox_dir.join("cur")), &ledger);
+    let vault_cur = message_store::maildir_messages_dir(vault_mailbox_dir);
+    let vault_touched = replay_into(vault_mailbox_dir, &vault_cur, message_store::raw_paths_at(vault_mailbox_dir), &ledger);
+    let mirror_cur = maildir::mirror_cur_in(mirror_mailbox_dir);
+    replay_into(mirror_mailbox_dir, &mirror_cur, maildir::mirror_file_map(&mirror_cur), &ledger);
     vault_touched
 }
 
-fn replay_into(mailbox_dir: &Path, mut files: HashMap<u32, PathBuf>, ledger: &[LedgerEntry]) -> bool {
-    let cur = mailbox_dir.join("cur");
+/// `replay` onto one side: `files` lists `cur`, the message directory inside
+/// `mailbox_dir`.
+fn replay_into(mailbox_dir: &Path, cur: &Path, mut files: HashMap<u32, PathBuf>, ledger: &[LedgerEntry]) -> bool {
     let mut changed = false;
     for entry in ledger {
         let Some(path) = files.get(&entry.from).cloned() else { continue };
@@ -606,7 +603,7 @@ fn replay_into(mailbox_dir: &Path, mut files: HashMap<u32, PathBuf>, ledger: &[L
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::maildir::INFO_PREFIX;
+    use crate::maildir::{IMPORT_UID_BASE, INFO_PREFIX};
     use serde_json::json;
 
     const DATE: &str = "Mon, 1 Jan 2024 10:00:00 +0000";

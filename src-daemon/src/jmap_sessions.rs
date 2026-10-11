@@ -13,7 +13,7 @@ use crate::server::DaemonState;
 use mailvault_core::custody::Connection;
 use mailvault_core::jmap::mailbox_map::mailbox_tree;
 use mailvault_core::jmap::{ImportResult, JMailbox, JmapClient, JmapError};
-use mailvault_core::{graph_ledger, header_cache, vault_files};
+use mailvault_core::{graph_ledger, header_cache};
 use mailvault_core::imap::MailboxInfo;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -316,8 +316,7 @@ impl AccountJmap {
         tokio::task::spawn_blocking(move || {
             with_vault_write(&state, |root| {
                 let ledger = jmap_ledger_path(root, &account_id, &mailbox);
-                let cur = vault_files::cur_path(root, &account_id, &mailbox);
-                graph_ledger::allocate(&ledger, &cur, &listed)
+                graph_ledger::allocate_in(&ledger, root, &account_id, &mailbox, &listed)
             })
         })
         .await

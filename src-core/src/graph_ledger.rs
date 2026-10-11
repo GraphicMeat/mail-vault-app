@@ -11,8 +11,9 @@
 //! What a new id gets, in order of preference:
 //! - the uid of a vault file with its Message-ID that no ledger entry owns, so
 //!   mail an earlier backup already stored is not fetched again;
-//! - otherwise one more than every uid in the ledger AND every uid a file name
-//!   carries in the vault's `cur/` or `orphaned/`, so a copy filed there under
+//! - otherwise one more than every uid in the ledger AND every uid the store
+//!   counts as taken in the mailbox (`message_store::uid_space_at`: a file
+//!   name in the vault's `cur/` or `orphaned/`), so a copy filed there under
 //!   some older numbering can never block the message the ledger hands that
 //!   number to.
 //!
@@ -30,7 +31,8 @@
 //! clear path keeps both names (`LEDGER_FILES`).
 
 use crate::fsx;
-use crate::maildir::{mirror_filename_uid, IMPORT_UID_BASE, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
+use crate::maildir::{normalize_message_id, read_message_id};
+use crate::message_store;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
@@ -168,7 +170,7 @@ pub type Ledger = BTreeMap<u32, String>;
 
 /// Held for a whole load-allocate-persist, so the app's listings and the backup
 /// never allocate from the same stale read. The value is a memo of the
-/// Message-IDs read from vault files, per `cur/` dir and uid: the app seeds a
+/// Message-IDs read from vault files, per mailbox dir and uid: the app seeds a
 /// folder 200 ids at a time, and reading every file again per page is quadratic.
 // ponytail: one lock for every mailbox, not one per ledger path. The file
 // lock above now covers two processes racing the SAME ledger (Task 2.4);
@@ -195,43 +197,24 @@ pub fn load(path: &Path) -> Result<Ledger, String> {
 }
 
 struct DiskView {
-    /// The highest uid any file name in `cur/` or `orphaned/` parses to, by the
-    /// loosest rule any reader uses (legacy `12.eml`, `.regen` leftovers, set-aside files).
+    /// The highest uid any file name in `cur/` or `orphaned/` parses to below
+    /// the mbox import range, by the loosest rule any reader uses (legacy
+    /// `12.eml`, `.regen` leftovers, set-aside files).
     highest: u32,
     /// Canonical `<uid>:` files in `cur/`: the ones a reader finds by uid.
     canonical: HashMap<u32, PathBuf>,
 }
 
-/// `cur_dir` (and its sibling `orphaned/`) missing is an empty view: a mailbox
-/// never backed up has no `cur/` yet. Any other failure to list either
-/// directory, including a single unreadable entry partway through, is an
-/// error: reading it as empty would hand out a uid a file on disk already
-/// carries, the same reason `load` refuses unreadable input.
-fn scan(cur_dir: &Path) -> Result<DiskView, String> {
-    let mut view = DiskView { highest: 0, canonical: HashMap::new() };
-    let orphaned = cur_dir.parent().map(|mailbox| mailbox.join(ORPHAN_DIR));
-    for (dir, is_cur) in [(Some(cur_dir.to_path_buf()), true), (orphaned, false)] {
-        let Some(dir) = dir else { continue };
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(format!("Outlook uid allocation could not list {}: {}", dir.display(), e)),
-        };
-        for entry in entries {
-            let entry = entry
-                .map_err(|e| format!("Outlook uid allocation could not list {}: {}", dir.display(), e))?;
-            let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(uid) = mirror_filename_uid(&name).filter(|u| *u < IMPORT_UID_BASE) {
-                view.highest = view.highest.max(uid);
-            }
-            if is_cur {
-                if let Some(uid) = vault_filename_uid(&name) {
-                    view.canonical.entry(uid).or_insert_with(|| entry.path());
-                }
-            }
-        }
-    }
-    Ok(view)
+/// The mailbox's uid space, read through the store
+/// (`message_store::uid_space_at`). No `cur/` and no `orphaned/` is an empty
+/// view: a mailbox never backed up has no `cur/` yet. Any other failure to
+/// list either directory, including a single unreadable entry partway
+/// through, is an error: reading it as empty would hand out a uid a file on
+/// disk already carries, the same reason `load` refuses unreadable input.
+fn disk_view(mailbox_dir: &Path) -> Result<DiskView, String> {
+    let space = message_store::uid_space_at(mailbox_dir).map_err(|e| format!("Outlook uid allocation {e}"))?;
+    let highest = space.taken.iter().rev().find(|uid| !message_store::is_import_uid(**uid)).copied().unwrap_or(0);
+    Ok(DiskView { highest, canonical: space.held })
 }
 
 fn persist(path: &Path, ledger: &Ledger) -> Result<(), String> {
@@ -246,7 +229,25 @@ fn persist(path: &Path, ledger: &Ledger) -> Result<(), String> {
 /// One uid per `listed` entry, in order. `listed` pairs each Graph id with its
 /// internetMessageId as Graph returns it. Every new number is on disk before
 /// this returns; on any error no uid is returned and the ledger is unchanged.
+/// `cur_dir` is the mailbox's `cur/`; the uid space is read through the store
+/// from the mailbox directory that holds it.
 pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<String>)]) -> Result<Vec<u32>, String> {
+    allocate_at(ledger_path, cur_dir.parent().unwrap_or(cur_dir), listed)
+}
+
+/// `allocate` for `mailbox` of `account_id` in the vault at `root`.
+pub fn allocate_in(
+    ledger_path: &Path,
+    root: &Path,
+    account_id: &str,
+    mailbox: &str,
+    listed: &[(String, Option<String>)],
+) -> Result<Vec<u32>, String> {
+    allocate_at(ledger_path, &message_store::mailbox_dir(root, account_id, mailbox), listed)
+}
+
+/// `allocate` over the mailbox directory `mailbox_dir`, which also keys the memo.
+fn allocate_at(ledger_path: &Path, mailbox_dir: &Path, listed: &[(String, Option<String>)]) -> Result<Vec<u32>, String> {
     let mut memo = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     // Held across the whole load-scan-persist below, and released (by drop)
     // on every path out of this function, including an early `?` return.
@@ -269,12 +270,12 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
     }
 
     if !unseen.is_empty() {
-        let disk = scan(cur_dir)?;
+        let disk = disk_view(mailbox_dir)?;
 
         // Normalized Message-ID -> the lowest uid of a file the ledger does not own.
         let mut adoptable: HashMap<String, u32> = HashMap::new();
         if unseen.iter().any(|(_, message_id)| message_id.is_some()) {
-            let read = memo.entry(cur_dir.to_path_buf()).or_default();
+            let read = memo.entry(mailbox_dir.to_path_buf()).or_default();
             read.retain(|uid, _| disk.canonical.contains_key(uid));
             let mut unowned: Vec<(u32, &PathBuf)> = disk
                 .canonical
@@ -299,7 +300,7 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
             }
         }
 
-        let mut next = ledger.range(..IMPORT_UID_BASE).next_back().map(|(uid, _)| *uid).unwrap_or(0).max(disk.highest);
+        let mut next = ledger.keys().rev().find(|uid| !message_store::is_import_uid(**uid)).copied().unwrap_or(0).max(disk.highest);
         for (id, message_id) in unseen {
             let adopted = message_id.map(normalize_message_id).and_then(|m| adoptable.remove(&m));
             let uid = match adopted {
@@ -308,9 +309,10 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
                 // u32, so the floor can already sit at u32::MAX. Wrapping
                 // would hand out a uid a file on disk carries; panicking
                 // would take the whole process down for one mailbox.
-                // Imports own `IMPORT_UID_BASE` and up, so that is the ceiling.
+                // Imports own the mbox import range (`message_store::is_import_uid`),
+                // so its first uid is the ceiling.
                 None => {
-                    next = next.checked_add(1).filter(|u| *u < IMPORT_UID_BASE).ok_or_else(|| {
+                    next = next.checked_add(1).filter(|u| !message_store::is_import_uid(*u)).ok_or_else(|| {
                         format!("Outlook uid ledger {} has no uids left to allocate", ledger_path.display())
                     })?;
                     next
@@ -336,7 +338,7 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
 
         // Nothing left in this folder to adopt: the memo would only take memory.
         if disk.canonical.keys().all(|uid| ledger.contains_key(uid)) {
-            memo.remove(cur_dir);
+            memo.remove(mailbox_dir);
         }
     }
 
@@ -467,6 +469,7 @@ fn logged(path: &Path, result: std::io::Result<()>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::IMPORT_UID_BASE;
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
@@ -1101,6 +1104,24 @@ mod tests {
         let result = allocate(&m.ledger, &m.cur, &listed(&["b", "a"]));
         set_mode(&m.cur, 0o755);
         assert_eq!(result.unwrap(), vec![2, 1]);
+    }
+
+    /// Plan B Review Focus 6: "Clear cached emails" emptied `cur/` and the
+    /// ledger is rebuilt. The floor is the store's uid space, so the next uid
+    /// is above every uid the mailbox still carries (`orphaned/` here, a JMAP
+    /// record once Task 7 adds `jmap/`), never a reissue.
+    #[test]
+    fn a_rebuilt_ledger_never_reissues_a_uid_the_store_still_counts() {
+        let m = mailbox();
+        let orphaned = m.cur.parent().unwrap().join(crate::maildir::ORPHAN_DIR);
+        fs::create_dir_all(&orphaned).unwrap();
+        fs::write(orphaned.join(format!("40{}S.eml", crate::maildir::INFO_PREFIX)), eml("old@outlook.test")).unwrap();
+        assert!(!m.ledger.exists());
+        let root = m._tmp.path();
+        assert_eq!(crate::message_store::highest_uid(root, "acct", "INBOX").unwrap(), 40);
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["new"])).unwrap(), vec![41]);
+        // The mailbox-keyed entry point reads the same uid space and the same ledger.
+        assert_eq!(allocate_in(&m.ledger, root, "acct", "INBOX", &listed(&["new", "next"])).unwrap(), vec![41, 42]);
     }
 
     // --- Task 2.4: cross-process ledger lock (R2.2) ---

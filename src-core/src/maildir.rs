@@ -139,7 +139,14 @@ pub fn find_listed_by_uid(cur_dir: &Path, uid: u32, listed: &Path) -> Option<Pat
 /// mirror keys a folder by the account's email and the mailbox's own name
 /// (no `vault_dir_name`), and stays Maildir `.eml` whatever the vault's format.
 pub fn mirror_cur(mirror_root: &Path, email: &str, mailbox: &str) -> PathBuf {
-    mirror_root.join(email).join(mailbox).join("cur")
+    mirror_cur_in(&mirror_root.join(email).join(mailbox))
+}
+
+/// The message directory of the mirror's mailbox directory
+/// `mirror_mailbox_dir` (`<mirror_root>/<email>/<mailbox>`), for a caller that
+/// already holds that directory.
+pub fn mirror_cur_in(mirror_mailbox_dir: &Path) -> PathBuf {
+    mirror_mailbox_dir.join("cur")
 }
 
 /// The uid a message filename carries by the external mirror's rule: the text

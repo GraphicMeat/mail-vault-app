@@ -11,7 +11,7 @@
 
 use crate::imap::ImapConfig;
 use crate::jmap::Identity;
-use crate::maildir::{uid_file_map, IMPORT_UID_BASE};
+use crate::message_store;
 use crate::net_activity;
 use crate::vault_eml::parse_address_str;
 use serde::Serialize;
@@ -274,7 +274,9 @@ pub fn extract_delivery_addresses(header_block: &str) -> Vec<String> {
 /// other mailbox.
 pub fn senders_of_rows(rows: &[Value]) -> Vec<Seen> {
     rows.iter()
-        .filter(|row| row.get("uid").and_then(Value::as_u64).map_or(true, |uid| uid < IMPORT_UID_BASE as u64))
+        .filter(|row| {
+            row.get("uid").and_then(Value::as_u64).map_or(true, |uid| u32::try_from(uid).is_ok_and(|uid| !message_store::is_import_uid(uid)))
+        })
         .filter_map(|row| {
             let from = row.get("from")?;
             Some(Seen {
@@ -378,14 +380,15 @@ pub fn read_head(path: &Path) -> Option<String> {
     Some(String::from_utf8_lossy(&buf).into_owned())
 }
 
-/// The delivery addresses of a vault folder's newest `limit` messages (by uid;
-/// mbox imports skipped, their headers belong to another mailbox), one
-/// `Seen` per message and address, newest first. One directory pass and no
-/// lock; `between_batches` runs after every `SCAN_BATCH` files so the caller
-/// can yield to the user.
-pub fn scan_delivery_addresses(cur_dir: &Path, limit: usize, mut between_batches: impl FnMut()) -> Vec<Seen> {
-    let files = uid_file_map(cur_dir);
-    let mut uids: Vec<u32> = files.keys().copied().filter(|&uid| uid < IMPORT_UID_BASE).collect();
+/// The delivery addresses of the newest `limit` messages of the vault folder
+/// at `mailbox_dir` (`message_store::mailbox_dir`; by uid, mbox imports
+/// skipped, their headers belong to another mailbox), one `Seen` per message
+/// and address, newest first. One directory pass and no lock;
+/// `between_batches` runs after every `SCAN_BATCH` files so the caller can
+/// yield to the user.
+pub fn scan_delivery_addresses(mailbox_dir: &Path, limit: usize, mut between_batches: impl FnMut()) -> Vec<Seen> {
+    let files = message_store::raw_paths_at(mailbox_dir);
+    let mut uids: Vec<u32> = files.keys().copied().filter(|&uid| !message_store::is_import_uid(uid)).collect();
     uids.sort_unstable_by(|a, b| b.cmp(a));
     uids.truncate(limit);
     let mut out = Vec::new();
@@ -402,6 +405,7 @@ pub fn scan_delivery_addresses(cur_dir: &Path, limit: usize, mut between_batches
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maildir::IMPORT_UID_BASE;
     use serde_json::json;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -762,7 +766,8 @@ mod tests {
     #[test]
     fn the_scan_reads_the_newest_messages_skips_imports_and_yields_between_batches() {
         let dir = tempfile::tempdir().unwrap();
-        let cur = dir.path();
+        let cur = &dir.path().join("cur");
+        std::fs::create_dir_all(cur).unwrap();
         for uid in 1..=120 {
             write_eml(cur, uid, &format!("Delivered-To: n{uid}@example.test\r\nSubject: s\r\n\r\nbody"));
         }
@@ -770,7 +775,7 @@ mod tests {
         std::fs::write(cur.join("stray.txt"), "Delivered-To: stray@example.test\r\n\r\n").unwrap();
 
         let mut yields = 0;
-        let got = scan_delivery_addresses(cur, 110, || yields += 1);
+        let got = scan_delivery_addresses(dir.path(), 110, || yields += 1);
         assert_eq!(got.len(), 110);
         assert_eq!(got[0], seen("n120@example.test", ""), "newest first");
         assert_eq!(got[109].address, "n11@example.test");

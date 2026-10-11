@@ -20,7 +20,7 @@ use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::aliases::{self, DetectedAlias, ProviderAliases, ProviderStatus, Source};
 use mailvault_core::custody::cache as sql_cache;
-use mailvault_core::{header_cache, vault_files};
+use mailvault_core::{header_cache, message_store};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -127,7 +127,7 @@ fn scan(state: &Arc<DaemonState>, account_id: &str, login: &str) -> Vec<Detected
 
     let yield_now = || crate::search_index::yield_to_foreground(&state.search_index);
     yield_now();
-    let inbox_dir = vault_files::cur_path(&root, account_id, &inbox);
+    let inbox_dir = message_store::mailbox_dir(&root, account_id, &inbox);
     let delivered = aliases::scan_delivery_addresses(&inbox_dir, aliases::SCAN_LIMIT, yield_now);
     let delivered_to = aliases::rank(Source::DeliveredTo, &delivered, login);
 
@@ -139,6 +139,7 @@ mod tests {
     use super::*;
     use crate::server::handle_request_for_test;
     use mailvault_core::maildir::{INFO_PREFIX, IMPORT_UID_BASE};
+    use mailvault_core::vault_files;
     use std::path::Path;
 
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {

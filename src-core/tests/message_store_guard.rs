@@ -49,29 +49,22 @@ const OWNERS: &[&str] = &[
 /// Files that still reach the Maildir layout directly. Delete a row when its
 /// task moves the file behind `message_store`; never add one.
 const PENDING: &[&str] = &[
-    "src-core/src/aliases.rs",
     "src-core/src/archive.rs",
     "src-core/src/backup.rs",
-    "src-core/src/graph_ledger.rs",
-    "src-core/src/import_rehome.rs",
     "src-core/src/vault_flags.rs",
     "src-daemon/src/abd_local.rs",
     "src-daemon/src/backup_zip.rs",
     "src-daemon/src/handlers/abd.rs",
-    "src-daemon/src/handlers/aliases.rs",
     "src-daemon/src/handlers/archive.rs",
     "src-daemon/src/handlers/cache.rs",
     "src-daemon/src/handlers/custody.rs",
     "src-daemon/src/handlers/pgp.rs",
     "src-daemon/src/handlers/vault_files.rs",
     "src-daemon/src/handlers/views.rs",
-    "src-daemon/src/insights.rs",
-    "src-daemon/src/jmap_sessions.rs",
     "src-daemon/src/mbox.rs",
     "src-daemon/src/mbox_upload.rs",
     "src-daemon/src/mbox_upload_job.rs",
     "src-daemon/src/restore.rs",
-    "src-daemon/src/snapshot.rs",
 ];
 
 fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {

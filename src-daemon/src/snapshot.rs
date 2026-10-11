@@ -244,47 +244,33 @@ pub fn create_snapshot_from_maildir(
         }
 
         let mailbox_name = entry.file_name().to_string_lossy().to_string();
-        let cur_dir = entry.path().join("cur");
+        let mailbox_dir = entry.path();
 
-        if !cur_dir.exists() {
+        // Nothing at all at its message directory: not a mailbox.
+        if mailvault_core::message_store::has_message_dir(&mailbox_dir).is_err() {
             continue;
         }
 
         let mut emails = Vec::new();
 
-        if let Ok(email_entries) = fs::read_dir(&cur_dir) {
-            for email_entry in email_entries.flatten() {
-                let fname = email_entry.file_name().to_string_lossy().to_string();
-                let size = email_entry.metadata().map(|m| m.len()).unwrap_or(0);
-
-                // M-5 (final fix wave): the vault's only filename shape is
-                // `<uid>:2,<flags>.eml`. The old `splitn(3, ':').collect()`
-                // here read everything after the ONE colon as a comma list —
-                // for `7:2,AS.eml` that is `["2", "AS.eml"]`, not real flags
-                // — and accepted non-canonical uids (`07:`, `+7:`) that no
-                // other reader treats as a vault row. `vault_filename_uid`
-                // (global constraint: never `split(':').next().parse()`) and
-                // `parse_flags_from_filename` are the same parse every other
-                // reader uses; a name that fails to parse is not a vault
-                // message, so it is skipped here rather than recorded as
-                // uid 0 with garbage flags.
-                let Some(uid) = mailvault_core::maildir::vault_filename_uid(&fname).map(u64::from) else {
-                    continue;
-                };
-                let flags = mailvault_core::vault_eml::parse_flags_from_filename(&fname);
-
-                // We store minimal info — subject/from/date require parsing .eml
-                // For v1, store what we can extract from filename + metadata
-                emails.push(SnapshotEmail {
-                    uid,
-                    message_id: None,
-                    subject: String::new(), // Populated from cache if available
-                    from: String::new(),
-                    date: String::new(),
-                    flags,
-                    size,
-                });
-            }
+        // M-5 (final fix wave): one entry per vault message file, by the parse
+        // every other reader uses (`message_store::list_at`: the canonical uid
+        // before the info separator, the flag letters after it). A name that
+        // does not parse is not a vault message, so it is skipped rather than
+        // recorded as uid 0 with garbage flags. A message directory that will
+        // not list is an empty mailbox.
+        for listed in mailvault_core::message_store::list_at(&mailbox_dir).unwrap_or_default() {
+            // We store minimal info — subject/from/date require parsing .eml
+            // For v1, store what we can extract from filename + metadata
+            emails.push(SnapshotEmail {
+                uid: u64::from(listed.uid),
+                message_id: None,
+                subject: String::new(), // Populated from cache if available
+                from: String::new(),
+                date: String::new(),
+                flags: listed.flags,
+                size: listed.size,
+            });
         }
 
         emails.sort_by_key(|e| e.uid);

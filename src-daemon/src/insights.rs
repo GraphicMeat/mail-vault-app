@@ -355,7 +355,7 @@ impl Snapshot {
                             // as `Maildir/<account>/tmp`, and must stay listed.
                             let is_tmp = s.directory
                                 && p.file_name().and_then(|n| n.to_str()) == Some("tmp")
-                                && path.join("cur").is_dir();
+                                && mailvault_core::message_store::has_message_dir(path).unwrap_or(false);
                             if is_tmp {
                                 // Deliberately not pushed to `paths` and
                                 // `watch_directory` never called: `walk`'s
@@ -1020,7 +1020,7 @@ fn read_eml(path: &Path, uid: u32) -> Result<Value, String> {
         .cloned()
         .unwrap_or(json!({"address":"","name":null}));
     let flags =
-        mailvault_core::vault_eml::parse_flags_from_filename(path.file_name().unwrap().to_str().unwrap_or_default());
+        mailvault_core::message_store::flags_in_name(path.file_name().unwrap().to_str().unwrap_or_default());
     let mut value = json!({"uid":uid,"messageId":get("Message-ID"),"subject":get("Subject").unwrap_or_default(),"from":from,
         "to":addresses("To"),"cc":addresses("Cc"),"bcc":addresses("Bcc"),"date":get("Date"),"messageDate":get("Date"),
         "flags":flags,"listId":get("List-Id"),"listUnsubscribe":get("List-Unsubscribe"),
