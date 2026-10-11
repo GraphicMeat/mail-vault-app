@@ -15,6 +15,7 @@ import { t, useT  } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { BimiLogo } from './BimiLogo';
+import { Avatar } from '../ui/Avatar';
 import { useUnsubscribeStore, unsubscribeTarget } from '../../stores/unsubscribeStore';
 
 /**
@@ -56,7 +57,6 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   };
 
   const senderName = getSenderName(email);
-  const initial = senderName ? senderName[0].toUpperCase() : '?';
   const hasDistinctName = email?.from?.name && email.from.name !== email.from.address;
 
   // Compose to the sender. Dragging over the address to copy it ends in a
@@ -102,11 +102,11 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
       {/* Avatar — click opens Sender Details (parity with chat view) */}
       <button
         type="button" aria-label={t('email.sender.senderDetails')}
-        className="w-9 h-9 bg-mail-accent-tint text-mail-accent-text rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
+        className="flex-shrink-0 cursor-pointer"
         onClick={openDetails}
         title={t('email.sender.senderDetails')}
       >
-        <span className="font-semibold text-sm">{initial}</span>
+        <Avatar name={senderName} size={36} />
       </button>
 
       <div className="flex-1 min-w-0">

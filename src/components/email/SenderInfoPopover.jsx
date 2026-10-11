@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useMemo, memo } from 'react';
 import { Popover } from '../ui/Popover';
+import { Avatar } from '../ui/Avatar';
 import { Info } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { ConnectedStateIcon } from './MessageStateIcon';
@@ -28,7 +29,6 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
   const previousFocusRef = useRef(null);
 
   const senderName = getSenderName(email);
-  const initial = senderName ? senderName[0].toUpperCase() : '?';
   const hasDistinctName = email?.from?.name && email.from.name !== email.from.address;
   // The address prints here too, so it composes here too — same rule as the
   // header it was opened from. Surfaces that pass no `onReply` (chat view)
@@ -104,9 +104,7 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
 
         {/* Avatar + sender name + email row */}
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-semibold text-xs">{initial}</span>
-          </div>
+          <Avatar name={senderName} size={32} tint={false} />
           <div className="min-w-0">
             {hasDistinctName && (
               <div className="text-sm font-semibold text-mail-text truncate">

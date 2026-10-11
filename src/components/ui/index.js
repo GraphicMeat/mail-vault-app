@@ -7,6 +7,7 @@
 export { Button } from './Button';
 export { ToggleSwitch } from './ToggleSwitch';
 export { XLogo, LinkedInLogo, DiscordLogo } from './BrandGlyphs';
+export { Avatar } from './Avatar';
 
 // Molecules — a label/control pair or small composite built from atoms.
 export { SettingRow } from './SettingRow';
