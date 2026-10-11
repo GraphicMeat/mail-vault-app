@@ -246,7 +246,9 @@ mod tests {
         })
         .unwrap();
         assert_eq!(restore_if_empty(&s, d.path(), || {}).unwrap(), 0);
-        assert_eq!(people(&s), 0);
+        // delete_person is a soft delete: count live people only
+        let live = crate::custody::with_conn(&s, |c| store::all_ids(c).map(|v| v.len())).unwrap();
+        assert_eq!(live, 0);
     }
 
     #[test]
