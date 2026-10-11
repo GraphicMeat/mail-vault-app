@@ -1637,6 +1637,55 @@ async fn progress_frames_carry_the_contract_shape() {
 // ── JMAP ────────────────────────────────────────────────────────────────────
 
 /// A full archive-and-delete of three INBOX emails through the real
+/// A never-listed JMAP mailbox: the plan freeze hands the ledger the ids
+/// oldest first (across every listing page, which arrives newest first), so
+/// the uids it issues ascend with `receivedAt` as the bridge and the sync do.
+#[tokio::test]
+async fn a_jmap_plan_freeze_issues_uids_in_arrival_order() {
+    use mailvault_core::abd::imap_ops::build_preview;
+    use mailvault_core::abd::jmap_ops::JmapOps;
+
+    let mut s = common_jmap::scenario();
+    s.accounts[0].mailboxes[0].emails.push(common_jmap::email("e4", "four", "2026-10-04T10:00:00Z"));
+    let m = mock_jmap::MockJmap::start(s);
+    let cfg: mailvault_core::imap::ImapConfig = serde_json::from_value(serde_json::json!({
+        "email": "alice@example.test", "imapHost": "127.0.0.1", "password": "pw",
+        "jmapSessionUrl": m.session_url(), "jmapAuth": "basic",
+    }))
+    .unwrap();
+    // One email per listing page, so the order must hold across pages.
+    let mut ops = JmapOps::new(cfg).with_page_size(1);
+    let sh = Shared::new(start_ms());
+    let local = FakeLocal::new(sh.clone());
+    let env = FakeEnv::new(sh.clone());
+    let ctl = Control::new();
+    let mut progress = |_: &str, _: usize| {};
+    let preview = build_preview(&mut ops, "p1", sh.clock.get(), &mut progress).await.unwrap();
+    let mut job = JobFile::create(NewJob {
+        account_id: "acc1".to_string(),
+        account_email: "alice@example.test".to_string(),
+        host: "127.0.0.1".to_string(),
+        provider: Provider::Jmap,
+        mode: Mode::ArchiveDelete,
+        timing: Timing::AfterAll,
+        delete_mode: DeleteMode::MoveToTrashAndEmpty,
+        scope: Scope {
+            folders: vec!["INBOX".to_string()],
+            dates: DateScope::All,
+            date_choice: "all".to_string(),
+            year_bounds: year_bounds(0, 2015, 2030),
+        },
+        now_ms: sh.clock.get(),
+    });
+    let mut plans = PlanStore::new();
+    assert_eq!(plan_job(&mut job, &preview, &mut plans, &mut ops, &local, &env, &ctl).await, RunExit::Completed);
+
+    let plan = plans.names().iter().filter_map(|n| plans.get(n)).find(|p| p.path == "INBOX").expect("INBOX plan");
+    let ids = plan.graph_ids.clone().expect("the plan keeps the ids");
+    let uid_of = |id: &str| plan.uids.iter().zip(&ids).find(|(_, i)| i.as_str() == id).map(|(u, _)| *u).expect(id);
+    assert!(uid_of("e1") < uid_of("e2") && uid_of("e2") < uid_of("e4"), "uids follow receivedAt: {:?} {:?}", plan.uids, ids);
+}
+
 /// `JmapOps` against the mock JMAP server: plan, download, verify, move,
 /// empty Trash. e1 also carries the Work label, so only its INBOX label comes
 /// off and it lives on in Work; e2 and e4 are destroyed from Trash.

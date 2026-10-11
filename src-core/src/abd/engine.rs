@@ -1888,13 +1888,23 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             let mut rows: Vec<ListedMsg> = sf.msgs.iter().map(|m| (*m).clone()).collect();
 
             if preview.provider.is_id_based() {
-                let listed: Vec<(String, Option<String>)> =
-                    rows.iter().map(|m| (m.graph_id.clone().unwrap_or_default(), m.message_id.clone())).collect();
+                // The ledger issues uids in the order it is handed the ids. JMAP
+                // lists newest first (page after page), so a never-listed mailbox
+                // would get descending uids; hand it oldest first, as the bridge
+                // and the sync do. Ties keep the reverse of the listing order.
+                let mut order: Vec<usize> = (0..rows.len()).collect();
+                if preview.provider == Provider::Jmap {
+                    order.sort_by(|a, b| rows[*a].internal_ms.cmp(&rows[*b].internal_ms).then(b.cmp(a)));
+                }
+                let listed: Vec<(String, Option<String>)> = order
+                    .iter()
+                    .map(|&i| (rows[i].graph_id.clone().unwrap_or_default(), rows[i].message_id.clone()))
+                    .collect();
                 let r = self.local.graph_uids(&info.path, &listed).await;
                 match self.map_local(r)? {
                     Ok(uids) if uids.len() == rows.len() => {
-                        for (m, u) in rows.iter_mut().zip(uids) {
-                            m.uid = u;
+                        for (i, u) in order.into_iter().zip(uids) {
+                            rows[i].uid = u;
                         }
                     }
                     Ok(_) => {
