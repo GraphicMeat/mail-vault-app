@@ -21,6 +21,9 @@ let mailSeq = 0;
 // Fast scrolling fires loadMore again before the first page lands; both calls
 // would ask for the same offset and append the same page twice.
 let loadingMore = false;
+// Same for the mail pager; holds the mailSeq it started under, so a page still
+// in flight for the previous contact does not block the next one.
+let loadingMoreMail = null;
 
 const initial = {
   items: [], total: 0, indexReady: true, indexing: false,
@@ -32,9 +35,10 @@ const initial = {
 };
 
 export const usePeopleStore = create((set, get) => {
+  const fail = (e) => { set({ error: e?.message || String(e), status: 'idle' }); return null; };
   const run = async (fn) => {
     try { set({ error: null }); return await fn(); }
-    catch (e) { set({ error: e?.message || String(e), status: 'idle' }); return null; }
+    catch (e) { return fail(e); }
   };
   const refresh = async () => { await get().load(); if (get().selectedId) await get().select(get().selectedId); };
 
@@ -67,15 +71,25 @@ export const usePeopleStore = create((set, get) => {
       const r = await run(() => daemonCall('people.list', { query, sort: 'name', vipOnly: false, limit: 20, offset: 0 }));
       return r?.items || [];
     },
-    fetchCard: (id) => run(() => daemonCall('people.get', { id })),
+    // A proposal row can name a contact that is gone: that renders nothing, not a banner.
+    fetchCard: async (id) => { try { return await daemonCall('people.get', { id }); } catch { return null; } },
     setQuery: (query) => { set({ query }); return get().load(); },
     setSort: (sort) => { set({ sort }); return get().load(); },
     setVipOnly: (vipOnly) => { set({ vipOnly }); return get().load(); },
 
     select: async (id) => {
-      set({ selectedId: id, card: null, mail: [], mailNext: null });
+      ++mailSeq; // a mail page still in flight for the previous contact is stale now
+      set({ selectedId: id, card: null, mail: [], mailNext: null, mailLoading: false });
       if (!id || id === 'new') return; // 'new' is the unsaved draft: nothing to fetch
-      const card = await run(() => daemonCall('people.get', { id }));
+      let card;
+      try { set({ error: null }); card = await daemonCall('people.get', { id }); }
+      catch (e) {
+        if (get().selectedId !== id) return;
+        // Deleted or undone while selected: nothing to show, not an error.
+        if (/E_NOT_FOUND/.test(e?.message || '')) set({ selectedId: null, card: null });
+        else fail(e);
+        return;
+      }
       if (get().selectedId !== id) return;
       set({ card });
       get().refreshStats([id]);
@@ -97,26 +111,31 @@ export const usePeopleStore = create((set, get) => {
     },
     loadMoreMail: async () => {
       const { selectedId: id, mailNext, mailFilters, mail } = get();
-      if (!id || !mailNext) return;
       const seq = mailSeq;
-      const r = await run(() => daemonCall('people.messages', { id, ownAddresses: myAddresses(), limit: PAGE, ...mailFilters, after: mailNext }));
-      if (!r || seq !== mailSeq) return;
-      set({ mail: [...mail, ...r.items], mailNext: r.next });
+      if (!id || !mailNext || loadingMoreMail === seq) return;
+      loadingMoreMail = seq;
+      try {
+        const r = await run(() => daemonCall('people.messages', { id, ownAddresses: myAddresses(), limit: PAGE, ...mailFilters, after: mailNext }));
+        if (!r || seq !== mailSeq) return;
+        set({ mail: [...mail, ...r.items], mailNext: r.next });
+      } finally {
+        if (loadingMoreMail === seq) loadingMoreMail = null;
+      }
     },
 
     create: async (fields) => {
       const card = await run(() => daemonCall('people.create', fields));
-      if (card) { await get().load(); await get().select(card.id); }
+      if (card) { await get().load(); await get().select(card.id); await get().loadProposals(); }
       return card;
     },
     update: async (id, patch) => {
       const card = await run(() => daemonCall('people.update', { id, patch }));
-      if (card) { set({ card }); await get().load(); }
+      if (card) { if (get().selectedId === id) set({ card }); await get().load(); }
       return card;
     },
     remove: async (id) => {
       const ok = await run(() => daemonCall('people.delete', { id }));
-      if (ok) { set({ selectedId: null, card: null }); await get().load(); }
+      if (ok) { set({ selectedId: null, card: null }); await get().load(); await get().loadProposals(); }
       return ok;
     },
 
@@ -135,6 +154,7 @@ export const usePeopleStore = create((set, get) => {
       const r = await run(() => daemonCall('people.undo', {}));
       await refresh();
       await get().loadJournal();
+      await get().loadProposals();
       return r;
     },
 
@@ -157,10 +177,19 @@ export const usePeopleStore = create((set, get) => {
     importVcf: async (text) => {
       const r = await run(() => daemonCall('people.import_vcf', { text }));
       await get().load();
+      await get().loadProposals();
       return r;
     },
 
-    applyIndexEvent: ({ done }) => set({ indexReady: !!done, indexing: !done }),
+    applyIndexEvent: ({ done }) => {
+      const finished = !!done && !get().indexReady;
+      set({ indexReady: !!done, indexing: !done });
+      if (!finished) return;
+      // The counts and the list were built on a partial index.
+      get().load();
+      const id = get().selectedId;
+      if (id && id !== 'new') get().refreshStats([id]);
+    },
     reset: () => set({ ...initial }),
     initPeople: () => initPeople(),
   };

@@ -141,6 +141,16 @@ describe('PersonCard', () => {
     expect(h.s.getState().update).toHaveBeenCalledWith('p1', { blocked: true });
   });
 
+  it('a new card object for the same contact keeps unsaved edits', () => {
+    select(CARD);
+    render(<PersonCard />);
+    fireEvent.change(screen.getByTestId('person-notes'), { target: { value: 'draft note' } });
+    act(() => h.s.setState({ card: { ...CARD, vip: true } }));
+    expect(screen.getByTestId('person-notes').value).toBe('draft note');
+    act(() => h.s.setState({ selectedId: 'p9', card: { ...CARD, id: 'p9', notes: 'other' } }));
+    expect(screen.getByTestId('person-notes').value).toBe('other');
+  });
+
   it('a contact with no email shows the details without an email section crash', () => {
     select({ ...CARD, emails: [], phones: [] });
     render(<PersonCard />);

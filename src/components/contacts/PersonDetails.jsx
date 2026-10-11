@@ -62,7 +62,9 @@ export function PersonDetails({ draft }) {
   const [confirming, setConfirming] = useState(false);
   const [merging, setMerging] = useState(null); // the ids the merge dialog was opened with
   const proposals = usePeopleStore((s) => s.proposals);
-  useEffect(() => { setForm(fromCard(draft ? null : card)); }, [card, draft]);
+  // Reset for another contact or the draft, not for a fresh card object of the
+  // same one (a VIP toggle replaces the card and must keep unsaved edits).
+  useEffect(() => { setForm(fromCard(draft ? null : card)); }, [card?.id, draft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const emails = clean(form.emails);
   const phones = clean(form.phones);

@@ -102,9 +102,97 @@ describe('peopleStore', () => {
   });
 
   it('the index progress event flips indexReady', () => {
+    harness.daemonCall.mockResolvedValue({ items: [], total: 0, indexReady: true });
     usePeopleStore.getState().applyIndexEvent({ indexed: 10, done: true });
     expect(usePeopleStore.getState().indexReady).toBe(true);
     usePeopleStore.getState().applyIndexEvent({ indexed: 5, done: false });
     expect(usePeopleStore.getState().indexing).toBe(true);
+  });
+
+  it('when indexing finishes the list and the selected contact stats are reloaded', async () => {
+    harness.daemonCall.mockResolvedValue({ items: [], total: 0, indexReady: true });
+    usePeopleStore.setState({ selectedId: 'p1', indexReady: false, indexing: true });
+    usePeopleStore.getState().applyIndexEvent({ indexed: 9, done: true });
+    await vi.waitFor(() => expect(harness.daemonCall).toHaveBeenCalledWith('people.list', expect.anything()));
+    await vi.waitFor(() => expect(harness.daemonCall).toHaveBeenCalledWith('people.stats', expect.objectContaining({ ids: ['p1'] })));
+  });
+
+  it('a progress event that is not the finish reloads nothing', () => {
+    usePeopleStore.setState({ indexReady: false, indexing: true });
+    usePeopleStore.getState().applyIndexEvent({ indexed: 3, done: false });
+    expect(harness.daemonCall).not.toHaveBeenCalled();
+  });
+
+  it('update shows the card only while that contact is still selected', async () => {
+    harness.daemonCall.mockImplementation(async (m) => (m === 'people.update' ? { id: 'p1', displayName: 'Edited' } : { items: [], total: 0, indexReady: true }));
+    usePeopleStore.setState({ selectedId: 'p2', card: { id: 'p2' } });
+    await usePeopleStore.getState().update('p1', { displayName: 'Edited' });
+    expect(usePeopleStore.getState().card).toEqual({ id: 'p2' });
+    usePeopleStore.setState({ selectedId: 'p1', card: { id: 'p1' } });
+    await usePeopleStore.getState().update('p1', { displayName: 'Edited' });
+    expect(usePeopleStore.getState().card.displayName).toBe('Edited');
+  });
+
+  it('a slow mail page of the previous contact never lands under the next one', async () => {
+    let slow;
+    harness.daemonCall.mockImplementationOnce(() => new Promise(r => { slow = r; }));
+    usePeopleStore.setState({ selectedId: 'p1' });
+    const pending = usePeopleStore.getState().loadMail({});
+    harness.daemonCall.mockResolvedValue({ id: 'p2' });
+    await usePeopleStore.getState().select('p2');
+    slow({ items: [{ uid: 1 }], next: null });
+    await pending;
+    expect(usePeopleStore.getState().mail).toEqual([]);
+    expect(usePeopleStore.getState().mailLoading).toBe(false);
+  });
+
+  it('two loadMoreMail calls in flight append the page once', async () => {
+    let land;
+    usePeopleStore.setState({ selectedId: 'p1', mail: [{ uid: 1 }], mailNext: { uid: 1 } });
+    harness.daemonCall.mockImplementationOnce(() => new Promise(r => { land = r; }));
+    const first = usePeopleStore.getState().loadMoreMail();
+    const second = usePeopleStore.getState().loadMoreMail();
+    land({ items: [{ uid: 2 }], next: null });
+    await Promise.all([first, second]);
+    expect(harness.daemonCall).toHaveBeenCalledTimes(1);
+    expect(usePeopleStore.getState().mail).toEqual([{ uid: 1 }, { uid: 2 }]);
+  });
+
+  it('fetchCard of a missing contact sets no store error', async () => {
+    harness.daemonCall.mockRejectedValueOnce(new Error('E_NOT_FOUND: person'));
+    await expect(usePeopleStore.getState().fetchCard('gone')).resolves.toBeNull();
+    expect(usePeopleStore.getState().error).toBeNull();
+  });
+
+  it('selecting a contact that no longer exists clears the selection without an error', async () => {
+    harness.daemonCall.mockRejectedValueOnce(new Error('E_NOT_FOUND: person'));
+    await usePeopleStore.getState().select('gone');
+    expect(usePeopleStore.getState().selectedId).toBeNull();
+    expect(usePeopleStore.getState().card).toBeNull();
+    expect(usePeopleStore.getState().error).toBeNull();
+  });
+
+  it('another failure when selecting still surfaces as state', async () => {
+    harness.daemonCall.mockRejectedValueOnce(new Error('E_INTERNAL: boom'));
+    await usePeopleStore.getState().select('p1');
+    expect(usePeopleStore.getState().selectedId).toBe('p1');
+    expect(usePeopleStore.getState().error).toMatch(/E_INTERNAL/);
+  });
+
+  it.each([
+    ['create', (s) => s.create({ displayName: 'Z' }), 'people.create'],
+    ['remove', (s) => s.remove('p1'), 'people.delete'],
+    ['undo', (s) => s.undo(), 'people.undo'],
+    ['importVcf', (s) => s.importVcf('BEGIN:VCARD'), 'people.import_vcf'],
+  ])('%s reloads the duplicate proposals', async (_n, act, method) => {
+    harness.daemonCall.mockImplementation(async (m) => {
+      if (m === method) return { id: 'p1', created: 1 };
+      if (m === 'people.list') return { items: [], total: 0, indexReady: true };
+      if (m === 'people.proposals') return [{ a: 'p1', b: 'p2', reason: 'sameName' }];
+      return {};
+    });
+    await act(usePeopleStore.getState());
+    expect(harness.daemonCall).toHaveBeenCalledWith('people.proposals', {});
+    expect(usePeopleStore.getState().proposals).toHaveLength(1);
   });
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 
 vi.mock('../../../i18n', () => ({ useT: () => (k) => k }));
 vi.mock('lucide-react', () => new Proxy({}, {
@@ -26,7 +26,7 @@ vi.mock('../../../stores/peopleStore', async () => {
 });
 import { ContactsList } from '../ContactsList';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('ContactsList', () => {
   it('renders a row per contact, shows a total from stats and handles a contact with no email', () => {
@@ -39,12 +39,23 @@ describe('ContactsList', () => {
     render(<ContactsList />);
     expect(h.s.getState().refreshStats).toHaveBeenCalledWith(['p1', 'p2']);
   });
-  it('selecting a row selects the contact; typing searches; sort and VIP filter call the store', () => {
+  it('typing searches once, after a pause, with the last text', () => {
+    vi.useFakeTimers();
+    h.s.getState().setQuery.mockClear();
+    render(<ContactsList />);
+    fireEvent.change(screen.getByTestId('contacts-search'), { target: { value: 'a' } });
+    act(() => { vi.advanceTimersByTime(100); });
+    fireEvent.change(screen.getByTestId('contacts-search'), { target: { value: 'am' } });
+    expect(screen.getByTestId('contacts-search').value).toBe('am');
+    expect(h.s.getState().setQuery).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(h.s.getState().setQuery).toHaveBeenCalledTimes(1);
+    expect(h.s.getState().setQuery).toHaveBeenCalledWith('am');
+  });
+  it('selecting a row selects the contact; sort and VIP filter call the store', () => {
     render(<ContactsList />);
     fireEvent.click(screen.getByTestId('contact-row-p2'));
     expect(h.s.getState().select).toHaveBeenCalledWith('p2');
-    fireEvent.change(screen.getByTestId('contacts-search'), { target: { value: 'am' } });
-    expect(h.s.getState().setQuery).toHaveBeenCalledWith('am');
     fireEvent.change(screen.getByTestId('contacts-sort'), { target: { value: 'total' } });
     expect(h.s.getState().setSort).toHaveBeenCalledWith('total');
     fireEvent.click(screen.getByTestId('contacts-vip-filter'));

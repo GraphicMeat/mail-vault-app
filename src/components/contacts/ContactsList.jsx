@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Plus, Star } from 'lucide-react';
 import { useT } from '../../i18n';
@@ -10,6 +10,13 @@ const ROW = 56;
 export function ContactsList() {
   const t = useT();
   const { items, total, query, sort, vipOnly, selectedId, stats, setQuery, setSort, setVipOnly, select, loadMore, refreshStats } = usePeopleStore();
+  // The box shows what was typed at once; the store searches once typing pauses.
+  const [text, setText] = useState(query);
+  useEffect(() => {
+    if (text === query) return undefined;
+    const timer = setTimeout(() => setQuery(text), 250);
+    return () => clearTimeout(timer);
+  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
   const parentRef = useRef(null);
   const v = useVirtualizer({ count: items.length, getScrollElement: () => parentRef.current, estimateSize: () => ROW, overscan: 8 });
 
@@ -27,7 +34,7 @@ export function ContactsList() {
   return (
     <section className="w-80 flex flex-col border-r border-mail-border min-h-0">
       <div className="p-3 flex flex-col gap-2">
-        <input data-testid="contacts-search" value={query} onChange={e => setQuery(e.target.value)} placeholder={t('contacts.search')} aria-label={t('contacts.search')} className="w-full rounded px-2 py-1 border border-mail-border bg-mail-bg" />
+        <input data-testid="contacts-search" value={text} onChange={e => setText(e.target.value)} placeholder={t('contacts.search')} aria-label={t('contacts.search')} className="w-full rounded px-2 py-1 border border-mail-border bg-mail-bg" />
         <div className="flex items-center gap-2">
           <select data-testid="contacts-sort" value={sort} onChange={e => setSort(e.target.value)} className="flex-1 rounded border border-mail-border bg-mail-bg px-1 py-1 text-sm">
             <option value="name">{t('contacts.sort.name')}</option>
