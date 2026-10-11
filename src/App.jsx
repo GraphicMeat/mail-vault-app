@@ -87,7 +87,7 @@ import { RefreshCw, X } from 'lucide-react';
 import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
 import { resolveErrorToastProps } from './utils/errorToast';
-import { resolveEscapeAction } from './utils/escapeAction';
+import { resolveEscapeAction, escapeBelongsToField } from './utils/escapeAction';
 import { shouldStartFullInit } from './utils/shouldStartFullInit';
 import { filterUnread } from './utils/emailParser';
 import { rowKey, stepThroughList, spansMailboxes } from './stores/slices/unifiedHelpers';
@@ -815,7 +815,7 @@ function App() {
         return;
       }
       if (contactsOpen && !composeState && !showSettings && !showShortcutsModal) {
-        closeContacts();
+        if (!escapeBelongsToField(document.activeElement)) closeContacts();
         return;
       }
       const {

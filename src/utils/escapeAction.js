@@ -34,3 +34,13 @@ export function resolveEscapeAction({
   if (shortcutsOpen) return 'close-shortcuts';
   return 'none';
 }
+
+/**
+ * True when Escape is meant for a text field or an open dialog (the Contacts
+ * details form, its merge dialog), not for the full page behind them.
+ */
+export function escapeBelongsToField(el, doc = typeof document === 'undefined' ? null : document) {
+  if (el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable)) return true;
+  return !!doc && [...doc.querySelectorAll('[role="dialog"], [role="alertdialog"]')].some(dialog =>
+    !dialog.closest('[hidden], [inert], [aria-hidden="true"]'));
+}

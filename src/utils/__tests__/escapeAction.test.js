@@ -8,8 +8,8 @@
 // its bubble read "0 selected" — the one gesture documented to preserve the
 // selection was the one that destroyed it. Caught by the e2e suite on real
 // hardware, not by any unit test.
-import { describe, it, expect } from 'vitest';
-import { resolveEscapeAction } from '../escapeAction';
+import { describe, it, expect, afterEach } from 'vitest';
+import { resolveEscapeAction, escapeBelongsToField } from '../escapeAction';
 
 describe('resolveEscapeAction', () => {
   it('does nothing while the bulk modal is open, even with a selection', () => {
@@ -52,5 +52,33 @@ describe('resolveEscapeAction', () => {
   it('does nothing when nothing is open and nothing is selected', () => {
     expect(resolveEscapeAction()).toBe('none');
     expect(resolveEscapeAction({})).toBe('none');
+  });
+});
+
+// Escape in a Contacts form field or dialog belongs to that field or dialog;
+// it must not close the whole view and drop the edit in progress.
+describe('escapeBelongsToField', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('is true for an input, textarea, select and contenteditable', () => {
+    for (const tag of ['input', 'textarea', 'select']) {
+      expect(escapeBelongsToField(document.createElement(tag))).toBe(true);
+    }
+    const editable = document.createElement('div');
+    Object.defineProperty(editable, 'isContentEditable', { value: true });
+    expect(escapeBelongsToField(editable)).toBe(true);
+  });
+
+  it('is false for a button, the body and nothing at all', () => {
+    expect(escapeBelongsToField(document.createElement('button'))).toBe(false);
+    expect(escapeBelongsToField(document.body)).toBe(false);
+    expect(escapeBelongsToField(null)).toBe(false);
+  });
+
+  it('is true while a visible dialog is open, false once it is hidden', () => {
+    document.body.innerHTML = '<div role="dialog" id="d"></div>';
+    expect(escapeBelongsToField(document.body)).toBe(true);
+    document.getElementById('d').setAttribute('aria-hidden', 'true');
+    expect(escapeBelongsToField(document.body)).toBe(false);
   });
 });
