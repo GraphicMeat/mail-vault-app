@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "导入未完成（{{message}}）。部分账户可能已添加；请在重启后检查账户列表。",
   "settings.transfer.warnings.settings": "账户已导入，但部分设置未能保存。",
   "settings.transfer.warnings.aiKey": "无法保存 AI 服务商密钥。请在设置中重新输入。",
+  "settings.transfer.warnings.contacts": "无法导入你的联系人。其余设置已应用。",
   "settingsPage.close": "关闭设置",
   "settingsPage.minimize": "最小化设置",
   "settingsPage.restore": "重新显示设置",

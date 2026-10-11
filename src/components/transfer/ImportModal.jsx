@@ -75,7 +75,7 @@ export function ImportModal({ onClose, reload = reloadWindow }) {
         selectedIds: rows.map(r => r.fileId).filter(id => selected.has(id)),
         applyAppSettings: hasAppSettings && applyAppSettings,
       });
-      if (result.settingsError || result.aiKeyError) setWarnings(result);
+      if (result.settingsError || result.aiKeyError || result.contactsError) setWarnings(result);
       else reload();
     } catch (err) {
       const mapped = transferErrorKey(err, { applying: true });
@@ -159,6 +159,7 @@ export function ImportModal({ onClose, reload = reloadWindow }) {
         <div role="status" className="space-y-1">
           {warnings.settingsError && <Warning text={t('settings.transfer.warnings.settings')} />}
           {warnings.aiKeyError && <Warning text={t('settings.transfer.warnings.aiKey')} />}
+          {warnings.contactsError && <Warning text={t('settings.transfer.warnings.contacts')} />}
         </div>
       )}
       {error && <p role="alert" className="text-sm text-mail-danger">{t(error.key, error.values)}</p>}

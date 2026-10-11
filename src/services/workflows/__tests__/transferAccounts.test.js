@@ -66,7 +66,7 @@ describe('applyImport', () => {
 
     expect(mockSaveAccounts).toHaveBeenCalledTimes(1);
     expect(mockSaveAccounts.mock.calls[0][0].map(a => a.id)).toEqual(['a', 'b', 'c']);
-    expect(res).toEqual({ imported: 3, aiKeyError: false, settingsError: false });
+    expect(res).toEqual({ imported: 3, aiKeyError: false, contactsError: false, settingsError: false });
     expect(mockDaemonCall).not.toHaveBeenCalled();
   });
 
@@ -112,17 +112,23 @@ describe('applyImport', () => {
     const res = await applyImport(b, { selectedIds: ['b'], applyAppSettings: true });
 
     expect(mockSaveAccounts.mock.calls[0][0].map(a => a.id)).toEqual(['b']);
-    expect(res).toEqual({ imported: 1, aiKeyError: true, settingsError: false });
+    expect(res).toEqual({ imported: 1, aiKeyError: true, contactsError: false, settingsError: false });
     expect(mockDaemonCall.mock.calls[0][1].accountMap).toEqual({ b: 'b' });
     expect(mockDaemonCall.mock.calls[0][1].aiEndpointKey).toBe('sk-test');
   });
 });
 
 describe('applyImport soft failures', () => {
+  it('surfaces contactsError as a soft warning, the accounts still saved', async () => {
+    mockDaemonCall.mockImplementationOnce(async () => ({ aiKeyError: false, contactsError: true }));
+    const res = await applyImport(bundleOf([acct('a', 'a@x.test')]), { selectedIds: ['a'], applyAppSettings: true });
+    expect(res).toEqual({ imported: 1, aiKeyError: false, contactsError: true, settingsError: false });
+  });
+
   it('resolves with settingsError when the settings file write fails, still running apply_config', async () => {
     mockFlush.mockRejectedValueOnce('Failed to write settings: disk full');
     const res = await applyImport(bundleOf([acct('a', 'a@x.test')]), { selectedIds: ['a'], applyAppSettings: true });
-    expect(res).toEqual({ imported: 1, aiKeyError: false, settingsError: true });
+    expect(res).toEqual({ imported: 1, aiKeyError: false, contactsError: false, settingsError: true });
     expect(mockDaemonCall.mock.calls.map(([m]) => m)).toEqual(['transfer.apply_config']);
   });
 

@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "La importación no terminó ({{message}}). Puede que algunas cuentas ya se hayan añadido; revisa tu lista de cuentas tras reiniciar.",
   "settings.transfer.warnings.settings": "Las cuentas se importaron, pero algunos ajustes no se pudieron guardar.",
   "settings.transfer.warnings.aiKey": "No se pudo guardar la clave del proveedor de IA. Vuelve a introducirla en Ajustes.",
+  "settings.transfer.warnings.contacts": "No se pudieron importar tus contactos. El resto de tus ajustes se aplicó.",
   "settingsPage.close": "Cerrar ajustes",
   "settingsPage.minimize": "Minimizar ajustes",
   "settingsPage.restore": "Volver a abrir ajustes",

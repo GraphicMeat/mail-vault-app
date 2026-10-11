@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "読み込みが完了しませんでした ({{message}})。一部のアカウントは追加済みの可能性があります。再起動後にアカウント一覧を確認してください。",
   "settings.transfer.warnings.settings": "アカウントは読み込まれましたが、一部の設定を保存できませんでした。",
   "settings.transfer.warnings.aiKey": "AI プロバイダのキーを保存できませんでした。設定でもう一度入力してください。",
+  "settings.transfer.warnings.contacts": "連絡先を読み込めませんでした。その他の設定は適用されました。",
   "settingsPage.close": "設定を閉じる",
   "settingsPage.minimize": "設定を最小化",
   "settingsPage.restore": "設定を再表示",

@@ -75,8 +75,9 @@ export function planImport(bundle, existingAccounts) {
  * plus app.db config. Accounts already here (same logical key) are never
  * re-saved and their file settings are dropped; they still map to the local
  * id so imported views/fields that name them keep working.
- * `aiKeyError` and `settingsError` are soft warnings (the AI key did not reach
- * the keychain / the settings file write failed); the accounts are saved.
+ * `aiKeyError`, `contactsError` and `settingsError` are soft warnings (the AI
+ * key did not reach the keychain / the contacts did not import / the settings
+ * file write failed); the accounts are saved.
  */
 export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
   const existing = await getAccounts();
@@ -107,6 +108,7 @@ export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
   const { settingsError } = await applySettings(bundle, importedMap, { applyGlobal: applyAppSettings, existingIds: existing.map(a => a.id) });
 
   let aiKeyError = false;
+  let contactsError = false;
   if (applyAppSettings && bundle.appConfig) {
     const report = await daemonCall('transfer.apply_config', {
       appConfig: bundle.appConfig,
@@ -114,7 +116,8 @@ export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
       aiEndpointKey: bundle.aiEndpointKey ?? undefined,
     });
     aiKeyError = !!report?.aiKeyError;
+    contactsError = !!report?.contactsError;
   }
   console.log('[transfer] imported', toSave.length, 'account(s)');
-  return { imported: toSave.length, aiKeyError, settingsError };
+  return { imported: toSave.length, aiKeyError, contactsError, settingsError };
 }

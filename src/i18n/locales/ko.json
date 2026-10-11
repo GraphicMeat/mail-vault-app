@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "가져오기가 완료되지 않았습니다({{message}}). 일부 계정은 이미 추가되었을 수 있으니 다시 시작한 후 계정 목록을 확인하세요.",
   "settings.transfer.warnings.settings": "계정은 가져왔지만 일부 설정을 저장하지 못했습니다.",
   "settings.transfer.warnings.aiKey": "AI 제공업체 키를 저장하지 못했습니다. 설정에서 다시 입력하세요.",
+  "settings.transfer.warnings.contacts": "연락처를 가져오지 못했습니다. 나머지 설정은 적용되었습니다.",
   "settingsPage.close": "설정 닫기",
   "settingsPage.minimize": "설정 최소화",
   "settingsPage.restore": "설정 다시 열기",

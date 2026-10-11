@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "Der Import wurde nicht abgeschlossen ({{message}}). Einige Konten wurden eventuell schon hinzugefügt; prüfe nach dem Neustart deine Kontenliste.",
   "settings.transfer.warnings.settings": "Die Konten wurden importiert, aber einige Einstellungen konnten nicht gespeichert werden.",
   "settings.transfer.warnings.aiKey": "Der Schlüssel des KI-Anbieters konnte nicht gespeichert werden. Gib ihn in den Einstellungen erneut ein.",
+  "settings.transfer.warnings.contacts": "Deine Kontakte konnten nicht importiert werden. Die übrigen Einstellungen wurden übernommen.",
   "settingsPage.close": "Einstellungen schließen",
   "settingsPage.minimize": "Einstellungen minimieren",
   "settingsPage.restore": "Einstellungen wieder öffnen",

@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "L'importazione non è stata completata ({{message}}). Alcuni account potrebbero essere già stati aggiunti; controlla l'elenco degli account dopo il riavvio.",
   "settings.transfer.warnings.settings": "Gli account sono stati importati, ma alcune impostazioni non sono state salvate.",
   "settings.transfer.warnings.aiKey": "Impossibile salvare la chiave del provider IA. Inseriscila di nuovo in Impostazioni.",
+  "settings.transfer.warnings.contacts": "Non è stato possibile importare i tuoi contatti. Il resto delle impostazioni è stato applicato.",
   "settingsPage.close": "Chiudi le impostazioni",
   "settingsPage.minimize": "Riduci le impostazioni a icona",
   "settingsPage.restore": "Riapri le impostazioni",

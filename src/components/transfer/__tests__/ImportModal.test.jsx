@@ -71,6 +71,16 @@ it('holds the reload behind Restart now when a setting or the AI key did not sav
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
+it('holds the reload behind Restart now when the contacts did not import', async () => {
+  const reload = vi.fn();
+  transfer.applyImport.mockResolvedValue({ imported: 1, aiKeyError: false, contactsError: true, settingsError: false });
+  render(<ImportModal onClose={() => {}} reload={reload} />);
+  await unlock();
+  fireEvent.click(importButton());
+  await screen.findByText(t('settings.transfer.warnings.contacts'));
+  expect(reload).not.toHaveBeenCalled();
+});
+
 // Closing without a reload would leave the imported accounts invisible.
 it.each(['close button', 'Escape'])('reloads instead of closing via the %s once something was imported', async how => {
   const reload = vi.fn();

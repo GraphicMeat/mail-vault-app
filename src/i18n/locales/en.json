@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "The import did not finish ({{message}}). Some accounts may already be added; check your account list after restarting.",
   "settings.transfer.warnings.settings": "Accounts were imported, but some settings could not be saved.",
   "settings.transfer.warnings.aiKey": "The AI provider key could not be saved. Enter it again in Settings.",
+  "settings.transfer.warnings.contacts": "Your contacts could not be imported. The rest of your settings were applied.",
   "settingsPage.close": "Close Settings",
   "settingsPage.minimize": "Minimize Settings",
   "settingsPage.restore": "Restore Settings",

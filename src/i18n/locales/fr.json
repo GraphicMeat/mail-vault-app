@@ -2902,6 +2902,7 @@
   "settings.transfer.errors.partial": "L'importation n'a pas abouti ({{message}}). Certains comptes ont peut-être déjà été ajoutés ; vérifiez votre liste de comptes après le redémarrage.",
   "settings.transfer.warnings.settings": "Les comptes ont été importés, mais certains paramètres n'ont pas pu être enregistrés.",
   "settings.transfer.warnings.aiKey": "La clé du fournisseur d'IA n'a pas pu être enregistrée. Saisissez-la de nouveau dans Paramètres.",
+  "settings.transfer.warnings.contacts": "Vos contacts n'ont pas pu être importés. Le reste de vos paramètres a été appliqué.",
   "settingsPage.close": "Fermer les paramètres",
   "settingsPage.minimize": "Réduire les paramètres",
   "settingsPage.restore": "Réafficher les paramètres",
