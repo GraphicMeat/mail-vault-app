@@ -70,7 +70,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 // like the Contacts export so a big book never holds the lock long.
                 match people_write::export_text(state, None, |_, _| {}).await {
                     Ok(text) => cfg.contacts = (!text.is_empty()).then_some(text),
-                    Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+                    // an unavailable custody store must not fail the whole settings export
+                    Err(e) => tracing::warn!("transfer: contacts not exported: {e}"),
                 }
                 let cfg_json = match serde_json::to_value(cfg) {
                     Ok(v) => v,
@@ -339,6 +340,28 @@ mod tests {
         assert_eq!(out["aiEndpointKey"], "sk-export-test");
         assert!(out["appConfig"].is_object(), "{out}");
         assert_eq!(out["appConfig"]["tags"], json!([]));
+
+        std::env::remove_var("MAILVAULT_TEST_AI_KEY");
+    }
+
+    #[tokio::test]
+    async fn export_still_succeeds_without_contacts_when_custody_is_unavailable() {
+        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("MAILVAULT_TEST_AI_KEY", dir.path().join("ai_key"));
+
+        let s = st();
+        *mailvault_core::custody::lock(&s.custody.db) = None;
+        let exported = call(
+            &s,
+            "transfer.export",
+            json!({ "password": "correct horse battery", "bundle": sample_bundle(), "includeAppConfig": true }),
+        )
+        .await;
+        let data = exported.result.expect("export must succeed")["data"].as_str().unwrap().to_string();
+        let out = call(&s, "transfer.decrypt", json!({ "password": "correct horse battery", "data": data })).await.result.unwrap();
+        assert!(out["appConfig"].is_object(), "{out}");
+        assert!(out["appConfig"]["contacts"].is_null(), "{out}");
 
         std::env::remove_var("MAILVAULT_TEST_AI_KEY");
     }

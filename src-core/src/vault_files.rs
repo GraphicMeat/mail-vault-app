@@ -1148,7 +1148,7 @@ pub struct ExportedAttachments {
 /// extension — the same rule a browser download uses. Nothing here overwrites
 /// anything: an unrelated `invoice.pdf` in the export folder is not ours to
 /// destroy, and two `image.png` on one forwarded message are both wanted.
-fn next_free(path: &Path) -> PathBuf {
+pub fn next_free(path: &Path) -> PathBuf {
     // `symlink_metadata`, not `exists`: a DANGLING symlink at this name reads
     // as "does not exist", and then `create_dir_all`/`write_atomic` fails on
     // it and takes the whole export down instead of stepping to `(1)`.

@@ -156,19 +156,22 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, p: &Value, id:
                 // the file is written off the custody lock, via a .part then a rename
                 let result = tokio::task::spawn_blocking(move || {
                     let dir = std::path::Path::new(&dest);
-                    let (part, target) = (dir.join("contacts.vcf.part"), dir.join("contacts.vcf"));
+                    // never replace a contacts.vcf that is already in the chosen folder
+                    let target = mailvault_core::vault_files::next_free(&dir.join("contacts.vcf"));
+                    let name = target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    let part = dir.join(format!("{name}.part"));
                     let count = text.lines().filter(|l| *l == "BEGIN:VCARD").count();
                     let written = std::fs::write(&part, text).and_then(|_| std::fs::rename(&part, &target));
                     if written.is_err() {
                         let _ = std::fs::remove_file(&part);
                     }
                     written.map_err(|_| "contacts.exportFailed".to_string())?;
-                    Ok(json!({"file": "contacts.vcf", "count": count}))
+                    Ok(json!({"file": name, "count": count}))
                 })
                 .await
                 .unwrap_or_else(|_| Err("contacts.exportFailed".to_string()));
-                if result.is_ok() {
-                    job.step(1, 1, Some("contacts.vcf"));
+                if let Ok(v) = &result {
+                    job.step(1, 1, v["file"].as_str());
                 }
                 job.finish(result);
             });
@@ -258,6 +261,21 @@ mod tests {
         let text = std::fs::read_to_string(dest.path().join("contacts.vcf")).unwrap();
         assert!(text.contains("FN:Al") && text.contains("FN:Bo") && text.contains("NOTE:n"));
         assert!(!dest.path().join("contacts.vcf.part").exists());
+    }
+
+    #[tokio::test]
+    async fn export_vcf_does_not_replace_a_contacts_file_already_in_the_folder() {
+        let (_d, s) = state();
+        call(&s, "people.create", json!({"displayName": "Al", "emails": ["a@x.io"]})).await;
+        let dest = tempfile::tempdir().unwrap();
+        std::fs::write(dest.path().join("contacts.vcf"), "mine").unwrap();
+        let mut rx = s.events.subscribe();
+        call(&s, "people.export_vcf", json!({"jobId": "j4", "destDir": dest.path().to_string_lossy()})).await;
+        let (_, frame) = crate::handlers::vault_files::finished_export(&mut rx, "j4").await;
+        assert!(frame.get("error").is_none(), "{frame}");
+        assert_eq!(frame["result"]["file"], "contacts (1).vcf");
+        assert_eq!(std::fs::read_to_string(dest.path().join("contacts.vcf")).unwrap(), "mine");
+        assert!(std::fs::read_to_string(dest.path().join("contacts (1).vcf")).unwrap().contains("FN:Al"));
     }
 
     #[tokio::test]
