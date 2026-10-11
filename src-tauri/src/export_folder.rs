@@ -25,8 +25,8 @@ use tracing::{info, warn};
 
 use crate::external_location::{self, ExternalLocation, SLOT_ATTACHMENT_EXPORT};
 
-/// The two daemon routes this forwards; anything else is refused.
-const EXPORT_METHODS: [&str; 2] = ["export_attachments", "views.export_attachments"];
+/// The daemon routes this forwards; anything else is refused.
+const EXPORT_METHODS: [&str; 3] = ["export_attachments", "views.export_attachments", "people.export_vcf"];
 
 /// The daemon answers as soon as the job is spawned: this covers the start.
 const START_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
@@ -141,6 +141,12 @@ pub(crate) fn release_all(app: &tauri::AppHandle, why: &str) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn contacts_export_is_an_allowed_export_method() {
+        assert!(EXPORT_METHODS.contains(&"people.export_vcf"));
+        assert!(EXPORT_METHODS.contains(&"export_attachments"));
+    }
 
     #[test]
     fn only_a_final_frame_of_a_held_job_releases_it() {

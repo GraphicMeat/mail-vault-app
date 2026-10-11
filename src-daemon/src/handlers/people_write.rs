@@ -7,6 +7,8 @@ use mailvault_core::people::{journal, merge, review, store, vcard};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+const EXPORT_PAGE: usize = 200;
+
 async fn import_chunked(state: &Arc<DaemonState>, text: String) -> Result<Value, String> {
     let cards = tokio::task::spawn_blocking(move || vcard::VCard::parse_all(&text))
         .await
@@ -22,6 +24,27 @@ async fn import_chunked(state: &Arc<DaemonState>, text: String) -> Result<Value,
         crate::search_index::wait_foreground_quiet(&state.search_index).await;
     }
     serde_json::to_value(total).map_err(|e| e.to_string())
+}
+
+/// One vCard text for `ids` (every person when `None`), built a page of people
+/// per custody call with a quiet-UI wait between pages, so a big book never
+/// holds the lock for long. Reports progress on `job` page by page.
+async fn export_text(state: &Arc<DaemonState>, ids: Option<Vec<String>>, job: &mut super::vault_files::ExportJob) -> Result<String, String> {
+    let ids = match ids {
+        Some(i) => i,
+        None => db_blocking(state, store::all_ids).await?,
+    };
+    let (mut text, mut done) = (String::new(), 0usize);
+    for page in ids.chunks(EXPORT_PAGE) {
+        let page = page.to_vec();
+        done += page.len();
+        text.push_str(&db_blocking(state, move |c| vcard::export(c, Some(page.as_slice()))).await?);
+        job.step(done, ids.len(), None);
+        if done < ids.len() {
+            crate::search_index::wait_foreground_quiet(&state.search_index).await;
+        }
+    }
+    Ok(text)
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, p: &Value, id: Value) -> Option<RpcResponse> {
@@ -117,6 +140,40 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, p: &Value, id:
             Ok(text) => import_chunked(state, text).await,
             Err(e) => Err(e),
         },
+        "people.export_vcf" => {
+            let (job_id, dest) = match (str_param(p, "jobId"), str_param(p, "destDir")) {
+                (Ok(j), Ok(d)) => (j, d),
+                (Err(e), _) | (_, Err(e)) => return Some(done(id, Err(e))),
+            };
+            let ids = p.get("ids").map(|_| strings(p, "ids"));
+            let mut job = super::vault_files::ExportJob::new(state, job_id.clone(), 1);
+            let state = Arc::clone(state);
+            tokio::spawn(async move {
+                let text = match export_text(&state, ids, &mut job).await {
+                    Ok(t) => t,
+                    Err(_) => return job.finish(Err("contacts.exportFailed".into())),
+                };
+                // the file is written off the custody lock, via a .part then a rename
+                let result = tokio::task::spawn_blocking(move || {
+                    let dir = std::path::Path::new(&dest);
+                    let (part, target) = (dir.join("contacts.vcf.part"), dir.join("contacts.vcf"));
+                    let count = text.lines().filter(|l| *l == "BEGIN:VCARD").count();
+                    let written = std::fs::write(&part, text).and_then(|_| std::fs::rename(&part, &target));
+                    if written.is_err() {
+                        let _ = std::fs::remove_file(&part);
+                    }
+                    written.map_err(|_| "contacts.exportFailed".to_string())?;
+                    Ok(json!({"file": "contacts.vcf", "count": count}))
+                })
+                .await
+                .unwrap_or_else(|_| Err("contacts.exportFailed".to_string()));
+                if result.is_ok() {
+                    job.step(1, 1, Some("contacts.vcf"));
+                }
+                job.finish(result);
+            });
+            return Some(done(id, Ok(json!({"jobId": job_id}))));
+        }
         _ => return None,
     };
     Some(done(id, res))
@@ -180,5 +237,50 @@ mod tests {
         assert_eq!(u["result"]["op"], "import");
         assert_eq!(call(&s, "people.list", json!({})).await["result"]["total"], 0);
         assert!(call(&s, "people.undo", json!({})).await["result"].is_null(), "nothing left to undo");
+    }
+
+    #[tokio::test]
+    async fn export_vcf_writes_the_folder_and_ends_with_a_final_frame() {
+        let (_d, s) = state();
+        for (n, e) in [("Al", "a@x.io"), ("Bo", "b@x.io")] {
+            call(&s, "people.create", json!({"displayName": n, "emails": [e], "notes": "n"})).await;
+        }
+        let dest = tempfile::tempdir().unwrap();
+        let mut rx = s.events.subscribe();
+        let r = call(&s, "people.export_vcf", json!({"jobId": "j1", "destDir": dest.path().to_string_lossy()})).await;
+        assert_eq!(r["result"]["jobId"], "j1");
+        let (_, frame) = crate::handlers::vault_files::finished_export(&mut rx, "j1").await;
+        assert!(frame.get("error").is_none(), "{frame}");
+        assert_eq!(frame["result"]["count"], 2);
+        let text = std::fs::read_to_string(dest.path().join("contacts.vcf")).unwrap();
+        assert!(text.contains("FN:Al") && text.contains("FN:Bo") && text.contains("NOTE:n"));
+        assert!(!dest.path().join("contacts.vcf.part").exists());
+    }
+
+    #[tokio::test]
+    async fn export_vcf_into_a_missing_folder_fails_with_a_catalog_key_and_still_sends_the_final_frame() {
+        let (_d, s) = state();
+        let mut rx = s.events.subscribe();
+        call(&s, "people.export_vcf", json!({"jobId": "j2", "destDir": "/nonexistent/definitely/not/here"})).await;
+        let (_, frame) = crate::handlers::vault_files::finished_export(&mut rx, "j2").await;
+        assert_eq!(frame["error"], "contacts.exportFailed");
+    }
+
+    #[tokio::test]
+    async fn export_vcf_pages_a_big_book_and_loses_nobody() {
+        let (_d, s) = state();
+        let mut text = String::new();
+        for i in 0..450 {
+            text.push_str(&format!("BEGIN:VCARD\nFN:P{i}\nEMAIL:p{i}@x.io\nEND:VCARD\n"));
+        }
+        call(&s, "people.import_vcf", json!({"text": text})).await;
+        let dest = tempfile::tempdir().unwrap();
+        let mut rx = s.events.subscribe();
+        call(&s, "people.export_vcf", json!({"jobId": "j3", "destDir": dest.path().to_string_lossy()})).await;
+        let (_, frame) = crate::handlers::vault_files::finished_export(&mut rx, "j3").await;
+        assert!(frame.get("error").is_none(), "{frame}");
+        assert_eq!(frame["result"]["count"], 450);
+        let out = std::fs::read_to_string(dest.path().join("contacts.vcf")).unwrap();
+        assert_eq!(out.matches("BEGIN:VCARD").count(), 450);
     }
 }

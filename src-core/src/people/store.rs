@@ -362,6 +362,16 @@ pub fn list_with_totals(
     Ok((page, total as usize))
 }
 
+/// Every live person id in list order (pinned first, then name), one cheap
+/// query, so a caller can page the expensive per-person work itself.
+pub fn all_ids(conn: &Connection) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id FROM person WHERE deleted_ms IS NULL ORDER BY pinned DESC, lower(display_name), id")
+        .map_err(err)?;
+    let ids = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(err)?.collect::<Result<_, _>>().map_err(err)?;
+    Ok(ids)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
