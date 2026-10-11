@@ -883,20 +883,21 @@ pub async fn store_archived(
             gate(&mut || {
                 // An archived copy already there is the one to keep.
                 let existing = match registry.known(&account_key, &mailbox_owned, uid) {
-                    Some(Some(name)) => Some(name).filter(|n| crate::maildir::carries_archived(n)),
+                    Some(Some(name)) => Some(name).filter(|n| crate::message_store::is_archived_entry(&root, &account_key, &mailbox_owned, n)),
                     Some(None) => None,
                     None => crate::message_store::archived_name(&root, &account_key, &mailbox_owned, uid),
                 };
                 if let Some(name) = existing {
                     let path = crate::message_store::entry_path(&root, &account_key, &mailbox_owned, &name);
-                    // Read under the lock: the comparison is about this file.
-                    let same = std::fs::read(&path).map_or(false, |held| held == raw);
+                    // Read under the lock: the comparison is about this file
+                    // (a record's bytes are its blob's).
+                    let same = crate::message_store::read_path(&path).map_or(false, |held| held == raw);
                     let outcome = if same { StoreOutcome::FoundSame } else { StoreOutcome::FoundDifferent };
                     written = Some((path, outcome));
                     return Ok(());
                 }
                 vault_files::store(&registry, &root, &account_key, &mailbox_owned, uid, &raw, &flags, true)?;
-                let name = crate::message_store::entry_name(uid, &flags);
+                let name = crate::message_store::stored_name(&root, uid, &flags);
                 written = Some((crate::message_store::entry_path(&root, &account_key, &mailbox_owned, &name), StoreOutcome::Wrote));
                 Ok(())
             })

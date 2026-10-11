@@ -205,8 +205,9 @@ fn encoded_part_size(part: &mailparse::ParsedMail) -> u64 {
 }
 
 /// `ParseFn` for core: the list-row parser, so rows and the index agree on one parser.
-/// `filename` is the listed `Entry.name`; its flags are the ones the store
-/// listed it under (`message_store::flags_in_name`).
+/// `filename` is the name the listed entry's flags read off
+/// (`message_store::flags_name`); its flags are the ones the store listed it
+/// under (`message_store::flags_in_name`).
 pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<IndexDoc> {
     let email = parse_eml_bytes_light(raw, uid, message_store::flags_in_name(filename)).ok()?;
     let mut row = serde_json::to_value(&email).ok()?;
@@ -699,12 +700,13 @@ pub fn rows_reply(st: &SearchIndexState, account_id: &str, mailbox: &str, uids: 
     let Some(conn) = guard.as_ref() else { return Vec::new() };
     let vault_dir = core::text::vault_dir_name(mailbox);
     let rows = (|| -> Result<Vec<Value>, String> {
-        let mut stmt = conn.prepare_cached("SELECT filename, row_json FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3").map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare_cached("SELECT filename, row_json, flags FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3").map_err(|e| e.to_string())?;
         let mut rows = Vec::new();
         for uid in uids {
-            let Some((filename, row_json)) = stmt.query_row((account_id, vault_dir.as_str(), *uid), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).optional().map_err(|e| e.to_string())? else { continue };
+            let Some((filename, row_json, letters)) = stmt.query_row((account_id, vault_dir.as_str(), *uid), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))).optional().map_err(|e| e.to_string())? else { continue };
             let Ok(mut row) = serde_json::from_str::<serde_json::Value>(&row_json) else { continue };
-            let flags = message_store::flags_in_name(&filename);
+            // A JMAP record's name holds no flags: the row's letters answer for it.
+            let flags = message_store::listed_flags(&filename, &letters);
             let Some(obj) = row.as_object_mut() else { continue };
             obj.insert("uid".into(), (*uid).into());
             obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());

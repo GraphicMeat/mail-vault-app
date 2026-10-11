@@ -290,6 +290,39 @@ async fn remove_existing_true_removes_the_stale_legacy_file() {
     assert_eq!(names.len(), 1, "only the fresh write remains: {names:?}");
 }
 
+// ── (c2) a JMAP vault: the run writes records and replaces a Maildir copy ──
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_archive_run_in_a_jmap_vault_writes_records() {
+    use mailvault_core::message_store::{self, Format};
+    let server = MockImap::start(Scenario::new().mailbox(inbox_with_one(1)));
+    let root = tempfile::tempdir().expect("tempdir");
+    message_store::set_vault_format(root.path(), Format::Jmap).unwrap();
+    let (_app, registry) = registry_for(root.path());
+    let dir = cur_dir(root.path(), "acct", "INBOX");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(&format!("1{INFO_PREFIX}S.eml")), b"stale").unwrap();
+
+    let ctx = Arc::new(ArchiveCtx {
+        root: root.path().to_path_buf(),
+        pool: Arc::new(pool()),
+        gate: always_open_gate(),
+        sinks: noop_sinks(),
+        registry: Arc::clone(&registry),
+    });
+    let result = archive::run(ctx, "acct".to_string(), account_json(&server), "INBOX".to_string(), vec![1], Arc::new(AtomicBool::new(false)), false)
+        .await
+        .expect("run does not error");
+
+    assert_eq!(result.completed, 1);
+    assert!(file_names(&dir).is_empty(), "the Maildir copy is replaced: {:?}", file_names(&dir));
+    let record = message_store::find(root.path(), "acct", "INBOX", 1).expect("archived");
+    assert_eq!(record.name, "1.json");
+    assert!(record.flags.contains(&"archived".to_string()));
+    assert_ne!(message_store::read_raw(root.path(), "acct", "INBOX", 1).unwrap(), Some(b"stale".to_vec()));
+    assert_eq!(registry.uid_sets(root.path(), "acct", "INBOX"), Some((vec![1], vec![1])));
+}
+
 // ── (d) the vault registry holds every stored uid without a relisting ───────
 
 #[tokio::test(flavor = "multi_thread")]

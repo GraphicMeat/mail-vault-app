@@ -2066,4 +2066,32 @@ From e@f Mon Jan  1 00:00:00 2026\nSubject: three\n\nno trailing newline";
         let r = Trickle { data, pos: 0, step: 3, fail_at: Some(budget) };
         assert_eq!(sample_labels(r, 200, budget as u64).unwrap(), (false, 20));
     }
+
+    /// Task 7: a JMAP vault's mbox export reads each record's blob and its
+    /// flags; an import into it writes records, and its uid allocation and
+    /// dedupe see the records already there.
+    #[test]
+    fn mbox_export_and_import_read_and_write_records_in_a_jmap_vault() {
+        use mailvault_core::message_store::{self, Format};
+        let (v, s) = state(true);
+        message_store::set_vault_format(v.path(), Format::Jmap).unwrap();
+        message_store::write(v.path(), "acct1", "INBOX", 1, b"Message-ID: <one@x>\r\nSubject: one\r\n\r\nbody one", &["archived".to_string()]).unwrap();
+        message_store::write(v.path(), "acct1", "INBOX", 2, b"Subject: two\r\n\r\nbody two", &[]).unwrap();
+
+        let dest = tempfile::tempdir().unwrap().keep().join("out.mbox");
+        assert_eq!(export_mbox_all(&s, dest.clone(), false, |_, _| {}).unwrap().email_count, 2);
+        let content = std::fs::read_to_string(&dest).unwrap();
+        assert!(content.contains("body one") && content.contains("body two"), "{content}");
+        assert!(!content.contains("\"format\""), "never a record's JSON");
+        assert_eq!(export_mbox_all(&s, tempfile::tempdir().unwrap().keep().join("a.mbox"), true, |_, _| {}).unwrap().email_count, 1);
+
+        let dir = tempfile::tempdir().unwrap();
+        let mbox_path = write_mbox(dir.path(), "in.mbox", &["Message-ID: <one@x>\r\nSubject: one\r\n\r\nbody one", "Subject: new\r\n\r\nbody new"]);
+        let result = import_mbox(&s, mbox_path, "acct1".to_string(), "INBOX".to_string(), false, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 1, "the message a record already holds is a duplicate");
+        let uids = message_store::uids(v.path(), "acct1", "INBOX").unwrap();
+        let imported: Vec<u32> = uids.iter().copied().filter(|u| message_store::is_import_uid(*u)).collect();
+        assert_eq!(imported.len(), 1);
+        assert_eq!(message_store::find(v.path(), "acct1", "INBOX", imported[0]).unwrap().name, format!("{}.json", imported[0]));
+    }
 }

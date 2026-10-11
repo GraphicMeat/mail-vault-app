@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::fsx::{mark_from_internet, write_atomic};
-use crate::maildir::{self, find_by_uid, vault_filename_uid};
+use crate::maildir::{self, vault_filename_uid};
 use crate::vault_registry::VaultRegistry;
 use crate::vault_eml::{
     collect_attachment_parts, is_real_attachment, parse_eml_bytes, parse_eml_bytes_light,
@@ -100,29 +100,31 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
 /// directory pass — the per-uid `find_by_uid` rescans the whole directory
 /// each call, which is quadratic over a bulk selection. The registry drops
 /// the uids whose files went; a failed removal leaves the disk uncertain, so
-/// the mailbox is invalidated instead.
+/// the mailbox is invalidated instead. A uid's JMAP record goes too, by one
+/// pass over the record directory (never its blob).
 pub fn delete_maildir_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> usize {
     let cur_dir = cur_path(root, account_id, mailbox);
     let mut removed = 0usize;
     let mut gone: Vec<u32> = Vec::new();
     let mut failed = false;
-    if let Ok(entries) = fs::read_dir(&cur_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Some(uid) = vault_filename_uid(&name) else { continue };
-            if !uids.contains(&uid) {
-                continue;
+    let records = crate::message_store::mailbox_dir(root, account_id, mailbox).join(crate::message_store::JMAP_DIR);
+    let in_cur = fs::read_dir(&cur_dir).into_iter().flatten().flatten().filter_map(|e| Some((vault_filename_uid(&e.file_name().to_string_lossy())?, e.path())));
+    let in_records = fs::read_dir(&records).into_iter().flatten().flatten().filter(|e| crate::message_store::is_record_path(&e.path())).filter_map(|e| {
+        Some((crate::message_store::record_uid(&e.file_name().to_string_lossy())?, e.path()))
+    });
+    for (uid, path) in in_cur.chain(in_records) {
+        if !uids.contains(&uid) {
+            continue;
+        }
+        match fs::remove_file(&path) {
+            Ok(()) => {
+                crate::pgp::remove_copy(&cur_dir, uid);
+                removed += 1;
+                gone.push(uid);
             }
-            match fs::remove_file(entry.path()) {
-                Ok(()) => {
-                    crate::pgp::remove_copy(&cur_dir, uid);
-                    removed += 1;
-                    gone.push(uid);
-                }
-                Err(e) => {
-                    failed = true;
-                    warn!("maildir purge: failed to remove {:?}: {}", entry.path(), e);
-                }
+            Err(e) => {
+                failed = true;
+                warn!("maildir purge: failed to remove {:?}: {}", path, e);
             }
         }
     }
@@ -364,7 +366,27 @@ pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mail
 pub fn read_light_batch_on_disk(root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Vec<Option<LightEmail>> {
     let cur_dir = cur_path(root, account_id, mailbox);
     let files = maildir::uid_file_map(&cur_dir);
-    read_light_listed(&cur_dir, &files, uids)
+    let records = cur_dir.parent().map(|m| m.join(crate::message_store::JMAP_DIR)).unwrap_or_default();
+    let held: HashSet<u32> = fs::read_dir(&records)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| crate::message_store::record_uid(&e.file_name().to_string_lossy()))
+        .collect();
+    if held.is_empty() {
+        return read_light_listed(&cur_dir, &files, uids);
+    }
+    // A uid with a JMAP record is read from it (its blob, its flags).
+    uids.iter()
+        .map(|uid| {
+            if !held.contains(uid) {
+                return read_light_at(&cur_dir, *uid, Some(files.get(uid)?.as_path()));
+            }
+            let (flags_name, raw) = crate::message_store::read_at(root, &records.join(format!("{uid}.json"))).ok()?;
+            let raw = crate::pgp::readable(&cur_dir, *uid, raw);
+            parse_eml_bytes_light(&raw, *uid, parse_flags_from_filename(&flags_name)).ok()
+        })
+        .collect()
 }
 
 /// `read_light_batch_on_disk` against a listing taken earlier. A uid the listing
@@ -584,6 +606,10 @@ pub fn storage_stats(root: &Path, account_id: Option<&str>) -> MaildirStorageSta
                     total_bytes += meta.len();
                     email_count += 1;
                 }
+            } else if let Some(entry) = crate::message_store::is_record_path(entry.path()).then(|| crate::message_store::entry_at(entry.path(), 0)).flatten() {
+                // A JMAP record: the message's size, not the record's.
+                total_bytes += entry.size;
+                email_count += 1;
             }
         }
     }
@@ -638,6 +664,16 @@ pub fn clear_cache(
                 continue;
             }
             let name = entry.file_name().to_string_lossy().to_string();
+            // A JMAP record is judged by the Maildir name of its flags; one
+            // that will not read is kept.
+            let name = if crate::message_store::is_record_path(entry.path()) {
+                match crate::message_store::listed_message(entry.path()) {
+                    Some((_, _, flags_name)) => flags_name,
+                    None => continue,
+                }
+            } else {
+                name
+            };
             if !crate::maildir::has_info(&name) {
                 continue;
             }
@@ -669,7 +705,8 @@ pub fn clear_cache(
 }
 
 /// The one delete of a working-cache copy, shared by `clear_cache` and
-/// `evict_files`: the file, then its `.decrypted/<uid>.eml` sidecar. Refuses
+/// `evict_files`: the file, then its `.decrypted/<uid>.eml` sidecar. `name`
+/// is the name its flags read off (a JMAP record's `flags_name`). Refuses
 /// (`Ok(false)`, nothing touched) a copy whose CURRENT name carries `A`
 /// (backup/archive/restore) or `D` (draft): those are never cache, whatever
 /// a caller decided from an older listing.
@@ -701,7 +738,8 @@ fn remove_cache_copy(path: &Path, name: &str, registry: Option<(&VaultRegistry, 
         if crate::pgp::copy_path(cur, uid).exists() {
             let others_left = match registry {
                 Some((.., others_left)) => others_left,
-                None => find_by_uid(cur, uid).is_some(),
+                // Either format: `cur` is the Maildir or the record directory.
+                None => cur.parent().and_then(|mailbox| crate::message_store::held_path(mailbox, uid)).is_some(),
             };
             if !others_left {
                 crate::pgp::remove_copy(cur, uid);
@@ -716,7 +754,7 @@ fn remove_cache_copy(path: &Path, name: &str, registry: Option<(&VaultRegistry, 
 /// per attachment part, by index. Read before the message is deleted; an
 /// unreadable or unparseable message names none.
 fn attachment_cache_files(cache_dir: &Path, cur: &Path, account_id: &str, mailbox: &str, uid: u32, path: &Path) -> Vec<PathBuf> {
-    let Ok(raw) = fs::read(path) else { return Vec::new() };
+    let Ok(raw) = crate::message_store::read_path(path) else { return Vec::new() };
     let raw = crate::pgp::readable(cur, uid, raw);
     let Ok(parsed) = mailparse::parse_mail(&raw) else { return Vec::new() };
     let mut parts = Vec::new();
@@ -738,13 +776,14 @@ fn attachment_cache_files(cache_dir: &Path, cur: &Path, account_id: &str, mailbo
 pub fn cache_copies(root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<Vec<crate::fetch_mode::CachedCopy>, String> {
     use crate::fetch_mode::{CacheFile, CachedCopy};
     let cur_dir = cur_path(root, account_id, mailbox);
+    // No `cur/` is no Maildir copy; the JMAP records below may still hold some.
     let entries = match fs::read_dir(&cur_dir) {
-        Ok(e) => e,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Ok(e) => Some(e),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(format!("Failed to list {:?}: {}", cur_dir, e)),
     };
     let mut out = Vec::new();
-    for entry in entries {
+    for entry in entries.into_iter().flatten() {
         let entry = entry.map_err(|e| format!("Failed to list {:?}: {}", cur_dir, e))?;
         let name = entry.file_name().to_string_lossy().to_string();
         let Some(uid) = vault_filename_uid(&name) else { continue };
@@ -754,6 +793,19 @@ pub fn cache_copies(root: &Path, account_id: &str, mailbox: &str, uids: &HashSet
         let flags = parse_flags_from_filename(&name);
         let archived = flags.iter().any(|f| f == "archived" || f == "draft");
         let (message_id, date_ms) = if archived { (None, None) } else { maildir::read_message_id_and_date(&entry.path()) };
+        out.push(CachedCopy { file: CacheFile { uid, archived, date_ms }, message_id });
+    }
+    // The mailbox's JMAP records, judged the same way: flags from the record,
+    // the header read from its blob. One that will not read is not listed.
+    let records = cur_dir.parent().map(|m| m.join(crate::message_store::JMAP_DIR)).unwrap_or_default();
+    for entry in fs::read_dir(&records).into_iter().flatten().flatten() {
+        let Some((uid, blob, flags_name)) = crate::message_store::listed_message(&entry.path()) else { continue };
+        if !uids.contains(&uid) {
+            continue;
+        }
+        let flags = parse_flags_from_filename(&flags_name);
+        let archived = flags.iter().any(|f| f == "archived" || f == "draft");
+        let (message_id, date_ms) = if archived { (None, None) } else { maildir::read_message_id_and_date(&blob) };
         out.push(CachedCopy { file: CacheFile { uid, archived, date_ms }, message_id });
     }
     Ok(out)
@@ -773,9 +825,10 @@ pub fn cache_copies(root: &Path, account_id: &str, mailbox: &str, uids: &HashSet
 /// write lock.
 pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<Vec<u32>, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
+    // No `cur/` is no Maildir copy; the JMAP records below may still hold some.
     let entries = match fs::read_dir(&cur_dir) {
-        Ok(e) => e,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Ok(e) => Some(e),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(format!("Failed to list {:?}: {}", cur_dir, e)),
     };
     // This mailbox's extracted attachments, listed once: a message is parsed
@@ -791,14 +844,22 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
     // How many files each uid has in `cur/`, from this one listing, less
     // those removed below: what `remove_cache_copy` needs to know whether it
     // removes a uid's last file.
-    let entries: Vec<(fs::DirEntry, String, u32)> = entries
+    let mut entries: Vec<(PathBuf, String, u32)> = entries
+        .into_iter()
+        .flatten()
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             let uid = vault_filename_uid(&name)?;
-            Some((e, name, uid))
+            Some((e.path(), name, uid))
         })
         .collect();
+    // The mailbox's JMAP records, each under the name its flags read off.
+    let records = cur_dir.parent().map(|m| m.join(crate::message_store::JMAP_DIR)).unwrap_or_default();
+    entries.extend(fs::read_dir(&records).into_iter().flatten().flatten().filter_map(|e| {
+        let (uid, _, flags_name) = crate::message_store::listed_message(&e.path())?;
+        Some((e.path(), flags_name, uid))
+    }));
     let mut files_of: HashMap<u32, usize> = HashMap::new();
     for (_, _, uid) in &entries {
         *files_of.entry(*uid).or_default() += 1;
@@ -809,12 +870,12 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
         }
         let uid_prefix = format!("{mailbox_prefix}{uid}_");
         let attachments = if cached.iter().any(|n| n.starts_with(&uid_prefix)) {
-            attachment_cache_files(&cache_dir, &cur_dir, account_id, mailbox, uid, &entry.path())
+            attachment_cache_files(&cache_dir, &cur_dir, account_id, mailbox, uid, &entry)
         } else {
             Vec::new()
         };
         let files = files_of.entry(uid).or_default();
-        match remove_cache_copy(&entry.path(), &name, Some((reg, account_id, mailbox, *files > 1))) {
+        match remove_cache_copy(&entry, &name, Some((reg, account_id, mailbox, *files > 1))) {
             Ok(true) => {
                 *files -= 1;
                 removed.push((uid, attachments));
@@ -822,7 +883,7 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
             Ok(false) => {}
             Err(e) => {
                 failed = true;
-                warn!("eviction: failed to remove {:?}: {}", entry.path(), e);
+                warn!("eviction: failed to remove {:?}: {}", entry, e);
             }
         }
     }
@@ -834,9 +895,18 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
     let left: Option<HashSet<u32>> = if removed.is_empty() {
         None
     } else {
-        fs::read_dir(&cur_dir)
-            .ok()
-            .map(|rd| rd.flatten().filter_map(|e| vault_filename_uid(&e.file_name().to_string_lossy())).collect())
+        // No `cur/` (a mailbox of records) holds no Maildir file.
+        let in_cur = match fs::read_dir(&cur_dir) {
+            Ok(rd) => Some(rd.flatten().filter_map(|e| vault_filename_uid(&e.file_name().to_string_lossy())).collect::<HashSet<u32>>()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(HashSet::new()),
+            Err(_) => None,
+        };
+        in_cur.map(|mut left| {
+            left.extend(fs::read_dir(&records).into_iter().flatten().flatten().filter_map(|e| {
+                crate::message_store::record_uid(&e.file_name().to_string_lossy())
+            }));
+            left
+        })
     };
     for (uid, attachments) in removed {
         evicted.push(uid);
@@ -1380,14 +1450,25 @@ fn prefetch_attachments_in(
     above: Marks,
     gate: VaultGate<'_>,
 ) -> Result<(Vec<PathBuf>, Marks), String> {
-    let entries = fs::read_dir(cur_dir).map_err(|e| format!("Failed to read Maildir: {}", e))?;
-    let mut files: Vec<(u32, PathBuf)> = entries.flatten()
+    // Both message directories; a missing one is empty, but the folder must
+    // hold one of them.
+    let records = cur_dir.parent().map(|m| m.join(crate::message_store::JMAP_DIR)).unwrap_or_default();
+    let in_cur = fs::read_dir(cur_dir);
+    let in_records = fs::read_dir(&records);
+    if let (Err(e), Err(_)) = (&in_cur, &in_records) {
+        return Err(format!("Failed to read Maildir: {}", e));
+    }
+    let mut files: Vec<(u32, PathBuf)> = in_cur.into_iter().flatten().flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().to_string();
             let uid = vault_filename_uid(&name)?;
             Some((uid, entry.path()))
         })
         .collect();
+    files.extend(in_records.into_iter().flatten().flatten().filter_map(|entry| {
+        let uid = crate::message_store::record_uid(&entry.file_name().to_string_lossy())?;
+        crate::message_store::is_record_path(&entry.path()).then(|| (uid, entry.path()))
+    }));
     files.sort_unstable_by(|a, b| b.0.cmp(&a.0));
     let marks = Marks {
         server: files.iter().map(|f| f.0).find(|u| *u < maildir::IMPORT_UID_BASE).unwrap_or(0),
@@ -1404,7 +1485,7 @@ fn prefetch_attachments_in(
             break;
         }
         gate(&mut || {
-            let Ok(raw) = fs::read(&path) else { return Ok(()) };
+            let Ok(raw) = crate::message_store::read_path(&path) else { return Ok(()) };
             let raw = crate::pgp::readable(cur_dir, uid, raw);
             // A message with no Content-Disposition header has no attachment part.
             if !raw.windows(19).any(|w| w.eq_ignore_ascii_case(b"content-disposition")) { return Ok(()); }
@@ -1496,7 +1577,7 @@ pub fn orphan_mailbox_dirs(base: &Path, account_id: Option<&str>) -> Vec<PathBuf
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::maildir::INFO_PREFIX;
+    use crate::maildir::{find_by_uid, INFO_PREFIX};
 
     /// A registry of its own per test, in a tempdir beside the vault.
     fn registry(root: &Path) -> (tempfile::TempDir, VaultRegistry) {
@@ -2955,5 +3036,72 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert_eq!(uid_sets("user@example.com"), Vec::<u32>::new());
         assert_eq!(uid_sets("uuid-123"), vec![1]);
         assert_eq!(reg.listing_count(), 4);
+    }
+
+    // ── Task 7b: the cache walks and on-disk reads hold JMAP records too ──
+
+    /// Eviction, the cache listing, the purge, the storage count, the
+    /// no-index batch read and Clear cached emails, alike in both formats; a
+    /// record's blob is never removed.
+    #[test]
+    fn cache_walks_and_on_disk_reads_answer_alike_in_both_formats() {
+        run_both(|root, format| {
+            let (_app, reg) = registry(root);
+            let s = |f: &[&str]| f.iter().map(|x| x.to_string()).collect::<Vec<String>>();
+            for (uid, subject, flags) in [(1, "one", s(&["seen"])), (2, "two", s(&["archived"])), (3, "three", s(&["draft"])), (4, "four", s(&[]))] {
+                assert!(store(&reg, root, "acct", "INBOX", uid, &light_batch_eml(subject), &flags, true).unwrap());
+            }
+            let all: HashSet<u32> = [1, 2, 3, 4].into_iter().collect();
+            let mut copies = cache_copies(root, "acct", "INBOX", &all).unwrap();
+            copies.sort_by_key(|c| c.file.uid);
+            let seen: Vec<(u32, bool, Option<String>, bool)> =
+                copies.iter().map(|c| (c.file.uid, c.file.archived, c.message_id.clone(), c.file.date_ms.is_some())).collect();
+            assert_eq!(seen, vec![
+                (1, false, Some("one@x.test".to_string()), true),
+                (2, true, None, false),
+                (3, true, None, false),
+                (4, false, Some("four@x.test".to_string()), true),
+            ]);
+
+            let stats = storage_stats(root, Some("acct"));
+            assert_eq!(stats.email_count, 4);
+            let sizes: u64 = ["one", "two", "three", "four"].iter().map(|s| light_batch_eml(s).len() as u64).sum();
+            assert_eq!(stats.total_bytes, sizes, "the messages' sizes");
+
+            let read = read_light_batch_on_disk(root, "acct", "INBOX", &[2, 9, 1]);
+            assert_eq!(read.iter().map(|e| e.as_ref().map(|e| (e.uid, e.is_archived))).collect::<Vec<_>>(), vec![Some((2, true)), None, Some((1, false))]);
+
+            assert_eq!(evict_files(&reg, root, "acct", "INBOX", &[1, 2].into_iter().collect()).unwrap(), vec![1], "the archived copy stays");
+            assert_eq!(held_bytes(root, 1), None);
+            assert_eq!(held_bytes(root, 2), Some(light_batch_eml("two")));
+
+            let gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+            let cleared = clear_cache(&reg, root, &gate).unwrap();
+            assert_eq!((cleared.deleted_count, cleared.skipped_archived), (1, 2), "4 goes, the archived and the draft stay");
+            assert_eq!(held_bytes(root, 4), None);
+
+            assert_eq!(delete_maildir_files(&reg, root, "acct", "INBOX", &[2, 9].into_iter().collect()), 1);
+            assert_eq!(held_bytes(root, 2), None);
+            assert_eq!(sets(&reg, root), (vec![3], vec![]));
+            assert_eq!(storage_stats(root, None).email_count, 1);
+            if format == Format::Jmap {
+                for subject in ["one", "two", "three", "four"] {
+                    let id = crate::jmap_store::blobs::blob_id(&light_batch_eml(subject));
+                    assert!(crate::jmap_store::blobs::blob_path(root, &id).exists(), "never a blob");
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn prefetch_reads_a_records_blob() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        crate::message_store::write(root, "acct", "INBOX", 5, &multipart_with_attachment(), &[]).unwrap();
+        let marks = std::sync::Mutex::new(Vec::new());
+        let gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        assert_eq!(prefetch_attachments(root, "acct", "INBOX", &marks, &gate).unwrap(), 1);
+        assert_eq!(prefetch_attachments(root, "acct", "INBOX", &marks, &gate).unwrap(), 0, "above the mark");
     }
 }

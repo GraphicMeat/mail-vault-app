@@ -199,6 +199,12 @@ fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Appl
     for change in changes {
         if let Some(path) = app_files.get(&change.uid) {
             match crate::message_store::set_flags_at(path, change.uid, |current| merge_flags(current, &change.over(current))) {
+                // A record is rewritten in place under the same name: its row
+                // follows the record (flags, size, mtime), keeping its parse.
+                Ok(Some(_)) if crate::message_store::is_record_path(path) => {
+                    reg.reflag(&dirs.account_id, &dirs.mailbox, change.uid, path);
+                    out.renamed += 1;
+                }
                 Ok(Some(new_name)) => {
                     reg.rename(&dirs.account_id, &dirs.mailbox, change.uid, &new_name);
                     out.renamed += 1;
@@ -1271,5 +1277,30 @@ mod tests {
         assert_eq!((out.moved, out.app_moved), (1, 0));
         assert_eq!(saved("Sent"), vec![1]);
         assert_eq!(reg.listing_count(), 4);
+    }
+
+    /// A star on a JMAP record rewrites the record in place, renames its
+    /// mirror copy as before, and keeps the registry row and its parse.
+    #[test]
+    fn a_flag_change_rewrites_a_record_and_keeps_its_row() {
+        let f = fixture();
+        let d = &f.dirs;
+        let root = f._tmp.path();
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Jmap).unwrap();
+        crate::message_store::write(root, "acct", "INBOX", 7, b"From: a@x.test\r\nSubject: seven\r\n\r\nbody\r\n", &s(&["archived"])).unwrap();
+        fs::write(d.mirror_cur.as_ref().unwrap().join(format!("7{INFO_PREFIX}A.eml")), b"mirror").unwrap();
+        let rows = f.reg.light_rows(root, "acct", "INBOX", None).unwrap();
+        assert_eq!(rows[0]["flags"], serde_json::json!(["archived"]));
+
+        let applied = apply_everywhere(&f.reg, d, &[change(7, &["\\Seen", "\\Flagged"])], |_patch| Ok((0, 0)));
+        assert_eq!((applied.renamed, applied.mirrored), (1, 1));
+        let record = root.join("Maildir").join("acct").join("INBOX").join("jmap").join("7.json");
+        assert_eq!(f.reg.resolve(root, "acct", "INBOX", 7), Some(Some(record)));
+        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec![format!("7{INFO_PREFIX}AFS.eml")]);
+        let rows = f.reg.light_rows(root, "acct", "INBOX", Some(&[7])).unwrap();
+        assert_eq!(rows[0]["flags"], serde_json::json!(["archived", "flagged", "seen", "\\Seen", "\\Flagged"]));
+        assert_eq!((f.reg.listing_count(), f.reg.parse_count()), (1, 1), "no relisting, no reparse");
+        let again = apply_everywhere(&f.reg, d, &[change(7, &["\\Seen", "\\Flagged"])], |_patch| Ok((0, 0)));
+        assert_eq!(again.renamed, 0, "already so");
     }
 }

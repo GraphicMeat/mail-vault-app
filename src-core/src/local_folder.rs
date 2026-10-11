@@ -121,13 +121,15 @@ pub fn list(account_dir: &Path) -> std::io::Result<Vec<(String, Marker)>> {
 }
 
 /// Removes `folder` once no message is left anywhere in it (a vault file
-/// name, `has_info`; symlinks are removed, never followed), the marker last so
-/// a removal cut short still lists and can run again. `Ok(false)`: mail is
-/// left and nothing was removed. A tree that cannot be walked is an error.
+/// name, `has_info`, or a JMAP record; symlinks are removed, never followed),
+/// the marker last so a removal cut short still lists and can run again.
+/// `Ok(false)`: mail is left and nothing was removed. A tree that cannot be
+/// walked is an error.
 pub fn remove_if_no_mail(folder: &Path) -> Result<bool, String> {
     for entry in walkdir::WalkDir::new(folder) {
         let entry = entry.map_err(|e| e.to_string())?;
-        if entry.file_type().is_file() && crate::maildir::has_info(&entry.file_name().to_string_lossy()) {
+        let mail = crate::maildir::has_info(&entry.file_name().to_string_lossy()) || crate::message_store::is_record_path(entry.path());
+        if entry.file_type().is_file() && mail {
             return Ok(false);
         }
     }
@@ -337,5 +339,18 @@ mod tests {
         assert_eq!(remove_if_no_mail(&folder), Ok(true));
         assert!(!folder.exists());
         assert_eq!(fs::read(&theirs).unwrap(), b"not ours");
+    }
+
+    /// A folder holding JMAP records only still holds mail: removing it
+    /// would take the records with it.
+    #[test]
+    fn a_folder_of_records_is_not_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Jmap).unwrap();
+        crate::message_store::write(root, "acct", "MBOX_import", 3221225472, b"Subject: kept\r\n\r\nbody", &["archived".to_string()]).unwrap();
+        let folder = crate::message_store::mailbox_dir(root, "acct", "MBOX_import");
+        assert_eq!(remove_if_no_mail(&folder), Ok(false));
+        assert!(folder.join("jmap").join("3221225472.json").is_file());
     }
 }

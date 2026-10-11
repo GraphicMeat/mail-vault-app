@@ -412,4 +412,20 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&mailbox);
     }
+
+    /// Task 7: a restore uploads a JMAP record's blob under the record's
+    /// flags, and skips a trashed one, as it does Maildir files.
+    #[test]
+    fn restore_lists_records_with_their_blob_and_flags() {
+        use mailvault_core::message_store::{self, Format};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        message_store::write(root, "acct", "INBOX", 10, b"Subject: ten\r\n\r\nx", &["seen".to_string(), "flagged".to_string()]).unwrap();
+        message_store::write(root, "acct", "INBOX", 40, b"Subject: forty\r\n\r\ny", &["trashed".to_string()]).unwrap();
+        let msgs = list_messages_in_dir(&message_store::mailbox_dir(root, "acct", "INBOX"));
+        assert_eq!(msgs.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![10]);
+        assert_eq!(msgs[0].imap_flags, "\\Flagged \\Seen");
+        assert_eq!(std::fs::read(&msgs[0].path).unwrap(), b"Subject: ten\r\n\r\nx", "the blob, not the record");
+    }
 }

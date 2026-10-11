@@ -410,6 +410,9 @@ pub struct GenerationRepair {
     pub errors: u32,
     /// The generation now recorded for this mailbox.
     pub generation: u32,
+    /// JMAP records turned back into Maildir files before the repair
+    /// (`message_store::demote_records`): the repair works on names.
+    pub demoted: u32,
 }
 
 /// Strip the angle brackets and surrounding space so both sides of the join
@@ -798,6 +801,18 @@ pub fn repair_generation(
     // their place unless their uid collides with one the server is using.
     let adopting = recorded.is_none();
     report.ran = true;
+
+    // A JMAP mailbox's records become Maildir files again first: everything
+    // below renames and sets aside by file name. A demotion cut short leaves
+    // the generation unstamped, so the next repair tries again.
+    match crate::message_store::demote_records(mailbox_dir) {
+        Ok(n) => report.demoted = n as u32,
+        Err(e) => {
+            warn!("repair_generation: records not turned back into files: {}", e);
+            report.errors += 1;
+            return report;
+        }
+    }
 
     let cur = mailbox_dir.join("cur");
     if !cur.exists() {
@@ -2104,5 +2119,29 @@ mod tests {
         assert_eq!(verified.len(), n as usize);
         assert_eq!(slow_verified.len(), sample.len());
         println!("n={n} one_pass={one_pass:?} per_uid={per_uid:?} projected_old_total={:?}", per_uid * n);
+    }
+
+    /// A JMAP mailbox is repaired as Maildir files: its records become files
+    /// first (`message_store::demote_records`), then the repair runs on names.
+    #[test]
+    fn a_generation_repair_of_a_jmap_mailbox_works_on_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Jmap).unwrap();
+        let eml = |id: &str| format!("Message-ID: <{id}>\r\nSubject: s\r\n\r\nbody\r\n");
+        crate::message_store::write(root, "acct", "INBOX", 5, eml("five@x").as_bytes(), &["archived".to_string()]).unwrap();
+        crate::message_store::write(root, "acct", "INBOX", 6, eml("gone@x").as_bytes(), &["archived".to_string()]).unwrap();
+        let mailbox = crate::message_store::mailbox_dir(root, "acct", "INBOX");
+        write_generation(&mailbox, 1).unwrap();
+        let id_to_uid: HashMap<String, u32> = [("five@x".to_string(), 50)].into_iter().collect();
+
+        let r = repair_generation(&mailbox, 2, &id_to_uid, &HashSet::new());
+        assert_eq!(r.demoted, 2);
+        assert_eq!(r.rebound, vec![(5, 50)]);
+        assert_eq!(r.orphaned, vec![6]);
+        assert!(!mailbox.join("jmap").join("5.json").exists() && !mailbox.join("jmap").join("6.json").exists());
+        assert!(mailbox.join("cur").join(format!("50{INFO_PREFIX}A.eml")).is_file());
+        let orphaned: Vec<String> = fs::read_dir(mailbox.join(ORPHAN_DIR)).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(orphaned, vec![format!("6{INFO_PREFIX}A.eml")], "orphaned/ stays .eml");
     }
 }

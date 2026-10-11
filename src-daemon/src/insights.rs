@@ -900,12 +900,15 @@ fn inventory(
         let vault_files = snapshot.walk(&vault_root, &account);
         let mut physical = HashSet::new();
         for path in vault_files.iter().filter(|p| {
-            p.parent()
-                .and_then(Path::file_name)
-                .and_then(|n| n.to_str())
-                == Some("cur")
+            matches!(p.parent().and_then(Path::file_name).and_then(|n| n.to_str()), Some("cur") | Some("jmap"))
         }) {
-            let Some(uid) = file_uid(path) else {
+            // A JMAP record (`jmap/<uid>.json`) by the store's rule; a `cur/` file by the name.
+            let uid = match mailvault_core::message_store::listed_message(path) {
+                Some((uid, _, _)) => Some(uid),
+                None if path.parent().and_then(Path::file_name).and_then(|n| n.to_str()) == Some("jmap") => None,
+                None => file_uid(path),
+            };
+            let Some(uid) = uid else {
                 continue;
             };
             let folder = path.parent().unwrap().parent().unwrap();
@@ -1002,7 +1005,12 @@ fn read_header_block<R: BufRead>(reader: &mut R) -> Result<Vec<u8>, String> {
     }
 }
 fn read_eml(path: &Path, uid: u32) -> Result<Value, String> {
-    let file = fs::File::open(path).map_err(|_| "unreadableHeader")?;
+    // A JMAP record: the header of its blob, the flags of the record.
+    let (path, flags_name) = match mailvault_core::message_store::listed_message(path) {
+        Some((_, blob, flags_name)) => (blob, flags_name),
+        None => (path.to_path_buf(), path.file_name().unwrap().to_str().unwrap_or_default().to_string()),
+    };
+    let file = fs::File::open(&path).map_err(|_| "unreadableHeader")?;
     let raw = read_header_block(&mut BufReader::new(file))?;
     let (headers, _) = mailparse::parse_headers(&raw).map_err(|_| "unreadableHeader")?;
     let get = |name: &str| {
@@ -1019,8 +1027,7 @@ fn read_eml(path: &Path, uid: u32) -> Result<Value, String> {
         .and_then(|a| a.first())
         .cloned()
         .unwrap_or(json!({"address":"","name":null}));
-    let flags =
-        mailvault_core::message_store::flags_in_name(path.file_name().unwrap().to_str().unwrap_or_default());
+    let flags = mailvault_core::message_store::flags_in_name(&flags_name);
     let mut value = json!({"uid":uid,"messageId":get("Message-ID"),"subject":get("Subject").unwrap_or_default(),"from":from,
         "to":addresses("To"),"cc":addresses("Cc"),"bcc":addresses("Bcc"),"date":get("Date"),"messageDate":get("Date"),
         "flags":flags,"listId":get("List-Id"),"listUnsubscribe":get("List-Unsubscribe"),

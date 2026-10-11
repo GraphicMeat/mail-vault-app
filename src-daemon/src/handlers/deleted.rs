@@ -1065,4 +1065,21 @@ mod tests {
         assert_eq!(binned(&s).len(), 2);
         assert!(trap.accept().is_err(), "no IMAP dial");
     }
+
+    /// Task 7: in a JMAP vault the bin's capture of a vault-held message is
+    /// still `deleted/<id>.eml`, the message's exact bytes, read from the blob.
+    #[tokio::test]
+    async fn deleted_bin_capture_stays_eml() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        mailvault_core::message_store::set_vault_format(&s.data_dir, mailvault_core::message_store::Format::Jmap).unwrap();
+        with_mailbox_write(&s, "acc1", "INBOX", |root| vault_files::store(&s.vault_registry, root, "acc1", "INBOX", 1, RAW.as_bytes(), &[], false)).unwrap();
+        assert!(mailvault_core::message_store::mailbox_dir(&s.data_dir, "acc1", "INBOX").join("jmap").join("1.json").is_file());
+        delete(&s, &server, false).await.result.expect("deleted");
+        assert_eq!(server.count_commands("BODY.PEEK[]"), 0, "the vault copy is the capture");
+        let rows = binned(&s);
+        assert!(rows[0].has_eml);
+        let captured = bin::bin_dir(&s.app_dir).join(format!("{}.eml", rows[0].id));
+        assert_eq!(std::fs::read(&captured).unwrap(), RAW.as_bytes());
+    }
 }

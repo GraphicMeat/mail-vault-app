@@ -151,7 +151,7 @@ fn record_name(uid: u32) -> String {
 /// The uid a record leaf names: canonical decimal digits (no sign, no
 /// leading zero) then `.json`. A temp name (`.7.json.tmp-...`) or anything
 /// else in `jmap/` is not a record.
-fn record_uid(name: &str) -> Option<u32> {
+pub(crate) fn record_uid(name: &str) -> Option<u32> {
     let digits = name.strip_suffix(".json")?;
     if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) || (digits.len() > 1 && digits.starts_with('0')) {
         return None;
@@ -233,6 +233,56 @@ fn list_records(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
         }
     }
     Ok(out)
+}
+
+/// Every record leaf of the mailbox directory by uid, from one names-only
+/// listing (no parse): lenient, a directory that is missing or will not list
+/// holds none and an entry that will not read is skipped.
+fn record_paths_at(mailbox_dir: &Path) -> HashMap<u32, PathBuf> {
+    fs::read_dir(jmap_in(mailbox_dir))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| Some((record_uid(&entry.file_name().to_string_lossy())?, entry.path())))
+        .collect()
+}
+
+/// Whether `path` is a blob of the blob store: `message_blobs/<h0h1>/<hex>.eml`.
+fn is_blob_path(path: &Path) -> bool {
+    path.parent().and_then(Path::parent).and_then(Path::file_name).is_some_and(|dir| dir == blobs::BLOB_DIR)
+}
+
+/// The vault root of a record path (`<root>/Maildir/<account>/<dir>/jmap/<uid>.json`).
+fn root_of_record(path: &Path) -> Option<&Path> {
+    Some(root_of(path.parent()?.parent()?))
+}
+
+/// The bytes of a listed path, whatever a store listing handed out: a
+/// record's blob, else the file itself. A record or blob gone is `NotFound`.
+pub fn read_path(path: &Path) -> io::Result<Vec<u8>> {
+    if !is_record_path(path) {
+        return fs::read(path);
+    }
+    let rec = read_record(path)?;
+    let root = root_of_record(path).ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+    blobs::get(root, &rec.blob)
+}
+
+/// The flags of the record at `path`, `None` when it will not read.
+pub(crate) fn record_flags_at(path: &Path) -> Option<Vec<String>> {
+    read_record(path).ok().map(|rec| record::flags_of(&rec))
+}
+
+/// For a listed record path, what a reader of the message needs: its uid, the
+/// file holding its bytes (the blob) and the name its flags read off
+/// (`flags_name`). `None` for any other path, or a record that will not read.
+pub fn listed_message(path: &Path) -> Option<(u32, PathBuf, String)> {
+    if !is_record_path(path) {
+        return None;
+    }
+    let rec = read_record(path).ok()?;
+    let uid = record_uid(&path.file_name()?.to_string_lossy())?;
+    Some((uid, blobs::blob_path(root_of_record(path)?, &rec.blob), entry_name(uid, &record::flags_of(&rec))))
 }
 
 /// `uid`'s bytes as a file opened for reading: its record's blob, else its
@@ -798,6 +848,148 @@ pub fn write_decrypted_copy(root: &Path, account_id: &str, mailbox: &str, uid: u
     crate::pgp::write_copy(&messages_dir(root, account_id, mailbox), uid, decrypted)
 }
 
+/// Records `uid`'s server ids (a JMAP account's `emailId`, `blobId`,
+/// `threadId`): `server` in its record, and the record's `email.id` and
+/// `email.threadId` follow them. A no-op when the uid has no record (a
+/// Maildir copy keeps no server ids) or the record already holds them.
+pub fn set_server_ids(root: &Path, account_id: &str, mailbox: &str, uid: u32, ids: record::ServerIds) -> Result<(), String> {
+    let Some((path, rec)) = record_of(&mailbox_dir(root, account_id, mailbox), uid).map_err(|e| format!("Failed to read the message record: {e}"))? else {
+        return Ok(());
+    };
+    let mut new = rec.clone();
+    if let Some(email) = new.email.as_object_mut() {
+        email.insert("id".into(), Value::String(ids.email_id.clone()));
+        if let Some(thread) = &ids.thread_id {
+            email.insert("threadId".into(), Value::String(thread.clone()));
+        }
+    }
+    new.server = Some(ids);
+    if new == rec {
+        return Ok(());
+    }
+    let json = serde_json::to_vec(&new).map_err(|e| format!("Failed to encode the message record: {e}"))?;
+    crate::fsx::write_atomic(&path, &json).map_err(|e| format!("Failed to rewrite the message record: {e}"))
+}
+
+/// What one `sweep_blobs` pass found and did.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SweepStats {
+    /// Records read in the mark walk.
+    pub records: usize,
+    /// Blob files looked at.
+    pub blobs: usize,
+    /// Unreferenced blobs left because they are younger than `min_age`.
+    pub young: usize,
+    /// Blobs removed.
+    pub removed: usize,
+    /// Bytes the removed blobs held.
+    pub freed_bytes: u64,
+}
+
+/// Mark and sweep of `<root>/message_blobs`, the only way a blob is ever
+/// deleted. Holds no lock: a vault-wide walk under the write gate would stall
+/// every foreground read for its whole length.
+///
+/// 1. Mark: every `Maildir/<account>/<dir>/jmap/<uid>.json` is read and its
+///    blob id kept. A record that will not read as JSON stops the pass with
+///    an error, removing nothing: its blob cannot be told apart.
+/// 2. Sweep: each blob not marked is stated again and removed only when its
+///    mtime is still older than `min_age`.
+///
+/// Why that is safe with writers running: `blobs::put` makes an existing
+/// blob young again before a record names it, and a new blob is young, so a
+/// blob a write reuses or adds during the walk is never old enough to go
+/// (`write_record` writes no record when that refresh fails). A record removed
+/// during the walk only keeps its blob until the next pass. Refcounts are never
+/// stored: the vault registry is per host and droppable, and a vault on a NAS
+/// is shared by hosts.
+pub fn sweep_blobs(root: &Path, min_age: std::time::Duration) -> Result<SweepStats, String> {
+    let mut stats = SweepStats::default();
+    let mut marked: HashSet<String> = HashSet::new();
+    let unlisted = |dir: &Path, e: io::Error| format!("could not list {}: {e}", dir.display());
+    let list = |dir: &Path| -> Result<Vec<PathBuf>, String> {
+        match fs::read_dir(dir) {
+            Ok(entries) => entries.map(|e| e.map(|e| e.path()).map_err(|e| unlisted(dir, e))).collect(),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) => Err(unlisted(dir, e)),
+        }
+    };
+    for account in list(&root.join("Maildir"))?.into_iter().filter(|p| p.is_dir()) {
+        for mailbox in list(&account)?.into_iter().filter(|p| p.is_dir()) {
+            for path in list(&jmap_in(&mailbox))? {
+                if path.file_name().is_none_or(|n| record_uid(&n.to_string_lossy()).is_none()) {
+                    continue;
+                }
+                let bytes = match fs::read(&path) {
+                    Ok(bytes) => bytes,
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                    Err(e) => return Err(format!("sweep stopped: the record {} will not read: {e}", path.display())),
+                };
+                let value: Value = serde_json::from_slice(&bytes)
+                    .map_err(|e| format!("sweep stopped: the record {} will not parse: {e}", path.display()))?;
+                if let Some(blob) = value.get("blob").and_then(Value::as_str) {
+                    marked.insert(blob.to_string());
+                }
+                stats.records += 1;
+            }
+        }
+    }
+    let now = SystemTime::now();
+    for shard in list(&root.join(blobs::BLOB_DIR))?.into_iter().filter(|p| p.is_dir()) {
+        for path in list(&shard)? {
+            let Some(hex) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".eml")).map(str::to_owned) else { continue };
+            let id = format!("sha256-{hex}");
+            if !blobs::is_valid_id(&id) {
+                continue;
+            }
+            stats.blobs += 1;
+            if marked.contains(&id) {
+                continue;
+            }
+            // Stated now, after the walk: a put during it made the blob young.
+            let Ok(meta) = fs::metadata(&path) else { continue };
+            let age = meta.modified().ok().and_then(|m| now.duration_since(m).ok()).unwrap_or_default();
+            if age < min_age {
+                stats.young += 1;
+                continue;
+            }
+            match fs::remove_file(&path) {
+                Ok(()) => {
+                    stats.removed += 1;
+                    stats.freed_bytes += meta.len();
+                }
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => warn!("sweep_blobs: {} could not be removed: {e}", path.display()),
+            }
+        }
+    }
+    Ok(stats)
+}
+
+/// Turns every record of the mailbox directory back into a Maildir file (its
+/// blob's bytes under its flags), each verified before its record goes: for a
+/// pass that works on Maildir files by name across a whole mailbox (the
+/// generation repair). A uid's Maildir files are replaced by the record's
+/// copy, as the record is the one every reader read. Never removes a blob.
+/// Returns how many records went; the first failure stops the pass (the
+/// record stays, so nothing is lost).
+pub(crate) fn demote_records(mailbox_dir: &Path) -> Result<usize, String> {
+    let root = root_of(mailbox_dir);
+    let dir = messages_in(mailbox_dir);
+    let mut demoted = 0;
+    for (uid, path) in record_paths_at(mailbox_dir) {
+        let rec = read_record(&path).map_err(|e| format!("the record {} will not read: {e}", path.display()))?;
+        let raw = blobs::get(root, &rec.blob).map_err(|e| format!("the blob of uid {uid} will not read: {e}"))?;
+        let stale = leaf_names(&dir, uid);
+        let entry = put(&dir, uid, &raw, &record::flags_of(&rec))?;
+        unlink_stale(&dir, &entry.name, &stale);
+        verify_entry(root, mailbox_dir, uid, Expect::File { raw: &raw })?;
+        fs::remove_file(&path).map_err(|e| format!("the record {} could not be removed: {e}", path.display()))?;
+        demoted += 1;
+    }
+    Ok(demoted)
+}
+
 // ── Archive and Archive & delete ─────────────────────────────────────────────
 //
 // The archive runs, the Archive & delete job and custody take one listing of a
@@ -808,35 +1000,159 @@ pub fn write_decrypted_copy(root: &Path, account_id: &str, mailbox: &str, uid: u
 /// `archived_paths`): `listed` while that file is still there, else one rescan
 /// by uid (`maildir::find_listed_by_uid`). A flag change renames a file after
 /// the listing; a caller never asks for a uid its listing lacked.
+///
+/// A listed record or blob path resolves by uid (`raw_path`: its record's
+/// blob, else its Maildir file); a listed Maildir path gone with no Maildir
+/// file of the uid left resolves to the uid's record, if it has one.
 pub fn raw_path_listed(root: &Path, account_id: &str, mailbox: &str, uid: u32, listed: &Path) -> Option<PathBuf> {
-    maildir::find_listed_by_uid(&messages_dir(root, account_id, mailbox), uid, listed)
+    if is_record_path(listed) || is_blob_path(listed) {
+        return raw_path(root, account_id, mailbox, uid);
+    }
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    maildir::find_listed_by_uid(&messages_in(&mailbox), uid, listed)
+        .or_else(|| record_of(&mailbox, uid).ok().flatten().map(|(_, rec)| blobs::blob_path(root, &rec.blob)))
 }
 
 /// The path of the entry `name` (an `Entry.name`, or a vault registry row's
-/// name) in the mailbox. No disk access: the file need not exist.
+/// name) in the mailbox. No disk access: the file need not exist. A record
+/// name is its record (`listed_path`).
 pub fn entry_path(root: &Path, account_id: &str, mailbox: &str, name: &str) -> PathBuf {
-    messages_dir(root, account_id, mailbox).join(name)
+    listed_path(&mailbox_dir(root, account_id, mailbox), name)
+}
+
+/// The `Entry.name` a write of `uid` under `flags` gives in the vault's
+/// format: a record's `<uid>.json`, else the Maildir name (`entry_name`).
+pub fn stored_name(root: &Path, uid: u32, flags: &[String]) -> String {
+    match vault_format(root) {
+        Format::Jmap => record_name(uid),
+        Format::Maildir => entry_name(uid, flags),
+    }
+}
+
+/// The name a copy of the listed file `src` of `uid` takes outside the vault
+/// (the backup mirror): a blob's is the Maildir name of its uid under its
+/// record's flags (`maildir::mirror_filename`), any other file's its own.
+/// `None` for a blob whose record will not read.
+pub fn copy_name(root: &Path, account_id: &str, mailbox: &str, uid: u32, src: &Path) -> Option<String> {
+    if !is_blob_path(src) && !is_record_path(src) {
+        return src.file_name().map(|n| n.to_string_lossy().into_owned());
+    }
+    let (_, rec) = record_of(&mailbox_dir(root, account_id, mailbox), uid).ok().flatten()?;
+    Some(maildir::mirror_filename(uid, &record::flags_of(&rec)))
+}
+
+/// The archived records of the mailbox directory by uid: `(record path,
+/// record)` for each that reads and carries `local.archived`.
+fn archived_records(mailbox_dir: &Path) -> HashMap<u32, (PathBuf, record::Record)> {
+    record_paths_at(mailbox_dir)
+        .into_iter()
+        .filter_map(|(uid, path)| {
+            let rec = read_record(&path).ok()?;
+            rec.local.archived.then_some((uid, (path, rec)))
+        })
+        .collect()
 }
 
 /// Every archived copy (`A` in its name) the mailbox holds, keyed by uid, from
 /// one listing (`maildir::archived_file_map`): a uid with a working-cache copy
-/// beside an archived one maps to the archived one.
+/// beside an archived one maps to the archived one. An archived record
+/// (`local.archived`) maps to its record path, over any Maildir file.
 pub fn archived_paths(root: &Path, account_id: &str, mailbox: &str) -> HashMap<u32, PathBuf> {
-    maildir::archived_file_map(&messages_dir(root, account_id, mailbox))
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    let mut map = maildir::archived_file_map(&messages_in(&mailbox));
+    map.extend(archived_records(&mailbox).into_iter().map(|(uid, (path, _))| (uid, path)));
+    map
 }
 
 /// The name of an archived copy of `uid`, by one listing of the mailbox: for a
-/// mailbox the vault registry could not verify.
+/// mailbox the vault registry could not verify. A uid with a record answers by
+/// the record alone: `<uid>.json` when it is archived, else `None`.
 pub fn archived_name(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<String> {
-    fs::read_dir(messages_dir(root, account_id, mailbox))
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    if let Some((_, rec)) = record_of(&mailbox, uid).ok().flatten() {
+        return rec.local.archived.then(|| record_name(uid));
+    }
+    fs::read_dir(messages_in(&mailbox))
         .ok()?
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .find(|n| maildir::vault_filename_uid(n) == Some(uid) && maildir::carries_archived(n))
 }
 
+/// Whether the entry `name` (a registry row's name) of the mailbox is an
+/// archived copy: `A` in a Maildir name, `local.archived` in a record.
+pub fn is_archived_entry(root: &Path, account_id: &str, mailbox: &str, name: &str) -> bool {
+    match record_uid(name) {
+        Some(_) => read_record(&entry_path(root, account_id, mailbox, name)).is_ok_and(|rec| rec.local.archived),
+        None => maildir::carries_archived(name),
+    }
+}
+
+/// One uid's outcome in a verify of archived copies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verdict {
+    Verified,
+    Missing,
+    Mismatched,
+}
+
+/// The verdicts of the uids of `uids` that have an archived record in
+/// `records`, by the rules of `maildir::verify_listed` (`strict: false`) or
+/// `maildir::verify_listed_strict`: the Message-ID read from the blob against
+/// `expected_ids`.
+fn verify_records(
+    root: &Path,
+    records: &HashMap<u32, (PathBuf, record::Record)>,
+    uids: &[u32],
+    expected_ids: Option<&HashMap<u32, String>>,
+    strict: bool,
+) -> HashMap<u32, Verdict> {
+    let mut out = HashMap::new();
+    for uid in uids {
+        let Some((_, rec)) = records.get(uid) else { continue };
+        let want = expected_ids.and_then(|m| m.get(uid)).map(|id| maildir::normalize_message_id(id)).filter(|id| !id.is_empty());
+        let Some(want) = want else {
+            out.insert(*uid, Verdict::Verified);
+            continue;
+        };
+        let blob = blobs::blob_path(root, &rec.blob);
+        let verdict = match maildir::read_message_id(&blob) {
+            Some(got) if got == want => Verdict::Verified,
+            Some(_) => Verdict::Mismatched,
+            None if !strict => Verdict::Verified,
+            None if blob.is_file() => Verdict::Mismatched,
+            None => Verdict::Missing,
+        };
+        out.insert(*uid, verdict);
+    }
+    out
+}
+
+/// Merges the record uids' verdicts with a Maildir verify's split of the
+/// rest, in `uids`' order.
+fn merge_verified(uids: &[u32], mut verdicts: HashMap<u32, Verdict>, maildir: (Vec<u32>, Vec<u32>, Vec<u32>)) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    let (verified, missing, mismatched) = maildir;
+    for (set, verdict) in [(verified, Verdict::Verified), (missing, Verdict::Missing), (mismatched, Verdict::Mismatched)] {
+        for uid in set {
+            verdicts.entry(uid).or_insert(verdict);
+        }
+    }
+    let mut out = (Vec::new(), Vec::new(), Vec::new());
+    for uid in uids {
+        match verdicts.get(uid) {
+            Some(Verdict::Verified) => out.0.push(*uid),
+            Some(Verdict::Missing) => out.1.push(*uid),
+            Some(Verdict::Mismatched) => out.2.push(*uid),
+            None => {}
+        }
+    }
+    out
+}
+
 /// Which of `uids` the mailbox holds an archived copy of, as `(verified,
-/// missing, mismatched)` by `maildir::verify_copies`' rules.
+/// missing, mismatched)` by `maildir::verify_copies`' rules. A uid with an
+/// archived record is judged by it (its Message-ID read from the blob); a
+/// uid whose record is not archived counts as missing, as a cache copy does.
 pub fn verify_archived(
     root: &Path,
     account_id: &str,
@@ -844,12 +1160,25 @@ pub fn verify_archived(
     uids: &[u32],
     expected_ids: Option<&HashMap<u32, String>>,
 ) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
-    maildir::verify_copies(&messages_dir(root, account_id, mailbox), uids, expected_ids)
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    let records = archived_records(&mailbox);
+    let held = record_paths_at(&mailbox);
+    if held.is_empty() {
+        return maildir::verify_copies(&messages_in(&mailbox), uids, expected_ids);
+    }
+    let rest: Vec<u32> = uids.iter().copied().filter(|uid| !held.contains_key(uid)).collect();
+    let mut judged = verify_records(root, &records, uids, expected_ids, false);
+    // A record that is not archived: no archived copy, as with a cache file.
+    for uid in uids.iter().filter(|uid| held.contains_key(uid)) {
+        judged.entry(*uid).or_insert(Verdict::Missing);
+    }
+    merge_verified(uids, judged, maildir::verify_copies(&messages_in(&mailbox), &rest, expected_ids))
 }
 
 /// `verify_archived` against a listing an earlier `archived_paths` took, by
 /// `maildir::verify_listed_strict`'s rules: for a caller about to delete the
-/// server's copy.
+/// server's copy. A listed record is judged by the record read now (it must
+/// still be archived), its Message-ID read from its blob.
 pub fn verify_archived_strict(
     root: &Path,
     account_id: &str,
@@ -858,14 +1187,64 @@ pub fn verify_archived_strict(
     uids: &[u32],
     expected_ids: &HashMap<u32, String>,
 ) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
-    maildir::verify_listed_strict(&messages_dir(root, account_id, mailbox), listing, uids, expected_ids)
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    let listed_records: Vec<u32> = uids.iter().copied().filter(|uid| listing.get(uid).is_some_and(|p| is_record_path(p))).collect();
+    if listed_records.is_empty() {
+        return maildir::verify_listed_strict(&messages_in(&mailbox), listing, uids, expected_ids);
+    }
+    let records = archived_records(&mailbox);
+    let rest: Vec<u32> = uids.iter().copied().filter(|uid| !listed_records.contains(uid)).collect();
+    let mut judged = verify_records(root, &records, &listed_records, Some(expected_ids), true);
+    for uid in &listed_records {
+        judged.entry(*uid).or_insert(Verdict::Missing);
+    }
+    merge_verified(uids, judged, maildir::verify_listed_strict(&messages_in(&mailbox), listing, &rest, expected_ids))
 }
 
 /// Re-files copies under the uids a move gave their messages
 /// (`maildir::rebind_uids`): the `(old, new)` pairs renamed. The caller
-/// invalidates the mailbox's registry rows when any moved.
+/// invalidates the mailbox's registry rows when any moved. A record of `old`
+/// is rewritten as the record of `new` (its `uid` and local `email.id` follow)
+/// when `new` holds no copy in either format, then the old record goes.
 pub fn rebind_uids(root: &Path, account_id: &str, mailbox: &str, pairs: &[(u32, u32)]) -> Vec<(u32, u32)> {
-    maildir::rebind_uids(&messages_dir(root, account_id, mailbox), pairs)
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    let mut records = record_paths_at(&mailbox);
+    let (record_pairs, file_pairs): (Vec<_>, Vec<_>) =
+        pairs.iter().copied().partition(|(old, _)| records.contains_key(old));
+    let file_pairs: Vec<(u32, u32)> = file_pairs.into_iter().filter(|(_, new)| !records.contains_key(new)).collect();
+    let mut rebound = maildir::rebind_uids(&messages_in(&mailbox), &file_pairs);
+    let maildir_held = maildir_paths_at(&mailbox);
+    for (old, new) in record_pairs {
+        if old == new || records.contains_key(&new) || maildir_held.contains_key(&new) {
+            continue;
+        }
+        let Some(path) = records.remove(&old) else { continue };
+        let target = jmap_in(&mailbox).join(record_name(new));
+        let moved = (|| -> Result<(), String> {
+            let mut rec = read_record(&path).map_err(|e| e.to_string())?;
+            rec.uid = new;
+            if rec.server.is_none() {
+                if let Some(email) = rec.email.as_object_mut() {
+                    let local = format!("L{new}-{}", &rec.blob["sha256-".len().."sha256-".len() + 12]);
+                    email.insert("id".into(), Value::String(local));
+                }
+            }
+            let json = serde_json::to_vec(&rec).map_err(|e| e.to_string())?;
+            crate::fsx::write_atomic(&target, &json).map_err(|e| e.to_string())?;
+            fs::remove_file(&path).map_err(|e| e.to_string())
+        })();
+        match moved {
+            Ok(()) => {
+                records.insert(new, target);
+                rebound.push((old, new));
+            }
+            Err(e) => {
+                warn!("rebind_uids: record {old} -> {new} failed: {e}");
+                records.insert(old, path);
+            }
+        }
+    }
+    rebound
 }
 
 /// Makes the directory `write_new` writes the mailbox's messages into.
@@ -879,7 +1258,15 @@ pub fn create_messages_dir(root: &Path, account_id: &str, mailbox: &str) -> io::
 /// file and a rename (`fsx::write_atomic`), so a failure leaves nothing
 /// behind; otherwise one plain `fs::write` (the backup runners'), which can
 /// leave a partial file, so the caller invalidates the folder on an error.
+///
+/// In a JMAP vault: `uid`'s record and blob (`write_record`, always atomic),
+/// and the record's path.
 pub fn write_new(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8], flags: &[String], atomic: bool) -> io::Result<PathBuf> {
+    if vault_format(root) == Format::Jmap {
+        let mailbox = mailbox_dir(root, account_id, mailbox);
+        write_record(root, &mailbox, uid, raw, flags).map_err(io::Error::other)?;
+        return Ok(jmap_in(&mailbox).join(record_name(uid)));
+    }
     let path = messages_dir(root, account_id, mailbox).join(vault_files::build_maildir_filename(uid, flags));
     if atomic {
         crate::fsx::write_atomic(&path, raw)?;
@@ -891,8 +1278,13 @@ pub fn write_new(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[
 
 /// Removes the file an earlier listing gave for `uid` (`raw_path_listed`'s
 /// rule), if one is still there. A failure is ignored: the caller writes the
-/// uid's new copy next.
+/// uid's new copy next. A listed record or blob removes the uid's record,
+/// never a blob.
 pub fn remove_listed(root: &Path, account_id: &str, mailbox: &str, uid: u32, listed: &Path) {
+    if is_record_path(listed) || is_blob_path(listed) {
+        let _ = drop_format_files(&mailbox_dir(root, account_id, mailbox), uid, Format::Jmap);
+        return;
+    }
     if let Some(existing) = raw_path_listed(root, account_id, mailbox, uid, listed) {
         let _ = fs::remove_file(&existing);
     }
@@ -904,7 +1296,17 @@ pub fn remove_listed(root: &Path, account_id: &str, mailbox: &str, uid: u32, lis
 /// the mailbox: an archived copy (`A`) wins over a working-cache copy of the
 /// same uid; otherwise the first file `read_dir` returns. A folder that will
 /// not list holds none.
+///
+/// A uid with a record maps to its record path, over any Maildir file
+/// (`raw_path_listed` reads its blob, `copy_name` names its copy).
 pub fn archived_first_paths(root: &Path, account_id: &str, mailbox: &str, wanted: &HashSet<u32>) -> HashMap<u32, PathBuf> {
+    let mut out = archived_first_files(root, account_id, mailbox, wanted);
+    out.extend(record_paths_at(&mailbox_dir(root, account_id, mailbox)).into_iter().filter(|(uid, _)| wanted.contains(uid)));
+    out
+}
+
+/// `archived_first_paths` of the Maildir message directory alone.
+fn archived_first_files(root: &Path, account_id: &str, mailbox: &str, wanted: &HashSet<u32>) -> HashMap<u32, PathBuf> {
     let mut found: HashMap<u32, (PathBuf, bool)> = HashMap::new();
     let Ok(entries) = fs::read_dir(messages_dir(root, account_id, mailbox)) else { return Default::default() };
     for entry in entries.flatten() {
@@ -930,8 +1332,12 @@ pub fn archived_first_paths(root: &Path, account_id: &str, mailbox: &str, wanted
 /// (`maildir::mirror_file_map`: legacy `12.eml` and `12_S.eml` names too), from
 /// one listing, the first file per uid: what a pass that changes the flags of
 /// many uids re-files with `set_flags_at`.
+///
+/// A uid with a record maps to its record path (`set_flags_at` rewrites it).
 pub(crate) fn flag_paths(root: &Path, account_id: &str, mailbox: &str) -> HashMap<u32, PathBuf> {
-    maildir::mirror_file_map(&messages_dir(root, account_id, mailbox))
+    let mut map = maildir::mirror_file_map(&messages_dir(root, account_id, mailbox));
+    map.extend(record_paths_at(&mailbox_dir(root, account_id, mailbox)));
+    map
 }
 
 // ── Mailbox-directory level, for the derived stores ──────────────────────────
@@ -1213,8 +1619,28 @@ pub fn uid_space_at(mailbox_dir: &Path) -> io::Result<UidSpace> {
 /// `mailbox_dir`, from one listing: the first file `read_dir` returns per
 /// uid, no stat. Lenient, for a reader that walks a whole folder: a directory
 /// that is missing or will not list is empty, and an entry that will not
-/// read is skipped.
+/// read is skipped. A uid with a record that reads maps to its blob.
 pub fn raw_paths_at(mailbox_dir: &Path) -> HashMap<u32, PathBuf> {
+    let mut map = maildir::uid_file_map(&messages_in(mailbox_dir));
+    add_record_blobs(&mut map, mailbox_dir);
+    map
+}
+
+/// Maps each uid with a record that reads in the mailbox directory to its
+/// blob, over whatever `map` held for it.
+fn add_record_blobs(map: &mut HashMap<u32, PathBuf>, mailbox_dir: &Path) {
+    let root = root_of(mailbox_dir);
+    for (uid, path) in record_paths_at(mailbox_dir) {
+        if let Ok(rec) = read_record(&path) {
+            map.insert(uid, blobs::blob_path(root, &rec.blob));
+        }
+    }
+}
+
+/// `raw_paths_at` of the Maildir message directory alone: for a pass that
+/// renames or sets aside Maildir files by name (the import rehome), which a
+/// blob must never reach.
+pub(crate) fn maildir_paths_at(mailbox_dir: &Path) -> HashMap<u32, PathBuf> {
     maildir::uid_file_map(&messages_in(mailbox_dir))
 }
 
@@ -1359,8 +1785,15 @@ pub(crate) fn read_at(root: &Path, path: &Path) -> io::Result<(String, Vec<u8>)>
 /// Re-file the listed file `path` of `uid` under the flags `flags_for` makes
 /// of the ones its name holds now (`Entry.flags`). `Ok(Some(name))`: renamed to
 /// `name`; `Ok(None)`: the name already said this. One rename, no rescan: for
-/// a pass that listed the mailbox once (`flag_paths`).
+/// a pass that listed the mailbox once (`flag_paths`). A record is rewritten
+/// in place from its own flags (`set_record_flags`): `Ok(Some("<uid>.json"))`
+/// when they changed.
 pub(crate) fn set_flags_at(path: &Path, uid: u32, flags_for: impl FnOnce(&[String]) -> Vec<String>) -> Result<Option<String>, String> {
+    if is_record_path(path) {
+        let current = record_flags_at(path).ok_or_else(|| format!("Failed to read the message record {}", path.display()))?;
+        let (entry, changed) = set_record_flags(path, uid, &flags_for(&current))?;
+        return Ok(changed.then_some(entry.name));
+    }
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let current = parse_flags_from_filename(&name);
     let new_name = vault_files::build_maildir_filename(uid, &flags_for(&current));
@@ -1381,7 +1814,17 @@ pub(crate) fn set_flags_at(path: &Path, uid: u32, flags_for: impl FnOnce(&[Strin
 /// Every uid a file in the Maildir message directory `dir` carries, by the
 /// mirror's loose rule (legacy names too). A directory that is not there holds
 /// none; one that will not list is an error.
+///
+/// The JMAP records beside `dir` count too (by name).
 pub(crate) fn loose_uids_in(dir: &Path) -> Result<HashSet<u32>, String> {
+    let records: Vec<u32> = dir.parent().map(|mailbox| record_paths_at(mailbox).into_keys().collect()).unwrap_or_default();
+    let mut uids = loose_file_uids_in(dir)?;
+    uids.extend(records);
+    Ok(uids)
+}
+
+/// `loose_uids_in` of the Maildir message directory alone.
+fn loose_file_uids_in(dir: &Path) -> Result<HashSet<u32>, String> {
     if !dir.exists() {
         return Ok(HashSet::new());
     }
@@ -1404,18 +1847,50 @@ pub(crate) fn loose_uids_in(dir: &Path) -> Result<HashSet<u32>, String> {
 /// from: `(uid, name, path)` for every entry that is not a directory and whose
 /// name carries a uid by the mirror's loose rule, in `read_dir` order. A
 /// directory that will not list holds none.
+///
+/// A JMAP record beside `dir` is a source too, as `(uid, the Maildir name of
+/// its uid under its flags, its blob)`, and a Maildir file of its uid is not.
 pub(crate) fn mirror_sources_in(dir: &Path) -> Vec<(u32, String, PathBuf)> {
-    maildir::mirror_files(dir).into_iter().filter(|(_, _, path)| !path.is_dir()).collect()
+    let records: Vec<(u32, String, PathBuf)> = match dir.parent() {
+        Some(mailbox) => record_paths_at(mailbox)
+            .into_iter()
+            .filter_map(|(uid, path)| {
+                let rec = read_record(&path).ok()?;
+                Some((uid, maildir::mirror_filename(uid, &record::flags_of(&rec)), blobs::blob_path(root_of(mailbox), &rec.blob)))
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+    let held: HashSet<u32> = records.iter().map(|(uid, _, _)| *uid).collect();
+    let mut out: Vec<(u32, String, PathBuf)> =
+        maildir::mirror_files(dir).into_iter().filter(|(uid, _, path)| !path.is_dir() && !held.contains(uid)).collect();
+    out.extend(records);
+    out
 }
 
-/// `raw_paths_at` of the Maildir message directory `dir` itself.
+/// `raw_paths_at` of the Maildir message directory `dir` itself, plus the
+/// blobs of the JMAP records beside it.
 pub(crate) fn raw_paths_in(dir: &Path) -> HashMap<u32, PathBuf> {
-    maildir::uid_file_map(dir)
+    let mut map = maildir::uid_file_map(dir);
+    if let Some(mailbox) = dir.parent() {
+        add_record_blobs(&mut map, mailbox);
+    }
+    map
 }
 
 /// Copies the file `src` into the Maildir message directory `dir` as `uid`
 /// under the name `flags` builds (a restore from the mirror). Removes nothing.
+/// In a JMAP vault it is written as `uid`'s record and blob instead
+/// (`write_record`); the count is the bytes copied either way.
 pub(crate) fn copy_in(dir: &Path, uid: u32, flags: &[String], src: &Path) -> io::Result<u64> {
+    if let Some(mailbox) = dir.parent() {
+        let root = root_of(mailbox);
+        if vault_format(root) == Format::Jmap {
+            let raw = fs::read(src)?;
+            write_record(root, mailbox, uid, &raw, flags).map_err(io::Error::other)?;
+            return Ok(raw.len() as u64);
+        }
+    }
     fs::copy(src, dir.join(vault_files::build_maildir_filename(uid, flags)))
 }
 
@@ -1439,8 +1914,11 @@ fn leading_uid(name: &str) -> Option<u32> {
 /// file name already carries. One lazy listing of the message directory; a
 /// directory that is missing or will not list names none, and an entry that
 /// will not read is skipped.
+///
+/// Every JMAP record name counts too.
 pub fn named_uids_at(mailbox_dir: &Path) -> impl Iterator<Item = u32> {
-    fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(|entry| leading_uid(&entry.file_name().to_string_lossy()))
+    let files = fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(|entry| leading_uid(&entry.file_name().to_string_lossy()));
+    files.chain(record_paths_at(mailbox_dir).into_keys())
 }
 
 /// Every regular file of the mailbox directory `mailbox_dir` that
@@ -1448,15 +1926,22 @@ pub fn named_uids_at(mailbox_dir: &Path) -> impl Iterator<Item = u32> {
 /// what a restore uploads. One lazy listing of the message directory; a
 /// directory that is missing or will not list holds none, and an entry that
 /// will not read, or whose type will not read, is skipped.
+///
+/// A JMAP record is `(uid, the name its flags read off, its blob)`
+/// (`listed_message`), and a Maildir file of its uid is left out.
 pub fn named_files_at(mailbox_dir: &Path) -> impl Iterator<Item = (u32, String, PathBuf)> {
-    fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(|entry| {
+    let records: Vec<(u32, String, PathBuf)> =
+        record_paths_at(mailbox_dir).into_values().filter_map(|path| listed_message(&path)).map(|(uid, blob, name)| (uid, name, blob)).collect();
+    let held: HashSet<u32> = records.iter().map(|(uid, _, _)| *uid).collect();
+    let files = fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(move |entry| {
         if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
             return None;
         }
         let name = entry.file_name().to_string_lossy().to_string();
         let uid = leading_uid(&name)?;
-        Some((uid, name, entry.path()))
-    })
+        (!held.contains(&uid)).then(|| (uid, name, entry.path()))
+    });
+    files.chain(records)
 }
 
 /// Every file of the mailbox directory `mailbox_dir` whose name carries a
@@ -1465,11 +1950,18 @@ pub fn named_files_at(mailbox_dir: &Path) -> impl Iterator<Item = (u32, String, 
 /// reads Message-IDs from. One lazy listing of the message directory; a
 /// directory that is missing or will not list holds none, and an entry that
 /// will not read is skipped.
+///
+/// A JMAP record is `(the name its flags read off, its blob)` (an `.eml` name
+/// with an info part), and a Maildir file of its uid is left out.
 pub fn info_files_at(mailbox_dir: &Path) -> impl Iterator<Item = (String, PathBuf)> {
-    fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(|entry| {
+    let records: Vec<(u32, PathBuf, String)> = record_paths_at(mailbox_dir).into_values().filter_map(|path| listed_message(&path)).collect();
+    let held: HashSet<u32> = records.iter().map(|(uid, _, _)| *uid).collect();
+    let files = fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten().filter_map(move |entry| {
         let name = entry.file_name().to_string_lossy().to_string();
-        maildir::has_info(&name).then(|| (name, entry.path()))
-    })
+        let shadowed = maildir::vault_filename_uid(&name).is_some_and(|uid| held.contains(&uid));
+        (maildir::has_info(&name) && !shadowed).then(|| (name, entry.path()))
+    });
+    files.chain(records.into_iter().map(|(_, blob, name)| (name, blob)))
 }
 
 /// `create_messages_dir` of the mailbox directory `mailbox_dir`, used as is.
@@ -1478,8 +1970,12 @@ pub fn create_messages_dir_at(mailbox_dir: &Path) -> io::Result<()> {
 }
 
 /// `entry_path` in the mailbox directory `mailbox_dir`. No disk access: the
-/// file need not exist.
+/// file need not exist. In a JMAP vault a name that carries a uid
+/// (`uid_in_name`) is that uid's record, where `write_named_at` writes it.
 pub fn entry_path_at(mailbox_dir: &Path, name: &str) -> PathBuf {
+    if let Some(uid) = uid_in_name(name).filter(|_| vault_format(root_of(mailbox_dir)) == Format::Jmap) {
+        return jmap_in(mailbox_dir).join(record_name(uid));
+    }
     messages_in(mailbox_dir).join(name)
 }
 
@@ -1489,7 +1985,17 @@ pub fn entry_path_at(mailbox_dir: &Path, name: &str) -> PathBuf {
 /// plain `fs::write`: it overwrites a file already under `name` and can leave
 /// a partial file on an error, so the caller checks first and invalidates the
 /// folder after a failure. Removes nothing else.
+///
+/// In a JMAP vault a name that carries a uid is written as that uid's record
+/// and blob, under the flags the name holds (`write_record`, atomic), and the
+/// record's path returned. A name with no uid has no record form: it lands as
+/// named.
 pub fn write_named_at(mailbox_dir: &Path, name: &str, raw: &[u8]) -> io::Result<PathBuf> {
+    let root = root_of(mailbox_dir);
+    if let Some(uid) = uid_in_name(name).filter(|_| vault_format(root) == Format::Jmap) {
+        write_record(root, mailbox_dir, uid, raw, &flags_in_name(name)).map_err(io::Error::other)?;
+        return Ok(jmap_in(mailbox_dir).join(record_name(uid)));
+    }
     let path = entry_path_at(mailbox_dir, name);
     fs::write(&path, raw)?;
     Ok(path)
@@ -2464,5 +2970,272 @@ mod tests {
         unlink_other_format(&one, 1).unwrap();
         assert_eq!(find(root, ACCT, MBOX, 1), None, "neither copy is left");
         assert!(blobs::blob_path(root, &blobs::blob_id(&eml("one"))).exists(), "never a blob");
+    }
+
+    // ── Task 7b: walkers, blob sweep, server ids ─────────────────────────────
+
+    /// Sets `path`'s mtime `age` into the past.
+    fn age(path: &Path, age: std::time::Duration) {
+        let file = fs::File::options().write(true).open(path).unwrap();
+        file.set_modified(SystemTime::now() - age).unwrap();
+    }
+
+    const DAY: std::time::Duration = std::time::Duration::from_secs(24 * 3600);
+
+    #[test]
+    fn sweep_keeps_shared_blob_until_last_record_removed() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("shared"), &[]).unwrap();
+        write(root, ACCT, "Work", 7, &eml("shared"), &flags(&["seen"])).unwrap();
+        let blob = blobs::blob_path(root, &blobs::blob_id(&eml("shared")));
+        assert_eq!(fs::read_dir(blob.parent().unwrap()).unwrap().count(), 1, "one blob for both copies");
+
+        assert!(remove(root, ACCT, MBOX, 1).unwrap());
+        assert!(blob.exists(), "remove never deletes a blob");
+        let kept = sweep_blobs(root, std::time::Duration::ZERO).unwrap();
+        assert_eq!((kept.records, kept.blobs, kept.removed), (1, 1, 0));
+        assert!(blob.exists(), "Work/7 still names it");
+
+        assert!(remove(root, ACCT, "Work", 7).unwrap());
+        let swept = sweep_blobs(root, std::time::Duration::ZERO).unwrap();
+        assert_eq!((swept.records, swept.removed, swept.freed_bytes), (0, 1, eml("shared").len() as u64));
+        assert!(!blob.exists());
+    }
+
+    #[test]
+    fn sweep_respects_grace_period() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        let id = blobs::put(root, b"Subject: never named\r\n\r\nx").unwrap();
+        let swept = sweep_blobs(root, DAY).unwrap();
+        assert_eq!((swept.blobs, swept.young, swept.removed), (1, 1, 0));
+        assert!(blobs::blob_path(root, &id).exists(), "an unreferenced fresh blob is kept");
+        age(&blobs::blob_path(root, &id), 2 * DAY);
+        assert_eq!(sweep_blobs(root, DAY).unwrap().removed, 1);
+        assert!(!blobs::blob_path(root, &id).exists());
+        // Nothing at all to sweep: no Maildir, no blob store.
+        assert_eq!(sweep_blobs(&root.join("empty"), DAY).unwrap(), SweepStats::default());
+    }
+
+    #[test]
+    fn reused_old_blob_survives_sweep() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("x"), &[]).unwrap();
+        let blob = blobs::blob_path(root, &blobs::blob_id(&eml("x")));
+        assert!(remove(root, ACCT, MBOX, 1).unwrap());
+        age(&blob, 2 * DAY);
+        // A new record of the same bytes: `put` makes the old blob young again.
+        write(root, ACCT, MBOX, 2, &eml("x"), &[]).unwrap();
+        let swept = sweep_blobs(root, DAY).unwrap();
+        assert_eq!(swept.removed, 0);
+        assert!(blob.exists());
+        assert_eq!(read_raw(root, ACCT, MBOX, 2).unwrap(), Some(eml("x")));
+        // Even unreferenced again, it is young: the grace period covers it.
+        assert!(remove(root, ACCT, MBOX, 2).unwrap());
+        assert_eq!(sweep_blobs(root, DAY).unwrap().young, 1);
+    }
+
+    #[test]
+    fn sweep_stops_on_a_record_it_cannot_read() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        let orphan = blobs::put(root, b"Subject: old\r\n\r\nx").unwrap();
+        age(&blobs::blob_path(root, &orphan), 2 * DAY);
+        fs::write(jmap_in(&mailbox_dir(root, ACCT, MBOX)).join("2.json"), b"{ not json").unwrap();
+        let err = sweep_blobs(root, DAY).unwrap_err();
+        assert!(err.contains("2.json"), "{err}");
+        assert!(blobs::blob_path(root, &orphan).exists(), "nothing is removed when the mark is unsure");
+    }
+
+    #[test]
+    fn set_server_ids_writes_the_record_and_is_a_noop_without_one() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        let ids = record::ServerIds { email_id: "M1".into(), blob_id: "G1".into(), thread_id: Some("T1".into()) };
+        write(root, ACCT, MBOX, 3, &eml("maildir"), &[]).unwrap();
+        set_server_ids(root, ACCT, MBOX, 3, ids.clone()).unwrap();
+        assert_eq!(read_raw(root, ACCT, MBOX, 3).unwrap(), Some(eml("maildir")), "a Maildir copy is untouched");
+        set_server_ids(root, ACCT, MBOX, 9, ids.clone()).unwrap();
+
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 4, &eml("jmap"), &flags(&["seen"])).unwrap();
+        set_server_ids(root, ACCT, MBOX, 4, ids.clone()).unwrap();
+        let path = jmap_in(&mailbox_dir(root, ACCT, MBOX)).join("4.json");
+        let rec = read_record(&path).unwrap();
+        assert_eq!(rec.server, Some(ids.clone()));
+        assert_eq!((rec.email["id"].as_str(), rec.email["threadId"].as_str()), (Some("M1"), Some("T1")));
+        assert_eq!(rec.blob, blobs::blob_id(&eml("jmap")), "the local blob id stays");
+        // A later write of the uid keeps the server ids.
+        write(root, ACCT, MBOX, 4, &eml("jmap"), &flags(&["seen", "flagged"])).unwrap();
+        assert_eq!(read_record(&path).unwrap().server, Some(ids));
+    }
+
+    /// Carries (Tasks 4a, 4b, 5): every whole-mailbox walk the archive,
+    /// backup, import, export and restore callers use reads `jmap/`, handing
+    /// out a blob (bytes) or a record (identity) and an `.eml`-shaped name.
+    #[test]
+    fn walkers_read_records_beside_maildir_files() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &flags(&["seen"])).unwrap();
+        write(root, ACCT, MBOX, 2, &eml("two-old"), &[]).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 2, &eml("two"), &flags(&["archived", "seen"])).unwrap();
+        write(root, ACCT, MBOX, 3, &eml("three"), &flags(&["flagged"])).unwrap();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        let dir = maildir_messages_dir(&mbox);
+        let blob = |id: &str| blobs::blob_path(root, &blobs::blob_id(&eml(id)));
+        let record = |uid: u32| jmap_in(&mbox).join(format!("{uid}.json"));
+        let one = messages_in(&mbox).join(format!("1{INFO_PREFIX}S.eml"));
+
+        let paths = raw_paths_at(&mbox);
+        assert_eq!(paths, HashMap::from([(1, one.clone()), (2, blob("two")), (3, blob("three"))]), "a record wins with its blob");
+        assert_eq!(raw_paths_in(&dir), paths);
+        assert_eq!(maildir_paths_at(&mbox).len(), 2, "the Maildir files alone: 1 and the old 2");
+        assert_eq!(loose_uids_in(&dir).unwrap(), HashSet::from([1, 2, 3]));
+        let mut uids: Vec<u32> = named_uids_at(&mbox).collect();
+        uids.sort_unstable();
+        assert_eq!(uids, vec![1, 2, 2, 3]);
+
+        let mut named: Vec<(u32, String, PathBuf)> = named_files_at(&mbox).collect();
+        named.sort();
+        assert_eq!(named, vec![
+            (1, format!("1{INFO_PREFIX}S.eml"), one.clone()),
+            (2, format!("2{INFO_PREFIX}AS.eml"), blob("two")),
+            (3, format!("3{INFO_PREFIX}F.eml"), blob("three")),
+        ]);
+        let mut infos: Vec<(String, PathBuf)> = info_files_at(&mbox).collect();
+        infos.sort();
+        assert_eq!(infos, named.iter().map(|(_, name, path)| (name.clone(), path.clone())).collect::<Vec<_>>(), "export names stay .eml");
+        let mut sources = mirror_sources_in(&dir);
+        sources.sort();
+        assert_eq!(sources, named, "the mirror gets .eml copies named by their flags");
+
+        assert_eq!(archived_paths(root, ACCT, MBOX), HashMap::from([(2, record(2))]));
+        assert_eq!(archived_name(root, ACCT, MBOX, 2), Some("2.json".to_string()));
+        assert_eq!(archived_name(root, ACCT, MBOX, 3), None, "a record that is not archived");
+        assert!(is_archived_entry(root, ACCT, MBOX, "2.json") && !is_archived_entry(root, ACCT, MBOX, "3.json"));
+        assert!(!is_archived_entry(root, ACCT, MBOX, &format!("1{INFO_PREFIX}S.eml")));
+        assert_eq!(archived_first_paths(root, ACCT, MBOX, &HashSet::from([1, 2, 9])), HashMap::from([(1, one.clone()), (2, record(2))]));
+        let flagged = flag_paths(root, ACCT, MBOX);
+        assert_eq!((flagged.get(&2), flagged.get(&3)), (Some(&record(2)), Some(&record(3))));
+
+        assert_eq!(entry_path(root, ACCT, MBOX, "3.json"), record(3));
+        assert_eq!(stored_name(root, 3, &flags(&["seen"])), "3.json");
+        assert_eq!(copy_name(root, ACCT, MBOX, 3, &blob("three")), Some(maildir::mirror_filename(3, &flags(&["flagged"]))));
+        assert_eq!(copy_name(root, ACCT, MBOX, 1, &one), Some(format!("1{INFO_PREFIX}S.eml")));
+        assert_eq!(raw_path_listed(root, ACCT, MBOX, 3, &record(3)), Some(blob("three")));
+        assert_eq!(raw_path_listed(root, ACCT, MBOX, 3, &blob("three")), Some(blob("three")));
+        let gone = messages_in(&mbox).join(format!("3{INFO_PREFIX}F.eml"));
+        assert_eq!(raw_path_listed(root, ACCT, MBOX, 3, &gone), Some(blob("three")), "a listed Maildir name gone: the record");
+        assert_eq!(read_path(&record(3)).unwrap(), eml("three"));
+        assert_eq!(listed_message(&record(3)), Some((3, blob("three"), format!("3{INFO_PREFIX}F.eml"))));
+        assert_eq!(listed_message(&one), None);
+
+        // A flag pass re-files a record in place.
+        let renamed = set_flags_at(&record(3), 3, |current| {
+            assert_eq!(current, flags(&["flagged", "\\Flagged"]));
+            flags(&["flagged", "seen"])
+        });
+        assert_eq!(renamed.unwrap(), Some("3.json".to_string()));
+        assert_eq!(set_flags_at(&record(3), 3, |current| current.to_vec()).unwrap(), None);
+
+        // A listed record or blob removes the record, never the blob.
+        remove_listed(root, ACCT, MBOX, 3, &blob("three"));
+        assert!(!record(3).exists() && blob("three").exists());
+        remove_listed(root, ACCT, MBOX, 2, &record(2));
+        assert!(!record(2).exists() && blob("two").exists());
+        assert_eq!(read_raw(root, ACCT, MBOX, 2).unwrap(), Some(eml("two-old")), "the Maildir copy shows again");
+    }
+
+    /// Carries (Tasks 4a, 4b, 5): the name-given and new-copy writers write a
+    /// record in a JMAP vault, and a copy in from the mirror does too.
+    #[test]
+    fn write_new_write_named_at_and_copy_in_write_records_in_a_jmap_vault() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        create_messages_dir(root, ACCT, MBOX).unwrap();
+        let written = write_new(root, ACCT, MBOX, 5, &eml("five"), &flags(&["archived"]), false).unwrap();
+        assert_eq!(written, jmap_in(&mbox).join("5.json"));
+        assert_eq!(read_raw(root, ACCT, MBOX, 5).unwrap(), Some(eml("five")));
+
+        let name = format!("6{INFO_PREFIX}AS.eml");
+        assert_eq!(entry_path_at(&mbox, &name), jmap_in(&mbox).join("6.json"), "where the write lands, for the caller's exists check");
+        assert!(!entry_path_at(&mbox, &name).exists());
+        assert_eq!(write_named_at(&mbox, &name, &eml("six")).unwrap(), jmap_in(&mbox).join("6.json"));
+        assert_eq!(find(root, ACCT, MBOX, 6).unwrap().flags, flags(&["archived", "seen", "\\Seen"]));
+        assert!(entry_path_at(&mbox, &name).exists(), "a second import of the name skips");
+        // A name with no uid has no record form: it lands as named.
+        assert_eq!(write_named_at(&mbox, "notes.txt", b"x").unwrap(), messages_in(&mbox).join("notes.txt"));
+
+        let src = root.join("mirror-copy.eml");
+        fs::write(&src, eml("seven")).unwrap();
+        let dir = maildir_messages_dir(&mbox);
+        assert_eq!(copy_in(&dir, 7, &flags(&["seen", "archived"]), &src).unwrap(), eml("seven").len() as u64);
+        assert_eq!(find(root, ACCT, MBOX, 7).unwrap().name, "7.json");
+        assert!(!messages_in(&mbox).join(format!("7{INFO_PREFIX}AS.eml")).exists());
+    }
+
+    #[test]
+    fn verify_archived_reads_records() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &flags(&["archived"])).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 2, &eml("two"), &flags(&["archived"])).unwrap();
+        write(root, ACCT, MBOX, 3, &eml("three"), &flags(&["archived"])).unwrap();
+        write(root, ACCT, MBOX, 4, &eml("four"), &[]).unwrap();
+        let expected = HashMap::from([
+            (1, "<one@x.test>".to_string()),
+            (2, "<two@x.test>".to_string()),
+            (3, "<other@x.test>".to_string()),
+            (4, "<four@x.test>".to_string()),
+        ]);
+        let uids = [1, 2, 3, 4, 5];
+        assert_eq!(verify_archived(root, ACCT, MBOX, &uids, Some(&expected)), (vec![1, 2], vec![4, 5], vec![3]));
+        let listing = archived_paths(root, ACCT, MBOX);
+        assert_eq!(verify_archived_strict(root, ACCT, MBOX, &listing, &uids, &expected), (vec![1, 2], vec![4, 5], vec![3]));
+        // A record no longer archived since the listing is not proof.
+        set_flags(root, ACCT, MBOX, 2, &[]).unwrap();
+        assert_eq!(verify_archived_strict(root, ACCT, MBOX, &listing, &[2], &expected), (vec![], vec![2], vec![]));
+    }
+
+    #[test]
+    fn rebind_uids_rekeys_records() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 3, &eml("three"), &flags(&["archived"])).unwrap();
+        write(root, ACCT, MBOX, 4, &eml("four"), &[]).unwrap();
+        write(root, ACCT, MBOX, 13, &eml("taken"), &[]).unwrap();
+        let rebound = rebind_uids(root, ACCT, MBOX, &[(3, 12), (4, 13), (8, 14)]);
+        assert_eq!(rebound, vec![(3, 12)], "13 is taken, 8 holds nothing");
+        assert_eq!(find(root, ACCT, MBOX, 3), None);
+        let moved = find(root, ACCT, MBOX, 12).unwrap();
+        assert_eq!((moved.name.as_str(), moved.flags.clone()), ("12.json", flags(&["archived"])));
+        let rec = read_record(&jmap_in(&mailbox_dir(root, ACCT, MBOX)).join("12.json")).unwrap();
+        assert_eq!(rec.uid, 12);
+        assert!(rec.email["id"].as_str().unwrap().starts_with("L12-"));
+        assert_eq!(read_raw(root, ACCT, MBOX, 12).unwrap(), Some(eml("three")));
+    }
+
+    #[test]
+    fn demote_records_turns_records_into_verified_files() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 3, &eml("three"), &flags(&["archived", "seen"])).unwrap();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        fs::create_dir_all(messages_in(&mbox)).unwrap();
+        fs::write(messages_in(&mbox).join(format!("3{INFO_PREFIX}.eml")), eml("stale")).unwrap();
+        assert_eq!(demote_records(&mbox).unwrap(), 1);
+        let entry = find(root, ACCT, MBOX, 3).unwrap();
+        assert_eq!(entry.name, format!("3{INFO_PREFIX}AS.eml"));
+        assert_eq!(read_raw(root, ACCT, MBOX, 3).unwrap(), Some(eml("three")), "the record's copy, not the stale file");
+        assert!(!jmap_in(&mbox).join("3.json").exists());
+        assert!(blobs::blob_path(root, &blobs::blob_id(&eml("three"))).exists(), "never a blob");
+        assert_eq!(demote_records(&mbox).unwrap(), 0);
     }
 }

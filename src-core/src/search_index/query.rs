@@ -79,6 +79,8 @@ pub const MSG_KEY_SQL: &str =
 pub struct SearchHit {
     pub vault_dir: String,
     pub uid: u32,
+    /// The name the row's flags read off (`message_store::flags_name` of
+    /// `messages.filename` and `messages.flags`): a JMAP record's name holds none.
     pub filename: String,
     /// The Message-ID indexed for this uid, rechecked by the reader when opened.
     pub message_id: Option<String>,
@@ -124,6 +126,7 @@ pub struct NoteCandidate {
     pub vault_dir: String,
     pub uid: u32,
     /// The vault file name, flags and all — `starred` reads `\Flagged` off it.
+    /// A JMAP record's is `message_store::flags_name` of its row.
     pub filename: String,
     /// `messages.message_id`, when the index has it (dedupe key for I2).
     pub message_id: Option<String>,
@@ -152,7 +155,7 @@ pub fn notes_to_self_candidates(
     }
     let marks = own.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
-        "SELECT id, account_id, vault_dir, uid, filename, message_id, from_addr_lc, to_lc, row_json, snippet, date_utc \
+        "SELECT id, account_id, vault_dir, uid, filename, message_id, from_addr_lc, to_lc, row_json, snippet, date_utc, flags \
          FROM messages WHERE from_addr_lc IN ({marks}) AND to_lc != '' ORDER BY date_utc DESC"
     );
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -170,7 +173,10 @@ pub fn notes_to_self_candidates(
             account_id: row.get(1).map_err(|e| e.to_string())?,
             vault_dir: row.get(2).map_err(|e| e.to_string())?,
             uid: row.get(3).map_err(|e| e.to_string())?,
-            filename: row.get(4).map_err(|e| e.to_string())?,
+            filename: crate::message_store::flags_name(
+                &row.get::<_, String>(4).map_err(|e| e.to_string())?,
+                &row.get::<_, String>(11).map_err(|e| e.to_string())?,
+            ),
             message_id: row.get(5).map_err(|e| e.to_string())?,
             from_addr_lc: row.get(6).map_err(|e| e.to_string())?,
             to_lc: row.get(7).map_err(|e| e.to_string())?,
@@ -513,12 +519,13 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     select_args.extend(args.iter().cloned());
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id, m.snippet FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit} OFFSET {offset}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id, m.snippet, m.flags FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit} OFFSET {offset}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
         .query_map(rusqlite::params_from_iter(select_args.iter()), |r| {
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)?, snippet: r.get(9)? })
+            let filename = crate::message_store::flags_name(&r.get::<_, String>(2)?, &r.get::<_, String>(10)?);
+            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)?, snippet: r.get(9)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.

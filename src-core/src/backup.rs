@@ -2173,7 +2173,8 @@ fn mirror_local_folders(ctx: &BackupRunContext) {
             return;
         }
         let cur = crate::message_store::maildir_messages_dir(&account_dir.join(&dir));
-        if !cur.is_dir() {
+        // A folder holding JMAP records only has mail too.
+        if !matches!(crate::message_store::has_message_dir(&account_dir.join(&dir)), Ok(true)) {
             continue;
         }
         let frame = || BackupProgress {
@@ -2710,7 +2711,9 @@ fn copy_one_to_mirror(
         Some(p) => p,
         None => return CopyOne::VaultGone,
     };
-    let Some(name) = src.file_name().map(|n| n.to_string_lossy().to_string()) else {
+    // The vault file's name, or for a JMAP record's blob the Maildir name of
+    // its uid under its flags: the mirror always holds `.eml` files.
+    let Some(name) = crate::message_store::copy_name(vault_root, account_id, mailbox, uid, &src) else {
         return CopyOne::Failed;
     };
     let dst_name = if name.ends_with(".eml") { name } else { format!("{name}.eml") };
@@ -4042,5 +4045,50 @@ mod tests {
         assert_eq!(out.copied, vec![1], "a stale listing entry is not proof the drive holds the message");
         assert_eq!(out.verified, vec![1]);
         assert_eq!(listing.loads(), 1);
+    }
+
+    // ── Task 7b: a JMAP vault's mirror stays `.eml` ──
+
+    #[test]
+    fn mirror_stays_eml_in_jmap_vault() {
+        let fx = CopyFx::new();
+        crate::message_store::set_vault_format(fx.vault.path(), crate::message_store::Format::Jmap).unwrap();
+        let archived = ["archived".to_string(), "seen".to_string()];
+        crate::message_store::write(fx.vault.path(), ACCT, BOX, 1, &mail_bytes("a@x", "first body"), &archived).unwrap();
+        crate::message_store::write(fx.vault.path(), ACCT, BOX, 2, &mail_bytes("b@x", "second body"), &["flagged".to_string()]).unwrap();
+        assert!(!fx.vault_cur().exists(), "the vault holds records only");
+
+        let out = fx.copy(&[1, 2]).unwrap();
+        assert_eq!((out.copied.clone(), out.verified.clone()), (vec![1, 2], vec![1, 2]), "{out:?}");
+        let names = fx.mirror_names();
+        assert_eq!(names, vec![format!("1{}AS.eml", crate::maildir::INFO_PREFIX), format!("2{}F.eml", crate::maildir::INFO_PREFIX)]);
+        assert_eq!(std::fs::read(fx.mirror_cur().join(&names[0])).unwrap(), mail_bytes("a@x", "first body"), "identical bytes");
+        assert_eq!(std::fs::read(fx.mirror_cur().join(&names[1])).unwrap(), mail_bytes("b@x", "second body"));
+        assert!(!names.iter().any(|n| n.ends_with(".json")));
+        assert_eq!(fx.copy(&[1, 2]).unwrap().verified, vec![1, 2], "already there: verified, not copied");
+    }
+
+    /// The pre-sync in a JMAP vault: a record goes to the mirror as an `.eml`
+    /// under its flags, a mirror-only file comes into the vault as a record.
+    #[test]
+    fn a_presync_in_a_jmap_vault_copies_records_out_as_eml_and_files_in_as_records() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Jmap).unwrap();
+        let (_app, reg) = test_registry(root);
+        let cur = crate::vault_files::cur_path(root, "acct", "INBOX");
+        let mirror = root.join("mirror").join("me@mock.test").join("INBOX").join("cur");
+        std::fs::create_dir_all(&mirror).unwrap();
+        write_vault_file(&mirror, 42, &[]);
+        crate::vault_files::store(&reg, root, "acct", "INBOX", 7, b"Subject: seven\r\n\r\nbody", &["seen".to_string()], true).unwrap();
+
+        let uids = vault_uids_after_presync(&reg, "acct", "INBOX", &cur, Some(&mirror)).unwrap();
+        assert_eq!(uids, HashSet::from([7, 42]));
+        assert_eq!(std::fs::read(mirror.join(format!("7{}S.eml", crate::maildir::INFO_PREFIX))).unwrap(), b"Subject: seven\r\n\r\nbody");
+        let restored = crate::message_store::find(root, "acct", "INBOX", 42).unwrap();
+        assert_eq!(restored.name, "42.json", "restored as a record");
+        assert!(restored.flags.contains(&"archived".to_string()));
+        assert_eq!(reg.uid_sets(root, "acct", "INBOX"), Some((vec![7, 42], vec![42])));
+        assert_eq!(scan_cur_uids(&cur).unwrap(), HashSet::from([7, 42]), "the status count holds records");
     }
 }

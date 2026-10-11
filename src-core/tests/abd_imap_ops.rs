@@ -737,6 +737,33 @@ async fn store_archived_writes_the_a_flag_atomically_and_upserts_the_registry() 
     assert_eq!(entry["flags"][0], "\\Seen");
 }
 
+/// Task 7: in a JMAP vault the Archive & delete job's copy is a record. It is
+/// found again (never rewritten), compared by its blob's bytes, and listed
+/// for the verify that clears the server's copy.
+#[tokio::test]
+async fn store_archived_writes_a_record_in_a_jmap_vault() {
+    use mailvault_core::message_store::{self, Format};
+    let v = vault();
+    message_store::set_vault_format(v.root.path(), Format::Jmap).unwrap();
+    let raw = msg("solo").into_bytes();
+    let (path, _, outcome) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, raw.clone(), &["\\Seen".to_string()], false).await.unwrap();
+    assert_eq!(outcome, StoreOutcome::Wrote);
+    let record = message_store::mailbox_dir(v.root.path(), "acc", "INBOX").join("jmap").join("7.json");
+    assert_eq!(path, record);
+    assert_eq!(message_store::read_path(&path).unwrap(), raw);
+    assert_eq!(v.ctx.registry.resolve(v.root.path(), "acc", "INBOX", 7), Some(Some(record.clone())));
+
+    let (again, _, o2) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, msg("other").into_bytes(), &[], false).await.unwrap();
+    assert_eq!((again.clone(), o2), (record.clone(), StoreOutcome::FoundDifferent), "an archived record is never rewritten");
+    let (_, _, o3) = archive::store_archived(&v.ctx, "acc", "INBOX", 7, raw.clone(), &[], false).await.unwrap();
+    assert_eq!(o3, StoreOutcome::FoundSame);
+
+    let listing = message_store::archived_paths(v.root.path(), "acc", "INBOX");
+    assert_eq!(listing.get(&7), Some(&record));
+    let expected = std::collections::HashMap::from([(7, "<solo@t.test>".to_string())]);
+    assert_eq!(message_store::verify_archived_strict(v.root.path(), "acc", "INBOX", &listing, &[7], &expected), (vec![7], vec![], vec![]));
+}
+
 #[tokio::test]
 async fn store_archived_never_overwrites_an_archived_copy() {
     let v = vault();

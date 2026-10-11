@@ -945,4 +945,43 @@ mod tests {
         let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 0, "an existing file is skipped, not overwritten or double-counted");
     }
+
+    /// Task 7: a JMAP vault's ZIP export holds `.eml` entries named by each
+    /// message's flags, with the exact bytes, and imports back as records.
+    #[test]
+    fn zip_export_entries_stay_eml_in_jmap_vault() {
+        use mailvault_core::message_store::{self, Format};
+        let (v, s) = state(true);
+        message_store::set_vault_format(v.path(), Format::Jmap).unwrap();
+        message_store::write(v.path(), "acct1", "INBOX", 1, b"Subject: one\r\n\r\nbody one", &["archived".to_string()]).unwrap();
+        message_store::write(v.path(), "acct1", "INBOX", 2, b"Subject: two\r\n\r\nbody two", &[]).unwrap();
+        let entries = vec![AccountsJsonEntry { id: "acct1".into(), email: Some("a@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+        let dest = tempfile::tempdir().unwrap().keep().join("out.zip");
+        let accounts = vec![BackupAccount { email: "a@test.com".into(), imap_server: Some("imap.test".into()), smtp_server: None }];
+        let result = export(&s, dest.clone(), &entries, accounts, None, false, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 2);
+
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(&dest).unwrap()).unwrap();
+        let mut emails: Vec<String> =
+            (0..archive.len()).map(|i| archive.by_index(i).unwrap().name().to_string()).filter(|n| n.contains("/emails/")).collect();
+        emails.sort();
+        let one = mailvault_core::vault_files::build_maildir_filename(1, &["A".to_string()]);
+        let two = mailvault_core::vault_files::build_maildir_filename(2, &[]);
+        assert_eq!(emails, vec![format!("mailvault-backup/emails/a@test.com/INBOX/{one}"), format!("mailvault-backup/emails/a@test.com/INBOX/{two}")]);
+        let mut body = String::new();
+        archive.by_name(&emails[0]).unwrap().read_to_string(&mut body).unwrap();
+        assert_eq!(body, "Subject: one\r\n\r\nbody one", "the blob's exact bytes");
+        let archived_only = export(&s, tempfile::tempdir().unwrap().keep().join("a.zip"), &entries, vec![], None, true, |_, _| {}).unwrap();
+        assert_eq!(archived_only.email_count, 1, "the archived filter reads the record's flags");
+
+        // Imported into a JMAP vault, the entries become records.
+        let (v2, s2) = state(true);
+        message_store::set_vault_format(v2.path(), Format::Jmap).unwrap();
+        let imported = import(&s2, dest, vec![], |_, _| {}).unwrap();
+        assert_eq!(imported.email_count, 2);
+        let account = &imported.new_accounts[0].id;
+        let first = message_store::find(v2.path(), account, "INBOX", 1).unwrap();
+        assert_eq!((first.name.as_str(), first.flags.clone()), ("1.json", vec!["archived".to_string()]));
+        assert_eq!(message_store::read_raw(v2.path(), account, "INBOX", 2).unwrap(), Some(b"Subject: two\r\n\r\nbody two".to_vec()));
+    }
 }

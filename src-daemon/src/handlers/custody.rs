@@ -256,7 +256,7 @@ pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, 
         // Files were renamed or set aside wholesale, or a rename failed
         // part way: the next read relists the folder. The change hook
         // nudges the index.
-        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() || report.errors > 0 {
+        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() || report.errors > 0 || report.demoted > 0 {
             state.vault_registry.invalidate(account_id, mailbox);
         }
         if !report.rebound.is_empty() || !report.orphaned.is_empty() {

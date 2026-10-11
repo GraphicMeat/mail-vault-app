@@ -330,7 +330,10 @@ pub fn reconcile_mailbox_guarded(
                     && !(row.body_state == BODY_INDEXED && row.snippet_missing && config.bodies)
                     && !(row.needs_attachment_backfill && config.attachments) =>
             {
-                if row.filename == file.filename {
+                // A record keeps its name and its message size through a flag
+                // change, and a network volume's mtime is coarse: the flags are
+                // compared too, and `Op::Rename` writes them.
+                if row.filename == file.filename && row.flags == file.flags {
                     stats.unchanged += 1;
                 } else {
                     renames.push((row.id, file));
@@ -419,7 +422,8 @@ pub fn reconcile_mailbox_guarded(
                     continue;
                 }
             };
-            let doc = parse(&raw, file.uid, &file.filename).map(|mut d| {
+            // The parse takes its flags off a name: a record's carries none.
+            let doc = parse(&raw, file.uid, &message_store::flags_name(&file.filename, &file.flags)).map(|mut d| {
                 // Cap before taking the lock: less memory per batch, shorter commits.
                 d.body_text = if config.bodies { cap_chars(d.body_text, MAX_BODY_CHARS) } else { String::new() };
                 d
@@ -2360,5 +2364,75 @@ mod tests {
         *crate::search_index::lock(&v.db) = None; // exclusive locking: one connection at a time
         let reopened = db::open(&v.root).unwrap();
         assert_eq!(meta_get(&reopened, db::LISTED_ROWS_PENDING).as_deref(), Some("0"), "an existing index is not asked again");
+    }
+
+    /// Task 7b: the index of a JMAP mailbox. Rows name the record, keep its
+    /// flags, and a parse takes its flags off `flags_name`; a flag change
+    /// (a record rewrite, same name) reaches the row and the search.
+    #[test]
+    fn a_jmap_records_flags_reach_the_row_the_parse_and_the_search() {
+        use crate::message_store::{self, Format};
+        let v = vault();
+        message_store::set_vault_format(&v.root, Format::Jmap).unwrap();
+        message_store::write(&v.root, "a1", "INBOX", 1, eml("Hello", "body").as_bytes(), &["seen".to_string()]).unwrap();
+        let names = Mutex::new(Vec::new());
+        let parse = |raw: &[u8], uid: u32, name: &str| {
+            names.lock().unwrap().push(name.to_string());
+            fake_parse(raw, uid, name)
+        };
+        reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &parse, &|| true, &mut |_| {}).unwrap();
+        assert_eq!(*names.lock().unwrap(), vec![format!("1{INFO_PREFIX}S.eml")]);
+        let row = |v: &Vault| -> (String, String) {
+            let g = crate::search_index::lock(&v.db);
+            g.as_ref().unwrap().query_row("SELECT filename, flags FROM messages WHERE uid = 1", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
+        };
+        assert_eq!(row(&v), ("1.json".to_string(), "S".to_string()));
+
+        message_store::set_flags(&v.root, "a1", "INBOX", 1, &["seen".to_string(), "flagged".to_string()]).unwrap();
+        // The rewrite's mtime is what change detection sees; make it plainly newer.
+        let record = v.root.join("Maildir/a1/INBOX/jmap/1.json");
+        let file = std::fs::File::options().write(true).open(&record).unwrap();
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5)).unwrap();
+        reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &parse, &|| true, &mut |_| {}).unwrap();
+        assert_eq!(row(&v), ("1.json".to_string(), "FS".to_string()));
+
+        let g = crate::search_index::lock(&v.db);
+        let req = crate::search_index::query::SearchRequest { account_id: "a1".into(), query: "hello".into(), starred: Some(true), ..Default::default() };
+        let page = crate::search_index::query::search(g.as_ref().unwrap(), &req).unwrap();
+        assert_eq!(page.hits.len(), 1, "a starred search finds the record");
+        assert_eq!(page.hits[0].filename, format!("1{INFO_PREFIX}FS.eml"), "the name its flags read off");
+        assert_eq!(message_store::flags_in_name(&page.hits[0].filename), vec!["flagged", "seen", "\\Seen", "\\Flagged"]);
+    }
+
+    /// A record keeps its name and its message size through a flag change, and
+    /// a rewrite inside one mtime tick (a network volume's coarse clock) leaves
+    /// size and mtime as they were: the row still follows the flags, by a
+    /// rename and without a reparse.
+    #[test]
+    fn a_record_flag_change_that_size_and_mtime_cannot_show_reaches_the_row() {
+        use crate::message_store::{self, Format};
+        let v = vault();
+        message_store::set_vault_format(&v.root, Format::Jmap).unwrap();
+        message_store::write(&v.root, "a1", "INBOX", 1, eml("Hello", "body").as_bytes(), &["seen".to_string()]).unwrap();
+        reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &fake_parse, &|| true, &mut |_| {}).unwrap();
+        let row = |v: &Vault| -> (String, String) {
+            let g = crate::search_index::lock(&v.db);
+            g.as_ref().unwrap().query_row("SELECT filename, flags FROM messages WHERE uid = 1", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
+        };
+        assert_eq!(row(&v), ("1.json".to_string(), "S".to_string()));
+
+        let record = v.root.join("Maildir/a1/INBOX/jmap/1.json");
+        let before = message_store::find(&v.root, "a1", "INBOX", 1).unwrap();
+        let mtime = std::fs::metadata(&record).unwrap().modified().unwrap();
+        message_store::set_flags(&v.root, "a1", "INBOX", 1, &["seen".to_string(), "flagged".to_string()]).unwrap();
+        // The same mtime tick: the rewrite's mtime is the old one.
+        std::fs::File::options().write(true).open(&record).unwrap().set_modified(mtime).unwrap();
+        let after = message_store::find(&v.root, "a1", "INBOX", 1).unwrap();
+        assert_eq!((&after.name, after.size, after.mtime_ns), (&before.name, before.size, before.mtime_ns), "name, size and mtime cannot show it");
+        assert_ne!(after.flags, before.flags);
+
+        let stats = reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &fake_parse, &|| true, &mut |_| {}).unwrap();
+        assert_eq!(row(&v), ("1.json".to_string(), "FS".to_string()), "the row follows the flags");
+        assert_eq!((stats.renamed, stats.parsed, stats.unchanged), (1, 0, 0), "a rename, not a reparse");
     }
 }

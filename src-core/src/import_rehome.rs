@@ -249,7 +249,10 @@ pub struct Plan {
 /// mail the server holds under another uid.
 pub fn plan(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: &HashSet<u32>) -> Plan {
     let mut plan = Plan::default();
-    let files = message_store::raw_paths_at(mailbox_dir);
+    // Maildir files only: a pass renames by file name, and a JMAP record (or
+    // its shared blob) is never one to rename. Its uid still counts as taken
+    // (`next_import_uid`, `carry_out`'s target check).
+    let files = message_store::maildir_paths_at(mailbox_dir);
     let mut uids: Vec<u32> = files.keys().copied().filter(|u| !message_store::is_import_uid(*u) && !protected.contains(u)).collect();
     uids.sort_unstable();
     let mut confirmed = 0u32;
@@ -326,7 +329,7 @@ fn import_twins(server: &ServerView, is_graph: bool, protected: &HashSet<u32>, f
 /// A plan of the import copies alone (`import_twins`), for a folder whose
 /// server-range files were sorted for good by an earlier pass.
 pub fn plan_import_twins(mailbox_dir: &Path, server: &ServerView, is_graph: bool, protected: &HashSet<u32>) -> Plan {
-    let files = message_store::raw_paths_at(mailbox_dir);
+    let files = message_store::maildir_paths_at(mailbox_dir);
     Plan { set_aside: import_twins(server, is_graph, protected, &files), ..Default::default() }
 }
 
@@ -559,7 +562,7 @@ pub fn replay(vault_mailbox_dir: &Path, mirror_mailbox_dir: &Path) -> bool {
         }
     };
     let vault_cur = message_store::maildir_messages_dir(vault_mailbox_dir);
-    let vault_touched = replay_into(vault_mailbox_dir, &vault_cur, message_store::raw_paths_at(vault_mailbox_dir), &ledger);
+    let vault_touched = replay_into(vault_mailbox_dir, &vault_cur, message_store::maildir_paths_at(vault_mailbox_dir), &ledger);
     let mirror_cur = maildir::mirror_cur_in(mirror_mailbox_dir);
     replay_into(mirror_mailbox_dir, &mirror_cur, maildir::mirror_file_map(&mirror_cur), &ledger);
     vault_touched
@@ -1135,5 +1138,26 @@ mod tests {
         let p = plan(t.path(), &view(&[row(5, "<s@x>", "S", DATE)]), false, &HashSet::new());
         assert!(apply(t.path(), &p).is_err());
         assert_eq!(cur_uids(t.path()), vec![5]);
+    }
+
+    /// A pass renames and sets aside by file name: a JMAP record (and its
+    /// shared blob) is never planned, while a Maildir file beside it still is.
+    #[test]
+    fn a_pass_never_plans_a_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Jmap).unwrap();
+        let mailbox = crate::message_store::mailbox_dir(root, "acct", "INBOX");
+        crate::message_store::write(root, "acct", "INBOX", 5, eml("<import5@x>", "Five", DATE, "", "body").as_bytes(), &["archived".to_string()]).unwrap();
+        put(&mailbox, 6, "A", &eml("<import6@x>", "Six", DATE, "", "body"));
+        let server = view(&[row(5, "<real5@x>", "Real five", DATE), row(6, "<real6@x>", "Real six", DATE)]);
+        let plan = plan(&mailbox, &server, false, &HashSet::new());
+        let planned: Vec<u32> = plan.to_import.iter().chain(&plan.set_aside).map(|p| p.uid).collect();
+        assert_eq!(planned, vec![6], "only the Maildir file");
+        assert!(plan_import_twins(&mailbox, &server, false, &HashSet::new()).set_aside.is_empty());
+        // The record's uid is still taken for a move target.
+        assert_eq!(next_import_uid(&mailbox, &[]), Some(IMPORT_UID_BASE));
+        crate::message_store::write(root, "acct", "INBOX", IMPORT_UID_BASE, b"Subject: i\r\n\r\nx", &[]).unwrap();
+        assert_eq!(next_import_uid(&mailbox, &[]), Some(IMPORT_UID_BASE + 1));
     }
 }
