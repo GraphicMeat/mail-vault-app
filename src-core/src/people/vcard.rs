@@ -138,6 +138,14 @@ impl VCard {
         String::new()
     }
 
+    /// The name a person is listed by: the card's name, else its first email
+    /// address, else its first phone number, so a row is never blank.
+    pub fn display_name(&self) -> String {
+        let name = self.fn_name();
+        if !name.is_empty() { return name; }
+        self.emails().into_iter().next().map(|(a, _)| a).or_else(|| self.phones().into_iter().next().map(|(n, _)| n)).unwrap_or_default()
+    }
+
     pub fn emails(&self) -> Vec<(String, String)> {
         self.lines.iter().filter(|l| l.name == "EMAIL")
             .filter_map(|l| normalize(&unescape(&l.value)).map(|a| (a, type_label(&l.params)))).collect()
@@ -261,7 +269,7 @@ fn people_by_name(conn: &Connection) -> Result<HashMap<String, Vec<String>>, Str
 /// name stay two.
 fn owner_by_name(conn: &Connection, names: &HashMap<String, Vec<String>>, card: &VCard) -> Result<Option<String>, String> {
     let keys: Vec<String> = card.phones().iter().map(|(n, _)| phone_tail(n)).filter(|k| !k.is_empty()).collect();
-    for id in names.get(&norm_name(&card.fn_name())).into_iter().flatten() {
+    for id in names.get(&norm_name(&card.display_name())).into_iter().flatten() {
         if keys.is_empty() {
             return Ok(Some(id.clone()));
         }
@@ -340,7 +348,7 @@ pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<Imp
             None => {
                 let (pid, steps) = create_person_steps(&tx, &NewPerson { source_kind: "import".into(), raw: Some(card.to_text()), ..Default::default() })?;
                 if let Some(map) = names.as_mut() {
-                    let key = norm_name(&card.fn_name());
+                    let key = norm_name(&card.display_name());
                     if !key.is_empty() {
                         map.entry(key).or_default().push(pid);
                     }
@@ -585,6 +593,15 @@ mod tests {
             let r = import(&c, "BEGIN:VCARD\nFN:Sam\nTEL:111\nTEL:333\nEND:VCARD\n").unwrap();
             assert_eq!((r.created, r.linked, r.skipped), (0, 1, 0));
             assert_eq!(get_card(&c, &id).unwrap().unwrap().phones.len(), 2);
+        }
+
+        #[test]
+        fn a_nameless_phone_only_card_is_not_created_again_by_a_second_import() {
+            let (_t, c) = conn();
+            let text = "BEGIN:VCARD\nTEL:+1 555 0100\nEND:VCARD\n";
+            assert_eq!(import(&c, text).unwrap().created, 1);
+            let again = import(&c, text).unwrap();
+            assert_eq!((again.created, again.linked, again.skipped), (0, 0, 1));
         }
 
         #[test]
