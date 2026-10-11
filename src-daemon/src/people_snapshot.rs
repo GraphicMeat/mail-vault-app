@@ -21,19 +21,33 @@ const SETTLE_MS: u64 = 30_000;
 const POLL: Duration = Duration::from_secs(5);
 const HASH_KEY: &str = "contacts_snapshot_hash";
 /// `1` once this vault has restored from, or written, a snapshot: the file is
-/// never read again. `pending:N` while a restore is running (or was cut short),
-/// N cards of the file already in: the next start resumes at card N and nothing
-/// is written meanwhile. A bare `pending` (older builds) resumes at card 0.
+/// never read again. `pending:N:<hash>` while a restore is running (or was cut
+/// short), N cards of the file with that hash already in: the next start resumes
+/// at card N of the same file (a changed file starts over) and nothing is written
+/// meanwhile. `pending:N` and a bare `pending` (older builds) resume at N and 0.
 const RESTORED_KEY: &str = "people_restored";
 const PENDING: &str = "pending";
 
-/// How many cards a pending restore has already imported; `None` when the flag is not pending.
-fn pending_at(flag: Option<&str>) -> Option<usize> {
+/// How many cards a pending restore has already imported, and the hash of the
+/// file text they came from (`pending:N:<hash>`; older flags carry none);
+/// `None` when the flag is not pending.
+fn pending_at(flag: Option<&str>) -> Option<(usize, Option<&str>)> {
     let f = flag?;
     if f == PENDING {
-        return Some(0);
+        return Some((0, None));
     }
-    f.strip_prefix("pending:").map(|n| n.parse().unwrap_or(0))
+    let rest = f.strip_prefix("pending:")?;
+    let (n, hash) = match rest.split_once(':') {
+        Some((n, h)) => (n, Some(h)),
+        None => (rest, None),
+    };
+    Some((n.parse().unwrap_or(0), hash))
+}
+
+fn text_hash(text: &str) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 /// When the last unsnapshotted change happened (0 = nothing waiting).
@@ -73,9 +87,7 @@ fn store_text(state: &DaemonState, root: &Path, text: &str) -> Result<bool, Stri
     if text.is_empty() {
         return Ok(false);
     }
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    text.hash(&mut hasher);
-    let hash = format!("{:016x}", hasher.finish());
+    let hash = text_hash(text);
     if pending_at(crate::custody::with_conn(state, |c| Ok(meta_get(c, RESTORED_KEY)))?.as_deref()).is_some() {
         return Ok(false);
     }
@@ -104,17 +116,18 @@ pub(crate) fn write(state: &DaemonState, root: &Path, mut yield_fn: impl FnMut()
 }
 
 /// A vault with no people at all but a `contacts.vcf` (a restore, a moved or
-/// copied vault) gets them back, once: `people_restored` is `pending:N` while it
-/// runs (N cards done, saved with each chunk) and `1` after the last, and the file
-/// is never read again. A restore cut short resumes at card N, so a card with no
-/// email, which has no address to be found by, is not created twice. Returns how
-/// many people it brought back.
+/// copied vault) gets them back, once: `people_restored` is `pending:N:<hash>` while it
+/// runs (N cards done, saved with each chunk, with a hash of the file) and `1`
+/// after the last, and the file is never read again. A restore cut short resumes
+/// at card N, so a card with no email, which has no address to be found by, is not
+/// created twice; if the file changed since, it starts over from card 0 (the
+/// import skips cards already in). Returns how many people it brought back.
 pub(crate) fn restore_if_empty(state: &DaemonState, root: &Path, mut yield_fn: impl FnMut()) -> Result<usize, String> {
     let (empty, resume) = crate::custody::with_conn(state, |c| {
         let rows: i64 = c.query_row("SELECT count(*) FROM person", [], |r| r.get(0)).map_err(|e| e.to_string())?;
         let flag = meta_get(c, RESTORED_KEY);
-        let resume = pending_at(flag.as_deref());
-        Ok((resume.is_some() || (rows == 0 && flag.is_none()), resume.unwrap_or(0)))
+        let resume = pending_at(flag.as_deref()).map(|(n, h)| (n, h.map(str::to_string)));
+        Ok((resume.is_some() || (rows == 0 && flag.is_none()), resume))
     })?;
     if !empty {
         return Ok(0);
@@ -124,16 +137,21 @@ pub(crate) fn restore_if_empty(state: &DaemonState, root: &Path, mut yield_fn: i
         crate::custody::with_conn(state, |c| if pending_at(meta_get(c, RESTORED_KEY).as_deref()).is_some() { meta_set(c, RESTORED_KEY, "1") } else { Ok(()) })?;
         return Ok(0);
     };
-    let (cards, grp) = (vcard::VCard::parse_all(&text), new_id());
-    let mut done = resume.min(cards.len());
-    crate::custody::with_conn(state, |c| meta_set(c, RESTORED_KEY, &format!("{PENDING}:{done}")))?;
+    let (cards, grp, hash) = (vcard::VCard::parse_all(&text), new_id(), text_hash(&text));
+    // progress counts cards of one particular file: a file replaced since the cut is read from its start
+    let mut done = match resume {
+        Some((_, Some(h))) if h != hash => 0,
+        Some((n, _)) => n.min(cards.len()),
+        None => 0,
+    };
+    crate::custody::with_conn(state, |c| meta_set(c, RESTORED_KEY, &format!("{PENDING}:{done}:{hash}")))?;
     let mut restored = 0;
     for chunk in cards[done..].chunks(vcard::IMPORT_CHUNK) {
         yield_fn();
         // the progress is saved in the same custody call as the chunk, so a kill leaves at most that one chunk to repeat
         let r = crate::custody::with_conn(state, |c| {
             let r = vcard::import_cards(c, chunk, &grp)?;
-            meta_set(c, RESTORED_KEY, &format!("{PENDING}:{}", done + chunk.len()))?;
+            meta_set(c, RESTORED_KEY, &format!("{PENDING}:{}:{hash}", done + chunk.len()))?;
             Ok(r)
         })?;
         done += chunk.len();
@@ -286,7 +304,7 @@ mod tests {
 
         let mut seen = Vec::new();
         restore_if_empty(&dst, dst_dir.path(), || seen.push(flag(&dst))).unwrap();
-        assert_eq!(seen.first(), Some(&Some("pending:0".to_string())));
+        assert!(seen.first().unwrap().as_deref().unwrap().starts_with("pending:0:"), "{seen:?}");
         assert_eq!(flag(&dst).as_deref(), Some("1"));
 
         crate::custody::with_conn(&dst, |c| meta_set(c, RESTORED_KEY, PENDING)).unwrap();
@@ -343,7 +361,7 @@ mod tests {
         // killed after the first chunk of 200: those cards are in, the flag says how many
         crate::custody::with_conn(&dst, |c| {
             vcard::import_cards(c, &cards[..vcard::IMPORT_CHUNK], "g")?;
-            meta_set(c, RESTORED_KEY, "pending:200")
+            meta_set(c, RESTORED_KEY, &format!("pending:200:{}", text_hash(&book)))
         })
         .unwrap();
         assert_eq!(people(&dst), 200);
@@ -352,7 +370,28 @@ mod tests {
         let mut seen = Vec::new();
         assert_eq!(restore_if_empty(&dst, dst_dir.path(), || seen.push(flag(&dst))).unwrap(), 250);
         assert_eq!(people(&dst), 450, "resumed at card 200, nobody twice");
-        assert_eq!(seen, [Some("pending:200".to_string()), Some("pending:400".to_string())]);
+        let h = text_hash(&book);
+        assert_eq!(seen, [Some(format!("pending:200:{h}")), Some(format!("pending:400:{h}"))]);
+        assert_eq!(flag(&dst).as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn a_restore_cut_short_over_a_file_that_was_replaced_starts_over_with_the_new_file() {
+        let old: String = (0..450).map(|i| format!("BEGIN:VCARD\nFN:Old{i}\nEMAIL:o{i}@x.io\nEND:VCARD\n")).collect();
+        let new: String = (0..250).map(|i| format!("BEGIN:VCARD\nFN:New{i}\nEMAIL:n{i}@y.io\nEND:VCARD\n")).collect();
+        let (dst_dir, dst) = state();
+        std::fs::create_dir_all(dst_dir.path().join("Contacts")).unwrap();
+        // killed after 200 cards of the old file ...
+        crate::custody::with_conn(&dst, |c| {
+            vcard::import_cards(c, &vcard::VCard::parse_all(&old)[..vcard::IMPORT_CHUNK], "g")?;
+            meta_set(c, RESTORED_KEY, &format!("pending:200:{}", text_hash(&old)))
+        })
+        .unwrap();
+        // ... and the file was replaced (a shorter one) before the next start
+        std::fs::write(file_in(dst_dir.path()), &new).unwrap();
+
+        assert_eq!(restore_if_empty(&dst, dst_dir.path(), || {}).unwrap(), 250, "every card of the new file");
+        assert_eq!(people(&dst), 450);
         assert_eq!(flag(&dst).as_deref(), Some("1"));
     }
 
