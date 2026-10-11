@@ -2,6 +2,12 @@
 //! understand: every content line is held verbatim as (group, name, params,
 //! value), so an edit rewrites only the lines it means to change.
 use crate::people::message_addr::normalize;
+use crate::people::journal::{self, Step};
+use crate::people::model::{new_id, now_ms, RecordRow};
+use crate::people::store::{create_person_steps, find_person_by_address, get_card, list, reindex, NewPerson, Sort};
+use rusqlite::Connection;
+use serde::Serialize;
+use serde_json::json;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Line {
@@ -218,6 +224,133 @@ pub fn addresses(raw: &str) -> Vec<String> {
     out
 }
 
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportReport {
+    pub created: usize,
+    pub linked: usize,
+    pub skipped: usize,
+}
+
+fn derr(e: rusqlite::Error) -> String { e.to_string() }
+
+/// Cards per `import_cards` call. The daemon takes the custody lock once per
+/// chunk, so a 10k-card Takeout file never holds it for long.
+pub const IMPORT_CHUNK: usize = 200;
+
+/// Import already-parsed cards in ONE transaction, journaled as one entry in
+/// group `grp` (a caller importing in chunks gives every chunk the same group,
+/// so a single undo reverses the whole file). A card whose email already
+/// belongs to a person is added as a second record of that person
+/// (exact-address auto-link); a card that adds nothing new, one with no name,
+/// address or phone, and a duplicate are skipped. Nothing leaves the vault.
+pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<ImportReport, String> {
+    let mut report = ImportReport::default();
+    let tx = conn.unchecked_transaction().map_err(derr)?;
+    let mut inverse: Vec<Step> = Vec::new();
+    for card in cards {
+        let emails: Vec<String> = card.emails().into_iter().map(|(a, _)| a).collect();
+        if emails.is_empty() && card.fn_name().is_empty() && card.phones().is_empty() {
+            report.skipped += 1;
+            continue;
+        }
+        let owner = emails.iter().find_map(|a| find_person_by_address(&tx, a).ok().flatten());
+        match owner {
+            Some(pid) => {
+                let existing = get_card(&tx, &pid)?.ok_or("E_NOT_FOUND: person")?;
+                let known: Vec<_> = existing.emails.iter().map(|e| e.address.clone()).collect();
+                if emails.iter().all(|a| known.contains(a)) {
+                    report.skipped += 1;
+                    continue;
+                }
+                let rec = RecordRow {
+                    id: new_id(),
+                    account_id: String::new(),
+                    source_kind: "import".into(),
+                    remote_id: String::new(),
+                    etag: String::new(),
+                    raw: card.to_text(),
+                    tombstone: false,
+                    fetched_ms: now_ms(),
+                };
+                let before = journal::snapshot_person(&tx, &pid)?.ok_or("E_NOT_FOUND: person")?;
+                journal::apply(&tx, &Step::PutRecord(rec.clone()))?;
+                journal::apply(&tx, &Step::SetLink { record_id: rec.id.clone(), person_id: Some(pid.clone()) })?;
+                reindex(&tx, &pid)?;
+                // newest first: undo restores the person's old search text and drops the record
+                inverse.insert(0, Step::DropRecord { id: rec.id });
+                inverse.insert(0, Step::PutPerson(before));
+                report.linked += 1;
+            }
+            None => {
+                let (_, steps) = create_person_steps(&tx, &NewPerson { source_kind: "import".into(), raw: Some(card.to_text()), ..Default::default() })?;
+                for s in steps.into_iter().rev() {
+                    inverse.insert(0, s);
+                }
+                report.created += 1;
+            }
+        }
+    }
+    if report.created + report.linked > 0 {
+        journal::record_in(&tx, "import", &json!({"created": report.created, "linked": report.linked}), &inverse, grp)?;
+    }
+    tx.commit().map_err(derr)?;
+    Ok(report)
+}
+
+/// The whole file in chunks of `IMPORT_CHUNK`, one group, one undo. Tests and
+/// small tools; the daemon parses outside the lock and calls `import_cards`
+/// once per chunk, each under its own `with_conn`.
+pub fn import(conn: &Connection, text: &str) -> Result<ImportReport, String> {
+    let grp = new_id();
+    let mut total = ImportReport::default();
+    for chunk in VCard::parse_all(text).chunks(IMPORT_CHUNK) {
+        let r = import_cards(conn, chunk, &grp)?;
+        total.created += r.created;
+        total.linked += r.linked;
+        total.skipped += r.skipped;
+    }
+    Ok(total)
+}
+
+/// One card per person. The first record is the base (so unknown lines
+/// survive); name, emails, phones, org, NOTE and the VIP/pinned/blocked flags
+/// are written from the resolved card, so nothing the Contacts view shows is
+/// lost and a merged person's other records add their addresses and phones
+/// without duplicating anything.
+pub fn export(conn: &Connection, ids: Option<&[String]>) -> Result<String, String> {
+    let wanted: Vec<String> = match ids {
+        Some(i) => i.to_vec(),
+        None => list(conn, None, false, Sort::Name, usize::MAX, 0)?.0.into_iter().map(|s| s.id).collect(),
+    };
+    let mut out = String::new();
+    for id in wanted {
+        let Some(card) = get_card(conn, &id)? else { continue };
+        let mut records = Vec::new();
+        for rid in &card.record_ids {
+            if let Some(r) = journal::snapshot_record(conn, rid)? {
+                records.push(r);
+            }
+        }
+        let mut base = records
+            .first()
+            .and_then(|r| VCard::parse_all(&r.raw).into_iter().next())
+            .unwrap_or_else(|| VCard::new_card(&card.display_name, &[], &[], ""));
+        base.set_fn(&card.display_name);
+        base.set_emails(&card.emails.iter().map(|e| e.address.clone()).collect::<Vec<_>>());
+        base.set_phones(&card.phones.iter().map(|p| p.number.clone()).collect::<Vec<_>>());
+        if !card.org.is_empty() {
+            base.set_org(&card.org);
+        }
+        base.set_note(&card.notes);
+        base.set_flag("X-MAILVAULT-VIP", card.vip);
+        base.set_flag("X-MAILVAULT-PINNED", card.pinned);
+        base.set_flag("X-MAILVAULT-BLOCKED", card.blocked);
+        out.push_str(&base.to_text());
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,5 +447,91 @@ mod tests {
     #[test]
     fn addresses_reads_grouped_email_lines() {
         assert_eq!(addresses("BEGIN:VCARD\nitem2.EMAIL;type=INTERNET:A@B.io\nEND:VCARD"), vec!["a@b.io".to_string()]);
+    }
+
+    mod io {
+        use super::super::*;
+        use crate::custody::db;
+        use crate::people::store::{create_person, get_card, NewPerson};
+
+        fn conn() -> (tempfile::TempDir, rusqlite::Connection) {
+            let t = tempfile::tempdir().unwrap();
+            let c = db::open(t.path()).unwrap();
+            (t, c)
+        }
+
+        #[test]
+        fn import_creates_people_links_by_exact_address_and_skips_empty_cards() {
+            let (_t, c) = conn();
+            let existing = create_person(&c, &NewPerson { display_name: "Jane".into(), emails: vec!["jane@corp.com".into()], ..Default::default() }).unwrap();
+            let text = "BEGIN:VCARD\nFN:Jane D\nEMAIL:JANE@corp.com\nEND:VCARD\nBEGIN:VCARD\nFN:New One\nEMAIL:new@x.io\nEND:VCARD\nBEGIN:VCARD\nEND:VCARD\nBEGIN:VCARD\nFN:Phone Only\nTEL:555\nEND:VCARD\n";
+            let r = import(&c, text).unwrap();
+            assert_eq!((r.created, r.linked, r.skipped), (2, 1, 1));
+            assert_eq!(get_card(&c, &existing).unwrap().unwrap().record_ids.len(), 2, "linked as a second record, not a new person");
+        }
+
+        #[test]
+        fn importing_the_same_file_twice_adds_nothing_new() {
+            let (_t, c) = conn();
+            let text = "BEGIN:VCARD\nFN:A\nEMAIL:a@x.io\nEND:VCARD\n";
+            import(&c, text).unwrap();
+            let again = import(&c, text).unwrap();
+            assert_eq!((again.created, again.linked), (0, 0));
+            assert_eq!(again.skipped, 1);
+        }
+
+        #[test]
+        fn export_round_trips_names_addresses_and_unknown_lines() {
+            let (_t, c) = conn();
+            import(&c, "BEGIN:VCARD\nFN:Zed\nEMAIL:z@x.io\nX-KEEP:yes\nEND:VCARD\n").unwrap();
+            let out = export(&c, None).unwrap();
+            assert!(out.contains("FN:Zed") && out.contains("z@x.io") && out.contains("X-KEEP:yes"));
+            let (_t2, c2) = conn();
+            import(&c2, &out).unwrap();
+            assert_eq!(crate::people::store::list(&c2, None, false, crate::people::store::Sort::Name, 10, 0).unwrap().1, 1);
+        }
+
+        #[test]
+        fn export_keeps_notes_and_flags_and_import_restores_them() {
+            let (_t, c) = conn();
+            let id = create_person(&c, &NewPerson { display_name: "Nora".into(), emails: vec!["n@x.io".into()], notes: "met at the fair".into(), ..Default::default() }).unwrap();
+            crate::people::store::update_person(&c, &id, &crate::people::store::Patch { vip: Some(true), pinned: Some(true), notes: Some("met at the fair, again".into()), ..Default::default() }).unwrap();
+            let out = export(&c, None).unwrap();
+            assert!(out.contains("NOTE:met at the fair\\, again") && out.contains("X-MAILVAULT-VIP:1") && out.contains("X-MAILVAULT-PINNED:1"), "{out}");
+            assert!(!out.contains("X-MAILVAULT-BLOCKED"));
+            let (_t2, c2) = conn();
+            import(&c2, &out).unwrap();
+            let items = crate::people::store::list(&c2, None, false, crate::people::store::Sort::Name, 10, 0).unwrap().0;
+            let card = get_card(&c2, &items[0].id).unwrap().unwrap();
+            assert_eq!((card.notes.as_str(), card.vip, card.pinned, card.blocked), ("met at the fair, again", true, true, false));
+        }
+
+        #[test]
+        fn a_big_import_runs_in_chunks_and_one_undo_reverses_all_of_it() {
+            let (_t, c) = conn();
+            let mut text = String::new();
+            for i in 0..(IMPORT_CHUNK * 2 + 30) {
+                text.push_str(&format!("BEGIN:VCARD\nFN:P{i}\nEMAIL:p{i}@x.io\nEND:VCARD\n"));
+            }
+            let r = import(&c, &text).unwrap();
+            assert_eq!(r.created, IMPORT_CHUNK * 2 + 30);
+            let entries: i64 = c.query_row("SELECT count(*) FROM person_journal", [], |r| r.get(0)).unwrap();
+            assert_eq!(entries, 3, "one journal entry per chunk");
+            assert_eq!(crate::people::journal::recent(&c, 10).unwrap().len(), 1, "Activity shows the import as one line");
+            crate::people::journal::undo_last(&c).unwrap();
+            assert_eq!(crate::people::store::list(&c, None, false, crate::people::store::Sort::Name, 10, 0).unwrap().1, 0);
+        }
+
+        #[test]
+        fn export_includes_phone_only_people_and_a_merged_person_once() {
+            let (_t, c) = conn();
+            let a = create_person(&c, &NewPerson { display_name: "A".into(), emails: vec!["a@x.io".into()], ..Default::default() }).unwrap();
+            let b = create_person(&c, &NewPerson { display_name: "B".into(), emails: vec!["b@x.io".into()], ..Default::default() }).unwrap();
+            create_person(&c, &NewPerson { display_name: "Phone".into(), phones: vec!["555".into()], ..Default::default() }).unwrap();
+            crate::people::merge::merge(&c, &[a.clone(), b], &a).unwrap();
+            let out = export(&c, None).unwrap();
+            assert_eq!(out.matches("BEGIN:VCARD").count(), 2);
+            assert!(out.contains("a@x.io") && out.contains("b@x.io"));
+        }
     }
 }
