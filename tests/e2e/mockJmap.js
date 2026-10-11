@@ -343,3 +343,33 @@ export function daemonLogHits(home, needle) {
     .flatMap((f) => readFileSync(join(dir, f), 'utf-8').split('\n'))
     .filter((line) => line.includes(needle));
 }
+
+// ── The app console ─────────────────────────────────────────────────────────
+
+/**
+ * Record, on `window.__E_JMAP_NOT_IMAP__`, every console.error / console.warn
+ * whose text holds E_JMAP_NOT_IMAP (the pool's refusal of a JMAP account on
+ * an IMAP path). The daemon logs the same refusal; this catches the one that
+ * reached the app and was shown or logged there. The specs never reload the
+ * page, so one install in `before` covers the run. Installing twice keeps
+ * the first record.
+ */
+export async function installNotImapProbe() {
+  await browser.execute(() => {
+    if (Array.isArray(window.__E_JMAP_NOT_IMAP__)) return;
+    window.__E_JMAP_NOT_IMAP__ = [];
+    for (const level of ['error', 'warn']) {
+      const original = console[level];
+      console[level] = function (...args) {
+        try {
+          const text = args.map((a) => (a && a.message) || String(a)).join(' ');
+          if (text.includes('E_JMAP_NOT_IMAP')) window.__E_JMAP_NOT_IMAP__.push(text);
+        } catch { /* a probe never breaks the app's logging */ }
+        return original.apply(this, args);
+      };
+    }
+  });
+}
+
+/** What the probe recorded, or null when it is not installed (a vacuous check). */
+export const notImapConsoleHits = () => browser.execute(() => window.__E_JMAP_NOT_IMAP__ ?? null);

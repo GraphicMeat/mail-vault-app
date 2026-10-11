@@ -16,7 +16,7 @@
  * this spec reads only what that spec never changes: e3, and Work/Sub's e5.
  */
 import { waitForApp, waitForEmails, openSettings, switchToFolder, visibleRowSubjects } from './helpers.js';
-import { JMAP_EMAIL, JMAP_PASSWORD, SUBJECT, daemonLogHits, openJmapFolder } from './mockJmap.js';
+import { JMAP_EMAIL, JMAP_PASSWORD, SUBJECT, daemonLogHits, installNotImapProbe, notImapConsoleHits, openJmapFolder } from './mockJmap.js';
 
 const SESSION_INPUT = 'input[aria-label="JMAP session URL"]';
 
@@ -76,6 +76,8 @@ describe('Adding a JMAP account by its session URL', function () {
   before(async function () {
     await waitForApp();
     await waitForEmails();
+    // Records any E_JMAP_NOT_IMAP the app logs; read by the final log case.
+    await installNotImapProbe();
   });
 
   it('adds the account through the AccountModal, JMAP protocol, session URL and password', async function () {
@@ -216,5 +218,10 @@ describe('Adding a JMAP account by its session URL', function () {
     const hits = daemonLogHits(browser.testDataDir, 'E_JMAP_NOT_IMAP');
     if (hits.length) console.log(`[jmap-account] E_JMAP_NOT_IMAP in daemon.log:\n${hits.join('\n')}`);
     expect(hits).toEqual([]);
+    // And none reached the app's console. A probe that is gone would pass
+    // an empty check, so it must be there.
+    const consoleHits = await notImapConsoleHits();
+    expect(Array.isArray(consoleHits)).toBe(true);
+    expect(consoleHits).toEqual([]);
   });
 });

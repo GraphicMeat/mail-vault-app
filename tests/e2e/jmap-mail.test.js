@@ -28,7 +28,7 @@ import { openRowMenu, clickRowAction } from './rowMenu.js';
 import { openComposeFresh, setField, typeInBody, closeComposeHard, settingsCall } from './composeHelpers.js';
 import {
   JMAP_ACCOUNT_ID, JMAP_EMAIL, MB, SUBJECT, E1_BODY,
-  serverEmail, serverSubjects, submitted, mockRequests, deliver, rawMessage, daemonLogHits, openJmapFolder,
+  serverEmail, serverSubjects, submitted, mockRequests, deliver, rawMessage, daemonLogHits, installNotImapProbe, notImapConsoleHits, openJmapFolder,
 } from './mockJmap.js';
 
 const LUKE = 'luke@mock.test';
@@ -82,6 +82,8 @@ describe('Mail on a JMAP account', function () {
   before(async function () {
     await waitForApp();
     await waitForEmails();
+    // Records any E_JMAP_NOT_IMAP the app logs; read by the final log case.
+    await installNotImapProbe();
     // Send now: the undo window would only delay what this spec reads.
     await settingsCall('setSendDelay', 0);
     // The mock is fresh for this spec: nothing flagged, moved or sent yet.
@@ -292,5 +294,10 @@ describe('Mail on a JMAP account', function () {
     const hits = daemonLogHits(browser.testDataDir, 'E_JMAP_NOT_IMAP');
     if (hits.length) console.log(`[jmap-mail] E_JMAP_NOT_IMAP in daemon.log:\n${hits.join('\n')}`);
     expect(hits).toEqual([]);
+    // And none reached the app's console. A probe that is gone would pass
+    // an empty check, so it must be there.
+    const consoleHits = await notImapConsoleHits();
+    expect(Array.isArray(consoleHits)).toBe(true);
+    expect(consoleHits).toEqual([]);
   });
 });

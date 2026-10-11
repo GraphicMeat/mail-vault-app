@@ -485,10 +485,25 @@ where
 /// Activity as the account it names (`accountEmail`): Graph, a token refresh,
 /// an unsubscribe, a sender logo, an export's remote content.
 async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse {
-    match req.params.get("accountEmail").and_then(Value::as_str).filter(|e| !e.is_empty()).map(str::to_owned) {
+    let method = req.method.clone();
+    let resp = match req.params.get("accountEmail").and_then(Value::as_str).filter(|e| !e.is_empty()).map(str::to_owned) {
         Some(email) => mailvault_core::net_activity::with_account(email, route_request(state, req)).await,
         None => route_request(state, req).await,
+    };
+    if let Some(line) = jmap_refusal_log_line(&method, &resp) {
+        warn!("{line}");
     }
+    resp
+}
+
+/// The log line for an RPC the pool refused because it reached an IMAP
+/// session-opening entry with a JMAP account (`E_JMAP_NOT_IMAP`), or `None`
+/// for any other response. A foreground path that forgot to branch on
+/// `uses_jmap()` otherwise shows the user an error with no trace in the log;
+/// the e2e battery greps `daemon.log` for this code and expects none.
+fn jmap_refusal_log_line(method: &str, resp: &RpcResponse) -> Option<String> {
+    let message = &resp.error.as_ref()?.message;
+    message.starts_with("E_JMAP_NOT_IMAP").then(|| format!("[jmap] {method}: {message}"))
 }
 
 /// Route a parsed RPC request to the appropriate handler.
@@ -938,6 +953,23 @@ mod tests {
             params,
             id: Some(json!(1)),
         }
+    }
+
+    #[test]
+    fn a_jmap_pool_refusal_has_a_log_line_and_nothing_else_does() {
+        let refused = RpcResponse::error(
+            json!(1),
+            ipc::INTERNAL_ERROR,
+            "E_JMAP_NOT_IMAP: a@x.test is a JMAP account; this path must branch on uses_jmap()",
+        );
+        assert_eq!(
+            jmap_refusal_log_line("imap_list_folders", &refused).as_deref(),
+            Some("[jmap] imap_list_folders: E_JMAP_NOT_IMAP: a@x.test is a JMAP account; this path must branch on uses_jmap()")
+        );
+        let other = RpcResponse::error(json!(1), ipc::INTERNAL_ERROR, "E_JMAP_UNSUPPORTED: nope");
+        assert_eq!(jmap_refusal_log_line("imap_list_folders", &other), None);
+        let ok = RpcResponse::success(json!(1), json!({}));
+        assert_eq!(jmap_refusal_log_line("imap_list_folders", &ok), None);
     }
 
     fn err_message(resp: RpcResponse) -> String {

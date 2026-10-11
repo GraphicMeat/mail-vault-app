@@ -215,8 +215,8 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
 }
 
 /// `wake_row` for a JMAP account (`uses_jmap`), on the account's session: the
-/// email in the holder whose Message-ID is the row's (the stored uid is not
-/// used), `$seen` removed, and unless the snooze was local one `mailboxIds`
+/// email in the holder whose Message-ID is the row's (the stored uid is
+/// preferred when that search confirms it), `$seen` removed, and unless the snooze was local one `mailboxIds`
 /// patch moving it back. No such email, or one the server no longer has:
 /// `NotFound`. Then the same sync and record as the IMAP wake.
 async fn wake_row_jmap(state: &Arc<DaemonState>, account: ImapConfig, row: &snooze::Snooze) -> snooze::WakeOutcome {
@@ -298,10 +298,13 @@ fn landed(out: &SetOutcome, email_id: &str) -> Result<bool, String> {
 /// Sync the destination and record the change as an IDLE arrival does, so the
 /// app's new-mail notification and list refresh fire through their usual path.
 async fn announce(state: &Arc<DaemonState>, account: ImapConfig, row: &snooze::Snooze) {
+    // A local snooze moved nothing: the app announces that wake itself off
+    // the `snooze` event's `woke`, so the sync must not count it too.
+    let jmap_moved = account.uses_jmap() && !row.snoozed_mailbox.is_empty();
     let sync_account = SyncAccount { id: row.account_id.clone(), email: account.email.clone(), imap_config: account };
     let result = state.sync_engine.sync_account(&sync_account, &row.from_mailbox).await;
     if result.success {
-        publish_woken(&state.sync_engine, &row.account_id, &row.from_mailbox, &result);
+        publish_woken(&state.sync_engine, &row.account_id, &row.from_mailbox, &result, jmap_moved);
     } else {
         warn!("[snooze] woke {} but the sync of {} failed: {:?}", row.id, row.from_mailbox, result.error);
     }
@@ -310,8 +313,13 @@ async fn announce(state: &Arc<DaemonState>, account: ImapConfig, row: &snooze::S
 /// Record a woken message's sync as a change. `sync_account` does not
 /// announce, but a JMAP sync publishes the arrivals itself (`announced`), so
 /// only the unannounced ones are noted here, as `idle_watch.rs` does.
-fn publish_woken(engine: &crate::sync_engine::SyncEngine, account_id: &str, mailbox: &str, result: &crate::sync_engine::SyncResult) {
-    let unannounced = if result.announced { 0 } else { result.arrivals };
+/// `jmap_moved`: the wake was a JMAP account's own move back (not a local
+/// snooze), which its sync does not see as an arrival.
+fn publish_woken(engine: &crate::sync_engine::SyncEngine, account_id: &str, mailbox: &str, result: &crate::sync_engine::SyncResult, jmap_moved: bool) {
+    // A JMAP wake is the daemon's own move, which its sync does not count as
+    // an arrival: when the sync announced nothing, the woken message is the
+    // one new-mail notification (an IMAP wake's sync sees the move itself).
+    let unannounced = if result.announced { 0 } else { result.arrivals.max(usize::from(jmap_moved)) };
     engine.note_change(account_id, mailbox, unannounced, result.updated_flags);
 }
 
@@ -536,12 +544,29 @@ mod tests {
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
         let gen0 = state.sync_engine.change_gen();
         // JMAP: already published by the sync, so the wake adds no arrivals.
-        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(2, true));
+        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(2, true), true);
         // IMAP: the wake is the only publisher.
-        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(3, false));
+        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(3, false), false);
         let (_, records) = state.sync_engine.wait_changes(gen0, 0).await;
         let announced: usize = records.iter().map(|r| r.new_emails).sum();
         assert_eq!(announced, 3, "{records:?}");
+    }
+
+    /// The wake of a JMAP account's own move is no arrival to its sync (the
+    /// daemon's ids do not count), so the sync announces nothing: the woken
+    /// message itself is the one new-mail notification. An IMAP wake whose sync
+    /// saw nothing adds none, and a JMAP sync that did announce adds none twice.
+    #[tokio::test]
+    async fn a_jmap_wake_with_nothing_announced_counts_the_woken_message_once() {
+        let dir = app_dir();
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let gen0 = state.sync_engine.change_gen();
+        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(0, false), true);
+        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(0, false), false);
+        publish_woken(&state.sync_engine, "acct", "INBOX", &sync_result(1, true), true);
+        let (_, records) = state.sync_engine.wait_changes(gen0, 0).await;
+        let announced: usize = records.iter().map(|r| r.new_emails).sum();
+        assert_eq!(announced, 1, "{records:?}");
     }
 
     /// A JMAP account's wake (Task 9c): found in Snoozed by its Message-ID
