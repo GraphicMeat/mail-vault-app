@@ -12,6 +12,7 @@ export function ContactsView({ onClose, onOpenMail }) {
   const { load, loadReview, loadProposals, review, indexReady, indexing, total, error, importVcf } = usePeopleStore();
   const fileRef = useRef(null);
   const [mode, setMode] = useState('people'); // 'people' | 'review'
+  const [imported, setImported] = useState(null);
 
   useEffect(() => { initPeople(); load(); loadReview(); loadProposals(); }, [load, loadReview, loadProposals]);
 
@@ -19,7 +20,9 @@ export function ContactsView({ onClose, onOpenMail }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    await importVcf(text);
+    const report = await importVcf(text);
+    setImported(report);
+    loadProposals();
     e.target.value = '';
   };
 
@@ -38,6 +41,7 @@ export function ContactsView({ onClose, onOpenMail }) {
         <ExportButton />
       </header>
       {!indexReady && indexing && <div className="px-4 py-1 text-xs text-mail-text-secondary" role="status">{t('contacts.indexing')}</div>}
+      {imported && <div className="px-4 py-1 text-xs text-mail-text-secondary" role="status" data-testid="contacts-import-result">{t('contacts.import.done', { created: imported.created, linked: imported.linked, skipped: imported.skipped })}</div>}
       {error && <div className="px-4 py-1 text-xs text-red-600" role="alert">{tErr(error)}</div>}
       {mode === 'review' ? (
         <ReviewQueue />
