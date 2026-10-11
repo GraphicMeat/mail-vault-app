@@ -34,10 +34,10 @@ describe('ReviewQueue', () => {
     const amy = screen.getByTestId('review-row-amy@x.io');
     expect(amy.textContent).toContain('Amy');
     expect(amy.textContent).toContain('amy@x.io');
-    expect(amy.textContent).toContain('contacts.review.seen:5');
+    expect(amy.textContent).toContain('common.emailCount:5');
     const bo = screen.getByTestId('review-row-bo@x.io');
     expect(bo.textContent).toContain('bo@x.io');
-    expect(bo.textContent).toContain('contacts.review.seen:1');
+    expect(bo.textContent).toContain('common.emailCount:1');
     expect(screen.getByText('contacts.review.hint')).toBeTruthy();
   });
 

@@ -22,6 +22,7 @@ describe('ExportButton', () => {
     render(<ExportButton />);
     fireEvent.click(screen.getByTestId('contacts-export'));
     await waitFor(() => expect(h.exportContacts).toHaveBeenCalledTimes(1));
+    expect(h.exportContacts).toHaveBeenCalledWith('contacts.export');
     expect(screen.queryByTestId('contacts-export-error')).toBeNull();
   });
 

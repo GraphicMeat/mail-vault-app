@@ -27,7 +27,7 @@ export function ReviewQueue() {
                 <span className="flex-1 min-w-0">
                   <span className="block truncate">{r.name || r.address}</span>
                   <span className="block truncate text-xs text-mail-text-secondary">
-                    {r.address} · {t('contacts.review.seen', { count: r.received + r.sentTo })}
+                    {r.address} · {t('common.emailCount', { count: r.received + r.sentTo })}
                   </span>
                 </span>
                 <Button size="sm" data-testid={`review-add-${r.address}`} onClick={() => acceptReview([item(r)])}>{t('contacts.review.add')}</Button>

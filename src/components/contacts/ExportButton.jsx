@@ -12,7 +12,7 @@ export function ExportButton() {
     setBusy(true);
     setErrorKey(null);
     try {
-      const r = await exportContacts(t);
+      const r = await exportContacts(t('contacts.export'));
       if (!r.ok && !r.cancelled) setErrorKey(r.errorKey);
     } finally {
       setBusy(false);

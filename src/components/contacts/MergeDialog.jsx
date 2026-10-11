@@ -59,7 +59,7 @@ export function MergeDialog({ ids, onClose }) {
       title={t('contacts.merge.title')}
       footer={(
         <div className="flex justify-end gap-2 w-full">
-          <Button data-testid="merge-cancel" onClick={onClose}>{t('contacts.cancel')}</Button>
+          <Button data-testid="merge-cancel" onClick={onClose}>{t('common.cancel')}</Button>
           <Button variant="primary" data-testid="merge-confirm" disabled={!pair.length} onClick={confirm}>{t('contacts.merge.confirm')}</Button>
         </div>
       )}

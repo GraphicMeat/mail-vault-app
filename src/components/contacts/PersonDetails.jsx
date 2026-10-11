@@ -15,7 +15,8 @@ const fromCard = (c) => ({
 const clean = (list) => list.map((v) => v.trim()).filter(Boolean);
 const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
-function Rows({ kind, values, labels, onChange, addLabel, t }) {
+function Rows({ kind, values, labels, onChange, addLabel }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-1">
       {values.map((value, i) => (
@@ -35,7 +36,8 @@ function Rows({ kind, values, labels, onChange, addLabel, t }) {
   );
 }
 
-function ProposalRow({ otherId, reason, onMerge, t }) {
+function ProposalRow({ otherId, reason, onMerge }) {
+  const t = useT();
   const fetchCard = usePeopleStore((s) => s.fetchCard);
   const [name, setName] = useState('');
   useEffect(() => {
@@ -92,11 +94,11 @@ export function PersonDetails({ draft }) {
       </label>
       <div className="flex flex-col gap-1 text-sm">
         {t('contacts.field.emails')}
-        <Rows kind="email" values={form.emails} labels={labels(card?.emails, 'address')} onChange={(emails) => setForm({ ...form, emails })} addLabel={t('contacts.field.addEmail')} t={t} />
+        <Rows kind="email" values={form.emails} labels={labels(card?.emails, 'address')} onChange={(emails) => setForm({ ...form, emails })} addLabel={t('contacts.field.addEmail')} />
       </div>
       <div className="flex flex-col gap-1 text-sm">
         {t('contacts.field.phones')}
-        <Rows kind="phone" values={form.phones} labels={labels(card?.phones, 'number')} onChange={(phones) => setForm({ ...form, phones })} addLabel={t('contacts.field.addPhone')} t={t} />
+        <Rows kind="phone" values={form.phones} labels={labels(card?.phones, 'number')} onChange={(phones) => setForm({ ...form, phones })} addLabel={t('contacts.field.addPhone')} />
       </div>
       <label className="flex flex-col gap-1 text-sm">
         {t('contacts.field.org')}
@@ -107,8 +109,8 @@ export function PersonDetails({ draft }) {
         <textarea data-testid="person-notes" rows={4} value={form.notes} onChange={set('notes')} className="rounded px-2 py-1 border border-mail-border bg-mail-bg" />
       </label>
       <div className="flex items-center gap-2">
-        <Button variant="primary" data-testid="person-save" disabled={!canSave} onClick={save}>{t('contacts.save')}</Button>
-        {(draft || dirty) && <Button data-testid="person-cancel" onClick={cancel}>{t('contacts.cancel')}</Button>}
+        <Button variant="primary" data-testid="person-save" disabled={!canSave} onClick={save}>{t('common.save')}</Button>
+        {(draft || dirty) && <Button data-testid="person-cancel" onClick={cancel}>{t('common.cancel')}</Button>}
         <div className="flex-1" />
         {!draft && <Button data-testid="person-merge" onClick={() => setMerging([card.id])}>{t('contacts.merge.action')}</Button>}
         {!draft && <Button variant="dangerTint" data-testid="person-delete" onClick={() => setConfirming(true)}>{t('contacts.delete')}</Button>}
@@ -122,7 +124,7 @@ export function PersonDetails({ draft }) {
           description={t('contacts.deleteConfirm', { name })}
           footer={(
             <div className="flex justify-end gap-2">
-              <Button data-testid="person-delete-cancel" onClick={() => setConfirming(false)}>{t('contacts.cancel')}</Button>
+              <Button data-testid="person-delete-cancel" onClick={() => setConfirming(false)}>{t('common.cancel')}</Button>
               <Button variant="danger" data-testid="person-delete-confirm" onClick={async () => { setConfirming(false); await remove(card.id); }}>{t('contacts.delete')}</Button>
             </div>
           )}
@@ -134,7 +136,7 @@ export function PersonDetails({ draft }) {
           <ul className="flex flex-col gap-1">
             {mine.map((p) => {
               const otherId = p.a === card.id ? p.b : p.a;
-              return <ProposalRow key={otherId} otherId={otherId} reason={p.reason} t={t} onMerge={() => setMerging([card.id, otherId])} />;
+              return <ProposalRow key={otherId} otherId={otherId} reason={p.reason} onMerge={() => setMerging([card.id, otherId])} />;
             })}
           </ul>
         </div>
