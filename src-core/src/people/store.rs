@@ -230,6 +230,26 @@ pub fn update_person(conn: &Connection, id: &str, p: &Patch) -> Result<(), Strin
         if !records.iter().any(|r| r.id == rec.id) {
             journal::apply(&tx, &Step::SetLink { record_id: rec.id.clone(), person_id: Some(id.to_string()) })?;
         }
+        // the card is the union of the records: a value removed here must go from the other editable ones too
+        if p.emails.is_some() || p.phones.is_some() {
+            let want_emails = p.emails.as_deref().map(clean_emails);
+            for other in records.iter().filter(|r| r.id != rec.id && (r.source_kind == "local" || r.source_kind == "import")) {
+                let Some(mut oc) = VCard::parse_all(&other.raw).into_iter().next() else { continue };
+                if let Some(w) = &want_emails {
+                    let keep: Vec<String> = oc.emails().into_iter().map(|(a, _)| a).filter(|a| w.contains(a)).collect();
+                    oc.set_emails(&keep);
+                }
+                if let Some(w) = &p.phones {
+                    let keep: Vec<String> = oc.phones().into_iter().map(|(n, _)| n).filter(|n| w.iter().any(|x| x.trim() == n)).collect();
+                    oc.set_phones(&keep);
+                }
+                let raw = oc.to_text();
+                if raw != other.raw {
+                    inverse.push(Step::PutRecord(other.clone()));
+                    journal::apply(&tx, &Step::PutRecord(RecordRow { raw, ..other.clone() }))?;
+                }
+            }
+        }
     }
     journal::apply(&tx, &Step::PutPerson(after))?;
     reindex(&tx, id)?;
@@ -463,6 +483,34 @@ mod tests {
         let card = get_card(&c, &id).unwrap().unwrap();
         assert!(!card.vip);
         assert_eq!(card.emails.len(), 1);
+    }
+
+    #[test]
+    fn removing_a_merged_address_removes_it_from_every_editable_record_and_undo_restores_it() {
+        let (_t, c) = conn();
+        let a = create_person(&c, &np("A", &["a@x.io"])).unwrap();
+        let b = create_person(&c, &np("B", &["b@x.io"])).unwrap();
+        crate::people::merge::merge(&c, &[a.clone(), b], &a).unwrap();
+        for keep in ["a@x.io", "b@x.io"] {
+            update_person(&c, &a, &Patch { emails: Some(vec![keep.into()]), ..Default::default() }).unwrap();
+            let card = get_card(&c, &a).unwrap().unwrap();
+            assert_eq!(card.emails.iter().map(|e| e.address.as_str()).collect::<Vec<_>>(), [keep]);
+            let gone = if keep == "a@x.io" { "b@x.io" } else { "a@x.io" };
+            assert_eq!(find_person_by_address(&c, gone).unwrap(), None, "record_address no longer holds {gone}");
+            crate::people::journal::undo_last(&c).unwrap();
+            assert_eq!(get_card(&c, &a).unwrap().unwrap().emails.len(), 2);
+        }
+    }
+
+    #[test]
+    fn removing_a_merged_phone_removes_it_from_every_editable_record() {
+        let (_t, c) = conn();
+        let a = create_person(&c, &NewPerson { phones: vec!["111".into()], ..np("A", &["a@x.io"]) }).unwrap();
+        let b = create_person(&c, &NewPerson { phones: vec!["222".into()], ..np("B", &["b@x.io"]) }).unwrap();
+        crate::people::merge::merge(&c, &[a.clone(), b], &a).unwrap();
+        update_person(&c, &a, &Patch { phones: Some(vec!["222".into()]), ..Default::default() }).unwrap();
+        let card = get_card(&c, &a).unwrap().unwrap();
+        assert_eq!(card.phones.iter().map(|p| p.number.as_str()).collect::<Vec<_>>(), ["222"]);
     }
 
     #[test]
