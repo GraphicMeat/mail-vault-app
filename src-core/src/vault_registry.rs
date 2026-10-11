@@ -2,9 +2,15 @@
 //! (architecture.md "Reads come from the database").
 //!
 //! `<app_dir>/vault_registry.db` records, per `(account_id, vault_dir, uid)`,
-//! the file name, its size and mtime, and the parsed light row. It is derived
-//! and droppable: any open error, a schema bump or a different vault root
-//! deletes it and starts empty, and it is never in custody.
+//! the file name, its size and mtime, its flag letters, and the parsed light
+//! row. It is derived and droppable: any open error, a schema bump or a
+//! different vault root deletes it and starts empty, and it is never in
+//! custody.
+//!
+//! A row is a listed `message_store::Entry`: a Maildir file (its flags in its
+//! name) or a JMAP record (`<uid>.json`, a name with no flags). Flags are read
+//! off `message_store::flags_name(filename, flags)`, so the `flags` column
+//! answers for a record and a Maildir name answers for itself.
 //!
 //! - A mailbox is listed at most once per daemon session ("verified", held in
 //!   memory, never persisted) and again only after `invalidate` or a stored
@@ -31,7 +37,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-use std::time::UNIX_EPOCH;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
@@ -42,7 +47,8 @@ use crate::search_index::text::vault_dir_name;
 use crate::vault_eml::{light_row_json, parse_flags_from_filename};
 
 pub const DB_FILE: &str = "vault_registry.db";
-const SCHEMA_VERSION: &str = "1";
+/// "2": rows may name a JMAP record (`<uid>.json`) and carry `flags`.
+const SCHEMA_VERSION: &str = "2";
 
 /// No migrations: a different version drops the file.
 const SCHEMA: &str = "
@@ -55,6 +61,7 @@ CREATE TABLE files (
   mtime_ns   INTEGER NOT NULL,
   seq        INTEGER NOT NULL,
   light_row  TEXT,
+  flags      TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (account_id, vault_dir, uid)
 ) WITHOUT ROWID;
 ";
@@ -115,16 +122,14 @@ fn key(account: &str, mailbox: &str) -> Key {
     (account.to_string(), vault_dir_name(mailbox))
 }
 
-fn cur_dir(root: &Path, account: &str, vault_dir: &str) -> PathBuf {
-    crate::vault_files::account_dir(&root.join("Maildir"), account).join(vault_dir).join("cur")
+/// The mailbox directory of a row's `vault_dir`, used as is.
+fn mailbox_dir(root: &Path, account: &str, vault_dir: &str) -> PathBuf {
+    crate::message_store::mailbox_dir_at(&root.join("Maildir"), account, vault_dir)
 }
 
-fn mtime_ns(meta: &std::fs::Metadata) -> i64 {
-    meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos() as i64)
-}
-
-fn is_archived(filename: &str) -> bool {
-    parse_flags_from_filename(filename).iter().any(|f| f == "archived")
+/// Whether a row's flags name (`message_store::flags_name`) carries `A`.
+fn is_archived(flags_name: &str) -> bool {
+    parse_flags_from_filename(flags_name).iter().any(|f| f == "archived")
 }
 
 fn open_at(path: &Path, root: &str) -> rusqlite::Result<Connection> {
@@ -157,7 +162,7 @@ fn init(conn: &Connection, root: &str) -> rusqlite::Result<()> {
         Some(r) if r == root => {}
         Some(_) => return Err(rusqlite::Error::InvalidQuery),
     }
-    conn.query_row("SELECT account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row FROM files LIMIT 0", [], |_| Ok(()))
+    conn.query_row("SELECT account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row, flags FROM files LIMIT 0", [], |_| Ok(()))
         .optional()?;
     Ok(())
 }
@@ -240,19 +245,23 @@ impl VaultRegistry {
         Some((files.into_iter().map(|f| f.0).collect(), archived))
     }
 
-    /// `(uid, filename, size)` of every file the mailbox holds, by uid. `None`
-    /// when the mailbox cannot be verified.
+    /// `(uid, flags name, size)` of every file the mailbox holds, by uid: the
+    /// name its flags read off (`message_store::flags_name`, a Maildir file's
+    /// own name). `None` when the mailbox cannot be verified.
     pub fn files(&self, root: &Path, account: &str, mailbox: &str) -> Option<Vec<(u32, String, u64)>> {
         let (account, dir) = key(account, mailbox);
         self.ensure_verified(root, &account, &dir)?;
         let conn_guard = guard(&self.conn);
         let conn = conn_guard.as_ref()?;
         conn.prepare_cached(
-            "SELECT uid, filename, size FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND filename IS NOT NULL ORDER BY uid",
+            "SELECT uid, filename, size, flags FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND filename IS NOT NULL ORDER BY uid",
         )
         .and_then(|mut st| {
-            st.query_map(params![account, dir], |r| Ok((r.get(0)?, r.get(1)?, u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0))))?
-                .collect()
+            st.query_map(params![account, dir], |r| {
+                let name = crate::message_store::flags_name(&r.get::<_, String>(1)?, &r.get::<_, String>(3)?);
+                Ok((r.get(0)?, name, u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0)))
+            })?
+            .collect()
         })
         .map_err(|e| warn!("vault_registry: read {account}/{dir}: {e}"))
         .ok()
@@ -260,7 +269,8 @@ impl VaultRegistry {
 
     /// The light rows (headers, attachment list, `snippet`, no body) for
     /// `uids` in request order, or the whole mailbox by uid. `uid`, `flags` and
-    /// `isArchived` come from the current file name. Uids not held, files
+    /// `isArchived` come from the current file name (a record's from the row's
+    /// `flags`, `message_store::listed_flags`). Uids not held, files
     /// that are not mail, and files that will not read (EIO, EACCES: logged,
     /// and retried on the next call) are left out; `uid_sets` still counts
     /// them as held. `None` when the mailbox cannot be verified. One bad file
@@ -271,16 +281,18 @@ impl VaultRegistry {
         loop {
             self.ensure_verified(root, &account, &dir)?;
             let rows = self.live_rows(&account, &dir, uids)?;
-            let cur = cur_dir(root, &account, &dir);
+            let mbox = mailbox_dir(root, &account, &dir);
             let mut out = Vec::with_capacity(rows.len());
             let mut parsed = Vec::new();
             let mut unreadable = false;
-            for (uid, filename, seq, light_row) in rows {
+            for (uid, filename, seq, light_row, letters) in rows {
                 let json = match light_row {
                     Some(json) => json,
                     None => {
-                        // No connection lock is held here: parsing is the slow part.
-                        let raw = match std::fs::read(cur.join(&filename)) {
+                        // No connection lock is held here: parsing is the slow
+                        // part. `read_listed` gives the readable bytes (a
+                        // decrypted copy when there is one).
+                        let raw = match crate::message_store::read_listed(&mbox, uid, &filename) {
                             Ok(raw) => raw,
                             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                                 // A vanished name: the disk changed under us.
@@ -296,7 +308,6 @@ impl VaultRegistry {
                             }
                         };
                         self.parses.fetch_add(1, Ordering::SeqCst);
-                        let raw = crate::pgp::readable(&cur, uid, raw);
                         let json = light_row_json(&raw, uid).unwrap_or_else(|| UNPARSEABLE.to_string());
                         parsed.push((uid, seq, json.clone()));
                         json
@@ -304,7 +315,7 @@ impl VaultRegistry {
                 };
                 let Ok(mut row) = serde_json::from_str::<Value>(&json) else { continue };
                 let Some(obj) = row.as_object_mut() else { continue };
-                let flags = parse_flags_from_filename(&filename);
+                let flags = crate::message_store::listed_flags(&filename, &letters);
                 obj.insert("uid".into(), uid.into());
                 obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());
                 obj.insert("flags".into(), serde_json::json!(flags));
@@ -330,7 +341,7 @@ impl VaultRegistry {
         let (account, dir) = key(account, mailbox);
         self.ensure_verified(root, &account, &dir)?;
         let row = self.live_rows(&account, &dir, Some(&[uid]))?.pop();
-        Some(row.map(|r| cur_dir(root, &account, &dir).join(r.1)))
+        Some(row.map(|r| crate::message_store::listed_path(&mailbox_dir(root, &account, &dir), &r.1)))
     }
 
     /// What the registry already knows about `uid`, without listing: `None`
@@ -379,8 +390,10 @@ impl VaultRegistry {
         }
     }
 
-    /// A writer put `path` (a file in the mailbox's `cur`) in place for `uid`.
-    /// Stats it and records it with no light row. A failed stat invalidates.
+    /// A writer put `path` (a file in the mailbox's `cur`, or its record in
+    /// `jmap`) in place for `uid`. Stats it (`message_store::entry_at`: a
+    /// record's size and flags are the record's) and records it with no light
+    /// row. A failed stat invalidates.
     ///
     /// The stat and the seq are taken under the connection lock. Taken before
     /// it, an upsert that queued behind a delete of the same uid would write
@@ -391,20 +404,39 @@ impl VaultRegistry {
     /// delete that unlinks first and writes its tombstone after a re-store.
     pub fn upsert(&self, account: &str, mailbox: &str, uid: u32, path: &Path) {
         let (account, dir) = key(account, mailbox);
-        let Some(filename) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+        if path.file_name().is_none() {
             return self.invalidate_dir(&account, &dir);
-        };
+        }
         self.write(&account, &dir, |conn, seq| {
-            let Ok(meta) = std::fs::metadata(path) else { return Ok(false) };
-            let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
-            let mtime = mtime_ns(&meta);
+            let Some(entry) = crate::message_store::entry_at(path, uid) else { return Ok(false) };
+            let size = i64::try_from(entry.size).unwrap_or(i64::MAX);
+            let letters = crate::message_store::flag_letters(&entry.flags);
             conn.execute(
-                "INSERT INTO files (account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)
+                "INSERT INTO files (account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row, flags) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8)
                  ON CONFLICT (account_id, vault_dir, uid) DO UPDATE SET filename = excluded.filename, size = excluded.size,
-                   mtime_ns = excluded.mtime_ns, seq = excluded.seq, light_row = NULL",
-                params![account, dir, uid, filename, size, mtime, seq],
+                   mtime_ns = excluded.mtime_ns, seq = excluded.seq, light_row = NULL, flags = excluded.flags",
+                params![account, dir, uid, entry.name, size, entry.mtime_ns as i64, seq, letters],
             )
             .map(|_| true)
+        });
+    }
+
+    /// A writer rewrote `uid`'s record `path` in place under new flags
+    /// (`message_store::set_record_flags`): same message, so the light row is
+    /// kept, and the name, size, mtime and flags follow the record. A uid with
+    /// no live row, or a record that will not read, invalidates.
+    pub fn reflag(&self, account: &str, mailbox: &str, uid: u32, path: &Path) {
+        let (account, dir) = key(account, mailbox);
+        self.write(&account, &dir, |conn, seq| {
+            let Some(entry) = crate::message_store::entry_at(path, uid) else { return Ok(false) };
+            let size = i64::try_from(entry.size).unwrap_or(i64::MAX);
+            let letters = crate::message_store::flag_letters(&entry.flags);
+            conn.execute(
+                "UPDATE files SET filename = ?4, size = ?5, mtime_ns = ?6, flags = ?7, seq = ?8
+                 WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3 AND filename IS NOT NULL",
+                params![account, dir, uid, entry.name, size, entry.mtime_ns as i64, letters, seq],
+            )
+            .map(|n| n == 1)
         });
     }
 
@@ -523,22 +555,22 @@ impl VaultRegistry {
         }
     }
 
-    /// `(uid, filename, seq, light_row)` of live rows, for `uids` in request
-    /// order or the whole mailbox by uid.
+    /// `(uid, filename, seq, light_row, flags)` of live rows, for `uids` in
+    /// request order or the whole mailbox by uid.
     #[allow(clippy::type_complexity)]
-    fn live_rows(&self, account: &str, dir: &str, uids: Option<&[u32]>) -> Option<Vec<(u32, String, i64, Option<String>)>> {
+    fn live_rows(&self, account: &str, dir: &str, uids: Option<&[u32]>) -> Option<Vec<(u32, String, i64, Option<String>, String)>> {
         let conn_guard = guard(&self.conn);
         let conn = conn_guard.as_ref()?;
-        let map = |r: &rusqlite::Row| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?));
+        let map = |r: &rusqlite::Row| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?));
         let rows = match uids {
             None => conn
                 .prepare_cached(
-                    "SELECT uid, filename, seq, light_row FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND filename IS NOT NULL ORDER BY uid",
+                    "SELECT uid, filename, seq, light_row, flags FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND filename IS NOT NULL ORDER BY uid",
                 )
                 .and_then(|mut st| st.query_map(params![account, dir], map)?.collect()),
             Some(uids) => conn
                 .prepare_cached(
-                    "SELECT uid, filename, seq, light_row FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3 AND filename IS NOT NULL",
+                    "SELECT uid, filename, seq, light_row, flags FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3 AND filename IS NOT NULL",
                 )
                 .and_then(|mut st| {
                     let mut out = Vec::with_capacity(uids.len());
@@ -637,12 +669,12 @@ impl VaultRegistry {
             };
             {
                 let mut upsert = tx.prepare_cached(
-                    "INSERT INTO files (account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)
+                    "INSERT INTO files (account_id, vault_dir, uid, filename, size, mtime_ns, seq, light_row, flags) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8)
                      ON CONFLICT (account_id, vault_dir, uid) DO UPDATE SET filename = excluded.filename, size = excluded.size,
-                       mtime_ns = excluded.mtime_ns, seq = excluded.seq, light_row = NULL",
+                       mtime_ns = excluded.mtime_ns, seq = excluded.seq, light_row = NULL, flags = excluded.flags",
                 )?;
                 let mut rename = tx.prepare_cached(
-                    "UPDATE files SET filename = ?4, seq = ?5 WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3",
+                    "UPDATE files SET filename = ?4, seq = ?5, flags = ?6 WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3",
                 )?;
                 let mut delete = tx.prepare_cached("DELETE FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3")?;
                 for (uid, file) in &files {
@@ -650,11 +682,11 @@ impl VaultRegistry {
                         Some((_, _, _, row_seq)) if *row_seq > s0 => {}
                         Some((Some(name), size, mtime, _)) if *size == file.size && *mtime == file.mtime_ns => {
                             if *name != file.filename {
-                                rename.execute(params![account, dir, uid, file.filename, seq])?;
+                                rename.execute(params![account, dir, uid, file.filename, seq, file.flags])?;
                             }
                         }
                         _ => {
-                            upsert.execute(params![account, dir, uid, file.filename, file.size, file.mtime_ns, seq])?;
+                            upsert.execute(params![account, dir, uid, file.filename, file.size, file.mtime_ns, seq, file.flags])?;
                         }
                     }
                 }
@@ -1113,5 +1145,73 @@ mod tests {
         assert_eq!(reg.listing_count(), 1, "the file set is not listed again");
         reg.light_rows(&f.root, ACCT, MB, None).unwrap();
         assert_eq!(reg.parse_count(), 2, "the new parse is stored");
+    }
+
+    /// Task 7: a row may name a JMAP record. Its flags come from the row's
+    /// `flags`, its path is the record, its bytes are its blob's, and a flag
+    /// change in place keeps its parse.
+    #[test]
+    fn a_record_row_carries_its_flags_and_resolves_to_its_record() {
+        use crate::message_store::{self, Format};
+        let f = fixture();
+        message_store::set_vault_format(&f.root, Format::Jmap).unwrap();
+        let raw = b"From: a@x.test\r\nSubject: m4\r\n\r\nbody of 4\r\n";
+        let entry = message_store::write(&f.root, ACCT, MB, 4, raw, &["archived".to_string(), "seen".to_string()]).unwrap();
+        let record = message_store::mailbox_dir(&f.root, ACCT, MB).join("jmap").join("4.json");
+        let reg = VaultRegistry::open(&f.app, &f.root);
+
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB).unwrap(), (vec![4], vec![4]));
+        assert_eq!(reg.files(&f.root, ACCT, MB).unwrap(), vec![(4, format!("4{}AS.eml", crate::maildir::INFO_PREFIX), entry.size)]);
+        assert_eq!(reg.resolve(&f.root, ACCT, MB, 4), Some(Some(record.clone())));
+        assert_eq!(reg.known(ACCT, MB, 4), Some(Some("4.json".to_string())));
+        let rows = reg.light_rows(&f.root, ACCT, MB, None).unwrap();
+        assert_eq!(rows[0]["subject"], "m4", "parsed from the blob");
+        assert_eq!(rows[0]["isArchived"], true);
+        assert_eq!(rows[0]["flags"], serde_json::json!(["archived", "seen", "\\Seen"]));
+
+        let (_, changed) = message_store::set_record_flags(&record, 4, &["seen".to_string()]).unwrap();
+        assert!(changed);
+        reg.reflag(ACCT, MB, 4, &record);
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB).unwrap(), (vec![4], vec![]));
+        assert_eq!(reg.light_rows(&f.root, ACCT, MB, None).unwrap()[0]["isArchived"], false);
+        assert_eq!((reg.listing_count(), reg.parse_count()), (1, 1), "no relisting, no reparse");
+
+        // A reflag of a uid with no live row invalidates instead.
+        reg.reflag(ACCT, MB, 9, &record);
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB).unwrap(), (vec![4], vec![]));
+        assert_eq!(reg.listing_count(), 2);
+
+        // Upserted as a record: its size is the message's, not the JSON's.
+        let five = message_store::write(&f.root, ACCT, MB, 5, raw, &[]).unwrap();
+        let five_path = record.with_file_name("5.json");
+        reg.upsert(ACCT, MB, 5, &five_path);
+        assert_eq!(reg.files(&f.root, ACCT, MB).unwrap()[1], (5, format!("5{}.eml", crate::maildir::INFO_PREFIX), raw.len() as u64));
+        assert_eq!(five.size, raw.len() as u64);
+        assert_ne!(fs::metadata(&five_path).unwrap().len(), raw.len() as u64);
+    }
+
+    /// The schema bump: a version-1 database is dropped and rebuilt as "2",
+    /// with the `flags` column.
+    #[test]
+    fn a_version_1_registry_is_dropped_and_rebuilt() {
+        let f = fixture();
+        {
+            let conn = Connection::open(f.app.join(DB_FILE)).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '1');",
+            )
+            .unwrap();
+            conn.execute("INSERT INTO meta(key, value) VALUES ('root', ?1)", [f.root.to_string_lossy()]).unwrap();
+        }
+        put(&f, MB, &format!("1{}S.eml", crate::maildir::INFO_PREFIX));
+        let reg = VaultRegistry::open(&f.app, &f.root);
+        assert_eq!(saved(&reg, &f, MB), vec![1]);
+        let g = guard(&reg.conn);
+        let conn = g.as_ref().unwrap();
+        let version: String = conn.query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, "2");
+        let flags: String = conn.query_row("SELECT flags FROM files WHERE uid = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(flags, "S");
     }
 }

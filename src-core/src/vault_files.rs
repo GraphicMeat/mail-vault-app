@@ -177,6 +177,9 @@ pub fn store(
     flags: &[String],
     overwrite: bool,
 ) -> Result<bool, String> {
+    if crate::message_store::vault_format(root) == crate::message_store::Format::Jmap {
+        return store_record(reg, root, account_id, mailbox, uid, raw, flags, overwrite);
+    }
     let dir = cur_path(root, account_id, mailbox);
     let known = reg.known(account_id, mailbox, uid);
     if !overwrite && matches!(known, Some(Some(_))) {
@@ -207,9 +210,43 @@ pub fn store(
     Ok(true)
 }
 
+/// `store` in a JMAP vault: the uid's record and blob through
+/// `message_store::write_replacing`, so a Maildir file of the uid goes only
+/// once the record re-read as these bytes. "Already held" is the registry's
+/// answer on a verified mailbox, else a lookup in both formats.
+#[allow(clippy::too_many_arguments)]
+fn store_record(
+    reg: &VaultRegistry,
+    root: &Path,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    raw: &[u8],
+    flags: &[String],
+    overwrite: bool,
+) -> Result<bool, String> {
+    if !overwrite {
+        let held = match reg.known(account_id, mailbox, uid) {
+            Some(row) => row.is_some(),
+            None => crate::message_store::find(root, account_id, mailbox, uid).is_some(),
+        };
+        if held {
+            return Ok(false);
+        }
+    }
+    let entry = crate::message_store::write_replacing(root, account_id, mailbox, uid, raw, flags)?;
+    let record = crate::message_store::listed_path(&crate::message_store::mailbox_dir(root, account_id, mailbox), &entry.name);
+    reg.upsert(account_id, mailbox, uid, &record);
+    info!("Stored email UID {} to {:?} ({} bytes)", uid, record, raw.len());
+    Ok(true)
+}
+
 /// `uid`'s file name and bytes, found through the registry: a verified
 /// mailbox answers from its rows with no directory scan, and a stored name
-/// that no longer opens relists the mailbox once (`with_resolved`).
+/// that no longer opens relists the mailbox once (`with_resolved`). The name
+/// is the one its flags read off (`message_store::flags_name`): a record's
+/// is the Maildir name of its uid under the record's flags, and its bytes are
+/// its blob's.
 /// `Ok(None)`: the verified mailbox does not hold `uid`. `Err`: the mailbox
 /// could not be verified (unknown, never absent), or the file will not read.
 pub fn read_resolved(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(String, Vec<u8>)>, String> {
@@ -227,10 +264,10 @@ fn read_resolved_file(reg: &VaultRegistry, root: &Path, account_id: &str, mailbo
     // Only NotFound goes back to `with_resolved` (it means "relist and
     // retry"); any other read error is the file's own and stays inside.
     let read = reg.with_resolved(root, account_id, mailbox, uid, |path| {
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        match crate::message_store::read_at(path) {
+        match crate::message_store::read_at(root, path) {
             Err(e) if e.kind() == ErrorKind::NotFound => Err(e),
-            other => Ok((name, other)),
+            Ok((name, raw)) => Ok((name, Ok(raw))),
+            Err(e) => Ok((path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), Err(e))),
         }
     });
     match read {
@@ -405,14 +442,19 @@ pub fn list(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, r
 /// so may not take the registry's per-mailbox lock (`mail_search`'s scan).
 pub fn list_on_disk(root: &Path, account_id: &str, mailbox: &str, require_flag: Option<&str>) -> Result<Vec<MaildirEmailSummary>, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
-    if !cur_dir.exists() {
+    if crate::message_store::has_message_dir(&crate::message_store::mailbox_dir(root, account_id, mailbox)).is_err() {
         info!("maildir_list: cur_dir does not exist: {:?} (require_flag={:?})", cur_dir, require_flag);
         return Ok(Vec::new());
     }
 
     let entries = crate::message_store::list(root, account_id, mailbox).map_err(|e| format!("Failed to read Maildir: {}", e))?;
-    let results: Vec<MaildirEmailSummary> =
-        entries.iter().filter_map(|e| summary(e.uid, &e.name, e.size, require_flag)).collect();
+    let results: Vec<MaildirEmailSummary> = entries
+        .iter()
+        .filter_map(|e| {
+            let name = crate::message_store::flags_name(&e.name, &crate::message_store::flag_letters(&e.flags));
+            summary(e.uid, &name, e.size, require_flag)
+        })
+        .collect();
 
     if require_flag.is_some() {
         info!("maildir_list: require_flag={:?}, found {} results", require_flag, results.len());
@@ -424,28 +466,32 @@ pub fn list_on_disk(root: &Path, account_id: &str, mailbox: &str, require_flag: 
 /// was removed (the caller nudges the index only then).
 /// The file for `uid` as a writer holding the mailbox's lock sees it: the
 /// registry's row on a verified mailbox (no scan, and a verified miss is
-/// absent), else one directory scan. A row whose file is gone invalidates the
-/// mailbox and falls back to the scan. Never a verifying read: the caller
-/// holds the lock a verify would take.
-fn locate(reg: &VaultRegistry, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<PathBuf> {
+/// absent), else one lookup (`message_store::held_path`: its record, else one
+/// directory scan). A row whose file is gone invalidates the mailbox and falls
+/// back to the lookup. Never a verifying read: the caller holds the lock a
+/// verify would take.
+fn locate(reg: &VaultRegistry, mailbox_dir: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<PathBuf> {
     match reg.known(account_id, mailbox, uid) {
         Some(Some(name)) => {
-            let path = cur_dir.join(name);
+            let path = crate::message_store::listed_path(mailbox_dir, &name);
             if path.exists() {
                 return Some(path);
             }
             reg.invalidate(account_id, mailbox);
-            find_by_uid(cur_dir, uid)
+            crate::message_store::held_path(mailbox_dir, uid)
         }
         Some(None) => None,
-        None => find_by_uid(cur_dir, uid),
+        None => crate::message_store::held_path(mailbox_dir, uid),
     }
 }
 
+/// Removes `uid`'s file and its copy in the other format, if any, so no
+/// listing brings it back. Never a blob.
 pub fn delete(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<bool, String> {
-    let cur_dir = cur_path(root, account_id, mailbox);
-    if let Some(path) = locate(reg, &cur_dir, account_id, mailbox, uid) {
+    let mailbox_dir = crate::message_store::mailbox_dir(root, account_id, mailbox);
+    if let Some(path) = locate(reg, &mailbox_dir, account_id, mailbox, uid) {
         crate::message_store::unlink(&path, uid).map_err(|e| format!("Failed to delete .eml file: {}", e))?;
+        crate::message_store::unlink_other_format(&path, uid).map_err(|e| format!("Failed to delete .eml file: {}", e))?;
         reg.remove(account_id, mailbox, &[uid]);
         info!("Deleted email UID {} from {:?}", uid, path);
         return Ok(true);
@@ -454,13 +500,24 @@ pub fn delete(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str,
 }
 
 /// Rename the vault file for `uid` onto the filename `flags` builds. Returns
-/// whether a rename happened (the old and new names can already agree).
+/// whether a rename happened (the old and new names can already agree). A
+/// record is rewritten in place instead (`message_store::set_record_flags`),
+/// and the registry row follows it (`reflag`) keeping its parse.
 pub fn set_flags(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: &[String]) -> Result<bool, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
-    let old_path = match locate(reg, &cur_dir, account_id, mailbox, uid) {
+    let mailbox_dir = crate::message_store::mailbox_dir(root, account_id, mailbox);
+    let old_path = match locate(reg, &mailbox_dir, account_id, mailbox, uid) {
         Some(p) => p,
         None => return Err(format!("E_UID_NOT_IN_MAILDIR: Email UID {} not found in Maildir", uid)),
     };
+    if crate::message_store::is_record_path(&old_path) {
+        let (_, changed) = crate::message_store::set_record_flags(&old_path, uid, flags)?;
+        if changed {
+            reg.reflag(account_id, mailbox, uid, &old_path);
+            info!("Updated flags for UID {} in its record {:?}", uid, old_path);
+        }
+        return Ok(changed);
+    }
 
     let entry = crate::message_store::rename_onto(&old_path, uid, flags)?;
     let new_path = cur_dir.join(&entry.name);
@@ -810,6 +867,10 @@ pub fn migrate_json_to_eml(
             let path = entry.path().to_path_buf();
             let ext = path.extension().and_then(|e| e.to_str());
             if ext != Some("json") { continue; }
+            // A JMAP-format record (`jmap/<uid>.json`) is a message, not a
+            // legacy sidecar: it holds no `rawSource`, and this walk would
+            // remove it.
+            if path.parent().and_then(Path::file_name).is_some_and(|dir| dir == crate::message_store::JMAP_DIR) { continue; }
 
             let json_str = match fs::read_to_string(&path) {
                 Ok(s) => s,
@@ -937,30 +998,34 @@ pub fn migrate_email_dirs(
                         continue;
                     }
                     let mb_name = mb_entry.file_name();
-                    let src_cur = mb_entry.path().join("cur");
-                    if !src_cur.exists() { continue; }
+                    // Both message directories: a JMAP vault's records go
+                    // too, or the account dir's removal below would take them.
+                    for messages in ["cur", crate::message_store::JMAP_DIR] {
+                        let src_cur = mb_entry.path().join(messages);
+                        if !src_cur.exists() { continue; }
 
-                    let dst_cur = uuid_dir.join(&mb_name).join("cur");
-                    gate(&mut || {
-                        if let Err(e) = fs::create_dir_all(&dst_cur) {
-                            warn!("Migration: failed to create {:?}: {}", dst_cur, e);
-                            return Ok(());
-                        }
-                        if let Ok(files) = fs::read_dir(&src_cur) {
-                            for file in files.flatten() {
-                                let fname = file.file_name();
-                                let dst_path = dst_cur.join(&fname);
-                                if !dst_path.exists() {
-                                    if let Err(e) = fs::rename(file.path(), &dst_path) {
-                                        warn!("Migration: failed to move {:?}: {}", fname, e);
-                                    } else {
-                                        migrated += 1;
+                        let dst_cur = uuid_dir.join(&mb_name).join(messages);
+                        gate(&mut || {
+                            if let Err(e) = fs::create_dir_all(&dst_cur) {
+                                warn!("Migration: failed to create {:?}: {}", dst_cur, e);
+                                return Ok(());
+                            }
+                            if let Ok(files) = fs::read_dir(&src_cur) {
+                                for file in files.flatten() {
+                                    let fname = file.file_name();
+                                    let dst_path = dst_cur.join(&fname);
+                                    if !dst_path.exists() {
+                                        if let Err(e) = fs::rename(file.path(), &dst_path) {
+                                            warn!("Migration: failed to move {:?}: {}", fname, e);
+                                        } else {
+                                            migrated += 1;
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Ok(())
-                    })?;
+                            Ok(())
+                        })?;
+                    }
                 }
             }
 
@@ -1420,6 +1485,24 @@ mod tests {
         (app, reg)
     }
 
+    use crate::message_store::Format;
+
+    /// Runs `f` once per storage format, each in a temp vault of its own whose
+    /// marker names that format.
+    fn run_both(f: impl Fn(&Path, Format)) {
+        for format in [Format::Maildir, Format::Jmap] {
+            eprintln!("run_both: {format:?}");
+            let tmp = tempfile::tempdir().unwrap();
+            crate::message_store::set_vault_format(tmp.path(), format).unwrap();
+            f(tmp.path(), format);
+        }
+    }
+
+    /// `uid`'s bytes in the vault, whichever format holds them.
+    fn held_bytes(root: &Path, uid: u32) -> Option<Vec<u8>> {
+        crate::message_store::read_raw(root, "acct", "INBOX", uid).unwrap()
+    }
+
     /// An account id that is not one plain path component can never lead
     /// `cur_path` out of `{root}/Maildir`: the account dir is always a direct
     /// child of it. (`C:` is only a traversal on Windows; on unix it is an
@@ -1613,13 +1696,16 @@ mod tests {
 
     #[test]
     fn store_without_overwrite_skips_an_existing_uid() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        let (_app, reg) = registry(root);
-        assert!(store(&reg, root, "acct", "INBOX", 7, b"one", &[], false).unwrap());
-        assert!(!store(&reg, root, "acct", "INBOX", 7, b"two", &[], false).unwrap(), "must skip, not overwrite");
-        let cur = cur_path(root, "acct", "INBOX");
-        assert_eq!(fs::read(find_by_uid(&cur, 7).unwrap()).unwrap(), b"one");
+        run_both(|root, _| {
+            let (_app, reg) = registry(root);
+            assert!(store(&reg, root, "acct", "INBOX", 7, b"one", &[], false).unwrap());
+            assert!(!store(&reg, root, "acct", "INBOX", 7, b"two", &[], false).unwrap(), "must skip, not overwrite");
+            assert_eq!(held_bytes(root, 7), Some(b"one".to_vec()));
+            // An unverified mailbox (a fresh registry) asks the disk instead.
+            let (_app, fresh) = registry(root);
+            assert!(!store(&fresh, root, "acct", "INBOX", 7, b"two", &[], false).unwrap());
+            assert_eq!(held_bytes(root, 7), Some(b"one".to_vec()));
+        });
     }
 
     // -- the writers keep the vault registry current --
@@ -1630,45 +1716,180 @@ mod tests {
 
     #[test]
     fn a_store_on_a_verified_mailbox_answers_from_the_registry_not_a_sweep() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        let (_app, reg) = registry(root);
-        assert!(store(&reg, root, "acct", "INBOX", 1, b"one", &[], false).unwrap());
-        assert_eq!(sets(&reg, root), (vec![1], vec![]));
-        assert_eq!(reg.listing_count(), 1);
+        run_both(|root, _| {
+            let (_app, reg) = registry(root);
+            assert!(store(&reg, root, "acct", "INBOX", 1, b"one", &[], false).unwrap());
+            assert_eq!(sets(&reg, root), (vec![1], vec![]));
+            assert_eq!(reg.listing_count(), 1);
 
-        // Planted behind the registry's back. A sweep would find it and skip;
-        // on a verified mailbox the miss is authoritative and the store writes.
-        let cur = cur_path(root, "acct", "INBOX");
-        fs::write(cur.join(format!("5{INFO_PREFIX}S.eml")), b"planted").unwrap();
-        assert!(store(&reg, root, "acct", "INBOX", 5, b"five", &[], false).unwrap(), "no directory sweep on a verified mailbox");
-        assert!(!store(&reg, root, "acct", "INBOX", 1, b"again", &[], false).unwrap(), "a live row skips with no fs access");
-        assert_eq!(fs::read(cur.join(format!("1{INFO_PREFIX}.eml"))).unwrap(), b"one");
+            // Planted behind the registry's back. A sweep would find it and skip;
+            // on a verified mailbox the miss is authoritative and the store writes.
+            let cur = cur_path(root, "acct", "INBOX");
+            fs::create_dir_all(&cur).unwrap();
+            fs::write(cur.join(format!("5{INFO_PREFIX}S.eml")), b"planted").unwrap();
+            assert!(store(&reg, root, "acct", "INBOX", 5, b"five", &[], false).unwrap(), "no directory sweep on a verified mailbox");
+            assert!(!store(&reg, root, "acct", "INBOX", 1, b"again", &[], false).unwrap(), "a live row skips with no fs access");
+            assert_eq!(held_bytes(root, 1), Some(b"one".to_vec()));
 
-        // Overwrite under new flags: the row's old name goes, the row follows.
-        assert!(store(&reg, root, "acct", "INBOX", 1, b"two", &["archived".to_string()], true).unwrap());
-        assert!(!cur.join(format!("1{INFO_PREFIX}.eml")).exists());
-        assert_eq!(fs::read(cur.join(format!("1{INFO_PREFIX}A.eml"))).unwrap(), b"two");
+            // Overwrite under new flags: the row's old name goes, the row follows.
+            assert!(store(&reg, root, "acct", "INBOX", 1, b"two", &["archived".to_string()], true).unwrap());
+            assert!(!cur.join(format!("1{INFO_PREFIX}.eml")).exists());
+            assert_eq!(held_bytes(root, 1), Some(b"two".to_vec()));
 
-        assert_eq!(sets(&reg, root), (vec![1, 5], vec![1]));
-        assert_eq!(reg.listing_count(), 1, "every answer came from the registry");
+            assert_eq!(sets(&reg, root), (vec![1, 5], vec![1]));
+            assert_eq!(reg.listing_count(), 1, "every answer came from the registry");
+        });
     }
 
     #[test]
     fn set_flags_and_delete_keep_a_verified_mailbox_current() {
+        run_both(|root, format| {
+            let (_app, reg) = registry(root);
+            assert!(store(&reg, root, "acct", "INBOX", 7, b"seven", &[], true).unwrap());
+            assert_eq!(sets(&reg, root), (vec![7], vec![]));
+
+            assert!(set_flags(&reg, root, "acct", "INBOX", 7, &["archived".to_string(), "seen".to_string()]).unwrap());
+            assert!(!set_flags(&reg, root, "acct", "INBOX", 7, &["archived".to_string(), "seen".to_string()]).unwrap(), "already so");
+            assert_eq!(sets(&reg, root), (vec![7], vec![7]));
+            let mailbox_dir = crate::message_store::mailbox_dir(root, "acct", "INBOX");
+            let held = match format {
+                Format::Maildir => cur_path(root, "acct", "INBOX").join(format!("7{INFO_PREFIX}AS.eml")),
+                Format::Jmap => mailbox_dir.join("jmap").join("7.json"),
+            };
+            assert_eq!(reg.resolve(root, "acct", "INBOX", 7), Some(Some(held)));
+
+            assert!(delete(&reg, root, "acct", "INBOX", 7).unwrap());
+            assert_eq!(sets(&reg, root), (vec![], vec![]));
+            assert_eq!(reg.listing_count(), 1);
+        });
+    }
+
+    /// Every read, list and write path of the registry-backed API, alike in
+    /// both formats: what the app's list, open and flag paths call.
+    #[test]
+    fn reads_lists_and_flag_changes_answer_alike_in_both_formats() {
+        run_both(|root, _| {
+            let (_app, reg) = registry(root);
+            let seen = vec!["seen".to_string()];
+            for (uid, subject, flags) in [(3, "three", seen.clone()), (5, "five", vec!["archived".to_string(), "flagged".to_string()])] {
+                assert!(store(&reg, root, "acct", "INBOX", uid, &light_batch_eml(subject), &flags, true).unwrap());
+            }
+            let (name, raw) = read_resolved(&reg, root, "acct", "INBOX", 5).unwrap().unwrap();
+            assert_eq!(raw, light_batch_eml("five"));
+            assert_eq!(name, format!("5{INFO_PREFIX}AF.eml"), "the name its flags read off");
+            assert_eq!(read_eml(&reg, root, "acct", "INBOX", 3).unwrap(), light_batch_eml("three"));
+            assert_eq!(read_message(&reg, root, "acct", "INBOX", 4, false).unwrap(), None);
+
+            let full = read(&reg, root, "acct", "INBOX", 5).unwrap().unwrap();
+            assert_eq!(full.flags, vec!["archived", "flagged", "\\Flagged"]);
+            let light = read_light(&reg, root, "acct", "INBOX", 3).unwrap().unwrap();
+            assert_eq!((light.subject.as_str(), light.flags.clone()), ("three", vec!["seen".to_string(), "\\Seen".to_string()]));
+            let batch = read_light_batch(&reg, root, "acct", "INBOX", &[5, 4, 3]).unwrap();
+            assert_eq!(batch.iter().map(|e| e.as_ref().map(|e| e.uid)).collect::<Vec<_>>(), vec![Some(5), None, Some(3)]);
+            assert!(batch[0].as_ref().unwrap().is_archived);
+
+            let listed: Vec<(u32, Vec<String>, bool)> =
+                list(&reg, root, "acct", "INBOX", None).unwrap().into_iter().map(|s| (s.uid, s.flags, s.is_archived)).collect();
+            let on_disk: Vec<(u32, Vec<String>, bool)> =
+                list_on_disk(root, "acct", "INBOX", None).unwrap().into_iter().map(|s| (s.uid, s.flags, s.is_archived)).collect();
+            assert_eq!(listed, on_disk);
+            assert_eq!(listed[1], (5, vec!["archived".to_string(), "flagged".to_string(), "\\Flagged".to_string()], true));
+            assert_eq!(list(&reg, root, "acct", "INBOX", Some("archived")).unwrap().len(), 1);
+            let rows = reg.light_rows(root, "acct", "INBOX", None).unwrap();
+            assert_eq!(rows[1]["isArchived"], true);
+            assert_eq!(rows[0]["flags"], serde_json::json!(["seen", "\\Seen"]));
+            assert_eq!(reg.parse_count(), 2);
+
+            // A flag change: no relisting, no reparse, and every reader sees it.
+            assert!(set_flags(&reg, root, "acct", "INBOX", 3, &["seen".to_string(), "archived".to_string()]).unwrap());
+            assert_eq!(sets(&reg, root), (vec![3, 5], vec![3, 5]));
+            let rows = reg.light_rows(root, "acct", "INBOX", Some(&[3])).unwrap();
+            assert_eq!(rows[0]["isArchived"], true);
+            assert_eq!((reg.listing_count(), reg.parse_count()), (1, 2), "no relisting, no reparse");
+            assert!(read(&reg, root, "acct", "INBOX", 3).unwrap().unwrap().flags.contains(&"archived".to_string()));
+            assert!(exists(root, "acct", "INBOX", 3));
+
+            // A fresh registry lists the disk and finds the same.
+            let (_app2, fresh) = registry(root);
+            assert_eq!(sets(&fresh, root), (vec![3, 5], vec![3, 5]));
+            assert!(delete(&fresh, root, "acct", "INBOX", 3).unwrap());
+            assert!(!exists(root, "acct", "INBOX", 3));
+            assert_eq!(held_bytes(root, 3), None);
+        });
+    }
+
+    /// A delete in a mixed mailbox takes both copies of the uid: a record left
+    /// behind would bring the message back on the next listing.
+    #[test]
+    fn delete_takes_the_other_formats_copy_too() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let (_app, reg) = registry(root);
-        assert!(store(&reg, root, "acct", "INBOX", 7, b"seven", &[], true).unwrap());
-        assert_eq!(sets(&reg, root), (vec![7], vec![]));
-
-        assert!(set_flags(&reg, root, "acct", "INBOX", 7, &["archived".to_string(), "seen".to_string()]).unwrap());
-        assert_eq!(sets(&reg, root), (vec![7], vec![7]));
-        assert_eq!(reg.resolve(root, "acct", "INBOX", 7), Some(Some(cur_path(root, "acct", "INBOX").join(format!("7{INFO_PREFIX}AS.eml")))));
-
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"Subject: maildir\r\n\r\nm", &[], true).unwrap());
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        // A plain `write` keeps the Maildir copy beside the record.
+        crate::message_store::write(root, "acct", "INBOX", 7, b"Subject: record\r\n\r\nr", &[]).unwrap();
+        let (_app2, reg) = registry(root);
+        assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), b"Subject: record\r\n\r\nr");
         assert!(delete(&reg, root, "acct", "INBOX", 7).unwrap());
-        assert_eq!(sets(&reg, root), (vec![], vec![]));
-        assert_eq!(reg.listing_count(), 1);
+        assert_eq!(held_bytes(root, 7), None, "neither copy is left");
+        let (_app3, fresh) = registry(root);
+        assert_eq!(sets(&fresh, root), (vec![], vec![]));
+    }
+
+    /// The `Scheduled` outbox is a vault mailbox like any other: the scheduled
+    /// handler stores, checks and deletes through these, the send worker reads
+    /// through `read_eml`.
+    #[test]
+    fn scheduled_outbox_reads_raw_in_jmap_vault() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        let (_app, reg) = registry(root);
+        let raw = b"From: me@x.test\r\nTo: you@x.test\r\nSubject: later\r\n\r\nsend me at nine\r\n".to_vec();
+        let draft = ["draft".to_string(), "seen".to_string()];
+        assert!(!exists(root, "acct", "Scheduled", 1));
+        assert!(store(&reg, root, "acct", "Scheduled", 1, &raw, &draft, true).unwrap());
+        assert!(exists(root, "acct", "Scheduled", 1));
+        assert!(crate::message_store::mailbox_dir(root, "acct", "Scheduled").join("jmap").join("1.json").is_file());
+        assert_eq!(read_eml(&reg, root, "acct", "Scheduled", 1).unwrap(), raw, "the exact bytes");
+        assert!(delete(&reg, root, "acct", "Scheduled", 1).unwrap());
+        assert!(!exists(root, "acct", "Scheduled", 1));
+    }
+
+    /// `migrate_json_to_eml` runs at every app start and removes a `.json`
+    /// with no `rawSource`: a JMAP record is never one of its sidecars.
+    #[test]
+    fn migrate_json_to_eml_leaves_records_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"Subject: kept\r\n\r\nbody", &[], true).unwrap());
+        let record = crate::message_store::mailbox_dir(root, "acct", "INBOX").join("jmap").join("7.json");
+        let before = fs::read(&record).unwrap();
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let summary = migrate_json_to_eml(&reg, root, &noop_gate).unwrap();
+        assert!(summary.contains("Migrated: 0") && summary.contains("Skipped (no rawSource): 0") && summary.contains("Errors: 0"), "{summary}");
+        assert_eq!(fs::read(&record).unwrap(), before, "the record is untouched");
+        assert_eq!(held_bytes(root, 7), Some(b"Subject: kept\r\n\r\nbody".to_vec()));
+    }
+
+    /// `migrate_email_dirs` removes the email-keyed account dir after its move:
+    /// a JMAP vault's records must move too, or they go with it.
+    #[test]
+    fn migrate_email_dirs_carries_records() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        crate::message_store::write(root, "user@example.com", "INBOX", 3, b"Subject: moved\r\n\r\nbody", &["seen".to_string()]).unwrap();
+        let (_app, reg) = registry(root);
+        let map: HashMap<String, String> = [("user@example.com".to_string(), "uuid-123".to_string())].into_iter().collect();
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        assert_eq!(migrate_email_dirs(&reg, root, &map, &noop_gate).unwrap(), 1);
+        assert!(!account_dir(&root.join("Maildir"), "user@example.com").exists());
+        assert_eq!(crate::message_store::read_raw(root, "uuid-123", "INBOX", 3).unwrap(), Some(b"Subject: moved\r\n\r\nbody".to_vec()));
+        assert_eq!(crate::message_store::find(root, "uuid-123", "INBOX", 3).unwrap().flags, vec!["seen", "\\Seen"]);
     }
 
     #[test]

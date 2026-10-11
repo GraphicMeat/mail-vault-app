@@ -15,6 +15,7 @@ use std::path::Path;
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
 pub const VAULT_DIRS: [&str; 9] = [
     "Maildir",          // the messages
+    "message_blobs",    // the JMAP storage format's raw message bytes (`jmap_store::blobs`)
     "maildir",          // legacy per-mailbox index dirs (now .pre-db files), kept so a move carries them
     "email_cache",      // header sidecars
     "attachment_cache", // extracted attachments
@@ -88,6 +89,32 @@ pub fn read_marker(dir: &Path) -> Option<VaultMarker> {
     Some(marker)
 }
 
+/// One row of the marker's key/value table, `None` when there is no marker
+/// database, no such row, or it will not read. Read-only and no-create, like
+/// `read_marker`. The vault's other settings live beside the identity rows
+/// (`storageFormat`, `storageMigration`).
+pub fn read_marker_value(dir: &Path, key: &str) -> Option<String> {
+    use rusqlite::OpenFlags;
+    let path = dir.join(MARKER_FILE);
+    if !path.is_file() {
+        return None;
+    }
+    let conn = rusqlite::Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    conn.query_row("SELECT value FROM marker WHERE key = ?1", [key], |r| r.get::<_, String>(0)).ok()
+}
+
+/// Sets one row of the marker's key/value table, creating the table when it
+/// is not there. Every other row is kept: `write_marker` writes its three
+/// rows one `INSERT OR REPLACE` at a time, so it keeps this one too.
+pub fn write_marker_value(dir: &Path, key: &str, value: &str) -> Result<(), String> {
+    let conn = rusqlite::Connection::open(dir.join(MARKER_FILE)).map_err(|e| format!("Cannot write vault marker: {e}"))?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS marker (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+        .map_err(|e| format!("Cannot write vault marker: {e}"))?;
+    conn.execute("INSERT OR REPLACE INTO marker(key, value) VALUES (?1, ?2)", [key, value])
+        .map_err(|e| format!("Cannot write vault marker: {e}"))?;
+    Ok(())
+}
+
 /// Phase 6: markers are now written by both processes (the app for its own
 /// data-dir copy, the daemon for `adopt`/`move` destinations), so the writer
 /// lives here next to the reader it must stay compatible with.
@@ -123,11 +150,14 @@ pub fn new_vault_id() -> String {
 /// True if the folder already holds mail data, marker or not. A search index,
 /// a contacts index or the contacts.vcf safety copy alone is not mail, a stray
 /// `contacts_index/` left behind by an old, ungated flush (final fix wave
-/// I-1) must not make an otherwise-empty folder look like a vault.
+/// I-1) must not make an otherwise-empty folder look like a vault. Nor does a
+/// `message_blobs/` alone: the name is generic enough to turn up in a folder
+/// that is not a vault, and a JMAP vault's blobs never come without its
+/// `Maildir/` (which holds the records).
 pub fn looks_like_vault(dir: &Path) -> bool {
     VAULT_DIRS
         .iter()
-        .filter(|d| **d != "search_index" && **d != "contacts_index" && **d != "Contacts")
+        .filter(|d| **d != "search_index" && **d != "contacts_index" && **d != "Contacts" && **d != "message_blobs")
         .any(|d| dir.join(d).exists())
 }
 
@@ -192,6 +222,40 @@ mod tests {
     #[test]
     fn a_move_carries_the_contacts_index_dir() {
         assert!(VAULT_DIRS.contains(&"contacts_index"), "a vault move must carry the contacts index, not orphan it");
+    }
+
+    #[test]
+    fn vault_dirs_carry_blobs() {
+        assert!(VAULT_DIRS.contains(&"message_blobs"), "a vault move and a portable copy must carry the blobs");
+    }
+
+    #[test]
+    fn a_message_blobs_only_folder_does_not_look_like_a_vault() {
+        let dir = scratch("blobs-only");
+        std::fs::create_dir_all(dir.join("message_blobs")).unwrap();
+        assert!(!looks_like_vault(&dir), "a folder that merely holds a message_blobs dir is not a vault");
+        std::fs::create_dir_all(dir.join("Maildir")).unwrap();
+        assert!(looks_like_vault(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn marker_values_sit_beside_the_identity_rows_and_survive_a_rewrite() {
+        let dir = scratch("marker-values");
+        assert_eq!(read_marker_value(&dir, "storageFormat"), None, "no marker at all");
+        assert!(!dir.join(MARKER_FILE).exists(), "reading never creates the marker");
+        write_marker(&dir, &VaultMarker { app: "mailvault".into(), vault_id: "abc".into(), created_at: 1 }).unwrap();
+        assert_eq!(read_marker_value(&dir, "storageFormat"), None, "no such row");
+        write_marker_value(&dir, "storageFormat", "jmap").unwrap();
+        assert_eq!(read_marker_value(&dir, "storageFormat").as_deref(), Some("jmap"));
+        assert_eq!(read_marker_value(&dir, "vaultId").as_deref(), Some("abc"));
+        // `write_marker` (an adopt, a move) keeps the rows it does not write.
+        write_marker(&dir, &VaultMarker { app: "mailvault".into(), vault_id: "def".into(), created_at: 2 }).unwrap();
+        assert_eq!(read_marker_value(&dir, "storageFormat").as_deref(), Some("jmap"));
+        assert_eq!(read_marker(&dir).unwrap().vault_id, "def");
+        write_marker_value(&dir, "storageFormat", "maildir").unwrap();
+        assert_eq!(read_marker_value(&dir, "storageFormat").as_deref(), Some("maildir"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

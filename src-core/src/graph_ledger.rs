@@ -31,7 +31,7 @@
 //! clear path keeps both names (`LEDGER_FILES`).
 
 use crate::fsx;
-use crate::maildir::{normalize_message_id, read_message_id};
+use crate::maildir::normalize_message_id;
 use crate::message_store;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, TryLockError};
@@ -291,7 +291,7 @@ fn allocate_at(ledger_path: &Path, mailbox_dir: &Path, listed: &[(String, Option
                 // rest of the process instead of retrying it on a later call.
                 let message_id = match read.get(&uid) {
                     Some(id) => Some(id.clone()),
-                    None => read_message_id(path),
+                    None => message_store::message_id_at(path),
                 };
                 if let Some(message_id) = message_id {
                     read.entry(uid).or_insert_with(|| message_id.clone());
@@ -1134,6 +1134,21 @@ mod tests {
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["new"])).unwrap(), vec![41]);
         // The mailbox-keyed entry point reads the same uid space and the same ledger.
         assert_eq!(allocate_in(&m.ledger, root, "acct", "INBOX", &listed(&["new", "next"])).unwrap(), vec![41, 42]);
+    }
+
+    /// Task 7: a JMAP record counts in the uid space like a `cur/` file, and an
+    /// unowned one is adopted by the Message-ID its blob carries.
+    #[test]
+    fn graph_ledger_allocate_never_reissues_a_jmap_uid() {
+        let m = mailbox();
+        let root = m._tmp.path();
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Jmap).unwrap();
+        crate::message_store::write(root, "acct", "INBOX", 40, eml("old@outlook.test").as_bytes(), &[]).unwrap();
+        assert!(root.join("Maildir/acct/INBOX/jmap/40.json").is_file());
+        assert!(!m.ledger.exists(), "the ledger file is gone");
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["new"])).unwrap(), vec![41]);
+        // The record's own message is adopted, not given a new uid.
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["old"])).unwrap(), vec![40]);
     }
 
     #[test]

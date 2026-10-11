@@ -17,7 +17,7 @@
 //!   error-path `invalidate`, and dropping the `upsert` is the likely
 //!   regression.
 //! - a body that only renames or removes (`MOVE`) must call any of `upsert(`,
-//!   `rename(`, `remove(`, `invalidate` on a registry receiver.
+//!   `rename(`, `reflag(`, `remove(`, `invalidate` on a registry receiver.
 //! Anything else is named in `ALLOWED` with a reason, and an `ALLOWED` entry
 //! that no longer trips the rule fails too, so the list cannot rot.
 //!
@@ -75,6 +75,9 @@ const MOVE: &[&str] = &[
     "message_store::remove_listed(",
     "message_store::rebind_uids(",
     "message_store::set_flags_at(",
+    "message_store::set_record_flags(",
+    "message_store::unlink_other_format(",
+    "message_store::remove_other_format(",
 ];
 /// The `CREATE`/`MOVE` needles that are `message_store` writers: one alone
 /// makes a body a vault writer.
@@ -216,7 +219,7 @@ fn violation(body: &str) -> Option<&'static str> {
     if CREATE.iter().any(|w| body.contains(w)) {
         return (!registry_call(body, &["upsert("])).then_some("creates a file without a registry upsert");
     }
-    (!registry_call(body, &["upsert(", "rename(", "remove(", "invalidate"])).then_some("renames or removes a file without a registry call")
+    (!registry_call(body, &["upsert(", "rename(", "reflag(", "remove(", "invalidate"])).then_some("renames or removes a file without a registry call")
 }
 
 /// `(inspected count, flagged (file, fn, why))` over the watched tree.

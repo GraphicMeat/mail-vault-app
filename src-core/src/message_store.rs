@@ -10,16 +10,30 @@
 //! helpers `leaf_names`, `put`, `unlink_stale`, `rename_onto`, `unlink` and
 //! `read_at` so its verified-mailbox fast paths keep their exact behaviour).
 //!
-//! Task 1: one format, Maildir (`cur/<uid>:2,<FLAGS>.eml`). `vault_format`
-//! always answers `Maildir`, and `write` and `write_replacing` are the same.
+//! Two formats, chosen per vault by the marker's `storageFormat` row
+//! (`vault_format`):
+//! - Maildir: `cur/<uid>:2,<FLAGS>.eml`, the flags in the name.
+//! - JMAP: `jmap/<uid>.json`, a `jmap_store::record` holding the flags, whose
+//!   bytes are a content-addressed blob in `<root>/message_blobs`.
+//!
+//! A mailbox may hold both at once (a conversion runs message by message).
+//! Every reader reads both, and where one uid has both, the JMAP record wins.
+//! Writers write the vault's format and never remove the other format's file;
+//! only `write_replacing` and `remove_other_format` do, after the copy they
+//! keep has verified. A record's name holds no flags, so a reader that keeps
+//! only names (the vault registry, the search index) keeps the flag letters
+//! beside them and reads flags off `flags_name`.
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::sync::{OnceLock, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde_json::Value;
 use tracing::warn;
 
+use crate::jmap_store::{blobs, record};
 use crate::maildir;
 use crate::vault_eml::parse_flags_from_filename;
 use crate::vault_files;
@@ -42,10 +56,44 @@ pub enum Format {
     Jmap,
 }
 
-/// The vault's storage format. Task 1: always `Maildir`; Task 7 reads the
-/// `storageFormat` marker.
-pub fn vault_format(_root: &Path) -> Format {
-    Format::Maildir
+/// The vault marker row (`vault_layout::read_marker_value`) holding the
+/// storage format: `maildir` or `jmap`.
+pub const FORMAT_KEY: &str = "storageFormat";
+
+/// Each vault root's format, read from its marker once per process.
+fn formats() -> &'static RwLock<HashMap<PathBuf, Format>> {
+    static FORMATS: OnceLock<RwLock<HashMap<PathBuf, Format>>> = OnceLock::new();
+    FORMATS.get_or_init(Default::default)
+}
+
+/// The vault's storage format: the marker's `storageFormat` row, `Maildir`
+/// when there is none (every vault made before the JMAP format) or the marker
+/// will not read. Read once per root and cached; `set_vault_format` is the
+/// only writer and keeps the cache current. Writers ask this; readers never
+/// need to, since they read both formats.
+pub fn vault_format(root: &Path) -> Format {
+    if let Some(format) = formats().read().unwrap_or_else(|p| p.into_inner()).get(root) {
+        return *format;
+    }
+    let format = match crate::vault_layout::read_marker_value(root, FORMAT_KEY).as_deref() {
+        Some("jmap") => Format::Jmap,
+        _ => Format::Maildir,
+    };
+    formats().write().unwrap_or_else(|p| p.into_inner()).insert(root.to_path_buf(), format);
+    format
+}
+
+/// Writes `format` to the vault marker, then to the cache `vault_format`
+/// reads. From here on every writer writes `format`; nothing on disk is
+/// converted (the conversion job does that, message by message).
+pub fn set_vault_format(root: &Path, format: Format) -> Result<(), String> {
+    let value = match format {
+        Format::Maildir => "maildir",
+        Format::Jmap => "jmap",
+    };
+    crate::vault_layout::write_marker_value(root, FORMAT_KEY, value)?;
+    formats().write().unwrap_or_else(|p| p.into_inner()).insert(root.to_path_buf(), format);
+    Ok(())
 }
 
 /// The mailbox directory (holds cur/, jmap/, .uidvalidity, orphaned/, .decrypted/ ...). Dir-level callers
@@ -67,6 +115,190 @@ fn messages_in(mailbox_dir: &Path) -> PathBuf {
 
 fn mtime_ns(meta: &fs::Metadata) -> i128 {
     meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos() as i128)
+}
+
+// ── The JMAP format's records ────────────────────────────────────────────────
+
+/// The directory of a mailbox's JMAP records, beside its Maildir `cur/`.
+pub(crate) const JMAP_DIR: &str = "jmap";
+
+/// The JMAP record directory inside the mailbox directory `mailbox_dir`.
+fn jmap_in(mailbox_dir: &Path) -> PathBuf {
+    mailbox_dir.join(JMAP_DIR)
+}
+
+/// `<uid>.json`: the leaf of `uid`'s record, and its `Entry.name`.
+fn record_name(uid: u32) -> String {
+    format!("{uid}.json")
+}
+
+/// The uid a record leaf names: canonical decimal digits (no sign, no
+/// leading zero) then `.json`. A temp name (`.7.json.tmp-...`) or anything
+/// else in `jmap/` is not a record.
+fn record_uid(name: &str) -> Option<u32> {
+    let digits = name.strip_suffix(".json")?;
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) || (digits.len() > 1 && digits.starts_with('0')) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+/// A rule reading the uid a file name carries.
+type UidOf = fn(&str) -> Option<u32>;
+
+/// Whether `path` is a record: a record leaf in a `jmap/` directory.
+pub(crate) fn is_record_path(path: &Path) -> bool {
+    path.parent().and_then(Path::file_name).is_some_and(|dir| dir == JMAP_DIR)
+        && path.file_name().is_some_and(|name| record_uid(&name.to_string_lossy()).is_some())
+}
+
+/// The vault root a mailbox directory (`<root>/Maildir/<account dir>/<vault
+/// dir>`, as `mailbox_dir` and `mailbox_dir_at` build it) sits in: where its
+/// records' blobs are.
+fn root_of(mailbox_dir: &Path) -> &Path {
+    mailbox_dir.ancestors().nth(3).unwrap_or(mailbox_dir)
+}
+
+/// The record at `path`. A record that will not parse is `InvalidData`.
+fn read_record(path: &Path) -> io::Result<record::Record> {
+    let bytes = fs::read(path)?;
+    record::parse(&bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+/// The entry of the record at `path` (of `uid`): `record.size`, the record
+/// file's mtime and the record's flags. Stated before it is read, so a rewrite
+/// in between leaves an mtime older than the content, never newer: the next
+/// listing then sees the change.
+fn record_entry(uid: u32, path: &Path) -> io::Result<Entry> {
+    let meta = fs::metadata(path)?;
+    let rec = read_record(path)?;
+    Ok(Entry { uid, flags: record::flags_of(&rec), size: rec.size, mtime_ns: mtime_ns(&meta), name: record_name(uid) })
+}
+
+/// The entry of a record just written or rewritten at `path`.
+fn written_entry(uid: u32, rec: &record::Record, path: &Path) -> Entry {
+    let mtime_ns = fs::metadata(path).map_or(0, |m| mtime_ns(&m));
+    Entry { uid, flags: record::flags_of(rec), size: rec.size, mtime_ns, name: record_name(uid) }
+}
+
+/// `uid`'s record in the mailbox directory and its path. `Ok(None)` when it
+/// has none, or one that will not parse (logged): the Maildir file of the uid,
+/// if any, is read instead. Any other read error is returned.
+fn record_of(mailbox_dir: &Path, uid: u32) -> io::Result<Option<(PathBuf, record::Record)>> {
+    let path = jmap_in(mailbox_dir).join(record_name(uid));
+    match read_record(&path) {
+        Ok(rec) => Ok(Some((path, rec))),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+            warn!("message_store: record {} will not parse: {e}", path.display());
+            Ok(None)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// The record entries of the mailbox directory, one per record that reads, in
+/// `read_dir` order: `list`'s rules (a missing directory is empty, an entry
+/// that will not read is skipped). A record that will not stat or parse is
+/// left out (logged), so the Maildir file of its uid, if any, is listed.
+fn list_records(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
+    let entries = match fs::read_dir(jmap_in(mailbox_dir)) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let Some(uid) = record_uid(&entry.file_name().to_string_lossy()) else { continue };
+        match record_entry(uid, &entry.path()) {
+            Ok(listed) => out.push(listed),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => warn!("message_store: record {} will not read: {e}", entry.path().display()),
+        }
+    }
+    Ok(out)
+}
+
+/// `uid`'s bytes as a file opened for reading: its record's blob, else its
+/// Maildir file. `Ok(None)`: the mailbox holds neither.
+fn open_held(root: &Path, mailbox_dir: &Path, uid: u32) -> io::Result<Option<fs::File>> {
+    if let Some((_, rec)) = record_of(mailbox_dir, uid)? {
+        return fs::File::open(blobs::blob_path(root, &rec.blob)).map(Some);
+    }
+    open_by_uid(&messages_in(mailbox_dir), uid)
+}
+
+/// The record of `uid` built from `raw` under `flags`, its blob stored, and
+/// the record written atomically to `jmap/<uid>.json` in the mailbox directory.
+/// An existing record's server ids and `receivedAt` are kept (the same uid is
+/// the same message); with neither, `receivedAt` is the Date header, else the
+/// uid's Maildir file's mtime, else now. Removes nothing.
+///
+/// The blob goes in before the record (`blobs::put`), and a `put` that fails
+/// fails the write with no record written. That includes an existing blob
+/// whose mtime `put` cannot refresh (a read-only file): so no record ever
+/// names a blob its own write did not make young, and `sweep_blobs`' grace
+/// period always covers the window between a `put` and its record.
+pub(crate) fn write_record(root: &Path, mailbox_dir: &Path, uid: u32, raw: &[u8], flags: &[String]) -> Result<Entry, String> {
+    let records = jmap_in(mailbox_dir);
+    let path = records.join(record_name(uid));
+    let existing = read_record(&path).ok();
+    let received = existing.as_ref().and_then(|r| r.email.get("receivedAt")).and_then(Value::as_str).map(str::to_owned);
+    let server = existing.and_then(|r| r.server);
+    let vault_dir = mailbox_dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut rec = match record::build(uid, &vault_dir, raw, flags, received.as_deref(), server.clone()) {
+        Ok(rec) => rec,
+        // Bytes the parser refuses (a first line that starts with a space, a
+        // lone CR where a header line starts) are still a message the vault
+        // keeps, as Maildir keeps any bytes: the record is built from them read
+        // as a body with no headers, then made to name these very bytes.
+        Err(_) => {
+            let mut padded = b"\r\n".to_vec();
+            padded.extend_from_slice(raw);
+            let mut rec = record::build(uid, &vault_dir, &padded, flags, received.as_deref(), server)?;
+            let id = blobs::blob_id(raw);
+            rec.blob = id.clone();
+            rec.size = raw.len() as u64;
+            if let Some(email) = rec.email.as_object_mut() {
+                if rec.server.is_none() {
+                    email.insert("id".into(), Value::String(format!("L{uid}-{}", &id["sha256-".len().."sha256-".len() + 12])));
+                }
+                email.insert("blobId".into(), Value::String(id));
+                email.insert("size".into(), Value::from(raw.len() as u64));
+            }
+            rec
+        }
+    };
+    if rec.email.get("receivedAt").and_then(Value::as_str).is_none() {
+        let when = path_of(&messages_in(mailbox_dir), uid)
+            .and_then(|file| fs::metadata(file).ok())
+            .and_then(|meta| meta.modified().ok())
+            .unwrap_or_else(SystemTime::now);
+        let stamp = chrono::DateTime::<chrono::Utc>::from(when).to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        if let Some(email) = rec.email.as_object_mut() {
+            email.insert("receivedAt".into(), Value::String(stamp));
+        }
+    }
+    blobs::put(root, raw)?;
+    fs::create_dir_all(&records).map_err(|e| format!("Failed to create the message record directory: {e}"))?;
+    let json = serde_json::to_vec(&rec).map_err(|e| format!("Failed to encode the message record: {e}"))?;
+    crate::fsx::write_atomic(&path, &json).map_err(|e| format!("Failed to write the message record: {e}"))?;
+    Ok(written_entry(uid, &rec, &path))
+}
+
+/// Rewrites the record at `path` (of `uid`) under `flags` (`record::with_flags`,
+/// which keeps every other keyword): no rename, and nothing written when the
+/// flags already match. Returns the entry after the change and whether it
+/// changed.
+pub(crate) fn set_record_flags(path: &Path, uid: u32, flags: &[String]) -> Result<(Entry, bool), String> {
+    let rec = read_record(path).map_err(|e| format!("Failed to read the message record: {e}"))?;
+    let new = record::with_flags(&rec, flags);
+    let changed = new != rec;
+    if changed {
+        let json = serde_json::to_vec(&new).map_err(|e| format!("Failed to encode the message record: {e}"))?;
+        crate::fsx::write_atomic(path, &json).map_err(|e| format!("Failed to rewrite the message record: {e}"))?;
+    }
+    Ok((written_entry(uid, &new, path), changed))
 }
 
 /// The entry for the leaf `name` of `uid`. `meta` is its stat; a failed stat
@@ -105,42 +337,69 @@ pub fn list(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<Entr
 
 /// `list` of the mailbox directory `mailbox_dir`, for a caller that walks the
 /// mailbox directories by their on-disk names (a snapshot).
+///
+/// Both formats: every JMAP record that reads (`<uid>.json`), and every
+/// Maildir file of a uid no record holds. A missing directory of either format
+/// is empty; either one failing to list is the error.
 pub fn list_at(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
-    let entries = match fs::read_dir(messages_in(mailbox_dir)) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(e),
-    };
     let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let Some(uid) = maildir::vault_filename_uid(&name) else { continue };
-        out.push(entry_of(uid, name, entry.metadata().ok()));
+    match fs::read_dir(messages_in(mailbox_dir)) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let Some(uid) = maildir::vault_filename_uid(&name) else { continue };
+                out.push(entry_of(uid, name, entry.metadata().ok()));
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    let records = list_records(mailbox_dir)?;
+    if !records.is_empty() {
+        let held: HashSet<u32> = records.iter().map(|e| e.uid).collect();
+        out.retain(|e| !held.contains(&e.uid));
+        out.extend(records);
     }
     out.sort_by(|a, b| (a.uid, &a.name).cmp(&(b.uid, &b.name)));
     Ok(out)
 }
 
 /// Disk only. The entry for `uid`, or `None` when the mailbox holds no file for it.
+/// Its record when it has one that reads, else its Maildir file.
 pub fn find(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<Entry> {
-    let path = path_of(&messages_dir(root, account_id, mailbox), uid)?;
-    let name = path.file_name()?.to_string_lossy().into_owned();
-    Some(entry_of(uid, name, fs::metadata(&path).ok()))
+    find_at(&mailbox_dir(root, account_id, mailbox), uid)
+}
+
+/// Which directory of a mailbox a taken file is in, in listing order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Taken {
+    /// The Maildir message directory.
+    Message,
+    /// The JMAP record directory.
+    Record,
+    /// `orphaned/`: set aside, never held.
+    Orphaned,
 }
 
 /// Every file of the mailbox directory `mailbox_dir` that names a uid:
-/// `(in orphaned/, uid, path)`, its message directory first, then
-/// `orphaned/`, each in `read_dir` order. The uid is read by the loosest rule
-/// any reader uses (`maildir::mirror_filename_uid`: legacy `12.eml`, `.regen`
-/// leftovers, `orphaned/`'s `.1` dedupe suffixes), exactly as `graph_ledger`'s
-/// allocator has always counted a uid as taken. A missing directory is empty;
-/// any other listing failure, including one unreadable entry, is an error
-/// that names the directory (`could not list <dir>: <cause>`, its kind kept):
-/// reading it as empty would hand out a uid a file on disk already carries.
-fn taken_files_at(mailbox_dir: &Path) -> io::Result<Vec<(bool, u32, PathBuf)>> {
-    let dirs = [(false, messages_in(mailbox_dir)), (true, mailbox_dir.join(maildir::ORPHAN_DIR))];
+/// `(where, uid, path)`, its message directory first, then its JMAP records,
+/// then `orphaned/`, each in `read_dir` order. A Maildir or `orphaned/` uid is
+/// read by the loosest rule any reader uses (`maildir::mirror_filename_uid`:
+/// legacy `12.eml`, `.regen` leftovers, `orphaned/`'s `.1` dedupe suffixes),
+/// exactly as `graph_ledger`'s allocator has always counted a uid as taken; a
+/// record's by its `<uid>.json` name, read or not. A missing directory is
+/// empty; any other listing failure, including one unreadable entry, is an
+/// error that names the directory (`could not list <dir>: <cause>`, its kind
+/// kept): reading it as empty would hand out a uid a file on disk already
+/// carries.
+fn taken_files_at(mailbox_dir: &Path) -> io::Result<Vec<(Taken, u32, PathBuf)>> {
+    let dirs = [
+        (Taken::Message, messages_in(mailbox_dir)),
+        (Taken::Record, jmap_in(mailbox_dir)),
+        (Taken::Orphaned, mailbox_dir.join(maildir::ORPHAN_DIR)),
+    ];
     let mut out = Vec::new();
-    for (orphaned, dir) in dirs {
+    for (taken, dir) in dirs {
         let unlisted = |e: io::Error| io::Error::new(e.kind(), format!("could not list {}: {}", dir.display(), e));
         let entries = match fs::read_dir(&dir) {
             Ok(entries) => entries,
@@ -149,8 +408,13 @@ fn taken_files_at(mailbox_dir: &Path) -> io::Result<Vec<(bool, u32, PathBuf)>> {
         };
         for entry in entries {
             let entry = entry.map_err(unlisted)?;
-            if let Some(uid) = maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()) {
-                out.push((orphaned, uid, entry.path()));
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let uid = match taken {
+                Taken::Record => record_uid(&name),
+                Taken::Message | Taken::Orphaned => maildir::mirror_filename_uid(&name),
+            };
+            if let Some(uid) = uid {
+                out.push((taken, uid, entry.path()));
             }
         }
     }
@@ -158,15 +422,14 @@ fn taken_files_at(mailbox_dir: &Path) -> io::Result<Vec<(bool, u32, PathBuf)>> {
 }
 
 /// `taken_files_at` of the mailbox, each directory by uid then path.
-fn taken_files(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<(bool, u32, PathBuf)>> {
+fn taken_files(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<(Taken, u32, PathBuf)>> {
     let mut out = taken_files_at(&mailbox_dir(root, account_id, mailbox))?;
     out.sort();
     Ok(out)
 }
 
 /// Every uid this mailbox holds or held: cur/ + jmap/ + orphaned/. The ONLY source for "which uids are taken".
-/// Task 1: the message directory plus `orphaned/` (no `jmap/` yet), by the
-/// loose rule `taken_files` documents. Includes the mbox import range
+/// By the loose rule `taken_files` documents. Includes the mbox import range
 /// (`is_import_uid`); a caller that allocates server-range uids leaves those
 /// out.
 pub fn uids(root: &Path, account_id: &str, mailbox: &str) -> io::Result<BTreeSet<u32>> {
@@ -180,33 +443,38 @@ pub fn highest_uid(root: &Path, account_id: &str, mailbox: &str) -> io::Result<u
 }
 
 /// The uids of the messages `mailbox` holds, ascending: one names-only
-/// listing of its message directory that takes no lock. (The vault
-/// registry's listing stats every file and holds its locks for the whole
-/// folder, and opening a message waits on those.) A regular file named
-/// `<uid>:2,...` is a copy; a symlink, a directory, a dot-prefixed temp name
-/// (`maildir::vault_filename_uid` refuses it) or any other name is not, and
-/// `orphaned/` is never read: a set-aside copy is not held. No message
-/// directory under a vault `root` that is there is an empty folder; a root
-/// that is gone, or a listing that fails at any point, is `None`: unknown,
-/// never empty. The vault gap walks this (`vault_gap::Gap`).
+/// listing of each message directory (Maildir, then JMAP records) that takes
+/// no lock. (The vault registry's listing stats every file and holds its
+/// locks for the whole folder, and opening a message waits on those.) A
+/// regular file named `<uid>:2,...` or `<uid>.json` is a copy; a symlink, a
+/// directory, a dot-prefixed temp name (`maildir::vault_filename_uid` and the
+/// record rule refuse it) or any other name is not, and `orphaned/` is never
+/// read: a set-aside copy is not held. No message directory under a vault
+/// `root` that is there is an empty folder; a root that is gone, or a listing
+/// that fails at any point, is `None`: unknown, never empty. The vault gap
+/// walks this (`vault_gap::Gap`).
 pub fn held_uids(root: &Path, account_id: &str, mailbox: &str) -> Option<Vec<u32>> {
-    let entries = match fs::read_dir(messages_dir(root, account_id, mailbox)) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == io::ErrorKind::NotFound && root.is_dir() => return Some(Vec::new()),
-        Err(_) => return None,
-    };
+    let mailbox = mailbox_dir(root, account_id, mailbox);
     let mut uids = Vec::new();
-    for entry in entries {
-        // An error part way ends the listing: a shorter folder it is not.
-        let entry = entry.ok()?;
-        // The type comes with the listing on most file systems. Where it
-        // needs a stat and that fails (a flag rename in between), the name
-        // still says a copy was there.
-        if !entry.file_type().map(|t| t.is_file()).unwrap_or(true) {
-            continue;
-        }
-        if let Some(uid) = maildir::vault_filename_uid(&entry.file_name().to_string_lossy()) {
-            uids.push(uid);
+    let dirs: [(PathBuf, UidOf); 2] = [(messages_in(&mailbox), maildir::vault_filename_uid), (jmap_in(&mailbox), record_uid)];
+    for (dir, uid_of) in dirs {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == io::ErrorKind::NotFound && root.is_dir() => continue,
+            Err(_) => return None,
+        };
+        for entry in entries {
+            // An error part way ends the listing: a shorter folder it is not.
+            let entry = entry.ok()?;
+            // The type comes with the listing on most file systems. Where it
+            // needs a stat and that fails (a flag rename in between), the name
+            // still says a copy was there.
+            if !entry.file_type().map(|t| t.is_file()).unwrap_or(true) {
+                continue;
+            }
+            if let Some(uid) = uid_of(&entry.file_name().to_string_lossy()) {
+                uids.push(uid);
+            }
         }
     }
     uids.sort_unstable();
@@ -228,21 +496,31 @@ pub fn next_import_uid(taken: impl IntoIterator<Item = u32>) -> Option<u32> {
 }
 
 /// (uid, normalized Message-ID) for cur/ + jmap/ (+ orphaned/): graph_ledger adoption, mbox dedupe.
-/// One pair per file `uids` counts, message directory first, then
-/// `orphaned/`, each by uid; a uid can appear twice (a held copy and a
-/// set-aside one). `None` when the header carries no Message-ID or the file
-/// will not read. An `orphaned/` pair only says the uid is taken: a caller
-/// adopting a uid for a server message checks it is held (`find`).
+/// One pair per file `uids` counts, message directory first, then the JMAP
+/// records, then `orphaned/`, each by uid; a uid can appear more than once (a
+/// Maildir copy, a record, a set-aside one). A record's id is read from its
+/// blob (`message_id_at`). `None` when the header carries no Message-ID or
+/// the file will not read. An `orphaned/` pair only says the uid is taken: a
+/// caller adopting a uid for a server message checks it is held (`find`).
 pub fn uid_message_ids(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<(u32, Option<String>)>> {
-    Ok(taken_files(root, account_id, mailbox)?
-        .into_iter()
-        .map(|(_, uid, path)| (uid, maildir::read_message_id(&path)))
-        .collect())
+    Ok(taken_files(root, account_id, mailbox)?.into_iter().map(|(_, uid, path)| (uid, message_id_at(&path))).collect())
+}
+
+/// The normalized Message-ID of the listed file `path` (`maildir::read_message_id`):
+/// a record's is read from its blob, any other file's from the file.
+pub fn message_id_at(path: &Path) -> Option<String> {
+    if !is_record_path(path) {
+        return maildir::read_message_id(path);
+    }
+    let rec = read_record(path).ok()?;
+    let mailbox_dir = path.parent()?.parent()?;
+    maildir::read_message_id(&blobs::blob_path(root_of(mailbox_dir), &rec.blob))
 }
 
 /// `uid`'s raw RFC 5322 bytes, `None` when the mailbox holds no file for it.
+/// A record's blob; else the Maildir file.
 pub fn read_raw(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> io::Result<Option<Vec<u8>>> {
-    let Some(mut file) = open_by_uid(&messages_dir(root, account_id, mailbox), uid)? else { return Ok(None) };
+    let Some(mut file) = open_held(root, &mailbox_dir(root, account_id, mailbox), uid)? else { return Ok(None) };
     let mut raw = Vec::new();
     file.read_to_end(&mut raw)?;
     Ok(Some(raw))
@@ -251,17 +529,22 @@ pub fn read_raw(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> io::R
 /// The header section of `uid`'s first `max` bytes: everything before the
 /// first blank line, or all `max` bytes when there is none in them.
 pub fn read_header_section(root: &Path, account_id: &str, mailbox: &str, uid: u32, max: usize) -> io::Result<Option<Vec<u8>>> {
-    let Some(file) = open_by_uid(&messages_dir(root, account_id, mailbox), uid)? else { return Ok(None) };
+    let Some(file) = open_held(root, &mailbox_dir(root, account_id, mailbox), uid)? else { return Ok(None) };
     let mut buf = Vec::new();
     file.take(max as u64).read_to_end(&mut buf)?;
     Ok(Some(maildir::header_section(&buf).to_vec()))
 }
 
 /// Writes in the vault's format. Never removes the other format's file for this uid.
-/// Task 1 (Maildir): the new name goes in atomically, then every other file of
-/// this uid in the same format (an older flags name, a crash-left duplicate)
-/// is removed; one that will not go is logged and left.
+/// Maildir: the new name goes in atomically, then every other file of this
+/// uid in the same format (an older flags name, a crash-left duplicate) is
+/// removed; one that will not go is logged and left. JMAP: the blob, then
+/// `jmap/<uid>.json` atomically (`write_record`); a record has one name, so
+/// there is nothing stale to remove.
 pub fn write(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8], flags: &[String]) -> Result<Entry, String> {
+    if vault_format(root) == Format::Jmap {
+        return write_record(root, &mailbox_dir(root, account_id, mailbox), uid, raw, flags);
+    }
     let dir = messages_dir(root, account_id, mailbox);
     let stale = leaf_names(&dir, uid);
     let entry = put(&dir, uid, raw, flags)?;
@@ -272,23 +555,142 @@ pub fn write(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8],
 }
 
 /// write() + verify the new copy by re-reading it + remove the other format's file. For ordinary writers.
-/// Task 1: identical to `write`, since only one format exists.
+/// The verify and the removal run only when the mailbox holds `uid` in the
+/// other format too. A copy that fails to verify is removed again, so the
+/// other format's copy stays the one every reader reads, and the error is
+/// returned. A verified write whose old copy will not go is logged and kept:
+/// the new copy is the one every reader reads (a record wins over a Maildir
+/// file; a Maildir file left beside a removed record is alone).
 pub fn write_replacing(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8], flags: &[String]) -> Result<Entry, String> {
-    write(root, account_id, mailbox, uid, raw, flags)
+    let format = vault_format(root);
+    let entry = write(root, account_id, mailbox, uid, raw, flags)?;
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    let other = other_format(format);
+    if !holds_in(&mailbox, uid, other) {
+        return Ok(entry);
+    }
+    if let Err(e) = verify_entry(root, &mailbox, uid, format, raw) {
+        if let Err(undo) = drop_format_files(&mailbox, uid, format) {
+            warn!("message_store: the unverified copy of uid {uid} could not be removed: {undo}");
+        }
+        return Err(format!("The new copy of uid {uid} did not verify: {e}"));
+    }
+    if let Err(e) = drop_format_files(&mailbox, uid, other) {
+        warn!("message_store: the other format's copy of uid {uid} could not be removed: {e}");
+    }
+    Ok(entry)
+}
+
+/// The format a `keep` of `format` removes.
+fn other_format(format: Format) -> Format {
+    match format {
+        Format::Maildir => Format::Jmap,
+        Format::Jmap => Format::Maildir,
+    }
+}
+
+/// Whether the mailbox directory holds a file of `uid` in `format`, by name.
+fn holds_in(mailbox_dir: &Path, uid: u32, format: Format) -> bool {
+    match format {
+        Format::Maildir => !leaf_names(&messages_in(mailbox_dir), uid).is_empty(),
+        Format::Jmap => jmap_in(mailbox_dir).join(record_name(uid)).exists(),
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test hook: makes `verify_entry` fail on this thread.
+    static FAIL_VERIFY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Re-reads `uid`'s copy in `format` and checks it is `raw`. JMAP: the record
+/// re-parses, names `raw`'s blob, and the blob's sha256 matches
+/// (`blobs::verify`). Maildir: the file re-reads as exactly `raw`.
+fn verify_entry(root: &Path, mailbox_dir: &Path, uid: u32, format: Format, raw: &[u8]) -> Result<(), String> {
+    #[cfg(test)]
+    if FAIL_VERIFY.with(|fail| fail.get()) {
+        return Err("verify refused by the test hook".to_string());
+    }
+    match format {
+        Format::Jmap => {
+            let rec = read_record(&jmap_in(mailbox_dir).join(record_name(uid))).map_err(|e| format!("the record will not read back: {e}"))?;
+            if rec.blob != blobs::blob_id(raw) {
+                return Err("the record names another blob".to_string());
+            }
+            if !blobs::verify(root, &rec.blob)? {
+                return Err("the blob is missing or damaged".to_string());
+            }
+            Ok(())
+        }
+        Format::Maildir => {
+            let path = path_of(&messages_in(mailbox_dir), uid).ok_or_else(|| "the file is not there".to_string())?;
+            let back = fs::read(&path).map_err(|e| format!("the file will not read back: {e}"))?;
+            if back != raw {
+                return Err("the file does not hold what was written".to_string());
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Removes `uid`'s files of `format` from the mailbox directory: its Maildir
+/// files, or its record (never a blob: `sweep_blobs` judges blobs). Not its
+/// decrypted copy, which serves the copy that stays. `Ok(true)` when a file
+/// went; a file already gone is not an error.
+fn drop_format_files(mailbox_dir: &Path, uid: u32, format: Format) -> Result<bool, String> {
+    let paths: Vec<PathBuf> = match format {
+        Format::Maildir => {
+            let dir = messages_in(mailbox_dir);
+            leaf_names(&dir, uid).into_iter().map(|leaf| dir.join(leaf)).collect()
+        }
+        Format::Jmap => vec![jmap_in(mailbox_dir).join(record_name(uid))],
+    };
+    let mut removed = false;
+    for path in paths {
+        match fs::remove_file(&path) {
+            Ok(()) => removed = true,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("Failed to remove {}: {e}", path.display())),
+        }
+    }
+    Ok(removed)
+}
+
+/// Removes `uid`'s copy in the format other than `keep`: its Maildir files
+/// when `keep` is `Jmap`, its record when `keep` is `Maildir` (never a blob).
+/// For the conversion job, once it has verified the copy in `keep`. Refuses,
+/// removing nothing, when the mailbox holds no copy of `uid` in `keep`.
+/// `Ok(true)` when a file went.
+pub fn remove_other_format(root: &Path, account_id: &str, mailbox: &str, uid: u32, keep: Format) -> Result<bool, String> {
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    let kept = match keep {
+        Format::Jmap => record_of(&mailbox, uid).map_err(|e| e.to_string())?.is_some(),
+        Format::Maildir => path_of(&messages_in(&mailbox), uid).is_some(),
+    };
+    if !kept {
+        return Err(format!("uid {uid} has no {keep:?} copy to keep"));
+    }
+    drop_format_files(&mailbox, uid, other_format(keep))
 }
 
 /// Re-file `uid` under the flags `flags` names. `Ok(None)`: the mailbox holds
 /// no file for `uid`. The entry is the file after the change (unchanged when
-/// the name already matched).
+/// the name already matched). A record is rewritten in place
+/// (`set_record_flags`); a Maildir file is renamed.
 pub fn set_flags(root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: &[String]) -> Result<Option<Entry>, String> {
-    let Some(old) = path_of(&messages_dir(root, account_id, mailbox), uid) else { return Ok(None) };
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    if let Some((path, _)) = record_of(&mailbox, uid).map_err(|e| format!("Failed to read the message record: {e}"))? {
+        return set_record_flags(&path, uid, flags).map(|(entry, _)| Some(entry));
+    }
+    let Some(old) = path_of(&messages_in(&mailbox), uid) else { return Ok(None) };
     rename_onto(&old, uid, flags).map(Some)
 }
 
 /// Removes every file of `uid` (both formats; never deletes blobs), and its
 /// decrypted copy. Returns whether one was removed.
 pub fn remove(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<bool, String> {
-    let dir = messages_dir(root, account_id, mailbox);
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    let dir = messages_in(&mailbox);
     let mut removed = false;
     for leaf in leaf_names(&dir, uid) {
         match unlink(&dir.join(&leaf), uid) {
@@ -297,13 +699,22 @@ pub fn remove(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<
             Err(e) => return Err(format!("Failed to delete .eml file: {}", e)),
         }
     }
+    match unlink(&jmap_in(&mailbox).join(record_name(uid)), uid) {
+        Ok(()) => removed = true,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("Failed to delete the message record: {}", e)),
+    }
     Ok(removed)
 }
 
 /// The file a zero-copy copier (mirror, zip) reads `uid` from: a blob path in
 /// JMAP format. `None` when the mailbox holds no file for it.
 pub fn raw_path(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Option<PathBuf> {
-    path_of(&messages_dir(root, account_id, mailbox), uid)
+    let mailbox = mailbox_dir(root, account_id, mailbox);
+    if let Ok(Some((_, rec))) = record_of(&mailbox, uid) {
+        return Some(blobs::blob_path(root, &rec.blob));
+    }
+    path_of(&messages_in(&mailbox), uid)
 }
 
 /// `uid`'s decrypted copy (`pgp`'s `.decrypted/<uid>.eml` in the mailbox
@@ -469,11 +880,39 @@ pub fn mailbox_dir_at(maildir_root: &Path, account_id: &str, vault_dir: &str) ->
     vault_files::account_dir(maildir_root, account_id).join(vault_dir)
 }
 
-/// Whether the mailbox directory holds a message directory: `Ok(true)` for a
-/// directory, `Ok(false)` for anything else at that name, and the stat's error
-/// otherwise (`NotFound`: the mailbox holds no messages and never did).
+/// Whether the mailbox directory holds a message directory (Maildir `cur/` or
+/// JMAP `jmap/`): `Ok(true)` when either is a directory, else a stat's error
+/// that is not `NotFound` (the Maildir one first), else `Ok(false)` for
+/// anything else at either name, and `NotFound` when neither is there: the
+/// mailbox holds no messages and never did.
 pub fn has_message_dir(mailbox_dir: &Path) -> io::Result<bool> {
-    fs::metadata(messages_in(mailbox_dir)).map(|meta| meta.is_dir())
+    let maildir = fs::metadata(messages_in(mailbox_dir)).map(|meta| meta.is_dir());
+    if matches!(maildir, Ok(true)) {
+        return maildir;
+    }
+    let records = fs::metadata(jmap_in(mailbox_dir)).map(|meta| meta.is_dir());
+    if matches!(records, Ok(true)) {
+        return records;
+    }
+    match (maildir, records) {
+        (Err(e), _) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        (_, Err(e)) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        (Ok(false), _) | (_, Ok(false)) => Ok(false),
+        (maildir, _) => maildir,
+    }
+}
+
+/// One result out of a Maildir directory's and a JMAP directory's: `NotFound`
+/// only when both are missing, any other error of either (the Maildir one
+/// first), else both joined, a missing one as empty.
+fn either_dir<T: Default>(maildir: io::Result<T>, records: io::Result<T>, join: impl FnOnce(T, T) -> T) -> io::Result<T> {
+    let missing = |r: &io::Result<T>| matches!(r, Err(e) if e.kind() == io::ErrorKind::NotFound);
+    match (maildir, records) {
+        (Err(e), _) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        (_, Err(e)) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        (maildir, records) if missing(&maildir) && missing(&records) => maildir,
+        (maildir, records) => Ok(join(maildir.unwrap_or_default(), records.unwrap_or_default())),
+    }
 }
 
 /// One strict listing of a mailbox's messages, for a store that reconciles its
@@ -503,9 +942,32 @@ pub struct Scan {
 ///   `read_dir` open. (Not injectable in a test: there is no way to fail
 ///   `readdir` part-way on a real directory.)
 /// - A file that will not stat is in `unstatted`, not an entry of size 0.
+///
+/// Both formats (`either_dir`'s errors): every record that stats and reads,
+/// its `Entry` a record entry, wins over a Maildir file of its uid. A record
+/// that will not stat is in `unstatted`; one that will not read or parse is
+/// left out (logged), so a Maildir file of its uid is the entry instead.
 pub fn scan_dir(mailbox_dir: &Path) -> io::Result<Scan> {
-    let listing = fs::read_dir(messages_in(mailbox_dir))?;
-    let mut held: std::collections::HashMap<u32, Entry> = std::collections::HashMap::new();
+    let maildir = scan_messages(&messages_in(mailbox_dir));
+    let records = scan_records(&jmap_in(mailbox_dir));
+    let (held, unstatted) = either_dir(maildir, records, |(mut held, mut unstatted), (records, unread)| {
+        for (uid, entry) in records {
+            unstatted.remove(&uid);
+            held.insert(uid, entry);
+        }
+        unstatted.extend(unread.into_iter().filter(|uid| !held.contains_key(uid)));
+        (held, unstatted)
+    })?;
+    let mut entries: Vec<Entry> = held.into_values().collect();
+    entries.sort_by_key(|e| e.uid);
+    Ok(Scan { entries, unstatted })
+}
+
+/// `scan_dir`'s pass over a Maildir message directory: one entry per uid (the
+/// first file that stats) and the uids whose stat failed.
+fn scan_messages(dir: &Path) -> io::Result<(HashMap<u32, Entry>, BTreeSet<u32>)> {
+    let listing = fs::read_dir(dir)?;
+    let mut held: HashMap<u32, Entry> = HashMap::new();
     let mut unstatted = BTreeSet::new();
     for item in listing {
         let item = item.map_err(io::Error::other)?;
@@ -517,24 +979,56 @@ pub fn scan_dir(mailbox_dir: &Path) -> io::Result<Scan> {
         };
         held.entry(uid).or_insert_with(|| entry_of(uid, name, Some(meta)));
     }
-    let mut entries: Vec<Entry> = held.into_values().collect();
-    entries.sort_by_key(|e| e.uid);
-    Ok(Scan { entries, unstatted })
+    Ok((held, unstatted))
+}
+
+/// `scan_dir`'s pass over a JMAP record directory: every record that stats
+/// and reads, and the uids of records whose stat failed. A record gone since
+/// the listing is neither.
+fn scan_records(dir: &Path) -> io::Result<(HashMap<u32, Entry>, BTreeSet<u32>)> {
+    let listing = fs::read_dir(dir)?;
+    let mut held: HashMap<u32, Entry> = HashMap::new();
+    let mut unstatted = BTreeSet::new();
+    for item in listing {
+        let item = item.map_err(io::Error::other)?;
+        let Some(uid) = record_uid(&item.file_name().to_string_lossy()) else { continue };
+        let path = item.path();
+        match fs::metadata(&path) {
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+            Err(_) => {
+                unstatted.insert(uid);
+                continue;
+            }
+        }
+        match record_entry(uid, &path) {
+            Ok(entry) => {
+                held.insert(uid, entry);
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => warn!("message_store: record {} will not read: {e}", path.display()),
+        }
+    }
+    Ok((held, unstatted))
 }
 
 /// How many files of the mailbox directory carry a uid, counted from
 /// `read_dir` alone: no stat, no dedupe, entries that fail to read skipped. A
 /// cheap upper bound on what `scan_dir` will find, for a progress total.
+/// Both formats, with `either_dir`'s errors.
 pub fn count_files(mailbox_dir: &Path) -> io::Result<usize> {
-    Ok(fs::read_dir(messages_in(mailbox_dir))?
-        .flatten()
-        .filter(|e| maildir::vault_filename_uid(&e.file_name().to_string_lossy()).is_some())
-        .count())
+    let count = |dir: PathBuf, uid_of: UidOf| {
+        fs::read_dir(dir).map(|listing| listing.flatten().filter(|e| uid_of(&e.file_name().to_string_lossy()).is_some()).count())
+    };
+    either_dir(count(messages_in(mailbox_dir), maildir::vault_filename_uid), count(jmap_in(mailbox_dir), record_uid), |a, b| a + b)
 }
 
 /// Disk only. The entry for `uid` in the mailbox directory `mailbox_dir`, or
 /// `None` when it holds no file for it (`find`'s rule).
 pub fn find_at(mailbox_dir: &Path, uid: u32) -> Option<Entry> {
+    if let Ok(entry) = record_entry(uid, &jmap_in(mailbox_dir).join(record_name(uid))) {
+        return Some(entry);
+    }
     let path = path_of(&messages_in(mailbox_dir), uid)?;
     let name = path.file_name()?.to_string_lossy().into_owned();
     Some(entry_of(uid, name, fs::metadata(&path).ok()))
@@ -548,8 +1042,20 @@ pub fn find_at(mailbox_dir: &Path, uid: u32) -> Option<Entry> {
 /// `NotADirectory`. On Windows, opening a directory with `File::open` fails
 /// with neither kind, so a failed read whose path is a directory is re-kinded
 /// to `IsADirectory`. Any other error may pass (permissions, a flaky drive).
+///
+/// A record entry (`<uid>.json`) reads as its blob's bytes, with the same
+/// decrypted-copy rule and the same error kinds: the record or its blob gone
+/// is `NotFound`, a record that will not parse is `InvalidData`.
 pub fn read_listed(mailbox_dir: &Path, uid: u32, name: &str) -> io::Result<Vec<u8>> {
     let dir = messages_in(mailbox_dir);
+    if record_uid(name).is_some() {
+        let path = jmap_in(mailbox_dir).join(name);
+        let rec = match read_record(&path) {
+            Err(e) if path.is_dir() => return Err(io::Error::new(io::ErrorKind::IsADirectory, e)),
+            other => other?,
+        };
+        return Ok(crate::pgp::readable(&dir, uid, blobs::get(root_of(mailbox_dir), &rec.blob)?));
+    }
     let path = dir.join(name);
     match fs::read(&path) {
         Ok(raw) => Ok(crate::pgp::readable(&dir, uid, raw)),
@@ -561,9 +1067,28 @@ pub fn read_listed(mailbox_dir: &Path, uid: u32, name: &str) -> io::Result<Vec<u
 
 /// The flags `Entry.flags` holds for an entry named `name`. For a derived
 /// store that kept only `Entry.name` (a search index row) and must answer
-/// with the flags it was listed under.
+/// with the flags it was listed under. A record's name holds none: read
+/// `flags_name` of it instead.
 pub fn flags_in_name(name: &str) -> Vec<String> {
     parse_flags_from_filename(name)
+}
+
+/// The name a reader takes a listed entry's flags from (`flags_in_name`):
+/// a Maildir entry's own `name`, unchanged; for a record (`<uid>.json`, a name
+/// holding no flags) the Maildir name of its uid under `letters`, the
+/// `flag_letters` of its `Entry.flags` that the vault registry and the search
+/// index keep beside the name. The one rule for every reader that keeps names.
+pub fn flags_name(name: &str, letters: &str) -> String {
+    match record_uid(name) {
+        Some(uid) => entry_name(uid, &letters.chars().map(String::from).collect::<Vec<_>>()),
+        None => name.to_string(),
+    }
+}
+
+/// `flags_in_name(flags_name(name, letters))`: the flags of a listed entry
+/// whose name and flag letters a derived store kept.
+pub fn listed_flags(name: &str, letters: &str) -> Vec<String> {
+    flags_in_name(&flags_name(name, letters))
 }
 
 /// The flag letters (`ADFRST`) `flags` names, in `flags`' order, as the search
@@ -583,12 +1108,13 @@ pub fn entry_name(uid: u32, flags: &[String]) -> String {
 /// and the held copies a reader finds by uid.
 #[derive(Debug, Default)]
 pub struct UidSpace {
-    /// Every uid a file carries (`uids`' set): the message directory and
-    /// `orphaned/`, by the loose rule.
+    /// Every uid a file carries (`uids`' set): the message directory, the JMAP
+    /// records and `orphaned/`, by the loose rule.
     pub taken: BTreeSet<u32>,
-    /// uid -> the file `raw_path` finds for it: the message directory only,
-    /// by the strict rule (`maildir::vault_filename_uid`), the first file
-    /// `read_dir` returned for the uid.
+    /// uid -> its held copy: its record (`jmap/<uid>.json`) when it has one,
+    /// else the file `raw_path` finds for it in the message directory by the
+    /// strict rule (`maildir::vault_filename_uid`), the first file `read_dir`
+    /// returned for the uid. `message_id_at` reads the Message-ID of either.
     pub held: HashMap<u32, PathBuf>,
 }
 
@@ -597,13 +1123,19 @@ pub struct UidSpace {
 /// empty, any other listing failure is an error that names the directory.
 pub fn uid_space_at(mailbox_dir: &Path) -> io::Result<UidSpace> {
     let mut space = UidSpace::default();
-    for (orphaned, uid, path) in taken_files_at(mailbox_dir)? {
+    for (taken, uid, path) in taken_files_at(mailbox_dir)? {
         space.taken.insert(uid);
-        if orphaned {
-            continue;
-        }
-        if let Some(held) = path.file_name().and_then(|name| maildir::vault_filename_uid(&name.to_string_lossy())) {
-            space.held.entry(held).or_insert(path);
+        match taken {
+            Taken::Orphaned => {}
+            // Listed after the message directory: a record wins over a Maildir file.
+            Taken::Record => {
+                space.held.insert(uid, path);
+            }
+            Taken::Message => {
+                if let Some(held) = path.file_name().and_then(|name| maildir::vault_filename_uid(&name.to_string_lossy())) {
+                    space.held.entry(held).or_insert(path);
+                }
+            }
         }
     }
     Ok(space)
@@ -644,6 +1176,49 @@ pub(crate) fn leaf_names(dir: &Path, uid: u32) -> Vec<String> {
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .filter(|name| maildir::vault_filename_uid(name) == Some(uid))
         .collect()
+}
+
+/// The path of the listed entry `name` (an `Entry.name`, or a vault registry
+/// row's name) in the mailbox directory `mailbox_dir`: a record name in
+/// `jmap/`, any other in the Maildir message directory. No disk access.
+pub(crate) fn listed_path(mailbox_dir: &Path, name: &str) -> PathBuf {
+    if record_uid(name).is_some() {
+        jmap_in(mailbox_dir).join(name)
+    } else {
+        messages_in(mailbox_dir).join(name)
+    }
+}
+
+/// The file of `uid` a writer holding the mailbox's lock acts on, by one
+/// lookup and no parse: its record when there is one, else its Maildir file
+/// (`find_by_uid`'s rule).
+pub(crate) fn held_path(mailbox_dir: &Path, uid: u32) -> Option<PathBuf> {
+    let record = jmap_in(mailbox_dir).join(record_name(uid));
+    if record.is_file() {
+        return Some(record);
+    }
+    path_of(&messages_in(mailbox_dir), uid)
+}
+
+/// The entry of the listed file `path` (of `uid`) as `scan_dir` lists it: a
+/// record's entry, or a Maildir file's name, stat and flags. `None` when it
+/// will not stat, or is a record that will not read.
+pub(crate) fn entry_at(path: &Path, uid: u32) -> Option<Entry> {
+    if is_record_path(path) {
+        return record_entry(uid, path).ok();
+    }
+    let name = path.file_name()?.to_string_lossy().into_owned();
+    let meta = fs::metadata(path).ok()?;
+    Some(entry_of(uid, name, Some(meta)))
+}
+
+/// After `unlink(path, uid)` of one listed file: removes `uid`'s copy in the
+/// other format too (`drop_format_files`), so a delete leaves no copy a
+/// listing would bring back. Never a blob.
+pub(crate) fn unlink_other_format(path: &Path, uid: u32) -> Result<(), String> {
+    let Some(mailbox_dir) = path.parent().and_then(Path::parent) else { return Ok(()) };
+    let other = if is_record_path(path) { Format::Maildir } else { Format::Jmap };
+    drop_format_files(mailbox_dir, uid, other).map(|_| ())
 }
 
 /// Write `raw` atomically into `dir` under the name `flags` builds for `uid`,
@@ -688,7 +1263,9 @@ pub(crate) fn rename_onto(old: &Path, uid: u32, flags: &[String]) -> Result<Entr
 }
 
 /// Remove the file `path` (of `uid`), then its decrypted copy beside the
-/// directory: plaintext must not outlive the original.
+/// directory: plaintext must not outlive the original. A record's decrypted
+/// copy is the same `.decrypted/<uid>.eml` (`pgp::copy_path` takes the
+/// directory's parent, the mailbox directory, for `cur/` and `jmap/` alike).
 pub(crate) fn unlink(path: &Path, uid: u32) -> io::Result<()> {
     fs::remove_file(path)?;
     if let Some(dir) = path.parent() {
@@ -698,9 +1275,17 @@ pub(crate) fn unlink(path: &Path, uid: u32) -> io::Result<()> {
 }
 
 /// The bytes of a file a caller already resolved for one uid (the vault
-/// registry's row).
-pub(crate) fn read_at(path: &Path) -> io::Result<Vec<u8>> {
-    fs::read(path)
+/// registry's row), with the name its flags read off (`flags_name`): a
+/// Maildir file's own name; for a record, its blob's bytes and the Maildir
+/// name of its uid under its flags. A record or blob gone is `NotFound`.
+pub(crate) fn read_at(root: &Path, path: &Path) -> io::Result<(String, Vec<u8>)> {
+    if is_record_path(path) {
+        let rec = read_record(path)?;
+        let raw = blobs::get(root, &rec.blob)?;
+        return Ok((entry_name(rec.uid, &record::flags_of(&rec)), raw));
+    }
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    fs::read(path).map(|raw| (name, raw))
 }
 
 /// Re-file the listed file `path` of `uid` under the flags `flags_for` makes
@@ -862,11 +1447,49 @@ mod tests {
         f.iter().map(|s| s.to_string()).collect()
     }
 
+    /// Runs `f` once per format, each in a temp vault of its own whose marker
+    /// names that format. A behaviour that holds in one format only fails here.
+    fn run_both(f: impl Fn(&Path, Format)) {
+        for format in [Format::Maildir, Format::Jmap] {
+            eprintln!("run_both: {format:?}");
+            let tmp = tempfile::tempdir().unwrap();
+            set_vault_format(tmp.path(), format).unwrap();
+            f(tmp.path(), format);
+        }
+    }
+
+    /// The `Entry.name` of `uid`'s copy in `format` under the flag `letters`.
+    fn leaf(format: Format, uid: u32, letters: &str) -> String {
+        match format {
+            Format::Maildir => format!("{uid}{INFO_PREFIX}{letters}.eml"),
+            Format::Jmap => format!("{uid}.json"),
+        }
+    }
+
+    /// The Task 1 behaviour tests, each a fn of the vault root and its format.
+    const STORE_BEHAVIOURS: [fn(&Path, Format); 6] = [
+        round_trips,
+        set_flags_reports_new_flags,
+        remove_deletes_every_copy,
+        missing_mailbox_is_empty,
+        uids_include_orphaned,
+        header_section_stops_at_blank_line,
+    ];
+
+    #[test]
+    fn every_store_test_passes_in_both_formats() {
+        for behaviour in STORE_BEHAVIOURS {
+            run_both(behaviour);
+        }
+    }
+
     #[test]
     fn write_then_find_then_read_round_trips() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        assert_eq!(vault_format(root), Format::Maildir);
+        run_both(round_trips);
+    }
+
+    fn round_trips(root: &Path, format: Format) {
+        assert_eq!(vault_format(root), format);
         assert_eq!(serde_json::to_string(&Format::Jmap).unwrap(), "\"jmap\"");
         assert_eq!(serde_json::from_str::<Format>("\"maildir\"").unwrap(), Format::Maildir);
 
@@ -874,7 +1497,7 @@ mod tests {
         // `build_maildir_filename` takes `seen`/`archived` (or the letters);
         // a `\\Seen` system flag names no letter.
         let written = write(root, ACCT, MBOX, 7, &raw, &flags(&["seen", "archived"])).unwrap();
-        assert_eq!(written.name, format!("7{INFO_PREFIX}AS.eml"));
+        assert_eq!(written.name, leaf(format, 7, "AS"));
 
         let found = find(root, ACCT, MBOX, 7).expect("uid 7 is held");
         assert_eq!(found, written);
@@ -883,7 +1506,11 @@ mod tests {
         assert_eq!(found.size, raw.len() as u64);
         assert!(found.mtime_ns > 0, "a written file has an mtime");
         assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(raw.clone()));
-        assert_eq!(raw_path(root, ACCT, MBOX, 7), Some(messages_dir(root, ACCT, MBOX).join(&found.name)));
+        let copied_from = match format {
+            Format::Maildir => messages_dir(root, ACCT, MBOX).join(&found.name),
+            Format::Jmap => blobs::blob_path(root, &blobs::blob_id(&raw)),
+        };
+        assert_eq!(raw_path(root, ACCT, MBOX, 7), Some(copied_from));
         assert_eq!(messages_dir(root, ACCT, MBOX), mailbox_dir(root, ACCT, MBOX).join("cur"));
 
         assert_eq!(find(root, ACCT, MBOX, 8), None);
@@ -892,27 +1519,29 @@ mod tests {
 
         // A second write of the uid under other flags replaces the first copy.
         let again = write_replacing(root, ACCT, MBOX, 7, b"new", &flags(&["seen"])).unwrap();
-        assert_eq!(again.name, format!("7{INFO_PREFIX}S.eml"));
+        assert_eq!(again.name, leaf(format, 7, "S"));
         assert_eq!(list(root, ACCT, MBOX).unwrap(), vec![again]);
         assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(b"new".to_vec()));
     }
 
     #[test]
     fn set_flags_renames_and_list_reports_new_flags() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
+        run_both(set_flags_reports_new_flags);
+    }
+
+    fn set_flags_reports_new_flags(root: &Path, format: Format) {
         write(root, ACCT, MBOX, 3, b"three", &flags(&["seen"])).unwrap();
         write(root, ACCT, MBOX, 4, b"four", &[]).unwrap();
 
         let renamed = set_flags(root, ACCT, MBOX, 3, &flags(&["seen", "flagged"])).unwrap().expect("uid 3 is held");
-        assert_eq!(renamed.name, format!("3{INFO_PREFIX}FS.eml"));
+        assert_eq!(renamed.name, leaf(format, 3, "FS"));
         assert_eq!(renamed.flags, flags(&["flagged", "seen", "\\Seen", "\\Flagged"]));
         assert!(!messages_dir(root, ACCT, MBOX).join(format!("3{INFO_PREFIX}S.eml")).exists(), "the old name is gone");
 
         let listed = list(root, ACCT, MBOX).unwrap();
         assert_eq!(listed.iter().map(|e| (e.uid, e.name.clone())).collect::<Vec<_>>(), vec![
-            (3, format!("3{INFO_PREFIX}FS.eml")),
-            (4, format!("4{INFO_PREFIX}.eml")),
+            (3, leaf(format, 3, "FS")),
+            (4, leaf(format, 4, "")),
         ]);
         assert_eq!(listed[0], renamed);
         assert_eq!(read_raw(root, ACCT, MBOX, 3).unwrap(), Some(b"three".to_vec()), "a flag change keeps the bytes");
@@ -924,11 +1553,15 @@ mod tests {
 
     #[test]
     fn remove_deletes_and_find_is_none() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
+        run_both(remove_deletes_every_copy);
+    }
+
+    fn remove_deletes_every_copy(root: &Path, _format: Format) {
         let dir = messages_dir(root, ACCT, MBOX);
         write(root, ACCT, MBOX, 5, b"five", &flags(&["seen"])).unwrap();
-        // A crash-left second copy of uid 5 under other flags, and its decrypted copy.
+        // A crash-left second copy of uid 5 under other flags (in a JMAP
+        // vault, a Maildir copy beside its record), and its decrypted copy.
+        fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(format!("5{INFO_PREFIX}.eml")), b"five").unwrap();
         crate::pgp::write_copy(&dir, 5, b"plain").unwrap();
         assert!(crate::pgp::copy_path(&dir, 5).exists());
@@ -944,8 +1577,10 @@ mod tests {
 
     #[test]
     fn list_of_missing_mailbox_is_empty_not_error() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
+        run_both(missing_mailbox_is_empty);
+    }
+
+    fn missing_mailbox_is_empty(root: &Path, _format: Format) {
         assert_eq!(list(root, ACCT, "Nope").unwrap(), Vec::<Entry>::new());
         assert_eq!(uids(root, ACCT, "Nope").unwrap(), BTreeSet::new());
         assert_eq!(highest_uid(root, ACCT, "Nope").unwrap(), 0);
@@ -970,12 +1605,15 @@ mod tests {
 
     #[test]
     fn uids_and_highest_include_orphaned() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
+        run_both(uids_include_orphaned);
+    }
+
+    fn uids_include_orphaned(root: &Path, _format: Format) {
         write(root, ACCT, MBOX, 3, b"Message-ID: <three@x.test>\r\n\r\nthree", &flags(&["seen"])).unwrap();
         write(root, ACCT, MBOX, 5, b"Subject: no id\r\n\r\nfive", &[]).unwrap();
         // Strays that name no uid: a write_atomic temp and a text file.
         let dir = messages_dir(root, ACCT, MBOX);
+        fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(format!(".8{INFO_PREFIX}S.eml.tmp-1-2")), b"temp").unwrap();
         fs::write(dir.join("notes.txt"), b"stray").unwrap();
         // orphaned/: a set-aside uid 9, and a second set-aside copy of 3 under a dedupe suffix.
@@ -998,8 +1636,10 @@ mod tests {
 
     #[test]
     fn read_header_section_stops_at_blank_line_or_max() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
+        run_both(header_section_stops_at_blank_line);
+    }
+
+    fn header_section_stops_at_blank_line(root: &Path, _format: Format) {
         write(root, ACCT, MBOX, 4, b"From: a@x\r\nSubject: hi\r\n\r\nbody text\r\n", &[]).unwrap();
         write(root, ACCT, MBOX, 5, b"A: 1\nB: 2\n\nbody", &[]).unwrap();
 
@@ -1352,5 +1992,347 @@ mod tests {
         let raw_named = mailbox_dir_at(&root.join("Maildir"), ACCT, "..");
         create_messages_dir_at(&raw_named).unwrap();
         assert_eq!(entry_path_at(&raw_named, "1.eml"), vault_files::account_dir(&root.join("Maildir"), ACCT).join("..").join("cur").join("1.eml"));
+    }
+
+    // ── Task 7: the JMAP format behind the seam ──────────────────────────────
+
+    /// A vault in `format` (a temp dir whose marker names it).
+    fn vault(format: Format) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        set_vault_format(tmp.path(), format).unwrap();
+        tmp
+    }
+
+    fn eml(id: &str) -> Vec<u8> {
+        format!("Message-ID: <{id}@x.test>\r\nSubject: {id}\r\n\r\nbody of {id}\r\n").into_bytes()
+    }
+
+    #[test]
+    fn a_vault_with_no_format_row_is_maildir_and_set_vault_format_sticks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        assert_eq!(vault_format(root), Format::Maildir, "no marker: Maildir");
+        set_vault_format(root, Format::Jmap).unwrap();
+        assert_eq!(vault_format(root), Format::Jmap, "the cache follows the write");
+        assert_eq!(crate::vault_layout::read_marker_value(root, FORMAT_KEY).as_deref(), Some("jmap"));
+        set_vault_format(root, Format::Maildir).unwrap();
+        assert_eq!(vault_format(root), Format::Maildir);
+        assert_eq!(crate::vault_layout::read_marker_value(root, FORMAT_KEY).as_deref(), Some("maildir"));
+    }
+
+    #[test]
+    fn jmap_record_wins_over_cur_file_for_same_uid() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 7, &eml("old"), &flags(&["seen"])).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+        let record = write(root, ACCT, MBOX, 7, &eml("new"), &flags(&["flagged"])).unwrap();
+        assert_eq!(record.name, "7.json");
+
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        assert!(messages_in(&mbox).join(format!("7{INFO_PREFIX}S.eml")).exists(), "the Maildir copy is still there");
+        assert_eq!(find(root, ACCT, MBOX, 7), Some(record.clone()));
+        assert_eq!(find_at(&mbox, 7), Some(record.clone()));
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(eml("new")));
+        assert_eq!(read_header_section(root, ACCT, MBOX, 7, 1024).unwrap(), Some(b"Message-ID: <new@x.test>\r\nSubject: new\r\n".to_vec()));
+        assert_eq!(list(root, ACCT, MBOX).unwrap(), vec![record.clone()]);
+        assert_eq!(raw_path(root, ACCT, MBOX, 7), Some(blobs::blob_path(root, &blobs::blob_id(&eml("new")))));
+        let scan = scan_dir(&mbox).unwrap();
+        assert_eq!(scan.entries, vec![record.clone()]);
+        assert!(scan.unstatted.is_empty());
+        assert_eq!(read_listed(&mbox, 7, &record.name).unwrap(), eml("new"));
+        assert_eq!(uids(root, ACCT, MBOX).unwrap(), BTreeSet::from([7]));
+        assert_eq!(held_uids(root, ACCT, MBOX), Some(vec![7]));
+        // Both copies count for the uid space and for the Message-ID dedupe.
+        assert_eq!(uid_message_ids(root, ACCT, MBOX).unwrap(), vec![(7, Some("old@x.test".into())), (7, Some("new@x.test".into()))]);
+        // The flags of the record win: set_flags rewrites it, the Maildir name stays.
+        let reflagged = set_flags(root, ACCT, MBOX, 7, &flags(&["seen", "archived"])).unwrap().unwrap();
+        assert_eq!(reflagged.flags, flags(&["archived", "seen", "\\Seen"]));
+        assert!(messages_in(&mbox).join(format!("7{INFO_PREFIX}S.eml")).exists());
+    }
+
+    #[test]
+    fn write_never_removes_other_format() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 7, &eml("maildir"), &[]).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 7, &eml("jmap"), &[]).unwrap();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        assert!(messages_in(&mbox).join(format!("7{INFO_PREFIX}.eml")).exists(), "cur/7 is kept");
+        assert!(jmap_in(&mbox).join("7.json").exists(), "jmap/7.json is written");
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(eml("jmap")));
+        // And back: a Maildir write keeps the record.
+        set_vault_format(root, Format::Maildir).unwrap();
+        write(root, ACCT, MBOX, 7, &eml("maildir again"), &flags(&["seen"])).unwrap();
+        assert!(jmap_in(&mbox).join("7.json").exists(), "the record is kept");
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(eml("jmap")), "and still wins");
+    }
+
+    #[test]
+    fn write_replacing_removes_old_only_after_verify() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        let old = messages_in(&mbox).join(format!("7{INFO_PREFIX}S.eml"));
+        write(root, ACCT, MBOX, 7, &eml("old"), &flags(&["seen"])).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+
+        FAIL_VERIFY.with(|fail| fail.set(true));
+        let refused = write_replacing(root, ACCT, MBOX, 7, &eml("new"), &flags(&["seen"]));
+        FAIL_VERIFY.with(|fail| fail.set(false));
+        assert!(refused.is_err(), "{refused:?}");
+        assert!(old.exists(), "cur/7 survives a copy that did not verify");
+        assert!(!jmap_in(&mbox).join("7.json").exists(), "the unverified record is taken back");
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(eml("old")));
+
+        let entry = write_replacing(root, ACCT, MBOX, 7, &eml("new"), &flags(&["seen"])).unwrap();
+        assert_eq!(entry.name, "7.json");
+        assert!(!old.exists(), "verified: the Maildir copy goes");
+        assert_eq!(list(root, ACCT, MBOX).unwrap(), vec![entry]);
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(eml("new")));
+
+        // The other way: a Maildir write_replacing drops the record, never its blob.
+        set_vault_format(root, Format::Maildir).unwrap();
+        let entry = write_replacing(root, ACCT, MBOX, 7, &eml("newer"), &flags(&["seen"])).unwrap();
+        assert_eq!(entry.name, format!("7{INFO_PREFIX}S.eml"));
+        assert!(!jmap_in(&mbox).join("7.json").exists());
+        assert!(blobs::blob_path(root, &blobs::blob_id(&eml("new"))).exists(), "the blob is the sweep's to judge");
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(eml("newer")));
+    }
+
+    #[test]
+    fn remove_other_format_refuses_without_a_kept_copy() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 7, &eml("seven"), &[]).unwrap();
+        assert!(remove_other_format(root, ACCT, MBOX, 7, Format::Jmap).is_err(), "no record to keep: nothing goes");
+        assert!(find(root, ACCT, MBOX, 7).is_some());
+        assert_eq!(remove_other_format(root, ACCT, MBOX, 7, Format::Maildir), Ok(false), "no record to remove");
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 7, &eml("seven"), &[]).unwrap();
+        assert_eq!(remove_other_format(root, ACCT, MBOX, 7, Format::Jmap), Ok(true));
+        assert!(!messages_in(&mailbox_dir(root, ACCT, MBOX)).join(format!("7{INFO_PREFIX}.eml")).exists());
+        assert_eq!(find(root, ACCT, MBOX, 7).unwrap().name, "7.json");
+    }
+
+    #[test]
+    fn mixed_mailbox_lists_union() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &flags(&["seen"])).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 2, &eml("two"), &flags(&["flagged", "archived"])).unwrap();
+        let listed = list(root, ACCT, MBOX).unwrap();
+        assert_eq!(
+            listed.iter().map(|e| (e.uid, e.name.clone(), e.flags.clone())).collect::<Vec<_>>(),
+            vec![
+                (1, format!("1{INFO_PREFIX}S.eml"), flags(&["seen", "\\Seen"])),
+                (2, "2.json".to_string(), flags(&["archived", "flagged", "\\Flagged"])),
+            ]
+        );
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        assert_eq!(list_at(&mbox).unwrap(), listed);
+        assert_eq!(scan_dir(&mbox).unwrap().entries, listed);
+        assert_eq!(count_files(&mbox).unwrap(), 2);
+        assert_eq!(held_uids(root, ACCT, MBOX), Some(vec![1, 2]));
+    }
+
+    #[test]
+    fn highest_uid_counts_jmap_records() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 40, &eml("forty"), &[]).unwrap();
+        let orphaned = mailbox_dir(root, ACCT, MBOX).join(maildir::ORPHAN_DIR);
+        fs::create_dir_all(&orphaned).unwrap();
+        fs::write(orphaned.join(format!("12{INFO_PREFIX}S.eml")), eml("twelve")).unwrap();
+        assert!(!messages_dir(root, ACCT, MBOX).exists(), "cur/ is empty: never made");
+        assert_eq!(highest_uid(root, ACCT, MBOX).unwrap(), 40);
+        assert_eq!(uids(root, ACCT, MBOX).unwrap(), BTreeSet::from([12, 40]));
+    }
+
+    /// Carry (Task 3a/3b): `held_uids`, `taken_files_at` and `uid_space_at` read `jmap/`.
+    #[test]
+    fn held_uids_and_the_uid_space_count_records() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 3, &eml("three"), &[]).unwrap();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        let records = jmap_in(&mbox);
+        // Not records: a temp, a non-canonical name, a directory, a stray.
+        fs::write(records.join(".9.json.tmp-1-2"), b"temp").unwrap();
+        fs::write(records.join("09.json"), b"zero").unwrap();
+        fs::create_dir(records.join("5.json")).unwrap();
+        fs::write(records.join("notes.txt"), b"stray").unwrap();
+        assert_eq!(held_uids(root, ACCT, MBOX), Some(vec![3]), "regular record files only");
+        assert_eq!(uids(root, ACCT, MBOX).unwrap(), BTreeSet::from([3, 5]), "the uid space counts every record name");
+
+        let space = uid_space_at(&mbox).unwrap();
+        assert_eq!(space.taken, BTreeSet::from([3, 5]));
+        assert_eq!(space.held.get(&3), Some(&records.join("3.json")));
+        assert_eq!(message_id_at(&records.join("3.json")).as_deref(), Some("three@x.test"), "read from the blob");
+        assert_eq!(uid_message_ids(root, ACCT, MBOX).unwrap(), vec![(3, Some("three@x.test".into())), (5, None)]);
+    }
+
+    /// The gates that decided "a mailbox" by `cur/` alone: a mailbox holding
+    /// records only is a mailbox to every one of them.
+    #[test]
+    fn a_jmap_only_mailbox_is_a_mailbox_to_every_listing() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        assert_eq!(has_message_dir(&mbox).unwrap_err().kind(), io::ErrorKind::NotFound, "neither directory: never held mail");
+        assert_eq!(scan_dir(&mbox).unwrap_err().kind(), io::ErrorKind::NotFound);
+        assert_eq!(count_files(&mbox).unwrap_err().kind(), io::ErrorKind::NotFound);
+
+        write(root, ACCT, MBOX, 4, &eml("four"), &flags(&["seen"])).unwrap();
+        assert!(!messages_in(&mbox).exists());
+        assert!(has_message_dir(&mbox).unwrap());
+        assert_eq!(count_files(&mbox).unwrap(), 1);
+        let scan = scan_dir(&mbox).unwrap();
+        assert_eq!(scan.entries.len(), 1);
+        assert_eq!((scan.entries[0].uid, scan.entries[0].name.as_str(), scan.entries[0].size), (4, "4.json", eml("four").len() as u64));
+        assert_eq!(scan.entries[0].flags, flags(&["seen", "\\Seen"]));
+
+        // A Maildir directory that is a file is still an error when no records sit beside it.
+        #[cfg(unix)]
+        {
+            let broken = mailbox_dir(root, ACCT, "Broken");
+            fs::create_dir_all(&broken).unwrap();
+            fs::write(broken.join("cur"), b"not a directory").unwrap();
+            assert!(!has_message_dir(&broken).unwrap());
+            assert!(scan_dir(&broken).is_err());
+        }
+    }
+
+    /// Carry (Task 2, BINDING): a record's name holds no flags, so a reader that
+    /// keeps names reads them off `flags_name` with the letters it kept.
+    #[test]
+    fn flags_name_reads_a_records_flags_off_its_letters() {
+        let maildir_name = format!("7{INFO_PREFIX}FS.eml");
+        assert_eq!(flags_name(&maildir_name, "A"), maildir_name, "a Maildir name answers for itself");
+        assert_eq!(flags_name("7.json", "FS"), maildir_name);
+        assert_eq!(listed_flags("7.json", "AS"), flags(&["archived", "seen", "\\Seen"]));
+        assert_eq!(listed_flags("7.json", ""), Vec::<String>::new());
+        assert_eq!(flags_in_name("7.json"), Vec::<String>::new(), "the record name itself holds none");
+        // What the stores keep is what a listing gave.
+        let tmp = vault(Format::Jmap);
+        let entry = write(tmp.path(), ACCT, MBOX, 7, &eml("seven"), &flags(&["seen", "replied", "draft"])).unwrap();
+        assert_eq!(listed_flags(&entry.name, &flag_letters(&entry.flags)), entry.flags);
+    }
+
+    /// Carry (Task 3c): the decrypted copy stays `.decrypted/<uid>.eml` in the
+    /// mailbox directory for a record too, is read through it and removed with it.
+    #[test]
+    fn a_records_decrypted_copy_sits_where_a_maildir_copy_does() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        let original = b"Subject: sealed\r\n\r\n-----BEGIN PGP MESSAGE-----\r\n".to_vec();
+        write(root, ACCT, MBOX, 7, &original, &[]).unwrap();
+        let copy = format!("X-MailVault-Source: {}\r\nSubject: sealed\r\n\r\nplain", crate::pgp::source_tag(&original));
+        write_decrypted_copy(root, ACCT, MBOX, 7, copy.as_bytes()).unwrap();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        let at = mbox.join(crate::pgp::DECRYPTED_DIR).join("7.eml");
+        assert_eq!(fs::read(&at).unwrap(), copy.as_bytes());
+        assert_eq!(read_decrypted_copy(root, ACCT, MBOX, 7, &original), Some(copy.clone().into_bytes()));
+        assert_eq!(read_listed(&mbox, 7, "7.json").unwrap(), copy.as_bytes(), "a listed record reads through its decrypted copy");
+        assert!(remove(root, ACCT, MBOX, 7).unwrap());
+        assert!(!at.exists(), "plaintext never outlives the record");
+    }
+
+    #[test]
+    fn a_message_the_parser_refuses_is_still_stored() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        let raw = b" starts with a space\r\nSubject: x\r\n\r\nbody".to_vec();
+        assert!(record::build(1, MBOX, &raw, &[], None, None).is_err(), "the record builder refuses these bytes");
+        let entry = write(root, ACCT, MBOX, 1, &raw, &flags(&["seen"])).unwrap();
+        assert_eq!((entry.name.as_str(), entry.size), ("1.json", raw.len() as u64));
+        assert_eq!(read_raw(root, ACCT, MBOX, 1).unwrap(), Some(raw.clone()));
+        let rec = read_record(&jmap_in(&mailbox_dir(root, ACCT, MBOX)).join("1.json")).unwrap();
+        assert_eq!(rec.blob, blobs::blob_id(&raw));
+        assert_eq!(rec.email["blobId"], blobs::blob_id(&raw));
+        assert_eq!(rec.email["size"], raw.len() as u64);
+        assert!(blobs::verify(root, &rec.blob).unwrap());
+    }
+
+    /// Review carry (Task 6): `blob_path` validates nothing, so a blob id only
+    /// reaches it from a record `parse` accepted. A record naming a hostile id
+    /// is not a record: nothing outside the blob store is ever read.
+    #[test]
+    fn a_record_naming_a_hostile_blob_id_is_never_read() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        let entry = write(root, ACCT, MBOX, 7, &eml("seven"), &[]).unwrap();
+        let path = jmap_in(&mailbox_dir(root, ACCT, MBOX)).join(&entry.name);
+        fs::write(root.join("secret.eml"), b"Subject: not a blob\r\n\r\nsecret").unwrap();
+        let mut value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        value["blob"] = Value::String("sha256-../../secret".into());
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), None, "read as no record, never as a path");
+        assert_eq!(raw_path(root, ACCT, MBOX, 7), None);
+        assert_eq!(find(root, ACCT, MBOX, 7), None);
+        assert!(list(root, ACCT, MBOX).unwrap().is_empty());
+        assert_eq!(message_id_at(&path), None);
+        assert_eq!(read_listed(&mailbox_dir(root, ACCT, MBOX), 7, "7.json").unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(read_at(root, &path).unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    /// Review carry (Task 6): `put` on an intact blob it cannot touch fails, and
+    /// so does the write: no record names a blob whose mtime its write left old.
+    #[cfg(unix)]
+    #[test]
+    fn a_blob_put_cannot_refresh_fails_the_write() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("shared"), &[]).unwrap();
+        let blob = blobs::blob_path(root, &blobs::blob_id(&eml("shared")));
+        fs::set_permissions(&blob, fs::Permissions::from_mode(0o444)).unwrap();
+        let result = write(root, ACCT, "Work", 2, &eml("shared"), &[]);
+        fs::set_permissions(&blob, fs::Permissions::from_mode(0o644)).unwrap();
+        if result.is_ok() {
+            return; // running as root: permissions aren't enforced, nothing to prove
+        }
+        assert!(!jmap_in(&mailbox_dir(root, ACCT, "Work")).join("2.json").exists(), "no record without a fresh blob");
+        assert_eq!(read_raw(root, ACCT, MBOX, 1).unwrap(), Some(eml("shared")), "the first record is untouched");
+    }
+
+    /// The crate helpers `vault_files` and the registry use on listed paths.
+    #[test]
+    fn listed_paths_resolve_in_both_formats() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        let maildir_entry = write(root, ACCT, MBOX, 1, &eml("one"), &flags(&["seen"])).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+        let record_entry = write(root, ACCT, MBOX, 2, &eml("two"), &flags(&["flagged"])).unwrap();
+
+        let one = listed_path(&mbox, &maildir_entry.name);
+        let two = listed_path(&mbox, &record_entry.name);
+        assert_eq!(one, messages_in(&mbox).join(&maildir_entry.name));
+        assert_eq!(two, jmap_in(&mbox).join("2.json"));
+        assert!(!is_record_path(&one) && is_record_path(&two));
+        assert_eq!(held_path(&mbox, 1), Some(one.clone()));
+        assert_eq!(held_path(&mbox, 2), Some(two.clone()));
+        assert_eq!(held_path(&mbox, 3), None);
+        assert_eq!(entry_at(&one, 1), Some(maildir_entry.clone()));
+        assert_eq!(entry_at(&two, 2), Some(record_entry.clone()));
+        assert_eq!(read_at(root, &one).unwrap(), (maildir_entry.name.clone(), eml("one")));
+        assert_eq!(read_at(root, &two).unwrap(), (format!("2{INFO_PREFIX}F.eml"), eml("two")), "a record reads as its blob under its flags name");
+
+        // A record re-flagged in place keeps its name and bytes.
+        let (after, changed) = set_record_flags(&two, 2, &flags(&["flagged", "seen"])).unwrap();
+        assert!(changed);
+        assert_eq!(after.name, "2.json");
+        assert_eq!(set_record_flags(&two, 2, &flags(&["flagged", "seen"])).unwrap(), (after, false), "nothing to write");
+
+        // A delete of one copy takes the other format's copy of the uid with it.
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        unlink(&one, 1).unwrap();
+        unlink_other_format(&one, 1).unwrap();
+        assert_eq!(find(root, ACCT, MBOX, 1), None, "neither copy is left");
+        assert!(blobs::blob_path(root, &blobs::blob_id(&eml("one"))).exists(), "never a blob");
     }
 }
