@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 pub const DB_DIR: &str = "custody";
 pub const DB_FILE: &str = "custody.db";
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE vault_entries (
@@ -48,6 +48,71 @@ CREATE TABLE contacts (
   folders_json TEXT NOT NULL,
   PRIMARY KEY (account_id, address)
 );
+";
+
+/// People: user and imported contacts (NON-derived, never wiped), their links,
+/// the undo journal, and `message_addr` (DERIVED from `header_cache`, kept in
+/// step by the `custody::cache` write functions and backfilled by the daemon).
+const SCHEMA_V4: &str = "
+CREATE TABLE IF NOT EXISTS person (
+    id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    vip INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    blocked INTEGER NOT NULL DEFAULT 0,
+    search_text TEXT NOT NULL DEFAULT '',
+    created_ms INTEGER NOT NULL,
+    updated_ms INTEGER NOT NULL,
+    deleted_ms INTEGER
+);
+CREATE TABLE IF NOT EXISTS source_record (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL DEFAULT '',
+    source_kind TEXT NOT NULL,
+    remote_id TEXT NOT NULL DEFAULT '',
+    etag TEXT NOT NULL DEFAULT '',
+    raw TEXT NOT NULL DEFAULT '',
+    tombstone INTEGER NOT NULL DEFAULT 0,
+    fetched_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS person_link (
+    record_id TEXT PRIMARY KEY,
+    person_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS person_link_person ON person_link(person_id);
+CREATE TABLE IF NOT EXISTS record_address (
+    record_id TEXT NOT NULL,
+    address TEXT NOT NULL,
+    PRIMARY KEY (record_id, address)
+);
+CREATE INDEX IF NOT EXISTS record_address_addr ON record_address(address);
+CREATE TABLE IF NOT EXISTS person_journal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts_ms INTEGER NOT NULL,
+    op TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    inverse TEXT NOT NULL,
+    undone INTEGER NOT NULL DEFAULT 0,
+    grp TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS review_dismissed (
+    address TEXT PRIMARY KEY,
+    ts_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS message_addr (
+    account_id TEXT NOT NULL,
+    mailbox_path TEXT NOT NULL,
+    uid INTEGER NOT NULL,
+    address TEXT NOT NULL,
+    role TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    sort_ms INTEGER NOT NULL,
+    counted INTEGER NOT NULL DEFAULT 1,
+    msg_key TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (account_id, mailbox_path, uid, role, address)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS message_addr_addr ON message_addr(address, sort_ms DESC);
 ";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -125,6 +190,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             "BEGIN; {SCHEMA_V3} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '3'); COMMIT;"
         )).map_err(sql)?;
     }
+    if version < 4 {
+        conn.execute_batch(&format!(
+            "BEGIN; {SCHEMA_V4} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4'); COMMIT;"
+        ))
+        .map_err(sql)?;
+    }
     Ok(())
 }
 
@@ -150,7 +221,7 @@ mod tests {
         assert_eq!(mode.to_lowercase(), "wal");
         let locking: String = conn.query_row("PRAGMA locking_mode", [], |r| r.get(0)).unwrap();
         assert_eq!(locking.to_lowercase(), "exclusive");
-        for table in ["meta", "vault_entries", "header_cache", "header_cache_meta", "mailbox_cache", "contacts"] {
+        for table in ["meta", "vault_entries", "header_cache", "header_cache_meta", "mailbox_cache", "contacts", "person", "source_record", "person_link", "record_address", "person_journal", "review_dismissed", "message_addr"] {
             let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = ?1", [table], |r| r.get(0)).unwrap();
             assert_eq!(n, 1, "{table}");
         }
@@ -229,5 +300,40 @@ mod tests {
         }
         assert!(t.elapsed() < std::time::Duration::from_secs(1), "a held lock must fail fast, took {:?}", t.elapsed());
         assert_eq!(meta_get(&holder, "probe").as_deref(), Some("held"));
+    }
+
+    #[test]
+    fn v4_adds_the_people_tables_and_message_addr() {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        for t in ["person", "source_record", "person_link", "record_address", "person_journal", "review_dismissed", "message_addr"] {
+            let n: i64 = conn
+                .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "table {t} missing");
+        }
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
+    }
+
+    #[test]
+    fn a_v3_vault_upgrades_to_v4_and_keeps_its_contacts() {
+        let tmp = tempfile::tempdir().unwrap();
+        {
+            let conn = open(tmp.path()).unwrap();
+            for t in ["person", "source_record", "person_link", "record_address", "person_journal", "review_dismissed", "message_addr"] {
+                conn.execute_batch(&format!("DROP TABLE {t};")).unwrap();
+            }
+            conn.execute(
+                "INSERT INTO contacts(account_id,address,name,count,last_seen,folders_json) VALUES ('a','x@y.z','X',3,1,'[]')",
+                [],
+            )
+            .unwrap();
+            meta_set(&conn, "schema_version", "3").unwrap();
+        }
+        let conn = open(tmp.path()).unwrap();
+        let kept: i64 = conn.query_row("SELECT count FROM contacts WHERE address='x@y.z'", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 3);
+        let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name='message_addr'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
     }
 }
