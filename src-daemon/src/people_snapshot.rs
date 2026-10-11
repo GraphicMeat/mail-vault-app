@@ -21,10 +21,20 @@ const SETTLE_MS: u64 = 30_000;
 const POLL: Duration = Duration::from_secs(5);
 const HASH_KEY: &str = "contacts_snapshot_hash";
 /// `1` once this vault has restored from, or written, a snapshot: the file is
-/// never read again. `pending` while a restore is running (or was cut short):
-/// the next start resumes it and nothing is written meanwhile.
+/// never read again. `pending:N` while a restore is running (or was cut short),
+/// N cards of the file already in: the next start resumes at card N and nothing
+/// is written meanwhile. A bare `pending` (older builds) resumes at card 0.
 const RESTORED_KEY: &str = "people_restored";
 const PENDING: &str = "pending";
+
+/// How many cards a pending restore has already imported; `None` when the flag is not pending.
+fn pending_at(flag: Option<&str>) -> Option<usize> {
+    let f = flag?;
+    if f == PENDING {
+        return Some(0);
+    }
+    f.strip_prefix("pending:").map(|n| n.parse().unwrap_or(0))
+}
 
 /// When the last unsnapshotted change happened (0 = nothing waiting).
 static LAST_CHANGE_MS: AtomicU64 = AtomicU64::new(0);
@@ -66,7 +76,7 @@ fn store_text(state: &DaemonState, root: &Path, text: &str) -> Result<bool, Stri
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     text.hash(&mut hasher);
     let hash = format!("{:016x}", hasher.finish());
-    if crate::custody::with_conn(state, |c| Ok(meta_get(c, RESTORED_KEY)))?.as_deref() == Some(PENDING) {
+    if pending_at(crate::custody::with_conn(state, |c| Ok(meta_get(c, RESTORED_KEY)))?.as_deref()).is_some() {
         return Ok(false);
     }
     let file = file_in(root);
@@ -94,30 +104,39 @@ pub(crate) fn write(state: &DaemonState, root: &Path, mut yield_fn: impl FnMut()
 }
 
 /// A vault with no people at all but a `contacts.vcf` (a restore, a moved or
-/// copied vault) gets them back, once: `people_restored` is `pending` before the
-/// first chunk and `1` after the last, and the file is never read again. A
-/// restore cut short resumes on the next start; the import skips cards already
-/// in. Returns how many people it brought back.
+/// copied vault) gets them back, once: `people_restored` is `pending:N` while it
+/// runs (N cards done, saved with each chunk) and `1` after the last, and the file
+/// is never read again. A restore cut short resumes at card N, so a card with no
+/// email, which has no address to be found by, is not created twice. Returns how
+/// many people it brought back.
 pub(crate) fn restore_if_empty(state: &DaemonState, root: &Path, mut yield_fn: impl FnMut()) -> Result<usize, String> {
-    let empty = crate::custody::with_conn(state, |c| {
+    let (empty, resume) = crate::custody::with_conn(state, |c| {
         let rows: i64 = c.query_row("SELECT count(*) FROM person", [], |r| r.get(0)).map_err(|e| e.to_string())?;
         let flag = meta_get(c, RESTORED_KEY);
-        Ok(flag.as_deref() == Some(PENDING) || (rows == 0 && flag.is_none()))
+        let resume = pending_at(flag.as_deref());
+        Ok((resume.is_some() || (rows == 0 && flag.is_none()), resume.unwrap_or(0)))
     })?;
     if !empty {
         return Ok(0);
     }
     let Ok(text) = std::fs::read_to_string(file_in(root)) else {
         // a pending restore with no file to resume from is over, or the safety copy would never be written again
-        crate::custody::with_conn(state, |c| if meta_get(c, RESTORED_KEY).as_deref() == Some(PENDING) { meta_set(c, RESTORED_KEY, "1") } else { Ok(()) })?;
+        crate::custody::with_conn(state, |c| if pending_at(meta_get(c, RESTORED_KEY).as_deref()).is_some() { meta_set(c, RESTORED_KEY, "1") } else { Ok(()) })?;
         return Ok(0);
     };
     let (cards, grp) = (vcard::VCard::parse_all(&text), new_id());
-    crate::custody::with_conn(state, |c| meta_set(c, RESTORED_KEY, PENDING))?;
+    let mut done = resume.min(cards.len());
+    crate::custody::with_conn(state, |c| meta_set(c, RESTORED_KEY, &format!("{PENDING}:{done}")))?;
     let mut restored = 0;
-    for chunk in cards.chunks(vcard::IMPORT_CHUNK) {
+    for chunk in cards[done..].chunks(vcard::IMPORT_CHUNK) {
         yield_fn();
-        let r = crate::custody::with_conn(state, |c| vcard::import_cards(c, chunk, &grp))?;
+        // the progress is saved in the same custody call as the chunk, so a kill leaves at most that one chunk to repeat
+        let r = crate::custody::with_conn(state, |c| {
+            let r = vcard::import_cards(c, chunk, &grp)?;
+            meta_set(c, RESTORED_KEY, &format!("{PENDING}:{}", done + chunk.len()))?;
+            Ok(r)
+        })?;
+        done += chunk.len();
         restored += r.created + r.linked;
     }
     crate::custody::with_conn(state, |c| meta_set(c, RESTORED_KEY, "1"))?;
@@ -267,7 +286,7 @@ mod tests {
 
         let mut seen = Vec::new();
         restore_if_empty(&dst, dst_dir.path(), || seen.push(flag(&dst))).unwrap();
-        assert_eq!(seen.first(), Some(&Some("pending".to_string())));
+        assert_eq!(seen.first(), Some(&Some("pending:0".to_string())));
         assert_eq!(flag(&dst).as_deref(), Some("1"));
 
         crate::custody::with_conn(&dst, |c| meta_set(c, RESTORED_KEY, PENDING)).unwrap();
@@ -297,13 +316,43 @@ mod tests {
         // killed after the first chunk: one person in, flag still pending
         crate::custody::with_conn(&dst, |c| {
             vcard::import_cards(c, &vcard::VCard::parse_all(&text)[..1], "g")?;
-            meta_set(c, RESTORED_KEY, PENDING)
+            meta_set(c, RESTORED_KEY, "pending:1")
         })
         .unwrap();
         assert_eq!(people(&dst), 1);
 
         assert_eq!(restore_if_empty(&dst, dst_dir.path(), || {}).unwrap(), 1, "only the missing card is added");
         assert_eq!(people(&dst), 2);
+        assert_eq!(flag(&dst).as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn a_restore_cut_short_resumes_at_its_chunk_and_never_duplicates_cards_without_an_email() {
+        // email, phone-only and name-only cards: only the first kind has an address to find its person by
+        let book: String = (0..450)
+            .map(|i| match i % 3 {
+                0 => format!("BEGIN:VCARD\nFN:P{i}\nEMAIL:p{i}@x.io\nEND:VCARD\n"),
+                1 => format!("BEGIN:VCARD\nFN:Phone{i}\nTEL:+1 555 {i:07}\nEND:VCARD\n"),
+                _ => format!("BEGIN:VCARD\nFN:Name{i}\nEND:VCARD\n"),
+            })
+            .collect();
+        let (dst_dir, dst) = state();
+        std::fs::create_dir_all(dst_dir.path().join("Contacts")).unwrap();
+        std::fs::write(file_in(dst_dir.path()), &book).unwrap();
+        let cards = vcard::VCard::parse_all(&book);
+        // killed after the first chunk of 200: those cards are in, the flag says how many
+        crate::custody::with_conn(&dst, |c| {
+            vcard::import_cards(c, &cards[..vcard::IMPORT_CHUNK], "g")?;
+            meta_set(c, RESTORED_KEY, "pending:200")
+        })
+        .unwrap();
+        assert_eq!(people(&dst), 200);
+        assert!(!write(&dst, dst_dir.path(), || {}).unwrap(), "a pending restore writes no snapshot");
+
+        let mut seen = Vec::new();
+        assert_eq!(restore_if_empty(&dst, dst_dir.path(), || seen.push(flag(&dst))).unwrap(), 250);
+        assert_eq!(people(&dst), 450, "resumed at card 200, nobody twice");
+        assert_eq!(seen, [Some("pending:200".to_string()), Some("pending:400".to_string())]);
         assert_eq!(flag(&dst).as_deref(), Some("1"));
     }
 
