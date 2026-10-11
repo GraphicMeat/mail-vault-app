@@ -67,20 +67,36 @@ fn formats() -> &'static RwLock<HashMap<PathBuf, Format>> {
 }
 
 /// The vault's storage format: the marker's `storageFormat` row, `Maildir`
-/// when there is none (every vault made before the JMAP format) or the marker
-/// will not read. Read once per root and cached; `set_vault_format` is the
-/// only writer and keeps the cache current. Writers ask this; readers never
-/// need to, since they read both formats.
+/// when there is none (every vault made before the JMAP format). Read once per
+/// root and cached; `set_vault_format` keeps the cache current and
+/// `invalidate_vault_format` drops it. Only an answer is cached: a marker that
+/// will not read gives `Maildir` for that call alone. Writers ask this;
+/// readers never need to, since they read both formats.
 pub fn vault_format(root: &Path) -> Format {
     if let Some(format) = formats().read().unwrap_or_else(|p| p.into_inner()).get(root) {
         return *format;
     }
-    let format = match crate::vault_layout::read_marker_value(root, FORMAT_KEY).as_deref() {
-        Some("jmap") => Format::Jmap,
-        _ => Format::Maildir,
+    let format = match crate::vault_layout::read_marker_row(root, FORMAT_KEY) {
+        Ok(Some(value)) if value == "jmap" => Format::Jmap,
+        Ok(_) => Format::Maildir,
+        // A read that failed is not an answer: remembering `Maildir` here would
+        // turn a JMAP vault mixed for the life of the process on one busy or
+        // unreachable moment. This call writes Maildir; the next one asks again.
+        Err(e) => {
+            warn!("message_store: the storage format of {} is unknown, using Maildir for now: {e}", root.display());
+            return Format::Maildir;
+        }
     };
-    formats().write().unwrap_or_else(|p| p.into_inner()).insert(root.to_path_buf(), format);
-    format
+    // `entry`: a `set_vault_format` that landed since the cache miss wins.
+    *formats().write().unwrap_or_else(|p| p.into_inner()).entry(root.to_path_buf()).or_insert(format)
+}
+
+/// Forgets the cached format of the vault at `root`, so the next
+/// `vault_format` reads its marker again. For a vault adopted or moved to a
+/// root that this process has already asked about (the marker there is a
+/// different file now). `set_vault_format` needs no call: it writes the cache.
+pub fn invalidate_vault_format(root: &Path) {
+    formats().write().unwrap_or_else(|p| p.into_inner()).remove(root);
 }
 
 /// Writes `format` to the vault marker, then to the cache `vault_format`
@@ -239,7 +255,11 @@ fn open_held(root: &Path, mailbox_dir: &Path, uid: u32) -> io::Result<Option<fs:
 /// whose mtime `put` cannot refresh (a read-only file): so no record ever
 /// names a blob its own write did not make young, and `sweep_blobs`' grace
 /// period always covers the window between a `put` and its record.
-pub(crate) fn write_record(root: &Path, mailbox_dir: &Path, uid: u32, raw: &[u8], flags: &[String]) -> Result<Entry, String> {
+///
+/// `raw` is hashed once, by the record build; the blob is stored under that
+/// id (`blobs::put_as`). Returns the entry and the blob id, for a caller that
+/// verifies the write against it.
+pub(crate) fn write_record(root: &Path, mailbox_dir: &Path, uid: u32, raw: &[u8], flags: &[String]) -> Result<(Entry, String), String> {
     let records = jmap_in(mailbox_dir);
     let path = records.join(record_name(uid));
     let existing = read_record(&path).ok();
@@ -279,11 +299,11 @@ pub(crate) fn write_record(root: &Path, mailbox_dir: &Path, uid: u32, raw: &[u8]
             email.insert("receivedAt".into(), Value::String(stamp));
         }
     }
-    blobs::put(root, raw)?;
+    blobs::put_as(root, raw, rec.blob.clone())?;
     fs::create_dir_all(&records).map_err(|e| format!("Failed to create the message record directory: {e}"))?;
     let json = serde_json::to_vec(&rec).map_err(|e| format!("Failed to encode the message record: {e}"))?;
     crate::fsx::write_atomic(&path, &json).map_err(|e| format!("Failed to write the message record: {e}"))?;
-    Ok(written_entry(uid, &rec, &path))
+    Ok((written_entry(uid, &rec, &path), rec.blob))
 }
 
 /// Rewrites the record at `path` (of `uid`) under `flags` (`record::with_flags`,
@@ -543,7 +563,7 @@ pub fn read_header_section(root: &Path, account_id: &str, mailbox: &str, uid: u3
 /// there is nothing stale to remove.
 pub fn write(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8], flags: &[String]) -> Result<Entry, String> {
     if vault_format(root) == Format::Jmap {
-        return write_record(root, &mailbox_dir(root, account_id, mailbox), uid, raw, flags);
+        return write_record(root, &mailbox_dir(root, account_id, mailbox), uid, raw, flags).map(|(entry, _)| entry);
     }
     let dir = messages_dir(root, account_id, mailbox);
     let stale = leaf_names(&dir, uid);
@@ -563,13 +583,25 @@ pub fn write(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8],
 /// file; a Maildir file left beside a removed record is alone).
 pub fn write_replacing(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw: &[u8], flags: &[String]) -> Result<Entry, String> {
     let format = vault_format(root);
-    let entry = write(root, account_id, mailbox, uid, raw, flags)?;
+    // A record write knows the blob id its one hash made; verify checks the
+    // stored record against that id and does not hash `raw` again.
+    let (entry, blob) = match format {
+        Format::Jmap => {
+            let (entry, blob) = write_record(root, &mailbox_dir(root, account_id, mailbox), uid, raw, flags)?;
+            (entry, Some(blob))
+        }
+        Format::Maildir => (write(root, account_id, mailbox, uid, raw, flags)?, None),
+    };
     let mailbox = mailbox_dir(root, account_id, mailbox);
     let other = other_format(format);
     if !holds_in(&mailbox, uid, other) {
         return Ok(entry);
     }
-    if let Err(e) = verify_entry(root, &mailbox, uid, format, raw) {
+    let expected = match &blob {
+        Some(blob) => Expect::Record { blob },
+        None => Expect::File { raw },
+    };
+    if let Err(e) = verify_entry(root, &mailbox, uid, expected) {
         if let Err(undo) = drop_format_files(&mailbox, uid, format) {
             warn!("message_store: the unverified copy of uid {uid} could not be removed: {undo}");
         }
@@ -589,6 +621,12 @@ fn other_format(format: Format) -> Format {
     }
 }
 
+/// Whether the mailbox holds a JMAP record file for `uid`, whatever the
+/// vault's format is now (a stat; the record is not read).
+pub(crate) fn holds_record(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> bool {
+    holds_in(&mailbox_dir(root, account_id, mailbox), uid, Format::Jmap)
+}
+
 /// Whether the mailbox directory holds a file of `uid` in `format`, by name.
 fn holds_in(mailbox_dir: &Path, uid: u32, format: Format) -> bool {
     match format {
@@ -600,29 +638,26 @@ fn holds_in(mailbox_dir: &Path, uid: u32, format: Format) -> bool {
 #[cfg(test)]
 thread_local! {
     /// Test hook: makes `verify_entry` fail on this thread.
-    static FAIL_VERIFY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(crate) static FAIL_VERIFY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// Re-reads `uid`'s copy in `format` and checks it is `raw`. JMAP: the record
-/// re-parses, names `raw`'s blob, and the blob's sha256 matches
-/// (`blobs::verify`). Maildir: the file re-reads as exactly `raw`.
-fn verify_entry(root: &Path, mailbox_dir: &Path, uid: u32, format: Format, raw: &[u8]) -> Result<(), String> {
+/// What `verify_entry` checks the stored copy against.
+enum Expect<'a> {
+    /// The record names this blob id, and the blob's sha256 matches it.
+    Record { blob: &'a str },
+    /// The Maildir file re-reads as exactly these bytes.
+    File { raw: &'a [u8] },
+}
+
+/// Re-reads `uid`'s stored copy and checks it is what `expected` names.
+fn verify_entry(root: &Path, mailbox_dir: &Path, uid: u32, expected: Expect) -> Result<(), String> {
     #[cfg(test)]
     if FAIL_VERIFY.with(|fail| fail.get()) {
         return Err("verify refused by the test hook".to_string());
     }
-    match format {
-        Format::Jmap => {
-            let rec = read_record(&jmap_in(mailbox_dir).join(record_name(uid))).map_err(|e| format!("the record will not read back: {e}"))?;
-            if rec.blob != blobs::blob_id(raw) {
-                return Err("the record names another blob".to_string());
-            }
-            if !blobs::verify(root, &rec.blob)? {
-                return Err("the blob is missing or damaged".to_string());
-            }
-            Ok(())
-        }
-        Format::Maildir => {
+    match expected {
+        Expect::Record { blob } => verify_record(root, mailbox_dir, uid, Some(blob)),
+        Expect::File { raw } => {
             let path = path_of(&messages_in(mailbox_dir), uid).ok_or_else(|| "the file is not there".to_string())?;
             let back = fs::read(&path).map_err(|e| format!("the file will not read back: {e}"))?;
             if back != raw {
@@ -631,6 +666,20 @@ fn verify_entry(root: &Path, mailbox_dir: &Path, uid: u32, format: Format, raw: 
             Ok(())
         }
     }
+}
+
+/// `uid`'s record re-parses, names `expected_blob` when one is given, and the
+/// blob it names exists and hashes to its id (`blobs::verify`: one read and
+/// one sha256 of the stored file).
+fn verify_record(root: &Path, mailbox_dir: &Path, uid: u32, expected_blob: Option<&str>) -> Result<(), String> {
+    let rec = read_record(&jmap_in(mailbox_dir).join(record_name(uid))).map_err(|e| format!("the record will not read back: {e}"))?;
+    if expected_blob.is_some_and(|blob| rec.blob != blob) {
+        return Err("the record names another blob".to_string());
+    }
+    if !blobs::verify(root, &rec.blob)? {
+        return Err("the blob is missing or damaged".to_string());
+    }
+    Ok(())
 }
 
 /// Removes `uid`'s files of `format` from the mailbox directory: its Maildir
@@ -658,17 +707,26 @@ fn drop_format_files(mailbox_dir: &Path, uid: u32, format: Format) -> Result<boo
 
 /// Removes `uid`'s copy in the format other than `keep`: its Maildir files
 /// when `keep` is `Jmap`, its record when `keep` is `Maildir` (never a blob).
-/// For the conversion job, once it has verified the copy in `keep`. Refuses,
-/// removing nothing, when the mailbox holds no copy of `uid` in `keep`.
-/// `Ok(true)` when a file went.
+/// For the conversion job. Refuses, removing nothing, when the mailbox holds
+/// no copy of `uid` in `keep`, and, for `keep` of `Jmap`, when that copy does
+/// not verify here and now: the record re-parses and its blob exists and
+/// hashes to its id (the Maildir copy is the only other holder of the bytes,
+/// so a record whose blob is gone or damaged must not cost it). `Ok(true)`
+/// when a file went.
 pub fn remove_other_format(root: &Path, account_id: &str, mailbox: &str, uid: u32, keep: Format) -> Result<bool, String> {
     let mailbox = mailbox_dir(root, account_id, mailbox);
-    let kept = match keep {
-        Format::Jmap => record_of(&mailbox, uid).map_err(|e| e.to_string())?.is_some(),
-        Format::Maildir => path_of(&messages_in(&mailbox), uid).is_some(),
-    };
-    if !kept {
-        return Err(format!("uid {uid} has no {keep:?} copy to keep"));
+    match keep {
+        Format::Jmap => {
+            if record_of(&mailbox, uid).map_err(|e| e.to_string())?.is_none() {
+                return Err(format!("uid {uid} has no {keep:?} copy to keep"));
+            }
+            verify_record(root, &mailbox, uid, None).map_err(|e| format!("uid {uid}: the record to keep did not verify: {e}"))?;
+        }
+        Format::Maildir => {
+            if path_of(&messages_in(&mailbox), uid).is_none() {
+                return Err(format!("uid {uid} has no {keep:?} copy to keep"));
+            }
+        }
     }
     drop_format_files(&mailbox, uid, other_format(keep))
 }
@@ -2114,6 +2172,68 @@ mod tests {
         assert_eq!(remove_other_format(root, ACCT, MBOX, 7, Format::Jmap), Ok(true));
         assert!(!messages_in(&mailbox_dir(root, ACCT, MBOX)).join(format!("7{INFO_PREFIX}.eml")).exists());
         assert_eq!(find(root, ACCT, MBOX, 7).unwrap().name, "7.json");
+    }
+
+    /// The conversion job removes a uid's Maildir copy only once the record's
+    /// blob is there and hashes to its id: the record alone is not the message.
+    #[test]
+    fn remove_other_format_keeps_the_maildir_copy_unless_the_blob_verifies() {
+        let tmp = vault(Format::Maildir);
+        let root = tmp.path();
+        let old = messages_in(&mailbox_dir(root, ACCT, MBOX)).join(format!("7{INFO_PREFIX}.eml"));
+        write(root, ACCT, MBOX, 7, &eml("seven"), &[]).unwrap();
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 7, &eml("seven"), &[]).unwrap();
+        let blob = blobs::blob_path(root, &blobs::blob_id(&eml("seven")));
+        let good = fs::read(&blob).unwrap();
+
+        fs::write(&blob, b"junk").unwrap();
+        let corrupt = remove_other_format(root, ACCT, MBOX, 7, Format::Jmap);
+        assert!(corrupt.is_err(), "a corrupt blob refuses: {corrupt:?}");
+        assert!(old.exists(), "the Maildir copy survives a corrupt blob");
+
+        fs::remove_file(&blob).unwrap();
+        let missing = remove_other_format(root, ACCT, MBOX, 7, Format::Jmap);
+        assert!(missing.is_err(), "a missing blob refuses: {missing:?}");
+        assert!(old.exists(), "the Maildir copy survives a missing blob");
+
+        fs::write(&blob, &good).unwrap();
+        assert_eq!(remove_other_format(root, ACCT, MBOX, 7, Format::Jmap), Ok(true));
+        assert!(!old.exists(), "verified: the Maildir copy goes");
+        assert_eq!(read_raw(root, ACCT, MBOX, 7).unwrap(), Some(eml("seven")));
+    }
+
+    /// A marker that will not read (here: not a database) is a failed read,
+    /// not an absent one: it is not cached, so the next call asks again and a
+    /// JMAP vault does not turn mixed for the life of the process.
+    #[test]
+    fn a_marker_that_will_not_read_is_not_cached_as_maildir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let marker = root.join(crate::vault_layout::MARKER_FILE);
+        fs::write(&marker, vec![b'x'; 4096]).unwrap();
+        assert_eq!(vault_format(root), Format::Maildir, "a marker that will not read answers Maildir this once");
+
+        fs::remove_file(&marker).unwrap();
+        // Straight to the marker, not `set_vault_format`: that would fill the cache.
+        crate::vault_layout::write_marker_value(root, FORMAT_KEY, "jmap").unwrap();
+        assert_eq!(vault_format(root), Format::Jmap, "the failed read was not cached");
+    }
+
+    /// An absent row is an answer and is cached; a vault adopted or moved to
+    /// the same root asks the cache to forget it (Task 10).
+    #[test]
+    fn an_absent_marker_is_cached_until_the_cache_is_invalidated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        assert_eq!(vault_format(root), Format::Maildir);
+        crate::vault_layout::write_marker_value(root, FORMAT_KEY, "jmap").unwrap();
+        assert_eq!(vault_format(root), Format::Maildir, "absent was cached");
+        invalidate_vault_format(root);
+        assert_eq!(vault_format(root), Format::Jmap, "read again after the invalidate");
+        invalidate_vault_format(root);
+        invalidate_vault_format(&root.join("nowhere"));
+        assert_eq!(vault_format(root), Format::Jmap);
     }
 
     #[test]

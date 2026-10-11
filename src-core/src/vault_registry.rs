@@ -651,8 +651,9 @@ impl VaultRegistry {
 
     /// Reconciles the rows with `listing` and returns whether the mailbox is
     /// now verified. Rows written after the listing began (`seq > s0`) are
-    /// left alone. Same size and mtime under a new name is a rename and keeps
-    /// the light row; any other change clears it.
+    /// left alone. Same size and mtime under a new name or new flags is a
+    /// rename and keeps the light row (a record keeps its name, size and a
+    /// coarse mtime through a flag change); any other change clears it.
     pub(crate) fn apply_listing(&self, account: &str, dir: &str, listing: Listing) -> bool {
         let Listing { files, unstatted, s0, e0 } = listing;
         let mut conn_guard = guard(&self.conn);
@@ -660,11 +661,11 @@ impl VaultRegistry {
         let seq = self.next_seq();
         let result = (|| -> rusqlite::Result<bool> {
             let tx = conn.transaction()?;
-            let rows: HashMap<u32, (Option<String>, i64, i64, i64)> = {
+            let rows: HashMap<u32, (Option<String>, i64, i64, i64, String)> = {
                 let mut st = tx.prepare_cached(
-                    "SELECT uid, filename, size, mtime_ns, seq FROM files WHERE account_id = ?1 AND vault_dir = ?2",
+                    "SELECT uid, filename, size, mtime_ns, seq, flags FROM files WHERE account_id = ?1 AND vault_dir = ?2",
                 )?;
-                let rows = st.query_map(params![account, dir], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))))?;
+                let rows = st.query_map(params![account, dir], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))))?;
                 rows.collect::<rusqlite::Result<_>>()?
             };
             {
@@ -679,9 +680,12 @@ impl VaultRegistry {
                 let mut delete = tx.prepare_cached("DELETE FROM files WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3")?;
                 for (uid, file) in &files {
                     match rows.get(uid) {
-                        Some((_, _, _, row_seq)) if *row_seq > s0 => {}
-                        Some((Some(name), size, mtime, _)) if *size == file.size && *mtime == file.mtime_ns => {
-                            if *name != file.filename {
+                        Some((_, _, _, row_seq, _)) if *row_seq > s0 => {}
+                        Some((Some(name), size, mtime, _, row_flags)) if *size == file.size && *mtime == file.mtime_ns => {
+                            // A record keeps its name and size through a flag
+                            // change and its mtime is coarse on a network volume,
+                            // so the flags are compared too.
+                            if *name != file.filename || *row_flags != file.flags {
                                 rename.execute(params![account, dir, uid, file.filename, seq, file.flags])?;
                             }
                         }
@@ -690,7 +694,7 @@ impl VaultRegistry {
                         }
                     }
                 }
-                for (uid, (_, _, _, row_seq)) in &rows {
+                for (uid, (_, _, _, row_seq, _)) in &rows {
                     if *row_seq <= s0 && !files.contains_key(uid) && !unstatted.contains(uid) {
                         delete.execute(params![account, dir, uid])?;
                     }
@@ -1188,6 +1192,30 @@ mod tests {
         assert_eq!(reg.files(&f.root, ACCT, MB).unwrap()[1], (5, format!("5{}.eml", crate::maildir::INFO_PREFIX), raw.len() as u64));
         assert_eq!(five.size, raw.len() as u64);
         assert_ne!(fs::metadata(&five_path).unwrap().len(), raw.len() as u64);
+    }
+
+    /// A record's name and size never change and its mtime is coarse on a
+    /// network volume, so a flag change from outside can show only in the
+    /// flags: `apply_listing` must follow them.
+    #[test]
+    fn a_record_row_follows_a_flag_change_that_size_and_mtime_cannot_show() {
+        use crate::message_store::{self, Format};
+        let f = fixture();
+        message_store::set_vault_format(&f.root, Format::Jmap).unwrap();
+        let raw = b"From: a@x.test\r\nSubject: m4\r\n\r\nbody of 4\r\n";
+        message_store::write(&f.root, ACCT, MB, 4, raw, &["seen".to_string()]).unwrap();
+        let reg = VaultRegistry::open(&f.app, &f.root);
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB).unwrap(), (vec![4], vec![]));
+        let row_flags = |reg: &VaultRegistry| -> String {
+            guard(&reg.conn).as_ref().unwrap().query_row("SELECT flags FROM files WHERE uid = 4", [], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(row_flags(&reg), "S");
+
+        let mut listing = reg.list_mailbox(&f.root, ACCT, MB).unwrap();
+        listing.files.get_mut(&4).unwrap().flags = "AS".to_string();
+        assert!(reg.apply_listing(ACCT, MB, listing));
+        assert_eq!(row_flags(&reg), "AS", "same name, size and mtime, new flags");
+        assert_eq!(reg.uid_sets(&f.root, ACCT, MB).unwrap(), (vec![4], vec![4]));
     }
 
     /// The schema bump: a version-1 database is dropped and rebuilt as "2",

@@ -16,13 +16,37 @@ pub const BLOB_DIR: &str = "message_blobs";
 
 const ID_PREFIX: &str = "sha256-";
 
+#[cfg(test)]
+thread_local! {
+    static HASHES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Test hook: how many message-sized hashes this thread has made since
+/// `reset_hash_count`.
+#[cfg(test)]
+pub(crate) fn hash_count() -> usize {
+    HASHES.with(|c| c.get())
+}
+
+#[cfg(test)]
+pub(crate) fn reset_hash_count() {
+    HASHES.with(|c| c.set(0));
+}
+
 fn hex_of(raw: &[u8]) -> String {
+    #[cfg(test)]
+    HASHES.with(|c| c.set(c.get() + 1));
     format!("{:x}", Sha256::digest(raw))
 }
 
 /// The local blob id of these bytes: `sha256-<64 lowercase hex>`.
 pub fn blob_id(raw: &[u8]) -> String {
     format!("{ID_PREFIX}{}", hex_of(raw))
+}
+
+/// The digest part of an id made by `blob_id`, without hashing again.
+pub(crate) fn digest_of(id: &str) -> &str {
+    id.strip_prefix(ID_PREFIX).unwrap_or(id)
 }
 
 /// The hex digest of a well-formed id (`sha256-` then exactly 64 lowercase hex
@@ -47,13 +71,20 @@ pub fn blob_path(root: &Path, id: &str) -> PathBuf {
     root.join(BLOB_DIR).join(shard).join(format!("{hex}.eml"))
 }
 
-/// Store `raw` and return its id. Absent: written with `write_atomic`.
+/// Store `raw` and return its id (one sha256 of `raw`). Absent: written with `write_atomic`.
 /// Present: its size and bytes are checked against `raw` (byte-equal means the
 /// hash matches); a mismatch (a corrupt or truncated file) is rewritten, an
 /// intact file gets its mtime set to now so the blob sweep's grace period
 /// covers the record about to point at it.
 pub fn put(root: &Path, raw: &[u8]) -> Result<String, String> {
-    let id = blob_id(raw);
+    put_as(root, raw, blob_id(raw))
+}
+
+/// `put` for a caller that already holds `raw`'s id (`blob_id(raw)`, made
+/// while building the record), so the message is hashed once and not again
+/// here. The id is trusted: a wrong one files `raw` under another blob's name,
+/// and `verify` of that id is `false`.
+pub(crate) fn put_as(root: &Path, raw: &[u8], id: String) -> Result<String, String> {
     let path = blob_path(root, &id);
     let intact = match fs::metadata(&path) {
         Ok(meta) if meta.is_file() && meta.len() == raw.len() as u64 => {

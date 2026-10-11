@@ -177,7 +177,12 @@ pub fn store(
     flags: &[String],
     overwrite: bool,
 ) -> Result<bool, String> {
-    if crate::message_store::vault_format(root) == crate::message_store::Format::Jmap {
+    // A mailbox that holds the uid as a record takes this write the record
+    // way in either format. A Maildir file written beside the record would
+    // lose to it in every listing while the registry served the file.
+    if crate::message_store::vault_format(root) == crate::message_store::Format::Jmap
+        || crate::message_store::holds_record(root, account_id, mailbox, uid)
+    {
         return store_record(reg, root, account_id, mailbox, uid, raw, flags, overwrite);
     }
     let dir = cur_path(root, account_id, mailbox);
@@ -210,10 +215,17 @@ pub fn store(
     Ok(true)
 }
 
-/// `store` in a JMAP vault: the uid's record and blob through
-/// `message_store::write_replacing`, so a Maildir file of the uid goes only
-/// once the record re-read as these bytes. "Already held" is the registry's
-/// answer on a verified mailbox, else a lookup in both formats.
+/// `store` in a JMAP vault, or of a uid a record holds in a Maildir vault:
+/// the uid's file through `message_store::write_replacing` in the vault's
+/// format, so the other format's copy of the uid goes only once the new one
+/// re-read as these bytes. "Already held" is the registry's answer on a
+/// verified mailbox, else a lookup in both formats.
+///
+/// Hashing: the message is hashed once (the record build's digest names the
+/// blob), and once more when the other format's copy has to be replaced (the
+/// stored blob, re-read to verify it). The build, the blob write and the
+/// verify all run inside the caller's per-message lock; moving them out is
+/// Task 9's carry for the sync and fetch callers.
 #[allow(clippy::too_many_arguments)]
 fn store_record(
     reg: &VaultRegistry,
@@ -1855,6 +1867,96 @@ mod tests {
         assert_eq!(read_eml(&reg, root, "acct", "Scheduled", 1).unwrap(), raw, "the exact bytes");
         assert!(delete(&reg, root, "acct", "Scheduled", 1).unwrap());
         assert!(!exists(root, "acct", "Scheduled", 1));
+    }
+
+    /// A Maildir-format store into a mailbox that still holds the uid as a JMAP
+    /// record must replace the record (after verifying the new file), or the
+    /// record keeps winning every listing while the registry serves `cur/`.
+    #[test]
+    fn a_maildir_store_over_a_record_replaces_it_and_every_reader_agrees() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        let (_app, reg) = registry(root);
+        let seen = ["seen".to_string()];
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"Subject: old\r\n\r\nold", &seen, true).unwrap());
+        let mailbox = crate::message_store::mailbox_dir(root, "acct", "INBOX");
+        let record = mailbox.join("jmap").join("7.json");
+        assert!(record.is_file());
+        assert_eq!(sets(&reg, root), (vec![7], vec![]), "the registry lists the mailbox: verified, its row names the record");
+        assert_eq!(reg.known("acct", "INBOX", 7), Some(Some("7.json".to_string())));
+
+        crate::message_store::set_vault_format(root, Format::Maildir).unwrap();
+        let new = b"Subject: new\r\n\r\nnew";
+
+        // Verify refused: the record stays the copy every reader reads.
+        crate::message_store::FAIL_VERIFY.with(|fail| fail.set(true));
+        let refused = store(&reg, root, "acct", "INBOX", 7, new, &seen, true);
+        crate::message_store::FAIL_VERIFY.with(|fail| fail.set(false));
+        assert!(refused.is_err(), "{refused:?}");
+        assert!(record.is_file(), "the record goes only after the new file verified");
+        assert_eq!(held_bytes(root, 7), Some(b"Subject: old\r\n\r\nold".to_vec()));
+        assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), b"Subject: old\r\n\r\nold");
+
+        assert!(store(&reg, root, "acct", "INBOX", 7, new, &seen, true).unwrap());
+        assert!(!record.exists(), "verified: the record goes");
+        let listed = crate::message_store::list(root, "acct", "INBOX").unwrap();
+        assert_eq!(listed.iter().map(|e| e.name.clone()).collect::<Vec<_>>(), vec![format!("7{INFO_PREFIX}S.eml")]);
+        assert_eq!(held_bytes(root, 7), Some(new.to_vec()));
+        assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), new, "the registry serves the same bytes");
+        assert_eq!(reg.known("acct", "INBOX", 7), Some(Some(format!("7{INFO_PREFIX}S.eml"))));
+        let (_app2, fresh) = registry(root);
+        assert_eq!(read_eml(&fresh, root, "acct", "INBOX", 7).unwrap(), new);
+        assert_eq!(sets(&fresh, root), (vec![7], vec![]));
+    }
+
+    /// `maildir_store_raw` (no overwrite) must see a record as "already held"
+    /// in a Maildir vault too, whether or not the registry has listed it.
+    #[test]
+    fn a_maildir_store_without_overwrite_skips_a_uid_a_record_holds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, b"Subject: kept\r\n\r\nkept", &[], true).unwrap());
+        crate::message_store::set_vault_format(root, Format::Maildir).unwrap();
+        let (_app2, fresh) = registry(root);
+        assert!(!store(&fresh, root, "acct", "INBOX", 7, b"Subject: other\r\n\r\nother", &[], false).unwrap());
+        let cur = cur_path(root, "acct", "INBOX");
+        assert!(crate::message_store::leaf_names(&cur, 7).is_empty(), "no second copy beside the record");
+        assert_eq!(held_bytes(root, 7), Some(b"Subject: kept\r\n\r\nkept".to_vec()));
+    }
+
+    /// One sha256 of the message per store: the digest the record build makes
+    /// is the one the blob is stored under; a store that replaces a Maildir
+    /// copy adds the one re-hash of the stored blob that verifies it.
+    #[test]
+    fn a_jmap_store_hashes_the_message_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let raw = light_batch_eml("hashed");
+        crate::message_store::set_vault_format(root, Format::Maildir).unwrap();
+        let (_app, reg) = registry(root);
+        assert!(store(&reg, root, "acct", "INBOX", 7, &raw, &[], true).unwrap());
+        assert!(store(&reg, root, "acct", "INBOX", 8, &raw, &[], true).unwrap());
+
+        crate::jmap_store::blobs::reset_hash_count();
+        assert!(store(&reg, root, "acct", "INBOX", 9, &raw, &[], true).unwrap());
+        assert_eq!(crate::jmap_store::blobs::hash_count(), 0, "a Maildir store hashes nothing");
+
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        crate::jmap_store::blobs::reset_hash_count();
+        assert!(store(&reg, root, "acct", "INBOX", 10, &raw, &[], true).unwrap());
+        assert_eq!(crate::jmap_store::blobs::hash_count(), 1, "build and put share one digest");
+
+        crate::jmap_store::blobs::reset_hash_count();
+        assert!(store(&reg, root, "acct", "INBOX", 10, &raw, &[], true).unwrap(), "an overwrite of a record");
+        assert_eq!(crate::jmap_store::blobs::hash_count(), 1);
+
+        crate::jmap_store::blobs::reset_hash_count();
+        assert!(store(&reg, root, "acct", "INBOX", 7, &raw, &[], true).unwrap(), "replaces the Maildir copy of uid 7");
+        assert_eq!(crate::jmap_store::blobs::hash_count(), 2, "the digest, and the verify of the stored blob");
+        assert!(!crate::message_store::mailbox_dir(root, "acct", "INBOX").join("cur").join(format!("7{INFO_PREFIX}.eml")).exists());
     }
 
     /// `migrate_json_to_eml` runs at every app start and removes a `.json`

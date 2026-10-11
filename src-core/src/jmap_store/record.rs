@@ -221,7 +221,9 @@ pub fn build(
 ) -> Result<Record, String> {
     let parsed = mailparse::parse_mail(raw).map_err(|e| format!("jmap record: failed to parse email: {e}"))?;
     let blob = blobs::blob_id(raw);
-    let blob_hex = sha256_hex(raw);
+    // The one hash of the message: the blob id, and the digest the record ids
+    // are cut from. `write_record` stores the blob under this same id.
+    let blob_hex = blobs::digest_of(&blob);
     let headers = &parsed.headers;
     let header = |name: &str| headers.get_first_value(name).map(|v| v.trim().to_string());
 

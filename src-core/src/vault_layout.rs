@@ -89,18 +89,43 @@ pub fn read_marker(dir: &Path) -> Option<VaultMarker> {
     Some(marker)
 }
 
-/// One row of the marker's key/value table, `None` when there is no marker
-/// database, no such row, or it will not read. Read-only and no-create, like
-/// `read_marker`. The vault's other settings live beside the identity rows
-/// (`storageFormat`, `storageMigration`).
-pub fn read_marker_value(dir: &Path, key: &str) -> Option<String> {
+/// One row of the marker's key/value table, with "not there" kept apart from
+/// "would not read". `Ok(None)`: the vault folder exists and holds no marker
+/// database, or the database has no such row (or no table yet). `Err`: the
+/// folder is missing (an unmounted drive), or the database is there and
+/// failed to open or answer (busy past the 5 s `rusqlite` waits by default,
+/// an I/O error on a network volume, not a database). The first is an answer
+/// a caller may remember; the second is not one.
+///
+/// Read-only and no-create, like `read_marker`. The vault's other settings
+/// live beside the identity rows (`storageFormat`, `storageMigration`).
+pub fn read_marker_row(dir: &Path, key: &str) -> Result<Option<String>, String> {
     use rusqlite::OpenFlags;
-    let path = dir.join(MARKER_FILE);
-    if !path.is_file() {
-        return None;
+    if !dir.is_dir() {
+        return Err(format!("the vault folder {} is not there", dir.display()));
     }
-    let conn = rusqlite::Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
-    conn.query_row("SELECT value FROM marker WHERE key = ?1", [key], |r| r.get::<_, String>(0)).ok()
+    let path = dir.join(MARKER_FILE);
+    match std::fs::metadata(&path) {
+        Ok(meta) if meta.is_file() => {}
+        Ok(_) => return Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("the vault marker {} will not stat: {e}", path.display())),
+    }
+    let conn = rusqlite::Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| format!("the vault marker {} will not open: {e}", path.display()))?;
+    match conn.query_row("SELECT value FROM marker WHERE key = ?1", [key], |r| r.get::<_, String>(0)) {
+        Ok(value) => Ok(Some(value)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        // A marker database that was created and never given its table.
+        Err(rusqlite::Error::SqliteFailure(_, Some(message))) if message.starts_with("no such table") => Ok(None),
+        Err(e) => Err(format!("the vault marker {} will not read: {e}", path.display())),
+    }
+}
+
+/// `read_marker_row`, `None` when there is no such row or the marker will not
+/// read. For callers that treat both as "unset" and never remember the answer.
+pub fn read_marker_value(dir: &Path, key: &str) -> Option<String> {
+    read_marker_row(dir, key).ok().flatten()
 }
 
 /// Sets one row of the marker's key/value table, creating the table when it
