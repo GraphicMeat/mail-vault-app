@@ -8,6 +8,7 @@ import { binCaptureError } from '../../utils/binCapture';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
+import { isJmapAccount } from '../providerKind.js';
 import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval, vaultKey, vaultKeys } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
@@ -1184,6 +1185,9 @@ async function _restoreFromTrash(outcomes) {
   // message whose new uid the server did not name, is repainted by a reload.
   let reload = back.length < outcomes.length;
   const moved = new Set();
+  // JMAP rows whose label came back under the uid they had: the ledger keeps
+  // every uid it issued, so nothing was retired and nothing is re-keyed.
+  const kept = new Set();
   try {
     for (const g of groups.values()) {
       const account = await ensureFreshToken(g.account);
@@ -1211,15 +1215,37 @@ async function _restoreFromTrash(outcomes) {
       // from COPYUIDs of their own. A Message-ID search gives no such pairing.
       // ponytail: pairs by ascending trash uid; a server that reorders the set
       // is not caught here, add a per-uid MOVE if one ever shows up.
-      const newUids = byCopyUid && Array.isArray(res?.newUids) && res.newUids.length === g.uids.length
-        ? [...res.newUids].sort((a, b) => a - b) : null;
-      if (!newUids) {
+      const answered = byCopyUid && Array.isArray(res?.newUids) && res.newUids.length === g.uids.length;
+      if (!answered) {
         reload = true;
         // The vault copy was stamped "we deleted the server copy" a moment
         // ago; it is back, so custody must stop claiming it is the only copy.
         for (const o of found) await stampVaultEntry(g.accountId, g.mailbox, o.uid, { serverDeleted: false });
         continue;
       }
+      if (isJmapAccount(account)) {
+        // JMAP names the new uids in the order of the uids it was sent
+        // (jmap_bridge.rs move_emails), and ledger uids need not rise with
+        // the trash uids: pair by position, never by sorting.
+        const pairs = g.uids.map((uid, i) => [uid, res.newUids[i]]);
+        const same = g.outcomes.filter((o, i) => pairs[i][1] === o.uid);
+        for (const o of same) {
+          kept.add(_targetId(o));
+          await stampVaultEntry(g.accountId, g.mailbox, o.uid, { serverDeleted: false });
+        }
+        try {
+          const rows = same.filter(o => o.row).map(o => o.row);
+          if (rows.length) await db.saveEmailHeaders(g.accountId, g.mailbox, rows, null);
+        } catch (error) {
+          console.warn('[undo] Could not put the header rows back:', error);
+        }
+        const changed = pairs.filter(([old, uid]) => old !== uid);
+        if (changed.length) {
+          await _rekeyRestored(useMailStore, { ...g, outcomes: g.outcomes.filter(o => !kept.has(_targetId(o))) }, changed);
+        }
+        continue;
+      }
+      const newUids = [...res.newUids].sort((a, b) => a - b);
       const byTrash = g.uids.map((uid, i) => [g.trashUids[i], uid]).sort((a, b) => a[0] - b[0]);
       await _rekeyRestored(useMailStore, g, byTrash.map(([, uid], i) => [uid, newUids[i]]));
     }
@@ -1240,7 +1266,7 @@ async function _restoreFromTrash(outcomes) {
       // wrote back, a vault row filed under it) must not paint it. After the
       // reload, which is what replaces a row whose new uid nobody named.
       useMailStore.setState({
-        deleteTombstones: new Set([...get().deleteTombstones, ...outcomes.map(_targetId)]),
+        deleteTombstones: new Set([...get().deleteTombstones, ...outcomes.map(_targetId).filter(id => !kept.has(id))]),
       });
       get().updateSortedEmails();
       settle();

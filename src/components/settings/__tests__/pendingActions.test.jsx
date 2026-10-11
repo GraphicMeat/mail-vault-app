@@ -75,3 +75,17 @@ describe('pending actions', () => {
     await waitFor(() => expect(mockReadOps).toHaveBeenCalled());
   });
 });
+
+describe('a JMAP refusal', () => {
+  it('reads in the app\'s words, not the daemon\'s code', async () => {
+    mockReadOps.mockResolvedValue([entry()]);
+    mockOpFailures.mockReturnValue(new Map([['delete|acct-a|INBOX|7', {
+      message: 'E_JMAP_NO_TRASH: the account has no Trash mailbox to move UID 7 from INBOX into', at: Date.now(),
+    }]]));
+
+    render(<PendingActionsSettings />);
+
+    expect(await screen.findByText('This account has no Trash folder, so nothing was deleted.')).toBeTruthy();
+    expect(screen.queryByText(/E_JMAP_NO_TRASH/)).toBeNull();
+  });
+});

@@ -1,10 +1,30 @@
 import React from 'react';
 import { useComposeStore } from '../stores/composeStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader, Check, AlertTriangle, RefreshCw, X } from 'lucide-react';
-import { useT } from '../i18n/index.js';
+import { Loader, Check, AlertTriangle, RefreshCw, X, Send } from 'lucide-react';
+import { useT, tErr } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr } from '../hooks/usePrivacy';
+import { findSentMailboxPath } from '../utils/sentFolder';
+
+// The daemon's marker on a Graph or JMAP send that got no answer after the
+// request left (src-core smtp.rs MAY_HAVE_GONE_OUT). The server may have
+// taken it, so a Retry could send it twice: the bubble offers Sent instead.
+const MAY_HAVE_GONE_OUT = 'the message may have gone out';
+
+/** Open the Sent folder of the account a send went out from. */
+export async function openSentFolder(accountId) {
+  const { useMailStore } = await import('../stores/mailStore');
+  const state = useMailStore.getState();
+  const account = (state.accounts || []).find(a => a.id === accountId);
+  if (!account) return;
+  let boxes = state.activeAccountId === accountId ? state.mailboxes : null;
+  if (!boxes?.length) {
+    const { getCachedMailboxes } = await import('../services/db');
+    boxes = await getCachedMailboxes(accountId).catch(() => []);
+  }
+  await state.activateAccount(accountId, findSentMailboxPath(boxes, account.sentFolderOverride) || 'Sent');
+}
 
 // Renders one bubble per in-flight or errored send. Mirrors the minimized
 // compose bubble style so the compose → send → success/error flow all lives
@@ -29,6 +49,9 @@ export function OutboxTray({ onRestoreDraft }) {
           const isError = item.status === 'error';
           const isSent = item.status === 'sent';
           const isSending = item.status === 'sending';
+          const mayHaveGoneOut = isError && String(item.error || '').includes(MAY_HAVE_GONE_OUT);
+          // A JMAP code reads in the app's words (tErr); anything else as before.
+          const errorText = item.error ? tErr(item.error) : item.error;
 
           return (
             <motion.div
@@ -59,7 +82,7 @@ export function OutboxTray({ onRestoreDraft }) {
                 <p className={`text-[11px] mt-0.5 ${isError ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
                   {isSending && 'Sending…'}
                   {isSent && 'Sent'}
-                  {isError && (item.error || 'Failed to send')}
+                  {isError && (errorText || 'Failed to send')}
                 </p>
               </div>
               {isSending && (
@@ -78,6 +101,18 @@ export function OutboxTray({ onRestoreDraft }) {
               )}
               {isError && (
                 <div className="flex flex-col gap-1 flex-shrink-0">
+                  {mayHaveGoneOut ? (
+                    <button
+                      onClick={() => openSentFolder(item.composeState?.initialData?._accountId)
+                        .catch(e => console.warn('[OutboxTray] Could not open Sent:', e))}
+                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium
+                                 text-mail-accent-text hover:bg-mail-surface-hover rounded-md transition-colors"
+                      title={t('outbox.checkSentTitle')}
+                    >
+                      <Send size={12} />
+                      {t('outbox.checkSent')}
+                    </button>
+                  ) : (
                   <button
                     onClick={() => retryOutbox(item.id)}
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium
@@ -87,6 +122,7 @@ export function OutboxTray({ onRestoreDraft }) {
                     <RefreshCw size={12} />
                     {t('common.retry')}
                   </button>
+                  )}
                   <button
                     onClick={() => {
                       dismissOutbox(item.id);

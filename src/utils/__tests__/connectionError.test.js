@@ -148,3 +148,30 @@ describe('connectionFailureStatus (the sidebar notice)', () => {
     expect(connectionFailureStatus(undefined, account)).toBeNull();
   });
 });
+
+// A JMAP account's failures, by the daemon's code (a failed connection test)
+// or the code a message starts with (everything else).
+describe('describeConnectionError on a JMAP account', () => {
+  const fail = (message, errorCode) => Object.assign(new Error(message), { errorCode, host: 'api.fastmail.com', port: 443 });
+
+  it('names a refused token by its code, not as the IMAP app-password problem', () => {
+    const { message, detail } = describeConnectionError(fail('E_JMAP_AUTH: authentication failed', 'E_JMAP_AUTH'));
+    expect(message).toBe(t('errors.jmapAuthFailed'));
+    expect(message).not.toMatch(/app password/i);
+    expect(detail).toBe('E_JMAP_AUTH: authentication failed');
+  });
+
+  it('maps each connection-test code', () => {
+    expect(describeConnectionError(fail('E_JMAP_TRANSPORT: connect timed out', 'E_JMAP_TRANSPORT')).message).toBe(t('errors.jmapConnect'));
+    expect(describeConnectionError(fail('E_JMAP_FOREIGN_HOST: evil.example', 'E_JMAP_FOREIGN_HOST')).message).toBe(t('errors.jmapForeignHost'));
+  });
+
+  it('reads the code off the message when there is no errorCode', () => {
+    expect(describeConnectionError('E_JMAP_NO_SUBMISSION: the server does not let a@x send').message).toBe(t('errors.jmapNoSubmission'));
+  });
+
+  it('leaves a JMAP code it has no words for to the generic rules', () => {
+    const { message } = describeConnectionError(fail('E_JMAP_PROTOCOL: no apiUrl', 'E_JMAP_PROTOCOL'));
+    expect(message).toBe(t('errors.conn.couldConnectMailServerCheck'));
+  });
+});

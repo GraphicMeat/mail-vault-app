@@ -15,7 +15,7 @@ import { replayOps } from '../../services/workflows/replayOps';
 import { useAccountStore } from '../../stores/accountStore';
 import { formatDateTime } from '../../utils/dateFormat';
 import { mailboxLabel } from '../../utils/imapUtf7';
-import { useT } from '../../i18n/index.js';
+import { useT, tErr } from '../../i18n/index.js';
 
 const OP_ICON = { delete: Trash2, move: FolderInput, flag: Flag };
 const OP_LABEL = {
@@ -107,7 +107,8 @@ export function PendingActionsSettings() {
                   <p className="text-xs text-mail-text-muted truncate">
                     {emailFor(entry.accountId)} · {mailboxLabel(entry.mailbox)} · {t('settings.pendingActions.queuedAt', { date: formatDateTime(entry.at) })}
                   </p>
-                  {reason && <p className="text-xs text-mail-danger mt-1 break-words">{reason}</p>}
+                  {/* tErr: a JMAP refusal (no Trash, say) in the app's words. */}
+                  {reason && <p className="text-xs text-mail-danger mt-1 break-words">{tErr(reason)}</p>}
                 </div>
                 <button
                   onClick={() => cancel(entry)}

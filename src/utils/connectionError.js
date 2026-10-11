@@ -1,4 +1,5 @@
 import { t } from '../i18n/index.js';
+import { jmapErrorKey } from './jmapErrors.js';
 // Turns a backend connection failure into something a person can act on.
 //
 // The Rust side returns strings like "Connection test failed: AUTHENTICATIONFAILED
@@ -135,6 +136,12 @@ export function connectionFailureStatus(code, account) {
  */
 export function describeConnectionError(err) {
   const raw = (typeof err === 'string' ? err : err?.message || String(err ?? '')).trim();
+
+  // A JMAP account's failure (jmapErrors.js JMAP_BY_CODE), by its code or the
+  // code its message starts with. Before RULES: "E_JMAP_AUTH: authentication
+  // failed" would read as the IMAP app-password problem there.
+  const jmapKey = jmapErrorKey(err?.errorCode) || jmapErrorKey(raw);
+  if (jmapKey) return { message: t(jmapKey), detail: raw || null };
 
   const byCode = BY_CODE[err?.errorCode];
   if (byCode) {

@@ -940,3 +940,49 @@ describe('undo after a flag change', () => {
     expect(useMailStore.getState().undo).toBeNull();
   });
 });
+
+// A JMAP account answers the move back from Trash with the target ledger's
+// uids in the order of the uids sent, and a label put back gets its old uid
+// back: the ledger never drops a row. So the pairing is positional, and a
+// uid that came back unchanged is neither re-keyed nor tombstoned.
+describe('undo after a delete on a JMAP account', () => {
+  const JMAP = { id: 'a1', email: 'a1@x', jmapSessionUrl: 'https://jmap.x/jmap/session', jmapAuth: 'bearer' };
+  const uids = () => useMailStore.getState().sortedEmails.map(e => [e.subject, e.uid]).sort((a, b) => a[1] - b[1]);
+
+  beforeEach(() => {
+    mockDeleteEmail
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 10 })
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 9 });
+  });
+
+  it('keeps both rows on screen when the labels come back under their old uids', async () => {
+    primeStore({ emails: [row(7), row(8)], selected: [7, 8], accounts: [JMAP] });
+    await useMailStore.getState().deleteSelectedFromServer();
+    mockSaveEmailHeaders.mockClear();
+    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 2, newUids: [7, 8] });
+
+    await useMailStore.getState().runUndo();
+
+    expect(mockMoveEmails).toHaveBeenCalledWith(JMAP, [10, 9], 'Trash', 'INBOX');
+    expect(uids()).toEqual([['m7', 7], ['m8', 8]]);
+    const { deleteTombstones } = useMailStore.getState();
+    expect(deleteTombstones.has('a1|INBOX|7')).toBe(false);
+    expect(deleteTombstones.has('a1|INBOX|8')).toBe(false);
+    // Put back under the same uids; nothing pruned from the header cache.
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX',
+      [expect.objectContaining({ uid: 7, subject: 'm7' }), expect.objectContaining({ uid: 8, subject: 'm8' })], null);
+    for (const call of mockSaveEmailHeaders.mock.calls) expect(call[4]?.removedUids ?? []).toEqual([]);
+  });
+
+  it('pairs new uids by position, not by sorting', async () => {
+    primeStore({ emails: [row(7), row(8)], selected: [7, 8], accounts: [JMAP] });
+    await useMailStore.getState().deleteSelectedFromServer();
+    // m7 went to Trash as 10 and m8 as 9; the bridge answers in the order sent.
+    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 2, newUids: [30, 31] });
+
+    await useMailStore.getState().runUndo();
+
+    // Pairing by ascending trash uid would hand m8 the uid 30 and m7 the uid 31.
+    expect(uids()).toEqual([['m7', 30], ['m8', 31]]);
+  });
+});

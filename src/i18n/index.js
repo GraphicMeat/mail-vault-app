@@ -1,5 +1,6 @@
 import en from './locales/en.json';
 import { useSettingsStore } from '../stores/settingsStore';
+import { jmapErrorKey } from '../utils/jmapErrors.js';
 
 /**
  * The active catalog is module state, not React state, so `t()` works from
@@ -151,6 +152,16 @@ const _E_CODE = /^(E_[A-Z0-9_]+):\s*([\s\S]*)$/;
  */
 export function tErr(input, vars) {
   const raw = typeof input === 'string' ? input : String(input?.message ?? input);
+  // A JMAP failure reads in the app's own words in every locale, English too:
+  // its Rust tail is protocol talk ("E_JMAP_METHOD: mailboxHasEmail: …").
+  const jmapKey = jmapErrorKey(raw);
+  if (jmapKey) {
+    const english = _interp(en[jmapKey], vars);
+    const localized = _locale === 'en' ? undefined : _catalog[jmapKey];
+    if (localized === undefined) return english;
+    const l = _interp(localized, vars);
+    return l === english ? english : `${l} (${english})`;
+  }
   const m = _E_CODE.exec(raw);
   const key = m ? `errors.${m[1]}` : raw;
   const english = m ? m[2] : (en[key] ?? raw);
