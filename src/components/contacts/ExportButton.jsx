@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import { useT } from '../../i18n';
 import { exportContacts } from '../../services/contactsExport';

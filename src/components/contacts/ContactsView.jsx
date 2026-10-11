@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Upload, UserCheck } from 'lucide-react';
 import { useT, tErr } from '../../i18n';
 import { usePeopleStore, initPeople } from '../../stores/peopleStore';

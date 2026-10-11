@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Ban, Pin, Star } from 'lucide-react';
 import { useT } from '../../i18n';
 import { usePeopleStore } from '../../stores/peopleStore';

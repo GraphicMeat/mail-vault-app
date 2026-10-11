@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useT } from '../../i18n';
 import { usePeopleStore } from '../../stores/peopleStore';
 import { formatDateOnly } from '../../utils/dateFormat';

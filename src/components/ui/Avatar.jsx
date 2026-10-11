@@ -1,3 +1,4 @@
+import React from 'react';
 export function Avatar({ name = '', size = 36, tint = true, className = '' }) {
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
   const tone = tint ? 'bg-mail-accent-tint text-mail-accent-text' : 'bg-mail-accent text-white';

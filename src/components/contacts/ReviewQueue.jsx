@@ -1,3 +1,4 @@
+import React from 'react';
 import { useT } from '../../i18n';
 import { usePeopleStore } from '../../stores/peopleStore';
 import { Avatar } from '../ui/Avatar';

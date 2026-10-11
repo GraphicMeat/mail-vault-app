@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useT } from '../../i18n';
 import { usePeopleStore } from '../../stores/peopleStore';
 import { Button } from '../ui/Button';
