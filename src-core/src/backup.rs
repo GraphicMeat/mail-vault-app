@@ -592,8 +592,8 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
     };
     let server_uids = server_flags.iter().map(|(uid, _)| *uid).collect::<Vec<_>>();
     let local_uids = {
-        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
-        let mirror = ctx.mirror_root.as_ref().map(|root| PathBuf::from(root).join(&account.email).join(&mailbox).join("cur"));
+        let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, &ctx.account_id, &mailbox));
+        let mirror = ctx.mirror_root.as_ref().map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox));
         let (registry, account_id, mbox) = (Arc::clone(&ctx.archive_ctx.registry), ctx.account_id.clone(), mailbox.clone());
         tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account_id, &mbox, &cur, mirror.as_deref()))
             .await.map_err(|e| format!("pre-sync panicked: {e}"))??
@@ -672,7 +672,7 @@ pub async fn run_graph_account(ctx: BackupRunContext) -> Result<BackupResult, St
 }
 
 async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant) -> Result<BackupResult, String> {
-    use crate::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
+    use crate::maildir::{copies_to_write, mirror_file_map, CopiesToWrite};
 
     let account = &ctx.account;
     let account_id = &ctx.account_id;
@@ -731,7 +731,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         let mirror_dir = ctx
             .mirror_root
             .as_ref()
-            .map(|root| PathBuf::from(root).join(&account.email).join(&mailbox_path).join("cur"));
+            .map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox_path));
 
         // List the whole folder before numbering any of it — see
         // `graph_ledger`'s own doc comment for why filing by listing position
@@ -756,7 +756,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         // runner does: a message restored here is not downloaded only to be
         // skipped. Off the runtime workers for the same reason too.
         let local_uids = {
-            let vault_cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let vault_cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, account_id, &mailbox_path));
             let mirror_dir = mirror_dir.clone();
             let (registry, account, mailbox) = (Arc::clone(&ctx.archive_ctx.registry), account_id.clone(), mailbox_path.clone());
             tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account, &mailbox, &vault_cur_dir, mirror_dir.as_deref()))
@@ -770,10 +770,10 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         // listing, and this run writes its own beside it — the rescan this
         // replaced had that race too, only narrower.
         let (mut in_vault, mut in_mirror) = {
-            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let mailbox_dir = crate::message_store::mailbox_dir(&ctx.archive_ctx.root, account_id, &mailbox_path);
             let mirror_dir = mirror_dir.clone();
             tokio::task::spawn_blocking(move || {
-                let in_vault: HashSet<u32> = uid_file_map(&cur_dir).into_keys().collect();
+                let in_vault: HashSet<u32> = crate::message_store::raw_paths_at(&mailbox_dir).into_keys().collect();
                 let in_mirror: Option<HashSet<u32>> = mirror_dir.map(|dir| mirror_file_map(&dir).into_keys().collect());
                 (in_vault, in_mirror)
             })
@@ -791,7 +791,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                 .join("email_cache")
                 .join(crate::header_cache::cache_base_name(account_id, &mailbox_path))
                 .join(crate::graph_ledger::LEDGER_FILE);
-            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let (ledger_root, ledger_account, ledger_mailbox) = (ctx.archive_ctx.root.clone(), account_id.clone(), mailbox_path.clone());
             let local = local_uids.clone();
             // Directory scan, header reads and a file write, on whatever
             // drive the vault is on — and, in-process now, under the same
@@ -801,7 +801,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
             let plan: Result<Vec<(usize, u32)>, String> = tokio::task::spawn_blocking(move || {
                 let mut planned: Result<Vec<(usize, u32)>, String> = Ok(Vec::new());
                 let gated = gate(&mut || {
-                    planned = crate::graph_ledger::plan_fetch(&ledger_path, &cur_dir, &entries, &local);
+                    planned = crate::graph_ledger::plan_fetch_in(&ledger_path, &ledger_root, &ledger_account, &ledger_mailbox, &entries, &local);
                     Ok(())
                 });
                 match gated {
@@ -836,8 +836,9 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                                     CopiesToWrite::Vault => None,
                                     CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
                                 };
-                                let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
-                                let filename = crate::vault_files::build_maildir_filename(uid, &["archived".to_string()]);
+                                let root = ctx.archive_ctx.root.clone();
+                                let flags = vec!["archived".to_string()];
+                                let filename = crate::maildir::mirror_filename(uid, &flags);
                                 // Each write held under the same gate the
                                 // per-file archive write uses (once each, off
                                 // the runtime workers): a stalled
@@ -855,13 +856,15 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                                         // Mailbox lock, then the gate (lock order);
                                         // the row lands right after the vault write.
                                         registry.serialized(&account, &mailbox, || gate(&mut || {
-                                            std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
-                                            let written = cur_dir.join(&filename);
-                                            if let Err(e) = std::fs::write(&written, &raw_bytes) {
-                                                // A failed plain write can leave a partial file.
-                                                registry.invalidate(&account, &mailbox);
-                                                return Err(format!("write .eml: {}", e));
-                                            }
+                                            crate::message_store::create_messages_dir(&root, &account, &mailbox).map_err(|e| format!("mkdir: {}", e))?;
+                                            let written = match crate::message_store::write_new(&root, &account, &mailbox, uid, &raw_bytes, &flags, false) {
+                                                Ok(written) => written,
+                                                Err(e) => {
+                                                    // A failed plain write can leave a partial file.
+                                                    registry.invalidate(&account, &mailbox);
+                                                    return Err(format!("write .eml: {}", e));
+                                                }
+                                            };
                                             registry.upsert(&account, &mailbox, uid, &written);
                                             Ok(())
                                         }))?;
@@ -1097,11 +1100,11 @@ async fn backup_graph_folder(
     index: usize,
     folder: crate::graph::GraphMailFolder,
 ) -> Result<GraphFolderOutcome, String> {
-    use crate::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
+    use crate::maildir::{copies_to_write, mirror_file_map, CopiesToWrite};
     let token = ctx.account.access_token.as_deref().ok_or("Missing OAuth2 access token for Graph account")?;
     let client = crate::graph::GraphClient::for_purpose(token, "backup").for_account(&ctx.account.email);
     let mailbox = folder.storage_key;
-    let mirror_dir = ctx.mirror_root.as_ref().map(|root| PathBuf::from(root).join(&ctx.account.email).join(&mailbox).join("cur"));
+    let mirror_dir = ctx.mirror_root.as_ref().map(|root| crate::maildir::mirror_cur(Path::new(root), &ctx.account.email, &mailbox));
     let mut listed = Vec::new();
     let mut offset = 0;
     loop {
@@ -1113,17 +1116,17 @@ async fn backup_graph_folder(
         offset += 100;
     }
     let local_uids = {
-        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+        let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, &ctx.account_id, &mailbox));
         let mirror = mirror_dir.clone();
         let (registry, account_id, mbox) = (Arc::clone(&ctx.archive_ctx.registry), ctx.account_id.clone(), mailbox.clone());
         tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account_id, &mbox, &cur, mirror.as_deref()))
             .await.map_err(|e| format!("pre-sync panicked: {e}"))??
     };
     let (mut in_vault, mut in_mirror) = {
-        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+        let mailbox_dir = crate::message_store::mailbox_dir(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
         let mirror = mirror_dir.clone();
         tokio::task::spawn_blocking(move || {
-            (uid_file_map(&cur).into_keys().collect::<HashSet<_>>(), mirror.map(|d| mirror_file_map(&d).into_keys().collect::<HashSet<_>>()))
+            (crate::message_store::raw_paths_at(&mailbox_dir).into_keys().collect::<HashSet<_>>(), mirror.map(|d| mirror_file_map(&d).into_keys().collect::<HashSet<_>>()))
         }).await.map_err(|e| format!("folder listing panicked: {e}"))?
     };
     let mut out = GraphFolderOutcome { index, mailbox: mailbox.clone(), completed: false, backed_up: 0, errors: 0, external_failures: 0, last_error: None, refused: None };
@@ -1132,12 +1135,12 @@ async fn backup_graph_folder(
         // Graph-only: the Outlook backup listing; a JMAP mailbox's ledger is `JMAP_LEDGER_FILE`.
         let ledger = ctx.archive_ctx.root.join("email_cache")
             .join(crate::header_cache::cache_base_name(&ctx.account_id, &mailbox)).join(crate::graph_ledger::LEDGER_FILE);
-        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+        let (ledger_root, ledger_account, ledger_mailbox) = (ctx.archive_ctx.root.clone(), ctx.account_id.clone(), mailbox.clone());
         let local = local_uids.clone();
         let gate = Arc::clone(&ctx.archive_ctx.gate);
         let plan = tokio::task::spawn_blocking(move || {
             let mut planned = Ok(Vec::new());
-            gate(&mut || { planned = crate::graph_ledger::plan_fetch(&ledger, &cur, &entries, &local); Ok(()) })?;
+            gate(&mut || { planned = crate::graph_ledger::plan_fetch_in(&ledger, &ledger_root, &ledger_account, &ledger_mailbox, &entries, &local); Ok(()) })?;
             planned
         }).await.map_err(|e| format!("graph ledger panicked: {e}"))?;
         match plan {
@@ -1153,8 +1156,9 @@ async fn backup_graph_folder(
                             CopiesToWrite::Vault => None,
                             CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
                         };
-                        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
-                        let filename = crate::vault_files::build_maildir_filename(uid, &["archived".to_string()]);
+                        let root = ctx.archive_ctx.root.clone();
+                        let flags = vec!["archived".to_string()];
+                        let filename = crate::maildir::mirror_filename(uid, &flags);
                         let gate = Arc::clone(&ctx.archive_ctx.gate);
                         let registry = Arc::clone(&ctx.archive_ctx.registry);
                         let (account, mbox) = (ctx.account_id.clone(), mailbox.clone());
@@ -1162,13 +1166,15 @@ async fn backup_graph_folder(
                             // Mailbox lock, then the gate (lock order); the row
                             // lands right after the vault write.
                             registry.serialized(&account, &mbox, || gate(&mut || {
-                                std::fs::create_dir_all(&cur).map_err(|e| format!("mkdir: {e}"))?;
-                                let written = cur.join(&filename);
-                                if let Err(e) = std::fs::write(&written, &raw) {
-                                    // A failed plain write can leave a partial file.
-                                    registry.invalidate(&account, &mbox);
-                                    return Err(format!("write .eml: {e}"));
-                                }
+                                crate::message_store::create_messages_dir(&root, &account, &mbox).map_err(|e| format!("mkdir: {e}"))?;
+                                let written = match crate::message_store::write_new(&root, &account, &mbox, uid, &raw, &flags, false) {
+                                    Ok(written) => written,
+                                    Err(e) => {
+                                        // A failed plain write can leave a partial file.
+                                        registry.invalidate(&account, &mbox);
+                                        return Err(format!("write .eml: {e}"));
+                                    }
+                                };
                                 registry.upsert(&account, &mbox, uid, &written);
                                 Ok(())
                             }))?;
@@ -1280,35 +1286,39 @@ fn jmap_file_flags(email: &serde_json::Value) -> Vec<String> {
     flags
 }
 
-/// One backup copy of `uid` in `mailbox`, as the Graph runner writes it: the
-/// vault file under the mailbox lock and then the gate (lock order), its
-/// registry row right after; with `mirror_to`, the mirror file under a gate
-/// of its own outside the mailbox lock, so a slow external drive never holds
-/// up the folder's other writers. A failed vault write is `Err` and ends the
-/// run; the mirror's outcome comes back for the caller to count. Runs off the
-/// runtime workers.
+/// One backup copy of `uid` in `mailbox` under `flags`, as the Graph runner
+/// writes it: the vault file under the mailbox lock and then the gate (lock
+/// order), its registry row right after; with `mirror_to`, the mirror file
+/// (its Maildir name, `maildir::mirror_filename`) under a gate of its own
+/// outside the mailbox lock, so a slow external drive never holds up the
+/// folder's other writers. A failed vault write is `Err` and ends the run; the
+/// mirror's outcome comes back for the caller to count. Runs off the runtime
+/// workers.
 async fn write_backup_copy(
     ctx: &BackupRunContext,
     mailbox: &str,
     uid: u32,
-    filename: String,
+    flags: Vec<String>,
     raw: Vec<u8>,
     mirror_to: Option<PathBuf>,
 ) -> Result<Option<Result<(), String>>, String> {
-    let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, mailbox);
+    let root = ctx.archive_ctx.root.clone();
+    let filename = crate::maildir::mirror_filename(uid, &flags);
     let gate = Arc::clone(&ctx.archive_ctx.gate);
     let registry = Arc::clone(&ctx.archive_ctx.registry);
     let (account, mailbox) = (ctx.account_id.clone(), mailbox.to_string());
     tokio::task::spawn_blocking(move || -> Result<Option<Result<(), String>>, String> {
         registry.serialized(&account, &mailbox, || {
             gate(&mut || {
-                std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {e}"))?;
-                let written = cur_dir.join(&filename);
-                if let Err(e) = std::fs::write(&written, &raw) {
-                    // A failed plain write can leave a partial file.
-                    registry.invalidate(&account, &mailbox);
-                    return Err(format!("write .eml: {e}"));
-                }
+                crate::message_store::create_messages_dir(&root, &account, &mailbox).map_err(|e| format!("mkdir: {e}"))?;
+                let written = match crate::message_store::write_new(&root, &account, &mailbox, uid, &raw, &flags, false) {
+                    Ok(written) => written,
+                    Err(e) => {
+                        // A failed plain write can leave a partial file.
+                        registry.invalidate(&account, &mailbox);
+                        return Err(format!("write .eml: {e}"));
+                    }
+                };
                 registry.upsert(&account, &mailbox, uid, &written);
                 Ok(())
             })
@@ -1329,7 +1339,7 @@ async fn write_backup_copy(
 }
 
 async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant) -> Result<BackupResult, String> {
-    use crate::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
+    use crate::maildir::{copies_to_write, mirror_file_map, CopiesToWrite};
 
     let account = &ctx.account;
     let account_id = &ctx.account_id;
@@ -1372,7 +1382,7 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         let mirror_dir = ctx
             .mirror_root
             .as_ref()
-            .map(|root| PathBuf::from(root).join(&account.email).join(&mailbox_path).join("cur"));
+            .map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox_path));
 
         // Oldest first: the order the ledger takes a listing in.
         let mut listed = client.all_email_ids(&mailbox_id).await.map_err(|e| e.to_string())?;
@@ -1381,7 +1391,7 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         // Local uids after the pre-sync with the mirror, off the runtime
         // workers, as the other runners take them.
         let local_uids = {
-            let vault_cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let vault_cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, account_id, &mailbox_path));
             let mirror_dir = mirror_dir.clone();
             let (registry, account, mailbox) = (Arc::clone(&ctx.archive_ctx.registry), account_id.clone(), mailbox_path.clone());
             tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account, &mailbox, &vault_cur_dir, mirror_dir.as_deref()))
@@ -1389,10 +1399,10 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                 .map_err(|e| format!("pre-sync panicked: {}", e))??
         };
         let (mut in_vault, mut in_mirror) = {
-            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let mailbox_dir = crate::message_store::mailbox_dir(&ctx.archive_ctx.root, account_id, &mailbox_path);
             let mirror_dir = mirror_dir.clone();
             tokio::task::spawn_blocking(move || {
-                let in_vault: HashSet<u32> = uid_file_map(&cur_dir).into_keys().collect();
+                let in_vault: HashSet<u32> = crate::message_store::raw_paths_at(&mailbox_dir).into_keys().collect();
                 let in_mirror: Option<HashSet<u32>> = mirror_dir.map(|dir| mirror_file_map(&dir).into_keys().collect());
                 (in_vault, in_mirror)
             })
@@ -1406,7 +1416,7 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                 &crate::header_cache::sidecar_dir(&ctx.archive_ctx.root, account_id, &mailbox_path),
                 true,
             );
-            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let (ledger_root, ledger_account, ledger_mailbox) = (ctx.archive_ctx.root.clone(), account_id.clone(), mailbox_path.clone());
             let local = local_uids.clone();
             // Allocation under the vault gate, on a blocking thread, never
             // under `with_ledger_lock` (the Graph runner's rule).
@@ -1414,7 +1424,7 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
             let plan: Result<Vec<(usize, u32)>, String> = tokio::task::spawn_blocking(move || {
                 let mut planned: Result<Vec<(usize, u32)>, String> = Ok(Vec::new());
                 gate(&mut || {
-                    planned = crate::graph_ledger::plan_fetch(&ledger_path, &cur_dir, &entries, &local);
+                    planned = crate::graph_ledger::plan_fetch_in(&ledger_path, &ledger_root, &ledger_account, &ledger_mailbox, &entries, &local);
                     Ok(())
                 })?;
                 planned
@@ -1447,8 +1457,7 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                                     CopiesToWrite::Vault => None,
                                     CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
                                 };
-                                let filename = crate::vault_files::build_maildir_filename(uid, &jmap_file_flags(email));
-                                let mirror_write = write_backup_copy(&ctx, &mailbox_path, uid, filename, raw_bytes, mirror_to).await?;
+                                let mirror_write = write_backup_copy(&ctx, &mailbox_path, uid, jmap_file_flags(email), raw_bytes, mirror_to).await?;
                                 in_vault.insert(uid);
                                 match mirror_write {
                                     Some(Ok(())) => {
@@ -1565,9 +1574,9 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
 // `build_folder_status`), minus the bookmark resolution and app-handle
 // plumbing — see the module doc's "What did NOT move here" note.
 // `scan_local_uids` did not port as its own function: it was a one-line
-// `scan_cur_uids(&maildir_cur_path(...)?)` wrapper, and `crate::vault_files::
-// cur_path` + `scan_cur_uids` (both already in this file) inline the same
-// thing at each call site below without an extra indirection.
+// wrapper of `scan_cur_uids` over the app's Maildir folder path, and each call
+// site below inlines the same thing (the store's mailbox directory, then
+// `scan_cur_uids`) without an extra indirection.
 
 #[derive(Serialize, Clone)]
 pub struct FolderBackupStatus {
@@ -1621,7 +1630,7 @@ async fn build_folder_status(
     children: Vec<FolderBackupStatus>,
 ) -> FolderBackupStatus {
     let (app_count, external_count) = {
-        let vault_cur_dir = crate::vault_files::cur_path(vault_root, account_id, path);
+        let vault_cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(vault_root, account_id, path));
         let mirror_root = mirror_root.map(|p| p.to_path_buf());
         let email = email.to_string();
         let path_owned = path.to_string();
@@ -1817,7 +1826,7 @@ async fn get_graph_backup_status(
             for gf in &graph_folders {
                 let mailbox_path = gf.storage_key.clone();
                 let sc = gf.total_item_count.max(0) as usize;
-                let cur_dir = crate::vault_files::cur_path(&vault_root, &account_id, &mailbox_path);
+                let cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&vault_root, &account_id, &mailbox_path));
                 let app_count = scan_cur_uids(&cur_dir).unwrap_or_default().len();
                 let ext_count = match mirror_root.as_deref() {
                     Some(root) => scan_external_uids(root, &email, &mailbox_path).len(),
@@ -1885,7 +1894,7 @@ async fn get_jmap_backup_status(
             let (mut total_server, mut total_app, mut total_external) = (0usize, 0usize, 0usize);
             for info in &infos {
                 let sc = mailbox_ids.get(&info.path).and_then(|id| counts.get(id)).copied().unwrap_or(0);
-                let cur_dir = crate::vault_files::cur_path(&vault_root, &account_id, &info.path);
+                let cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&vault_root, &account_id, &info.path));
                 let app_count = scan_cur_uids(&cur_dir).unwrap_or_default().len();
                 let ext_count = match mirror_root.as_deref() {
                     Some(root) => scan_external_uids(root, &email, &info.path).len(),
@@ -1994,29 +2003,16 @@ fn vault_uids_after_presync(
     scan_cur_uids(vault_cur_dir)
 }
 
+/// Every uid a file in the vault's Maildir message directory `cur_dir`
+/// carries, by the mirror's loose rule (`message_store::loose_uids_in`).
 fn scan_cur_uids(cur_dir: &Path) -> Result<HashSet<u32>, String> {
-    if !cur_dir.exists() {
-        return Ok(HashSet::new());
-    }
-
-    let mut uids = HashSet::new();
-    let entries = std::fs::read_dir(cur_dir).map_err(|e| format!("Failed to read Maildir cur dir: {}", e))?;
-
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        // Filename format: "<uid>:<flags>.eml" or "<uid>.eml" or "<uid>_<flags>.eml"
-        if let Some(uid) = crate::maildir::mirror_filename_uid(&name) {
-            uids.insert(uid);
-        }
-    }
-
-    Ok(uids)
+    crate::message_store::loose_uids_in(cur_dir)
 }
 
 /// Which uids of `<email>/<mailbox>` are present in an external backup
 /// directory. Ported from `backup.rs:143-153`.
 fn scan_external_uids(backup_path: &Path, email: &str, mailbox: &str) -> HashSet<u32> {
-    let cur_dir = backup_path.join(email).join(mailbox).join("cur");
+    let cur_dir = crate::maildir::mirror_cur(backup_path, email, mailbox);
     crate::maildir::mirror_file_map(&cur_dir).into_keys().collect()
 }
 
@@ -2048,7 +2044,6 @@ pub fn scan_uids(mirror_root: Option<&Path>, email: &str, mailbox: &str) -> Opti
 /// Returns total files synced, and whether any copy INTO the vault was
 /// attempted (the caller's vault registry then lists the folder again).
 fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
-    use crate::maildir::{mirror_filename_uid, uid_file_map};
     use std::fs;
     let mut vault_touched = false;
 
@@ -2062,43 +2057,38 @@ fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
 
     // Backup → Vault: copy backup .eml files that don't exist in the vault,
     // restoring flags from the backup filename (legacy `<uid>.eml` has none).
-    let mut in_vault: HashSet<u32> = uid_file_map(vault_cur_dir).into_keys().collect();
+    let mut in_vault: HashSet<u32> = crate::message_store::raw_paths_in(vault_cur_dir).into_keys().collect();
     let mut orphaned_ids: Option<HashSet<String>> = None;
-    if let Ok(entries) = fs::read_dir(backup_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !name.ends_with(".eml") {
-                continue;
-            }
-            let Some(uid) = mirror_filename_uid(&name) else { continue };
-            if in_vault.contains(&uid) {
-                continue;
-            }
-            // The mirror is keyed by uid and carries no generation of its own, so
-            // a uid it holds is only as good as the generation that wrote it.
-            // `orphaned/` is the one local record of which messages this
-            // generation does NOT have — see orphaned_message_ids.
-            let ids = orphaned_ids.get_or_insert_with(|| orphaned_message_ids(vault_cur_dir));
-            if !ids.is_empty() {
-                if let Some(id) = crate::maildir::read_message_id(&entry.path()) {
-                    if ids.contains(&id) {
-                        warn!("backup: not restoring {} — the generation repair set this message aside", name);
-                        continue;
-                    }
+    for (uid, name, path) in crate::maildir::mirror_files(backup_dir) {
+        if path.is_dir() {
+            continue;
+        }
+        if !name.ends_with(".eml") {
+            continue;
+        }
+        if in_vault.contains(&uid) {
+            continue;
+        }
+        // The mirror is keyed by uid and carries no generation of its own, so
+        // a uid it holds is only as good as the generation that wrote it.
+        // `orphaned/` is the one local record of which messages this
+        // generation does NOT have — see orphaned_message_ids.
+        let ids = orphaned_ids.get_or_insert_with(|| orphaned_message_ids(vault_cur_dir));
+        if !ids.is_empty() {
+            if let Some(id) = crate::maildir::read_message_id(&path) {
+                if ids.contains(&id) {
+                    warn!("backup: not restoring {} — the generation repair set this message aside", name);
+                    continue;
                 }
             }
-            let mut flags = crate::vault_eml::parse_flags_from_filename(&name);
-            flags.push("archived".to_string());
-            let dst = vault_cur_dir.join(crate::vault_files::build_maildir_filename(uid, &flags));
-            // Even a failed copy can leave a partial file behind.
-            vault_touched = true;
-            if fs::copy(entry.path(), &dst).is_ok() {
-                synced += 1;
-                in_vault.insert(uid);
-            }
+        }
+        let mut flags = crate::maildir::mirror_flags(&name);
+        flags.push("archived".to_string());
+        // Even a failed copy can leave a partial file behind.
+        vault_touched = true;
+        if crate::message_store::copy_in(vault_cur_dir, uid, &flags, &path).is_ok() {
+            synced += 1;
+            in_vault.insert(uid);
         }
     }
 
@@ -2110,7 +2100,7 @@ fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
 /// suffix travels with the message. `keep_going` is asked before each copy,
 /// with the count so far. Returns how many files were copied.
 fn copy_to_backup(vault_cur_dir: &Path, backup_dir: &Path, keep_going: &mut dyn FnMut(usize) -> bool) -> usize {
-    use crate::maildir::{mirror_file_map, mirror_filename_uid};
+    use crate::maildir::mirror_file_map;
     use std::fs;
     let mut copied = 0;
 
@@ -2122,24 +2112,17 @@ fn copy_to_backup(vault_cur_dir: &Path, backup_dir: &Path, keep_going: &mut dyn 
     // two flag names; the rescan had that race too, only narrower.
     let mut in_backup: HashSet<u32> = mirror_file_map(backup_dir).into_keys().collect();
 
-    if let Ok(entries) = fs::read_dir(vault_cur_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Some(uid) = mirror_filename_uid(&name) else { continue };
-            if in_backup.contains(&uid) {
-                continue;
-            }
-            if !keep_going(copied) {
-                break;
-            }
-            let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
-            if fs::copy(entry.path(), backup_dir.join(&dst_name)).is_ok() {
-                copied += 1;
-                in_backup.insert(uid);
-            }
+    for (uid, name, path) in crate::message_store::mirror_sources_in(vault_cur_dir) {
+        if in_backup.contains(&uid) {
+            continue;
+        }
+        if !keep_going(copied) {
+            break;
+        }
+        let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
+        if fs::copy(&path, backup_dir.join(&dst_name)).is_ok() {
+            copied += 1;
+            in_backup.insert(uid);
         }
     }
     copied
@@ -2189,7 +2172,7 @@ fn mirror_local_folders(ctx: &BackupRunContext) {
         if cancelled() {
             return;
         }
-        let cur = account_dir.join(&dir).join("cur");
+        let cur = crate::message_store::maildir_messages_dir(&account_dir.join(&dir));
         if !cur.is_dir() {
             continue;
         }
@@ -2214,7 +2197,7 @@ fn mirror_local_folders(ctx: &BackupRunContext) {
             resume_after_ms: None,
         };
         (ctx.on_progress)(frame());
-        let backup_dir = Path::new(mirror_root).join(&ctx.account.email).join(local_mirror_name(&dir, &marker)).join("cur");
+        let backup_dir = crate::maildir::mirror_cur(Path::new(mirror_root), &ctx.account.email, &local_mirror_name(&dir, &marker));
         if let Err(e) = std::fs::create_dir_all(&backup_dir) {
             warn!("backup: local folder {} not mirrored, {:?} cannot be made: {}", dir, backup_dir, e);
             continue;
@@ -2396,22 +2379,18 @@ fn write_purge_queue(data_dir: &Path, q: &std::collections::BTreeMap<String, Vec
 /// Delete every mirror file under `<root>/<email>/<mailbox>/cur/` whose uid is
 /// in `uids`. Returns how many files were removed.
 fn purge_backup_files(root: &Path, email: &str, mailbox: &str, uids: &HashSet<u32>) -> usize {
-    let cur = root.join(email).join(mailbox).join("cur");
+    let cur = crate::maildir::mirror_cur(root, email, mailbox);
     if !cur.exists() {
         return 0;
     }
     let mut removed = 0usize;
-    if let Ok(entries) = std::fs::read_dir(&cur) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            match crate::maildir::mirror_filename_uid(&name) {
-                Some(uid) if uids.contains(&uid) => {}
-                _ => continue,
-            }
-            match std::fs::remove_file(entry.path()) {
-                Ok(()) => removed += 1,
-                Err(e) => warn!("backup purge: failed to remove {:?}: {}", entry.path(), e),
-            }
+    for (uid, _, path) in crate::maildir::mirror_files(&cur) {
+        if !uids.contains(&uid) {
+            continue;
+        }
+        match std::fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(e) => warn!("backup purge: failed to remove {:?}: {}", path, e),
         }
     }
     removed
@@ -2491,7 +2470,7 @@ fn drain_purge_queue(data_dir: &Path, root: &Path) -> usize {
             continue; // malformed key — drop it, nothing can act on it
         };
         let uid_set: HashSet<u32> = uids.iter().copied().collect();
-        let mirror = root.join(email).join(mailbox).join("cur");
+        let mirror = crate::maildir::mirror_cur(root, email, mailbox);
         if !mirror.exists() {
             // Folder not mirrored (yet). Keep the entry rather than declare success.
             leftover.insert(key.clone(), uids);
@@ -2638,9 +2617,8 @@ pub fn copy_uids_to_mirror_listed(
     if !mirror_root.is_dir() {
         return Err("Backup folder unavailable".to_string());
     }
-    let vault_cur = crate::vault_files::cur_path(vault_root, account_id, mailbox);
     let wanted: HashSet<u32> = uids.iter().copied().collect();
-    let sources = vault_sources(&vault_cur, &wanted);
+    let sources = crate::message_store::archived_first_paths(vault_root, account_id, mailbox, &wanted);
     copy_uids_to_mirror_from(vault_root, mirror_root, account_id, email, mailbox, uids, listing, &sources)
 }
 
@@ -2667,11 +2645,10 @@ pub fn copy_uids_to_mirror_from(
     if !mirror_root.is_dir() {
         return Err("Backup folder unavailable".to_string());
     }
-    let mirror_cur = mirror_root.join(email).join(mailbox).join("cur");
+    let mirror_cur = crate::maildir::mirror_cur(mirror_root, email, mailbox);
     std::fs::create_dir_all(&mirror_cur).map_err(|e| format!("Backup folder unavailable: {e}"))?;
     listing.ensure(&mirror_cur);
 
-    let vault_cur = crate::vault_files::cur_path(vault_root, account_id, mailbox);
     let mut seen: HashSet<u32> = HashSet::new();
     let wanted: Vec<u32> = uids.iter().copied().filter(|u| seen.insert(*u)).collect();
 
@@ -2680,7 +2657,7 @@ pub fn copy_uids_to_mirror_from(
             out.missing.push(uid);
             continue;
         };
-        match copy_one_to_mirror(&vault_cur, uid, src, &mirror_cur, listing) {
+        match copy_one_to_mirror(vault_root, account_id, mailbox, uid, src, &mirror_cur, listing) {
             CopyOne::Copied => {
                 out.copied.push(uid);
                 out.verified.push(uid);
@@ -2707,30 +2684,6 @@ pub fn copy_uids_to_mirror_from(
     Ok(out)
 }
 
-/// The vault file to copy per wanted uid, from one pass over `cur/`. An archived
-/// copy wins over a working-cache copy of the same uid.
-fn vault_sources(cur_dir: &Path, wanted: &HashSet<u32>) -> std::collections::HashMap<u32, PathBuf> {
-    let mut found: std::collections::HashMap<u32, (PathBuf, bool)> = std::collections::HashMap::new();
-    let Ok(entries) = std::fs::read_dir(cur_dir) else { return Default::default() };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let Some(uid) = crate::maildir::vault_filename_uid(&name) else { continue };
-        if !wanted.contains(&uid) {
-            continue;
-        }
-        let archived = crate::maildir::carries_archived(&name);
-        // Keep what is held unless this file is archived and the held one is not.
-        let keep = match found.get(&uid) {
-            Some((_, held_archived)) => *held_archived || !archived,
-            None => false,
-        };
-        if !keep {
-            found.insert(uid, (entry.path(), archived));
-        }
-    }
-    found.into_iter().map(|(uid, (path, _))| (uid, path)).collect()
-}
-
 enum CopyOne {
     Copied,
     Present,
@@ -2739,8 +2692,13 @@ enum CopyOne {
     Failed,
 }
 
+/// Copies `uid`'s vault file to the mirror and checks the copy. The source is
+/// the store's raw file for the uid (`message_store::raw_path_listed`): the
+/// listed path while it is there, else the uid found once more.
 fn copy_one_to_mirror(
-    vault_cur: &Path,
+    vault_root: &Path,
+    account_id: &str,
+    mailbox: &str,
     uid: u32,
     listed_src: &Path,
     mirror_cur: &Path,
@@ -2748,7 +2706,7 @@ fn copy_one_to_mirror(
 ) -> CopyOne {
     // A flag change renames the vault file after the listing: resolve by uid
     // once more before calling it gone.
-    let src = match crate::maildir::find_listed_by_uid(vault_cur, uid, listed_src) {
+    let src = match crate::message_store::raw_path_listed(vault_root, account_id, mailbox, uid, listed_src) {
         Some(p) => p,
         None => return CopyOne::VaultGone,
     };

@@ -156,6 +156,26 @@ pub fn mirror_filename(uid: u32, flags: &[String]) -> String {
     crate::vault_files::build_maildir_filename(uid, flags)
 }
 
+/// The flags a mirror file's name holds, read as a vault name's
+/// (`<uid>:2,<FLAGS>[.eml]`; a legacy `<uid>.eml` holds none).
+pub fn mirror_flags(name: &str) -> Vec<String> {
+    crate::vault_eml::parse_flags_from_filename(name)
+}
+
+/// Every entry of the mirror folder `dir` whose name carries a uid by the
+/// mirror's rule (`mirror_filename_uid`), as `(uid, name, path)` in `read_dir`
+/// order, directories included. A folder that will not list holds none.
+pub fn mirror_files(dir: &Path) -> Vec<(u32, String, PathBuf)> {
+    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            mirror_filename_uid(&name).map(|uid| (uid, name, entry.path()))
+        })
+        .collect()
+}
+
 /// The uid a message filename carries by the external mirror's rule: the text
 /// before the first `:`, `;`, `.` or `_`. The mirror has held
 /// `<uid>:2,<flags>[.eml]` (`;`-spelled on Windows, same as every other vault

@@ -12,7 +12,7 @@
 //!
 //! Task 1: one format, Maildir (`cur/<uid>:2,<FLAGS>.eml`). `vault_format`
 //! always answers `Maildir`, and `write` and `write_replacing` are the same.
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -419,6 +419,42 @@ pub fn remove_listed(root: &Path, account_id: &str, mailbox: &str, uid: u32, lis
     }
 }
 
+// ── Backup mirror copies and flag passes ─────────────────────────────────────
+
+/// The file to copy to the backup mirror per wanted uid, from one listing of
+/// the mailbox: an archived copy (`A`) wins over a working-cache copy of the
+/// same uid; otherwise the first file `read_dir` returns. A folder that will
+/// not list holds none.
+pub fn archived_first_paths(root: &Path, account_id: &str, mailbox: &str, wanted: &HashSet<u32>) -> HashMap<u32, PathBuf> {
+    let mut found: HashMap<u32, (PathBuf, bool)> = HashMap::new();
+    let Ok(entries) = fs::read_dir(messages_dir(root, account_id, mailbox)) else { return Default::default() };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(uid) = maildir::vault_filename_uid(&name) else { continue };
+        if !wanted.contains(&uid) {
+            continue;
+        }
+        let archived = maildir::carries_archived(&name);
+        // Keep what is held unless this file is archived and the held one is not.
+        let keep = match found.get(&uid) {
+            Some((_, held_archived)) => *held_archived || !archived,
+            None => false,
+        };
+        if !keep {
+            found.insert(uid, (entry.path(), archived));
+        }
+    }
+    found.into_iter().map(|(uid, (path, _))| (uid, path)).collect()
+}
+
+/// Every file of the mailbox keyed by uid by the mirror's loose rule
+/// (`maildir::mirror_file_map`: legacy `12.eml` and `12_S.eml` names too), from
+/// one listing, the first file per uid: what a pass that changes the flags of
+/// many uids re-files with `set_flags_at`.
+pub(crate) fn flag_paths(root: &Path, account_id: &str, mailbox: &str) -> HashMap<u32, PathBuf> {
+    maildir::mirror_file_map(&messages_dir(root, account_id, mailbox))
+}
+
 // ── Mailbox-directory level, for the derived stores ──────────────────────────
 //
 // The search index and the vault registry key a mailbox by the directory's
@@ -583,8 +619,10 @@ pub fn raw_paths_at(mailbox_dir: &Path) -> HashMap<u32, PathBuf> {
 }
 
 /// The Maildir message directory of the mailbox directory `mailbox_dir`, for
-/// a pass that re-checks and renames Maildir files by name (the import
-/// rehome). Every other caller asks by uid.
+/// a pass that reads, re-checks or renames Maildir files by name as a whole
+/// directory: the import rehome, the backup pre-sync and status counts (the
+/// `*_in` helpers below), and `vault_flags::Dirs` (whose parent a mailbox
+/// rename moves). Every other caller asks by uid.
 pub(crate) fn maildir_messages_dir(mailbox_dir: &Path) -> PathBuf {
     messages_in(mailbox_dir)
 }
@@ -663,6 +701,69 @@ pub(crate) fn unlink(path: &Path, uid: u32) -> io::Result<()> {
 /// registry's row).
 pub(crate) fn read_at(path: &Path) -> io::Result<Vec<u8>> {
     fs::read(path)
+}
+
+/// Re-file the listed file `path` of `uid` under the flags `flags_for` makes
+/// of the ones its name holds now (`Entry.flags`). `Ok(Some(name))`: renamed to
+/// `name`; `Ok(None)`: the name already said this. One rename, no rescan: for
+/// a pass that listed the mailbox once (`flag_paths`).
+pub(crate) fn set_flags_at(path: &Path, uid: u32, flags_for: impl FnOnce(&[String]) -> Vec<String>) -> Result<Option<String>, String> {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let current = parse_flags_from_filename(&name);
+    let new_name = vault_files::build_maildir_filename(uid, &flags_for(&current));
+    if new_name == name {
+        return Ok(None);
+    }
+    fs::rename(path, path.with_file_name(&new_name)).map_err(|e| e.to_string())?;
+    Ok(Some(new_name))
+}
+
+// ── Maildir message-directory passes, for the backup pre-sync ────────────────
+//
+// The pre-sync and the backup status read and fill a mailbox's Maildir message
+// directory as a whole, by name, against the mirror's (`backup::sync_locations`,
+// `copy_to_backup`, `scan_cur_uids`). They take that directory
+// (`maildir_messages_dir`), as the import rehome does.
+
+/// Every uid a file in the Maildir message directory `dir` carries, by the
+/// mirror's loose rule (legacy names too). A directory that is not there holds
+/// none; one that will not list is an error.
+pub(crate) fn loose_uids_in(dir: &Path) -> Result<HashSet<u32>, String> {
+    if !dir.exists() {
+        return Ok(HashSet::new());
+    }
+
+    let mut uids = HashSet::new();
+    let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read Maildir cur dir: {}", e))?;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        // Filename format: "<uid>:<flags>.eml" or "<uid>.eml" or "<uid>_<flags>.eml"
+        if let Some(uid) = maildir::mirror_filename_uid(&name) {
+            uids.insert(uid);
+        }
+    }
+
+    Ok(uids)
+}
+
+/// The files of the Maildir message directory `dir` a mirror copy is made
+/// from: `(uid, name, path)` for every entry that is not a directory and whose
+/// name carries a uid by the mirror's loose rule, in `read_dir` order. A
+/// directory that will not list holds none.
+pub(crate) fn mirror_sources_in(dir: &Path) -> Vec<(u32, String, PathBuf)> {
+    maildir::mirror_files(dir).into_iter().filter(|(_, _, path)| !path.is_dir()).collect()
+}
+
+/// `raw_paths_at` of the Maildir message directory `dir` itself.
+pub(crate) fn raw_paths_in(dir: &Path) -> HashMap<u32, PathBuf> {
+    maildir::uid_file_map(dir)
+}
+
+/// Copies the file `src` into the Maildir message directory `dir` as `uid`
+/// under the name `flags` builds (a restore from the mirror). Removes nothing.
+pub(crate) fn copy_in(dir: &Path, uid: u32, flags: &[String], src: &Path) -> io::Result<u64> {
+    fs::copy(src, dir.join(vault_files::build_maildir_filename(uid, flags)))
 }
 
 #[cfg(test)]
@@ -1028,5 +1129,79 @@ mod tests {
         // An undone delete re-filed under its new uid keeps its flags.
         assert_eq!(rebind_uids(root, ACCT, MBOX, &[(3, 12), (8, 13)]).len(), 1);
         assert!(find(root, ACCT, MBOX, 12).is_some());
+    }
+
+    #[test]
+    fn backup_and_flag_passes_keep_their_maildir_rules() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let mbox = mailbox_dir(root, ACCT, MBOX);
+        let dir = maildir_messages_dir(&mbox);
+        assert_eq!(loose_uids_in(&dir).unwrap(), HashSet::new(), "a folder not there holds none");
+        assert!(mirror_sources_in(&dir).is_empty() && raw_paths_in(&dir).is_empty() && flag_paths(root, ACCT, MBOX).is_empty());
+
+        // 3: a cache copy beside an archived one; 7: one copy; 12: a legacy name; 15: a directory; a stray.
+        create_messages_dir(root, ACCT, MBOX).unwrap();
+        write_new(root, ACCT, MBOX, 3, b"three", &flags(&["seen"]), true).unwrap();
+        let archived = write_new(root, ACCT, MBOX, 3, b"three", &flags(&["archived"]), true).unwrap();
+        let seven = write_new(root, ACCT, MBOX, 7, b"seven", &flags(&["seen"]), true).unwrap();
+        fs::write(dir.join("12.eml"), b"legacy").unwrap();
+        fs::create_dir(dir.join("15.eml")).unwrap();
+        fs::write(dir.join("notes.txt"), b"stray").unwrap();
+
+        assert_eq!(loose_uids_in(&dir).unwrap(), HashSet::from([3, 7, 12, 15]), "the loose rule, a directory too");
+        let sources: HashSet<(u32, String)> = mirror_sources_in(&dir)
+            .into_iter()
+            .map(|(uid, name, path)| {
+                assert_eq!(path, dir.join(&name));
+                (uid, name)
+            })
+            .collect();
+        assert_eq!(
+            sources,
+            HashSet::from([
+                (3, format!("3{INFO_PREFIX}S.eml")),
+                (3, format!("3{INFO_PREFIX}A.eml")),
+                (7, format!("7{INFO_PREFIX}S.eml")),
+                (12, "12.eml".to_string()),
+            ]),
+            "every file with a uid, no directory"
+        );
+        assert_eq!(raw_paths_in(&dir), raw_paths_at(&mbox));
+        assert_eq!(raw_paths_in(&dir).len(), 2, "the strict rule holds 3 and 7 only");
+        let wanted = HashSet::from([3, 7, 9]);
+        assert_eq!(archived_first_paths(root, ACCT, MBOX, &wanted), HashMap::from([(3, archived.clone()), (7, seven.clone())]), "the archived copy wins");
+        let listed = flag_paths(root, ACCT, MBOX);
+        assert_eq!(listed.get(&12), Some(&dir.join("12.eml")), "a legacy name is listed too");
+        assert_eq!(listed.get(&7), Some(&seven));
+
+        // Re-filed under flags made of the ones the name holds; the same flags again is no rename.
+        let renamed = set_flags_at(&seven, 7, |current| {
+            assert!(current.contains(&"seen".to_string()), "{current:?}");
+            flags(&["seen", "flagged"])
+        });
+        assert_eq!(renamed.unwrap(), Some(format!("7{INFO_PREFIX}FS.eml")));
+        let refiled = dir.join(format!("7{INFO_PREFIX}FS.eml"));
+        assert!(refiled.exists() && !seven.exists());
+        assert_eq!(set_flags_at(&refiled, 7, |current| current.to_vec()).unwrap(), None, "already named so");
+        assert_eq!(set_flags_at(&dir.join("12.eml"), 12, |_| flags(&["seen"])).unwrap(), Some(format!("12{INFO_PREFIX}S.eml")));
+        assert!(set_flags_at(&dir.join("99.eml"), 99, |_| flags(&["seen"])).is_err(), "a file gone is an error");
+
+        // A restore copies a mirror file in under its uid and the flags its name holds.
+        let src = root.join("mirror-copy.eml");
+        fs::write(&src, b"restored").unwrap();
+        copy_in(&dir, 20, &maildir::mirror_flags(&format!("20{INFO_PREFIX}S.eml")), &src).unwrap();
+        assert_eq!(read_raw(root, ACCT, MBOX, 20).unwrap(), Some(b"restored".to_vec()));
+        assert_eq!(find(root, ACCT, MBOX, 20).unwrap().name, format!("20{INFO_PREFIX}S.eml"));
+
+        // The mirror's own listing: every entry with a uid, a directory too.
+        let mirror = root.join("mirror");
+        fs::create_dir_all(mirror.join("5.eml")).unwrap();
+        fs::write(mirror.join(format!("4{INFO_PREFIX}S.eml")), b"m").unwrap();
+        fs::write(mirror.join("junk"), b"j").unwrap();
+        let mut mirrored: Vec<u32> = maildir::mirror_files(&mirror).into_iter().map(|(uid, _, _)| uid).collect();
+        mirrored.sort_unstable();
+        assert_eq!(mirrored, vec![4, 5]);
+        assert!(maildir::mirror_files(&root.join("gone")).is_empty());
     }
 }

@@ -354,13 +354,25 @@ pub fn plan_fetch(
     listed: &[(String, Option<String>)],
     local: &HashSet<u32>,
 ) -> Result<Vec<(usize, u32)>, String> {
-    let uids = allocate(ledger_path, cur_dir, listed)?;
+    Ok(still_to_fetch(allocate(ledger_path, cur_dir, listed)?, local))
+}
+
+/// `plan_fetch` for `mailbox` of `account_id` in the vault at `root`.
+pub fn plan_fetch_in(
+    ledger_path: &Path,
+    root: &Path,
+    account_id: &str,
+    mailbox: &str,
+    listed: &[(String, Option<String>)],
+    local: &HashSet<u32>,
+) -> Result<Vec<(usize, u32)>, String> {
+    Ok(still_to_fetch(allocate_in(ledger_path, root, account_id, mailbox, listed)?, local))
+}
+
+/// The `(index, uid)` pairs of `uids` that `local` does not hold, each uid once.
+fn still_to_fetch(uids: Vec<u32>, local: &HashSet<u32>) -> Vec<(usize, u32)> {
     let mut planned = HashSet::new();
-    Ok(uids
-        .into_iter()
-        .enumerate()
-        .filter(|(_, uid)| !local.contains(uid) && planned.insert(*uid))
-        .collect())
+    uids.into_iter().enumerate().filter(|(_, uid)| !local.contains(uid) && planned.insert(*uid)).collect()
 }
 
 /// Whether a mailbox cache dir entry is a uid ledger, Graph or JMAP. By name
@@ -1122,6 +1134,19 @@ mod tests {
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["new"])).unwrap(), vec![41]);
         // The mailbox-keyed entry point reads the same uid space and the same ledger.
         assert_eq!(allocate_in(&m.ledger, root, "acct", "INBOX", &listed(&["new", "next"])).unwrap(), vec![41, 42]);
+    }
+
+    #[test]
+    fn plan_fetch_in_plans_the_same_mailbox_as_plan_fetch() {
+        let m = mailbox();
+        seed(&m, &[(1, "a"), (2, "b"), (3, "c")]);
+        for (uid, n) in [(1, "a"), (2, "b"), (3, "c")] { file(&m, uid, n); }
+        let local: HashSet<u32> = [1, 2, 3].into_iter().collect();
+        let root = m._tmp.path();
+        assert_eq!(plan_fetch_in(&m.ledger, root, "acct", "INBOX", &listed(&["z", "a", "b", "c"]), &local).unwrap(), vec![(0, 4)]);
+        // The same ledger through the cur-keyed entry point: z is 4 now, held once it is local.
+        let held: HashSet<u32> = [1, 2, 3, 4].into_iter().collect();
+        assert_eq!(plan_fetch(&m.ledger, &m.cur, &listed(&["z", "a", "y"]), &held).unwrap(), vec![(2, 5)]);
     }
 
     // --- Task 2.4: cross-process ledger lock (R2.2) ---

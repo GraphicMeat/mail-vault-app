@@ -24,8 +24,6 @@ use std::path::{Path, PathBuf};
 
 use crate::graph_ledger;
 use crate::maildir::mirror_file_map;
-use crate::vault_eml::parse_flags_from_filename;
-use crate::vault_files::{build_maildir_filename, cur_path};
 use crate::vault_registry::VaultRegistry;
 use crate::header_cache;
 use serde::{Deserialize, Serialize};
@@ -116,7 +114,9 @@ pub fn merge_flags(current: &[String], imap: &[String]) -> Vec<String> {
 
 /// Where one mailbox keeps its copies.
 pub struct Dirs {
-    /// `Maildir/<account>/<mailbox>/cur/`
+    /// `Maildir/<account>/<mailbox>/cur/`, the store's Maildir message
+    /// directory. Its parent is the mailbox directory a rename moves; the
+    /// files in it are listed and re-filed through `message_store`.
     pub cur: PathBuf,
     /// `<backup root>/<email>/<mailbox>/cur/`, when an external location is
     /// configured and reachable.
@@ -140,9 +140,9 @@ pub fn dirs_for(
     account_email: Option<&str>,
     mirror_root: Option<&str>,
 ) -> Dirs {
-    let cur = cur_path(root, account_id, mailbox);
+    let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(root, account_id, mailbox));
     let mirror_cur = match (mirror_root, account_email) {
-        (Some(mirror_root), Some(email)) => Some(PathBuf::from(mirror_root).join(email).join(mailbox).join("cur")),
+        (Some(mirror_root), Some(email)) => Some(crate::maildir::mirror_cur(Path::new(mirror_root), email, mailbox)),
         _ => None,
     };
     Dirs {
@@ -193,12 +193,12 @@ fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Appl
     // a backup reconcile hands this every message the folder holds.
     // Every shape the vault and the mirror have written starts with the uid:
     // `<uid>:2,<flags>[.eml]`, `<uid>.eml`, `<uid>_<flags>.eml`.
-    let app_files = mirror_file_map(&dirs.cur);
+    let app_files = crate::message_store::flag_paths(&dirs.root, &dirs.account_id, &dirs.mailbox);
     let mirror_files = dirs.mirror_cur.as_deref().map(mirror_file_map);
 
     for change in changes {
         if let Some(path) = app_files.get(&change.uid) {
-            match rename_for(path, change) {
+            match crate::message_store::set_flags_at(path, change.uid, |current| merge_flags(current, &change.over(current))) {
                 Ok(Some(new_name)) => {
                     reg.rename(&dirs.account_id, &dirs.mailbox, change.uid, &new_name);
                     out.renamed += 1;
@@ -261,16 +261,17 @@ pub fn apply_everywhere(
     applied
 }
 
-/// Rename `path` so its flag letters carry `change`, a delta read against the
-/// name it has now. `Some(new name)` when the name changed, `None` when it
-/// already said this.
+/// Rename the mirror file `path` so its flag letters carry `change`, a delta
+/// read against the name it has now. `Some(new name)` when the name changed,
+/// `None` when it already said this. The vault's copy is re-filed through
+/// `message_store::set_flags_at`, by the same rule.
 fn rename_for(path: &Path, change: &FlagChange) -> Result<Option<String>, String> {
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    let current = parse_flags_from_filename(&name);
-    let new_name = build_maildir_filename(change.uid, &merge_flags(&current, &change.over(&current)));
+    let current = crate::maildir::mirror_flags(&name);
+    let new_name = crate::maildir::mirror_filename(change.uid, &merge_flags(&current, &change.over(&current)));
     if new_name == name {
         return Ok(None);
     }
