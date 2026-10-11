@@ -1,0 +1,66 @@
+import { send } from './transport.js';
+import { t, tErr } from '../i18n/index.js';
+import { formatBytes } from '../utils/formatBytes';
+
+/**
+ * Settings > Storage > Message format. The vault's storage format lives in
+ * the vault's own marker (the daemon's `storage_format_*` routes,
+ * src-daemon/src/handlers/storage_format.rs), so it travels with the vault
+ * and the app keeps no setting for it. A conversion is a daemon job
+ * (src-daemon/src/format_migration_job.rs) that reports by
+ * `format-migration-progress`; the app shows what it says.
+ *
+ * `migration`, in `get()` and every progress event:
+ * `{jobId, to, oldFiles, state, active, done, total, failed, error}`, where
+ * `state` is running, paused, cancelled, failed or done.
+ */
+
+/** `{format: 'maildir' | 'jmap', migration: null | {...}}`. */
+export const get = () => send('storage_format_get', {});
+/** Starts a conversion; `oldFiles` is 'retire' or 'delete', never defaulted. */
+export const convert = (to, oldFiles) => send('storage_format_convert', { to, oldFiles });
+export const pause = () => send('storage_format_pause', {});
+export const resume = () => send('storage_format_resume', {});
+export const cancel = () => send('storage_format_cancel', {});
+/** What conversions set aside: `{bytes, count}`. */
+export const retired = () => send('storage_format_retired', {});
+/** Deletes what conversions set aside, for good: `{bytes, count}`. */
+export const purgeRetired = () => send('storage_format_purge_retired', {});
+/** Sweeps message blobs no record names any more: `{removed, bytes}`. */
+export const reclaimSpace = () => send('storage_reclaim_space', {});
+
+const text = (e) => String(e?.message ?? e ?? '');
+
+// The daemon's codes, as catalog words. A free-space refusal carries the
+// bytes to free after its code, digits only.
+const NO_SPACE = 'E_FORMAT_NO_SPACE:';
+const ERRORS = [
+  ['E_FORMAT_BUSY:', 'errors.formatBusy'],
+  [NO_SPACE, 'errors.formatNoSpace'],
+  ['E_FORMAT_MOVE_BLOCKED:', 'errors.formatMoveBlocked'],
+];
+
+/** A refused call, in the user's words. Anything uncatalogued goes through tErr. */
+export function errorMessage(e) {
+  const raw = text(e);
+  const key = ERRORS.find(([prefix]) => raw.startsWith(prefix))?.[1];
+  if (!key) return tErr(e);
+  if (raw.startsWith(NO_SPACE)) return t(key, { size: formatBytes(Number(raw.slice(NO_SPACE.length).trim()) || 0) });
+  return t(key);
+}
+
+// One load of the event API, shared by every listener (mboxUpload.js has
+// the reason: two overlapping dynamic imports of one mocked module).
+let eventApi = null;
+async function listenTo(event, cb) {
+  try {
+    const { listen } = await (eventApi ||= import('@tauri-apps/api/event'));
+    return await listen(event, (e) => cb(e.payload));
+  } catch {
+    return () => {};
+  }
+}
+
+export const onProgress = (cb) => listenTo('format-migration-progress', cb);
+/** A restarted daemon: a live job is gone, its journal reads as paused. */
+export const onDaemonReconnected = (cb) => listenTo('daemon-reconnected', cb);

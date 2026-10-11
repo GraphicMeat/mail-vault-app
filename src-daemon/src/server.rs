@@ -211,6 +211,9 @@ pub struct DaemonState {
     /// The mbox-to-server upload job of each account (`mbox_upload_job`):
     /// running, or held in place until a resume.
     pub(crate) mbox_uploads: crate::mbox_upload_job::Uploads,
+    /// The vault's storage format conversion (`format_migration_job`): the
+    /// live job, running or held in place until a resume.
+    pub(crate) format_migration: crate::format_migration_job::Migrations,
     /// Network Activity's kept events in `app.db`: the listener in main.rs
     /// feeds its writer, `handlers::net_activity` reads it.
     pub net_log: Arc<mailvault_core::net_log::NetLog>,
@@ -677,6 +680,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::people::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::storage_format::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
@@ -911,6 +917,7 @@ impl DaemonState {
             raw_messages: Default::default(),
             import_rehome_running: Default::default(),
             mbox_uploads: Default::default(),
+            format_migration: Default::default(),
             net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
             abd: Default::default(),
             jmap: Default::default(),

@@ -106,6 +106,10 @@ describe('daemon-owned commands', () => {
       'search_index_configure', 'search_index_destroy', 'search_index_rebuild', 'search_index_status',
       'smtp_build_draft_mime', 'smtp_build_mime', 'smtp_send_email', 'smtp_test_connection',
       'start_migration', 'start_restore',
+      // Settings > Storage > Message format: the vault's format and its
+      // conversion job (Plan B, 2026-10-11).
+      'storage_format_cancel', 'storage_format_convert', 'storage_format_get', 'storage_format_pause',
+      'storage_format_purge_retired', 'storage_format_resume', 'storage_format_retired', 'storage_reclaim_space',
       // Settings > Backup: the copies not in the vault yet, counted and saved
       // by the daemon (Phase 5, 2026-09-29).
       'vault_gap_count', 'vault_gap_save',

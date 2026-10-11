@@ -271,6 +271,7 @@ export const settingSearchGroups = [
     ['settings.storage.advancedCustomStorageFolder', 'storage location folder custom move vault where files kept'],
     ['settings.storage.addCleanupRule', 'cleanup rule automatic delete archive old emails age folder schedule'],
     ['settings.storage.storageStatus', 'storage usage space used disk size'],
+    ['settings.storage.formatLabel', 'message format maildir jmap eml json records blobs convert conversion old files kept aside reclaim space'],
     ['settings.storage.dangerZone', 'empty vault delete everything reset erase all mail'],
     ['deletedBin.title', 'deleted emails recover restore undelete bin trash'],
     ['deletedBin.retention', 'deleted emails keep how long days retention purge'],

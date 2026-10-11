@@ -53,6 +53,7 @@ pub mod search_index;
 mod snapshot;
 mod snooze_worker;
 mod follow_up_worker;
+mod format_migration_job;
 mod vault_gap;
 pub mod sync_engine;
 mod sync_jmap;
@@ -512,6 +513,7 @@ async fn daemon_main() {
         raw_messages: raw_message::RawMessages::default(),
         import_rehome_running: Default::default(),
         mbox_uploads: Default::default(),
+        format_migration: Default::default(),
         net_log,
         abd: Default::default(),
         jmap: Default::default(),

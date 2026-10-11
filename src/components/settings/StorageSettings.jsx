@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { runCleanupRules } from '../../services/cleanupEngine';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { SearchIndexSettings } from './SearchIndexSettings';
+import { StorageFormatSettings } from './StorageFormatSettings';
 import { DownloadModeControl } from './DownloadModeControl';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
@@ -339,6 +340,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
           )}
         </div>
       </div>
+
+      {/* Message format: Maildir or JMAP, and converting between them. */}
+      <StorageFormatSettings usage={localStorageUsage} />
 
       <SearchIndexSettings onUpgrade={onUpgrade} />
 

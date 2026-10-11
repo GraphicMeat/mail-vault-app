@@ -186,6 +186,11 @@ export const DAEMON_OWNED = new Set([
   // "Import and restore to the server" starts a daemon job (import_mbox,
   // mode "server"); these hold, resume, end, forget and list it.
   'mbox_upload_pause', 'mbox_upload_resume', 'mbox_upload_cancel', 'mbox_upload_discard', 'mbox_upload_status',
+  // Settings > Storage > Message format: the vault's format (kept in its
+  // marker), the conversion job and its controls, the old files a conversion
+  // set aside, and the blob sweep.
+  'storage_format_get', 'storage_format_convert', 'storage_format_pause', 'storage_format_resume',
+  'storage_format_cancel', 'storage_format_retired', 'storage_format_purge_retired', 'storage_reclaim_space',
   // "Import as a separate folder" makes a vault-only folder: the sidebar lists
   // an account's (by display name) and deletes one into the deleted bin.
   'list_local_folders', 'delete_local_folder',

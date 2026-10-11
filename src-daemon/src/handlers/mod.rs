@@ -53,6 +53,7 @@ pub(crate) mod restore;
 pub(crate) mod scheduled;
 pub(crate) mod search_index;
 pub(crate) mod snooze;
+pub(crate) mod storage_format;
 pub(crate) mod follow_up;
 pub(crate) mod smtp;
 pub(crate) mod tags;
