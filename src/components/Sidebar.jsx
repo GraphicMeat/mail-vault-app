@@ -544,12 +544,12 @@ function AccountChooser({ position, onClose, accounts, renderAccount, unifiedRow
   </Popover>;
 }
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend, onOpenInsights, onOpenNotes, onOpenMail, insightsOpen = false, notesOpen = false }) {
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend, onOpenInsights, onOpenNotes, onOpenContacts, onOpenMail, insightsOpen = false, notesOpen = false, contactsOpen = false }) {
   const t = useT();
   const pa = usePrivateAttr();
   // Either full page hides the mail view, so neither leaves a folder or an
   // account looking selected.
-  const mailHidden = insightsOpen || notesOpen;
+  const mailHidden = insightsOpen || notesOpen || contactsOpen;
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   // A view and a folder are two lists, and only one of them is on screen. The
@@ -1019,7 +1019,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Account icons */}
-        <SidebarViews collapsed onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenMail={onOpenMail} notesOpen={notesOpen} mailHidden={mailHidden} />
+        <SidebarViews collapsed onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenContacts={onOpenContacts} onOpenMail={onOpenMail} notesOpen={notesOpen} contactsOpen={contactsOpen} mailHidden={mailHidden} />
         <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
           {orderedAccounts.map(account => (
             <div
@@ -1275,7 +1275,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <span className="text-xs text-mail-text-muted">{scheduledPendingCount}</span>
           )}
         </button>
-        <SidebarViews onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenMail={onOpenMail} notesOpen={notesOpen} mailHidden={mailHidden} />
+        <SidebarViews onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenContacts={onOpenContacts} onOpenMail={onOpenMail} notesOpen={notesOpen} contactsOpen={contactsOpen} mailHidden={mailHidden} />
         <section className={`sidebar-account-section ${useSwitcher ? 'sidebar-switcher-section' : ''}`} aria-label={t('workspace.accounts')}>
           {useSwitcher ? <>
             <div className="sidebar-section-heading"><h2>{t('workspace.accounts')}</h2>

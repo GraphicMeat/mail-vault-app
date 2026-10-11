@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Pencil, ChevronRight, ChevronDown, StickyNote } from 'lucide-react';
+import { Plus, Pencil, ChevronRight, ChevronDown, StickyNote, Users } from 'lucide-react';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useT } from '../i18n/index.js';
@@ -12,13 +12,13 @@ import { ViewIcon } from './ViewIcon';
 /// the Views page in Settings, where the builder can show what a change would
 /// find before it is saved. A row only opens its view.
 ///
-/// Notes to Self sits above them as a fixed entry: it is not a saved view and
-/// cannot be edited, folded away or deleted.
+/// Notes to Self and Contacts sit above them as fixed entries: neither is a saved view, and
+/// neither can be edited, folded away or deleted.
 ///
-/// While a full page (Notes to Self, Insights) hides the mail view, no view is
+/// While a full page (Notes to Self, Contacts, Insights) hides the mail view, no view is
 /// marked: the page is the one selection on screen. A view click leaves that
 /// page through `onOpenMail`, the exit every other mail entry takes.
-export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, onOpenMail, notesOpen = false, mailHidden = notesOpen }) {
+export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, onOpenContacts, onOpenMail, notesOpen = false, contactsOpen = false, mailHidden = notesOpen || contactsOpen }) {
   const t = useT();
   const views = useViewStore(state => state.views);
   const counts = useViewStore(state => state.counts);
@@ -61,10 +61,20 @@ export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, o
     {!collapsed && <span className="sidebar-view-name">{t('notes.title')}</span>}
   </button>;
 
+  const contactsEntry = <button type="button" data-testid="open-contacts"
+    className={`sidebar-view-row${contactsOpen ? ' is-active' : ''}`}
+    aria-current={contactsOpen ? 'page' : undefined}
+    aria-label={collapsed ? t('contacts.title') : undefined}
+    title={t('contacts.title')} onClick={() => onOpenContacts?.()}>
+    <Users size={collapsed ? 18 : 14} aria-hidden="true" />
+    {!collapsed && <span className="sidebar-view-name">{t('contacts.title')}</span>}
+  </button>;
+
   if (collapsed) {
     return <div className="sidebar-collapsed-views w-full py-2 border-b border-mail-border flex flex-col items-center gap-1"
       aria-label={t('views.section')}>
       {notesEntry}
+      {contactsEntry}
       {views?.map(row)}
     </div>;
   }
@@ -88,7 +98,7 @@ export function SidebarViews({ collapsed = false, onOpenSettings, onOpenNotes, o
       </button>
     </div>
     {/* Not in .sidebar-view-list: every button there is a saved view. */}
-    <div className="sidebar-notes-entry flex flex-col pb-0.5">{notesEntry}</div>
+    <div className="sidebar-notes-entry flex flex-col pb-0.5">{notesEntry}{contactsEntry}</div>
     {!folded && <>
       <div className="sidebar-view-list">
         {views.map(row)}

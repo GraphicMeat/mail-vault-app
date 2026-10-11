@@ -59,6 +59,16 @@ describe('Sidebar navigation', () => {
     fireEvent.click(screen.getByTestId('open-notes'));
     expect(onOpenNotes).toHaveBeenCalledTimes(1);
   });
+  it('makes Contacts the only selected navigation entry while open', () => {
+    const onOpenContacts = vi.fn();
+    render(<Sidebar contactsOpen onOpenContacts={onOpenContacts} />);
+    expect(screen.getByTestId('open-contacts').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('open-notes').getAttribute('aria-current')).toBeNull();
+    expect(screen.getByTestId('open-insights').getAttribute('aria-current')).toBeNull();
+    expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(0);
+    fireEvent.click(screen.getByTestId('open-contacts'));
+    expect(onOpenContacts).toHaveBeenCalledTimes(1);
+  });
   it.each([false, true])('leaves no folder or view selected under Notes to Self (collapsed %s)', collapsed => {
     useSettingsStore.setState({ sidebarCollapsed: collapsed });
     const openView = vi.fn(async () => true);

@@ -105,12 +105,12 @@ describe('the Views section', () => {
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
     // Rows have no edit action; the shared Edit button sits beside +.
     expect(screen.getAllByRole('button').map(b => b.dataset.testid).sort())
-      .toEqual(['open-notes', 'view-edit', 'view-new', 'view-row-builtin-starred', 'view-row-v1', 'views-fold']);
+      .toEqual(['open-contacts', 'open-notes', 'view-edit', 'view-new', 'view-row-builtin-starred', 'view-row-v1', 'views-fold']);
     unmount();
     render(<SidebarViews collapsed onOpenSettings={vi.fn()} />);
     expect(screen.queryByTestId('view-edit-v1')).toBeNull();
-    // The two views, and the fixed Notes to Self entry above them.
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    // The two views, and the fixed Notes to Self and Contacts entries above them.
+    expect(screen.getAllByRole('button')).toHaveLength(4);
   });
 
   /// The + is the accounts + : it makes one, rather than only showing the
@@ -144,6 +144,19 @@ describe('the Views section', () => {
     render(<SidebarViews />);
     expect(screen.queryByTestId('view-row-v1')).toBeNull();
     expect(screen.getByTestId('views-fold').getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+describe('the Contacts entry', () => {
+  it('opens the contacts view and marks itself while it is open', () => {
+    const onOpenContacts = vi.fn();
+    const { unmount } = render(<SidebarViews onOpenContacts={onOpenContacts} />);
+    fireEvent.click(screen.getByTestId('open-contacts'));
+    expect(onOpenContacts).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('open-contacts').getAttribute('aria-current')).toBeNull();
+    unmount();
+    render(<SidebarViews contactsOpen />);
+    expect(screen.getByTestId('open-contacts').getAttribute('aria-current')).toBe('page');
   });
 });
 

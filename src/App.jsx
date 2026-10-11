@@ -8,6 +8,7 @@ import { initAutoTags } from './stores/autoTagStore';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
 import { useNotesStore } from './stores/notesStore';
+import { useContactsViewStore } from './stores/contactsViewStore';
 import { useNetActivityStore } from './stores/netActivityStore';
 import { createInsightsReaderScope } from './services/insightsReaderScope';
 import * as selectionWorkflow from './services/workflows/selectEmail';
@@ -121,6 +122,7 @@ import { formatCount } from './utils/formatCount';
 // Each one is warmed at idle below, so the first click still opens instantly.
 const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
 const NotesBoard = lazy(() => import('./components/notes/NotesBoard'));
+const ContactsView = lazy(() => import('./components/contacts/ContactsView').then(m => ({ default: m.ContactsView })));
 // Undo too: the toast offers it over the board (a card's star, Done or
 // delete), and Cmd+Z there did nothing.
 const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts', 'undo'];
@@ -203,9 +205,10 @@ function App() {
   const t = useT();
   const insightsOpen = useInsightsStore(s => s.isOpen);
   const notesOpen = useNotesStore(s => s.isOpen);
-  // Insights and Notes to Self are full pages over the mail view, one at a
-  // time; they share the reader scope that puts the open message back.
-  const overlayOpen = insightsOpen || notesOpen;
+  const contactsOpen = useContactsViewStore(s => s.isOpen);
+  // Insights, Notes to Self and Contacts are full pages over the mail view, one
+  // at a time; they share the reader scope that puts the open message back.
+  const overlayOpen = insightsOpen || notesOpen || contactsOpen;
   const insightsReaderScope = useRef(null);
   if (!insightsReaderScope.current) insightsReaderScope.current = createInsightsReaderScope(useMailStore, {
     cancelSelection: () => selectionWorkflow.cancelInsightsSelection?.(),
@@ -215,6 +218,7 @@ function App() {
     if (useInsightsStore.getState().isOpen) return;
     insightsReaderScope.current.enter();
     if (useNotesStore.getState().isOpen) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
+    if (useContactsViewStore.getState().isOpen) useContactsViewStore.getState().close();
     void useInsightsStore.getState().openInsights();
   }, []);
   const closeInsights = useCallback(() => {
@@ -226,6 +230,7 @@ function App() {
     if (useNotesStore.getState().isOpen) return;
     insightsReaderScope.current.enter();
     if (useInsightsStore.getState().isOpen) useInsightsStore.getState().closeInsights();
+    if (useContactsViewStore.getState().isOpen) useContactsViewStore.getState().close();
     void useNotesStore.getState().open();
   }, []);
   const closeNotes = useCallback(() => {
@@ -234,15 +239,30 @@ function App() {
     void insightsReaderScope.current.exit();
     requestAnimationFrame(() => document.querySelector('[data-testid="open-notes"]')?.focus());
   }, []);
+  const openContacts = useCallback(() => {
+    if (useContactsViewStore.getState().isOpen) return;
+    insightsReaderScope.current.enter();
+    if (useInsightsStore.getState().isOpen) useInsightsStore.getState().closeInsights();
+    if (useNotesStore.getState().isOpen) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
+    useContactsViewStore.getState().open();
+  }, []);
+  const closeContacts = useCallback(() => {
+    selectionWorkflow.cancelInsightsSelection?.();
+    useContactsViewStore.getState().close();
+    void insightsReaderScope.current.exit();
+    requestAnimationFrame(() => document.querySelector('[data-testid="open-contacts"]')?.focus());
+  }, []);
   const openMailFromSidebar = useCallback(() => {
     insightsReaderScope.current.cancelRestore();
     const insights = useInsightsStore.getState().isOpen, notes = useNotesStore.getState().isOpen;
-    if (!insights && !notes) return;
+    const contacts = useContactsViewStore.getState().isOpen;
+    if (!insights && !notes && !contacts) return;
     if (insights) useInsightsStore.getState().closeInsights();
     if (notes) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
+    if (contacts) { selectionWorkflow.cancelInsightsSelection?.(); useContactsViewStore.getState().close(); }
     void insightsReaderScope.current.exit(KEEP_NO_SELECTION);
   }, []);
-  useEffect(() => () => { useInsightsStore.getState().resetSession(); useNotesStore.getState().close(); }, []);
+  useEffect(() => () => { useInsightsStore.getState().resetSession(); useNotesStore.getState().close(); useContactsViewStore.getState().close(); }, []);
   const init = useAccountStore(s => s.init);
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -792,6 +812,10 @@ function App() {
         const notes = useNotesStore.getState();
         if (notes.detailOpen) { selectionWorkflow.cancelInsightsSelection?.(); notes.setDetailOpen(false); }
         else closeNotes();
+        return;
+      }
+      if (contactsOpen && !composeState && !showSettings && !showShortcutsModal) {
+        closeContacts();
         return;
       }
       const {
@@ -1469,9 +1493,11 @@ function App() {
           onReferFriend={handleReferFriend}
           onOpenInsights={openInsights}
           onOpenNotes={openNotes}
+          onOpenContacts={openContacts}
           onOpenMail={openMailFromSidebar}
           insightsOpen={insightsOpen}
           notesOpen={notesOpen}
+          contactsOpen={contactsOpen}
         />
       </div>
 
@@ -1531,6 +1557,9 @@ function App() {
       </Suspense></ChunkErrorBoundary>}
       {notesOpen && <ChunkErrorBoundary name="Notes to Self"><Suspense fallback={<div className="flex-1 bg-mail-bg" />}>
         <NotesBoard onClose={closeNotes} onComposeReply={(mode, email) => setComposeState({mode,replyTo:email})} />
+      </Suspense></ChunkErrorBoundary>}
+      {contactsOpen && <ChunkErrorBoundary name="Contacts"><Suspense fallback={<div className="flex-1 bg-mail-bg" />}>
+        <ContactsView onClose={closeContacts} onOpenMail={openMailFromSidebar} />
       </Suspense></ChunkErrorBoundary>}
 
       <ChunkErrorBoundary name="Add account">
