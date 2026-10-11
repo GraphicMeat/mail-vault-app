@@ -274,6 +274,25 @@ async fn slow_probe_does_not_delay_the_imap_result() {
     assert!(JMAP_GRACE < PROBE_TIMEOUT);
 }
 
+/// A Fastmail custom domain whose own apex hangs: the cascade answers fast
+/// (SRV) and discovery gets only the short grace, yet the MX at Fastmail is
+/// the preset at once, not after the slowest HTTP probe.
+#[tokio::test]
+async fn a_fastmail_mx_wins_discovery_without_waiting_for_a_hung_probe() {
+    let dns = FakeDns::default()
+        .with_srv("_imaps._tcp.fm.test", "imap.fm.test", 993)
+        .with_srv("_submission._tcp.fm.test", "smtp.fm.test", 587)
+        .with_mx("fm.test", "in1-smtp.messagingengine.com");
+    let fetch = Slow::default();
+    let started = Instant::now();
+    let s = resolve_email_settings_with("fm.test", &dns, &fetch).await.expect("settings");
+    let elapsed = started.elapsed();
+    assert_eq!(s.imap_host.as_deref(), Some("imap.fm.test"));
+    assert_eq!(s.jmap_session_url.as_deref(), Some(FASTMAIL), "the preset survives a hung probe");
+    assert!(!s.jmap_needs_host_confirmation);
+    assert!(elapsed < Duration::from_millis(1500), "waited {elapsed:?}");
+}
+
 /// Replies to the apex well-known with a challenge after a delay; any other
 /// URL fails to connect at once.
 struct Delayed(Duration);

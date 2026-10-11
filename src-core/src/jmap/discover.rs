@@ -258,13 +258,28 @@ pub async fn discover_with(email: &str, resolver: &dyn Resolver, fetch: &dyn Fet
     }
     let apex = format!("https://{domain}{WELL_KNOWN}");
     let sub = format!("https://jmap.{domain}{WELL_KNOWN}");
-    let (mx, apex, sub, srv) = tokio::join!(
-        tokio::time::timeout(PROBE_TIMEOUT, mx_is_fastmail(resolver, &domain)),
-        tokio::time::timeout(PROBE_TIMEOUT, probe(fetch, &apex)),
-        tokio::time::timeout(PROBE_TIMEOUT, probe(fetch, &sub)),
-        tokio::time::timeout(PROBE_TIMEOUT, srv_probe(resolver, fetch, &domain)),
-    );
-    if mx.unwrap_or(false) {
+    use futures::future::{select, Either};
+    let mx = Box::pin(tokio::time::timeout(PROBE_TIMEOUT, mx_is_fastmail(resolver, &domain)));
+    let probes = Box::pin(async {
+        tokio::join!(
+            tokio::time::timeout(PROBE_TIMEOUT, probe(fetch, &apex)),
+            tokio::time::timeout(PROBE_TIMEOUT, probe(fetch, &sub)),
+            tokio::time::timeout(PROBE_TIMEOUT, srv_probe(resolver, fetch, &domain)),
+        )
+    });
+    // The MX check is raced against the HTTP probes: an MX at Fastmail is the
+    // preset whatever the probes do, so it must not wait for a hung one (the
+    // caller may give discovery only a short grace).
+    let (fastmail, (apex, sub, srv)) = match select(mx, probes).await {
+        Either::Left((mx, probes)) => {
+            if mx.unwrap_or(false) {
+                return Some(fastmail_preset());
+            }
+            (false, probes.await)
+        }
+        Either::Right((probes, mx)) => (mx.await.unwrap_or(false), probes),
+    };
+    if fastmail {
         return Some(fastmail_preset());
     }
     if let Some(url) = apex.ok().flatten().or_else(|| sub.ok().flatten()) {
