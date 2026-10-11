@@ -294,6 +294,13 @@ pub fn export(
     Ok(ExportResult { email_count, account_count })
 }
 
+/// A path segment that is empty or only dots (`.`, `..`, `...`) is a
+/// parent/current-dir reference (or collapses to one on Windows), never a
+/// real account or mailbox directory name.
+fn is_dot_segment(seg: &str) -> bool {
+    seg.chars().all(|c| c == '.')
+}
+
 /// `existing_accounts`: the router's own one-time read of `accounts.json`,
 /// read-only (decision 2): this function never reads or writes that file.
 pub fn import(
@@ -393,6 +400,11 @@ pub fn import(
         let mailbox = parts[1];
         let filename = parts[2];
 
+        if is_dot_segment(email_addr) || is_dot_segment(mailbox) {
+            warn!("Skipping backup entry with a dot-only account or mailbox segment: {}", entry_name);
+            continue;
+        }
+
         // A maildir filename is a single path component by definition; a
         // crafted ZIP entry with `../../..` (or an absolute-looking path) in
         // this position must not be allowed to escape the account/mailbox
@@ -422,6 +434,10 @@ pub fn import(
         // the same way rather than trusting the accounts-map value verbatim.
         let safe_account_id = common::sanitize_mailbox_name(&account_id);
         let safe_mailbox = common::sanitize_mailbox_name(mailbox);
+        if is_dot_segment(&safe_account_id) || is_dot_segment(&safe_mailbox) {
+            warn!("Skipping backup entry whose account id or mailbox is a dot-only path: {}", entry_name);
+            continue;
+        }
         // The zip entry's info separator is whatever platform wrote the
         // backup, which is routinely not this one (a mac/Linux export
         // imported on Windows, or vice versa). Written verbatim, `:2,` on
@@ -855,6 +871,47 @@ mod tests {
         assert!(!std::path::Path::new("/tmp/evil").exists(), "nothing may land outside the vault's Maildir tree");
         let inbox = mailvault_core::vault_files::cur_path(v.path(), "acct-known", "INBOX");
         assert!(!inbox.exists() || std::fs::read_dir(&inbox).unwrap().count() == 0);
+    }
+
+    fn files_under(root: &std::path::Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() { stack.push(p) } else { out.push(p) }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn import_rejects_a_dot_only_mailbox_or_account_segment() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let name = |acct: &str, mbox: &str| format!("mailvault-backup/emails/{acct}/{mbox}/1{}A.eml", mailvault_core::maildir::INFO_PREFIX);
+        let (dotdot, dot, evil_acct, ok) = (name("known@test.com", ".."), name("known@test.com", "."), name("..", "INBOX"), name("known@test.com", "INBOX"));
+        let zip_path = build_zip(
+            dir.path(),
+            "in.zip",
+            &[(dotdot.as_str(), b"p1"), (dot.as_str(), b"p2"), (evil_acct.as_str(), b"p3"), (ok.as_str(), b"good")],
+            &manifest_for(vec![
+                BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None },
+                BackupAccount { email: "..".into(), imap_server: None, smtp_server: None },
+            ]),
+        );
+        let existing = vec![
+            AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None },
+            AccountsJsonEntry { id: "..".into(), email: Some("..".into()), imap_server: None, smtp_server: None, created_at: None },
+        ];
+
+        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 1, "only the entry with real segments may be written");
+        let written = files_under(&v.path().join("Maildir"));
+        assert_eq!(written.len(), 1, "nothing else may land anywhere in Maildir: {written:?}");
+        let inbox = mailvault_core::vault_files::cur_path(v.path(), "acct-known", "INBOX");
+        assert!(written[0].starts_with(&inbox), "the one file must sit in a real mailbox dir: {:?}", written[0]);
+        assert!(!v.path().join("Maildir").join("cur").exists(), "'..' mailbox must not resolve to Maildir/cur");
     }
 
     #[test]
