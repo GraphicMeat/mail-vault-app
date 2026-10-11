@@ -35,13 +35,31 @@ function Rows({ kind, values, labels, onChange, addLabel, t }) {
   );
 }
 
+function ProposalRow({ otherId, reason, onMerge, t }) {
+  const fetchCard = usePeopleStore((s) => s.fetchCard);
+  const [name, setName] = useState('');
+  useEffect(() => {
+    let live = true;
+    fetchCard(otherId).then((c) => { if (live && c) setName(c.displayName || c.emails?.[0]?.address || ''); });
+    return () => { live = false; };
+  }, [otherId, fetchCard]);
+  return (
+    <li data-testid={`proposal-${otherId}`} className="flex items-center gap-2 text-sm">
+      <span className="flex-1 min-w-0 truncate">{name}</span>
+      <span className="text-xs text-mail-text-secondary">{t(`contacts.merge.reason.${reason}`)}</span>
+      <Button size="xs" data-testid={`proposal-merge-${otherId}`} onClick={onMerge}>{t('contacts.merge.action')}</Button>
+    </li>
+  );
+}
+
 export function PersonDetails({ draft }) {
   const t = useT();
   const card = usePeopleStore((s) => s.card);
   const { update, create, remove, select } = usePeopleStore();
   const [form, setForm] = useState(() => fromCard(draft ? null : card));
   const [confirming, setConfirming] = useState(false);
-  const [merging, setMerging] = useState(false);
+  const [merging, setMerging] = useState(null); // the ids the merge dialog was opened with
+  const proposals = usePeopleStore((s) => s.proposals);
   useEffect(() => { setForm(fromCard(draft ? null : card)); }, [card, draft]);
 
   const emails = clean(form.emails);
@@ -64,6 +82,7 @@ export function PersonDetails({ draft }) {
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
   const labels = (list, field) => Object.fromEntries((list || []).filter((x) => x.label).map((x) => [x[field], x.label]));
   const name = card?.displayName || card?.emails?.[0]?.address || '';
+  const mine = draft ? [] : proposals.filter((p) => p.a === card?.id || p.b === card?.id);
 
   return (
     <div className="p-4 flex flex-col gap-4" data-testid="person-details">
@@ -91,7 +110,7 @@ export function PersonDetails({ draft }) {
         <Button variant="primary" data-testid="person-save" disabled={!canSave} onClick={save}>{t('contacts.save')}</Button>
         {(draft || dirty) && <Button data-testid="person-cancel" onClick={cancel}>{t('contacts.cancel')}</Button>}
         <div className="flex-1" />
-        {!draft && <Button data-testid="person-merge" onClick={() => setMerging(true)}>{t('contacts.merge.action')}</Button>}
+        {!draft && <Button data-testid="person-merge" onClick={() => setMerging([card.id])}>{t('contacts.merge.action')}</Button>}
         {!draft && <Button variant="dangerTint" data-testid="person-delete" onClick={() => setConfirming(true)}>{t('contacts.delete')}</Button>}
       </div>
       {!draft && (
@@ -109,7 +128,18 @@ export function PersonDetails({ draft }) {
           )}
         />
       )}
-      {merging && <MergeDialog ids={[card.id]} onClose={() => setMerging(false)} />}
+      {mine.length > 0 && (
+        <div data-testid="person-proposals" className="flex flex-col gap-1">
+          <h3 className="text-xs font-semibold text-mail-text-secondary">{t('contacts.merge.proposals')}</h3>
+          <ul className="flex flex-col gap-1">
+            {mine.map((p) => {
+              const otherId = p.a === card.id ? p.b : p.a;
+              return <ProposalRow key={otherId} otherId={otherId} reason={p.reason} t={t} onMerge={() => setMerging([card.id, otherId])} />;
+            })}
+          </ul>
+        </div>
+      )}
+      {merging && <MergeDialog ids={merging} onClose={() => setMerging(null)} />}
     </div>
   );
 }

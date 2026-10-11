@@ -18,6 +18,9 @@ function myAddresses() {
 
 let listSeq = 0;
 let mailSeq = 0;
+// Fast scrolling fires loadMore again before the first page lands; both calls
+// would ask for the same offset and append the same page twice.
+let loadingMore = false;
 
 const initial = {
   items: [], total: 0, indexReady: true, indexing: false,
@@ -48,12 +51,23 @@ export const usePeopleStore = create((set, get) => {
     },
     loadMore: async () => {
       const { items, total, query, sort, vipOnly } = get();
-      if (items.length >= total) return;
-      const seq = listSeq;
-      const r = await run(() => daemonCall('people.list', { query, sort, vipOnly, limit: PAGE, offset: items.length }));
-      if (!r || seq !== listSeq) return;
-      set({ items: [...get().items, ...r.items], total: r.total });
+      if (loadingMore || items.length >= total) return;
+      loadingMore = true;
+      try {
+        const seq = listSeq;
+        const r = await run(() => daemonCall('people.list', { query, sort, vipOnly, limit: PAGE, offset: items.length }));
+        if (!r || seq !== listSeq) return;
+        set({ items: [...get().items, ...r.items], total: r.total });
+      } finally {
+        loadingMore = false;
+      }
     },
+    // Lookups for the merge dialog: they touch no list state.
+    searchPeople: async (query) => {
+      const r = await run(() => daemonCall('people.list', { query, sort: 'name', vipOnly: false, limit: 20, offset: 0 }));
+      return r?.items || [];
+    },
+    fetchCard: (id) => run(() => daemonCall('people.get', { id })),
     setQuery: (query) => { set({ query }); return get().load(); },
     setSort: (sort) => { set({ sort }); return get().load(); },
     setVipOnly: (vipOnly) => { set({ vipOnly }); return get().load(); },

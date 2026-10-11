@@ -541,6 +541,7 @@
   "contacts.activity.op.merge": "联系人已合并",
   "contacts.activity.op.split": "联系人已拆分",
   "contacts.activity.op.import_link": "导入的名片已添加到联系人",
+  "contacts.activity.op.import": "已导入联系人",
   "contacts.import": "导入 vCard",
   "contacts.import.done": "已导入 {{created}} 位新联系人，{{linked}} 位并入现有联系人，跳过 {{skipped}} 位。",
   "contacts.export": "导出 vCard",

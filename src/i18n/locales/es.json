@@ -543,6 +543,7 @@
   "contacts.activity.op.merge": "Contactos combinados",
   "contacts.activity.op.split": "Contacto separado",
   "contacts.activity.op.import_link": "Tarjeta importada añadida a un contacto",
+  "contacts.activity.op.import": "Contactos importados",
   "contacts.import": "Importar vCard",
   "contacts.import.done": "Se importaron {{created}} nuevos, se unieron {{linked}} a contactos existentes y se omitieron {{skipped}}.",
   "contacts.export": "Exportar vCard",

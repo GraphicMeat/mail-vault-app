@@ -34,7 +34,8 @@ const h = vi.hoisted(() => ({ s: null, fresh: null }));
 vi.mock('../../../stores/peopleStore', async () => {
   const { create } = await import('zustand');
   h.fresh = () => ({
-    selectedId: null, card: null, stats: {},
+    selectedId: null, card: null, stats: {}, proposals: [],
+    fetchCard: vi.fn(async (id) => ({ id, displayName: id === 'p2' ? 'Amelia' : '', emails: [] })),
     mail: [], mailNext: null, mailLoading: false,
     loadMail: vi.fn(), loadMoreMail: vi.fn(), update: vi.fn(), create: vi.fn(), remove: vi.fn(), select: vi.fn(),
   });
@@ -153,6 +154,33 @@ describe('PersonCard', () => {
     expect(screen.queryByTestId('merge-dialog')).toBeNull();
     fireEvent.click(screen.getByTestId('person-merge'));
     expect(screen.getByTestId('merge-dialog').textContent).toBe('p1');
+  });
+
+  it('lists possible duplicates that include this contact with the reason', async () => {
+    select(CARD, { proposals: [
+      { a: 'p2', b: 'p1', reason: 'name' },
+      { a: 'p3', b: 'p4', reason: 'phone' },
+    ] });
+    render(<PersonCard />);
+    expect(screen.getByText('contacts.merge.proposals')).toBeTruthy();
+    const row = screen.getByTestId('proposal-p2');
+    expect(row.textContent).toContain('contacts.merge.reason.name');
+    expect(await screen.findByText('Amelia')).toBeTruthy();
+    expect(screen.queryByTestId('proposal-p3')).toBeNull();
+    expect(screen.queryByTestId('proposal-p4')).toBeNull();
+  });
+
+  it('shows no duplicates block when none include this contact', () => {
+    select(CARD, { proposals: [{ a: 'p3', b: 'p4', reason: 'phone' }] });
+    render(<PersonCard />);
+    expect(screen.queryByTestId('person-proposals')).toBeNull();
+  });
+
+  it('a proposal opens the merge dialog with both contacts', () => {
+    select(CARD, { proposals: [{ a: 'p1', b: 'p2', reason: 'phone' }] });
+    render(<PersonCard />);
+    fireEvent.click(screen.getByTestId('proposal-merge-p2'));
+    expect(screen.getByTestId('merge-dialog').textContent).toBe('p1,p2');
   });
 
   it('the correspondence tab shows the mail list', () => {

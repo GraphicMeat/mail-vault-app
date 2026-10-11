@@ -543,6 +543,7 @@
   "contacts.activity.op.merge": "Contacts merged",
   "contacts.activity.op.split": "Contact split",
   "contacts.activity.op.import_link": "Imported card added to a contact",
+  "contacts.activity.op.import": "Contacts imported",
   "contacts.import": "Import vCard",
   "contacts.import.done": "Imported {{created}} new, joined {{linked}} to existing contacts, skipped {{skipped}}.",
   "contacts.export": "Export vCard",

@@ -9,11 +9,11 @@ import { ExportButton } from './ExportButton';
 
 export function ContactsView({ onClose, onOpenMail }) {
   const t = useT();
-  const { load, loadReview, review, indexReady, indexing, total, error, importVcf } = usePeopleStore();
+  const { load, loadReview, loadProposals, review, indexReady, indexing, total, error, importVcf } = usePeopleStore();
   const fileRef = useRef(null);
   const [mode, setMode] = useState('people'); // 'people' | 'review'
 
-  useEffect(() => { initPeople(); load(); loadReview(); }, [load, loadReview]);
+  useEffect(() => { initPeople(); load(); loadReview(); loadProposals(); }, [load, loadReview, loadProposals]);
 
   const onFile = async (e) => {
     const file = e.target.files?.[0];

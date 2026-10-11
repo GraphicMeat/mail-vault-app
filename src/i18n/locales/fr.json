@@ -543,6 +543,7 @@
   "contacts.activity.op.merge": "Contacts fusionnés",
   "contacts.activity.op.split": "Contact scindé",
   "contacts.activity.op.import_link": "Fiche importée ajoutée à un contact",
+  "contacts.activity.op.import": "Contacts importés",
   "contacts.import": "Importer un fichier vCard",
   "contacts.import.done": "{{created}} importés comme nouveaux, {{linked}} rattachés à des contacts existants, {{skipped}} ignorés.",
   "contacts.export": "Exporter en vCard",

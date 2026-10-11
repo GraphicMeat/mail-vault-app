@@ -541,6 +541,7 @@
   "contacts.activity.op.merge": "連絡先を統合しました",
   "contacts.activity.op.split": "連絡先を分割しました",
   "contacts.activity.op.import_link": "読み込んだカードを連絡先に追加しました",
+  "contacts.activity.op.import": "連絡先を読み込みました",
   "contacts.import": "vCardを読み込む",
   "contacts.import.done": "新規{{created}}件を読み込み、既存の連絡先に{{linked}}件を統合し、{{skipped}}件をスキップしました。",
   "contacts.export": "vCardを書き出す",

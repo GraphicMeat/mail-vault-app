@@ -16,7 +16,7 @@ vi.mock('../../../stores/peopleStore', async () => {
   h.store = create(() => ({
     items: [], total: 0, indexReady: true, indexing: false, query: '', sort: 'name', vipOnly: false,
     selectedId: null, card: null, review: [], status: 'idle', error: null,
-    load: vi.fn(), setQuery: vi.fn(), setSort: vi.fn(), setVipOnly: vi.fn(), select: vi.fn(), loadReview: vi.fn(),
+    load: vi.fn(), loadProposals: vi.fn(), setQuery: vi.fn(), setSort: vi.fn(), setVipOnly: vi.fn(), select: vi.fn(), loadReview: vi.fn(),
   }));
   return { usePeopleStore: h.store, initPeople: vi.fn() };
 });
@@ -28,7 +28,7 @@ import { ContactsView } from '../ContactsView';
 afterEach(cleanup);
 
 describe('ContactsView', () => {
-  beforeEach(() => h.store.setState({ items: [], total: 0, indexReady: true, indexing: false }));
+  beforeEach(() => h.store.setState({ items: [], total: 0, indexReady: true, indexing: false, error: null }));
 
   it('loads on mount and shows the empty state with import and new actions', () => {
     render(<ContactsView onClose={() => {}} />);
@@ -36,6 +36,11 @@ describe('ContactsView', () => {
     expect(screen.getByTestId('contacts-view')).toBeTruthy();
     expect(screen.getByText('contacts.empty')).toBeTruthy();
     expect(screen.getByTestId('contacts-import')).toBeTruthy();
+  });
+
+  it('loads the duplicate proposals on mount', () => {
+    render(<ContactsView onClose={() => {}} />);
+    expect(h.store.getState().loadProposals).toHaveBeenCalled();
   });
 
   it('shows the indexing note while the history is still being read', () => {

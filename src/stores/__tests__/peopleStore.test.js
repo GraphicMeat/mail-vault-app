@@ -37,6 +37,38 @@ describe('peopleStore', () => {
     expect(usePeopleStore.getState().items[0].id).toBe('new');
   });
 
+  it('two loadMore calls in flight append the page once', async () => {
+    let land;
+    harness.daemonCall.mockImplementationOnce(() => new Promise(r => { land = r; }));
+    usePeopleStore.setState({ items: [{ id: 'p1' }], total: 3 });
+    const first = usePeopleStore.getState().loadMore();
+    const second = usePeopleStore.getState().loadMore();
+    land({ items: [{ id: 'p2' }, { id: 'p3' }], total: 3 });
+    await Promise.all([first, second]);
+    expect(harness.daemonCall).toHaveBeenCalledTimes(1);
+    expect(usePeopleStore.getState().items.map(i => i.id)).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('loadMore can run again once the first page has landed', async () => {
+    harness.daemonCall.mockResolvedValueOnce({ items: [{ id: 'p2' }], total: 3 }).mockResolvedValueOnce({ items: [{ id: 'p3' }], total: 3 });
+    usePeopleStore.setState({ items: [{ id: 'p1' }], total: 3 });
+    await usePeopleStore.getState().loadMore();
+    await usePeopleStore.getState().loadMore();
+    expect(harness.daemonCall).toHaveBeenLastCalledWith('people.list', expect.objectContaining({ offset: 2 }));
+    expect(usePeopleStore.getState().items).toHaveLength(3);
+  });
+
+  it('searchPeople and fetchCard read from the daemon without touching the list', async () => {
+    usePeopleStore.setState({ items: [{ id: 'keep' }], total: 1 });
+    harness.daemonCall.mockResolvedValueOnce({ items: [{ id: 'x' }], total: 1 });
+    await expect(usePeopleStore.getState().searchPeople('al')).resolves.toEqual([{ id: 'x' }]);
+    expect(harness.daemonCall).toHaveBeenLastCalledWith('people.list', expect.objectContaining({ query: 'al', limit: 20, offset: 0 }));
+    harness.daemonCall.mockResolvedValueOnce({ id: 'x', displayName: 'Xi' });
+    await expect(usePeopleStore.getState().fetchCard('x')).resolves.toEqual({ id: 'x', displayName: 'Xi' });
+    expect(harness.daemonCall).toHaveBeenLastCalledWith('people.get', { id: 'x' });
+    expect(usePeopleStore.getState().items).toEqual([{ id: 'keep' }]);
+  });
+
   it('loadMail passes own addresses and pages with the cursor', async () => {
     usePeopleStore.setState({ selectedId: 'p1' });
     harness.daemonCall.mockResolvedValueOnce({ items: [{ uid: 1 }], next: { sortMs: 1, accountId: 'a', mailboxPath: 'INBOX', uid: 1 } });
