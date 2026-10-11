@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Escape is shared by several layers. The bulk modal listens on `window` in
 // the bubble phase and so does the global shortcut, with App mounting first —
 // so the global one runs first and must not act on state the modal owns.
