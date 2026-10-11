@@ -78,6 +78,7 @@ Every build is on the [latest release](https://github.com/GraphicMeat/mail-vault
 
 - **Explorer** - switch from List to browse by Date, Sender, or Date → Conversation. Open year, month and optional day groups, follow breadcrumbs, search the current group, or select its messages together. Your view and place are remembered.
 - **Insights** - a sender map, sender timeline, and daily activity calendar built from local headers. Frequent contacts have larger bubbles; recent contacts sit closer to you. Filter by account, date, direction, or likely automated mail, then open matching messages.
+- **Contacts** - a built-in address book kept on your computer: one card per person with how much mail you exchanged and the full correspondence by date, a review queue for addresses found in your mail, merge you can undo, and vCard import and export. It is included in backups and account transfers, and is not synced with any provider.
 
 ### The vault
 

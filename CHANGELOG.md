@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Contacts: a built-in address book.** Open Contacts in the sidebar for one card per person, built from your own mail plus what you add: how many emails you received from, sent to and copied them, the full correspondence with each contact by date, suggestions that say why they were made, a review queue for addresses found in your mail, merge with a preview that you can undo, and vCard import and export. A copy of your contacts is kept in your vault and is included in backups and in an account transfer. Contacts stay on this computer and are not synced with any provider.
 - **A Teal color palette, to go with the teal app icon.** Pick it in Settings, Appearance, Colors, beside Indigo and Graphite, in light or dark. Dark gets teal-tinted ink and light gets cream paper, and controls, Insights charts and chat bubbles follow the accent. Graphite stays the default for new installs and your saved choice is not touched.
 
 ### Fixed
