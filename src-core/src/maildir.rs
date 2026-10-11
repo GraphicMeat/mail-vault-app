@@ -134,6 +134,14 @@ pub fn find_listed_by_uid(cur_dir: &Path, uid: u32, listed: &Path) -> Option<Pat
     }
 }
 
+/// `<mirror_root>/<email>/<mailbox>/cur`: the external backup mirror's
+/// message directory for one mailbox, the one builder for mirror paths. The
+/// mirror keys a folder by the account's email and the mailbox's own name
+/// (no `vault_dir_name`), and stays Maildir `.eml` whatever the vault's format.
+pub fn mirror_cur(mirror_root: &Path, email: &str, mailbox: &str) -> PathBuf {
+    mirror_root.join(email).join(mailbox).join("cur")
+}
+
 /// The uid a message filename carries by the external mirror's rule: the text
 /// before the first `:`, `;`, `.` or `_`. The mirror has held
 /// `<uid>:2,<flags>[.eml]` (`;`-spelled on Windows, same as every other vault

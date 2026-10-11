@@ -66,8 +66,7 @@ pub fn account_dir(maildir: &Path, account_id: &str) -> PathBuf {
 /// in `{root}/Maildir` holds by construction (see `account_dir`); callers need
 /// not sanitize `account_id` first.
 pub fn cur_path(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
-    let safe_mailbox = crate::search_index::text::vault_dir_name(mailbox);
-    account_dir(&root.join("Maildir"), account_id).join(&safe_mailbox).join("cur")
+    crate::message_store::mailbox_dir(root, account_id, mailbox).join("cur")
 }
 
 /// Build a vault filename from UID and flags: `{uid}:2,{letters}.eml` (`;2,`
@@ -177,40 +176,25 @@ pub fn store(
     if !overwrite && matches!(known, Some(Some(_))) {
         return Ok(false);
     }
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
-
-    let filename = build_maildir_filename(uid, flags);
-    let new_path = dir.join(&filename);
 
     // One pass over the directory both answers "does uid already exist" and
-    // collects every stale file the write below must clean up.
-    let stale: Vec<PathBuf> = match known {
-        Some(row) => row.into_iter().map(|name| dir.join(name)).collect(),
-        None => fs::read_dir(&dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()) == Some(uid))
-            .map(|e| e.path())
-            .collect(),
+    // names every stale file the write below must clean up.
+    let stale: Vec<String> = match known {
+        Some(row) => row.into_iter().collect(),
+        None => crate::message_store::leaf_names(&dir, uid),
     };
 
     if !overwrite && !stale.is_empty() {
         return Ok(false);
     }
 
-    write_atomic(&new_path, raw).map_err(|e| format!("Failed to write .eml file: {}", e))?;
+    let entry = crate::message_store::put(&dir, uid, raw, flags)?;
+    let new_path = dir.join(&entry.name);
     reg.upsert(account_id, mailbox, uid, &new_path);
 
-    for old in stale {
-        if old != new_path {
-            match fs::remove_file(&old) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                // A second file for the uid is still there: let the next read relist.
-                Err(_) => reg.invalidate(account_id, mailbox),
-            }
-        }
+    // A second file for the uid is still there: let the next read relist.
+    if crate::message_store::unlink_stale(&dir, &entry.name, &stale) {
+        reg.invalidate(account_id, mailbox);
     }
 
     info!("Stored email UID {} to {:?} ({} bytes)", uid, new_path, raw.len());
@@ -238,7 +222,7 @@ fn read_resolved_file(reg: &VaultRegistry, root: &Path, account_id: &str, mailbo
     // retry"); any other read error is the file's own and stays inside.
     let read = reg.with_resolved(root, account_id, mailbox, uid, |path| {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        match fs::read(path) {
+        match crate::message_store::read_at(path) {
             Err(e) if e.kind() == ErrorKind::NotFound => Err(e),
             other => Ok((name, other)),
         }
@@ -378,8 +362,7 @@ pub fn read_raw_source(reg: &VaultRegistry, root: &Path, account_id: &str, mailb
 /// (`scheduled`'s uid allocation), which may not verify; routes ask the
 /// registry.
 pub fn exists(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> bool {
-    let cur_dir = cur_path(root, account_id, mailbox);
-    find_by_uid(&cur_dir, uid).is_some()
+    crate::message_store::find(root, account_id, mailbox, uid).is_some()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -421,15 +404,9 @@ pub fn list_on_disk(root: &Path, account_id: &str, mailbox: &str, require_flag: 
         return Ok(Vec::new());
     }
 
-    let entries = fs::read_dir(&cur_dir).map_err(|e| format!("Failed to read Maildir: {}", e))?;
-
-    let mut results = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let Some(uid) = vault_filename_uid(&name) else { continue };
-        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        results.extend(summary(uid, &name, size, require_flag));
-    }
+    let entries = crate::message_store::list(root, account_id, mailbox).map_err(|e| format!("Failed to read Maildir: {}", e))?;
+    let results: Vec<MaildirEmailSummary> =
+        entries.iter().filter_map(|e| summary(e.uid, &e.name, e.size, require_flag)).collect();
 
     if require_flag.is_some() {
         info!("maildir_list: require_flag={:?}, found {} results", require_flag, results.len());
@@ -462,8 +439,7 @@ fn locate(reg: &VaultRegistry, cur_dir: &Path, account_id: &str, mailbox: &str, 
 pub fn delete(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<bool, String> {
     let cur_dir = cur_path(root, account_id, mailbox);
     if let Some(path) = locate(reg, &cur_dir, account_id, mailbox, uid) {
-        fs::remove_file(&path).map_err(|e| format!("Failed to delete .eml file: {}", e))?;
-        crate::pgp::remove_copy(&cur_dir, uid);
+        crate::message_store::unlink(&path, uid).map_err(|e| format!("Failed to delete .eml file: {}", e))?;
         reg.remove(account_id, mailbox, &[uid]);
         info!("Deleted email UID {} from {:?}", uid, path);
         return Ok(true);
@@ -480,12 +456,11 @@ pub fn set_flags(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &s
         None => return Err(format!("E_UID_NOT_IN_MAILDIR: Email UID {} not found in Maildir", uid)),
     };
 
-    let new_filename = build_maildir_filename(uid, flags);
-    let new_path = cur_dir.join(&new_filename);
+    let entry = crate::message_store::rename_onto(&old_path, uid, flags)?;
+    let new_path = cur_dir.join(&entry.name);
 
     if old_path != new_path {
-        fs::rename(&old_path, &new_path).map_err(|e| format!("Failed to rename file: {}", e))?;
-        reg.rename(account_id, mailbox, uid, &new_filename);
+        reg.rename(account_id, mailbox, uid, &entry.name);
         info!("Updated flags for UID {}: {:?} -> {:?}", uid, old_path.file_name(), new_path.file_name());
         return Ok(true);
     }

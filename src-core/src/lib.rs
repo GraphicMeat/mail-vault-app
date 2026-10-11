@@ -19,6 +19,7 @@ pub mod header_cache;
 pub mod import_rehome;
 pub mod local_folder;
 pub mod maildir;
+pub mod message_store;
 pub mod notes_to_self;
 pub mod search_index;
 pub mod takeout;
