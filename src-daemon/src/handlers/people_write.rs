@@ -26,6 +26,23 @@ pub(crate) async fn import_chunked(state: &Arc<DaemonState>, text: String) -> Re
     serde_json::to_value(total).map_err(|e| e.to_string())
 }
 
+/// Undo the newest action. A chunked import is several journal entries in one
+/// group: each is undone in its own custody call with a quiet-UI wait between, so
+/// no single call holds the lock for the whole import, and the group's own next
+/// entry is taken even if an edit was recorded in between. `count` is the number
+/// of entries undone.
+async fn undo_chunked(state: &Arc<DaemonState>) -> Result<Value, String> {
+    let Some((mut entry, mut more)) = db_blocking(state, |c| journal::undo_step(c)).await? else { return Ok(Value::Null) };
+    while more {
+        crate::search_index::wait_foreground_quiet(&state.search_index).await;
+        let grp = entry.grp.clone();
+        let Some((_, again)) = db_blocking(state, move |c| journal::undo_group_step(c, &grp)).await? else { break };
+        entry.count += 1;
+        more = again;
+    }
+    serde_json::to_value(entry).map_err(|e| e.to_string())
+}
+
 /// One vCard text for `ids` (every person when `None`), built a page of people
 /// per custody call with a quiet-UI wait between pages, so a big book never
 /// holds the lock for long. Calls `on_page(done, total)` after each page.
@@ -102,7 +119,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, p: &Value, id:
             }
             Err(e) => Err(e),
         },
-        "people.undo" => db(state, |c| journal::undo_last(c)).await,
+        "people.undo" => undo_chunked(state).await,
         "people.review.accept" => {
             let items: Vec<(String, String)> = p
                 .get("items")
@@ -242,6 +259,23 @@ mod tests {
         let u = call(&s, "people.undo", json!({})).await;
         assert_eq!(u["result"]["op"], "import");
         assert_eq!(call(&s, "people.list", json!({})).await["result"]["total"], 0);
+        assert!(call(&s, "people.undo", json!({})).await["result"].is_null(), "nothing left to undo");
+    }
+
+    #[tokio::test]
+    async fn undo_of_a_three_chunk_import_goes_one_chunk_per_custody_call_and_reports_all_of_them() {
+        let (_d, s) = state();
+        let mut text = String::new();
+        for i in 0..450 {
+            text.push_str(&format!("BEGIN:VCARD\nFN:P{i}\nEMAIL:p{i}@x.io\nEND:VCARD\n"));
+        }
+        call(&s, "people.import_vcf", json!({"text": text})).await;
+        let u = call(&s, "people.undo", json!({})).await;
+        assert_eq!((u["result"]["op"].as_str(), u["result"]["count"].as_u64(), u["result"]["undone"].as_bool()), (Some("import"), Some(3), Some(true)), "{u}");
+        assert_eq!(call(&s, "people.list", json!({})).await["result"]["total"], 0);
+        let j = call(&s, "people.journal", json!({})).await;
+        let lines = j["result"].as_array().unwrap();
+        assert_eq!((lines.len(), lines[0]["undone"].as_bool(), lines[0]["count"].as_u64()), (1, Some(true), Some(3)), "{j}");
         assert!(call(&s, "people.undo", json!({})).await["result"].is_null(), "nothing left to undo");
     }
 

@@ -83,6 +83,9 @@ pub struct JournalRow {
     pub undone: bool,
     /// How many journal entries this line stands for (a group is one line).
     pub count: usize,
+    /// The group the entry belongs to, empty when it stands alone.
+    #[serde(skip)]
+    pub grp: String,
 }
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<(JournalRow, String)> {
@@ -95,6 +98,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<(JournalRow, String)> {
             summary: serde_json::from_str(&summary).unwrap_or(Value::Null),
             undone: r.get::<_, i64>(4)? != 0,
             count: 1,
+            grp: String::new(),
         },
         r.get(5)?,
     ))
@@ -118,34 +122,54 @@ pub fn recent(conn: &Connection, limit: usize) -> Result<Vec<JournalRow>, String
     Ok(out.into_iter().map(|(e, _)| e).collect())
 }
 
-pub fn undo_last(conn: &Connection) -> Result<Option<JournalRow>, String> {
+/// Undoes ONE open entry in its own transaction: the newest, or with `grp` the
+/// newest of that group. The flag says whether more open entries of the entry's
+/// group remain. A long undo (a chunked import) loops this so the custody lock is
+/// held one entry at a time.
+fn undo_one(conn: &Connection, grp: Option<&str>) -> Result<Option<(JournalRow, bool)>, String> {
     let tx = conn.unchecked_transaction().map_err(err)?;
     let found: Option<(JournalRow, String)> = tx
         .query_row(
-            "SELECT id,ts_ms,op,summary,undone,grp FROM person_journal WHERE undone=0 ORDER BY id DESC LIMIT 1",
-            [],
+            "SELECT id,ts_ms,op,summary,undone,grp FROM person_journal WHERE undone=0 AND (?1 IS NULL OR grp=?1) ORDER BY id DESC LIMIT 1",
+            params![grp],
             row,
         )
         .optional()
         .map_err(err)?;
-    let Some((mut entry, grp)) = found else { return Ok(None) };
-    // the newest entry, plus every other open entry of its group, newest first
-    let ids: Vec<(i64, String)> = if grp.is_empty() {
-        let inv: String = tx.query_row("SELECT inverse FROM person_journal WHERE id=?1", [entry.id], |r| r.get(0)).map_err(err)?;
-        vec![(entry.id, inv)]
-    } else {
-        let mut stmt = tx.prepare("SELECT id, inverse FROM person_journal WHERE grp=?1 AND undone=0 ORDER BY id DESC").map_err(err)?;
-        let rows = stmt.query_map([&grp], |r| Ok((r.get(0)?, r.get(1)?))).map_err(err)?;
-        rows.collect::<Result<_, _>>().map_err(err)?
-    };
-    entry.count = ids.len();
-    for (id, inverse) in &ids {
-        let steps: Vec<Step> = serde_json::from_str(inverse).map_err(|e| format!("journal entry {id} unreadable: {e}"))?;
-        for s in &steps { apply(&tx, s)?; }
-        tx.execute("UPDATE person_journal SET undone=1 WHERE id=?1", [id]).map_err(err)?;
-    }
+    let Some((mut entry, entry_grp)) = found else { return Ok(None) };
+    let inverse: String = tx.query_row("SELECT inverse FROM person_journal WHERE id=?1", [entry.id], |r| r.get(0)).map_err(err)?;
+    let steps: Vec<Step> = serde_json::from_str(&inverse).map_err(|e| format!("journal entry {} unreadable: {e}", entry.id))?;
+    for s in &steps { apply(&tx, s)?; }
+    tx.execute("UPDATE person_journal SET undone=1 WHERE id=?1", [entry.id]).map_err(err)?;
+    let more = !entry_grp.is_empty()
+        && tx.query_row("SELECT EXISTS(SELECT 1 FROM person_journal WHERE grp=?1 AND undone=0)", [&entry_grp], |r| r.get::<_, i64>(0)).map_err(err)? != 0;
     tx.commit().map_err(err)?;
-    Ok(Some(JournalRow { undone: true, ..entry }))
+    entry.undone = true;
+    entry.grp = entry_grp;
+    Ok(Some((entry, more)))
+}
+
+/// Undoes only the newest open entry; the flag says whether more entries of its
+/// group are still open.
+pub fn undo_step(conn: &Connection) -> Result<Option<(JournalRow, bool)>, String> {
+    undo_one(conn, None)
+}
+
+/// The next step of a group already started: the newest open entry of `grp`,
+/// even when something else was recorded after it.
+pub fn undo_group_step(conn: &Connection, grp: &str) -> Result<Option<(JournalRow, bool)>, String> {
+    undo_one(conn, Some(grp))
+}
+
+/// The newest entry plus every other open entry of its group, one step each.
+pub fn undo_last(conn: &Connection) -> Result<Option<JournalRow>, String> {
+    let Some((mut entry, mut more)) = undo_step(conn)? else { return Ok(None) };
+    while more {
+        let Some((_, again)) = undo_group_step(conn, &entry.grp)? else { break };
+        entry.count += 1;
+        more = again;
+    }
+    Ok(Some(entry))
 }
 
 pub fn snapshot_person(conn: &Connection, id: &str) -> Result<Option<PersonRow>, String> {
@@ -257,6 +281,38 @@ mod tests {
         super::record(&c, "edit", &json!({}), &[]).unwrap();
         assert_eq!(undo_last(&c).unwrap().unwrap().op, "edit");
         assert_eq!(undo_last(&c).unwrap().unwrap().op, "import");
+    }
+
+    #[test]
+    fn undo_step_undoes_one_entry_of_a_group_and_says_whether_more_are_open() {
+        let (_t, c) = conn();
+        for (i, id) in ["p1", "p2", "p3"].iter().enumerate() {
+            record_in(&c, "import", &json!({"n": i}), &[Step::DropPerson { id: (*id).into() }], "g1").unwrap();
+            apply(&c, &Step::PutPerson(person(id, id))).unwrap();
+        }
+        let count = |c: &Connection| c.query_row("SELECT count(*) FROM person", [], |r| r.get::<_, i64>(0)).unwrap();
+        let (row, more) = undo_step(&c).unwrap().unwrap();
+        assert_eq!((row.op.as_str(), row.undone, row.count, more), ("import", true, 1, true));
+        assert_eq!(count(&c), 2, "only the newest chunk is gone");
+        assert!(undo_step(&c).unwrap().unwrap().1);
+        assert!(!undo_step(&c).unwrap().unwrap().1, "the last entry of the group");
+        assert_eq!(count(&c), 0);
+        assert!(undo_step(&c).unwrap().is_none());
+    }
+
+    #[test]
+    fn an_ungrouped_step_has_nothing_more_and_a_group_step_skips_an_entry_that_landed_between() {
+        let (_t, c) = conn();
+        record_in(&c, "import", &json!({}), &[], "g1").unwrap();
+        super::record(&c, "edit", &json!({}), &[]).unwrap();
+        record_in(&c, "import", &json!({}), &[], "g1").unwrap();
+        let (first, more) = undo_step(&c).unwrap().unwrap();
+        assert!(more);
+        // an edit made between two steps of the undo is not what the next step undoes
+        let (next, more) = undo_group_step(&c, &first.grp).unwrap().unwrap();
+        assert_eq!((next.op.as_str(), more), ("import", false));
+        let (edit, more) = undo_step(&c).unwrap().unwrap();
+        assert_eq!((edit.op.as_str(), more), ("edit", false));
     }
 
     #[test]
