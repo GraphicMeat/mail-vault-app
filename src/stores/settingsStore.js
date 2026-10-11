@@ -15,6 +15,7 @@ import { applyQuickActionPreset } from '../utils/quickActionPresets';
 import { clampComposeSize } from '../utils/composeSize';
 import { ownAddresses } from '../utils/ownAddresses';
 import { addAliasToList, mergeDiscovery } from '../utils/aliasDiscovery';
+import { folderColorKey, normalizeFolderIconStyle, normalizeFolderIconColors } from '../utils/folderIconColor';
 import { MACOS_WINDOW_RADIUS, EMAIL_WIDTH, normalizeEmailWidth } from '../services/export/social/socialLayout';
 
 // Palette of visually distinct avatar colors
@@ -221,6 +222,8 @@ export const _mergePersistedSettings = (persisted, current) => ({
   explorerDateDepth: normalizeExplorerDateDepth(persisted?.explorerDateDepth ?? current.explorerDateDepth),
   explorerPaths: normalizeExplorerPaths(persisted?.explorerPaths ?? current.explorerPaths),
   viewOverrides: normalizeViewOverrides(persisted?.viewOverrides ?? current.viewOverrides),
+  folderIconStyle: normalizeFolderIconStyle(persisted?.folderIconStyle ?? current.folderIconStyle),
+  folderIconColors: normalizeFolderIconColors(persisted?.folderIconColors ?? current.folderIconColors),
   insightsPreferences: normalizeInsightsPreferences(persisted?.insightsPreferences ?? current.insightsPreferences),
   quickActions: normalizeQuickActions(persisted?.quickActions ?? current.quickActions),
   searchMailboxConcurrency: normalizeSearchMailboxConcurrency(persisted?.searchMailboxConcurrency ?? current.searchMailboxConcurrency),
@@ -612,6 +615,8 @@ export const useSettingsStore = create(
       sidebarStyle: 'list', // 'list' | 'tagcloud' — folder rows or wrapped bubble tags
       sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' — account and folder arrangement
       sidebarDensity: 'comfortable', // 'comfortable' | 'compact' — independent of layout and folder style
+      folderIconStyle: 'colorful', // 'colorful' | 'theme' — a colour per folder role, or the one theme accent
+      folderIconColors: {}, // `${accountId}|${path}` -> '#rrggbb', a colour picked for one folder
       sidebarBackupStatusLocation: 'avatar', // 'avatar' | 'row' | 'hidden' — display only; backups keep running
       // Which folders are open in the sidebar tree, per account. Session state
       // lost the whole expansion on every account switch, which on a five-level
@@ -1404,6 +1409,15 @@ export const useSettingsStore = create(
       setSidebarStyle: (style) => set({ sidebarStyle: style === 'tagcloud' ? 'tagcloud' : 'list' }),
       setSidebarLayout: (layout) => set({ sidebarLayout: normalizeSidebarLayout(layout) }),
       setSidebarDensity: (density) => set({ sidebarDensity: normalizeSidebarDensity(density) }),
+      setFolderIconStyle: (style) => set({ folderIconStyle: normalizeFolderIconStyle(style) }),
+      // null clears the pick; an invalid colour is ignored, not stored.
+      setFolderIconColor: (accountId, path, color) => set(state => {
+        const key = folderColorKey(accountId, path);
+        const { [key]: _old, ...rest } = state.folderIconColors;
+        if (!color) return { folderIconColors: rest };
+        const picked = normalizeFolderIconColors({ [key]: color });
+        return picked[key] ? { folderIconColors: { ...rest, ...picked } } : {};
+      }),
       setSidebarBackupStatusLocation: (location) => set({ sidebarBackupStatusLocation: normalizeSidebarBackupStatusLocation(location) }),
       setExpandedFolders: (accountId, paths) => set(state => ({
         expandedFolders: { ...state.expandedFolders, [accountId]: [...paths] },
@@ -1675,6 +1689,8 @@ export const useSettingsStore = create(
           sidebarStyle: 'list',
           sidebarLayout: 'stacked',
           sidebarDensity: 'comfortable',
+          folderIconStyle: 'colorful',
+          folderIconColors: {},
           sidebarBackupStatusLocation: 'avatar',
           expandedFolders: {},
           listPaneSize: 420,

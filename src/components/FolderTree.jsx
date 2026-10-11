@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, createContext, useContext } from 'react';
 import {
   ChevronDown, ChevronRight, Inbox, Send, File, Trash2, Star, AlertCircle,
   Archive, Folder, HardDrive,
@@ -6,6 +6,8 @@ import {
 import { buildMailboxTree } from '../services/workflows/mailboxTree';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { useT } from '../i18n/index.js';
+import { useSettingsStore } from '../stores/settingsStore';
+import { folderIconColor } from '../utils/folderIconColor';
 
 const MAILBOX_ICONS = {
   INBOX: Inbox,
@@ -28,6 +30,18 @@ const MAILBOX_ICONS = {
 export function getMailboxIcon(mailbox) {
   if (mailbox.local) return HardDrive;
   return MAILBOX_ICONS[mailbox.specialUse] || MAILBOX_ICONS[mailbox.path] || Folder;
+}
+
+// Custom icon colours are saved per account; the tree is told which one it draws.
+const AccountScope = createContext(null);
+
+/** A folder's icon: its role colour, the theme accent, or the colour picked for it. */
+function FolderIcon({ node, ...props }) {
+  const Icon = getMailboxIcon(node);
+  const accountId = useContext(AccountScope);
+  const style = useSettingsStore(s => s.folderIconStyle);
+  const colors = useSettingsStore(s => s.folderIconColors);
+  return <Icon {...props} style={{ color: folderIconColor(node, { style, colors, accountId }) }} />;
 }
 
 // The vault-only folders (MBOX imports kept on this computer, merged in as
@@ -92,7 +106,6 @@ function activate(node, onToggle, onSelect) {
 }
 
 function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact, counts, onContextMenu, flash, onFlashEnd }) {
-  const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.path);
   const isActive = !node.noselect && activeMailbox === node.path;
@@ -125,7 +138,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
         ) : (
           !compact && <div className="w-5 shrink-0" />
         )}
-        <Icon size={compact ? 14 : 16} className="shrink-0" />
+        <FolderIcon node={node} size={compact ? 14 : 16} className="shrink-0" />
         {!compact && <span className="text-sm flex-1 truncate">{label}</span>}
         {isActive && flash?.path === node.path && (
           <span key={flash.n} data-testid="folder-flash" className="folder-flash" aria-hidden="true" onAnimationEnd={onFlashEnd} />
@@ -191,7 +204,6 @@ function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onC
   if (!matches.length) return <p role="status" className="px-2 py-3 text-xs text-mail-text-muted">{t('sidebar.noFoldersFound')}</p>;
 
   return matches.map(({ node, label, trail, fullPath }) => {
-    const Icon = getMailboxIcon(node);
     const active = activeMailbox === node.path;
     const unseen = counts?.[node.path]?.unseen || 0;
     return <button type="button" key={node.path} data-testid="folder-row" data-path={node.path}
@@ -201,7 +213,7 @@ function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onC
       className={`sidebar-folder-search-result w-full min-w-0 flex items-center gap-2 px-2 py-2 mb-1 rounded-lg text-left ${active
         ? 'bg-mail-accent-tint text-mail-accent-text'
         : 'text-mail-text hover:bg-mail-surface-hover'}`}>
-      <Icon size={16} className="shrink-0" aria-hidden="true" />
+      <FolderIcon node={node} size={16} className="shrink-0" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm">{label}</span>
         {trail && <span className={`block truncate text-[11px] ${active ? 'text-mail-accent-text' : 'text-mail-text-muted'}`}>{trail}</span>}
@@ -217,7 +229,11 @@ function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onC
  * Takes the FLAT mailbox list the store holds and derives the hierarchy here —
  * see mailboxTree.js for why the stored list must stay flat.
  */
-export function FolderTree({
+export function FolderTree({ accountId = null, ...props }) {
+  return <AccountScope.Provider value={accountId}><FolderTreeBody {...props} /></AccountScope.Provider>;
+}
+
+function FolderTreeBody({
   mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts, onContextMenu, searchQuery = '',
   flash, onFlashEnd,
 }) {
@@ -249,7 +265,6 @@ export function FolderTree({
 }
 
 function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu }) {
-  const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isActive = !node.noselect && activeMailbox === node.path;
   const label = mailboxLabel(node.name);
@@ -275,7 +290,7 @@ function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, 
       onClick={() => activate(node, onToggle, onSelect)}
       onContextMenu={contextMenuHandler(node, onContextMenu)}
     >
-      <Icon size={12} className="shrink-0" />
+      <FolderIcon node={node} size={12} className="shrink-0" />
       <span className="truncate max-w-[180px]">{label}</span>
       {showCount && (
         <span data-testid="folder-unseen" className="ml-1 text-[11px] tabular-nums opacity-80">
@@ -322,7 +337,11 @@ function BubbleLevel({ nodes, trail, ...rest }) {
  * ("Telefonie › NFon AG") read as unrelated folders — and a parent gets the
  * tree's chevron, with its children indented beneath it while open.
  */
-export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu, searchQuery = '' }) {
+export function FolderBubbles({ accountId = null, ...props }) {
+  return <AccountScope.Provider value={accountId}><FolderBubblesBody {...props} /></AccountScope.Provider>;
+}
+
+function FolderBubblesBody({ mailboxes, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu, searchQuery = '' }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
   const local = useMemo(() => localNodes(mailboxes), [mailboxes]);
 

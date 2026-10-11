@@ -597,3 +597,40 @@ describe('search index reindex offer', () => {
     }
   });
 });
+
+describe('folder icon colours persistence', () => {
+  it('defaults to colourful with no custom colours', () => {
+    const st = useSettingsStore.getInitialState();
+    expect(st.folderIconStyle).toBe('colorful');
+    expect(st.folderIconColors).toEqual({});
+  });
+
+  it('saves, restores on hydration, resets', async () => {
+    const { safeStorage } = await import('../safeStorage');
+    const s = useSettingsStore.getState();
+    s.setFolderIconStyle('theme');
+    s.setFolderIconColor('a1', 'INBOX', '#AABBCC');
+    const persisted = JSON.parse(safeStorage.getItem('mailvault-settings'));
+    expect(persisted.state.folderIconStyle).toBe('theme');
+    const merged = _mergePersistedSettings(persisted.state, useSettingsStore.getInitialState());
+    expect(merged.folderIconStyle).toBe('theme');
+    expect(Object.values(merged.folderIconColors)).toEqual(['#aabbcc']);
+    useSettingsStore.getState().setFolderIconColor('a1', 'INBOX', null);
+    expect(useSettingsStore.getState().folderIconColors).toEqual({});
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().folderIconStyle).toBe('colorful');
+  });
+
+  it('rejects invalid values', () => {
+    const cur = useSettingsStore.getInitialState();
+    expect(_mergePersistedSettings({ folderIconStyle: 'x', folderIconColors: { k: 'red' } }, cur))
+      .toMatchObject({ folderIconStyle: 'colorful', folderIconColors: {} });
+    useSettingsStore.getState().setFolderIconColor('a1', 'INBOX', 'red');
+    expect(useSettingsStore.getState().folderIconColors).toEqual({});
+  });
+
+  it('travels in a transfer file', async () => {
+    const { GLOBAL_SETTINGS_ALLOWLIST } = await import('../../services/transfer/settingsTransfer');
+    expect(GLOBAL_SETTINGS_ALLOWLIST).toContain('folderIconStyle');
+  });
+});

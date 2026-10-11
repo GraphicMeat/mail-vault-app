@@ -813,6 +813,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // `folderMenu` = { node, x, y }; `nameDialog` = { mode, node }; `confirmDelete`
   // = the node whose permanent delete still needs a yes.
   const [folderMenu, setFolderMenu] = useState(null);
+  const setFolderIconColor = useSettingsStore(s => s.setFolderIconColor);
   const [nameDialog, setNameDialog] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
@@ -854,6 +855,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onNewSubfolder={(node) => setNameDialog({ mode: 'create', node })}
         onRename={(node) => setNameDialog({ mode: 'rename', node })}
         onDelete={deleteFolder}
+        onSetColor={(node, color) => setFolderIconColor(activeAccountId, node.path, color)}
         importRunning={importRunning}
       />
       <FolderNameDialog
@@ -1064,6 +1066,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {!unifiedInbox && <div className="sidebar-collapsed-folders flex-1 min-h-0 overflow-y-auto w-full py-2 text-sm">
           <FolderTree
             compact
+            accountId={activeAccountId}
             mailboxes={shownMailboxes}
             activeMailbox={activeViewId || mailHidden ? null : activeMailbox}
             expanded={expandedFolders}
@@ -1348,7 +1351,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </label>}
           <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
             {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} /> : (
-              <Folders mailboxes={shownMailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
+              <Folders accountId={activeAccountId} mailboxes={shownMailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
                 onContextMenu={onFolderContextMenu} searchQuery={folderQuery}
                 flash={unreadFlash} onFlashEnd={clearUnreadFlash} />

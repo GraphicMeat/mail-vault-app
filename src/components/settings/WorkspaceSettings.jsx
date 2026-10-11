@@ -26,6 +26,8 @@ export function WorkspaceSettings({ windowIsNarrow }) {
     // The message list's rows, the same two choices beside the sidebar's.
     { key: 'listDensity', setter: 'setListDensity', title: 'listDensity', disabled: chat,
       options: [['comfortable', 'sidebarDensityComfortable', 'listDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'listDensityCompactHint']] },
+    { key: 'folderIconStyle', setter: 'setFolderIconStyle', title: 'folderIcons',
+      options: [['colorful', 'folderIconsColorful', 'folderIconsColorfulHint'], ['theme', 'folderIconsTheme', 'folderIconsThemeHint']] },
     { key: 'sidebarBackupStatusLocation', setter: 'setSidebarBackupStatusLocation', title: 'backupStatusLocation',
       options: [['avatar', 'backupStatusAvatar', 'backupStatusAvatarHint'], ['row', 'backupStatusRow', 'backupStatusRowHint'], ['hidden', 'backupStatusHidden', 'backupStatusHiddenHint']] },
     { key: 'sidebarStyle', setter: 'setSidebarStyle', title: 'navigation',

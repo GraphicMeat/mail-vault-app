@@ -124,3 +124,29 @@ describe('FolderContextMenu', () => {
     expect(onRename).toHaveBeenCalledWith(node);
   });
 });
+
+describe('FolderContextMenu icon colour', () => {
+  it('offers swatches and reports the picked colour', () => {
+    const onSetColor = vi.fn();
+    draw({ path: 'Projects' }, { onSetColor });
+    const swatches = document.querySelectorAll('[data-testid="folder-color-swatch"]');
+    expect(swatches.length).toBeGreaterThan(5);
+    fireEvent.click(swatches[1]);
+    expect(onSetColor).toHaveBeenCalledWith({ path: 'Projects' }, swatches[1].getAttribute('data-color'));
+  });
+
+  it('reset clears the custom colour', () => {
+    const onSetColor = vi.fn();
+    draw({ path: 'Projects' }, { onSetColor });
+    fireEvent.click(document.querySelector('[data-testid="folder-color-reset"]'));
+    expect(onSetColor).toHaveBeenCalledWith({ path: 'Projects' }, null);
+  });
+
+  it('special and local folders can be recoloured too', () => {
+    draw({ path: 'Trash', specialUse: '\\Trash' }, { onSetColor: () => {} });
+    expect(document.querySelectorAll('[data-testid="folder-color-swatch"]').length).toBeGreaterThan(5);
+    cleanup();
+    draw({ path: 'L', local: true }, { onSetColor: () => {} });
+    expect(document.querySelectorAll('[data-testid="folder-color-swatch"]').length).toBeGreaterThan(5);
+  });
+});

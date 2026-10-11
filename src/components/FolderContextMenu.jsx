@@ -2,6 +2,7 @@ import React from 'react';
 import { FolderPlus, Pencil, Trash2 } from 'lucide-react';
 import { Popover, MenuItem } from './ui/Popover';
 import { useT } from '../i18n/index.js';
+import { FOLDER_ICON_PALETTE } from '../utils/folderIconColor';
 import { specialOrInbox, trashPathOf, folderDelimiter } from '../services/workflows/folderOps';
 
 /**
@@ -18,16 +19,35 @@ import { specialOrInbox, trashPathOf, folderDelimiter } from '../services/workfl
  * does not name its folder, and deleting the one being filled would leave the
  * rest of the import in a folder nothing lists.
  */
-export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, onRename, onDelete, importRunning = false }) {
+export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, onRename, onDelete, onSetColor, importRunning = false }) {
   const t = useT();
   if (!menu) return null;
   const { node, x, y } = menu;
+
+  // Any folder, special or local, can take a colour: it is only a label.
+  const colors = onSetColor && (
+    <div role="group" aria-label={t('sidebar.folderIconColor')} className="px-3 py-2 border-t border-mail-border">
+      <div className="text-xs text-mail-text-muted mb-1.5">{t('sidebar.folderIconColor')}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {FOLDER_ICON_PALETTE.map(color => (
+          <button key={color} type="button" data-testid="folder-color-swatch" data-color={color}
+            title={color} aria-label={color}
+            onClick={() => { onClose(); onSetColor(node, color); }}
+            className="w-4 h-4 rounded-full border border-mail-border" style={{ background: color }} />
+        ))}
+      </div>
+      <button type="button" data-testid="folder-color-reset"
+        onClick={() => { onClose(); onSetColor(node, null); }}
+        className="mt-1.5 text-xs text-mail-accent-text hover:underline">{t('sidebar.folderIconColorDefault')}</button>
+    </div>
+  );
 
   if (node.local) return (
     <Popover open onClose={onClose} style={{ top: y, left: x }} role="menu" data-testid="folder-context-menu">
       <MenuItem tone="danger" disabled={importRunning} onClick={() => { onClose(); onDelete(node, { permanent: true }); }}>
         <Trash2 size={14} />{t('sidebar.deleteLocalFolder')}
       </MenuItem>
+      {colors}
     </Popover>
   );
 
@@ -47,6 +67,7 @@ export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, on
       <MenuItem tone="danger" disabled={locked} onClick={() => { onClose(); onDelete(node, { permanent: underTrash }); }}>
         <Trash2 size={14} />{underTrash ? t('sidebar.deleteFolderForever') : t('sidebar.deleteFolder')}
       </MenuItem>
+      {colors}
     </Popover>
   );
 }

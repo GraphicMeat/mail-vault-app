@@ -18,6 +18,8 @@ vi.mock('lucide-react', () => {
 });
 
 import { FolderTree } from '../FolderTree';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { folderColorKey } from '../../utils/folderIconColor';
 
 const box = (path, extra = {}) => ({
   path,
@@ -68,7 +70,13 @@ const iconOf = (path) => [...row(path).querySelectorAll('[data-icon]')]
   .find(el => !el.closest('[data-testid="folder-toggle"]'))
   .getAttribute('data-icon');
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  useSettingsStore.setState({ folderIconStyle: 'colorful', folderIconColors: {} });
+});
+const colorOf = (path) => [...row(path).querySelectorAll('[data-icon]')]
+  .find(el => !el.closest('[data-testid="folder-toggle"]')).style.color;
+
 
 describe('FolderTree', () => {
   it('draws a row per folder, carrying its depth', () => {
@@ -336,5 +344,36 @@ describe('unread-filter flash', () => {
       activeMailbox: 'INBOX', flash: { path: 'Sent', n: 1 },
     });
     expect(container.querySelector('[data-testid="folder-flash"]')).toBeNull();
+  });
+});
+
+describe('FolderTree icon colours', () => {
+  it('colourful by default: a special folder and a plain folder differ', () => {
+    draw();
+    expect(colorOf('INBOX.Sent')).not.toBe('');
+    expect(colorOf('INBOX.Kunden')).not.toBe('');
+    expect(colorOf('INBOX.Sent')).not.toBe(colorOf('INBOX.Kunden'));
+  });
+
+  it('theme style: every folder icon carries the one accent colour', () => {
+    useSettingsStore.setState({ folderIconStyle: 'theme' });
+    draw();
+    expect(colorOf('INBOX.Sent')).toBe('var(--mail-accent-text)');
+    expect(colorOf('INBOX.Kunden')).toBe('var(--mail-accent-text)');
+  });
+
+  it('a custom colour wins, scoped to the account', () => {
+    useSettingsStore.setState({ folderIconColors: { [folderColorKey('acc1', 'INBOX.Kunden')]: '#112233' } });
+    draw({ accountId: 'acc1' });
+    expect(colorOf('INBOX.Kunden')).toBe('rgb(17, 34, 51)');
+    cleanup();
+    draw({ accountId: 'acc2' });
+    expect(colorOf('INBOX.Kunden')).not.toBe('rgb(17, 34, 51)');
+  });
+
+  it('search results and chips use the same colours', () => {
+    useSettingsStore.setState({ folderIconStyle: 'theme' });
+    draw({ searchQuery: 'Kunden' });
+    expect(colorOf('INBOX.Kunden')).toBe('var(--mail-accent-text)');
   });
 });
