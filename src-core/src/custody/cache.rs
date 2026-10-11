@@ -929,10 +929,17 @@ pub fn restore_missing_headers(conn: &Connection, account: &str, mailbox: &str, 
 }
 
 pub fn rename_mailbox(conn: &Connection, account: &str, from: &str, to: &str) -> Result<(), String> {
-    conn.execute("UPDATE OR REPLACE header_cache SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
-    conn.execute("UPDATE OR REPLACE header_cache_meta SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
-    crate::people::message_addr::rename_mailbox(conn, account, from, to)?;
-    Ok(())
+    let tx = conn.unchecked_transaction().map_err(err)?;
+    // header rows of the target that the move replaces lose their address rows too; the rest of the target keeps its own
+    tx.execute(
+        "DELETE FROM message_addr WHERE account_id=?1 AND mailbox_path=?3 AND uid IN (SELECT uid FROM header_cache WHERE account_id=?1 AND mailbox_path=?2)",
+        params![account, from, to],
+    )
+    .map_err(err)?;
+    tx.execute("UPDATE OR REPLACE header_cache SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
+    tx.execute("UPDATE OR REPLACE header_cache_meta SET mailbox_path=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account,from,to]).map_err(err)?;
+    crate::people::message_addr::rename_mailbox(&tx, account, from, to)?;
+    tx.commit().map_err(err)
 }
 
 pub fn save_mailboxes(conn: &Connection, account: &str, data: &str) -> Result<(), String> {
@@ -1637,6 +1644,24 @@ mod tests {
             assert_eq!(counted, 0);
             clear_headers(&c, Some("a"), Some("Trash")).unwrap();
             assert_eq!(count(&c), 0);
+        }
+
+        #[test]
+        fn renaming_onto_a_mailbox_that_has_uids_leaves_no_stale_rows_for_the_replaced_ones() {
+            let (_t, c) = open();
+            let trash = json!({"emails": [
+                {"uid": 1, "date": "2024-01-02T03:04:05Z", "from": {"address": "old@x.io"}},
+                {"uid": 9, "date": "2024-01-02T03:04:05Z", "from": {"address": "kept@x.io"}},
+            ]}).to_string();
+            save_headers(&c, "a", "Trash", &trash).unwrap();
+            save_headers(&c, "a", "INBOX", &emails(&[1])).unwrap();
+            rename_mailbox(&c, "a", "INBOX", "Trash").unwrap();
+            let addrs = |uid: u32| -> Vec<String> {
+                c.prepare("SELECT address FROM message_addr WHERE mailbox_path='Trash' AND uid=?1 AND role='from'").unwrap()
+                    .query_map([uid], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+            };
+            assert_eq!(addrs(1), ["s1@x.io"], "the replaced uid keeps only the moved message's addresses");
+            assert_eq!(addrs(9), ["kept@x.io"], "a uid the move did not touch keeps its rows");
         }
 
         #[test]
