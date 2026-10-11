@@ -177,7 +177,8 @@ impl VCard {
 
     pub fn set_fn(&mut self, name: &str) {
         self.lines.retain(|l| l.name != "FN");
-        self.lines.insert(0, Line { group: None, name: "FN".into(), params: String::new(), value: escape(name) });
+        let at = if self.lines.first().is_some_and(|l| l.name == "VERSION") { 1 } else { 0 };
+        self.lines.insert(at, Line { group: None, name: "FN".into(), params: String::new(), value: escape(name) });
         if self.first("N").is_none() { self.lines.push(Line { group: None, name: "N".into(), params: String::new(), value: format!("{};;;;", escape(name)) }); }
     }
 
@@ -242,8 +243,8 @@ pub const IMPORT_CHUNK: usize = 200;
 /// group `grp` (a caller importing in chunks gives every chunk the same group,
 /// so a single undo reverses the whole file). A card whose email already
 /// belongs to a person is added as a second record of that person
-/// (exact-address auto-link); a card that adds nothing new, one with no name,
-/// address or phone, and a duplicate are skipped. Nothing leaves the vault.
+/// (exact-address auto-link); a card that adds no name, address or phone to
+/// that person, one with no name, address or phone, and a duplicate are skipped. Nothing leaves the vault.
 pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<ImportReport, String> {
     let mut report = ImportReport::default();
     let tx = conn.unchecked_transaction().map_err(derr)?;
@@ -259,7 +260,9 @@ pub fn import_cards(conn: &Connection, cards: &[VCard], grp: &str) -> Result<Imp
             Some(pid) => {
                 let existing = get_card(&tx, &pid)?.ok_or("E_NOT_FOUND: person")?;
                 let known: Vec<_> = existing.emails.iter().map(|e| e.address.clone()).collect();
-                if emails.iter().all(|a| known.contains(a)) {
+                let same_name = card.fn_name().trim().eq_ignore_ascii_case(existing.display_name.trim());
+                let has_phone = |n: &str| existing.phones.iter().any(|p| p.number.trim() == n);
+                if same_name && emails.iter().all(|a| known.contains(a)) && card.phones().iter().all(|(n, _)| has_phone(n)) {
                     report.skipped += 1;
                     continue;
                 }
@@ -468,6 +471,17 @@ mod tests {
             let r = import(&c, text).unwrap();
             assert_eq!((r.created, r.linked, r.skipped), (2, 1, 1));
             assert_eq!(get_card(&c, &existing).unwrap().unwrap().record_ids.len(), 2, "linked as a second record, not a new person");
+        }
+
+        #[test]
+        fn a_card_with_a_known_address_and_name_but_a_new_phone_is_linked() {
+            let (_t, c) = conn();
+            let id = create_person(&c, &NewPerson { display_name: "Jane".into(), emails: vec!["jane@corp.com".into()], phones: vec!["111".into()], ..Default::default() }).unwrap();
+            let same = "BEGIN:VCARD\nFN: jane \nEMAIL:jane@corp.com\nTEL:111\nEND:VCARD\n";
+            assert_eq!(import(&c, same).unwrap().skipped, 1, "same name, address and phone adds nothing");
+            let r = import(&c, "BEGIN:VCARD\nFN:Jane\nEMAIL:jane@corp.com\nTEL:222\nEND:VCARD\n").unwrap();
+            assert_eq!((r.created, r.linked, r.skipped), (0, 1, 0));
+            assert_eq!(get_card(&c, &id).unwrap().unwrap().record_ids.len(), 2);
         }
 
         #[test]

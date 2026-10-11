@@ -121,7 +121,7 @@ pub fn new_vault_id() -> String {
 }
 
 /// True if the folder already holds mail data, marker or not. A search index,
-/// a contacts index or the contacts.vcf safety copy alone is not mail — a stray
+/// a contacts index or the contacts.vcf safety copy alone is not mail, a stray
 /// `contacts_index/` left behind by an old, ungated flush (final fix wave
 /// I-1) must not make an otherwise-empty folder look like a vault.
 pub fn looks_like_vault(dir: &Path) -> bool {
