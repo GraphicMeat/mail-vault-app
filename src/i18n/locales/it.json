@@ -3811,5 +3811,10 @@
   "settings.billing.unknownDevice": "Dispositivo sconosciuto",
   "settings.timeCapsule.soTheyTakeLittleSpace": ", quindi occupano pochissimo spazio (poche centinaia di KB ciascuna). Se cancelli o perdi per sbaglio un'email, puoi aprire un'istantanea passata, trovarla e ripristinarla.",
   "spellcheck.snapBuildNoDictionaries": "Questa è la versione snap. Uno snap non vede i dizionari installati sull'host, quindi include i propri, e se stai leggendo questo, quella copia manca. Il pacchetto .deb di mailvaultapp.com usa invece i dizionari del tuo sistema; la guida qui sotto spiega i dettagli.",
-  "settings.accounts.removeAccountExplanation": "Elimina dalla tua cassaforte le email, gli allegati e le impostazioni di questo account. La posta ancora sul server non viene toccata; quello che il server non ha più è perso per sempre."
+  "settings.accounts.removeAccountExplanation": "Elimina dalla tua cassaforte le email, gli allegati e le impostazioni di questo account. La posta ancora sul server non viene toccata; quello che il server non ha più è perso per sempre.",
+  "codeBubble.copy": "Copia",
+  "codeBubble.copied": "Copiato",
+  "codeBubble.copyDelete": "Copia ed elimina",
+  "codeBubble.dismiss": "Chiudi",
+  "codeBubble.open": "Apri l'email"
 }

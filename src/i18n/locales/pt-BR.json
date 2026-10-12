@@ -3811,5 +3811,10 @@
   "settings.billing.unknownDevice": "Dispositivo desconhecido",
   "settings.timeCapsule.soTheyTakeLittleSpace": ", então ocupam muito pouco espaço (algumas centenas de KB cada). Se você apagar ou perder um e-mail sem querer, pode abrir um instantâneo anterior, encontrá-lo e restaurá-lo.",
   "spellcheck.snapBuildNoDictionaries": "Esta é a versão snap. Um snap não enxerga os dicionários instalados no sistema hospedeiro, então carrega os seus próprios, e se você está lendo isto, essa cópia está faltando. O pacote .deb do mailvaultapp.com usa, em vez disso, os dicionários do seu sistema; o guia abaixo traz os detalhes.",
-  "settings.accounts.removeAccountExplanation": "Remove do seu cofre os e-mails, anexos e ajustes desta conta. O que ainda estiver no servidor não é tocado; o que o servidor não tem mais se perde de vez."
+  "settings.accounts.removeAccountExplanation": "Remove do seu cofre os e-mails, anexos e ajustes desta conta. O que ainda estiver no servidor não é tocado; o que o servidor não tem mais se perde de vez.",
+  "codeBubble.copy": "Copiar",
+  "codeBubble.copied": "Copiado",
+  "codeBubble.copyDelete": "Copiar e excluir",
+  "codeBubble.dismiss": "Fechar",
+  "codeBubble.open": "Abrir o e-mail"
 }

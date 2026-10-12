@@ -3811,5 +3811,10 @@
   "settings.billing.unknownDevice": "Unbekanntes Gerät",
   "settings.timeCapsule.soTheyTakeLittleSpace": ", daher brauchen sie sehr wenig Platz (wenige hundert KB pro Stück). Wenn du einmal versehentlich eine E-Mail löschst oder verlierst, kannst du eine frühere Momentaufnahme öffnen, sie finden und wiederherstellen.",
   "spellcheck.snapBuildNoDictionaries": "Dies ist die Snap-Version. Ein Snap sieht keine auf dem Host installierten Wörterbücher, deshalb bringt er eigene mit, und wenn du das hier liest, fehlt diese Kopie. Das .deb-Paket von mailvaultapp.com nutzt stattdessen die Wörterbücher deines Systems; die Anleitung unten nennt die Details.",
-  "settings.accounts.removeAccountExplanation": "Löscht die E-Mails, Anhänge und Einstellungen dieses Kontos aus deinem Tresor. Mail, die noch auf dem Server liegt, bleibt unberührt; was der Server nicht mehr hat, ist endgültig weg."
+  "settings.accounts.removeAccountExplanation": "Löscht die E-Mails, Anhänge und Einstellungen dieses Kontos aus deinem Tresor. Mail, die noch auf dem Server liegt, bleibt unberührt; was der Server nicht mehr hat, ist endgültig weg.",
+  "codeBubble.copy": "Kopieren",
+  "codeBubble.copied": "Kopiert",
+  "codeBubble.copyDelete": "Kopieren & löschen",
+  "codeBubble.dismiss": "Schließen",
+  "codeBubble.open": "E-Mail öffnen"
 }

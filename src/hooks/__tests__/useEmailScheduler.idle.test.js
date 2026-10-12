@@ -68,6 +68,12 @@ vi.mock('../../services/workflows/replayOps', () => ({
   wireReplayOnReconnect: vi.fn(),
 }));
 
+// The corner bubble for a one-time code: handed every arrival's newest header.
+const mockOfferCode = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../services/codeBubble', () => ({
+  offerCodeFromArrival: (...a) => mockOfferCode(...a),
+}));
+
 // ── stores ──────────────────────────────────────────────────────────────────
 // One store behind all three facades, exactly as the app composes them.
 const mockLoadEmails = vi.fn();
@@ -136,6 +142,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     mockLoadUnifiedInbox.mockClear();
     mockScheduleViewCounts.mockClear();
     mockRereadCopyFlags.mockClear();
+    mockOfferCode.mockClear();
     mockGetHeaders.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
     mockGetAllHeaders.mockReset().mockResolvedValue(null);
     mailStore.setState(mailState());
@@ -225,6 +232,30 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     // see focusStore.test.js for that.
     expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 },
       { accountId: 'a1', folder: 'INBOX', from: '', domain: '', viewIds: [] });
+  });
+
+  describe('a one-time code in the mail', () => {
+    it('hands the arrival to the code bubble', async () => {
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      const header = { uid: 7, from: { name: 'Acme' }, subject: 'Your verification code is 364758' };
+      mockGetHeaders.mockResolvedValue({ emails: [header] });
+      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockOfferCode).toHaveBeenCalledWith('a1', 'INBOX', header);
+    });
+
+    it('offers nothing for a change without new mail', async () => {
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1 }] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockOfferCode).not.toHaveBeenCalled();
+    });
   });
 
   describe('mail the user sent', () => {

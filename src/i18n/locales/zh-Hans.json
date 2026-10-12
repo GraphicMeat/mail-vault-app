@@ -3811,5 +3811,10 @@
   "settings.billing.unknownDevice": "未知设备",
   "settings.timeCapsule.soTheyTakeLittleSpace": "，因此占用空间很小（每个几百 KB）。如果不小心删除或丢失了邮件，可以打开过去的快照，找到并恢复它。",
   "spellcheck.snapBuildNoDictionaries": "这是 snap 版本。snap 看不到主机上安装的词典，所以自带了一份；如果你看到这条消息，说明这份词典缺失。mailvaultapp.com 的 .deb 安装包则改用系统词典，详情见下方指南。",
-  "settings.accounts.removeAccountExplanation": "从保险库中删除此账户的邮件、附件和设置。仍在服务器上的邮件不受影响；服务器上已经没有的，就彻底没有了。"
+  "settings.accounts.removeAccountExplanation": "从保险库中删除此账户的邮件、附件和设置。仍在服务器上的邮件不受影响；服务器上已经没有的，就彻底没有了。",
+  "codeBubble.copy": "复制",
+  "codeBubble.copied": "已复制",
+  "codeBubble.copyDelete": "复制并删除",
+  "codeBubble.dismiss": "关闭",
+  "codeBubble.open": "打开邮件"
 }

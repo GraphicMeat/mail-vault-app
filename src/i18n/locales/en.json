@@ -3811,5 +3811,10 @@
   "settings.billing.unknownDevice": "Unknown device",
   "settings.timeCapsule.soTheyTakeLittleSpace": ", so they take up very little space (a few hundred KB each). If you ever accidentally delete or lose an email, you can open a past snapshot, find it, and restore it.",
   "spellcheck.snapBuildNoDictionaries": "This is the snap build. A snap cannot see dictionaries installed on the host, so it carries its own, and if you are reading this, that copy is missing. The .deb package from mailvaultapp.com uses your system's dictionaries instead; the guide below has the details.",
-  "settings.accounts.removeAccountExplanation": "Deletes this account's emails, attachments and settings from your vault. Mail still on the server is untouched; anything the server no longer has is gone for good."
+  "settings.accounts.removeAccountExplanation": "Deletes this account's emails, attachments and settings from your vault. Mail still on the server is untouched; anything the server no longer has is gone for good.",
+  "codeBubble.copy": "Copy",
+  "codeBubble.copied": "Copied",
+  "codeBubble.copyDelete": "Copy & delete",
+  "codeBubble.dismiss": "Dismiss",
+  "codeBubble.open": "Open the email"
 }

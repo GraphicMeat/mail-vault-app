@@ -3811,5 +3811,10 @@
   "settings.billing.unknownDevice": "Dispositivo desconocido",
   "settings.timeCapsule.soTheyTakeLittleSpace": ", así que ocupan muy poco espacio (unos cientos de KB cada una). Si alguna vez borras o pierdes un correo por accidente, puedes abrir una instantánea anterior, encontrarlo y restaurarlo.",
   "spellcheck.snapBuildNoDictionaries": "Esta es la versión snap. Un snap no puede ver los diccionarios instalados en el sistema anfitrión, así que lleva los suyos, y si estás leyendo esto, falta esa copia. El paquete .deb de mailvaultapp.com usa en su lugar los diccionarios de tu sistema; la guía de abajo tiene los detalles.",
-  "settings.accounts.removeAccountExplanation": "Elimina de tu bóveda los correos, adjuntos y ajustes de esta cuenta. El correo que siga en el servidor no se toca; lo que el servidor ya no tenga se pierde para siempre."
+  "settings.accounts.removeAccountExplanation": "Elimina de tu bóveda los correos, adjuntos y ajustes de esta cuenta. El correo que siga en el servidor no se toca; lo que el servidor ya no tenga se pierde para siempre.",
+  "codeBubble.copy": "Copiar",
+  "codeBubble.copied": "Copiado",
+  "codeBubble.copyDelete": "Copiar y eliminar",
+  "codeBubble.dismiss": "Cerrar",
+  "codeBubble.open": "Abrir el correo"
 }

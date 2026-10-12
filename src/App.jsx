@@ -45,6 +45,8 @@ import { UnsubscribeHost } from './components/UnsubscribeHost';
 import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
 import { SettingsBubble } from './components/settings/SettingsBubble';
+import { CodeBubbles } from './components/CodeBubble';
+import { useCodeBubbleStore } from './stores/codeBubbleStore';
 import { useUnsavedStore } from './stores/unsavedStore';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { SnoozePicker } from './components/SnoozePicker';
@@ -602,6 +604,8 @@ function App() {
 
   // A minimized Archive & delete job shares the corner stack below.
   const abdMinimized = useAbdStore(s => !!s.panel?.minimized && !!s.jobs[s.panel.accountId]);
+  // One-time codes that arrived by mail sit in the same stack.
+  const codeBubblesShown = useCodeBubbleStore(s => s.bubbles.length > 0);
   const exportTarget = useExportStore(s => s.target);
   const showExportSamples = useExportStore(s => s.showSamples);
   const closeExport = useExportStore(s => s.closeExport);
@@ -1613,8 +1617,12 @@ function App() {
       </ChunkErrorBoundary>
 
       {/* Minimized windows share one stack so their restore buttons never overlap. */}
-      {(settingsMinimized || abdMinimized || composeWindows.some(w => w.minimized)) && (
+      {(settingsMinimized || abdMinimized || codeBubblesShown || composeWindows.some(w => w.minimized)) && (
         <div className="fixed top-16 right-4 z-40 flex flex-col gap-2">
+          <CodeBubbles
+            onOpen={(target) => openNotificationTarget(target, useMailStore.getState)}
+            onDelete={({ uid, accountId, mailbox }) => useMailStore.getState().deleteEmailFromServer(uid, { accountId, mailboxOverride: mailbox })}
+          />
           <AbdPill />
           {settingsMinimized && <SettingsBubble location={settingsLocation} onRestore={openSettings}
             onClose={() => useUnsavedStore.getState().leave(closeSettings)} />}

@@ -14,6 +14,7 @@ import { hasValidCredentials } from '../services/authUtils';
 import { isGraphAccount } from '../services/graphConfig';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { isOwnAddress } from '../utils/ownAddresses';
+import { offerCodeFromArrival } from '../services/codeBubble';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
@@ -220,6 +221,10 @@ export function useEmailScheduler() {
         newest = (await db.getEmailHeadersPartial(accountId, mailbox, 1))?.emails?.[0] || null;
       } catch { /* no preview, still notify */ }
       notifyArrival(accountId, mailbox, newEmails, newest);
+      // A one-time code in that mail goes to the corner bubble. Fire-and-forget:
+      // it may read the body, and nothing in the feed waits on it.
+      offerCodeFromArrival(accountId, mailbox, newest)
+        .catch(error => console.warn('[scheduler] Could not offer the code bubble:', error));
     }
     // A restore window saved before the change holds the old flags, and All
     // Inboxes paints those ahead of the cache. The Notes to Self board keeps

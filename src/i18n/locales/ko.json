@@ -3811,5 +3811,10 @@
   "settings.billing.unknownDevice": "알 수 없는 기기",
   "settings.timeCapsule.soTheyTakeLittleSpace": "입니다. 그래서 용량이 아주 적습니다(각 수백 KB 정도). 실수로 메일을 삭제하거나 잃어버려도 과거 스냅숏을 열어 찾아서 복원할 수 있습니다.",
   "spellcheck.snapBuildNoDictionaries": "이것은 snap 빌드입니다. snap은 호스트에 설치된 사전을 볼 수 없어 자체 사전을 포함하고 있으며, 이 메시지가 보인다면 그 사전이 없는 것입니다. mailvaultapp.com의 .deb 패키지는 대신 시스템 사전을 사용합니다. 자세한 내용은 아래 가이드를 참고하세요.",
-  "settings.accounts.removeAccountExplanation": "이 계정의 메일, 첨부파일, 설정을 보관함에서 삭제합니다. 서버에 남아 있는 메일은 그대로지만, 서버에 더 이상 없는 것은 영영 사라집니다."
+  "settings.accounts.removeAccountExplanation": "이 계정의 메일, 첨부파일, 설정을 보관함에서 삭제합니다. 서버에 남아 있는 메일은 그대로지만, 서버에 더 이상 없는 것은 영영 사라집니다.",
+  "codeBubble.copy": "복사",
+  "codeBubble.copied": "복사됨",
+  "codeBubble.copyDelete": "복사 후 삭제",
+  "codeBubble.dismiss": "닫기",
+  "codeBubble.open": "이메일 열기"
 }
