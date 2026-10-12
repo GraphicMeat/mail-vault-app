@@ -77,9 +77,30 @@ pub fn count_files(dir: &Path) -> usize {
     }).sum()
 }
 
+/// The blob id a path names, when it is `message_blobs/<h0h1>/<hex>.eml`
+/// (`jmap_store::blobs::blob_path`): a blob's name is the sha256 of its bytes.
+fn blob_id_named_by(path: &Path) -> Option<String> {
+    let hex = path.file_name()?.to_str()?.strip_suffix(".eml")?;
+    let id = format!("sha256-{hex}");
+    let shard = path.parent()?;
+    let named = crate::jmap_store::blobs::is_valid_id(&id)
+        && shard.file_name()?.to_str() == hex.get(0..2)
+        && shard.parent()?.file_name()?.to_str()? == crate::jmap_store::blobs::BLOB_DIR;
+    named.then_some(id)
+}
+
+/// Whether the file at `to` hashes to the blob id `id`. A file that will not
+/// read is not intact.
+fn blob_is_intact(to: &Path, id: &str) -> bool {
+    std::fs::read(to).is_ok_and(|bytes| crate::jmap_store::blobs::blob_id(&bytes) == id)
+}
+
 /// Copy `src` into `dst` recursively. Returns (files, bytes) actually written.
 /// Existing destination files with the same size are left alone so an
-/// interrupted offload can be resumed by running it again.
+/// interrupted offload can be resumed by running it again; a message blob is
+/// kept only when its bytes hash to its name (a power loss can leave one at
+/// full length with zeroed data, and the verify that follows deletes the
+/// source's good copy).
 pub fn copy_tree(src: &Path, dst: &Path, copied: &mut usize, bytes: &mut u64) -> Result<(), String> {
     std::fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {}", dst.display(), e))?;
     let entries = std::fs::read_dir(src).map_err(|e| format!("read {}: {}", src.display(), e))?;
@@ -94,7 +115,11 @@ pub fn copy_tree(src: &Path, dst: &Path, copied: &mut usize, bytes: &mut u64) ->
         // A JMAP record is rewritten in place under its one name (a flag
         // change, the blob of an overwritten draft), often at the same
         // length: one left by an interrupted run is never taken as copied.
-        if !crate::message_store::is_record_path(&from) && to.metadata().map(|m| m.len()).ok() == Some(src_len) {
+        let same_len = to.metadata().map(|m| m.len()).ok() == Some(src_len);
+        let kept = same_len
+            && !crate::message_store::is_record_path(&from)
+            && blob_id_named_by(&from).is_none_or(|id| blob_is_intact(&to, &id));
+        if kept {
             *copied += 1;
             *bytes += src_len;
             continue;
@@ -107,8 +132,8 @@ pub fn copy_tree(src: &Path, dst: &Path, copied: &mut usize, bytes: &mut u64) ->
 }
 
 /// Verify every file in `src` exists in `dst` with the same size, and every
-/// JMAP record with the same bytes (`copy_tree`: its size proves nothing).
-/// Returns the first mismatch found.
+/// JMAP record with the same bytes (`copy_tree`: its size proves nothing),
+/// and every message blob hashing to its name. Returns the first mismatch found.
 pub fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
     let entries = std::fs::read_dir(src).map_err(|e| format!("read {}: {}", src.display(), e))?;
     for entry in entries.flatten() {
@@ -128,6 +153,11 @@ pub fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
             let want = std::fs::read(&from).map_err(|e| format!("read {}: {}", from.display(), e))?;
             let got = std::fs::read(&to).map_err(|e| format!("read {}: {}", to.display(), e))?;
             if want != got {
+                return Err(format!("{} did not arrive intact", to.display()));
+            }
+        }
+        if let Some(id) = blob_id_named_by(&from) {
+            if !blob_is_intact(&to, &id) {
                 return Err(format!("{} did not arrive intact", to.display()));
             }
         }
@@ -602,6 +632,32 @@ mod tests {
         verify_tree(&src, &dst).unwrap();
 
         let _ = fs::remove_dir_all(&base);
+    }
+
+    /// A power loss mid-move can leave a destination blob at full length with
+    /// zeroed data. The resumed move must not keep it (the source is deleted
+    /// once the verify passes), and the verify must not pass it.
+    #[test]
+    fn a_resumed_move_repairs_a_same_length_corrupt_destination_blob() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("src"), tmp.path().join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        jmap_vault(&src);
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+
+        let blobs_in = |root: &Path| -> Vec<PathBuf> {
+            walkdir::WalkDir::new(root.join("message_blobs")).into_iter().flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path()).collect()
+        };
+        let blob = blobs_in(&dst).pop().expect("the vault holds blobs");
+        let good = fs::read(&blob).unwrap();
+        fs::write(&blob, vec![0u8; good.len()]).unwrap();
+        assert_eq!(fs::metadata(&blob).unwrap().len(), good.len() as u64, "the case this pins: one length");
+
+        assert!(verify_tree(&src.join("message_blobs"), &dst.join("message_blobs")).is_err(), "a zeroed blob does not verify");
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+        assert_eq!(fs::read(&blob).unwrap(), good, "the bad blob was copied again");
+        verify_tree(&src.join("message_blobs"), &dst.join("message_blobs")).unwrap();
     }
 
     #[test]
