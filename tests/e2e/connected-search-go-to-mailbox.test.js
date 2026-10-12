@@ -7,21 +7,20 @@
  * (guarded on the address) never drew and a hit read as nobody's. The row menu
  * had no way out of the search to the message's own folder and thread.
  *
- * Fixture: FRAGMENTED_SUBJECT. Every account's INBOX holds the same three-message
- * conversation (the harness seeds threadMode 'grouped'), so a search for it from
- * All inboxes returns hits in more than one account. The hit opened is yoda's
- * middle message: not the first account (so the switch is real) and not the
- * newest (so the anchor is not just the default).
+ * Fixtures: "message" matches mail in every account (the badge and sidebar
+ * cases). FRAGMENTED_SUBJECT is luke's three-message INBOX conversation (the
+ * harness seeds threadMode 'grouped'); the spec enters All inboxes with yoda as
+ * the active account, so opening luke's middle message is a real switch.
  */
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { FRAGMENTED_SUBJECT } from './mockImap.js';
 import { rowMenuIsOpen, clickRowAction, rowMenuItems } from './rowMenu.js';
 
+const LUKE = 'luke@mock.test';
 const YODA = 'yoda@mock.test';
-const MIDDLE_SUBJECT = `Re: ${FRAGMENTED_SUBJECT}`;
 
-const yodaId = () => browser.mockAccounts.find(account => account.email === YODA).id;
+const idOf = email => browser.mockAccounts.find(account => account.email === email).id;
 
 const searchAll = (query) => browser.execute((q) => {
   const store = window.__SEARCH_STORE__;
@@ -61,9 +60,10 @@ describe('Search from All inboxes: account badge, sidebar light, Go to mailbox',
   before(async function () {
     await waitForApp();
     await waitForEmails();
-    // All inboxes is built from each account's cached headers: visit both first.
+    // All inboxes is built from each account's cached headers: visit both
+    // first, yoda last, so yoda is the account All inboxes leaves behind.
+    await switchToFolder(LUKE, 'INBOX');
     await switchToFolder(YODA, 'INBOX');
-    await switchToFolder(browser.testEnv.TEST_EMAIL, 'INBOX');
     const clicked = await browser.execute(() => {
       const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
       if (!btn) return false;
@@ -76,17 +76,19 @@ describe('Search from All inboxes: account badge, sidebar light, Go to mailbox',
       return !!s && s.activeMailbox === 'UNIFIED' && !s.loadingProgress
         && new Set(s.sortedEmails.map(e => e._accountId).filter(Boolean)).size >= 2;
     }), { timeout: 30_000, timeoutMsg: 'All inboxes never loaded two accounts' });
-
-    expect(await searchAll(FRAGMENTED_SUBJECT)).toBe(true);
-    await browser.waitUntil(async () => {
-      const found = await hits();
-      return new Set(found.map(hit => hit.accountId)).size >= 2 && found.some(hit => hit.accountId === yodaId());
-    }, { timeout: 30_000, timeoutMsg: 'the search never returned hits from two accounts' });
-    await browser.waitUntil(() => browser.execute(() => !window.__SEARCH_STORE__.getState().isSearching),
-      { timeout: 30_000, timeoutMsg: 'the search never finished' });
   });
 
+  /** Search and wait until it has finished and `ready(hits)` holds. */
+  async function searchUntil(query, ready, why) {
+    expect(await searchAll(query)).toBe(true);
+    await browser.waitUntil(async () => ready(await hits()), { timeout: 30_000, timeoutMsg: why });
+    await browser.waitUntil(() => browser.execute(() => !window.__SEARCH_STORE__.getState().isSearching),
+      { timeout: 30_000, timeoutMsg: 'the search never finished' });
+  }
+
   it('names the account of every hit, by address and by badge', async function () {
+    await searchUntil('message', found => new Set(found.map(hit => hit.accountId)).size >= 2,
+      'the search never returned hits from two accounts');
     const found = await hits();
     expect(found.length).toBeGreaterThan(1);
     // The daemon stamps the id; the app gives the row the address.
@@ -94,8 +96,8 @@ describe('Search from All inboxes: account badge, sidebar light, Go to mailbox',
 
     const rows = await rowBadges();
     expect(rows.length).toBeGreaterThan(1);
+    expect(rows.filter(row => !row.dot).map(row => row.text)).toEqual([]);
     for (const row of rows) {
-      expect(row.dot, `no account badge on "${row.text}"`).not.toBeNull();
       expect(row.dot.initial.length).toBeGreaterThan(0);
       expect(row.dot.title).toContain('@mock.test');
     }
@@ -104,60 +106,64 @@ describe('Search from All inboxes: account badge, sidebar light, Go to mailbox',
 
   it('lights the hit\'s account in the sidebar while the pointer is on the row', async function () {
     expect(await pointedAccounts()).toEqual([]);
-    expect(await pointAtRow(MIDDLE_SUBJECT, true)).toBe(true);
+    const row = await browser.execute(() => {
+      const el = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .find(r => r.offsetHeight > 0 && r.querySelector('[data-testid="account-dot"]'));
+      if (!el) return null;
+      el.setAttribute('data-e2e-pointed', 'yes');
+      return el.querySelector('[data-testid="account-dot"]').title;
+    });
+    expect(row).toContain('@mock.test');
+    const point = entering => browser.execute((on) => {
+      document.querySelector('[data-e2e-pointed]')
+        .dispatchEvent(new MouseEvent(on ? 'mouseover' : 'mouseout', { bubbles: true, relatedTarget: document.body }));
+    }, entering);
+    await point(true);
     await browser.waitUntil(async () => (await pointedAccounts()).length === 1,
       { timeout: 5_000, timeoutMsg: 'no sidebar account lit under the pointer' });
-    const [pointed] = await pointedAccounts();
-    // Not necessarily yoda: the first matching row may be another account's.
-    const rowAccount = await browser.execute(() => {
-      const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-        .find(r => r.offsetHeight > 0 && (r.textContent || '').includes('Re: Fragmented thread check'));
-      return row?.querySelector('[data-testid="account-dot"]')?.title || null;
-    });
-    expect(pointed).toContain(rowAccount);
-
-    expect(await pointAtRow(MIDDLE_SUBJECT, false)).toBe(true);
+    expect((await pointedAccounts())[0]).toContain(row);
+    await point(false);
     await browser.waitUntil(async () => (await pointedAccounts()).length === 0,
       { timeout: 5_000, timeoutMsg: 'the sidebar account stayed lit after the pointer left' });
   });
 
   it('Go to mailbox leaves the search and opens the hit\'s thread on that message', async function () {
-    const target = (await hits()).find(hit => hit.accountId === yodaId() && hit.subject === MIDDLE_SUBJECT);
-    expect(target, 'yoda\'s middle message is not among the hits').toBeTruthy();
+    const luke = idOf(LUKE);
+    await searchUntil(FRAGMENTED_SUBJECT,
+      found => found.filter(hit => hit.accountId === luke && hit.mailbox === 'INBOX').length >= 3,
+      'the search never returned luke\'s three conversation messages');
+    // The middle one: neither the first nor the newest, so the anchor is not a default.
+    const inbox = (await hits()).filter(hit => hit.accountId === luke && hit.mailbox === 'INBOX')
+      .sort((a, b) => a.uid - b.uid);
+    const target = inbox[1];
+    expect(await browser.execute(() => window.__MAIL_STORE__.getState().activeAccountId)).not.toBe(luke);
 
-    // Rows of both accounts share the subject: the badge names yoda's.
     await browser.waitUntil(async () => {
       if (await rowMenuIsOpen()) return true;
-      await browser.execute((id, subject) => {
+      await browser.execute((id, uid) => {
         const row = [...document.querySelectorAll('[data-testid="email-row"]')]
-          .find(r => r.offsetHeight > 0 && (r.textContent || '').includes(subject)
+          .find(r => r.offsetHeight > 0 && r.getAttribute('data-uid') === String(uid)
             && r.querySelector('[data-testid="account-dot"]')?.dataset.accountId === id);
         row?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
         row?.querySelector('.quick-actions[data-surface="row"] .quick-actions-trigger')?.click();
-      }, yodaId(), MIDDLE_SUBJECT);
+      }, luke, target.uid);
       await browser.pause(250);
       return rowMenuIsOpen();
-    }, { interval: 300, timeout: 30_000, timeoutMsg: 'the row menu never opened on yoda\'s hit' });
-    const items = await rowMenuItems();
-    expect(items.map(item => item.action)).toContain('goToMailbox');
+    }, { interval: 300, timeout: 30_000, timeoutMsg: 'the row menu never opened on the hit' });
+    expect((await rowMenuItems()).map(item => item.action)).toContain('goToMailbox');
     expect(await clickRowAction('goToMailbox')).toBe(true);
 
     await browser.waitUntil(() => browser.execute((id) => {
       const s = window.__MAIL_STORE__.getState();
       return s.activeAccountId === id && s.activeMailbox === 'INBOX' && !s.unifiedInbox && !!s.selectedThread;
-    }, yodaId()), { timeout: 30_000, timeoutMsg: 'Go to mailbox never opened yoda\'s INBOX thread' });
+    }, luke), { timeout: 30_000, timeoutMsg: 'Go to mailbox never opened luke\'s INBOX thread' });
 
     const state = await browser.execute(() => {
       const s = window.__MAIL_STORE__.getState();
-      return {
-        searchActive: window.__SEARCH_STORE__.getState().searchActive,
-        focusKey: s.threadFocusKey,
-        members: s.selectedThread.emails.map(e => e.uid),
-        subject: s.selectedThread.subject,
-      };
+      return { searchActive: window.__SEARCH_STORE__.getState().searchActive, focusKey: s.threadFocusKey, members: s.selectedThread.emails.length };
     });
     expect(state.searchActive).toBe(false);
-    expect(state.members.length).toBeGreaterThan(1);
+    expect(state.members).toBeGreaterThan(1);
     expect(state.focusKey.endsWith(`|INBOX|${target.uid}`)).toBe(true);
 
     // The thread shows that one message open.
