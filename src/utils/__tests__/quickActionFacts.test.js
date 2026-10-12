@@ -38,6 +38,19 @@ describe('rowFacts', () => {
     expect(facts.can.delete).toBe(true);
   });
 
+  // A row of a plain folder is already where its message lives; one seen out of
+  // place (a search hit, an All inboxes row) can be opened there. A thread row
+  // goes to its newest message.
+  it('offers Go to mailbox only on a message seen out of place, placed in a folder', () => {
+    expect(rowFacts([mail(1)], STATE).goTo).toBeNull();
+    expect(rowFacts([mail(1)], STATE, { searching: true }).goTo.email.uid).toBe(1);
+    const spanning = { ...STATE, activeMailbox: 'UNIFIED' };
+    expect(rowFacts([mail(1), mail(3), mail(2)], spanning).goTo.email.uid).toBe(3);
+    expect(rowFacts([mail(1)], { ...STATE, mailboxScope: { kind: 'all' } }).goTo.email.uid).toBe(1);
+    // No folder to go to: a foreign account's row that names none.
+    expect(rowFacts([mail(1, { _accountId: 'acct-b', _mailbox: undefined })], spanning, { searching: true }).goTo).toBeNull();
+  });
+
   it('two accounts: no one account and no junk to move to', () => {
     const facts = rowFacts([mail(1), mail(2, { _accountId: 'acct-b' })], STATE);
     expect(facts).toMatchObject({ accountId: null, junkPath: null, mailbox: 'INBOX' });

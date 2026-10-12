@@ -9,7 +9,7 @@ const facts = (overrides = {}) => ({
   has: { markRead: true, markUnread: false, star: true, unstar: false, archive: true, unarchive: false },
   resolved: true, fullyResolved: true, accountId: 'acct-a', mailbox: 'INBOX', locations: [],
   localFolder: false, localOnly: false, readOnly: false, serverBacked: true, serverActions: true,
-  junkPath: 'Junk', snooze: true, unsubscribe: { email: {} }, purge: { label: 'Delete' }, sender: 's@x.test',
+  junkPath: 'Junk', snooze: true, unsubscribe: { email: {} }, goTo: { email: {} }, purge: { label: 'Delete' }, sender: 's@x.test',
   senderName: 'S', sent: false, singleRecipient: false, dark: false,
   explicit: { star: false, archive: false },
   can: Object.fromEntries(QUICK_ACTION_TYPES.map(action => [action, true])),
@@ -28,6 +28,14 @@ describe('quickActionAvailability', () => {
         expect(() => check(surface, { action })).not.toThrow();
       }
     }
+  });
+
+  it('Go to mailbox is a row action that shows only when the row has somewhere to go', () => {
+    expect(QUICK_ACTION_SURFACE_ACTIONS.row).toContain('goToMailbox');
+    expect(QUICK_ACTION_SURFACE_ACTIONS.selection).not.toContain('goToMailbox');
+    expect(QUICK_ACTION_SURFACE_ACTIONS.reader).not.toContain('goToMailbox');
+    expect(check('row', { action: 'goToMailbox' }, { goTo: { email: {} } })).toEqual({ hidden: false, disabled: false });
+    expect(check('row', { action: 'goToMailbox' }, { goTo: null }).hidden).toBe(true);
   });
 
   it('never hides on the selection bar; the row hides and the bar disables the side that does not apply', () => {

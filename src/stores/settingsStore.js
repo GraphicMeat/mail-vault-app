@@ -373,6 +373,11 @@ export function migrateSettings(persisted, version) {
   // the slider's mark; every saved style holds it whether picked or not. It is
   // 12 now, and a 26 saved before then was that default.
   if (version < 16 && next.socialExport?.radius === 26) next = { ...next, socialExport: { ...next.socialExport, radius: MACOS_WINDOW_RADIUS } };
+  // v16 -> v17: Go to mailbox joins the saved row lists, once. It only shows
+  // on a message seen out of place (a search hit, an All inboxes row).
+  if (version < 17 && next.quickActions) {
+    next = { ...next, quickActions: mapQuickActionSurfaces(next.quickActions, appendOnce(['row'], 'goToMailbox')) };
+  }
   return next;
 }
 
@@ -1739,7 +1744,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 16,
+      version: 17,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its

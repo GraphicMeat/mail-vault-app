@@ -47,8 +47,8 @@ describe('v8 -> v9: Snooze joins saved quick action lists once', () => {
 
   it('appends snooze to the row and selection lists, not the reader', () => {
     const { defaults } = migrateSettings(saved(), 8).quickActions;
-    // v10 then appends Unsubscribe to the row list (see below).
-    expect(defaults.row.entries.map(e => e.action)).toEqual(['archive', 'snooze', 'unsubscribe']);
+    // v10 then appends Unsubscribe, and v17 Go to mailbox, to the row list (see below).
+    expect(defaults.row.entries.map(e => e.action)).toEqual(['archive', 'snooze', 'unsubscribe', 'goToMailbox']);
     expect(defaults.selection.entries.map(e => e.action)).toEqual(['markRead', 'snooze']);
     expect(defaults.reader.entries.map(e => e.action)).toEqual(['reply']);
   });
@@ -57,8 +57,9 @@ describe('v8 -> v9: Snooze joins saved quick action lists once', () => {
     const once = migrateSettings(saved(), 8);
     const twice = migrateSettings(once, 8);
     expect(twice.quickActions.defaults.row.entries.filter(e => e.action === 'snooze')).toHaveLength(1);
-    expect(migrateSettings(saved(), 9).quickActions.defaults.row.entries.map(e => e.action)).toEqual(['archive', 'unsubscribe']);
-    expect(migrateSettings(saved(), 10).quickActions.defaults.row.entries.map(e => e.action)).toEqual(['archive']);
+    expect(migrateSettings(saved(), 9).quickActions.defaults.row.entries.map(e => e.action)).toEqual(['archive', 'unsubscribe', 'goToMailbox']);
+    expect(migrateSettings(saved(), 10).quickActions.defaults.row.entries.map(e => e.action)).toEqual(['archive', 'goToMailbox']);
+    expect(migrateSettings(saved(), 17).quickActions.defaults.row.entries.map(e => e.action)).toEqual(['archive']);
   });
 });
 
@@ -76,7 +77,7 @@ describe('v9 -> v10: Unsubscribe joins the saved row list once', () => {
 
   it('appends it to a v9 row list, last, and nowhere else', () => {
     const next = migrateSettings(saved(), 9);
-    expect(actions(next, 'row')).toEqual(['archive', 'snooze', 'unsubscribe']);
+    expect(actions(next, 'row')).toEqual(['archive', 'snooze', 'unsubscribe', 'goToMailbox']);
     expect(next.quickActions.defaults.row.mode).toBe('radial');
     expect(actions(next, 'selection')).toEqual(['markRead']);
     expect(actions(next, 'reader')).toEqual(['reply']);
@@ -86,15 +87,52 @@ describe('v9 -> v10: Unsubscribe joins the saved row list once', () => {
     const twice = migrateSettings(migrateSettings(saved(), 9), 9);
     expect(actions(twice, 'row').filter(a => a === 'unsubscribe')).toHaveLength(1);
     const had = saved([{ id: 'unsubscribe', action: 'unsubscribe' }, { id: 'archive', action: 'archive' }]);
-    expect(actions(migrateSettings(had, 9), 'row')).toEqual(['unsubscribe', 'archive']);
+    expect(actions(migrateSettings(had, 9), 'row')).toEqual(['unsubscribe', 'archive', 'goToMailbox']);
   });
 
   it('leaves a v10 list alone, so removing it after the upgrade sticks', () => {
-    expect(actions(migrateSettings(saved(), 10), 'row')).toEqual(['archive', 'snooze']);
+    expect(actions(migrateSettings(saved(), 10), 'row')).toEqual(['archive', 'snooze', 'goToMailbox']);
+    expect(actions(migrateSettings(saved(), 17), 'row')).toEqual(['archive', 'snooze']);
   });
 
   it('is in the row defaults of a new install', () => {
     expect(useSettingsStore.getState().quickActions.defaults.row.entries.some(e => e.action === 'unsubscribe')).toBe(true);
+  });
+});
+
+describe('v16 -> v17: Go to mailbox joins the saved row list once', () => {
+  const saved = (row = [{ id: 'archive', action: 'archive' }]) => ({
+    quickActions: {
+      defaults: {
+        row: { mode: 'radial', entries: row },
+        selection: { entries: [{ id: 'markRead', action: 'markRead' }] },
+        reader: { entries: [{ id: 'reply', action: 'reply' }] },
+      },
+    },
+  });
+  const actions = (state, surface) => state.quickActions.defaults[surface].entries.map(e => e.action);
+
+  it('appends it to a v16 row list, last, and nowhere else', () => {
+    const next = migrateSettings(saved(), 16);
+    expect(actions(next, 'row')).toEqual(['archive', 'goToMailbox']);
+    expect(actions(next, 'selection')).toEqual(['markRead']);
+    expect(actions(next, 'reader')).toEqual(['reply']);
+  });
+
+  it('adds it once, and leaves a v17 list alone so removing it sticks', () => {
+    expect(actions(migrateSettings(migrateSettings(saved(), 16), 16), 'row')).toEqual(['archive', 'goToMailbox']);
+    const had = saved([{ id: 'goToMailbox', action: 'goToMailbox' }, { id: 'archive', action: 'archive' }]);
+    expect(actions(migrateSettings(had, 16), 'row')).toEqual(['goToMailbox', 'archive']);
+    expect(actions(migrateSettings(saved(), 17), 'row')).toEqual(['archive']);
+  });
+
+  it('reaches a view\'s own row list and is in the defaults of a new install', () => {
+    const key = 'view-key';
+    const state = saved();
+    state.quickActions.overrides = { [key]: { row: { mode: 'menu', entries: [{ id: 'archive', action: 'archive' }, { id: 'move', action: 'move' }] } } };
+    const next = migrateSettings(state, 16).quickActions;
+    expect(next.overrides[key].row.entries.map(e => e.action)).toEqual(['archive', 'move', 'goToMailbox']);
+    expect(useSettingsStore.getState().quickActions.defaults.row.entries.at(-1).action).toBe('goToMailbox');
   });
 });
 
@@ -118,7 +156,7 @@ describe('quick action migrations reach per-view overrides', () => {
       },
     };
     const { quickActions } = migrateSettings(v8, 8);
-    expect(quickActions.defaults.row.entries.map(item => item.action)).toEqual(['archive', 'snooze', 'unsubscribe']);
+    expect(quickActions.defaults.row.entries.map(item => item.action)).toEqual(['archive', 'snooze', 'unsubscribe', 'goToMailbox']);
     // The view's row list gained both, so it matches All views and is no
     // longer its own; a surface without a list of its own inherits the new one.
     expect(quickActions.overrides[key]).toEqual({
@@ -132,7 +170,7 @@ describe('quick action migrations reach per-view overrides', () => {
   // the reader radial, the rows saved before Snooze and Unsubscribe existed,
   // and the selection limit left at 3 while All views says 6.
   const savedDefaults = {
-    row: { mode: 'inline', entries: e('archive', 'toggleRead', 'reply', 'deleteServer', 'snooze', 'unsubscribe'), favoriteId: 'archive', ...style },
+    row: { mode: 'inline', entries: e('archive', 'toggleRead', 'reply', 'deleteServer', 'snooze', 'unsubscribe', 'goToMailbox'), favoriteId: 'archive', ...style },
     selection: { mode: 'inline', entries: e('markRead', 'markUnread', 'archive', 'snooze'), favoriteId: 'archive', ...style, selectionDisplay: 'icon-label', selectionActionLimit: 6 },
     reader: { mode: 'inline', entries: e('reply', 'replyAll', 'forward', 'archive', 'delete'), favoriteId: 'reply', ...style },
   };
@@ -152,7 +190,8 @@ describe('quick action migrations reach per-view overrides', () => {
     const { quickActions } = migrateSettings(v14(), 14);
     expect(quickActions.defaults).toEqual(savedDefaults);
     expect(quickActions.overrides).toEqual({ [key]: {
-      row: { entries: e('archive', 'toggleRead', 'reply', 'deleteServer') },
+      // v17 appended Go to mailbox to the view's own row list too.
+      row: { entries: e('archive', 'toggleRead', 'reply', 'deleteServer', 'goToMailbox') },
       selection: { selectionActionLimit: 3 },
       reader: { mode: 'radial' },
     } });

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  AlarmClock, Archive, ArchiveRestore, Code, ExternalLink, FileText, FolderInput, Forward, ImageDown,
+  AlarmClock, Archive, ArchiveRestore, Code, ExternalLink, FileText, FolderInput, FolderOpen, Forward, ImageDown,
   Mail, MailOpen, MailPlus, MailX, Moon, Reply, ReplyAll, ShieldAlert, ShieldX, Star, Sun, Tag, Trash2,
 } from 'lucide-react';
 
@@ -14,7 +14,7 @@ export const QUICK_ACTION_ICONS = {
   star: Star, unstar: FilledStar, tag: Tag, move: FolderInput, spam: ShieldAlert,
   reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: FileText,
   export: ImageDown, newMessage: MailPlus, open: ExternalLink, source: Code, theme: Moon,
-  snooze: AlarmClock, unsubscribe: MailX,
+  snooze: AlarmClock, unsubscribe: MailX, goToMailbox: FolderOpen,
 };
 
 // The glyph for one action on a target in this state. A toggling star or

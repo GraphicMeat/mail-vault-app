@@ -1575,6 +1575,7 @@
   "rowMenu.deleteServerVaultBackup": "从服务器、保险库和备份删除",
   "rowMenu.deleteVault": "从保险库删除",
   "rowMenu.deleteVaultBackup": "从保险库和备份删除",
+  "rowMenu.goToMailbox": "前往邮箱",
   "rowMenu.markRead": "标为已读",
   "rowMenu.markUnread": "标为未读",
   "rowMenu.moveFolder": "移动到文件夹",

@@ -1575,6 +1575,7 @@
   "rowMenu.deleteServerVaultBackup": "Delete from server, vault and backup",
   "rowMenu.deleteVault": "Delete from vault",
   "rowMenu.deleteVaultBackup": "Delete from vault & backup",
+  "rowMenu.goToMailbox": "Go to mailbox",
   "rowMenu.markRead": "Mark as read",
   "rowMenu.markUnread": "Mark as unread",
   "rowMenu.moveFolder": "Move to folder",

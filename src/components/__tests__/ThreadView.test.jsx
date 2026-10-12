@@ -119,3 +119,55 @@ describe('thread message archived state', () => {
     useMailStore.setState({ activeAccountId: null, activeMailbox: null, archivedEmailIds: new Set() });
   });
 });
+
+describe('thread anchor (Go to mailbox)', () => {
+  const expandedFlags = () => screen.getAllByTestId('header-toggle').map(n => n.getAttribute('aria-expanded'));
+  const older = '|INBOX|7';
+  const newest = '|Sent|7';
+  const other = {
+    threadId: 'two', subject: 'Other', messageCount: 2,
+    emails: [
+      { uid: 21, _mailbox: 'INBOX', date: '2026-09-03', from: { name: 'First', address: 'f@example.com' }, to: [], subject: 'First' },
+      { uid: 22, _mailbox: 'INBOX', date: '2026-09-04', from: { name: 'Second', address: 's@example.com' }, to: [], subject: 'Second' },
+    ],
+  };
+
+  it('opens and scrolls to the message it was asked to land on, not the newest', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    render(<ThreadView thread={thread} openEmailKey={older} />);
+    expect(expandedFlags()).toEqual(['true', 'false']);
+    expect(scrollToIndex).toHaveBeenLastCalledWith(0, { align: 'start' });
+  });
+
+  it('moves to another message of the same open thread when the anchor changes', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    const { rerender } = render(<ThreadView thread={thread} openEmailKey={older} />);
+    rerender(<ThreadView thread={thread} openEmailKey={newest} />);
+    expect(expandedFlags()).toEqual(['false', 'true']);
+    expect(scrollToIndex).toHaveBeenLastCalledWith(1, { align: 'start' });
+  });
+
+  it('lands on the anchor when the mounted view is reused for another thread', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    const { rerender } = render(<ThreadView thread={thread} />);
+    rerender(<ThreadView thread={other} openEmailKey="|INBOX|21" />);
+    expect(expandedFlags()).toEqual(['true', 'false']);
+    expect(scrollToIndex).toHaveBeenLastCalledWith(0, { align: 'start' });
+  });
+
+  it('keeps the message open when the anchor is cleared, and ignores one the thread lacks', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    const { rerender } = render(<ThreadView thread={thread} openEmailKey={older} />);
+    rerender(<ThreadView thread={thread} openEmailKey={null} />);
+    expect(expandedFlags()).toEqual(['true', 'false']);
+    rerender(<ThreadView thread={thread} openEmailKey="|INBOX|999" />);
+    expect(expandedFlags()).toEqual(['true', 'false']);
+  });
+
+  it('still opens the newest of another thread when it has no anchor', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    const { rerender } = render(<ThreadView thread={thread} openEmailKey={older} />);
+    rerender(<ThreadView thread={other} />);
+    expect(expandedFlags()).toEqual(['false', 'true']);
+  });
+});

@@ -26,6 +26,10 @@ export const createSelectionSlice = (set, get) => ({
   selectedEmail: null,
   selectedEmailSource: null, // 'server' | 'local' | 'local-only'
   selectedThread: null, // thread object from buildThreads, or null for single email
+  // The message of `selectedThread` the reader opens on and scrolls to (an
+  // emailKey), when the thread was opened for one message in it ("Go to
+  // mailbox"). Null opens the newest, as a click on the row does.
+  threadFocusKey: null,
   loadingEmail: false,
   markReadProgress: null,
 
@@ -46,7 +50,7 @@ export const createSelectionSlice = (set, get) => ({
   deleteTombstones: new Set(),
 
   // Select a thread (shows all emails in the thread in the viewer)
-  selectThread: (thread) => {
+  selectThread: (thread, focusKey = null) => {
     // Clicking the row of the thread already open changes nothing on screen,
     // so it must not cancel that thread's mark-as-read countdowns: nothing
     // would start them again. A selection still loading is cancelled either way.
@@ -54,6 +58,7 @@ export const createSelectionSlice = (set, get) => ({
     _cancelSelection({ keepThreadTimers: reopen });
     set(state => ({
       selectedThread: thread,
+      threadFocusKey: focusKey,
       // The same key the rows are drawn with, or the row never reads as open.
       selectedEmailId: selectionKey(thread.lastEmail, state),
       selectedEmail: null,

@@ -5512,6 +5512,7 @@ exports[`row menu > single:archived | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5522,7 +5523,7 @@ exports[`row menu > single:archived | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5553,6 +5554,7 @@ exports[`row menu > single:archived | noRequestDelete 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5563,7 +5565,7 @@ exports[`row menu > single:archived | noRequestDelete 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5594,6 +5596,7 @@ exports[`row menu > single:backedUp | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5604,7 +5607,7 @@ exports[`row menu > single:backedUp | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5635,6 +5638,7 @@ exports[`row menu > single:flagged | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5645,7 +5649,7 @@ exports[`row menu > single:flagged | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5676,6 +5680,7 @@ exports[`row menu > single:graph | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5686,7 +5691,7 @@ exports[`row menu > single:graph | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5717,6 +5722,7 @@ exports[`row menu > single:insightsNoServer | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -5727,7 +5733,7 @@ exports[`row menu > single:insightsNoServer | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5758,6 +5764,7 @@ exports[`row menu > single:insightsReadOnly | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -5768,7 +5775,7 @@ exports[`row menu > single:insightsReadOnly | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5799,6 +5806,7 @@ exports[`row menu > single:localFolder | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -5809,7 +5817,7 @@ exports[`row menu > single:localFolder | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5840,6 +5848,7 @@ exports[`row menu > single:localOnly | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -5850,7 +5859,7 @@ exports[`row menu > single:localOnly | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5881,6 +5890,7 @@ exports[`row menu > single:noJunk | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5891,7 +5901,7 @@ exports[`row menu > single:noJunk | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5922,6 +5932,7 @@ exports[`row menu > single:noMessageId | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5932,7 +5943,7 @@ exports[`row menu > single:noMessageId | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -5963,6 +5974,7 @@ exports[`row menu > single:noSender | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"settings.cleanup.unknown\\"}","icon":"MailPlus","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -5973,7 +5985,7 @@ exports[`row menu > single:noSender | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6004,6 +6016,7 @@ exports[`row menu > single:otherAccount | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6014,7 +6027,7 @@ exports[`row menu > single:otherAccount | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6045,6 +6058,7 @@ exports[`row menu > single:otherAccountArchived | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6055,7 +6069,7 @@ exports[`row menu > single:otherAccountArchived | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6086,6 +6100,7 @@ exports[`row menu > single:otherMailbox | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6096,7 +6111,7 @@ exports[`row menu > single:otherMailbox | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6127,6 +6142,7 @@ exports[`row menu > single:read | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6137,7 +6153,7 @@ exports[`row menu > single:read | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6168,6 +6184,7 @@ exports[`row menu > single:read | noRequestDelete 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6178,7 +6195,7 @@ exports[`row menu > single:read | noRequestDelete 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6209,6 +6226,7 @@ exports[`row menu > single:read | saving 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6219,7 +6237,7 @@ exports[`row menu > single:read | saving 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6250,6 +6268,7 @@ exports[`row menu > single:readFlagged | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6260,7 +6279,7 @@ exports[`row menu > single:readFlagged | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6291,6 +6310,7 @@ exports[`row menu > single:sent | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6301,7 +6321,7 @@ exports[`row menu > single:sent | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6332,6 +6352,7 @@ exports[`row menu > single:singleRecipient | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6342,7 +6363,7 @@ exports[`row menu > single:singleRecipient | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6373,6 +6394,7 @@ exports[`row menu > single:unread | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6383,7 +6405,7 @@ exports[`row menu > single:unread | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6414,6 +6436,7 @@ exports[`row menu > single:unresolved | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -6424,7 +6447,7 @@ exports[`row menu > single:unresolved | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6455,6 +6478,7 @@ exports[`row menu > single:unsubscribe | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6465,7 +6489,7 @@ exports[`row menu > single:unsubscribe | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6497,6 +6521,7 @@ exports[`row menu > thread:archived+archived | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6507,7 +6532,7 @@ exports[`row menu > thread:archived+archived | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6539,6 +6564,7 @@ exports[`row menu > thread:archived+unarchived | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6549,7 +6575,7 @@ exports[`row menu > thread:archived+unarchived | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6581,6 +6607,7 @@ exports[`row menu > thread:flagged+flagged | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6591,7 +6618,7 @@ exports[`row menu > thread:flagged+flagged | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6623,6 +6650,7 @@ exports[`row menu > thread:insights | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -6633,7 +6661,7 @@ exports[`row menu > thread:insights | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6665,6 +6693,7 @@ exports[`row menu > thread:localFolder+server | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -6675,7 +6704,7 @@ exports[`row menu > thread:localFolder+server | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6707,6 +6736,7 @@ exports[`row menu > thread:multiAccount | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -6717,7 +6747,7 @@ exports[`row menu > thread:multiAccount | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6749,6 +6779,7 @@ exports[`row menu > thread:otherAccount | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6759,7 +6790,7 @@ exports[`row menu > thread:otherAccount | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6791,6 +6822,7 @@ exports[`row menu > thread:read+read | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6801,7 +6833,7 @@ exports[`row menu > thread:read+read | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6833,6 +6865,7 @@ exports[`row menu > thread:server+localOnly | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -6843,7 +6876,7 @@ exports[`row menu > thread:server+localOnly | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6875,6 +6908,7 @@ exports[`row menu > thread:snoozeMixed | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6885,7 +6919,7 @@ exports[`row menu > thread:snoozeMixed | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6917,6 +6951,7 @@ exports[`row menu > thread:twoMailboxes | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6927,7 +6962,7 @@ exports[`row menu > thread:twoMailboxes | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -6959,6 +6994,7 @@ exports[`row menu > thread:unread+read | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -6969,7 +7005,7 @@ exports[`row menu > thread:unread+read | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -7001,6 +7037,7 @@ exports[`row menu > thread:unread+read | noRequestDelete 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -7011,7 +7048,7 @@ exports[`row menu > thread:unread+read | noRequestDelete 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -7043,6 +7080,7 @@ exports[`row menu > thread:unread+unread | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -7053,7 +7091,7 @@ exports[`row menu > thread:unread+unread | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -7085,6 +7123,7 @@ exports[`row menu > thread:unresolved | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
@@ -7095,7 +7134,7 @@ exports[`row menu > thread:unresolved | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -7127,6 +7166,7 @@ exports[`row menu > thread:unsubscribe | default 1`] = `
       "{"id":"newMessage","action":"newMessage","label":"rowMenu.newMessageTo{\\"name\\":\\"Sender\\"}","icon":"MailPlus","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"tag:existing","action":"tag","label":"Work","icon":"Tag","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
       "{"id":"tag:missing","action":"tag","label":"quickActions.action.tag","icon":"Tag","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"move:existing","action":"move","label":"quickActions.action.move: Archive","icon":"FolderInput","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
@@ -7137,7 +7177,7 @@ exports[`row menu > thread:unsubscribe | default 1`] = `
       "{"id":"replyTemplate:existing","action":"replyTemplate","label":"Thanks","icon":"FileText","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"replyTemplate:missing","action":"replyTemplate","label":"quickActions.action.replyTemplate","icon":"FileText","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead:markRead toggleRead:markUnread markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage snooze unsubscribe goToMailbox tag:existing tag:missing move:existing move:missing move:noselect move:ownAccount move:otherAccount replyTemplate:existing replyTemplate:missing",
     "surface": "row",
   },
 ]
@@ -7169,6 +7209,7 @@ exports[`row swipe > single:archived 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7198,6 +7239,7 @@ exports[`row swipe > single:backedUp 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7227,6 +7269,7 @@ exports[`row swipe > single:flagged 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7256,6 +7299,7 @@ exports[`row swipe > single:graph 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7285,6 +7329,7 @@ exports[`row swipe > single:insightsNoServer 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7314,6 +7359,7 @@ exports[`row swipe > single:insightsReadOnly 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7343,6 +7389,7 @@ exports[`row swipe > single:localFolder 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7372,6 +7419,7 @@ exports[`row swipe > single:localOnly 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7401,6 +7449,7 @@ exports[`row swipe > single:noJunk 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7430,6 +7479,7 @@ exports[`row swipe > single:noMessageId 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7459,6 +7509,7 @@ exports[`row swipe > single:noSender 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7488,6 +7539,7 @@ exports[`row swipe > single:otherAccount 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7517,6 +7569,7 @@ exports[`row swipe > single:otherAccountArchived 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7546,6 +7599,7 @@ exports[`row swipe > single:otherMailbox 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7575,6 +7629,7 @@ exports[`row swipe > single:read 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7604,6 +7659,7 @@ exports[`row swipe > single:readFlagged 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7633,6 +7689,7 @@ exports[`row swipe > single:sent 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7662,6 +7719,7 @@ exports[`row swipe > single:singleRecipient 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7691,6 +7749,7 @@ exports[`row swipe > single:unread 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7720,6 +7779,7 @@ exports[`row swipe > single:unresolved 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7749,6 +7809,7 @@ exports[`row swipe > single:unsubscribe 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7778,6 +7839,7 @@ exports[`row swipe > thread:archived+archived 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7807,6 +7869,7 @@ exports[`row swipe > thread:archived+unarchived 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7836,6 +7899,7 @@ exports[`row swipe > thread:flagged+flagged 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7865,6 +7929,7 @@ exports[`row swipe > thread:insights 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7894,6 +7959,7 @@ exports[`row swipe > thread:localFolder+server 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7923,6 +7989,7 @@ exports[`row swipe > thread:multiAccount 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7952,6 +8019,7 @@ exports[`row swipe > thread:otherAccount 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -7981,6 +8049,7 @@ exports[`row swipe > thread:read+read 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -8010,6 +8079,7 @@ exports[`row swipe > thread:server+localOnly 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -8039,6 +8109,7 @@ exports[`row swipe > thread:snoozeMixed 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -8068,6 +8139,7 @@ exports[`row swipe > thread:twoMailboxes 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -8097,6 +8169,7 @@ exports[`row swipe > thread:unread+read 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -8126,6 +8199,7 @@ exports[`row swipe > thread:unread+unread 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -8155,6 +8229,7 @@ exports[`row swipe > thread:unresolved 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":true,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -8184,6 +8259,7 @@ exports[`row swipe > thread:unsubscribe 1`] = `
   "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":true}",
   "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
   "{"id":"unsubscribe","action":"unsubscribe","label":"unsubscribe.action","icon":"MailX","hidden":false,"disabled":false,"isDestructive":false,"restoreFocus":false}",
+  "{"id":"goToMailbox","action":"goToMailbox","label":"rowMenu.goToMailbox","icon":"FolderOpen","hidden":true,"disabled":false,"isDestructive":false,"restoreFocus":false}",
 ]
 `;
 
@@ -9997,8 +10073,9 @@ exports[`selection view (Settings sample: rows only) > single:read | every actio
       "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"quickActions.title","icon":"MailX","disabled":true,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"quickActions.title","icon":"FolderOpen","disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage open source theme snooze unsubscribe",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage open source theme snooze unsubscribe goToMailbox",
     "surface": "selection",
   },
 ]
@@ -10626,8 +10703,9 @@ exports[`selection view (Settings sample: rows only) > thread:unread+read | ever
       "{"id":"theme","action":"theme","label":"quickActions.title","icon":"Moon","disabled":true,"isDestructive":false,"restoreFocus":true}",
       "{"id":"snooze","action":"snooze","label":"snooze.action","icon":"AlarmClock","disabled":false,"isDestructive":false,"restoreFocus":false}",
       "{"id":"unsubscribe","action":"unsubscribe","label":"quickActions.title","icon":"MailX","disabled":true,"isDestructive":false,"restoreFocus":false}",
+      "{"id":"goToMailbox","action":"goToMailbox","label":"quickActions.title","icon":"FolderOpen","disabled":true,"isDestructive":false,"restoreFocus":false}",
     ],
-    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage open source theme snooze unsubscribe",
+    "entries": "archive unarchive delete deleteServer deleteEverywhere toggleRead markRead markUnread star unstar tag move spam reply replyAll forward replyTemplate export newMessage open source theme snooze unsubscribe goToMailbox",
     "surface": "selection",
   },
 ]

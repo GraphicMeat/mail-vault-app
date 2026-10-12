@@ -3,7 +3,7 @@
 // rows) and the reader (one open message and the handlers its host wired).
 // quickActionAvailability.js and quickActionCatalog.js read only this shape;
 // each builder below says what its surface's facts mean.
-import { resolveEmailLocation, inLocalFolder, selectionKey, vaultHasSelection } from '../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, inLocalFolder, selectionKey, vaultHasSelection, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { canSnooze } from '../services/workflows/snooze';
 import { actionVisibility } from './actionVisibility';
@@ -32,7 +32,7 @@ const BASE = {
   has: { markRead: false, markUnread: false, star: false, unstar: false, archive: false, unarchive: false },
   resolved: false, fullyResolved: true, accountId: null, mailbox: null, locations: [],
   localFolder: false, localOnly: false, readOnly: false, serverBacked: false, serverActions: false,
-  junkPath: null, snooze: false, unsubscribe: null, purge: null, sender: '', senderName: '',
+  junkPath: null, snooze: false, unsubscribe: null, goTo: null, purge: null, sender: '', senderName: '',
   sent: false, singleRecipient: false, dark: false,
   explicit: { star: false, archive: false }, can: {}, busy: {},
 };
@@ -63,7 +63,7 @@ export function withArchivedState(email, state, archivedIds = state?.archivedEma
  * `backedUp` is whether any of them is on the backup drive, `canConfirm`
  * whether the row can ask before a delete, `saving` an archive in flight.
  */
-export function rowFacts(emails, state, { backedUp = false, canConfirm = false, saving = false } = {}) {
+export function rowFacts(emails, state, { backedUp = false, canConfirm = false, saving = false, searching = false } = {}) {
   const locations = emails.map(email => resolveEmailLocation(email, state));
   const archived = emails.map(email => isRowArchived(email, state));
   const has = { ...actionVisibility(emails), archive: archived.some(value => !value), unarchive: archived.some(Boolean) };
@@ -96,6 +96,9 @@ export function rowFacts(emails, state, { backedUp = false, canConfirm = false, 
     junkPath: junkPaths.length && junkPaths.every(Boolean) && new Set(junkPaths).size === 1 ? junkPaths[0] : null,
     snooze: emails.every(email => canSnooze(email, state)),
     unsubscribe: listIndex < 0 ? null : { email: emails[listIndex], accountId: locations[listIndex]?.accountId },
+    // A message seen out of place (a search hit, an All inboxes row) can be
+    // opened where it lives; the row of a plain folder is already there.
+    goTo: (searching || spansMailboxes(state)) && primary && resolveEmailLocation(primary, state) ? { email: primary } : null,
     purge: !localFolder && describePurge({ server: serverBacked, vault: has.unarchive, backup: backedUp }, emails.length) || null,
     sender: primary?.from?.address || '',
     senderName: primary ? getSenderName(primary) : '',

@@ -176,9 +176,9 @@ describe('snooze quick action', () => {
 
   // Appended, never inserted: the selection bar shows its first three
   // entries inline, and the reader's grouped layout keys off its exact list.
-  // Unsubscribe (the v10 addition) follows it in the row list.
+  // Unsubscribe (the v10 addition) and Go to mailbox (v17) follow it in the row list.
   it('comes last in the row and selection defaults and is not added to the reader', () => {
-    expect(DEFAULT_QUICK_ACTIONS.defaults.row.entries.slice(-2).map(entry => entry.action)).toEqual(['snooze', 'unsubscribe']);
+    expect(DEFAULT_QUICK_ACTIONS.defaults.row.entries.slice(-3).map(entry => entry.action)).toEqual(['snooze', 'unsubscribe', 'goToMailbox']);
     expect(DEFAULT_QUICK_ACTIONS.defaults.selection.entries.at(-1).action).toBe('snooze');
     expect(DEFAULT_QUICK_ACTIONS.defaults.selection.entries.slice(0, 3).map(entry => entry.action))
       .toEqual(['markRead', 'markUnread', 'archive']);

@@ -54,6 +54,7 @@ const LABELS = {
   theme: "emailActionBar.dark",
   snooze: "snooze.action",
   unsubscribe: "unsubscribe.action",
+  goToMailbox: "rowMenu.goToMailbox",
 };
 const EMPTY_ARRAY = Object.freeze([]);
 const newEntry = (action, params = {}) => ({

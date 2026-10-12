@@ -1575,6 +1575,7 @@
   "rowMenu.deleteServerVaultBackup": "Eliminar del servidor, la bóveda y la copia",
   "rowMenu.deleteVault": "Eliminar de la bóveda",
   "rowMenu.deleteVaultBackup": "Eliminar de la bóveda y la copia",
+  "rowMenu.goToMailbox": "Ir al buzón",
   "rowMenu.markRead": "Marcar como leído",
   "rowMenu.markUnread": "Marcar como no leído",
   "rowMenu.moveFolder": "Mover a una carpeta",

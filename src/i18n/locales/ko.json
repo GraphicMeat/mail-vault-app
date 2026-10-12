@@ -1575,6 +1575,7 @@
   "rowMenu.deleteServerVaultBackup": "서버, 보관함, 백업에서 삭제",
   "rowMenu.deleteVault": "보관함에서 삭제",
   "rowMenu.deleteVaultBackup": "보관함과 백업에서 삭제",
+  "rowMenu.goToMailbox": "메일함으로 이동",
   "rowMenu.markRead": "읽음으로 표시",
   "rowMenu.markUnread": "읽지 않음으로 표시",
   "rowMenu.moveFolder": "폴더로 이동",

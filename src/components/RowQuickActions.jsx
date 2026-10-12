@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchStore } from '../stores/searchStore';
+import { goToMessage } from '../services/workflows/goToMessage';
 import { useUnsubscribeStore, unsubscribeTarget } from '../stores/unsubscribeStore';
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
@@ -49,6 +51,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   }, [busy]);
   const state = useMailStore.getState();
   const backupScan = useBackupScan();
+  const searching = useSearchStore(s => s.searchActive);
   const keys = useMemo(() => emails.map(email => selectionKey(email, useMailStore.getState())), [emails, identity]);
   const describeRef = useRef(null);
   const registerMarker = useCallback(node => registerRowActions(node, describeRef), []);
@@ -58,6 +61,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     backedUp: emails.some(email => isBackedUp(email, backupScan) === true),
     canConfirm: !!onRequestDelete,
     saving: disabled,
+    searching: searching,
   });
   const { primary: newest, locations: locs, localFolder, purge, junkPath } = facts;
   const hasUnread = facts.has.markRead;
@@ -178,6 +182,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
           useExportStore.getState().openExport({ messages: exportEmails }); onClose?.();
         } else if (entry.action === 'newMessage') { onClose?.(); openNewMessage(); }
         else if (entry.action === 'unsubscribe') { onClose?.(); useUnsubscribeStore.getState().request(unsubscribe); }
+        else if (entry.action === 'goToMailbox') { onClose?.(); await goToMessage(facts.goTo.email); }
       },
     };
   };

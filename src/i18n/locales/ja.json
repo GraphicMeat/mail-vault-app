@@ -1575,6 +1575,7 @@
   "rowMenu.deleteServerVaultBackup": "サーバー・保管庫・バックアップから削除",
   "rowMenu.deleteVault": "保管庫から削除",
   "rowMenu.deleteVaultBackup": "保管庫とバックアップから削除",
+  "rowMenu.goToMailbox": "メールボックスへ移動",
   "rowMenu.markRead": "既読にする",
   "rowMenu.markUnread": "未読にする",
   "rowMenu.moveFolder": "フォルダへ移動",

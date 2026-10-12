@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { create } from 'zustand';
 import {
-  AlarmClock, Archive, ArchiveRestore, Code, ExternalLink, FileText, FolderInput, Forward, ImageDown,
+  AlarmClock, Archive, ArchiveRestore, Code, ExternalLink, FileText, FolderInput, FolderOpen, Forward, ImageDown,
   Mail, MailOpen, MailPlus, MailX, Moon, Reply, ReplyAll, ShieldAlert, ShieldX, Star, Sun, Tag, Trash2,
 } from 'lucide-react';
 
@@ -86,7 +86,7 @@ const { describePurge } = await import('../../utils/custodyCopy');
 const { isOutgoingMailboxName } = await import('../../utils/sentFolder');
 
 const ICONS = new Map(Object.entries({
-  AlarmClock, Archive, ArchiveRestore, Code, ExternalLink, FileText, FolderInput, Forward, ImageDown,
+  AlarmClock, Archive, ArchiveRestore, Code, ExternalLink, FileText, FolderInput, FolderOpen, Forward, ImageDown,
   Mail, MailOpen, MailPlus, MailX, Moon, Reply, ReplyAll, ShieldAlert, ShieldX, Star, Sun, Tag, Trash2, FilledStar,
 }).map(([name, Icon]) => [Icon, name]));
 const iconName = Icon => (Icon === undefined ? undefined : ICONS.get(Icon) || `UNKNOWN:${Icon?.displayName || Icon?.name}`);

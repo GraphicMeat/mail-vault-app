@@ -18,7 +18,7 @@ export function quickActionTone(action) {
 // goes there, not back to the trigger. The same on every surface.
 export const QUICK_ACTION_FOLLOW_UP = [
   'move', 'snooze', 'unsubscribe', 'delete', 'deleteServer', 'deleteEverywhere', 'unarchive',
-  'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage', 'open', 'source',
+  'reply', 'replyAll', 'forward', 'replyTemplate', 'newMessage', 'open', 'source', 'goToMailbox',
 ];
 
 // A toggle presents itself as the direction it will take: its label, glyph
@@ -56,7 +56,7 @@ export const QUICK_ACTION_LABELS = {
     reply: 'emailActionBar.reply', replyAll: 'emailActionBar.replyAll', forward: 'emailActionBar.forward',
     replyTemplate: templateLabel, export: 'common.export',
     newMessage: facts => t('rowMenu.newMessageTo', { name: facts.senderName }),
-    snooze: 'snooze.action', unsubscribe: 'unsubscribe.action',
+    snooze: 'snooze.action', unsubscribe: 'unsubscribe.action', goToMailbox: 'rowMenu.goToMailbox',
   },
   selection: {
     archive: 'common.archive', unarchive: 'selection.unarchive', delete: 'common.delete', deleteServer: deleteServerLabel,

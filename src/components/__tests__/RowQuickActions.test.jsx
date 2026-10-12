@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   reloadListInView: vi.fn(),
   setDeleteUndo: vi.fn(),
   foldersByAccount: {},
+  goToMessage: vi.fn(),
 }));
 
 vi.mock('lucide-react', () => {
@@ -46,6 +47,7 @@ vi.mock('../MoveToFolderDropdown', () => ({
 }));
 vi.mock('../email/MessageStateIcon', () => ({ useBackupScan: () => null, isBackedUp: () => false }));
 vi.mock('../../i18n/index.js', () => ({ t: key => key, useT: () => key => key, getLocale: () => 'en' }));
+vi.mock('../../services/workflows/goToMessage', () => ({ goToMessage: (...args) => mocks.goToMessage(...args) }));
 vi.mock('../../utils/composeOpener', () => ({ openCompose: (...args) => mocks.openCompose(...args) }));
 vi.mock('../../utils/replyTarget', () => ({ replyTarget: (...args) => mocks.replyTarget(...args) }));
 vi.mock('../../stores/exportStore', () => ({ useExportStore: { getState: () => ({ openExport: mocks.openExport }) } }));
@@ -167,6 +169,7 @@ beforeEach(() => {
   mocks.reloadListInView.mockReset().mockResolvedValue(undefined);
   mocks.setDeleteUndo.mockReset();
   mocks.foldersByAccount = {};
+  mocks.goToMessage.mockReset().mockResolvedValue(true);
 });
 
 afterEach(cleanup);
@@ -535,6 +538,48 @@ describe('RowQuickActions — toggle read', () => {
     fireEvent.click(screen.getByTestId('quick-action-toggleRead:markUnread'));
     await waitFor(() => expect(useMailStoreMock.getState().markSelectedAsUnread).toHaveBeenCalledTimes(1));
     expect(useMailStoreMock.getState().markSelectedAsRead).not.toHaveBeenCalled();
+  });
+});
+
+describe('RowQuickActions go to mailbox', () => {
+  const button = () => screen.queryByTestId('quick-action-goToMailbox');
+
+  it('is absent from a plain folder, where the row is already in its mailbox', () => {
+    setActions(action('goToMailbox'));
+    renderActions({ emails: [email()] });
+    expect(button()).toBeNull();
+  });
+
+  it('opens a search hit in its own mailbox', async () => {
+    const { useSearchStore } = await import('../../stores/searchStore');
+    useSearchStore.setState({ searchActive: true });
+    try {
+      setActions(action('goToMailbox'));
+      const hit = email({ uid: 7, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
+      renderActions({ emails: [hit] });
+      fireEvent.click(button());
+      expect(mocks.goToMessage).toHaveBeenCalledWith(hit);
+    } finally {
+      useSearchStore.setState({ searchActive: false });
+    }
+  });
+
+  it('opens a thread row of All inboxes on its newest message', () => {
+    useMailStoreMock.setState({ activeMailbox: 'UNIFIED', unifiedInbox: true });
+    setActions(action('goToMailbox'));
+    const older = email({ uid: 3, date: '2026-08-01T10:00:00Z' });
+    const newest = email({ uid: 9, date: '2026-09-02T10:00:00Z', _accountId: ACCOUNT_B.id });
+    renderActions({ emails: [older, newest] });
+    fireEvent.click(button());
+    expect(mocks.goToMessage).toHaveBeenCalledWith(newest);
+  });
+
+  it('does nothing in a preview', () => {
+    useMailStoreMock.setState({ activeMailbox: 'UNIFIED', unifiedInbox: true });
+    setActions(action('goToMailbox'));
+    renderActions({ emails: [email()], preview: true });
+    fireEvent.click(button());
+    expect(mocks.goToMessage).not.toHaveBeenCalled();
   });
 });
 

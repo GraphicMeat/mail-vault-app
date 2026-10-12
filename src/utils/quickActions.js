@@ -10,6 +10,10 @@ export const QUICK_ACTION_TYPES = [
   // saved row list); never a reader default, since the reader's grouped
   // layout keys off its exact list. Hidden on rows without List-Unsubscribe.
   'unsubscribe',
+  // Row only, and only on a message seen out of place (a search hit, an All
+  // inboxes row): opens it in its own account and folder. Appended to a saved
+  // row list by settingsStore's v16 -> v17 migration.
+  'goToMailbox',
 ];
 
 // The actions each surface can offer: a row has no reader tools, the reader
@@ -20,7 +24,7 @@ export const QUICK_ACTION_SURFACE_ACTIONS = {
     'archive', 'unarchive', 'delete', 'deleteServer', 'deleteEverywhere', 'toggleRead', 'markRead',
     'markUnread', 'star', 'unstar', 'tag', 'move', 'spam', 'export', 'snooze',
   ],
-  reader: QUICK_ACTION_TYPES.filter(action => action !== 'newMessage'),
+  reader: QUICK_ACTION_TYPES.filter(action => !['newMessage', 'goToMailbox'].includes(action)),
 };
 
 export const RADIAL_LAYOUTS = ['flat', 'categories'];
@@ -32,7 +36,7 @@ export const RADIAL_CATEGORIES = {
   mark: ['toggleRead', 'markRead', 'markUnread', 'star', 'unstar'],
   organize: ['archive', 'unarchive', 'move', 'tag', 'snooze'],
   delete: ['delete', 'deleteServer', 'deleteEverywhere', 'spam', 'unsubscribe'],
-  more: ['open', 'source', 'theme', 'export'],
+  more: ['open', 'source', 'theme', 'export', 'goToMailbox'],
 };
 const CATEGORY_OF = new Map(Object.entries(RADIAL_CATEGORIES)
   .flatMap(([category, actions]) => actions.map(action => [action, category])));
@@ -93,7 +97,7 @@ export const DEFAULT_QUICK_ACTIONS = {
         entry('archive'), entry('unarchive'), entry('toggleRead'), entry('star'), entry('unstar'),
         entry('reply'), entry('replyAll'), entry('forward'), entry('newMessage'), entry('move'),
         entry('spam'), entry('deleteServer'), entry('deleteEverywhere'), entry('export'), entry('snooze'),
-        entry('unsubscribe'),
+        entry('unsubscribe'), entry('goToMailbox'),
       ],
       favoriteId: 'archive', palette: 'semantic', radialPagination: false, radialLayout: 'flat',
     },

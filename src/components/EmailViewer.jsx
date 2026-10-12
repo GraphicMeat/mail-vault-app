@@ -90,6 +90,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const selectedEmail = useSelectionStore(s => s.selectedEmail);
   const selectedEmailSource = useSelectionStore(s => s.selectedEmailSource);
   const selectedThread = useSelectionStore(s => s.selectedThread);
+  const threadFocusKey = useSelectionStore(s => s.threadFocusKey);
   const loadingEmail = useSelectionStore(s => s.loadingEmail);
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
@@ -641,7 +642,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
 
   // Thread view — show all emails in the thread
   if (selectedThread) {
-    return <ThreadView thread={selectedThread} onComposeReply={onComposeReply} />;
+    return <ThreadView thread={selectedThread} onComposeReply={onComposeReply} openEmailKey={threadFocusKey} />;
   }
 
   if (!selectedEmail && !loadingEmail) {

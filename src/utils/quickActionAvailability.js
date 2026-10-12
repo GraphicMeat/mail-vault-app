@@ -61,6 +61,7 @@ const GATES = {
   sender: f => !!f.sender,
   snooze: f => f.snooze,
   unsubscribe: f => !!f.unsubscribe,
+  goTo: f => !!f.goTo,
   notSent: f => !f.sent,
   multiRecipient: f => !f.singleRecipient,
 };
@@ -151,6 +152,7 @@ export const QUICK_ACTION_RULES = {
     reader: { hide: ['notLocalOnly', 'snooze'] },
   },
   unsubscribe: { row: { hide: ['unsubscribe'] }, ...SELECTION_UNSUPPORTED, reader: { hide: ['unsubscribe'] } },
+  goToMailbox: { row: { hide: ['goTo'] }, ...SELECTION_UNSUPPORTED, reader: { hide: ['never'] } },
 };
 QUICK_ACTION_RULES.markUnread = QUICK_ACTION_RULES.markRead;
 QUICK_ACTION_RULES.unstar = QUICK_ACTION_RULES.star;

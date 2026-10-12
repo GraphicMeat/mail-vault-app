@@ -1575,6 +1575,7 @@
   "rowMenu.deleteServerVaultBackup": "Von Server, Tresor und Sicherung löschen",
   "rowMenu.deleteVault": "Aus dem Tresor löschen",
   "rowMenu.deleteVaultBackup": "Aus Tresor und Sicherung löschen",
+  "rowMenu.goToMailbox": "Zum Postfach",
   "rowMenu.markRead": "Als gelesen markieren",
   "rowMenu.markUnread": "Als ungelesen markieren",
   "rowMenu.moveFolder": "In Ordner verschieben",

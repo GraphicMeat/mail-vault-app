@@ -769,14 +769,27 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
   // marks itself read and nobody opened this one. An arrival that is already
   // read (the reply you just sent) still takes over, as does the newest once
   // the opened one has left the thread.
+  // `anchor` is the message the caller asked to land on ("Go to mailbox"): it
+  // wins on a thread's first paint and whenever it changes, so reusing this
+  // mounted view for another thread, or another message of the same one,
+  // lands on it too. A value that is no member of the thread opens the newest.
+  const anchorKey = openEmailKey ?? null;
+  const memberKey = key => (key && thread.emails.some(email => emailKey(email) === key) ? key : null);
   const [openedOn, setOpenedOn] = useState(() => ({
     threadId: thread.threadId,
     newestKey,
-    key: openEmailKey && thread.emails.some(email => emailKey(email) === openEmailKey) ? openEmailKey : newestKey,
+    anchor: anchorKey,
+    key: memberKey(anchorKey) || newestKey,
   }));
-  if (openedOn.threadId !== thread.threadId || openedOn.newestKey !== newestKey) {
-    const arrivedRead = thread.emails.find(email => emailKey(email) === newestKey)?.flags?.includes('\\Seen');
-    setOpenedOn({ threadId: thread.threadId, newestKey, key: openedOn.threadId !== thread.threadId || arrivedRead ? newestKey : openedOn.key });
+  if (openedOn.threadId !== thread.threadId || openedOn.newestKey !== newestKey || openedOn.anchor !== anchorKey) {
+    const threadChanged = openedOn.threadId !== thread.threadId;
+    const anchored = memberKey(anchorKey);
+    const arrivedRead = openedOn.newestKey !== newestKey
+      && thread.emails.find(email => emailKey(email) === newestKey)?.flags?.includes('\\Seen');
+    let key = openedOn.key;
+    if (anchored && (threadChanged || openedOn.anchor !== anchorKey)) key = anchored;
+    else if (threadChanged || arrivedRead) key = newestKey;
+    setOpenedOn({ threadId: thread.threadId, newestKey, anchor: anchorKey, key });
   }
   const openKey = thread.emails.some(email => emailKey(email) === openedOn.key) ? openedOn.key : newestKey;
 
