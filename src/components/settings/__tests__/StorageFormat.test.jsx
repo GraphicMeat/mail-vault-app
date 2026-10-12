@@ -57,6 +57,7 @@ describe('Settings > Storage > Message format', () => {
     render(<StorageFormatSettings usage={{ totalBytes: 2 * GB, emailCount: 1200 }} />);
     await waitFor(() => expect(screen.getByTestId('storage-format-current').textContent).toBe('Maildir (.eml files)'));
     expect(screen.queryByText('Reclaim space')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Convert remaining' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Convert' }));
     expect(within(dialog()).getByText('Convert to JMAP (JSON records + blobs)')).toBeTruthy();
@@ -133,6 +134,8 @@ describe('Settings > Storage > Message format', () => {
     expect(screen.getByText('Conversion stopped: No space left on device. Nothing was deleted for the messages that failed.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Convert back' })).toBeTruthy();
+    // Nothing was left behind (failed: 0): Resume finishes it.
+    expect(screen.queryByRole('button', { name: 'Convert remaining' })).toBeNull();
   });
 
   it('a running conversion shows its progress with Pause and Cancel, and follows its events', async () => {
@@ -217,6 +220,52 @@ describe('Settings > Storage > Message format', () => {
     await waitFor(() => expect(screen.getByTestId('storage-format-current').textContent).toBe('JMAP (JSON records + blobs)'));
     fireEvent.click(screen.getByRole('button', { name: 'Reclaim space' }));
     await waitFor(() => expect(reclaimSpace).toHaveBeenCalledTimes(1));
+  });
+
+  it('offers Reclaim space in Maildir format while a blob store is left', async () => {
+    get.mockResolvedValue({ ...MAILDIR, blobs: true });
+    render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Reclaim space' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reclaim space' }));
+    await waitFor(() => expect(reclaimSpace).toHaveBeenCalledTimes(1));
+  });
+
+  it('offers to convert the messages the vault still holds in the other format', async () => {
+    get.mockResolvedValue({ ...JMAP, leftover: true });
+    render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => expect(screen.getByTestId('storage-format-leftover').textContent).toBe('Some messages are still stored as Maildir (.eml files).'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Convert remaining' }));
+    expect(within(dialog()).getByText('Convert the remaining messages to JMAP (JSON records + blobs)')).toBeTruthy();
+    expect(radio('retire').checked).toBe(true);
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Start conversion' }));
+    await waitFor(() => expect(convert).toHaveBeenCalledWith('jmap', 'retire'));
+  });
+
+  it('a refused Convert remaining reads the state again, so a stale offer goes', async () => {
+    get.mockResolvedValue({ ...JMAP, leftover: true });
+    convert.mockRejectedValue(new Error('E_FORMAT_SAME: the vault is in this format already'));
+    render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => screen.getByTestId('storage-format-leftover'));
+    get.mockResolvedValue({ ...JMAP, leftover: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Convert remaining' }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Start conversion' }));
+    await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('The vault is already in this format.'));
+    await waitFor(() => expect(screen.queryByTestId('storage-format-leftover')).toBeNull());
+  });
+
+  it('a run that left messages behind offers Convert remaining with the old-files choice', async () => {
+    get.mockResolvedValue({ format: 'jmap', migration: job({ oldFiles: 'delete', state: 'failed', active: false, done: 9, total: 10, failed: 1, error: 'E_FORMAT_UNVERIFIED: 1' }) });
+    render(<StorageFormatSettings usage={null} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Convert remaining' }));
+    expect(screen.queryByTestId('storage-format-leftover')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Convert remaining' }));
+    expect(within(dialog()).getByText('Convert the remaining messages to JMAP (JSON records + blobs)')).toBeTruthy();
+    expect(radio('retire').checked).toBe(true);
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Start conversion' }));
+    await waitFor(() => expect(convert).toHaveBeenCalledWith('jmap', 'retire'));
   });
 
   it('renders nothing when the daemon cannot say', async () => {

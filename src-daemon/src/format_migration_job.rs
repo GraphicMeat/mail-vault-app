@@ -49,7 +49,8 @@ use tracing::{info, warn};
 /// A conversion is running or paused in this daemon, or the old files are
 /// being deleted; the text after the code names the job.
 pub const E_FORMAT_BUSY: &str = "E_FORMAT_BUSY";
-/// The vault is in the asked format already and no conversion is pending.
+/// The vault is in the asked format already, no conversion is pending, and
+/// it holds no message in the other format (`message_store::holds_format`).
 pub const E_FORMAT_SAME: &str = "E_FORMAT_SAME";
 /// No conversion to pause, resume or cancel.
 pub const E_FORMAT_NOT_FOUND: &str = "E_FORMAT_NOT_FOUND";
@@ -70,6 +71,11 @@ pub const E_FORMAT_UNVERIFIED: &str = "E_FORMAT_UNVERIFIED";
 /// A run ended with folders whose first import rehome has not run yet
 /// (Plan B 7b D7); how many follows. Resume tries them again.
 pub const E_FORMAT_REHOME_PENDING: &str = "E_FORMAT_REHOME_PENDING";
+/// A run met records that will not parse and left them as they are, never
+/// removed or written over; how many this run met first follows. The journal
+/// keeps them (`Journal::damaged`), so a Resume passes over them and ends
+/// done: reported once, never a loop.
+pub const E_FORMAT_DAMAGED: &str = "E_FORMAT_DAMAGED";
 /// The vault (or one folder or message of it) could not be read.
 pub const E_FORMAT_UNREADABLE: &str = "E_FORMAT_UNREADABLE";
 /// The disk refused a write (no space, a quota, an I/O error): the run stops.
@@ -168,6 +174,11 @@ pub(crate) struct Journal {
     pub total: u64,
     #[serde(default)]
     pub failed: Vec<Failure>,
+    /// Uids whose record will not parse, left as they are
+    /// (`Runner::note_damaged`): reported by the run that met them first,
+    /// passed over by every run of the job after it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub damaged: Vec<Failure>,
     /// `running` (a live worker, or one a quit or a crash cut off), `paused`,
     /// `cancelled` or `failed`. A done job has no journal.
     pub state: String,
@@ -506,14 +517,18 @@ fn mark_stopped(root: &Path) -> Result<(), String> {
 // ── what the routes call ────────────────────────────────────────────────────
 
 /// `storage_format_get`: the vault's format, and its conversion when one is
-/// live or stopped short (`null` when none).
+/// live or stopped short (`null` when none). `blobs`: the vault has a blob
+/// store, so Settings offers Reclaim in either format (one stat). `leftover`:
+/// the marker's hint that messages are left in the other format with no
+/// stopped run to say so (one marker row, `message_store::LEFTOVER_KEY`), so
+/// Settings offers Convert remaining. Neither walks the vault.
 pub(crate) fn get(state: &DaemonState, root: &Path) -> Value {
     let format = message_store::vault_format(root);
     let migration = match state.format_migration.live() {
         Some(job) => job.view(),
         None => pending_journal(&state.app_dir, root).map_or(Value::Null, |j| stopped_view(&j)),
     };
-    json!({"format": format, "migration": migration})
+    json!({"format": format, "migration": migration, "blobs": message_store::has_blob_store(root), "leftover": message_store::leftover(root)})
 }
 
 /// The conversion that stops a move of the vault at `root`
@@ -593,12 +608,21 @@ fn other(to: message_store::Format) -> message_store::Format {
 }
 
 /// `storage_format_convert`: a new job toward `to`. It replaces the vault's
-/// stopped one, if any ("Convert back" is a new job the other way).
+/// stopped one, if any ("Convert back" is a new job the other way). Toward
+/// the vault's own format ("Convert remaining") only while there is
+/// something to convert: a stopped job, or a message left in the other
+/// format; else `E_FORMAT_SAME`.
 pub(crate) fn start(state: &Arc<DaemonState>, root: &Path, to: message_store::Format, old_files: OldFiles) -> Result<Value, String> {
     // A live job refuses at once; else the vault is sized outside the lock.
     if let Some(job) = state.format_migration.live() {
         return Err(busy(&job.id));
     }
+    // Toward the vault's own format, a start goes on while the vault still
+    // holds a message in the other one (a generation repair's files, a
+    // delete-mode conflict a retire-mode run sets aside): looked for outside
+    // the lock, stopping at the first; a damaged record is none. A folder
+    // that will not list lets the start through, and the run says which.
+    let remaining = message_store::vault_format(root) == to && message_store::holds_format(root, other(to)).unwrap_or(true);
     let need = space_needed(root, to, old_files)?;
     let mut live = state.format_migration.lock();
     if let Some(job) = live.as_ref() {
@@ -608,7 +632,13 @@ pub(crate) fn start(state: &Arc<DaemonState>, root: &Path, to: message_store::Fo
         return Err(busy("purge"));
     }
     let stopped = pending_journal(&state.app_dir, root);
-    if message_store::vault_format(root) == to && stopped.is_none() {
+    if message_store::vault_format(root) == to && stopped.is_none() && !remaining {
+        // Nothing left to convert: the hint that said otherwise goes.
+        if message_store::leftover(root) {
+            if let Err(e) = message_store::set_leftover(root, false) {
+                warn!("[format_migration] the leftover hint was not cleared: {e}");
+            }
+        }
         return Err(format!("{E_FORMAT_SAME}: the vault is in this format already"));
     }
     precheck(state, root, need)?;
@@ -623,6 +653,7 @@ pub(crate) fn start(state: &Arc<DaemonState>, root: &Path, to: message_store::Fo
         done: 0,
         total: 0,
         failed: Vec::new(),
+        damaged: Vec::new(),
         state: RUNNING.to_string(),
         error: None,
         updated_at: now_ms(),
@@ -631,6 +662,15 @@ pub(crate) fn start(state: &Arc<DaemonState>, root: &Path, to: message_store::Fo
     if let Err(e) = mark_started(root, &journal) {
         remove_journal(&state.app_dir, &journal.job_id);
         return Err(failed(E_FORMAT_IO, "the marker was not written", e));
+    }
+    // A new job plans every folder, so it converts whatever the other format
+    // holds: the hint that something was left goes. A Resume keeps it (it
+    // plans only the folders its run has not finished), and a generation
+    // repair after this sets it again.
+    if message_store::leftover(root) {
+        if let Err(e) = message_store::set_leftover(root, false) {
+            warn!("[format_migration] job {}: the leftover hint was not cleared: {e}", journal.job_id);
+        }
     }
     if let Some(old) = stopped {
         remove_journal(&state.app_dir, &old.job_id);
@@ -801,12 +841,23 @@ pub(crate) fn purge_retired(state: &DaemonState, root: &Path) -> Result<Value, S
 }
 
 /// `storage_reclaim_space`: a blob sweep with the usual grace. Refused while
-/// a job runs; the job sweeps at its own end.
+/// a job runs; the job sweeps at its own end. In Maildir format it then
+/// takes the emptied blob store away (`message_store::prune_blob_store`).
 pub(crate) fn reclaim(state: &DaemonState, root: &Path) -> Result<Value, String> {
     if let Some(job) = state.format_migration.live() {
         return Err(busy(&job.id));
     }
     let swept = message_store::sweep_blobs(root, SWEEP_GRACE).map_err(|e| failed(E_FORMAT_RECLAIM_FAILED, "the blob sweep stopped", e))?;
+    // In Maildir format no writer puts a blob: the store's emptied shards go,
+    // and the store with them once it is empty, so Settings stops offering
+    // Reclaim. Under the registry lock, so no start turns the vault to JMAP
+    // meanwhile.
+    {
+        let live = state.format_migration.lock();
+        if live.is_none() && message_store::vault_format(root) == message_store::Format::Maildir {
+            message_store::prune_blob_store(root);
+        }
+    }
     info!("[format_migration] reclaim: {} blob(s) removed, {} bytes", swept.removed, swept.freed_bytes);
     Ok(json!({"removed": swept.removed, "bytes": swept.freed_bytes}))
 }
@@ -818,7 +869,7 @@ pub(crate) fn reclaim(state: &DaemonState, root: &Path) -> Result<Value, String>
 /// it is registered.
 fn spawn(state: &Arc<DaemonState>, live: &mut Option<Arc<Job>>, root: &Path, journal: Journal) -> Result<(), String> {
     let job = Arc::new(Job::new(&journal.job_id, view(&journal, true, RUNNING)));
-    let runner = Runner { state: Arc::clone(state), root: root.to_path_buf(), job: Arc::clone(&job), journal, emitted: None, seen: 0, link: false };
+    let runner = Runner { state: Arc::clone(state), root: root.to_path_buf(), job: Arc::clone(&job), journal, emitted: None, seen: 0, link: false, damaged_now: 0 };
     std::thread::Builder::new()
         .name("format-migration".into())
         .spawn(move || {
@@ -845,6 +896,9 @@ struct Runner {
     /// Retire mode on a volume that takes hard links: old files are linked
     /// aside, not copied.
     link: bool,
+    /// Damaged records this run met first (`note_damaged`): the run ends
+    /// `E_FORMAT_DAMAGED` when there are any.
+    damaged_now: u64,
 }
 
 impl Runner {
@@ -1051,7 +1105,9 @@ mod e2e_pacing_tests {
 /// finds the uids left by listing the old format again. At the end, a blob
 /// sweep with the usual grace (`SWEEP_GRACE`) under the vault gate's shared
 /// side. A run that left messages or folders behind ends failed, with the
-/// journal kept for Resume; nothing of theirs was deleted.
+/// journal kept for Resume; nothing of theirs was deleted. A run that met a
+/// damaged record first ends failed too (`E_FORMAT_DAMAGED`), once: the runs
+/// after it pass over that record.
 fn convert(runner: &mut Runner) -> Ended {
     #[cfg(test)]
     if faults(&runner.state).hold {
@@ -1114,6 +1170,9 @@ fn convert(runner: &mut Runner) -> Ended {
     if !runner.journal.failed.is_empty() {
         return Ended::Failed(format!("{E_FORMAT_UNVERIFIED}: {}", runner.journal.failed.len()));
     }
+    if runner.damaged_now > 0 {
+        return Ended::Failed(format!("{E_FORMAT_DAMAGED}: {}", runner.damaged_now));
+    }
     Ended::Done
 }
 
@@ -1123,6 +1182,9 @@ enum Outcome {
     Converted,
     /// It was no longer there in the old format.
     Gone,
+    /// Its record is there but will not parse (`message_store::record_damaged_at`):
+    /// left as it is, never removed or written over.
+    Damaged,
     /// Left as it was; the reason goes in the journal.
     Failed(String),
     /// The disk refused a write (`message_store::E_DISK`): the job stops.
@@ -1255,7 +1317,8 @@ impl Runner {
                     message_store::uids_in_format_at(&folder_of(root, &account, &dir), from).map_err(|e| format!("{account}/{dir}: {e}"))
                 })
                 .map_err(unreadable)?;
-                left += uids.len() as u64;
+                let passed = self.damaged_in(&account, &dir);
+                left += uids.iter().filter(|uid| !passed.contains(uid)).count() as u64;
             }
             plans.push(MailboxPlan { account, dir, state: if done { MAILBOX_DONE } else { MAILBOX_PENDING }.to_string() });
         }
@@ -1300,7 +1363,8 @@ impl Runner {
                 return Err(ended);
             }
         };
-        let mut skip: HashSet<u32> = HashSet::new();
+        // A damaged record an earlier run met is passed over (`note_damaged`).
+        let mut skip: HashSet<u32> = self.damaged_in(account, dir);
         let mut first = true;
         loop {
             let listed = with_vault_write(&self.state, |root| {
@@ -1348,6 +1412,7 @@ impl Runner {
                         self.journal.failed.retain(|f| !(f.account == account && f.dir == dir && f.uid == uid));
                     }
                     Outcome::Gone => self.journal.total = self.journal.total.saturating_sub(1).max(self.journal.done),
+                    Outcome::Damaged => self.note_damaged(account, dir, uid),
                     Outcome::Failed(reason) => self.fail(account, dir, uid, reason),
                     Outcome::Stop(reason) => return Err(Ended::Failed(failed(E_FORMAT_DISK, "the disk refused a write", reason))),
                 }
@@ -1364,6 +1429,30 @@ impl Runner {
         warn!("[format_migration] {account}/{dir} uid {uid} left as it was: {reason}");
         self.journal.failed.retain(|f| !(f.account == account && f.dir == dir && f.uid == uid));
         self.journal.failed.push(Failure { account: account.to_string(), dir: dir.to_string(), uid, reason });
+    }
+
+    /// Records `uid`'s damaged record, left as it is: counted for this run's
+    /// end (`damaged_now`) the first time the job meets it, and kept in the
+    /// journal so every later run passes over it (`damaged_in`).
+    fn note_damaged(&mut self, account: &str, dir: &str, uid: u32) {
+        warn!("[format_migration] {account}/{dir} uid {uid}: its record will not parse; left as it is");
+        self.journal.failed.retain(|f| !(f.account == account && f.dir == dir && f.uid == uid));
+        if !self.journal.damaged.iter().any(|f| f.account == account && f.dir == dir && f.uid == uid) {
+            self.journal.damaged.push(Failure { account: account.to_string(), dir: dir.to_string(), uid, reason: format!("{E_FORMAT_DAMAGED}: uid {uid}") });
+            self.damaged_now += 1;
+        }
+    }
+
+    /// The uids of a mailbox whose damaged record the job has met.
+    fn damaged_in(&self, account: &str, dir: &str) -> HashSet<u32> {
+        self.journal.damaged.iter().filter(|f| f.account == account && f.dir == dir).map(|f| f.uid).collect()
+    }
+
+    /// Whether `uid`'s record is there but will not parse, under the vault
+    /// gate. False while the vault is out of reach: the caller then holds and
+    /// tries the message again.
+    fn record_damaged(&self, account: &str, mailbox: &str, uid: u32) -> bool {
+        with_vault_write(&self.state, |root| Ok(message_store::record_damaged_at(&folder_of(root, account, mailbox), uid))).unwrap_or(false)
     }
 
     /// One message. Outside the mailbox lock: the read, the hash, the record
@@ -1398,7 +1487,10 @@ impl Runner {
             });
             let (seen, prepared) = match read {
                 Ok(Some(read)) => read,
-                Ok(None) => return Outcome::Gone,
+                // A record that will not parse reads as none: never taken for gone.
+                Ok(None) => {
+                    return if from == message_store::Format::Jmap && self.record_damaged(account, mailbox, uid) { Outcome::Damaged } else { Outcome::Gone };
+                }
                 Err(e) => return outcome_of(e),
             };
             #[cfg(test)]
@@ -1442,7 +1534,11 @@ impl Runner {
         let to = self.journal.to;
         let from = other(to);
         let folder = folder_of(root, account, mailbox);
-        let Some(now) = message_store::held_at(&folder, uid, from) else { return Ok(Step::Done(Outcome::Gone)) };
+        let Some(now) = message_store::held_at(&folder, uid, from) else {
+            // A record that will not parse reads as none: never taken for gone.
+            let damaged = from == message_store::Format::Jmap && message_store::record_damaged_at(&folder, uid);
+            return Ok(Step::Done(if damaged { Outcome::Damaged } else { Outcome::Gone }));
+        };
         if now.stamp != seen.stamp {
             return Ok(Step::Changed);
         }
@@ -1461,6 +1557,10 @@ impl Runner {
             Ok(None)
         };
         let both = message_store::held_at(&folder, uid, to).is_some();
+        // A damaged record where the new one would go is never written over.
+        if !both && to == message_store::Format::Jmap && message_store::record_damaged_at(&folder, uid) {
+            return Ok(Step::Done(Outcome::Damaged));
+        }
         let same = both && message_store::same_content_at(&folder, uid) == Some(true);
         if both && !same && !retire {
             return Ok(Step::Done(Outcome::Failed(format!("{E_FORMAT_CONFLICT}: uid {uid}"))));
@@ -2316,5 +2416,149 @@ mod tests {
             assert!(record_of(root, account, mailbox, *uid).is_some(), "uid {uid} converted");
             assert_eq!(message_store::read_raw(root, account, mailbox, *uid).unwrap().as_ref(), Some(raw));
         }
+    }
+
+    /// R32: a record that will not parse is no message gone. A run toward
+    /// Maildir leaves it as it is and ends failed with its own code, once;
+    /// the journal keeps it, so Resume passes over it and ends done. A sweep
+    /// keeps the blob its text names.
+    #[test]
+    fn a_damaged_record_is_left_as_it_is_reported_once_and_resume_ends_done() {
+        let (v, _a, s) = st();
+        let root = v.path();
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        for uid in 1..=3 {
+            message_store::write(root, "acct", "INBOX", uid, format!("Subject: r{uid}\r\n\r\nrecord {uid}").as_bytes(), &[]).unwrap();
+        }
+        let held = record_of(root, "acct", "INBOX", 2).unwrap();
+        // Cut short by another tool: it no longer parses, yet it names its blob.
+        let damaged = format!("{{\"format\":\"mailvault-jmap/1\",\"uid\":2,\"blob\":\"{}\",\"si", held.stamp).into_bytes();
+        std::fs::write(&held.path, &damaged).unwrap();
+
+        let end = run(&s, root, Format::Maildir, OldFiles::Delete);
+        assert_eq!(
+            (end["state"].clone(), end["error"].clone(), end["done"].clone(), end["failed"].clone()),
+            (json!("failed"), json!(format!("{E_FORMAT_DAMAGED}: 1")), json!(2), json!(0)),
+            "{end}"
+        );
+        assert_eq!(std::fs::read(&held.path).unwrap(), damaged, "the record is left as it was");
+        assert!(file_of(root, "acct", "INBOX", 2).is_none(), "nothing was made of it");
+        for uid in [1, 3] {
+            assert!(file_of(root, "acct", "INBOX", uid).is_some() && record_of(root, "acct", "INBOX", uid).is_none(), "uid {uid} converted");
+        }
+        assert_eq!(journal_of(&s, root).damaged.iter().map(|f| f.uid).collect::<Vec<_>>(), vec![2]);
+
+        let mut rx = s.events.subscribe();
+        resume(&s, root).unwrap();
+        let end = end_of(&mut rx);
+        assert_eq!(end["state"], json!("done"), "Resume passes over it: {end}");
+        assert!(pending_journal(&s.app_dir, root).is_none(), "a done job leaves no journal");
+        assert_eq!(std::fs::read(&held.path).unwrap(), damaged, "still there");
+        let swept = message_store::sweep_blobs(root, Duration::ZERO).unwrap();
+        assert_eq!(swept.damaged, 1, "{swept:?}");
+        assert!(mailvault_core::jmap_store::blobs::blob_path(root, &held.stamp).exists(), "the blob it names is kept");
+    }
+
+    /// The other way: a damaged record where a Maildir file's record would
+    /// go is never written over; the file stays the message readers read.
+    #[test]
+    fn a_damaged_record_is_never_written_over_by_a_run_to_jmap() {
+        let (v, _a, s) = st();
+        let root = v.path();
+        for uid in 1..=2 {
+            message_store::write(root, "acct", "Local", uid, format!("Subject: f{uid}\r\n\r\nfile {uid}").as_bytes(), &[]).unwrap();
+        }
+        let jmap = message_store::mailbox_dir(root, "acct", "Local").join("jmap");
+        std::fs::create_dir_all(&jmap).unwrap();
+        std::fs::write(jmap.join("1.json"), b"{ cut short").unwrap();
+
+        let end = run(&s, root, Format::Jmap, OldFiles::Delete);
+        assert_eq!((end["state"].clone(), end["error"].clone()), (json!("failed"), json!(format!("{E_FORMAT_DAMAGED}: 1"))), "{end}");
+        assert_eq!(std::fs::read(jmap.join("1.json")).unwrap(), b"{ cut short".to_vec(), "never written over");
+        assert_eq!(message_store::read_raw(root, "acct", "Local", 1).unwrap(), Some(b"Subject: f1\r\n\r\nfile 1".to_vec()), "the file stays the message");
+        assert!(record_of(root, "acct", "Local", 2).is_some() && file_of(root, "acct", "Local", 2).is_none(), "uid 2 converted");
+    }
+
+    /// R32: a start toward the vault's own format goes on while the vault
+    /// still holds a message in the other one and no stopped run says so (a
+    /// generation repair's file), and converts it; a start takes the leftover
+    /// hint back. With nothing left it is E_FORMAT_SAME and the hint goes. A
+    /// damaged record is nothing left.
+    #[test]
+    fn a_same_direction_start_converts_what_is_left_and_refuses_when_nothing_is() {
+        let (v, _a, s) = st();
+        let root = v.path();
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        message_store::write(root, "acct", "Local", 1, b"Subject: r1\r\n\r\nrecord 1", &[]).unwrap();
+        message_store::set_vault_format(root, Format::Maildir).unwrap();
+        message_store::write(root, "acct", "Local", 2, b"Subject: f2\r\n\r\nfile 2", &[]).unwrap();
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        message_store::set_leftover(root, true).unwrap();
+        assert!(pending_journal(&s.app_dir, root).is_none(), "no stopped run");
+
+        let end = run(&s, root, Format::Jmap, OldFiles::Retire);
+        assert_eq!((end["state"].clone(), end["done"].clone(), end["total"].clone()), (json!("done"), json!(1), json!(1)), "{end}");
+        assert!(record_of(root, "acct", "Local", 2).is_some() && file_of(root, "acct", "Local", 2).is_none(), "the file left is a record now");
+        assert!(!message_store::leftover(root), "the start took the hint back");
+
+        message_store::set_leftover(root, true).unwrap();
+        let msg = start(&s, root, Format::Jmap, OldFiles::Retire).unwrap_err();
+        assert!(msg.starts_with(E_FORMAT_SAME), "{msg}");
+        assert!(!message_store::leftover(root), "nothing left: the hint goes");
+        assert!(pending_journal(&s.app_dir, root).is_none(), "nothing started");
+
+        let end = run(&s, root, Format::Maildir, OldFiles::Delete);
+        assert_eq!(end["state"], json!("done"), "{end}");
+        let jmap = message_store::mailbox_dir(root, "acct", "Local").join("jmap");
+        std::fs::create_dir_all(&jmap).unwrap();
+        std::fs::write(jmap.join("9.json"), b"{ cut").unwrap();
+        let msg = start(&s, root, Format::Maildir, OldFiles::Delete).unwrap_err();
+        assert!(msg.starts_with(E_FORMAT_SAME), "a damaged record is nothing to convert: {msg}");
+    }
+
+    /// A Resume plans only the folders its run has not finished, so it keeps
+    /// the leftover hint: a generation repair's file in a folder the stopped
+    /// run had finished stays offered, and a new same-direction job converts
+    /// it and takes the hint back.
+    #[test]
+    fn a_resume_keeps_the_leftover_hint_and_a_new_job_converts_what_is_left() {
+        let (v, _a, s) = st();
+        let root = v.path();
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        message_store::write(root, "acct", "Local", 1, b"Subject: r1\r\n\r\nrecord 1", &[]).unwrap();
+        // The repair's file, in a folder the cancelled run had finished.
+        message_store::set_vault_format(root, Format::Maildir).unwrap();
+        message_store::write(root, "acct", "Local", 2, b"Subject: f2\r\n\r\nfile 2", &[]).unwrap();
+        message_store::set_vault_format(root, Format::Jmap).unwrap();
+        message_store::set_leftover(root, true).unwrap();
+        let journal = Journal {
+            version: JOURNAL_VERSION,
+            job_id: "3f1e0c1a-0000-4000-8000-0000000000aa".to_string(),
+            vault: root.to_string_lossy().into_owned(),
+            to: Format::Jmap,
+            old_files: OldFiles::Delete,
+            stamp: "20261012-120000".to_string(),
+            mailboxes: vec![MailboxPlan { account: "acct".to_string(), dir: "Local".to_string(), state: MAILBOX_DONE.to_string() }],
+            done: 1,
+            total: 1,
+            failed: Vec::new(),
+            damaged: Vec::new(),
+            state: CANCELLED.to_string(),
+            error: None,
+            updated_at: now_ms(),
+        };
+        write_journal(&s.app_dir, &journal).unwrap();
+
+        let mut rx = s.events.subscribe();
+        resume(&s, root).unwrap();
+        let end = end_of(&mut rx);
+        assert_eq!(end["state"], json!("done"), "{end}");
+        assert!(file_of(root, "acct", "Local", 2).is_some(), "a folder the run had finished is not planned again");
+        assert!(message_store::leftover(root), "so the Resume keeps the hint");
+
+        let end = run(&s, root, Format::Jmap, OldFiles::Retire);
+        assert_eq!(end["state"], json!("done"), "{end}");
+        assert!(record_of(root, "acct", "Local", 2).is_some() && file_of(root, "acct", "Local", 2).is_none(), "the new job converts it");
+        assert!(!message_store::leftover(root), "and takes the hint back");
     }
 }

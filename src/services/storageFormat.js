@@ -16,7 +16,12 @@ import { formatCount } from '../utils/formatCount';
  * `state` is running, paused, cancelled, failed or done.
  */
 
-/** `{format: 'maildir' | 'jmap', migration: null | {...}}`. */
+/**
+ * `{format: 'maildir' | 'jmap', migration: null | {...}, blobs, leftover}`:
+ * `blobs` when the vault has a blob store (Reclaim is offered in either
+ * format then), `leftover` when the daemon's hint says the vault still holds
+ * messages in the other format with no stopped run (Convert remaining).
+ */
 export const get = () => send('storage_format_get', {});
 /** Starts a conversion; `oldFiles` is 'retire' or 'delete', never defaulted. */
 export const convert = (to, oldFiles) => send('storage_format_convert', { to, oldFiles });
@@ -57,11 +62,13 @@ export function errorMessage(e) {
 }
 
 // Why a conversion stopped (`migration.error`), by the codes its worker ends
-// with (format_migration_job.rs); a count follows the two that leave
-// messages or folders behind. Any other code is a refused call's.
+// with (format_migration_job.rs); a count follows the three that leave
+// messages, folders or damaged records behind. Any other code is a refused
+// call's.
 const STOPPED = [
   ['E_FORMAT_UNVERIFIED:', 'errors.formatUnverified'],
   ['E_FORMAT_REHOME_PENDING:', 'errors.formatRehomePending'],
+  ['E_FORMAT_DAMAGED:', 'errors.formatDamaged'],
   ['E_FORMAT_UNREADABLE:', 'errors.formatUnreadable'],
   ['E_FORMAT_DISK:', 'errors.formatDisk'],
 ];

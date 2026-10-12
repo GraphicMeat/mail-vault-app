@@ -305,6 +305,9 @@ pub const E_FORMAT_MARKER: &str = "E_FORMAT_MARKER";
 ///   its own (the app data dir keeps its marker when the vault moves out).
 /// - `storageMigration` empty: no conversion runs at the copy (a move is
 ///   refused while one is in progress, and a stopped one is no job).
+/// - `storageLeftover` (`message_store::LEFTOVER_KEY`) as the source has it,
+///   empty when it has none: the hint that messages are left in the other
+///   format travels with them.
 ///
 /// A source marker that will not read fails the carry
 /// (`E_FORMAT_MARKER: ...`), never reads as `maildir`: writers would then
@@ -316,6 +319,8 @@ pub fn carry_format(src_root: &Path, dst_root: &Path) -> Result<(), String> {
     let format = crate::vault_layout::read_marker_row(src_root, crate::message_store::FORMAT_KEY).map_err(marker)?;
     crate::vault_layout::write_marker_value(dst_root, crate::message_store::FORMAT_KEY, format.as_deref().unwrap_or("maildir")).map_err(marker)?;
     crate::vault_layout::write_marker_value(dst_root, crate::message_store::MIGRATION_KEY, "").map_err(marker)?;
+    let leftover = crate::vault_layout::read_marker_row(src_root, crate::message_store::LEFTOVER_KEY).map_err(marker)?;
+    crate::vault_layout::write_marker_value(dst_root, crate::message_store::LEFTOVER_KEY, leftover.as_deref().unwrap_or("")).map_err(marker)?;
     crate::message_store::invalidate_vault_format(dst_root);
     Ok(())
 }
@@ -468,6 +473,24 @@ mod tests {
         carry_marker(&src, &dst).unwrap();
         assert_eq!(crate::vault_layout::read_marker_value(&dst, "storageFormat").as_deref(), Some("maildir"));
         assert_eq!(crate::vault_layout::read_marker_value(&dst, "storageMigration").as_deref(), Some(""));
+    }
+
+    /// The leftover hint travels with the vault, and a stale one at the
+    /// destination is emptied.
+    #[test]
+    fn a_move_carries_the_leftover_row() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("src"), tmp.path().join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        crate::message_store::write(&src, "a1", "INBOX", 1, &eml("one"), &[]).unwrap();
+        crate::message_store::set_leftover(&dst, true).unwrap();
+        carry_marker(&src, &dst).unwrap();
+        assert!(!crate::message_store::leftover(&dst), "a stale row is emptied");
+
+        crate::message_store::set_leftover(&src, true).unwrap();
+        carry_marker(&src, &dst).unwrap();
+        assert!(crate::message_store::leftover(&dst), "the source's row came along");
     }
 
     #[test]

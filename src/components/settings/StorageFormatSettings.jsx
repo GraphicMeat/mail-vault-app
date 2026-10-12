@@ -12,14 +12,18 @@ const other = (format) => (format === 'jmap' ? 'maildir' : 'jmap');
 
 /**
  * Settings > Storage > Message format: the vault's storage format, a
- * conversion to the other one, the old files a conversion set aside, and
- * (in JMAP format) a sweep of message blobs nothing names any more.
+ * conversion to the other one, the old files a conversion set aside, and a
+ * sweep of message blobs nothing names any more (in JMAP format, and in
+ * Maildir format while a blob store is left: `blobs`).
  *
  * The daemon owns all of it; this renders what `storage_format_get` and the
  * `format-migration-progress` events say. The running conversion's corner
  * chip is Task 9's; here it gets Pause and Cancel, and once stopped, Resume
- * and Convert back. Hidden when the daemon cannot say (no vault, the web
- * build).
+ * and Convert back. Convert remaining runs the same direction again, its
+ * old-files choice picked anew: for a stopped run that left messages behind
+ * (a delete-mode conflict only a retire-mode run settles), and for a vault
+ * the daemon says still holds messages in the other format (`leftover`).
+ * Hidden when the daemon cannot say (no vault, the web build).
  *
  * @param {{totalBytes?: number, emailCount?: number} | null} usage
  *   the vault's size (`maildir_storage_stats`), for the Convert dialog's estimate
@@ -29,7 +33,11 @@ export function StorageFormatSettings({ usage }) {
   const [format, setFormat] = useState(null);
   const [migration, setMigration] = useState(null);
   const [retired, setRetired] = useState(null);
+  const [blobs, setBlobs] = useState(false);
+  const [leftover, setLeftover] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
+  // What the open dialog converts to: the other format, or this one again.
+  const [convertTo, setConvertTo] = useState(null);
   const [oldFiles, setOldFiles] = useState('retire');
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [working, setWorking] = useState(false);
@@ -40,6 +48,8 @@ export function StorageFormatSettings({ usage }) {
       const [info, kept] = await Promise.all([storageFormat.get(), storageFormat.retired()]);
       setFormat(info?.format || 'maildir');
       setMigration(info?.migration || null);
+      setBlobs(info?.blobs === true);
+      setLeftover(info?.leftover === true);
       setRetired(kept || null);
     } catch (e) {
       console.warn('[storageFormat] state unavailable:', e?.message || e);
@@ -69,6 +79,7 @@ export function StorageFormatSettings({ usage }) {
   const live = migration?.active === true;
   const stopped = migration && !live && (migration.state === 'cancelled' || migration.state === 'failed');
   const target = other(format);
+  const dialogTo = convertTo || target;
   const formatName = (f) => (f === 'jmap' ? t('settings.storage.formatJmap') : t('settings.storage.formatMaildir'));
 
   // Every press of a control: one call, its refusal shown, the state read again.
@@ -82,13 +93,17 @@ export function StorageFormatSettings({ usage }) {
       return true;
     } catch (e) {
       setError(storageFormat.errorMessage(e));
+      // A refusal can change what the daemon says too (a stale leftover hint it took back).
+      load();
       return false;
     } finally {
       setWorking(false);
     }
   };
 
-  const openConvert = () => {
+  // `to`: the other format (Convert, Convert back), or this one again (Convert remaining).
+  const openConvert = (to) => {
+    setConvertTo(to);
     // Deleting is never carried over from an earlier open: it is picked each time.
     setOldFiles('retire');
     setError(null);
@@ -96,7 +111,7 @@ export function StorageFormatSettings({ usage }) {
   };
 
   const startConversion = async () => {
-    if (await act(() => storageFormat.convert(target, oldFiles))) setConvertOpen(false);
+    if (await act(() => storageFormat.convert(dialogTo, oldFiles))) setConvertOpen(false);
   };
 
   const purge = async () => {
@@ -120,11 +135,22 @@ export function StorageFormatSettings({ usage }) {
             <div className="text-xs text-mail-text-muted">{t('settings.storage.formatHelp')}</div>
           </div>
           {!migration && (
-            <Button variant="subtle" size="sm" className="shrink-0" onClick={openConvert} disabled={working}>
+            <Button variant="subtle" size="sm" className="shrink-0" onClick={() => openConvert(target)} disabled={working}>
               {t('settings.storage.convert')}
             </Button>
           )}
         </div>
+
+        {!migration && leftover && (
+          <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
+            <div className="pr-4 text-sm text-mail-text" data-testid="storage-format-leftover">
+              {t('settings.storage.leftover', { format: formatName(target) })}
+            </div>
+            <Button variant="subtle" size="sm" className="shrink-0" onClick={() => openConvert(format)} disabled={working}>
+              {t('settings.storage.convertRemaining')}
+            </Button>
+          </div>
+        )}
 
         {migration && (
           <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg" data-testid="storage-format-migration">
@@ -151,8 +177,13 @@ export function StorageFormatSettings({ usage }) {
                   {t('common.resume')}
                 </Button>
               )}
+              {stopped && migration.failed > 0 && (
+                <Button variant="subtle" size="sm" onClick={() => openConvert(format)} disabled={working}>
+                  {t('settings.storage.convertRemaining')}
+                </Button>
+              )}
               {stopped ? (
-                <Button variant="subtle" size="sm" onClick={openConvert} disabled={working}>
+                <Button variant="subtle" size="sm" onClick={() => openConvert(target)} disabled={working}>
                   {t('settings.storage.convertBack')}
                 </Button>
               ) : (
@@ -176,7 +207,7 @@ export function StorageFormatSettings({ usage }) {
           </div>
         )}
 
-        {format === 'jmap' && !live && (
+        {(format === 'jmap' || blobs) && !live && (
           <div>
             <Button variant="subtle" size="sm" onClick={() => act(storageFormat.reclaimSpace)} disabled={working}>
               {working ? <Loader size={14} className="animate-spin" /> : null}
@@ -194,7 +225,9 @@ export function StorageFormatSettings({ usage }) {
         open={convertOpen}
         onClose={() => { if (!working) setConvertOpen(false); }}
         dismissable={!working}
-        title={t('settings.storage.convertTitle', { format: formatName(target) })}
+        title={dialogTo === format
+          ? t('settings.storage.convertRemainingTitle', { format: formatName(format) })
+          : t('settings.storage.convertTitle', { format: formatName(dialogTo) })}
         footer={(
           <>
             <Button variant="secondary" size="lg" className="flex-1" onClick={() => setConvertOpen(false)} disabled={working} data-autofocus>

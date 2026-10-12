@@ -135,7 +135,7 @@ mod tests {
         let (_v, _a, s) = st(true);
         // Through the server, so the router line in server.rs is pinned.
         let resp = handle_request_for_test(&s, "storage_format_get", json!({})).await;
-        assert_eq!(ok(resp), json!({"format": "maildir", "migration": null}));
+        assert_eq!(ok(resp), json!({"format": "maildir", "migration": null, "blobs": false, "leftover": false}));
     }
 
     #[tokio::test]
@@ -339,6 +339,43 @@ mod tests {
         assert_eq!(ok(call(&s, "storage_reclaim_space", json!({})).await), json!({"removed": 1, "bytes": 24}));
         assert!(!blobs::blob_path(v.path(), &old).exists());
         assert!(blobs::blob_path(v.path(), &young).exists(), "inside the 24h grace");
+    }
+
+    /// R32: Settings offers Reclaim in Maildir format while a blob store is
+    /// there (a convert back leaves blobs inside their grace), and Convert
+    /// remaining while the leftover hint is set: `storage_format_get` says
+    /// both, from one stat and one marker row. A Reclaim in Maildir format
+    /// that leaves no blob takes the emptied store away; in JMAP format the
+    /// store stays.
+    #[tokio::test]
+    async fn storage_format_get_tells_of_blobs_and_files_left_and_a_maildir_reclaim_takes_the_empty_store() {
+        use mailvault_core::jmap_store::blobs;
+        let (v, _a, s) = st(true);
+        let root = v.path();
+        std::fs::create_dir_all(root.join("Maildir")).unwrap();
+        let aged = |id: &str| {
+            let file = std::fs::File::options().write(true).open(blobs::blob_path(root, id)).unwrap();
+            file.set_modified(std::time::SystemTime::now() - Duration::from_secs(2 * 24 * 3600)).unwrap();
+        };
+        let id = blobs::put(root, b"a blob a convert back left").unwrap();
+        message_store::set_leftover(root, true).unwrap();
+        let got = ok(call(&s, "storage_format_get", json!({})).await);
+        assert_eq!((got["format"].clone(), got["blobs"].clone(), got["leftover"].clone()), (json!("maildir"), json!(true), json!(true)), "{got}");
+
+        ok(call(&s, "storage_reclaim_space", json!({})).await);
+        assert!(blobs::blob_path(root, &id).exists(), "inside its grace");
+        assert_eq!(ok(call(&s, "storage_format_get", json!({})).await)["blobs"], json!(true), "the store stays while it holds a blob");
+
+        aged(&id);
+        assert_eq!(ok(call(&s, "storage_reclaim_space", json!({})).await)["removed"], json!(1));
+        assert!(!root.join(blobs::BLOB_DIR).exists(), "in Maildir format the emptied store goes");
+        assert_eq!(ok(call(&s, "storage_format_get", json!({})).await)["blobs"], json!(false));
+
+        message_store::set_vault_format(root, message_store::Format::Jmap).unwrap();
+        let id = blobs::put(root, b"a JMAP vault's blob").unwrap();
+        aged(&id);
+        assert_eq!(ok(call(&s, "storage_reclaim_space", json!({})).await)["removed"], json!(1));
+        assert!(root.join(blobs::BLOB_DIR).exists(), "in JMAP format writers put blobs: the store stays");
     }
 
     /// Makes the marker refuse one row, as a busy or full marker database does.

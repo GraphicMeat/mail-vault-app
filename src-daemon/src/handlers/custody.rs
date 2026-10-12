@@ -253,6 +253,19 @@ pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, 
             }
         };
         let report = maildir::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
+        // A JMAP vault's folder holding Maildir files after a repair that
+        // turned its records back into files: Settings offers to convert them
+        // again (`message_store::LEFTOVER_KEY`). Not after a demotion a damaged
+        // record stopped (`demoted` stays 0): that repair runs again on every
+        // load, and would offer the folder again each time.
+        if report.demoted > 0
+            && message_store::vault_format(root) == message_store::Format::Jmap
+            && message_store::uids_in_format_at(&mailbox_dir, message_store::Format::Maildir).is_ok_and(|left| !left.is_empty())
+        {
+            if let Err(e) = message_store::set_leftover(root, true) {
+                warn!("maildir_repair_generation: {}/{}: the leftover hint was not written: {}", account_id, mailbox, e);
+            }
+        }
         // Files were renamed or set aside wholesale, or a rename failed
         // part way: the next read relists the folder. The change hook
         // nudges the index.
@@ -577,6 +590,26 @@ mod tests {
 
         assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![5], vec![])));
         assert_eq!(reg.listing_count(), 2, "the repair invalidated, so the folder was listed again");
+    }
+
+    /// A repair in a JMAP vault turns the folder's records back into Maildir
+    /// files: it sets the vault's leftover hint, so Settings offers to convert
+    /// them again (R32).
+    #[tokio::test]
+    async fn a_repair_in_a_jmap_vault_sets_the_leftover_hint() {
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let root = v.path();
+        message_store::set_vault_format(root, message_store::Format::Jmap).unwrap();
+        message_store::write(root, "acc", "INBOX", 1, b"From: a@b.test\r\nSubject: s\r\nMessage-ID: <m@x.test>\r\n\r\nbody", &[]).unwrap();
+        maildir::write_generation(&message_store::mailbox_dir(root, "acc", "INBOX"), 1).unwrap();
+        let headers = json!({"uidValidity": 2, "totalEmails": 1, "emails": [{"uid": 5, "messageId": "<m@x.test>"}]});
+        daemon_custody::with_conn(&s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+        assert!(!message_store::leftover(root));
+
+        let r = call(&s, "maildir_repair_generation", json!({"accountId": "acc", "mailbox": "INBOX"})).await.result.unwrap();
+        assert_eq!((r["demoted"].clone(), r["rebound"].clone()), (json!(1), json!([[1, 5]])), "{r}");
+        assert!(message_store::leftover(root), "a JMAP vault's folder holds Maildir files now");
     }
 
     /// A repair that only errored still invalidates: its failures (here the

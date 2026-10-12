@@ -133,6 +133,7 @@ describe('face and failureText', () => {
     expect(failureText('E_FORMAT_REHOME_PENDING: 2')).toBe('some folders wait for their first full sync (2)');
     expect(failureText('E_FORMAT_DISK: see the daemon log')).toBe('the disk is full or failing');
     expect(failureText('E_FORMAT_UNREADABLE: see the daemon log')).toBe('a folder of the vault could not be read');
+    expect(failureText('E_FORMAT_DAMAGED: 2')).toBe('some message records are damaged and were left as they are (2)');
     expect(failureText('No space left on device')).toBe('No space left on device');
     expect(failureText(null)).toBe('');
   });

@@ -38,7 +38,8 @@
  *      chip shows it and it finishes, and no seeded message was lost or
  *      doubled: same uids, same bytes, same flag letters on every message
  *      nothing touched.
- *   5. Delete old files: retired/ is gone. Reclaim space removes nothing.
+ *   5. Delete old files: retired/ is gone. Reclaim space is still offered in
+ *      Maildir format (the blobs are inside their grace) and removes nothing.
  *
  * "Kill the app" is the daemon here, on purpose: the conversion lives there
  * (src-daemon/src/format_migration_job.rs), the app is a shell over it, and a
@@ -1124,12 +1125,16 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
       timeout: 60_000, interval: 300,
     }).catch(() => { throw new Error(`the old files row never went: ${JSON.stringify(ui)}`); });
     expect(ui.alert).toBe(null);
+    // The convert back left the blobs inside their 24 h grace: Reclaim stays offered in Maildir format.
+    expect(existsSync(join(root, 'message_blobs'))).toBe(true);
+    expect(ui.buttons.map((b) => b.text)).toEqual(expect.arrayContaining([EN.reclaim]));
     await closeSettings();
 
     expect(existsSync(join(root, 'retired'))).toBe(false);
     expect(await must('storage_format_retired', daemonRpc('storage_format_retired', {}))).toEqual({ bytes: 0, count: 0 });
-    // In Maildir format the button is not offered; the route still answers.
+    // Every blob is inside its grace: nothing goes, and the store stays.
     const swept = await must('storage_reclaim_space', daemonRpc('storage_reclaim_space', {}));
     expect(swept.removed).toBe(0);
+    expect(existsSync(join(root, 'message_blobs'))).toBe(true);
   });
 });

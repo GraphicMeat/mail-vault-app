@@ -28,6 +28,7 @@ const ENGLISH = {
   'errors.formatRehomePending': 'some folders wait for their first full sync ({{count}})',
   'errors.formatDisk': 'the disk is full or failing',
   'errors.formatUnreadable': 'a folder of the vault could not be read',
+  'errors.formatDamaged': 'some message records are damaged and were left as they are ({{count}})',
 };
 const KEYS = Object.keys(ENGLISH);
 const placeholders = (s) => (String(s).match(/\{\{(\w+)\}\}/g) || []).sort().join();

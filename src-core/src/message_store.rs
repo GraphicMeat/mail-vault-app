@@ -64,6 +64,16 @@ pub const FORMAT_KEY: &str = "storageFormat";
 /// progress (the daemon's `format_migration_job`), the empty string when none is.
 pub const MIGRATION_KEY: &str = "storageMigration";
 
+/// The vault marker row hinting that the vault may still hold messages in
+/// the format it is not in, with no stopped conversion to say so: `1`, or
+/// the empty string. Set when a generation repair leaves Maildir files in a
+/// JMAP vault (the daemon's `repair_generation_for`); emptied by every new
+/// conversion job (not a Resume, which plans only the folders its run has
+/// not finished), and by a same-direction start that finds nothing left.
+/// Settings offers Convert remaining on it. A hint, never a count: a start
+/// looks again (`holds_format`).
+pub const LEFTOVER_KEY: &str = "storageLeftover";
+
 /// Each vault root's format, read from its marker once per process.
 fn formats() -> &'static RwLock<HashMap<PathBuf, Format>> {
     static FORMATS: OnceLock<RwLock<HashMap<PathBuf, Format>>> = OnceLock::new();
@@ -114,6 +124,24 @@ pub fn set_vault_format(root: &Path, format: Format) -> Result<(), String> {
     crate::vault_layout::write_marker_value(root, FORMAT_KEY, value)?;
     formats().write().unwrap_or_else(|p| p.into_inner()).insert(root.to_path_buf(), format);
     Ok(())
+}
+
+/// Whether the vault's marker hints that messages are left in the format it
+/// is not in (`LEFTOVER_KEY`). One marker read; a marker that will not read
+/// says no.
+pub fn leftover(root: &Path) -> bool {
+    crate::vault_layout::read_marker_value(root, LEFTOVER_KEY).as_deref() == Some("1")
+}
+
+/// Sets (`1`) or empties the vault's `LEFTOVER_KEY` row.
+pub fn set_leftover(root: &Path, on: bool) -> Result<(), String> {
+    crate::vault_layout::write_marker_value(root, LEFTOVER_KEY, if on { "1" } else { "" })
+}
+
+/// Whether the vault has a blob store (`message_blobs/`): one stat, no walk.
+/// Settings offers Reclaim in either format while it is there.
+pub fn has_blob_store(root: &Path) -> bool {
+    root.join(blobs::BLOB_DIR).is_dir()
 }
 
 /// The mailbox directory (holds cur/, jmap/, .uidvalidity, orphaned/, .decrypted/ ...). Dir-level callers
@@ -1237,6 +1265,35 @@ pub fn stored_bytes(root: &Path, format: Format) -> io::Result<u64> {
     Ok(total)
 }
 
+/// Whether the vault holds at least one message in `format`: a Maildir file
+/// in a `cur/`, or a record in a `jmap/` that parses (a damaged record is no
+/// message a conversion can move, `record_damaged_at`). Stops at the first
+/// mailbox that holds one, so a vault wholly in the other format costs one
+/// names-only listing of each mailbox's (empty or missing) directory of
+/// `format`. A listing that fails is the error.
+pub fn holds_format(root: &Path, format: Format) -> io::Result<bool> {
+    for account in dirs_in(&root.join("Maildir"))? {
+        for mailbox in dirs_in(&account)? {
+            let found = match format {
+                Format::Maildir => !files_in(&messages_in(&mailbox), maildir::vault_filename_uid)?.is_empty(),
+                Format::Jmap => files_in(&jmap_in(&mailbox), record_uid)?.iter().any(|path| read_record(path).is_ok()),
+            };
+            if found {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// Whether `uid`'s record in the mailbox directory is there but will not
+/// parse: a damaged record, which every reader passes over (`record_of`),
+/// the sweep reads for blob ids (`mark_ids_in`) and the conversion job
+/// leaves as it is.
+pub fn record_damaged_at(mailbox_dir: &Path, uid: u32) -> bool {
+    matches!(read_record(&jmap_in(mailbox_dir).join(record_name(uid))), Err(e) if e.kind() == io::ErrorKind::InvalidData)
+}
+
 /// The directories in `dir` (not a dot name, not a link); none when it is missing.
 fn dirs_in(dir: &Path) -> io::Result<Vec<PathBuf>> {
     let entries = match fs::read_dir(dir) {
@@ -1417,6 +1474,9 @@ pub fn set_server_ids(root: &Path, account_id: &str, mailbox: &str, uid: u32, id
 pub struct SweepStats {
     /// Records read in the mark walk.
     pub records: usize,
+    /// Of those, records that would not parse or named no blob: every blob id
+    /// in their text was kept (`mark_ids_in`).
+    pub damaged: usize,
     /// Blob files looked at.
     pub blobs: usize,
     /// Unreferenced blobs left because they are younger than `min_age`.
@@ -1432,11 +1492,14 @@ pub struct SweepStats {
 /// every foreground read for its whole length.
 ///
 /// 1. Mark: every `Maildir/<account>/<dir>/jmap/<uid>.json` is read and its
-///    blob id kept. A record that will not read as JSON stops the pass with
-///    an error, removing nothing: its blob cannot be told apart. So does a
-///    partial listing: a vault with blobs and no `Maildir/`, an account or
-///    mailbox directory that vanished or cannot be stated, or a mailbox
-///    whose `jmap/` is unreadable. Only a directory that exists may be empty.
+///    blob id kept. A record that reads but will not parse as JSON, or names
+///    no blob, has every blob id in its text kept instead (`mark_ids_in`):
+///    no blob it may name goes, and the record stays where it is. A record
+///    that will not read stops the pass with an error, removing nothing. So
+///    does a partial listing: a vault with blobs and no `Maildir/`, an
+///    account or mailbox directory that vanished or cannot be stated, or a
+///    mailbox whose `jmap/` is unreadable. Only a directory that exists may
+///    be empty.
 /// 2. Sweep: each blob not marked is stated again and removed only when its
 ///    mtime is still older than `min_age`.
 ///
@@ -1544,14 +1607,53 @@ fn mark_mailbox(mailbox: &Path, marked: &mut HashSet<String>, stats: &mut SweepS
             Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
             Err(e) => return Err(format!("sweep stopped: the record {} will not read: {e}", path.display())),
         };
-        let value: Value = serde_json::from_slice(&bytes)
-            .map_err(|e| format!("sweep stopped: the record {} will not parse: {e}", path.display()))?;
-        if let Some(blob) = value.get("blob").and_then(Value::as_str) {
-            marked.insert(blob.to_string());
+        let blob = serde_json::from_slice::<Value>(&bytes).ok().and_then(|value| value.get("blob").and_then(Value::as_str).map(str::to_owned));
+        match blob {
+            Some(blob) => {
+                marked.insert(blob);
+            }
+            None => {
+                warn!("sweep_blobs: the record {} will not parse or names no blob; every blob id in it is kept", path.display());
+                mark_ids_in(&bytes, marked);
+                stats.damaged += 1;
+            }
         }
         stats.records += 1;
     }
     Ok(())
+}
+
+/// Marks every well-formed blob id in `text` (`sha256-` then 64 lowercase
+/// hex digits, `blobs::is_valid_id`), read as bytes: a damaged record may
+/// not even be UTF-8. Marking too much only keeps a blob longer.
+fn mark_ids_in(text: &[u8], marked: &mut HashSet<String>) {
+    const PREFIX: &[u8] = b"sha256-";
+    const ID_LEN: usize = PREFIX.len() + 64;
+    let mut at = 0;
+    while let Some(found) = text.get(at..).and_then(|rest| rest.windows(PREFIX.len()).position(|w| w == PREFIX)) {
+        let start = at + found;
+        if let Some(id) = text.get(start..start + ID_LEN).and_then(|id| std::str::from_utf8(id).ok()) {
+            if blobs::is_valid_id(id) {
+                marked.insert(id.to_string());
+            }
+        }
+        at = start + PREFIX.len();
+    }
+}
+
+/// Removes the blob store's empty directories, then the store itself once
+/// it is empty: `remove_dir` only, so a blob, or anything else in it, is
+/// never removed. For a vault in Maildir format, where no writer puts a
+/// blob (the daemon's `reclaim`, under its registry lock): Settings offers
+/// Reclaim while the store is there (`has_blob_store`).
+pub fn prune_blob_store(root: &Path) {
+    let store = root.join(blobs::BLOB_DIR);
+    for shard in fs::read_dir(&store).into_iter().flatten().flatten() {
+        if shard.file_type().is_ok_and(|t| t.is_dir()) {
+            let _ = fs::remove_dir(shard.path());
+        }
+    }
+    let _ = fs::remove_dir(&store);
 }
 
 /// Turns every record of the mailbox directory back into a Maildir file (its
@@ -3664,17 +3766,103 @@ mod tests {
         assert_eq!(sweep_blobs(root, DAY).unwrap().young, 1);
     }
 
+    /// A record that will not parse (cut short, not even UTF-8), or parses
+    /// but names no blob, no longer stops the sweep: every blob id in its
+    /// text is kept, the rest is swept as usual, and the record stays.
+    #[test]
+    fn sweep_keeps_every_blob_a_damaged_record_names() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        let cut = blobs::put(root, b"Subject: cut\r\n\r\nx").unwrap();
+        let odd = blobs::put(root, b"Subject: odd\r\n\r\nx").unwrap();
+        let orphan = blobs::put(root, b"Subject: old\r\n\r\nx").unwrap();
+        for id in [&cut, &odd, &orphan] {
+            age(&blobs::blob_path(root, id), 2 * DAY);
+        }
+        let dir = jmap_in(&mailbox_dir(root, ACCT, MBOX));
+        let mut damaged = format!("{{\"format\":\"mailvault-jmap/1\",\"uid\":2,\"blob\":\"{cut}\",\"size\":").into_bytes();
+        damaged.extend_from_slice(&[0xff, 0xfe, b'1']);
+        fs::write(dir.join("2.json"), &damaged).unwrap();
+        fs::write(dir.join("3.json"), format!("{{\"blob\":7,\"was\":\"{odd}\"}}")).unwrap();
+
+        let swept = sweep_blobs(root, DAY).unwrap();
+        assert_eq!((swept.records, swept.damaged, swept.removed), (3, 2, 1), "{swept:?}");
+        assert!(blobs::blob_path(root, &cut).exists() && blobs::blob_path(root, &odd).exists(), "every blob id a damaged record names is kept");
+        assert!(!blobs::blob_path(root, &orphan).exists(), "the rest is swept");
+        assert_eq!(fs::read(dir.join("2.json")).unwrap(), damaged, "the record stays as it was");
+    }
+
+    /// A record that will not read at all (here, no permission) still stops
+    /// the sweep with nothing removed: its text cannot be looked at.
+    #[cfg(unix)]
     #[test]
     fn sweep_stops_on_a_record_it_cannot_read() {
+        use std::os::unix::fs::PermissionsExt;
         let tmp = vault(Format::Jmap);
         let root = tmp.path();
         write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
         let orphan = blobs::put(root, b"Subject: old\r\n\r\nx").unwrap();
         age(&blobs::blob_path(root, &orphan), 2 * DAY);
-        fs::write(jmap_in(&mailbox_dir(root, ACCT, MBOX)).join("2.json"), b"{ not json").unwrap();
-        let err = sweep_blobs(root, DAY).unwrap_err();
-        assert!(err.contains("2.json"), "{err}");
+        let record = jmap_in(&mailbox_dir(root, ACCT, MBOX)).join("1.json");
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o000)).unwrap();
+        if fs::read(&record).is_ok() {
+            fs::set_permissions(&record, fs::Permissions::from_mode(0o644)).unwrap();
+            return; // root: permissions do not apply
+        }
+        let result = sweep_blobs(root, DAY);
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o644)).unwrap();
+        let err = result.unwrap_err();
+        assert!(err.contains("1.json"), "{err}");
         assert!(blobs::blob_path(root, &orphan).exists(), "nothing is removed when the mark is unsure");
+    }
+
+    /// `holds_format` finds a message of a format (a Maildir file, a record
+    /// that parses) and passes over a damaged record; `record_damaged_at`
+    /// tells a damaged record from none and from a good one.
+    #[test]
+    fn holds_format_finds_a_message_of_the_format_and_passes_over_a_damaged_record() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        assert!(!holds_format(root, Format::Maildir).unwrap() && !holds_format(root, Format::Jmap).unwrap(), "an empty vault holds neither");
+        write(root, ACCT, MBOX, 1, &eml("one"), &[]).unwrap();
+        assert!(holds_format(root, Format::Jmap).unwrap());
+        assert!(!holds_format(root, Format::Maildir).unwrap());
+        let dir = mailbox_dir(root, ACCT, MBOX);
+        assert!(!record_damaged_at(&dir, 1), "a record that parses");
+        assert!(!record_damaged_at(&dir, 2), "no record");
+        fs::write(jmap_in(&dir).join("1.json"), b"{ cut").unwrap();
+        assert!(record_damaged_at(&dir, 1));
+        assert!(!holds_format(root, Format::Jmap).unwrap(), "a damaged record is no message to convert");
+        set_vault_format(root, Format::Maildir).unwrap();
+        write(root, ACCT, "Work", 4, &eml("four"), &[]).unwrap();
+        assert!(holds_format(root, Format::Maildir).unwrap());
+    }
+
+    /// The leftover hint is one marker row. Pruning the blob store takes its
+    /// empty directories, and the store once empty; never a blob.
+    #[test]
+    fn the_leftover_row_round_trips_and_pruning_keeps_every_blob() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        assert!(!leftover(root));
+        set_leftover(root, true).unwrap();
+        assert!(leftover(root));
+        set_leftover(root, false).unwrap();
+        assert!(!leftover(root));
+
+        assert!(!has_blob_store(root));
+        let id = blobs::put(root, b"Subject: kept\r\n\r\nx").unwrap();
+        // Not a hex shard name, so never the blob's own.
+        let empty = root.join(blobs::BLOB_DIR).join("zz");
+        fs::create_dir_all(&empty).unwrap();
+        assert!(has_blob_store(root));
+        prune_blob_store(root);
+        assert!(blobs::blob_path(root, &id).exists(), "a blob is never removed");
+        assert!(!empty.exists(), "an empty shard goes");
+        fs::remove_file(blobs::blob_path(root, &id)).unwrap();
+        prune_blob_store(root);
+        assert!(!has_blob_store(root), "the store goes once empty");
     }
 
     #[test]
