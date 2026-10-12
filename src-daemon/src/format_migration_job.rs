@@ -21,6 +21,12 @@
 //!   starts a new one from the journal. Cancel ends the worker. Nothing is
 //!   rolled back: the vault stays in the target format, mixed and readable.
 //! - **Worker.** One OS thread at background QoS (`spawn`).
+//! - **A vault out of reach.** While the vault is closed (`vault_close`,
+//!   before a move, a portable copy or an adopt) or gone (an unmounted
+//!   volume), the worker holds where it stands, journaled as running, and
+//!   tries the same step again once the vault is back (`Runner::wait_for_vault`):
+//!   nothing it saw meanwhile counts as a failure, a gone message or an empty
+//!   folder. A held job is a live one, so a move stays refused.
 //! - **Progress** is the `format-migration-progress` event: every change of
 //!   state, and at most four a second in between (`Runner::progress`). Its
 //!   payload is the `migration` object `storage_format_get` answers.
@@ -100,6 +106,8 @@ const CHECKPOINT_EVERY: u64 = 200;
 const ATTEMPTS: usize = 3;
 /// Header cache rows read per hold of its lock.
 const DATES_PAGE: usize = 2000;
+/// How often a job held for the vault looks whether it is back.
+const VAULT_LOOK_EVERY: Duration = Duration::from_millis(250);
 
 const RUNNING: &str = "running";
 const PAUSED: &str = "paused";
@@ -269,6 +277,16 @@ impl Job {
         while *ctl == Ctl::Run {
             ctl = self.wake.wait(ctl).unwrap_or_else(|p| p.into_inner());
         }
+    }
+
+    /// Waits up to `limit` for the job to be asked something: what it is
+    /// asked then, `Run` when nothing.
+    fn wait_asked(&self, limit: Duration) -> Ctl {
+        let ctl = lock(&self.ctl);
+        if *ctl != Ctl::Run {
+            return *ctl;
+        }
+        *self.wake.wait_timeout(ctl, limit).unwrap_or_else(|p| p.into_inner()).0
     }
 
     /// Waits for as long as the job is held; then what it was asked.
@@ -858,39 +876,90 @@ impl Runner {
     }
 
     /// Asked before each message. `None` to go on: after holding here for as
-    /// long as the job is paused, journaled and reported as paused. The end
-    /// when the job was cancelled.
+    /// long as the job is paused (journaled and reported as paused) or the
+    /// vault is closed (`hold_for_vault`). The end when the job was
+    /// cancelled.
     fn between_messages(&mut self) -> Option<Ended> {
-        if self.state.format_migration.quitting.load(Ordering::SeqCst) {
-            // The journal stays `running`: the next start carries on here.
-            self.checkpoint();
-            self.job.set_settled(true);
-            info!("[format_migration] job {}: held for the quit at {} of {}", self.journal.job_id, self.journal.done, self.journal.total);
-            loop {
-                std::thread::park();
-            }
-        }
-        match self.job.ctl() {
-            Ctl::Run => None,
-            Ctl::Cancel | Ctl::Ending => Some(Ended::Cancelled),
-            Ctl::Pause => {
-                self.journal.state = PAUSED.to_string();
+        self.steer(false)
+    }
+
+    /// Asked after a step whose result says nothing while the vault is out
+    /// of reach (a failure, a message gone, an empty listing): holds until
+    /// the vault is open and there again, so the caller tries the same step
+    /// again. `None` at once when the vault is there; else as
+    /// `between_messages`.
+    fn wait_for_vault(&mut self) -> Option<Ended> {
+        self.steer(true)
+    }
+
+    /// `between_messages`, and with `look` the vault is also looked at on
+    /// disk (`vault_ready`).
+    fn steer(&mut self, look: bool) -> Option<Ended> {
+        loop {
+            if self.state.format_migration.quitting.load(Ordering::SeqCst) {
+                // The journal stays `running`: the next start carries on here.
                 self.checkpoint();
-                self.progress(PAUSED, true, true);
                 self.job.set_settled(true);
-                let ctl = self.job.wait_held();
-                self.job.set_settled(false);
-                match ctl {
-                    Ctl::Run => {
-                        self.journal.state = RUNNING.to_string();
-                        self.checkpoint();
-                        self.progress(RUNNING, true, true);
-                        None
+                info!("[format_migration] job {}: held for the quit at {} of {}", self.journal.job_id, self.journal.done, self.journal.total);
+                loop {
+                    std::thread::park();
+                }
+            }
+            match self.job.ctl() {
+                Ctl::Run if self.vault_ready(look) => return None,
+                Ctl::Run => self.hold_for_vault(),
+                Ctl::Cancel | Ctl::Ending => return Some(Ended::Cancelled),
+                Ctl::Pause => {
+                    self.journal.state = PAUSED.to_string();
+                    self.checkpoint();
+                    self.progress(PAUSED, true, true);
+                    self.job.set_settled(true);
+                    let ctl = self.job.wait_held();
+                    self.job.set_settled(false);
+                    if ctl != Ctl::Run {
+                        return Some(Ended::Cancelled);
                     }
-                    _ => Some(Ended::Cancelled),
+                    self.journal.state = RUNNING.to_string();
+                    self.checkpoint();
+                    self.progress(RUNNING, true, true);
                 }
             }
         }
+    }
+
+    /// Whether the vault can be worked on: open (no `vault_close` in force)
+    /// and, with `look`, still there, its marker on disk (`mark_started`
+    /// wrote it). A volume that went away lists every folder as empty and
+    /// reads every message as gone, and says nothing else.
+    fn vault_ready(&self, look: bool) -> bool {
+        vault_root(&self.state).is_ok() && (!look || self.root.join(mailvault_core::vault_layout::MARKER_FILE).is_file())
+    }
+
+    /// Holds while the vault is out of reach: journaled and reported as
+    /// running at the count it reached, nothing written to the vault, and
+    /// settled, so a quit does not wait for the vault. Looks every
+    /// `VAULT_LOOK_EVERY`; ends when the vault is back or the job is asked
+    /// something (a pause, a cancel). A quit holds it here for good, as at a
+    /// message boundary.
+    fn hold_for_vault(&mut self) {
+        self.checkpoint();
+        self.progress(RUNNING, true, true);
+        self.job.set_settled(true);
+        info!("[format_migration] job {}: the vault is out of reach; holding at {} of {}", self.journal.job_id, self.journal.done, self.journal.total);
+        loop {
+            if self.state.format_migration.quitting.load(Ordering::SeqCst) {
+                loop {
+                    std::thread::park();
+                }
+            }
+            if self.job.wait_asked(VAULT_LOOK_EVERY) != Ctl::Run || self.vault_ready(true) {
+                break;
+            }
+        }
+        // Unsettled before `steer` looks at the quit flag again: a quit that
+        // saw the job settled is seen there, and it settles again.
+        self.job.set_settled(false);
+        info!("[format_migration] job {}: carries on", self.journal.job_id);
     }
 
     /// Records how the run ended. The journal and the marker come first, then
@@ -908,7 +977,10 @@ impl Runner {
         if let Ended::Failed(reason) = &ended {
             self.journal.error = Some(reason.clone());
         }
-        if let Err(e) = mark_stopped(&self.root) {
+        // Through the gate: a job cancelled while held for the vault never
+        // writes into a closed one. The row left names a job that is no
+        // longer in progress; the next start or resume writes it again.
+        if let Err(e) = with_vault_write(&self.state, mark_stopped) {
             warn!("[format_migration] job {}: the marker was not cleared: {e}", self.journal.job_id);
         }
         if matches!(ended, Ended::Done) {
@@ -942,9 +1014,18 @@ fn convert(runner: &mut Runner) -> Ended {
             }
         }
     }
-    if let Err(e) = runner.plan() {
-        // Already a code (`failed`): the cause is in the log.
-        return Ended::Failed(e);
+    loop {
+        match runner.plan() {
+            Ok(()) => break,
+            // A listing the vault was out of reach for: once it is back, again.
+            Err(_) if !runner.vault_ready(true) => {
+                if let Some(ended) = runner.wait_for_vault() {
+                    return ended;
+                }
+            }
+            // Already a code (`failed`): the cause is in the log.
+            Err(e) => return Ended::Failed(e),
+        }
     }
     runner.link = runner.journal.old_files == OldFiles::Retire && hard_links_work(&runner.state, &runner.root);
     for i in 0..runner.journal.mailboxes.len() {
@@ -969,6 +1050,10 @@ fn convert(runner: &mut Runner) -> Ended {
             }
         }
         runner.checkpoint();
+    }
+    // The sweep and the end's marker write want the vault there.
+    if let Some(ended) = runner.wait_for_vault() {
+        return ended;
     }
     match with_vault_write(&runner.state, |root| message_store::sweep_blobs(root, SWEEP_GRACE)) {
         Ok(swept) => info!("[format_migration] job {}: swept {} blob(s), {} bytes", runner.journal.job_id, swept.removed, swept.freed_bytes),
@@ -1126,6 +1211,10 @@ impl Runner {
             }
             plans.push(MailboxPlan { account, dir, state: if done { MAILBOX_DONE } else { MAILBOX_PENDING }.to_string() });
         }
+        // A vault that went away lists as empty: that plan is never kept.
+        if !self.vault_ready(true) {
+            return Err(failed(E_FORMAT_UNREADABLE, "the vault was out of reach while it was listed", "held until it is back"));
+        }
         if !self.journal.mailboxes.is_empty() {
             self.journal.done = self.journal.done.max(self.journal.total.saturating_sub(left));
         }
@@ -1145,19 +1234,38 @@ impl Runner {
     fn convert_mailbox(&mut self, account: &str, dir: &str) -> Result<&'static str, Ended> {
         let to = self.journal.to;
         let from = other(to);
-        let servers = server_mailboxes(&self.state, account, dir);
-        if to == message_store::Format::Jmap && !rehome_done(&self.state, &self.root, account, dir, servers.as_deref()) {
-            info!("[format_migration] {account}/{dir}: waits for its first import rehome");
-            return Ok(MAILBOX_WAITING);
-        }
-        let dates = servers.as_deref().map(|names| received_dates(&self.state, account, names)).unwrap_or_default();
+        // The header cache is the custody store's, which a closed vault
+        // closes: what it answered then (no server view, no dates) is asked
+        // again once the vault is back.
+        let dates = loop {
+            let servers = server_mailboxes(&self.state, account, dir);
+            let ready = to != message_store::Format::Jmap || rehome_done(&self.state, &self.root, account, dir, servers.as_deref());
+            let dates = if ready { servers.as_deref().map(|names| received_dates(&self.state, account, names)).unwrap_or_default() } else { HashMap::new() };
+            if self.vault_ready(true) {
+                if !ready {
+                    info!("[format_migration] {account}/{dir}: waits for its first import rehome");
+                    return Ok(MAILBOX_WAITING);
+                }
+                break dates;
+            }
+            if let Some(ended) = self.wait_for_vault() {
+                return Err(ended);
+            }
+        };
         let mut skip: HashSet<u32> = HashSet::new();
         let mut first = true;
         loop {
             let listed = with_vault_write(&self.state, |root| {
                 message_store::uids_in_format_at(&folder_of(root, account, dir), from).map_err(|e| format!("{account}/{dir}: {e}"))
-            })
-            .map_err(|e| Ended::Failed(failed(E_FORMAT_UNREADABLE, "a folder could not be listed", e)))?;
+            });
+            // A listing the vault was out of reach for: once it is back, again.
+            if !self.vault_ready(true) {
+                if let Some(ended) = self.wait_for_vault() {
+                    return Err(ended);
+                }
+                continue;
+            }
+            let listed = listed.map_err(|e| Ended::Failed(failed(E_FORMAT_UNREADABLE, "a folder could not be listed", e)))?;
             let pending: Vec<u32> = listed.into_iter().filter(|uid| !skip.contains(uid)).collect();
             if pending.is_empty() {
                 return Ok(MAILBOX_DONE);
@@ -1167,13 +1275,24 @@ impl Runner {
             }
             first = false;
             for uid in pending {
-                if let Some(ended) = self.between_messages() {
-                    return Err(ended);
-                }
-                crate::search_index::yield_to_foreground(&self.state.search_index);
                 self.seen += 1;
                 skip.insert(uid);
-                match self.convert_message(account, dir, uid, dates.get(&uid).map(String::as_str)) {
+                let outcome = loop {
+                    if let Some(ended) = self.between_messages() {
+                        return Err(ended);
+                    }
+                    crate::search_index::yield_to_foreground(&self.state.search_index);
+                    let outcome = self.convert_message(account, dir, uid, dates.get(&uid).map(String::as_str));
+                    // Short of converted while the vault was out of reach, the
+                    // outcome says nothing: the same message once it is back.
+                    if matches!(outcome, Outcome::Converted) || self.vault_ready(true) {
+                        break outcome;
+                    }
+                    if let Some(ended) = self.wait_for_vault() {
+                        return Err(ended);
+                    }
+                };
+                match outcome {
                     Outcome::Converted => {
                         self.journal.done += 1;
                         self.journal.total = self.journal.total.max(self.journal.done);
@@ -1960,5 +2079,193 @@ mod tests {
         assert_eq!(end["state"], json!("done"), "{end}");
         assert!(files_under(root, "jmap").is_empty());
         assert_eq!(files_under(root, "cur"), before, "the Maildir tree is the one it was");
+    }
+
+    /// Waits until the live job holds for the vault: settled while it is
+    /// asked to run. False when it never did (it ended, or `limit` passed).
+    fn held_for_vault(s: &Arc<DaemonState>, limit: Duration) -> bool {
+        let deadline = Instant::now() + limit;
+        while Instant::now() < deadline {
+            if let Some(job) = s.format_migration.live() {
+                if job.ctl() == Ctl::Run && *lock(&job.settled) {
+                    return true;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        false
+    }
+
+    /// R26: the app closes the vault before a move (and before a portable
+    /// copy or an adopt). A conversion in the middle of a message then holds
+    /// with nothing recorded as failed, the refused move leaves it alone, and
+    /// once the vault reopens the same message is tried again: the run ends
+    /// done with every message converted.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_closed_vault_holds_the_job_and_reopening_carries_on() {
+        let (v, _a, s) = st();
+        let root = v.path().to_path_buf();
+        let messages = fixture(&root, 1, 1, 6);
+        std::fs::write(message_store::mailbox_dir(&root, "acct0", "INBOX").join(import_rehome::DONE_FILE), b"").unwrap();
+        let (go_tx, go_rx) = std::sync::mpsc::channel::<()>();
+        let go_rx = Mutex::new(Some(go_rx));
+        let entered = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&entered);
+        // Message 2 waits between its read and its commit, once.
+        hook(&s, move |n, _, _, _, _| {
+            if n == 2 {
+                let rx = go_rx.lock().unwrap().take();
+                if let Some(rx) = rx {
+                    flag.store(true, Ordering::SeqCst);
+                    let _ = rx.recv();
+                }
+            }
+        });
+        let mut events = s.events.subscribe();
+        start(&s, &root, Format::Jmap, OldFiles::Delete).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while !entered.load(Ordering::SeqCst) {
+            assert!(Instant::now() < deadline, "the second message never came");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        crate::handlers::search_index::route(&s, "vault_close", &json!({}), Value::Null).await;
+        let id = journal_of(&s, &root).job_id;
+        let dst = tempfile::tempdir().unwrap();
+        let refused = crate::handlers::vault::route(&s, "vault_move_to", &json!({"path": dst.path().to_string_lossy()}), json!(1)).await.unwrap();
+        assert_eq!(refused.error.map(|e| e.message), Some(format!("{E_FORMAT_MOVE_BLOCKED}: {id}")), "a held job is a live job");
+        assert!(!dst.path().join("Maildir").exists(), "nothing copied");
+
+        go_tx.send(()).unwrap();
+        let held = tokio::task::block_in_place(|| held_for_vault(&s, Duration::from_secs(10)));
+        assert!(held, "the job holds for the vault: {:?}", pending_journal(&s.app_dir, &root));
+        let journal = journal_of(&s, &root);
+        assert_eq!((journal.state.as_str(), journal.done, journal.failed.len()), (RUNNING, 1, 0), "{journal:?}");
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let view = s.format_migration.live().expect("still live").view();
+        assert_eq!((view["state"].clone(), view["done"].clone(), view["failed"].clone()), (json!("running"), json!(1), json!(0)), "{view}");
+
+        crate::handlers::search_index::route(&s, "vault_reopen", &json!({}), Value::Null).await;
+        let end = tokio::task::block_in_place(|| end_of(&mut events));
+        assert_eq!((end["state"].clone(), end["done"].clone(), end["total"].clone(), end["failed"].clone()), (json!("done"), json!(6), json!(6), json!(0)), "{end}");
+        assert!(pending_journal(&s.app_dir, &root).is_none(), "a done job leaves no journal");
+        assert!(files_under(&root, "cur").is_empty(), "no old file left");
+        for ((account, mailbox, uid), raw) in &messages {
+            assert!(record_of(&root, account, mailbox, *uid).is_some(), "uid {uid} converted");
+            assert_eq!(message_store::read_raw(&root, account, mailbox, *uid).unwrap().as_ref(), Some(raw), "uid {uid}");
+        }
+    }
+
+    /// Any other loss of the vault holds the job the same way. A volume that
+    /// went away (an unmounted NAS) lists every folder as empty and reads
+    /// every message as gone: none of that may count as converted, gone or
+    /// done. Once the vault is back, the run carries on and ends done.
+    #[cfg(unix)]
+    #[test]
+    fn a_vault_that_went_away_holds_the_job_until_it_is_back() {
+        let (v, _a, s) = st();
+        let root = v.path().to_path_buf();
+        let messages = fixture(&root, 1, 2, 3);
+        let away = root.with_extension("away");
+        let (from, to) = (root.clone(), away.clone());
+        let once = AtomicBool::new(false);
+        hook(&s, move |n, _, _, _, _| {
+            if n == 2 && !once.swap(true, Ordering::SeqCst) {
+                std::fs::rename(&from, &to).unwrap();
+            }
+        });
+        let mut rx = s.events.subscribe();
+        start(&s, &root, Format::Jmap, OldFiles::Delete).unwrap();
+        let held = held_for_vault(&s, Duration::from_secs(10));
+        let journal = pending_journal(&s.app_dir, &root);
+        // Back before any assertion can fail, so the temp dir is cleaned up.
+        std::fs::rename(&away, &root).unwrap();
+        assert!(held, "the job holds while the vault is gone: {journal:?}");
+        let journal = journal.expect("a journal");
+        assert_eq!((journal.state.as_str(), journal.done, journal.failed.len()), (RUNNING, 1, 0), "{journal:?}");
+
+        let end = end_of(&mut rx);
+        assert_eq!((end["state"].clone(), end["done"].clone(), end["total"].clone(), end["failed"].clone()), (json!("done"), json!(6), json!(6), json!(0)), "{end}");
+        assert!(files_under(&root, "cur").is_empty(), "no old file left");
+        for ((account, mailbox, uid), raw) in &messages {
+            assert_eq!(message_store::read_raw(&root, account, mailbox, *uid).unwrap().as_ref(), Some(raw), "{mailbox} uid {uid}");
+        }
+    }
+
+    /// A quit while the job holds for the vault does not wait for the vault:
+    /// the job is settled already, its journal still `running` with nothing
+    /// failed and nothing written after, and the next daemon on the vault
+    /// carries on to the end.
+    #[test]
+    fn a_quit_while_held_for_the_vault_returns_at_once_and_stays_resumable() {
+        let (v, a, s) = st();
+        let root = v.path();
+        let messages = fixture(root, 1, 1, 6);
+        let closer = Arc::clone(&s);
+        hook(&s, move |n, _, _, _, _| {
+            if n == 2 {
+                closer.vault_closed.store(true, Ordering::SeqCst);
+            }
+        });
+        start(&s, root, Format::Jmap, OldFiles::Delete).unwrap();
+        assert!(held_for_vault(&s, Duration::from_secs(10)), "held for the vault: {:?}", pending_journal(&s.app_dir, root));
+        let asked = Instant::now();
+        assert!(pause_all_and_wait(&s, Duration::from_millis(600)), "settled");
+        assert!(asked.elapsed() < Duration::from_millis(300), "the quit did not wait for the vault: {:?}", asked.elapsed());
+        let journal = journal_of(&s, root);
+        assert_eq!((journal.state.as_str(), journal.done, journal.failed.len()), (RUNNING, 1, 0), "{journal:?}");
+        std::thread::sleep(Duration::from_millis(600));
+        assert_eq!(journal_of(&s, root), journal, "nothing written after the quit");
+
+        // The first daemon still holds the custody store; the folder's import
+        // rehome is done, so the next one need not read the header cache.
+        std::fs::write(message_store::mailbox_dir(root, "acct0", "INBOX").join(import_rehome::DONE_FILE), b"").unwrap();
+        let next = DaemonState::for_test(root.to_path_buf(), a.path().to_path_buf(), true);
+        let mut rx = next.events.subscribe();
+        resume_journaled(&next);
+        let end = end_of(&mut rx);
+        assert_eq!((end["state"].clone(), end["done"].clone(), end["total"].clone(), end["failed"].clone()), (json!("done"), json!(6), json!(6), json!(0)), "{end}");
+        for ((account, mailbox, uid), raw) in &messages {
+            assert_eq!(message_store::read_raw(root, account, mailbox, *uid).unwrap().as_ref(), Some(raw));
+        }
+    }
+
+    /// A cancel while the job holds for the vault ends it at once: nothing
+    /// failed, the message in hand still in its old format, nothing written
+    /// into the closed vault (the job row stays until the next run). Resume
+    /// once the vault is back converts the rest.
+    #[test]
+    fn a_cancel_while_held_for_the_vault_ends_the_run_with_nothing_failed() {
+        let (v, _a, s) = st();
+        let root = v.path();
+        let messages = fixture(root, 1, 1, 6);
+        let closer = Arc::clone(&s);
+        let once = AtomicBool::new(false);
+        hook(&s, move |n, _, _, _, _| {
+            if n == 2 && !once.swap(true, Ordering::SeqCst) {
+                closer.vault_closed.store(true, Ordering::SeqCst);
+            }
+        });
+        let mut rx = s.events.subscribe();
+        start(&s, root, Format::Jmap, OldFiles::Delete).unwrap();
+        assert!(held_for_vault(&s, Duration::from_secs(10)), "held for the vault: {:?}", pending_journal(&s.app_dir, root));
+        let id = journal_of(&s, root).job_id;
+        // The job's own control: `storage_format_cancel` goes through the
+        // vault gate, so the app cannot send it while the vault is closed.
+        assert_eq!(cancel(&s, root).unwrap()["cancelled"], json!(true));
+        let end = end_of(&mut rx);
+        assert_eq!((end["state"].clone(), end["done"].clone(), end["failed"].clone()), (json!("cancelled"), json!(1), json!(0)), "{end}");
+        assert!(file_of(root, "acct0", "INBOX", 2).is_some() && record_of(root, "acct0", "INBOX", 2).is_none(), "uid 2 keeps its old file");
+        assert_eq!(marker(root, MIGRATION_KEY), Some(id), "nothing written into the closed vault");
+
+        s.vault_closed.store(false, Ordering::SeqCst);
+        let mut rx = s.events.subscribe();
+        resume(&s, root).unwrap();
+        let end = end_of(&mut rx);
+        assert_eq!((end["state"].clone(), end["done"].clone(), end["total"].clone(), end["failed"].clone()), (json!("done"), json!(6), json!(6), json!(0)), "{end}");
+        assert_eq!(marker(root, MIGRATION_KEY).as_deref(), Some(""));
+        for ((account, mailbox, uid), raw) in &messages {
+            assert!(record_of(root, account, mailbox, *uid).is_some(), "uid {uid} converted");
+            assert_eq!(message_store::read_raw(root, account, mailbox, *uid).unwrap().as_ref(), Some(raw));
+        }
     }
 }
