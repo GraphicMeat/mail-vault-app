@@ -19,6 +19,7 @@ import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { isRowArchived } from '../utils/quickActionFacts';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { RowGutter, RowSnippet, WithSnippet } from './EmailRow';
+import { AccountBadge, useAccountHover } from './AccountBadge';
 import {
   Paperclip,
   ChevronRight,
@@ -98,6 +99,12 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread?.emails), [thread?.emails]);
   const [menuAt, pointerMenuHandlers, live] = useMenuAtPointer();
+  // A conversation of a view that spans accounts says which account holds it,
+  // by its newest message, like a single message's row.
+  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const accountColors = useSettingsStore(s => s.accountColors);
+  const accountEmail = thread?.lastEmail?._accountEmail;
+  const accountHover = useAccountHover(thread?.lastEmail?._accountId, !!(unifiedInbox && accountEmail));
   // Quick actions mount on the live row only; an open menu holds it live.
   const holdMenu = busy => (busy ? onOpenMenu?.(rowId) : onCloseMenu?.(rowId));
 
@@ -132,6 +139,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
       {...pointerMenuHandlers}
+      {...accountHover}
     >
       <RowGutter stacked={stacked} threadSlot={expandable} checked={anyChecked}
         onToggle={(e) => onSetSelection(members, !anyChecked, e?.shiftKey)}
@@ -144,6 +152,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         now sit after the names. The names span truncates instead.
       */}
       <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+        {unifiedInbox && accountEmail && <AccountBadge email={thread.lastEmail} accountColors={accountColors} />}
         <span data-testid="row-sender" className="truncate min-w-0">{participantNames}</span>
         {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
         <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
@@ -224,6 +233,12 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread?.emails), [thread?.emails]);
   const [menuAt, pointerMenuHandlers, live] = useMenuAtPointer();
+  // A conversation of a view that spans accounts says which account holds it,
+  // by its newest message, like a single message's row.
+  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const accountColors = useSettingsStore(s => s.accountColors);
+  const accountEmail = thread?.lastEmail?._accountEmail;
+  const accountHover = useAccountHover(thread?.lastEmail?._accountId, !!(unifiedInbox && accountEmail));
   // Quick actions mount on the live row only; an open menu holds it live.
   const holdMenu = busy => (busy ? onOpenMenu?.(rowId) : onCloseMenu?.(rowId));
   const participantNames = useMemo(() => participantsLabel(thread?.emails, outgoing), [thread?.emails, outgoing]);
@@ -254,6 +269,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
                  ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
       {...pointerMenuHandlers}
+      {...accountHover}
     >
       {/* Two lines, always: the chip sits under the checkbox. */}
       <RowGutter stacked threadSlot={expandable} checked={anyChecked}
@@ -264,6 +280,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       <div className={`flex-1 min-w-0 ${dense ? 'py-0.5' : 'py-1.5'}`}>
         {/* Line 1: participants, count, alerts ... date */}
         <div className="flex items-center gap-1.5">
+          {unifiedInbox && accountEmail && <AccountBadge email={thread.lastEmail} accountColors={accountColors} />}
           <span data-testid="row-sender" className={`truncate min-w-0 text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {participantNames}
           </span>

@@ -86,6 +86,16 @@ describe('Search from All inboxes: account badge, sidebar light, Go to mailbox',
       { timeout: 30_000, timeoutMsg: 'the search never finished' });
   }
 
+  it('badges every row of All inboxes before any search, conversation rows included', async function () {
+    const rows = await rowBadges();
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows.filter(row => !row.dot).map(row => row.text)).toEqual([]);
+    const threadRows = await browser.execute(() => [...document.querySelectorAll('[data-testid="email-row"]')]
+      .filter(r => r.offsetHeight > 0 && Number(r.getAttribute('data-thread-count') || 1) > 1).length);
+    // The harness's grouped mode draws conversations as one row: they carry the badge too.
+    expect(threadRows).toBeGreaterThan(0);
+  });
+
   it('names the account of every hit, by address and by badge', async function () {
     await searchUntil('message', found => new Set(found.map(hit => hit.accountId)).size >= 2,
       'the search never returned hits from two accounts');
@@ -167,8 +177,10 @@ describe('Search from All inboxes: account badge, sidebar light, Go to mailbox',
     expect(state.focusKey.endsWith(`|INBOX|${target.uid}`)).toBe(true);
 
     // The thread shows that one message open.
-    await browser.waitUntil(() => browser.execute(
-      () => document.querySelectorAll('[data-testid="header-toggle"][aria-expanded="true"]').length === 1,
-    ), { timeout: 15_000, timeoutMsg: 'the thread did not open exactly one message' });
+    // The one open message is the hit itself, not the newest the thread opens on by default.
+    await browser.waitUntil(() => browser.execute((uid) => {
+      const open = document.querySelectorAll('[data-testid="header-toggle"][aria-expanded="true"]');
+      return open.length === 1 && !!open[0].closest(`[data-email-key$="|INBOX|${uid}"]`);
+    }, target.uid), { timeout: 15_000, timeoutMsg: 'the thread did not open on the hit\'s own message' });
   });
 });

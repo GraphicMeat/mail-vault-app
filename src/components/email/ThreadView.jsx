@@ -998,6 +998,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
               <div
                 key={vr.key}
                 data-index={vr.index}
+                data-email-key={emailKey(email)}
                 ref={virtualizer.measureElement}
                 style={{
                   position: 'absolute',
