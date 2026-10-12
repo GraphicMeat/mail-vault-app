@@ -1029,10 +1029,11 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     await openUnderBudget(3, 'to Maildir, mid-run');
     await toggleFlagOnDisk(3, false);
 
-    // Killed early enough that most of the run is left for the next daemon.
+    // Killed early enough that the run is still going after the respawn, the
+    // two waits below and the page reload (about 80 ms a message): 60 left.
     const pre = (await migration()).migration;
     expect(pre.state).toBe('running');
-    expect(pre.done).toBeLessThan(pre.total - 20);
+    expect(pre.done).toBeLessThan(pre.total - 60);
     const oldPid = daemonPid(home);
     expect(oldPid).toBeGreaterThan(0);
     daemonExecutable(oldPid); // throws unless that pid is a mailvault-daemon
@@ -1059,12 +1060,14 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     // The shell's relaunch: a fresh page asks the daemon and shows the job again.
     await reloadApp();
     const now = (await migration()).migration;
-    if (now) {
-      let c = null;
-      await browser.waitUntil(async () => { c = await chip(); return c?.state === 'running' || c?.state === 'done'; }, {
-        timeout: 20_000, interval: 200,
-      }).catch(() => { throw new Error(`after the reload the chip never showed the run: ${JSON.stringify(c)} (daemon: ${JSON.stringify(now)})`); });
-    }
+    // Loud, never skipped: a run that finished before the reload settled would
+    // check nothing here, so it fails and names the race (raise the pace in
+    // wdio.conf.js MAILVAULT_E2E_FORMAT_MESSAGE_PAUSE_MS, or the kill margin).
+    expect(now, 'the run was already gone when the page reloaded: it outran the kill test, so the chip after the relaunch could not be checked').not.toBeNull();
+    let c = null;
+    await browser.waitUntil(async () => { c = await chip(); return c?.state === 'running' || c?.state === 'done'; }, {
+      timeout: 20_000, interval: 200,
+    }).catch(() => { throw new Error(`after the reload the chip never showed the run: ${JSON.stringify(c)} (daemon: ${JSON.stringify(now)})`); });
     const end = await finishRun('to Maildir');
     expect(end.format).toBe('maildir');
 
