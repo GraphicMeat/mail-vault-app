@@ -14,7 +14,7 @@
 
 use crate::handlers::common::{blocking, vault_root};
 use crate::handlers::deleted::{self, Source};
-use crate::handlers::imap::{auto_cache, backfill_refusal, email_date_ms, opened_intent, SearchFilters, BODY_FETCH_TIMEOUT};
+use crate::handlers::imap::{auto_cache_with_ids, backfill_refusal, email_date_ms, opened_intent, SearchFilters, BODY_FETCH_TIMEOUT};
 use crate::imap::{EmailHeader, ImapConfig, MailboxStatus, MessageIdLocation, MessageIdProbe, ServerSearch};
 use crate::ipc::{self, RpcResponse};
 use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
@@ -330,6 +330,20 @@ pub(crate) struct Fetched {
     pub(crate) raw: Vec<u8>,
     pub(crate) flags: Vec<String>,
     pub(crate) received_at: Option<String>,
+    /// Its server ids, for the record a JMAP-format vault keeps (Plan A
+    /// Task 14).
+    pub(crate) ids: mailvault_core::jmap_store::record::ServerIds,
+}
+
+/// The server ids of `email`, an `Email/get` answer for `email_id` whose
+/// `blobId` is `blob_id`, as a JMAP-format record keeps them. `threadId` is
+/// `None` when the `Email/get` did not ask for it or the server sent none.
+pub(crate) fn server_ids(email_id: &str, blob_id: &str, email: &Value) -> mailvault_core::jmap_store::record::ServerIds {
+    mailvault_core::jmap_store::record::ServerIds {
+        email_id: email_id.to_string(),
+        blob_id: blob_id.to_string(),
+        thread_id: email["threadId"].as_str().map(str::to_string),
+    }
 }
 
 /// The raw message behind `uid` in `mailbox`, `None` when it is gone: the
@@ -339,7 +353,7 @@ async fn fetch_body(state: &Arc<DaemonState>, acct: &AccountJmap, account_id: &s
     let pairs = acct.uid_to_id(state, account_id, mailbox, &[uid], false).await?;
     let Some(email_id) = pairs.into_iter().next().and_then(|(_, id)| id) else { return Ok(None) };
     let mailbox_id = acct.mailbox_id(mailbox).await?;
-    let got = acct.client.get_emails(&[email_id.clone()], &["id", "blobId", "mailboxIds", "keywords", "receivedAt"]).await?;
+    let got = acct.client.get_emails(&[email_id.clone()], &["id", "blobId", "threadId", "mailboxIds", "keywords", "receivedAt"]).await?;
     let Some(email) = by_id(got.list).remove(&email_id) else { return Ok(None) };
     if !in_mailbox(&email, &mailbox_id) {
         return Ok(None);
@@ -352,6 +366,7 @@ async fn fetch_body(state: &Arc<DaemonState>, acct: &AccountJmap, account_id: &s
         raw,
         flags: keywords_to_flags(&email["keywords"]),
         received_at: email["receivedAt"].as_str().map(str::to_string),
+        ids: server_ids(&email_id, blob_id, &email),
     }))
 }
 
@@ -540,7 +555,7 @@ async fn answer(
             };
             let light = vault_eml::parse_eml_bytes_light(&body.raw, uid, body.flags).map_err(Fail::Rpc)?;
             let dated = email_date_ms(light.date.as_deref(), body.received_at.as_deref());
-            let cached = auto_cache(state, account_id.clone(), mailbox.clone(), uid, body.raw.clone(), dated, opened).await;
+            let cached = auto_cache_with_ids(state, account_id.clone(), mailbox.clone(), uid, body.raw.clone(), dated, opened, Some(body.ids)).await;
             // Not kept on disk (On Demand): the reads that follow this open
             // are served from memory (`raw_message`), as for IMAP.
             if !cached && opened {
@@ -769,14 +784,16 @@ pub(crate) async fn fetch_by_uids(
     let mailbox_id = acct.mailbox_id(mailbox).await.map_err(|e| e.to_string())?;
     let mut got = by_id(
         acct.client
-            .get_emails(&ids, &["id", "blobId", "mailboxIds", "keywords", "receivedAt"])
+            .get_emails(&ids, &["id", "blobId", "threadId", "mailboxIds", "keywords", "receivedAt"])
             .await
             .map_err(|e| e.to_string())?
             .list,
     );
     let mut out = Vec::new();
     for (uid, id) in pairs {
-        let Some(email) = id.and_then(|id| got.remove(&id)).filter(|email| in_mailbox(email, &mailbox_id)) else { continue };
+        let Some((id, email)) = id.and_then(|id| got.remove(&id).map(|email| (id, email))).filter(|(_, email)| in_mailbox(email, &mailbox_id)) else {
+            continue;
+        };
         let fetched = match email["blobId"].as_str() {
             None => Err("E_JMAP_PROTOCOL: Email/get without blobId".to_string()),
             Some(blob) => match tokio::time::timeout(BODY_FETCH_TIMEOUT, acct.client.download(blob)).await {
@@ -784,6 +801,7 @@ pub(crate) async fn fetch_by_uids(
                     raw,
                     flags: keywords_to_flags(&email["keywords"]),
                     received_at: email["receivedAt"].as_str().map(str::to_string),
+                    ids: server_ids(&id, blob, &email),
                 }),
                 Ok(Err(e)) => Err(e.to_string()),
                 Err(_) => Err(format!(
@@ -1795,6 +1813,38 @@ second body";
         let raw = m.read(|s| s.raw("acc1", "e1")).unwrap();
         assert_eq!(std::fs::read(file.path()).unwrap(), raw);
         assert_eq!(raw, E1_RAW.as_bytes());
+        let mailbox = mailvault_core::message_store::mailbox_dir(&vault_root(&state).unwrap(), "acct-1", "INBOX");
+        assert!(!mailbox.join("jmap").exists(), "a Maildir vault keeps no record and no server ids");
+    }
+
+    /// Plan A Task 14: opened in a JMAP-format vault, the message is a record
+    /// carrying the server's ids (`server`, and the `email.id` and
+    /// `email.threadId` they give). Opened again, the record already holds
+    /// them and is not rewritten.
+    #[tokio::test]
+    async fn get_email_light_records_server_ids_in_a_jmap_vault() {
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let root = vault_root(&state).unwrap();
+        mailvault_core::message_store::set_vault_format(&root, mailvault_core::message_store::Format::Jmap).unwrap();
+        let a = jmap_account(&m);
+        let e1 = uid_in(&list(&state, &a, "INBOX").await, "<e1@x>");
+        let open = json!({"account": a, "uid": e1, "mailbox": "INBOX"});
+
+        let r = ok(call(&state, "imap_get_email_light", open.clone()).await);
+
+        assert_eq!(r["cached"], json!(true));
+        let record = mailvault_core::message_store::mailbox_dir(&root, "acct-1", "INBOX").join("jmap").join(format!("{e1}.json"));
+        let rec: Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+        let blob = m.read(|s| s.email("acc1", "e1").map(|e| e.blob_id.clone())).unwrap();
+        assert_eq!(rec["server"], json!({"emailId": "e1", "blobId": blob, "threadId": "Te1"}));
+        assert_eq!((rec["email"]["id"].clone(), rec["email"]["threadId"].clone()), (json!("e1"), json!("Te1")));
+
+        let stamp = || (std::fs::read(&record).unwrap(), std::fs::metadata(&record).unwrap().modified().unwrap());
+        let before = stamp();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let again = ok(call(&state, "imap_get_email_light", open).await);
+        assert_eq!(again["cached"], json!(true));
+        assert_eq!(stamp(), before, "the same ids: the record is not rewritten");
     }
 
     #[tokio::test]

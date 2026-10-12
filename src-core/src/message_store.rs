@@ -367,8 +367,10 @@ fn build_record(mailbox_dir: &Path, uid: u32, raw: &[u8], flags: &[String], rece
 
 /// Writes the record `built` (from `build_record`, its blob already stored)
 /// as `uid`'s `jmap/<uid>.json` in the mailbox directory, atomically, under
-/// `flags`. An existing record's server ids and `receivedAt` are kept (the
-/// same uid is the same message). The blob is made young again first
+/// `flags`. An existing record's `receivedAt` is kept (the same uid is the
+/// same message), and so are its server ids unless `built` carries ids of
+/// its own (`Prepared::with_server_ids`: the server's answer now). The blob
+/// is made young again first
 /// (`blobs::touch`), so a sweep's grace period covers the record however long
 /// ago the blob was stored. Removes nothing; no hash.
 fn commit_record(root: &Path, mailbox_dir: &Path, uid: u32, built: &record::Record, flags: &[String]) -> Result<Entry, String> {
@@ -385,23 +387,31 @@ fn commit_record(root: &Path, mailbox_dir: &Path, uid: u32, built: &record::Reco
     Ok(written_entry(uid, &rec, &path))
 }
 
-/// What a new record of a uid keeps from the record it replaces: the server's
-/// ids (and the `email.id` and `email.threadId` they give) and `receivedAt`.
+/// What a new record of a uid keeps from the record it replaces:
+/// `receivedAt`, and the server's ids (`put_server_ids`) when the new record
+/// has none of its own. Ids it was prepared with are the server's answer now
+/// and win.
 fn keep_identity(rec: &mut record::Record, old: &record::Record) {
+    if let (Some(email), Some(received)) = (rec.email.as_object_mut(), old.email.get("receivedAt").and_then(Value::as_str)) {
+        email.insert("receivedAt".into(), Value::String(received.to_owned()));
+    }
+    let kept = if rec.server.is_none() { old.server.clone() } else { None };
+    if let Some(ids) = kept {
+        put_server_ids(rec, ids);
+    }
+}
+
+/// `ids` as `rec`'s server ids: `server`, and the `email.id` and
+/// `email.threadId` they give. A `threadId` the server did not send leaves
+/// the local one.
+fn put_server_ids(rec: &mut record::Record, ids: record::ServerIds) {
     if let Some(email) = rec.email.as_object_mut() {
-        if let Some(received) = old.email.get("receivedAt").and_then(Value::as_str) {
-            email.insert("receivedAt".into(), Value::String(received.to_owned()));
-        }
-        if let Some(ids) = &old.server {
-            email.insert("id".into(), Value::String(ids.email_id.clone()));
-            if let Some(thread) = &ids.thread_id {
-                email.insert("threadId".into(), Value::String(thread.clone()));
-            }
+        email.insert("id".into(), Value::String(ids.email_id.clone()));
+        if let Some(thread) = &ids.thread_id {
+            email.insert("threadId".into(), Value::String(thread.clone()));
         }
     }
-    if old.server.is_some() {
-        rec.server = old.server.clone();
-    }
+    rec.server = Some(ids);
 }
 
 /// Rewrites the record at `path` (of `uid`) under `flags` (`record::with_flags`,
@@ -788,6 +798,9 @@ pub struct Prepared {
     uid: u32,
     raw: Vec<u8>,
     record: Option<record::Record>,
+    /// The server's ids (`with_server_ids`), in either format: `record`
+    /// carries them too in JMAP format.
+    server: Option<record::ServerIds>,
 }
 
 impl Prepared {
@@ -807,6 +820,24 @@ impl Prepared {
     /// The format `commit` writes it in.
     pub fn format(&self) -> Format {
         if self.record.is_some() { Format::Jmap } else { Format::Maildir }
+    }
+
+    /// The same message with the server's ids (a JMAP account's `emailId`,
+    /// `blobId`, `threadId`; Plan A Task 14): in JMAP format the record
+    /// `commit` writes carries them (`put_server_ids`), in that one write.
+    pub fn with_server_ids(mut self, ids: record::ServerIds) -> Prepared {
+        if let Some(rec) = self.record.as_mut() {
+            put_server_ids(rec, ids.clone());
+        }
+        self.server = Some(ids);
+        self
+    }
+
+    /// The ids `with_server_ids` gave it, for a caller that stores the
+    /// message without committing it (`vault_files::store_prepared` on a uid
+    /// already held, or one it stores the plain way).
+    pub fn server_ids(&self) -> Option<&record::ServerIds> {
+        self.server.as_ref()
     }
 }
 
@@ -844,7 +875,7 @@ pub fn prepare_at(root: &Path, mailbox_dir: &Path, uid: u32, raw: Vec<u8>, flags
             Some(rec)
         }
     };
-    Ok(Prepared { root: root.to_path_buf(), uid, raw, record })
+    Ok(Prepared { root: root.to_path_buf(), uid, raw, record, server: None })
 }
 
 /// Writes `prepared` as its uid's copy in its format under `flags` (the flags
@@ -1362,25 +1393,23 @@ pub fn write_decrypted_copy(root: &Path, account_id: &str, mailbox: &str, uid: u
 
 /// Records `uid`'s server ids (a JMAP account's `emailId`, `blobId`,
 /// `threadId`): `server` in its record, and the record's `email.id` and
-/// `email.threadId` follow them. A no-op when the uid has no record (a
-/// Maildir copy keeps no server ids) or the record already holds them.
-pub fn set_server_ids(root: &Path, account_id: &str, mailbox: &str, uid: u32, ids: record::ServerIds) -> Result<(), String> {
+/// `email.threadId` follow them (`put_server_ids`). Returns the record's path
+/// when it was rewritten, for the caller's registry row (`reflag`: its mtime
+/// moved). `None`, nothing written: the uid has no record (a Maildir copy
+/// keeps no server ids) or the record already holds these ids. The caller
+/// holds the mailbox's write lock.
+pub fn set_server_ids(root: &Path, account_id: &str, mailbox: &str, uid: u32, ids: record::ServerIds) -> Result<Option<PathBuf>, String> {
     let Some((path, rec)) = record_of(&mailbox_dir(root, account_id, mailbox), uid).map_err(|e| format!("Failed to read the message record: {e}"))? else {
-        return Ok(());
+        return Ok(None);
     };
     let mut new = rec.clone();
-    if let Some(email) = new.email.as_object_mut() {
-        email.insert("id".into(), Value::String(ids.email_id.clone()));
-        if let Some(thread) = &ids.thread_id {
-            email.insert("threadId".into(), Value::String(thread.clone()));
-        }
-    }
-    new.server = Some(ids);
+    put_server_ids(&mut new, ids);
     if new == rec {
-        return Ok(());
+        return Ok(None);
     }
     let json = serde_json::to_vec(&new).map_err(|e| format!("Failed to encode the message record: {e}"))?;
-    crate::fsx::write_atomic(&path, &json).map_err(|e| format!("Failed to rewrite the message record: {e}"))
+    crate::fsx::write_atomic(&path, &json).map_err(|e| format!("Failed to rewrite the message record: {e}"))?;
+    Ok(Some(path))
 }
 
 /// What one `sweep_blobs` pass found and did.
@@ -3669,6 +3698,39 @@ mod tests {
         // A later write of the uid keeps the server ids.
         write(root, ACCT, MBOX, 4, &eml("jmap"), &flags(&["seen", "flagged"])).unwrap();
         assert_eq!(read_record(&path).unwrap().server, Some(ids));
+    }
+
+    /// Plan A Task 14: server ids a prepared message carries land in the
+    /// record's one commit, and win over an older record's; `set_server_ids`
+    /// writes only a change and names the record it rewrote.
+    #[test]
+    fn server_ids_land_in_the_commit_and_set_server_ids_writes_only_a_change() {
+        let tmp = vault(Format::Jmap);
+        let root = tmp.path();
+        let ids = |e: &str| record::ServerIds { email_id: e.into(), blob_id: format!("G{e}"), thread_id: Some(format!("T{e}")) };
+        let path = jmap_in(&mailbox_dir(root, ACCT, MBOX)).join("5.json");
+
+        let prepared = prepare(root, ACCT, MBOX, 5, eml("five"), &[], None, Format::Jmap).unwrap().with_server_ids(ids("M5"));
+        assert_eq!(prepared.server_ids(), Some(&ids("M5")));
+        commit(root, ACCT, MBOX, &prepared, &flags(&["seen"])).unwrap();
+        let rec = read_record(&path).unwrap();
+        assert_eq!(rec.server, Some(ids("M5")));
+        assert_eq!((rec.email["id"].as_str(), rec.email["threadId"].as_str()), (Some("M5"), Some("TM5")));
+
+        let fresh = prepare(root, ACCT, MBOX, 5, eml("five"), &[], None, Format::Jmap).unwrap().with_server_ids(ids("M6"));
+        commit(root, ACCT, MBOX, &fresh, &[]).unwrap();
+        assert_eq!(read_record(&path).unwrap().server, Some(ids("M6")), "the server's ids now win over the old record's");
+        let plain = prepare(root, ACCT, MBOX, 5, eml("five"), &[], None, Format::Jmap).unwrap();
+        assert_eq!(plain.server_ids(), None);
+        commit(root, ACCT, MBOX, &plain, &[]).unwrap();
+        assert_eq!(read_record(&path).unwrap().server, Some(ids("M6")), "a write without ids keeps the old record's");
+
+        let before = fs::read(&path).unwrap();
+        assert_eq!(set_server_ids(root, ACCT, MBOX, 5, ids("M6")).unwrap(), None, "unchanged ids write nothing");
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(set_server_ids(root, ACCT, MBOX, 5, ids("M7")).unwrap(), Some(path.clone()));
+        assert_eq!(read_record(&path).unwrap().server, Some(ids("M7")));
+        assert_eq!(set_server_ids(root, ACCT, MBOX, 9, ids("M9")).unwrap(), None, "no record: nothing to write");
     }
 
     /// Carries (Tasks 4a, 4b, 5): every whole-mailbox walk the archive,

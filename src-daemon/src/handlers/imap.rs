@@ -104,6 +104,25 @@ where
 /// window, always under Hoarder. A hidden account: nothing. `false` then:
 /// no copy was written by this call.
 pub(crate) async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool) -> bool {
+    auto_cache_with_ids(state, account_id, mailbox, uid, raw, date_ms, opened, None).await
+}
+
+/// `auto_cache` of a JMAP account's body with its server ids (Plan A Task
+/// 14). In a JMAP-format vault they go into the record in the record's own
+/// commit, or into the record of a uid cached already when they differ
+/// (`vault_files::store_prepared`), one message under the mailbox lock
+/// either way. A Maildir vault keeps none.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn auto_cache_with_ids(
+    state: &Arc<DaemonState>,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+    raw: Vec<u8>,
+    date_ms: Option<i64>,
+    opened: bool,
+    ids: Option<mailvault_core::jmap_store::record::ServerIds>,
+) -> bool {
     let app_dir = state.app_dir.clone();
     let policy_account = account_id.clone();
     let policy = blocking(move || download_policy(&app_dir, &policy_account)).await.ok().flatten();
@@ -116,6 +135,10 @@ pub(crate) async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mai
         // so an open of this folder never waits on them (Plan B 7a D3); the
         // lock covers the commit alone.
         let prepared = with_vault_write(&state2, |root| vault_files::prepare_store(root, &account_id, &mailbox, uid, raw, &[]))?;
+        let prepared = match ids {
+            Some(ids) => prepared.with_server_ids(ids),
+            None => prepared,
+        };
         with_mailbox_write(&state2, &account_id, &mailbox, |root| {
             vault_files::store_prepared(&state2.vault_registry, root, &account_id, &mailbox, &prepared, &[], false)
         })
@@ -180,7 +203,7 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
                     match body {
                         Ok(body) => {
                             let dated = crate::handlers::jmap_bridge::dated_ms(&body.raw, body.received_at.as_deref());
-                            auto_cache(state, account.id.clone(), mailbox.to_string(), uid, body.raw, dated, false).await;
+                            auto_cache_with_ids(state, account.id.clone(), mailbox.to_string(), uid, body.raw, dated, false, Some(body.ids)).await;
                         }
                         Err(e) => warn!("[push] {}: arrival body {} not cached: {}", account.email, uid, e),
                     }
@@ -1691,6 +1714,34 @@ mod tests {
         assert_eq!(m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count(), 2);
         assert_eq!(m.count_calls("Email/get"), 1, "one read-back for the slice");
         assert!(trap.accept().is_err(), "no IMAP dial");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Plan A Task 14: a push arrival kept in a JMAP-format vault is a record
+    /// carrying the server's ids.
+    #[tokio::test]
+    async fn jmap_cache_arrivals_records_server_ids_in_a_jmap_vault() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        let (dir, s) = light_state();
+        mailvault_core::message_store::set_vault_format(&dir, mailvault_core::message_store::Format::Jmap).unwrap();
+        let ledger = crate::jmap_sessions::jmap_ledger_path(&dir, "acc1", "INBOX");
+        std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+        std::fs::write(&ledger, br#"{"1":"e1","2":"e2"}"#).unwrap();
+        let account: crate::sync_engine::SyncAccount = serde_json::from_value(json!({
+            "id": "acc1", "email": "alice@example.test", "imapConfig": support::account_json(&m, port),
+        }))
+        .unwrap();
+        write_settings(&dir, json!({"fetchMode": "hoarder"}));
+
+        cache_arrivals(&s, &account, "INBOX", &[2]).await;
+
+        let record = mailvault_core::message_store::mailbox_dir(&dir, "acc1", "INBOX").join("jmap").join("2.json");
+        let rec: Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+        assert_eq!((rec["server"]["emailId"].clone(), rec["server"]["threadId"].clone()), (json!("e2"), json!("Te2")));
+        assert_eq!(rec["email"]["threadId"], json!("Te2"));
+        assert!(cached_files(&dir).is_empty(), "no Maildir file in a JMAP vault");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

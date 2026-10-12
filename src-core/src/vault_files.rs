@@ -231,7 +231,9 @@ pub fn prepare_store(root: &Path, account_id: &str, mailbox: &str, uid: u32, raw
 /// (`message_store::commit_replacing`: no parse, no hash unless an old copy
 /// in the other format has to be replaced). A message prepared in another
 /// format or under another root than the vault has now (a conversion started,
-/// the vault moved), or for a Maildir vault, is stored the plain way.
+/// the vault moved), or for a Maildir vault, is stored the plain way. Server
+/// ids it carries (`Prepared::with_server_ids`) go into the record in its own
+/// commit, or through `keep_server_ids` when this call commits nothing of it.
 #[allow(clippy::too_many_arguments)]
 pub fn store_prepared(
     reg: &VaultRegistry,
@@ -245,7 +247,9 @@ pub fn store_prepared(
     let uid = prepared.uid();
     let jmap = crate::message_store::Format::Jmap;
     if prepared.format() != jmap || crate::message_store::vault_format(root) != jmap || prepared.root() != root {
-        return store(reg, root, account_id, mailbox, uid, prepared.raw(), flags, overwrite);
+        let stored = store(reg, root, account_id, mailbox, uid, prepared.raw(), flags, overwrite)?;
+        keep_server_ids(reg, root, account_id, mailbox, prepared);
+        return Ok(stored);
     }
     if !overwrite {
         let held = match reg.known(account_id, mailbox, uid) {
@@ -253,6 +257,7 @@ pub fn store_prepared(
             None => crate::message_store::find(root, account_id, mailbox, uid).is_some(),
         };
         if held {
+            keep_server_ids(reg, root, account_id, mailbox, prepared);
             return Ok(false);
         }
     }
@@ -261,6 +266,26 @@ pub fn store_prepared(
     reg.upsert(account_id, mailbox, uid, &record);
     info!("Stored email UID {} to {:?} ({} bytes)", uid, record, prepared.raw().len());
     Ok(true)
+}
+
+/// `prepared`'s server ids (Plan A Task 14) into the record a JMAP vault
+/// holds for its uid, for a `store_prepared` that committed nothing of its
+/// own: the uid was held already (a message opened again, one cached before
+/// its ids were known), or it was stored the plain way. Rewritten only when
+/// the ids differ (`message_store::set_server_ids`), the registry row
+/// following the record (`reflag`). A Maildir vault, a uid with no record or
+/// a message with no ids: nothing. A failure is logged; the store stands.
+fn keep_server_ids(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, prepared: &crate::message_store::Prepared) {
+    let Some(ids) = prepared.server_ids() else { return };
+    if crate::message_store::vault_format(root) != crate::message_store::Format::Jmap {
+        return;
+    }
+    let uid = prepared.uid();
+    match crate::message_store::set_server_ids(root, account_id, mailbox, uid, ids.clone()) {
+        Ok(Some(record)) => reg.reflag(account_id, mailbox, uid, &record),
+        Ok(None) => {}
+        Err(e) => warn!("Server ids of UID {} not recorded: {}", uid, e),
+    }
 }
 
 /// `store` in a JMAP vault, or of a uid a record holds in a Maildir vault:
@@ -2194,6 +2219,55 @@ mod tests {
         assert!(store_prepared(&reg, root, "acct", "INBOX", &prepared, &[], false).unwrap());
         assert_eq!(crate::message_store::find(root, "acct", "INBOX", 7).unwrap().name, format!("7{INFO_PREFIX}.eml"));
         assert_eq!(read_eml(&reg, root, "acct", "INBOX", 7).unwrap(), raw);
+    }
+
+    /// Plan A Task 14: a prepared message's server ids go into its record in
+    /// the record's own commit; a uid already held gets them only when they
+    /// differ (no rewrite otherwise), its registry row kept; a Maildir vault
+    /// gets no record and nothing beside its file.
+    #[test]
+    fn store_prepared_records_server_ids_once_and_only_in_a_jmap_vault() {
+        let ids = |e: &str| crate::jmap_store::record::ServerIds { email_id: e.into(), blob_id: format!("G{e}"), thread_id: Some(format!("T{e}")) };
+        {
+            let tmp = tempfile::tempdir().unwrap();
+            let root = tmp.path();
+            crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+            let (_app, reg) = registry(root);
+            let record = |uid: u32| crate::message_store::mailbox_dir(root, "acct", "INBOX").join("jmap").join(format!("{uid}.json"));
+            let server = |uid: u32| serde_json::from_slice::<serde_json::Value>(&fs::read(record(uid)).unwrap()).unwrap()["server"].clone();
+            let stamp = |uid: u32| (fs::read(record(uid)).unwrap(), fs::metadata(record(uid)).unwrap().modified().unwrap());
+
+            let prepared = prepare_store(root, "acct", "INBOX", 7, light_batch_eml("ids"), &[]).unwrap().with_server_ids(ids("e7"));
+            assert!(store_prepared(&reg, root, "acct", "INBOX", &prepared, &[], false).unwrap());
+            assert_eq!(server(7), serde_json::json!({"emailId": "e7", "blobId": "Ge7", "threadId": "Te7"}));
+
+            // Opened again: held, the same ids, nothing rewritten.
+            let before = stamp(7);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            let again = prepare_store(root, "acct", "INBOX", 7, light_batch_eml("ids"), &[]).unwrap().with_server_ids(ids("e7"));
+            assert!(!store_prepared(&reg, root, "acct", "INBOX", &again, &[], false).unwrap());
+            assert_eq!(stamp(7), before);
+
+            // Cached before its ids were known: the next store of it adds them.
+            assert!(store(&reg, root, "acct", "INBOX", 8, &light_batch_eml("old"), &[], false).unwrap());
+            assert_eq!(server(8), serde_json::Value::Null);
+            let later = prepare_store(root, "acct", "INBOX", 8, light_batch_eml("old"), &[]).unwrap().with_server_ids(ids("e8"));
+            assert!(!store_prepared(&reg, root, "acct", "INBOX", &later, &[], false).unwrap());
+            assert_eq!(server(8)["emailId"], serde_json::json!("e8"));
+            assert_eq!(read_eml(&reg, root, "acct", "INBOX", 8).unwrap(), light_batch_eml("old"));
+            assert_eq!(reg.known("acct", "INBOX", 8), Some(Some("8.json".to_string())), "the registry row stays");
+        }
+
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        crate::message_store::set_vault_format(root, Format::Maildir).unwrap();
+        let (_app, reg) = registry(root);
+        let jmap = crate::message_store::mailbox_dir(root, "acct", "INBOX").join("jmap");
+        let prepared = prepare_store(root, "acct", "INBOX", 7, light_batch_eml("ids"), &[]).unwrap().with_server_ids(ids("e7"));
+        assert!(store_prepared(&reg, root, "acct", "INBOX", &prepared, &[], false).unwrap());
+        assert!(!store_prepared(&reg, root, "acct", "INBOX", &prepared, &[], false).unwrap());
+        assert!(!jmap.exists(), "a Maildir vault keeps no record and no server ids");
+        assert_eq!(crate::message_store::find(root, "acct", "INBOX", 7).unwrap().name, format!("7{INFO_PREFIX}.eml"));
     }
 
     /// `migrate_json_to_eml` runs at every app start and removes a `.json`

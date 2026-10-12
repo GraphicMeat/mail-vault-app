@@ -188,8 +188,8 @@ async fn fallback(state: &Arc<DaemonState>, key: &Key, lock: Arc<tokio::sync::Mu
     if state.raw_messages.failed_recently(key) {
         return Err(missing(uid));
     }
-    let raw = match from_server(state, account_id, mailbox, uid).await {
-        Ok(Some(raw)) => raw,
+    let (raw, ids) = match from_server(state, account_id, mailbox, uid).await {
+        Ok(Some(got)) => got,
         Ok(None) => {
             state.raw_messages.note_failure(key);
             return Err(missing(uid));
@@ -201,7 +201,7 @@ async fn fallback(state: &Arc<DaemonState>, key: &Key, lock: Arc<tokio::sync::Mu
         }
     };
     verify(state, account_id, mailbox, uid, &raw).await?;
-    let cached = crate::handlers::imap::auto_cache(state, account_id.to_string(), mailbox.to_string(), uid, raw.clone(), None, true).await;
+    let cached = crate::handlers::imap::auto_cache_with_ids(state, account_id.to_string(), mailbox.to_string(), uid, raw.clone(), None, true, ids).await;
     let raw: Arc<[u8]> = raw.into();
     if !cached {
         state.raw_messages.remember(account_id, mailbox, uid, Arc::clone(&raw));
@@ -265,12 +265,13 @@ async fn listed_message_id(state: &Arc<DaemonState>, account_id: &str, mailbox: 
 
 /// The whole message from the server. `Ok(None)`: the server proved the uid
 /// is gone (or answered for another uid). A JMAP account's comes by blob
-/// download, by the mailbox's ledger uid (`jmap_bridge::fetch_by_uid`).
-async fn from_server(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<Vec<u8>>, String> {
+/// download, by the mailbox's ledger uid (`jmap_bridge::fetch_by_uid`), with
+/// its server ids (Plan A Task 14); an IMAP one has none.
+async fn from_server(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(Vec<u8>, Option<mailvault_core::jmap_store::record::ServerIds>)>, String> {
     let config = account_config(state, account_id).await?;
     if config.uses_jmap() {
         let fetched = crate::handlers::jmap_bridge::fetch_by_uid(state, &config, account_id, mailbox, uid).await?;
-        return Ok(fetched.map(|body| body.raw));
+        return Ok(fetched.map(|body| (body.raw, Some(body.ids))));
     }
     if config.oauth2_transport.as_deref() == Some("graph") {
         return Err("a Graph account's message is fetched through the app's Graph token, which the daemon does not hold".to_string());
@@ -284,7 +285,7 @@ async fn from_server(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
         }
     });
     match tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetch).await {
-        Ok(Ok(Some(email))) if email.uid == uid => Ok(Some(email.raw_source_bytes)),
+        Ok(Ok(Some(email))) if email.uid == uid => Ok(Some((email.raw_source_bytes, None))),
         Ok(Ok(_)) => Ok(None),
         Ok(Err(e)) => Err(e),
         Err(_) => Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
@@ -816,6 +817,30 @@ mod tests {
         assert_eq!(m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count(), 1);
         assert!(vault_files_of(&dir).is_empty(), "On Demand writes no body");
         assert!(trap.accept().is_err(), "no IMAP dial");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Plan A Task 14: a JMAP account's message kept from the server in a
+    /// JMAP-format vault is a record carrying the server's ids.
+    #[tokio::test]
+    async fn jmap_a_message_kept_from_the_server_records_server_ids_in_a_jmap_vault() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        let (dir, s) = state("keepRecent", None, "<e2@x>");
+        mailvault_core::message_store::set_vault_format(&dir, mailvault_core::message_store::Format::Jmap).unwrap();
+        s.raw_messages.accounts.lock().unwrap().insert("acc1".into(), support::config(&m, port));
+        let ledger = crate::jmap_sessions::jmap_ledger_path(&dir, "acc1", "INBOX");
+        std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+        std::fs::write(&ledger, br#"{"1":"e2"}"#).unwrap();
+
+        let r = call(&s, "maildir_read_raw_source", json!({"accountId": "acc1", "mailbox": "INBOX", "uid": 1})).await;
+
+        assert_eq!(r.result, Some(b64(support::raw("e2", "two").as_bytes())), "{:?}", r.error);
+        let record = mailvault_core::message_store::mailbox_dir(&dir, "acc1", "INBOX").join("jmap").join("1.json");
+        let rec: Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+        assert_eq!((rec["server"]["emailId"].clone(), rec["email"]["threadId"].clone()), (json!("e2"), json!("Te2")));
+        assert!(vault_files_of(&dir).is_empty(), "no Maildir file in a JMAP vault");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

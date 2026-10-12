@@ -1293,13 +1293,15 @@ fn jmap_file_flags(email: &serde_json::Value) -> Vec<String> {
 /// outside the mailbox lock, so a slow external drive never holds up the
 /// folder's other writers. A failed vault write is `Err` and ends the run; the
 /// mirror's outcome comes back for the caller to count. Runs off the runtime
-/// workers.
+/// workers. In a JMAP-format vault the record keeps `ids`, the server's ids
+/// of the message (Plan A Task 14), set before its registry row is filed.
 async fn write_backup_copy(
     ctx: &BackupRunContext,
     mailbox: &str,
     uid: u32,
     flags: Vec<String>,
     raw: Vec<u8>,
+    ids: crate::jmap_store::record::ServerIds,
     mirror_to: Option<PathBuf>,
 ) -> Result<Option<Result<(), String>>, String> {
     let root = ctx.archive_ctx.root.clone();
@@ -1319,6 +1321,11 @@ async fn write_backup_copy(
                         return Err(format!("write .eml: {e}"));
                     }
                 };
+                if crate::message_store::vault_format(&root) == crate::message_store::Format::Jmap {
+                    if let Err(e) = crate::message_store::set_server_ids(&root, &account, &mailbox, uid, ids.clone()) {
+                        warn!("backup(jmap): server ids of uid {} in {} not recorded: {}", uid, mailbox, e);
+                    }
+                }
                 registry.upsert(&account, &mailbox, uid, &written);
                 Ok(())
             })
@@ -1440,7 +1447,7 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                 }
                 Ok(plan) => {
                     let wanted: Vec<String> = plan.iter().map(|(idx, _)| listed[*idx].clone()).collect();
-                    let got = client.get_emails(&wanted, &["id", "blobId", "keywords"]).await.map_err(|e| e.to_string())?;
+                    let got = client.get_emails(&wanted, &["id", "blobId", "keywords", "threadId"]).await.map_err(|e| e.to_string())?;
                     let by_id: std::collections::HashMap<String, serde_json::Value> =
                         got.list.into_iter().filter_map(|e| e["id"].as_str().map(str::to_string).map(|id| (id, e))).collect();
                     for (idx, uid) in plan {
@@ -1457,7 +1464,12 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                                     CopiesToWrite::Vault => None,
                                     CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
                                 };
-                                let mirror_write = write_backup_copy(&ctx, &mailbox_path, uid, jmap_file_flags(email), raw_bytes, mirror_to).await?;
+                                let ids = crate::jmap_store::record::ServerIds {
+                                    email_id: listed[idx].clone(),
+                                    blob_id: blob_id.to_string(),
+                                    thread_id: email["threadId"].as_str().map(str::to_string),
+                                };
+                                let mirror_write = write_backup_copy(&ctx, &mailbox_path, uid, jmap_file_flags(email), raw_bytes, ids, mirror_to).await?;
                                 in_vault.insert(uid);
                                 match mirror_write {
                                     Some(Ok(())) => {

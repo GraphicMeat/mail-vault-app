@@ -32,7 +32,7 @@
 
 use crate::credentials;
 use crate::handlers::common::{blocking, with_mailbox_write};
-use crate::handlers::imap::{auto_cache, email_date_ms, fetch_policy, now_ms, BODY_FETCH_TIMEOUT};
+use crate::handlers::imap::{auto_cache, auto_cache_with_ids, email_date_ms, fetch_policy, now_ms, BODY_FETCH_TIMEOUT};
 use crate::imap::{self, has_attr, ImapConfig, MailboxInfo};
 use crate::jmap_sessions::{in_mailbox, AccountJmap};
 use crate::server::DaemonState;
@@ -789,7 +789,7 @@ async fn hoard_mailbox_jmap(
             return Err("policy_changed".into());
         }
         let ids: Vec<String> = batch.iter().map(|(_, id)| id.clone()).collect();
-        let got = match tokio::time::timeout(LISTING_TIMEOUT, acct.client.get_emails(&ids, &["id", "blobId", "mailboxIds", "receivedAt"])).await {
+        let got = match tokio::time::timeout(LISTING_TIMEOUT, acct.client.get_emails(&ids, &["id", "blobId", "threadId", "mailboxIds", "receivedAt"])).await {
             Ok(Ok(got)) => got,
             Ok(Err(e)) => {
                 let e = e.to_string();
@@ -825,7 +825,8 @@ async fn hoard_mailbox_jmap(
                     Ok(Ok(raw)) => {
                         state.hoarder_worker.spend(&state.app_dir, account_id, raw.len() as u64, now_ms());
                         let dated = crate::handlers::jmap_bridge::dated_ms(&raw, email["receivedAt"].as_str());
-                        auto_cache(state, account_id.to_string(), mailbox.to_string(), *uid, raw, dated, false).await
+                        let ids = crate::handlers::jmap_bridge::server_ids(id, blob, email);
+                        auto_cache_with_ids(state, account_id.to_string(), mailbox.to_string(), *uid, raw, dated, false, Some(ids)).await
                     }
                     Ok(Err(e)) => {
                         let e = e.to_string();
@@ -1378,6 +1379,33 @@ mod tests {
         assert_eq!(again, Outcome { fetched: 0, failed: 0, stopped: None });
         assert_eq!(downloads(), 3, "what the vault holds is never downloaded again");
         assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// Plan A Task 14: hoarded into a JMAP-format vault, each body is a
+    /// record carrying the server's ids, Work's copy of e1 as well as
+    /// INBOX's.
+    #[tokio::test]
+    async fn jmap_hoard_records_server_ids_in_a_jmap_vault() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        let dir = std::env::temp_dir().join(format!("mv-hoard-jmap-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        mailvault_core::message_store::set_vault_format(&dir, mailvault_core::message_store::Format::Jmap).unwrap();
+        let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        hoarder(&dir, true);
+        let config = support::config(&m, port);
+
+        let out = hoard_account(&s, &config, ACCT).await;
+
+        assert_eq!(out, Outcome { fetched: 3, failed: 0, stopped: None });
+        for (mailbox, uid, id) in [("INBOX", 1, "e1"), ("INBOX", 2, "e2"), ("Work", 1, "e1")] {
+            let record = mailvault_core::message_store::mailbox_dir(&dir, ACCT, mailbox).join("jmap").join(format!("{uid}.json"));
+            let rec: Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+            assert_eq!(rec["server"]["emailId"], json!(id), "{mailbox} uid {uid}");
+            assert_eq!(rec["email"]["threadId"], json!(format!("T{id}")), "{mailbox} uid {uid}");
+        }
+        assert!(uids(&dir, "INBOX").is_empty(), "no Maildir file in a JMAP vault");
     }
 
     /// The JMAP STATUS memo (R14): a folder left complete is relisted only

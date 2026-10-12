@@ -79,6 +79,7 @@ const MOVE: &[&str] = &[
     "message_store::rebind_uids(",
     "message_store::set_flags_at(",
     "message_store::set_record_flags(",
+    "message_store::set_server_ids(",
     "message_store::unlink_other_format(",
     "message_store::remove_other_format(",
     "message_store::remove_other_format_at(",
@@ -352,6 +353,7 @@ fn the_matcher_watches_message_store_writers() {
         "message_store::commit_at(root, &folder, &prepared, f)?;",
         "message_store::remove_other_format_at(root, &folder, uid, keep)?;",
         "message_store::commit_replacing(root, a, m, &prepared, f)?;",
+        "message_store::set_server_ids(root, a, m, uid, ids)?;",
     ] {
         assert!(one(&format!("fn f(dir: &Path) {{\n    crate::{call}\n}}\n")).is_some(), "{call} with no registry call must be flagged");
     }

@@ -125,6 +125,29 @@ async fn backup_jmap_account_copies_every_message_into_the_mirror_layout() {
     assert_eq!((last.completed_emails, last.completed_folders, last.total_folders), (4, 4, 4));
 }
 
+/// Plan A Task 14: backed up into a JMAP-format vault, each message is a
+/// record carrying the server's ids, and nothing is written as a Maildir file.
+#[tokio::test(flavor = "multi_thread")]
+async fn backup_jmap_into_a_jmap_vault_records_the_server_ids() {
+    use mailvault_core::message_store::{self, Format};
+    let m = MockJmap::start(common_jmap::scenario());
+    let run = Run::new();
+    message_store::set_vault_format(&run.root, Format::Jmap).unwrap();
+
+    let result = backup::run_jmap_account(run.ctx(account(&m))).await.unwrap();
+
+    assert_eq!((result.emails_backed_up, result.errors), (4, 0));
+    for (mailbox, id) in [("INBOX", "e1"), ("INBOX", "e2"), ("Work", "e1"), ("Work/Sub", "e3")] {
+        let uid = run.uid(mailbox, id);
+        let record = message_store::mailbox_dir(&run.root, ACCOUNT, mailbox).join("jmap").join(format!("{uid}.json"));
+        let rec: serde_json::Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+        let blob = m.read(|s| s.email("acc1", id).map(|e| e.blob_id.clone())).unwrap();
+        assert_eq!(rec["server"], serde_json::json!({"emailId": id, "blobId": blob, "threadId": format!("T{id}")}), "{mailbox} {id}");
+        assert_eq!((rec["email"]["id"].as_str(), rec["email"]["threadId"].as_str()), (Some(id), Some(format!("T{id}").as_str())));
+    }
+    assert!(names(&mailvault_core::vault_files::cur_path(&run.root, ACCOUNT, "INBOX")).is_empty(), "no Maildir file in a JMAP vault");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn backup_jmap_second_run_fetches_only_what_arrived() {
     let m = MockJmap::start(common_jmap::scenario());
