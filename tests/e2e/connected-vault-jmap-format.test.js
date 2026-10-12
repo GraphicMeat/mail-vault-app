@@ -282,7 +282,8 @@ const locationUi = () => browser.execute(() => {
   if (!s) return null;
   return {
     path: path.textContent.trim(),
-    error: s.querySelector('p.text-mail-danger')?.textContent.trim() || null,
+    // Not `error`: WebDriver clients (wdio's isSuccessfulResponse) fail any result whose value has a truthy `error` key, with that text as the message.
+    errorText: s.querySelector('p.text-mail-danger')?.textContent.trim() || null,
     notice: s.querySelector('p.text-mail-success')?.textContent.trim() || null,
     buttons: [...s.querySelectorAll('button')].filter((b) => b.offsetHeight > 0)
       .map((b) => ({ text: (b.textContent || '').trim(), disabled: b.disabled })),
@@ -301,21 +302,21 @@ const clickLocationButton = (label) => browser.execute((l) => {
 /**
  * Click the row of `subject` and time it, inside the page, until the reading
  * pane shows `token` in the body and no longer the snippet placeholder.
- * `{ms}` or `{error}`.
+ * `{ms}` or `{failure}` (never an `error` key, see locationUi).
  */
 const openTimed = (subject, token) => browser.executeAsync((s, tok, done) => {
   const row = [...document.querySelectorAll('[data-testid="email-row"]')].find((r) => r.offsetHeight > 0
     && !r.closest('[data-quick-actions-preview]')
     && ((r.querySelector('[data-testid="row-subject"]')?.textContent || '').trim() === s
       || (r.innerText || '').split('\n').map((l) => l.trim()).includes(s)));
-  if (!row) { done({ error: `no visible row "${s}"` }); return; }
+  if (!row) { done({ failure: `no visible row "${s}"` }); return; }
   const t0 = performance.now();
   row.click();
   const tick = () => {
     const body = document.querySelector('.email-plain-body, .email-content');
     const loading = document.querySelector('[data-testid="email-body-loading"]');
     if (body && !loading && (body.textContent || '').includes(tok)) { done({ ms: Math.round(performance.now() - t0) }); return; }
-    if (performance.now() - t0 > 15_000) { done({ error: `"${s}" never showed ${tok}`, ms: Math.round(performance.now() - t0) }); return; }
+    if (performance.now() - t0 > 15_000) { done({ failure: `"${s}" never showed ${tok}`, ms: Math.round(performance.now() - t0) }); return; }
     setTimeout(tick, 4);
   };
   tick();
@@ -470,7 +471,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
 
   async function openUnderBudget(seed, phase) {
     const r = await openTimed(subjectOf(seed), tokenOf(seed));
-    if (r.error) throw new Error(`${phase}: ${r.error}`);
+    if (r.failure) throw new Error(`${phase}: ${r.failure}`);
     console.log(`[jmap-format] ${phase}: opened seed ${pad(seed)} in ${r.ms} ms`);
     expect(r.ms).toBeLessThan(OPEN_BUDGET_MS);
     touched.add(seed);
@@ -556,7 +557,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     });
     // Warm the reading pane once, outside any run: the budget is about the run, not the first paint.
     const warm = await openTimed(subjectOf(10), tokenOf(10));
-    if (warm.error) throw new Error(`warm-up open: ${warm.error}`);
+    if (warm.failure) throw new Error(`warm-up open: ${warm.failure}`);
     console.log(`[jmap-format] warm-up open of seed 10: ${warm.ms} ms`);
     touched.add(10);
     await settleVault();
@@ -627,10 +628,10 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     try {
       expect(await clickLocationButton(EN.moveMail)).toBe(true);
       let ui = null;
-      await browser.waitUntil(async () => { ui = await locationUi(); return !!ui?.error; }, {
+      await browser.waitUntil(async () => { ui = await locationUi(); return !!ui?.errorText; }, {
         timeout: 60_000, interval: 300,
       }).catch(() => { throw new Error(`the move was never refused: ${JSON.stringify(ui)}`); });
-      expect(ui.error).toBe(EN.moveBlocked);
+      expect(ui.errorText).toBe(EN.moveBlocked);
       expect(ui.path).toBe(status.displayPath);
     } finally {
       await browser.execute(() => { delete window.__MV_VAULT_FOLDER__; });
@@ -676,11 +677,11 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
 
       expect(await clickLocationButton(EN.moveMail)).toBe(true);
       let ui = null;
-      await browser.waitUntil(async () => { ui = await locationUi(); return !!ui?.error; }, {
+      await browser.waitUntil(async () => { ui = await locationUi(); return !!ui?.errorText; }, {
         timeout: 60_000, interval: 100,
       }).catch(() => { throw new Error(`the move was never refused: ${JSON.stringify(ui)}`); });
       refusedAt = (await migration()).migration;
-      expect(ui.error).toBe(EN.moveBlocked);
+      expect(ui.errorText).toBe(EN.moveBlocked);
       expect(ui.path).toBe(status.displayPath);
 
       // The same job in the same daemon, still running, nothing failed.
@@ -854,7 +855,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
 
     await switchToFolder(LUKE, local.name);
     const r = await openTimed(subjectOf(7), tokenOf(7));
-    if (r.error) throw new Error(`open after the conversion: ${r.error}`);
+    if (r.failure) throw new Error(`open after the conversion: ${r.failure}`);
     touched.add(7);
 
     await openTimed(subjectOf(6), tokenOf(6));
@@ -902,7 +903,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
   it('in JMAP, View Source shows the original bytes', async function () {
     await switchToFolder(LUKE, local.name);
     const r = await openTimed(subjectOf(4), tokenOf(4));
-    if (r.error) throw new Error(`open for View Source: ${r.error}`);
+    if (r.failure) throw new Error(`open for View Source: ${r.failure}`);
     touched.add(4);
     const clickIn = (label) => browser.execute((l) => {
       const header = document.querySelector('[data-testid="sender-header"]');
@@ -934,7 +935,11 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
 
   it('in JMAP, Reclaim space removes nothing: every blob is named or inside its grace', async function () {
     await openTab('Storage');
-    expect(await clickFormatButton(EN.reclaim)).toBe(true);
+    // The section renders nothing until its first load answers: wait for the button, do not press at once.
+    let ui = null;
+    await browser.waitUntil(async () => { ui = await formatUi(); return clickFormatButton(EN.reclaim); }, {
+      timeout: 15_000, interval: 300,
+    }).catch(() => { throw new Error(`Settings never offered Reclaim space: ${JSON.stringify(ui)}`); });
     // The button gives no success line (StorageFormatSettings `act`); a refusal would show an alert.
     await browser.pause(1500);
     expect((await formatUi()).alert).toBe(null);
@@ -958,7 +963,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
         const r = await invoke('vault_get_status', {});
         st = r.ok ? r.v : null;
         const ui = await locationUi();
-        return st?.isCustom === wantCustom && !ui?.error;
+        return st?.isCustom === wantCustom && !ui?.errorText;
       }, { timeout: 180_000, interval: 500 }).catch(async () => {
         throw new Error(`the move never finished: status ${JSON.stringify(st)}, ui ${JSON.stringify(await locationUi())}`);
       });
@@ -998,7 +1003,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     await switchToFolder(LUKE, local.name);
     expect(await storeRowCount()).toBe(SEEDS - 1);
     const r = await openTimed(subjectOf(9), tokenOf(9));
-    if (r.error) throw new Error(`open after the move: ${r.error}`);
+    if (r.failure) throw new Error(`open after the move: ${r.failure}`);
     touched.add(9);
 
     // And back to the app's own storage, the same way.
