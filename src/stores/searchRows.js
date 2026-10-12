@@ -60,6 +60,14 @@ export function finalize(allResults, scan = {}) {
     const dateB = new Date(b.date || b.internalDate || 0);
     return dateB - dateA;
   });
+  // A hit names its account by id; the row's account badge reads the address,
+  // as every other unified row does. Stamped in place so a row keeps its identity.
+  const accounts = useMailStore.getState().accounts;
+  for (const row of perMessage) {
+    if (row._accountEmail) continue;
+    const owner = accounts?.find(a => a.id === (row._accountId || row._srcAccountId));
+    if (owner) row._accountEmail = owner.email;
+  }
   // The same shields the folder list paints, or a hit wears none of them.
   return annotateRowAlerts(perMessage, useMailStore.getState(), useSettingsStore.getState());
 }

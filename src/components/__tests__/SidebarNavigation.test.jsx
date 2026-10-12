@@ -8,6 +8,7 @@ import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useBackupStore } from '../../stores/backupStore';
 import { useViewStore } from '../../stores/viewStore';
+import { setHoveredAccount, clearHoveredAccount, useAccountHoverStore } from '../../stores/accountHoverStore';
 import { t } from '../../i18n';
 
 vi.mock('../../services/db', async importOriginal => ({
@@ -102,6 +103,25 @@ describe('Sidebar navigation', () => {
     expect(within(row).getByText('Design studio')).toBeTruthy();
     expect(within(row).getByText('studio@example.com')).toBeTruthy();
     expect(screen.queryByText('Old studio name')).toBeNull();
+  });
+
+  it.each([false, true])('lights the account a list row points at, and only that one (collapsed %s)', collapsed => {
+    useSettingsStore.setState({ sidebarCollapsed: collapsed });
+    useMailStore.setState({ unifiedInbox: true });
+    render(<Sidebar />);
+    const rows = () => [...document.querySelectorAll(collapsed ? '[data-pointed]' : '.sidebar-account-pointed')];
+    expect(rows()).toHaveLength(0);
+    act(() => setHoveredAccount('personal'));
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].textContent + rows()[0].getAttribute('aria-label')).toContain('Personal');
+    // Another row taking the pointer moves the light; a stale leave cannot wipe it.
+    act(() => setHoveredAccount('studio'));
+    act(() => clearHoveredAccount('personal'));
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].getAttribute('aria-label') || rows()[0].textContent).toContain('studio@example.com');
+    act(() => clearHoveredAccount('studio'));
+    expect(rows()).toHaveLength(0);
+    expect(useAccountHoverStore.getState().accountId).toBeNull();
   });
 
   it('keeps Settings beside Refresh outside the scrolling navigation', () => {

@@ -16,6 +16,7 @@ import { useMessageListStore } from '../stores/messageListStore';
 import { useSyncStore } from '../stores/syncStore';
 import { useUiStore } from '../stores/uiStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
+import { useAccountHoverStore } from '../stores/accountHoverStore';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import * as api from '../services/api';
@@ -281,10 +282,13 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
 }) {
   const t = useT();
   const pa = usePrivateAttr();
+  // A list row in a spanning view is pointing at this account.
+  const pointed = useAccountHoverStore(s => s.accountId === account.id);
   return (
     <div className="relative">
       <button type="button"
-        className={`relative p-1.5 rounded-lg transition-colors ${isActive && !unifiedInbox && !insightsOpen ? 'bg-mail-accent-tint' : 'hover:bg-mail-surface-hover'}`}
+        data-pointed={pointed || undefined}
+        className={`relative p-1.5 rounded-lg transition-colors ${isActive && !unifiedInbox && !insightsOpen ? 'bg-mail-accent-tint' : pointed ? 'bg-mail-surface-hover ring-1 ring-mail-accent' : 'hover:bg-mail-surface-hover'}`}
         onClick={onActivate}
         onDoubleClick={onActivateInbox}
         aria-label={label === account.email ? pa(label, 'email') : `${pa(label, 'name')}, ${pa(account.email, 'email')}`}
@@ -317,8 +321,10 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   const pa = usePrivateAttr();
   const selected = isActive && !unifiedInbox && !insightsOpen;
   const showAddress = label !== account.email;
+  // A list row in a spanning view is pointing at this account.
+  const pointed = useAccountHoverStore(s => s.accountId === account.id);
   return (
-    <div className={`sidebar-account-row ${selected ? 'sidebar-account-selected' : ''}`}>
+    <div className={`sidebar-account-row ${selected ? 'sidebar-account-selected' : ''}${pointed ? ' sidebar-account-pointed' : ''}`}>
       <button type="button" className="sidebar-account-open"
         aria-label={showAddress ? `${pa(label, 'name')}, ${pa(account.email, 'email')}` : pa(account.email, 'email')}
         aria-current={selected ? 'true' : undefined}

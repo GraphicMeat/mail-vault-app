@@ -2,7 +2,8 @@ import React from 'react';
 import { displayText } from '../utils/bidiText';
 import { cleanPreviewText } from '../utils/previewText';
 import { BimiLogo } from './email/BimiLogo';
-import { getAccountColor, useSettingsStore, isTrackerBlockingActive, normalizeListPreviewLines } from '../stores/settingsStore';
+import { useSettingsStore, isTrackerBlockingActive, normalizeListPreviewLines } from '../stores/settingsStore';
+import { AccountBadge, useAccountHover } from './AccountBadge';
 import { getRowPartyName } from '../utils/emailParser';
 import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
@@ -28,7 +29,6 @@ import {
 } from 'lucide-react';
 import { useT } from '../i18n/index.js';
 import { Private } from './privacy/Private';
-import { usePrivateAttr } from '../hooks/usePrivacy';
 
 // A search hit whose term lives only in an attachment shows nothing in the
 // message itself. `matchedIn` comes back from the offline index; the row's own
@@ -192,7 +192,6 @@ function openRow(email, onSelect) {
 // `configOverride` pass through to them (Settings' sample rows).
 export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
   const t = useT();
-  const pa = usePrivateAttr();
   // Preview lines make this a row of several lines: its gutter stacks.
   const stacked = useSettingsStore(s => normalizeListPreviewLines(s.listPreviewLines)) > 0;
   const dense = useSettingsStore(s => s.listDensity) === 'compact';
@@ -201,6 +200,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
   const [menuAt, pointerMenuHandlers, live] = useMenuAtPointer();
+  const accountHover = useAccountHover(email._accountId, !!(unifiedInbox && email._accountEmail));
   // Quick actions mount on the live row only; an open menu holds it live.
   const holdMenu = busy => (busy ? onOpenMenu?.(rowId) : onCloseMenu?.(rowId));
   const alerts = getCachedAlerts(scopeKey);
@@ -250,6 +250,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
       {...pointerMenuHandlers}
+      {...accountHover}
     >
       <RowGutter stacked={stacked} threadSlot={threadSlot} checked={isChecked}
         onToggle={(e) => onToggleSelection(email.uid, email._accountId, email._mailbox, e?.shiftKey)}
@@ -262,14 +263,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         was meant all along.
       */}
       <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-        {unifiedInbox && email._accountEmail && (
-          <span
-            data-testid="account-dot"
-            className="w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
-            title={pa(email._accountEmail, 'email')}
-          />
-        )}
+        {unifiedInbox && email._accountEmail && <AccountBadge email={email} accountColors={accountColors} />}
         <span data-testid="row-sender" className="truncate min-w-0" dir="auto">
           {outgoing && `${t('email.original.to')} `}<Private kind="name">{displayText(getRowPartyName(email, { outgoing }))}</Private>
         </span>
@@ -319,13 +313,13 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
 
 export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
   const t = useT();
-  const pa = usePrivateAttr();
   const dense = useSettingsStore(s => s.listDensity) === 'compact';
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
   const [menuAt, pointerMenuHandlers, live] = useMenuAtPointer();
+  const accountHover = useAccountHover(email._accountId, !!(unifiedInbox && email._accountEmail));
   // Quick actions mount on the live row only; an open menu holds it live.
   const holdMenu = busy => (busy ? onOpenMenu?.(rowId) : onCloseMenu?.(rowId));
   const alerts = getCachedAlerts(scopeKey);
@@ -371,6 +365,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => openRow(email, onSelect)}
       {...pointerMenuHandlers}
+      {...accountHover}
     >
       {/* Two lines, always: the chip sits under the checkbox. */}
       <RowGutter stacked threadSlot={threadSlot} checked={isChecked}
@@ -381,14 +376,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       <div className={`flex-1 min-w-0 ${dense ? 'py-0.5' : 'py-1.5'}`}>
         {/* Line 1: Sender, star, alerts ... Date */}
         <div className="flex items-center gap-1.5">
-          {unifiedInbox && email._accountEmail && (
-            <span
-              data-testid="account-dot"
-              className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
-              title={pa(email._accountEmail, 'email')}
-            />
-          )}
+          {unifiedInbox && email._accountEmail && <AccountBadge email={email} accountColors={accountColors} />}
           <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {outgoing && `${t('email.original.to')} `}<Private kind="name">{displayText(getRowPartyName(email, { outgoing }))}</Private>
           </span>
