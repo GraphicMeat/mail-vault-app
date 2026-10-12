@@ -2684,7 +2684,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
           await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
         } else {
           // Every copy, by request: none kept in the deleted-mail bin either.
-          await api.deleteEmail(account, t.uid, t.mailbox, null, { bin: false });
+          // `permanent: true` — the default (null) moves an INBOX message to
+          // Trash, which leaves a server copy this purge claims to remove.
+          await api.deleteEmail(account, t.uid, t.mailbox, true, { bin: false });
         }
         purgeable.push(t);
       } catch (e) {

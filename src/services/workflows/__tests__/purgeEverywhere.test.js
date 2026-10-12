@@ -177,6 +177,22 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(res.failed).toBe(0);
   });
 
+  // api.deleteEmail's `permanent` default is "everything but INBOX": an INBOX
+  // delete is a move to Trash. A purge left it null, so Delete everywhere on an
+  // inbox message only filed the server copy in Trash while the vault and
+  // backup copies went — "does not delete the email".
+  it('inbox message: the server delete is permanent, never a move to Trash', async () => {
+    prime({ emails: [serverMsg(1)] });
+    useMailStore.setState({ activeMailbox: 'INBOX' });
+    useMailStore.getState().updateSortedEmails();
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+    expect(mockDeleteEmail.mock.calls[0][2]).toBe('INBOX');
+    expect(mockDeleteEmail.mock.calls[0][3]).toBe(true);
+    expect(res.deleted).toBe(1);
+  });
+
   // The tombstone hiding a purged row is store state, so a reload wipes it. If
   // the header sidecar still lists the uid, a message purged from the server,
   // the vault AND the backup mirror repaints from cache as though nothing
