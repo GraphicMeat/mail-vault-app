@@ -1033,7 +1033,9 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     // two waits below and the page reload (about 80 ms a message): 60 left.
     const pre = (await migration()).migration;
     expect(pre.state).toBe('running');
-    expect(pre.done).toBeLessThan(pre.total - 60);
+    if (pre.done >= pre.total - 60) {
+      throw new Error(`the run got past the kill margin before the kill: ${pre.done} of ${pre.total} done, 60 must be left (it outran the kill test: raise MAILVAULT_E2E_FORMAT_MESSAGE_PAUSE_MS in wdio.conf.js)`);
+    }
     const oldPid = daemonPid(home);
     expect(oldPid).toBeGreaterThan(0);
     daemonExecutable(oldPid); // throws unless that pid is a mailvault-daemon
@@ -1063,7 +1065,9 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     // Loud, never skipped: a run that finished before the reload settled would
     // check nothing here, so it fails and names the race (raise the pace in
     // wdio.conf.js MAILVAULT_E2E_FORMAT_MESSAGE_PAUSE_MS, or the kill margin).
-    expect(now, 'the run was already gone when the page reloaded: it outran the kill test, so the chip after the relaunch could not be checked').not.toBeNull();
+    if (now === null) {
+      throw new Error('the run was already gone when the page reloaded: it outran the kill test, so the chip after the relaunch could not be checked');
+    }
     let c = null;
     await browser.waitUntil(async () => { c = await chip(); return c?.state === 'running' || c?.state === 'done'; }, {
       timeout: 20_000, interval: 200,
