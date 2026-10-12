@@ -69,6 +69,8 @@ function errorLine(translate, err) {
   const message = String(err?.message || err);
   if (message.includes('E_PORTABLE_EXISTS')) return translate('portable.error.exists');
   if (message.includes('E_PORTABLE_UNSUPPORTED_BUILD')) return translate('portable.unsupportedBuild');
+  // The mail's storage format would not carry over to the drive's copy.
+  if (message.includes('E_FORMAT_MARKER')) return translate('errors.formatMarker');
   return translate('portable.error.failed', { message });
 }
 

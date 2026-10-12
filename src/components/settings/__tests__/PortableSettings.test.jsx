@@ -142,6 +142,13 @@ describe('PortableSettings', () => {
     expect(createCalls()[0][1]).toMatchObject({ copyConfig: false, copyMail: false });
   });
 
+  it("says so in the catalog's words when the mail's storage format would not carry over", async () => {
+    replies['portable.create'] = new Error('E_FORMAT_MARKER: the vault marker /Users/x/Mail/.mailvault-vault.db will not read: busy');
+    await fillWizard();
+    fireEvent.click(screen.getByTestId('portable-create'));
+    expect((await screen.findByRole('alert')).textContent).toBe(t('errors.formatMarker'));
+  });
+
   it('shows the running copy its drive instead of the wizard', async () => {
     replies['portable.status'] = { portable: true, locked: false, drive: '/Volumes/USB', freeBytes: GIB };
     render(<PortableSettings />);

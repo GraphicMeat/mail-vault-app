@@ -791,6 +791,7 @@
   "errors.formatNoSpace": "Nicht genug freier Speicher, um die alten Dateien beiseitezulegen. Gib {{size}} frei oder lösche sie nach der Prüfung.",
   "errors.formatFailed": "Konvertierung angehalten: {{reason}}. Bei den fehlgeschlagenen Nachrichten wurde nichts gelöscht.",
   "errors.formatMoveBlocked": "Schließ die Formatkonvertierung ab oder brich sie ab, bevor du den Tresor verschiebst.",
+  "errors.formatMarker": "Die Speicherart deiner Mail konnte nicht übernommen werden. Prüfe, ob beide Ordner erreichbar sind, und versuche es erneut.",
   "errors.formatSame": "Der Tresor hat bereits dieses Format.",
   "errors.formatNotFound": "Es gibt keine Konvertierung, die pausiert, fortgesetzt oder abgebrochen werden könnte.",
   "errors.formatReclaimFailed": "Speicherplatz konnte nicht freigegeben werden. Prüfe, ob der Tresorordner erreichbar ist, und versuche es erneut.",

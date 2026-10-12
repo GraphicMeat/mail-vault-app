@@ -631,41 +631,30 @@ pub struct MaildirStorageStats {
     pub email_count: u32,
 }
 
+/// The vault's messages and what they take on disk, of one account or of all
+/// (`message_store::disk_usage` over every mailbox directory): a message is
+/// counted once, its record when it has one, and a blob that several records
+/// share (a Gmail label copy) counts its bytes once. `orphaned/` is not
+/// counted: a set-aside copy is not a message the vault holds.
 pub fn storage_stats(root: &Path, account_id: Option<&str>) -> MaildirStorageStats {
     let base = root.join("Maildir");
-    let scan_dir = match account_id {
-        Some(id) => account_dir(&base, id),
-        None => base,
+    let accounts = match account_id {
+        Some(id) => vec![account_dir(&base, id)],
+        None => child_dirs(&base),
     };
-
-    if !scan_dir.exists() {
-        return MaildirStorageStats { total_bytes: 0, total_mb: 0.0, email_count: 0 };
-    }
-
-    let mut total_bytes: u64 = 0;
-    let mut email_count: u32 = 0;
-
-    for entry in walkdir::WalkDir::new(&scan_dir).into_iter().flatten() {
-        if entry.file_type().is_file() {
-            let name = entry.file_name().to_string_lossy();
-            if crate::maildir::has_info(&name) {
-                if let Ok(meta) = entry.metadata() {
-                    total_bytes += meta.len();
-                    email_count += 1;
-                }
-            } else if let Some(entry) = crate::message_store::is_record_path(entry.path()).then(|| crate::message_store::entry_at(entry.path(), 0)).flatten() {
-                // A JMAP record: the message's size, not the record's.
-                total_bytes += entry.size;
-                email_count += 1;
-            }
-        }
-    }
+    let mailboxes: Vec<PathBuf> = accounts.iter().flat_map(|account| child_dirs(account)).collect();
+    let usage = crate::message_store::disk_usage(&mailboxes);
 
     MaildirStorageStats {
-        total_bytes,
-        total_mb: total_bytes as f64 / (1024.0 * 1024.0),
-        email_count,
+        total_bytes: usage.bytes,
+        total_mb: usage.bytes as f64 / (1024.0 * 1024.0),
+        email_count: usage.messages,
     }
+}
+
+/// The directories in `dir`; none when it is missing or will not list.
+fn child_dirs(dir: &Path) -> Vec<PathBuf> {
+    fs::read_dir(dir).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).map(|e| e.path()).collect()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1649,6 +1638,46 @@ mod tests {
     /// `uid`'s bytes in the vault, whichever format holds them.
     fn held_bytes(root: &Path, uid: u32) -> Option<Vec<u8>> {
         crate::message_store::read_raw(root, "acct", "INBOX", uid).unwrap()
+    }
+
+    /// A JMAP vault in the middle of things: a1/INBOX 1 and a1/Work 1 are one
+    /// message in two folders (one blob), a2/INBOX 5 has its own; a1/INBOX 1
+    /// still has its Maildir file (a conversion in progress), a1/INBOX 2 has
+    /// only one, and a copy set aside in `orphaned/` is no message.
+    #[test]
+    fn storage_stats_counts_each_record_once_and_each_blob_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let eml = |id: &str| format!("Message-ID: <{id}@x.test>\r\nSubject: {id}\r\n\r\n{id}\r\n").into_bytes();
+        crate::message_store::set_vault_format(root, Format::Maildir).unwrap();
+        crate::message_store::write(root, "a1", "INBOX", 1, &eml("shared"), &[]).unwrap();
+        crate::message_store::write(root, "a1", "INBOX", 2, &eml("maildir only"), &[]).unwrap();
+        crate::message_store::set_vault_format(root, Format::Jmap).unwrap();
+        crate::message_store::write(root, "a1", "INBOX", 1, &eml("shared"), &[]).unwrap();
+        crate::message_store::write(root, "a1", "Work", 1, &eml("shared"), &[]).unwrap();
+        crate::message_store::write(root, "a2", "INBOX", 5, &eml("own"), &[]).unwrap();
+        let orphaned = crate::message_store::mailbox_dir(root, "a1", "INBOX").join("orphaned");
+        fs::create_dir_all(&orphaned).unwrap();
+        fs::write(orphaned.join(format!("7{INFO_PREFIX}S.eml")), eml("set aside")).unwrap();
+
+        let record = |account: &str, mailbox: &str, uid: u32| {
+            fs::metadata(crate::message_store::mailbox_dir(root, account, mailbox).join(format!("jmap/{uid}.json"))).unwrap().len()
+        };
+        let bytes = |id: &str| eml(id).len() as u64;
+
+        let all = storage_stats(root, None);
+        assert_eq!(all.email_count, 4, "a1/INBOX 1 and 2, a1/Work 1, a2/INBOX 5");
+        assert_eq!(
+            all.total_bytes,
+            bytes("shared") + bytes("maildir only") // the Maildir files
+                + record("a1", "INBOX", 1) + record("a1", "Work", 1) + record("a2", "INBOX", 5)
+                + bytes("shared") + bytes("own"), // each blob once
+        );
+        let a1 = storage_stats(root, Some("a1"));
+        assert_eq!(a1.email_count, 3);
+        assert_eq!(a1.total_bytes, bytes("shared") + bytes("maildir only") + record("a1", "INBOX", 1) + record("a1", "Work", 1) + bytes("shared"));
+        let none = storage_stats(root, Some("nobody"));
+        assert_eq!((none.email_count, none.total_bytes), (0, 0));
     }
 
     /// An account id that is not one plain path component can never lead
@@ -3162,7 +3191,13 @@ R0lGODlhAQABAAAAACw=\r\n\
             let stats = storage_stats(root, Some("acct"));
             assert_eq!(stats.email_count, 4);
             let sizes: u64 = ["one", "two", "three", "four"].iter().map(|s| light_batch_eml(s).len() as u64).sum();
-            assert_eq!(stats.total_bytes, sizes, "the messages' sizes");
+            // What the disk holds: the Maildir files, or the records and their blobs.
+            let records: u64 = (1..=4)
+                .filter_map(|uid| fs::metadata(crate::message_store::mailbox_dir(root, "acct", "INBOX").join(format!("jmap/{uid}.json"))).ok())
+                .map(|m| m.len())
+                .sum();
+            assert_eq!(format == Format::Jmap, records > 0);
+            assert_eq!(stats.total_bytes, sizes + records, "the messages' files");
 
             let read = read_light_batch_on_disk(root, "acct", "INBOX", &[2, 9, 1]);
             assert_eq!(read.iter().map(|e| e.as_ref().map(|e| (e.uid, e.is_archived))).collect::<Vec<_>>(), vec![Some((2, true)), None, Some((1, false))]);

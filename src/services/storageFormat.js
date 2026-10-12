@@ -39,6 +39,7 @@ const ERRORS = [
   ['E_FORMAT_BUSY:', 'errors.formatBusy'],
   [NO_SPACE, 'errors.formatNoSpace'],
   ['E_FORMAT_MOVE_BLOCKED:', 'errors.formatMoveBlocked'],
+  ['E_FORMAT_MARKER:', 'errors.formatMarker'],
   ['E_FORMAT_SAME:', 'errors.formatSame'],
   ['E_FORMAT_NOT_FOUND:', 'errors.formatNotFound'],
   ['E_FORMAT_RECLAIM_FAILED:', 'errors.formatReclaimFailed'],

@@ -13,9 +13,10 @@ use std::path::Path;
 
 /// Mail-data directories that live in the vault. Everything else under the app
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
-pub const VAULT_DIRS: [&str; 9] = [
+pub const VAULT_DIRS: [&str; 10] = [
     "Maildir",          // the messages
     "message_blobs",    // the JMAP storage format's raw message bytes (`jmap_store::blobs`)
+    "retired",          // old files a storage format conversion kept aside (`retired/format-<stamp>/`), until the user deletes them
     "maildir",          // legacy per-mailbox index dirs (now .pre-db files), kept so a move carries them
     "email_cache",      // header sidecars
     "attachment_cache", // extracted attachments
@@ -176,13 +177,13 @@ pub fn new_vault_id() -> String {
 /// a contacts index or the contacts.vcf safety copy alone is not mail, a stray
 /// `contacts_index/` left behind by an old, ungated flush (final fix wave
 /// I-1) must not make an otherwise-empty folder look like a vault. Nor does a
-/// `message_blobs/` alone: the name is generic enough to turn up in a folder
-/// that is not a vault, and a JMAP vault's blobs never come without its
-/// `Maildir/` (which holds the records).
+/// `message_blobs/` or a `retired/` alone: the names are generic enough to
+/// turn up in a folder that is not a vault, and neither ever comes without
+/// the vault's `Maildir/` (which holds the messages).
 pub fn looks_like_vault(dir: &Path) -> bool {
     VAULT_DIRS
         .iter()
-        .filter(|d| **d != "search_index" && **d != "contacts_index" && **d != "Contacts" && **d != "message_blobs")
+        .filter(|d| **d != "search_index" && **d != "contacts_index" && **d != "Contacts" && **d != "message_blobs" && **d != "retired")
         .any(|d| dir.join(d).exists())
 }
 

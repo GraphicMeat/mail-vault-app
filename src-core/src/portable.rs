@@ -267,6 +267,10 @@ pub(crate) fn create_with(
     let mut mail_dirs = Vec::new();
     if let Some(mail) = opts.mail_dir {
         let (present, files, bytes) = crate::vault_ops::copy_and_verify(mail, &data, &|p| progress("mail", p.copied, p.total))?;
+        // The copy is a vault of its own: it stores its mail the way the
+        // source does (a vault outside the app data dir keeps that in its own
+        // marker, which the settings copy above never sees).
+        crate::vault_ops::carry_format(mail, &data)?;
         mail_dirs = present;
         n.0 += files;
         n.1 += bytes;
@@ -549,6 +553,25 @@ mod tests {
             .collect();
         names.sort();
         assert_eq!(names, vec!["MailVault.exe", "mailvault-daemon.exe"], "the host's uninstaller stays behind");
+    }
+
+    /// A vault outside the app data dir keeps its storage format in its own
+    /// marker, which the settings copy never sees.
+    #[test]
+    fn a_portable_copy_stores_its_mail_the_way_the_vault_does() {
+        let h = host();
+        let vault = h._tmp.path().join("Mail elsewhere");
+        std::fs::create_dir_all(&vault).unwrap();
+        crate::message_store::set_vault_format(&vault, crate::message_store::Format::Jmap).unwrap();
+        let raw = b"Subject: kept\r\n\r\nkept\r\n".to_vec();
+        crate::message_store::write(&vault, "acct", "INBOX", 7, &raw, &[]).unwrap();
+        let s = secrets();
+        create(&CreateOptions { mail_dir: Some(&vault), ..opts(&h, false, &s) }, &|_, _, _| {}).unwrap();
+
+        let data = portable_data_dir(&h.dest.join(PORTABLE_DIR));
+        assert_eq!(crate::vault_layout::read_marker_value(&data, "storageFormat").as_deref(), Some("jmap"));
+        assert_eq!(crate::message_store::vault_format(&data), crate::message_store::Format::Jmap);
+        assert_eq!(crate::message_store::read_raw(&data, "acct", "INBOX", 7).unwrap(), Some(raw));
     }
 
     #[test]

@@ -791,6 +791,7 @@
   "errors.formatNoSpace": "No hay espacio libre suficiente para apartar los archivos antiguos. Libera {{size}} o elige borrarlos tras la verificación.",
   "errors.formatFailed": "Conversión detenida: {{reason}}. No se borró nada de los mensajes que fallaron.",
   "errors.formatMoveBlocked": "Termina o cancela la conversión de formato antes de mover la bóveda.",
+  "errors.formatMarker": "No se pudo trasladar el formato en que se guarda el correo. Comprueba que ambas carpetas estén accesibles e inténtalo de nuevo.",
   "errors.formatSame": "La bóveda ya tiene este formato.",
   "errors.formatNotFound": "No hay ninguna conversión que pausar, reanudar o cancelar.",
   "errors.formatReclaimFailed": "No se pudo liberar espacio. Comprueba que la carpeta de la bóveda esté accesible e inténtalo de nuevo.",

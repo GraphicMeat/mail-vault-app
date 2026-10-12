@@ -791,6 +791,7 @@
   "errors.formatNoSpace": "可用空间不足，无法另行保留旧文件。请释放 {{size}}，或选择在验证后删除它们。",
   "errors.formatFailed": "转换已停止：{{reason}}。失败的邮件没有删除任何内容。",
   "errors.formatMoveBlocked": "移动保险库之前，请先完成或取消格式转换。",
+  "errors.formatMarker": "无法沿用邮件的存储格式。请确认两个文件夹都可以访问，然后重试。",
   "errors.formatSame": "保险库已经是这种格式。",
   "errors.formatNotFound": "没有可暂停、恢复或取消的转换。",
   "errors.formatReclaimFailed": "无法回收空间。请确认保险库文件夹可以访问，然后重试。",

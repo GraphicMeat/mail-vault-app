@@ -22,21 +22,11 @@ pub struct FolderInspection {
     pub email_count: usize,
 }
 
+/// The messages under the folder's `Maildir/`, in either storage format, by
+/// name alone (`message_store::count_under`): a uid with a Maildir file and a
+/// record (a conversion in progress) is one message.
 pub fn count_messages(dir: &Path) -> usize {
-    fn walk(dir: &Path, count: &mut usize) {
-        let entries = match std::fs::read_dir(dir) { Ok(e) => e, Err(_) => return };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                walk(&path, count);
-            } else if crate::maildir::has_info(&entry.file_name().to_string_lossy()) {
-                *count += 1;
-            }
-        }
-    }
-    let mut count = 0;
-    walk(&dir.join("Maildir"), &mut count);
-    count
+    crate::message_store::count_under(&dir.join("Maildir"))
 }
 
 /// Classify `dir` against `expected_vault_id` (the id recorded at the app's
@@ -101,7 +91,10 @@ pub fn copy_tree(src: &Path, dst: &Path, copied: &mut usize, bytes: &mut u64) ->
             continue;
         }
         let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        if to.metadata().map(|m| m.len()).ok() == Some(src_len) {
+        // A JMAP record is rewritten in place under its one name (a flag
+        // change, the blob of an overwritten draft), often at the same
+        // length: one left by an interrupted run is never taken as copied.
+        if !crate::message_store::is_record_path(&from) && to.metadata().map(|m| m.len()).ok() == Some(src_len) {
             *copied += 1;
             *bytes += src_len;
             continue;
@@ -113,7 +106,8 @@ pub fn copy_tree(src: &Path, dst: &Path, copied: &mut usize, bytes: &mut u64) ->
     Ok(())
 }
 
-/// Verify every file in `src` exists in `dst` with the same size.
+/// Verify every file in `src` exists in `dst` with the same size, and every
+/// JMAP record with the same bytes (`copy_tree`: its size proves nothing).
 /// Returns the first mismatch found.
 pub fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
     let entries = std::fs::read_dir(src).map_err(|e| format!("read {}: {}", src.display(), e))?;
@@ -129,6 +123,13 @@ pub fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
             Ok(m) if m.len() == src_len => {}
             Ok(m) => return Err(format!("{} copied as {} bytes, expected {}", to.display(), m.len(), src_len)),
             Err(e) => return Err(format!("{} is missing from the new location: {}", to.display(), e)),
+        }
+        if crate::message_store::is_record_path(&from) {
+            let want = std::fs::read(&from).map_err(|e| format!("read {}: {}", from.display(), e))?;
+            let got = std::fs::read(&to).map_err(|e| format!("read {}: {}", to.display(), e))?;
+            if want != got {
+                return Err(format!("{} did not arrive intact", to.display()));
+            }
         }
     }
     Ok(())
@@ -249,6 +250,46 @@ pub fn copy_and_verify<F: Fn(MoveProgress)>(
     Ok((present, copied, bytes))
 }
 
+/// The marker step of a vault move (`vault_move_to`), once the copy verified:
+/// the destination keeps the identity rows it has (an interrupted move run
+/// again), else gets new ones, then takes the source's storage format
+/// (`carry_format`).
+pub fn carry_marker(src_root: &Path, dst_root: &Path) -> Result<(), String> {
+    let marker = crate::vault_layout::read_marker(dst_root).unwrap_or(crate::vault_layout::VaultMarker {
+        app: "mailvault".into(),
+        vault_id: crate::vault_layout::new_vault_id(),
+        created_at: crate::vault_layout::now_millis(),
+    });
+    crate::vault_layout::write_marker(dst_root, &marker)?;
+    carry_format(src_root, dst_root)
+}
+
+/// A marker that will not read or write while its storage format is carried
+/// (`carry_format`). The text after the code names the cause.
+pub const E_FORMAT_MARKER: &str = "E_FORMAT_MARKER";
+
+/// The marker rows that say how copied mail is stored, from the vault at
+/// `src_root` to its copy at `dst_root` (a vault move, a portable copy):
+/// - `storageFormat` as the source has it, and `maildir` when it has none:
+///   the destination's marker may be an older vault's, with a `jmap` row of
+///   its own (the app data dir keeps its marker when the vault moves out).
+/// - `storageMigration` empty: no conversion runs at the copy (a move is
+///   refused while one is in progress, and a stopped one is no job).
+///
+/// A source marker that will not read fails the carry
+/// (`E_FORMAT_MARKER: ...`), never reads as `maildir`: writers would then
+/// write Maildir files into a JMAP vault. Then the format this process
+/// cached for `dst_root` is dropped (`invalidate_vault_format`), keyed by
+/// the root as the caller spells it, the spelling its `vault_format` calls use.
+pub fn carry_format(src_root: &Path, dst_root: &Path) -> Result<(), String> {
+    let marker = |e: String| format!("{E_FORMAT_MARKER}: {e}");
+    let format = crate::vault_layout::read_marker_row(src_root, crate::message_store::FORMAT_KEY).map_err(marker)?;
+    crate::vault_layout::write_marker_value(dst_root, crate::message_store::FORMAT_KEY, format.as_deref().unwrap_or("maildir")).map_err(marker)?;
+    crate::vault_layout::write_marker_value(dst_root, crate::message_store::MIGRATION_KEY, "").map_err(marker)?;
+    crate::message_store::invalidate_vault_format(dst_root);
+    Ok(())
+}
+
 /// Delete the copied-from dirs. Only ever called once the destination is live.
 /// Returns `false` (with a `warn!` at the call site) when any dir could not be
 /// removed — the caller reports this as `sourceRemoved: false`, not an error:
@@ -287,6 +328,153 @@ mod tests {
         let _ = fs::remove_dir_all(&p);
         fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    // ── Task 10: a JMAP vault moves whole ──
+
+    fn flags(f: &[&str]) -> Vec<String> {
+        f.iter().map(|x| x.to_string()).collect()
+    }
+
+    fn eml(id: &str) -> Vec<u8> {
+        format!("Message-ID: <{id}@x.test>\r\nSubject: {id}\r\n\r\nbody of {id}\r\n").into_bytes()
+    }
+
+    type Held = (&'static str, &'static str, u32, Vec<u8>, Vec<String>);
+
+    /// A JMAP vault at `root` (marked, vault id `src-id`), and what it holds:
+    /// `(account, mailbox, uid, bytes, flags)`. `a2/INBOX` 9 has the bytes of
+    /// `a1/INBOX` 2, so the two records share one blob.
+    fn jmap_vault(root: &Path) -> Vec<Held> {
+        crate::vault_layout::write_marker(
+            root,
+            &crate::vault_layout::VaultMarker { app: "mailvault".into(), vault_id: "src-id".into(), created_at: 1 },
+        )
+        .unwrap();
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Jmap).unwrap();
+        let held: Vec<Held> = vec![
+            ("a1", "INBOX", 1, eml("one"), flags(&["seen"])),
+            ("a1", "INBOX", 2, eml("two"), flags(&["archived"])),
+            ("a1", "Work", 3, eml("three"), flags(&[])),
+            ("a2", "INBOX", 9, eml("two"), flags(&["flagged"])),
+        ];
+        for (account, mailbox, uid, raw, flags) in &held {
+            crate::message_store::write(root, account, mailbox, *uid, raw, flags).unwrap();
+        }
+        held
+    }
+
+    #[test]
+    fn classify_folder_counts_a_jmap_vault_once_per_message() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        jmap_vault(root);
+        // uid 1 also has its Maildir file (a conversion in progress): one
+        // message. Work 4 is in Maildir alone.
+        crate::message_store::set_vault_format(root, crate::message_store::Format::Maildir).unwrap();
+        crate::message_store::write(root, "a1", "INBOX", 1, &eml("one"), &flags(&["seen"])).unwrap();
+        crate::message_store::write(root, "a1", "Work", 4, &eml("four"), &[]).unwrap();
+
+        let found = classify_folder(root, Some("src-id")).unwrap();
+        assert_eq!((found.kind.as_str(), found.email_count), ("our_vault", 5));
+    }
+
+    #[test]
+    fn classify_folder_does_not_take_a_retired_folder_alone_for_a_vault() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("retired/format-20261012-101500")).unwrap();
+        assert_eq!(classify_folder(dir.path(), None).unwrap().kind, "occupied");
+    }
+
+    /// The move as `vault_move_to` and `vault_move_finalize` run it: copy and
+    /// verify, the marker step, then the source goes.
+    #[test]
+    fn a_real_move_carries_a_jmap_vault_whole() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("src"), tmp.path().join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        let held = jmap_vault(&src);
+        // Old files a conversion kept aside travel with the vault.
+        let kept = src.join(format!("retired/format-20261012-101500/a1/INBOX/cur/1{}S.eml", crate::maildir::INFO_PREFIX));
+        fs::create_dir_all(kept.parent().unwrap()).unwrap();
+        fs::write(&kept, eml("one")).unwrap();
+        // This process asked about the destination before: no marker, Maildir.
+        assert_eq!(crate::message_store::vault_format(&dst), crate::message_store::Format::Maildir);
+        let entry = |root: &Path, (account, mailbox, uid, _, _): &Held| crate::message_store::find(root, account, mailbox, *uid).unwrap();
+        let before: Vec<_> = held.iter().map(|h| entry(&src, h)).collect();
+
+        let (present, _, _) = copy_and_verify(&src, &dst, &|_| {}).unwrap();
+        carry_marker(&src, &dst).unwrap();
+        assert!(remove_sources(&src, &present));
+
+        assert_eq!(crate::message_store::vault_format(&dst), crate::message_store::Format::Jmap, "the format came along; the cached answer went");
+        for (h, was) in held.iter().zip(&before) {
+            let (account, mailbox, uid, raw, _) = h;
+            assert_eq!(crate::message_store::read_raw(&dst, account, mailbox, *uid).unwrap().as_ref(), Some(raw), "{account}/{mailbox}/{uid}");
+            assert_eq!(entry(&dst, h).flags, was.flags, "{account}/{mailbox}/{uid}");
+        }
+        assert!(present.contains(&"message_blobs") && present.contains(&"retired"), "{present:?}");
+        assert_eq!(fs::read(dst.join(kept.strip_prefix(&src).unwrap())).unwrap(), eml("one"));
+        assert!(crate::vault_layout::read_marker(&dst).is_some(), "the destination is marked");
+        assert_eq!(crate::vault_layout::read_marker_value(&dst, "storageMigration").as_deref(), Some(""), "no conversion runs there");
+        for dir in ["Maildir", "message_blobs", "retired"] {
+            assert!(!src.join(dir).exists(), "{dir} is gone from the source");
+        }
+    }
+
+    /// The app data dir keeps its marker when the vault moves out of it, so a
+    /// move back finds the rows of the vault it once held.
+    #[test]
+    fn a_move_writes_maildir_over_a_stale_jmap_row() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("src"), tmp.path().join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        crate::message_store::write(&src, "a1", "INBOX", 1, &eml("one"), &[]).unwrap();
+        crate::vault_layout::write_marker_value(&dst, "storageFormat", "jmap").unwrap();
+        crate::vault_layout::write_marker_value(&dst, "storageMigration", "3f1e0c1a-0000-4000-8000-000000000001").unwrap();
+
+        carry_marker(&src, &dst).unwrap();
+        assert_eq!(crate::vault_layout::read_marker_value(&dst, "storageFormat").as_deref(), Some("maildir"));
+        assert_eq!(crate::vault_layout::read_marker_value(&dst, "storageMigration").as_deref(), Some(""));
+    }
+
+    #[test]
+    fn a_move_stops_when_the_source_format_will_not_read() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("src"), tmp.path().join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        fs::write(src.join(crate::vault_layout::MARKER_FILE), vec![b'x'; 4096]).unwrap();
+
+        let err = carry_marker(&src, &dst).unwrap_err();
+        assert!(err.starts_with("E_FORMAT_MARKER: "), "{err}");
+        assert_eq!(crate::vault_layout::read_marker_value(&dst, "storageFormat"), None, "never guessed");
+    }
+
+    /// An interrupted move run again: a record rewritten since, at the same
+    /// length, is neither kept by the copy nor passed by the verify.
+    #[test]
+    fn a_resumed_move_recopies_a_record_rewritten_at_the_same_length() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("src"), tmp.path().join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        jmap_vault(&src);
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+
+        crate::message_store::set_flags(&src, "a1", "INBOX", 2, &flags(&["trashed"])).unwrap();
+        let record = |root: &Path| fs::read(crate::message_store::mailbox_dir(root, "a1", "INBOX").join("jmap/2.json")).unwrap();
+        assert_eq!(record(&src).len(), record(&dst).len(), "the case this pins: one length");
+        assert_ne!(record(&src), record(&dst));
+        assert!(verify_tree(&src.join("Maildir"), &dst.join("Maildir")).is_err(), "a stale record does not verify");
+
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+        assert_eq!(record(&dst), record(&src));
+        let trashed = |root: &Path| crate::message_store::find(root, "a1", "INBOX", 2).unwrap().flags;
+        assert_eq!(trashed(&dst), trashed(&src));
+        assert!(trashed(&dst).contains(&"trashed".to_string()));
     }
 
     #[test]

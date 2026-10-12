@@ -13,6 +13,7 @@ describe('storageFormat.errorMessage', () => {
     ['E_FORMAT_SAME: the vault is in this format already', 'errors.formatSame'],
     ['E_FORMAT_NOT_FOUND: no conversion to steer', 'errors.formatNotFound'],
     ['E_FORMAT_MOVE_BLOCKED: finish it first', 'errors.formatMoveBlocked'],
+    ['E_FORMAT_MARKER: the vault marker will not read', 'errors.formatMarker'],
     ['E_FORMAT_RECLAIM_FAILED: the sweep stopped', 'errors.formatReclaimFailed'],
     ['E_FORMAT_PURGE_FAILED: some files stayed', 'errors.formatPurgeFailed'],
     ['E_FORMAT_IO: the state was not saved', 'errors.formatIo'],

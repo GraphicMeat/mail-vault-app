@@ -60,6 +60,10 @@ pub enum Format {
 /// storage format: `maildir` or `jmap`.
 pub const FORMAT_KEY: &str = "storageFormat";
 
+/// The vault marker row naming the job of a storage format conversion in
+/// progress (the daemon's `format_migration_job`), the empty string when none is.
+pub const MIGRATION_KEY: &str = "storageMigration";
+
 /// Each vault root's format, read from its marker once per process.
 fn formats() -> &'static RwLock<HashMap<PathBuf, Format>> {
     static FORMATS: OnceLock<RwLock<HashMap<PathBuf, Format>>> = OnceLock::new();
@@ -476,6 +480,89 @@ pub fn list_at(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
     }
     out.sort_by(|a, b| (a.uid, &a.name).cmp(&(b.uid, &b.name)));
     Ok(out)
+}
+
+/// What the messages of some mailbox directories take on disk (`disk_usage`).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct DiskUsage {
+    /// One per message as `list_at` lists them: a record that reads, else a
+    /// Maildir file.
+    pub messages: u32,
+    /// Every Maildir file and every record file, and each blob the records
+    /// name once, however many records share it.
+    pub bytes: u64,
+}
+
+/// The storage counters (`vault_files::storage_stats`) over the mailbox
+/// directories `mailbox_dirs`. A Maildir file beside a record of its uid
+/// (a conversion in progress) is not a message of its own, but its bytes are
+/// on the disk and count. Lenient, as a counter that nothing acts on: a
+/// directory that is missing or will not list counts as empty, a file that
+/// will not stat counts no bytes, and a blob that is not there counts none.
+/// Each record is read once.
+pub fn disk_usage(mailbox_dirs: &[PathBuf]) -> DiskUsage {
+    let mut usage = DiskUsage::default();
+    let mut blobs_seen: HashSet<String> = HashSet::new();
+    for mailbox_dir in mailbox_dirs {
+        let root = root_of(mailbox_dir);
+        let mut held = HashSet::new();
+        for entry in fs::read_dir(jmap_in(mailbox_dir)).into_iter().flatten().flatten() {
+            let Some(uid) = record_uid(&entry.file_name().to_string_lossy()) else { continue };
+            // `list_records`' rule: a record that will not stat or read is
+            // left out, and the Maildir file of its uid is the message.
+            let Ok(meta) = entry.metadata() else { continue };
+            usage.bytes += meta.len();
+            let Ok(rec) = read_record(&entry.path()) else { continue };
+            held.insert(uid);
+            usage.messages += 1;
+            if blobs_seen.insert(rec.blob.clone()) {
+                usage.bytes += fs::metadata(blobs::blob_path(root, &rec.blob)).map_or(0, |m| m.len());
+            }
+        }
+        for entry in fs::read_dir(messages_in(mailbox_dir)).into_iter().flatten().flatten() {
+            let Some(uid) = maildir::vault_filename_uid(&entry.file_name().to_string_lossy()) else { continue };
+            usage.bytes += entry.metadata().map_or(0, |m| m.len());
+            if !held.contains(&uid) {
+                usage.messages += 1;
+            }
+        }
+    }
+    usage
+}
+
+/// How many messages the tree under `dir` holds, by name alone (no stat, no
+/// parse), for a folder the user picked (`vault_ops::count_messages`), whose
+/// layout is not known: every file with a Maildir info part at any depth,
+/// and every record leaf of a `jmap/` directory. A file in a mailbox's
+/// Maildir message directory whose uid has a record beside it is that
+/// record's message, counted once. A directory that will not list counts as
+/// empty.
+pub fn count_under(dir: &Path) -> usize {
+    count_in(dir, &HashSet::new())
+}
+
+/// `count_under` of `dir`, leaving out each Maildir file of a uid in `shadowed`.
+fn count_in(dir: &Path, shadowed: &HashSet<u32>) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else { return 0 };
+    let mut count = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            count += if path == jmap_in(dir) {
+                record_paths_at(dir).len()
+            } else if path == messages_in(dir) {
+                count_in(&path, &record_paths_at(dir).into_keys().collect())
+            } else {
+                count_in(&path, &HashSet::new())
+            };
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if maildir::has_info(&name) && !maildir::vault_filename_uid(&name).is_some_and(|uid| shadowed.contains(&uid)) {
+            count += 1;
+        }
+    }
+    count
 }
 
 /// Disk only. The entry for `uid`, or `None` when the mailbox holds no file for it.
@@ -2511,6 +2598,34 @@ mod tests {
             set_vault_format(tmp.path(), format).unwrap();
             f(tmp.path(), format);
         }
+    }
+
+    /// The storage counters count a mailbox's messages as `list_at` lists
+    /// them, and the bytes of every file that is there.
+    #[test]
+    fn storage_stats_disk_usage_counts_what_the_listing_lists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let raw = |id: &str| format!("Subject: {id}\r\n\r\n{id}\r\n").into_bytes();
+        for (uid, id) in [(1, "one"), (2, "two"), (3, "three")] {
+            write(root, ACCT, MBOX, uid, &raw(id), &[]).unwrap();
+        }
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, ACCT, MBOX, 1, &raw("one"), &[]).unwrap();
+        write(root, ACCT, MBOX, 4, &raw("four"), &[]).unwrap();
+        // A record that will not parse: its uid's Maildir file is the message.
+        let dir = mailbox_dir(root, ACCT, MBOX);
+        fs::write(dir.join("jmap/3.json"), b"{not json").unwrap();
+
+        let usage = disk_usage(std::slice::from_ref(&dir));
+        assert_eq!(usage.messages as usize, list_at(&dir).unwrap().len());
+        assert_eq!(usage.messages, 4);
+        let len = |p: PathBuf| fs::metadata(p).unwrap().len();
+        let files: u64 = ["one", "two", "three"].iter().map(|id| raw(id).len() as u64).sum();
+        let records = len(dir.join("jmap/1.json")) + len(dir.join("jmap/4.json")) + 9;
+        let blobs = (raw("one").len() + raw("four").len()) as u64;
+        assert_eq!(usage.bytes, files + records + blobs);
+        assert_eq!(disk_usage(&[root.join("Maildir/acct/Nope")]), DiskUsage::default());
     }
 
     /// The `Entry.name` of `uid`'s copy in `format` under the flag `letters`.

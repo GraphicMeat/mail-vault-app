@@ -8,13 +8,14 @@
 //!   `storageFormat` row, the target: from then on every writer writes the
 //!   target format, and readers read both. It also writes `storageMigration`,
 //!   the job id. That row is set while a job runs or is paused, and emptied
-//!   when the job ends (done, cancelled or failed): a vault move is refused
-//!   while it is set (Task 10).
+//!   when the job ends (done, cancelled or failed). A vault move is refused
+//!   while a job runs or is paused (`move_blocker`), never by the row alone.
 //! - **Journal.** `<app data>/format_migrations/<jobId>.json`, written
 //!   atomically. It names the vault it belongs to, so a journal another vault
 //!   left is never shown. A done job's journal is removed. A cancelled or
 //!   failed one stays, so Settings can offer Resume and Convert back, until
-//!   the next conversion of the vault replaces it.
+//!   the next conversion of the vault replaces it; a vault move takes it
+//!   along (`follow_move`).
 //! - **Control.** Pause holds the worker where it stands, and resume wakes
 //!   it. With no live worker (after a restart, a cancel or a failure), resume
 //!   starts a new one from the journal. Cancel ends the worker. Nothing is
@@ -77,7 +78,10 @@ const E_FORMAT_CHANGED: &str = "E_FORMAT_CHANGED";
 
 /// The vault marker row naming the job of a conversion in progress: set
 /// while one runs or is paused, the empty string when none is.
-pub(crate) const MIGRATION_KEY: &str = "storageMigration";
+pub(crate) const MIGRATION_KEY: &str = message_store::MIGRATION_KEY;
+/// A vault move refused while a conversion of the vault is in progress; the
+/// job id follows.
+pub const E_FORMAT_MOVE_BLOCKED: &str = "E_FORMAT_MOVE_BLOCKED";
 /// `<vault>/retired/format-<stamp>/`: where a retire-mode conversion sets the
 /// old files aside (Task 9), and what Settings sums and deletes.
 pub(crate) const RETIRED_DIR: &str = "retired";
@@ -492,6 +496,37 @@ pub(crate) fn get(state: &DaemonState, root: &Path) -> Value {
         None => pending_journal(&state.app_dir, root).map_or(Value::Null, |j| stopped_view(&j)),
     };
     json!({"format": format, "migration": migration})
+}
+
+/// The conversion that stops a move of the vault at `root`
+/// (`vault_move_to`): a job live in this daemon, or this vault's journal
+/// still `running` (a quit or a crash cut it off) or `paused`. A cancelled or
+/// failed one does not: its vault is mixed and readable, and the journal
+/// follows the move (`follow_move`). Nor does the marker's `storageMigration`
+/// row alone: a row no journal here explains (another host's job on a shared
+/// vault, a reset app data dir, a marker write that failed twice) would hold
+/// the vault in place for good.
+pub(crate) fn move_blocker(state: &DaemonState, root: &Path) -> Option<String> {
+    if let Some(job) = state.format_migration.live() {
+        return Some(job.id.clone());
+    }
+    pending_journal(&state.app_dir, root).filter(|j| j.state == RUNNING || j.state == PAUSED).map(|j| j.job_id)
+}
+
+/// A committed move of the vault from `from` to `to`: its stopped
+/// conversion (`move_blocker` let no other through) now names `to`, so
+/// Settings there still offers Resume and Convert back. `to` is spelled as
+/// the daemon that opens the vault there spells its root (the path the app
+/// saved). Best effort: a journal that will not write is logged, and the
+/// vault there reads as mixed with no conversion pending.
+pub(crate) fn follow_move(app_dir: &Path, from: &Path, to: &Path) {
+    let Some(mut journal) = pending_journal(app_dir, from) else { return };
+    journal.vault = to.to_string_lossy().into_owned();
+    journal.updated_at = now_ms();
+    match write_journal(app_dir, &journal) {
+        Ok(()) => info!("[format_migration] job {}: its journal follows the vault to its new folder", journal.job_id),
+        Err(e) => warn!("[format_migration] job {}: its journal did not follow the vault: {e}", journal.job_id),
+    }
 }
 
 /// The free space a start needs: keeping the old files aside (retire mode)

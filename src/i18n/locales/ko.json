@@ -791,6 +791,7 @@
   "errors.formatNoSpace": "이전 파일을 따로 보관할 여유 공간이 부족합니다. {{size}}을(를) 확보하거나 확인 후 삭제하도록 선택하세요.",
   "errors.formatFailed": "변환이 멈췄습니다: {{reason}}. 실패한 메시지는 아무것도 삭제되지 않았습니다.",
   "errors.formatMoveBlocked": "보관함을 옮기기 전에 형식 변환을 끝내거나 취소하세요.",
+  "errors.formatMarker": "메일 저장 형식을 옮기지 못했습니다. 두 폴더 모두에 접근할 수 있는지 확인한 뒤 다시 시도하세요.",
   "errors.formatSame": "보관함이 이미 이 형식입니다.",
   "errors.formatNotFound": "일시정지, 재개 또는 취소할 변환이 없습니다.",
   "errors.formatReclaimFailed": "공간을 확보하지 못했습니다. 보관함 폴더에 접근할 수 있는지 확인한 뒤 다시 시도하세요.",

@@ -791,6 +791,7 @@
   "errors.formatNoSpace": "Não há espaço livre suficiente para guardar os arquivos antigos à parte. Libere {{size}} ou escolha excluí-los depois da verificação.",
   "errors.formatFailed": "Conversão parada: {{reason}}. Nada foi excluído das mensagens que falharam.",
   "errors.formatMoveBlocked": "Conclua ou cancele a conversão de formato antes de mover o cofre.",
+  "errors.formatMarker": "Não foi possível manter o formato em que o e-mail é armazenado. Verifique se as duas pastas estão acessíveis e tente novamente.",
   "errors.formatSame": "O cofre já está neste formato.",
   "errors.formatNotFound": "Não há nenhuma conversão para pausar, retomar ou cancelar.",
   "errors.formatReclaimFailed": "Não foi possível liberar espaço. Verifique se a pasta do cofre está acessível e tente novamente.",

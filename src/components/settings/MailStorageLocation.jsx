@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 import { t, useT  } from '../../i18n/index.js';
 import { formatCount } from '../../utils/formatCount';
+import { errorMessage } from '../../services/storageFormat';
 
 /**
  * Where the working copy of the mail lives. Default is the app's own storage;
@@ -82,7 +83,8 @@ export default function MailStorageLocation({ readOnly = false, title, descripti
           : t('settings.mailLocation.copiedFilesSomeOldFiles', { result: formatCount(result.filesCopied) })
       );
     } catch (e) {
-      setError(typeof e === 'string' ? e : e.message || 'Move failed');
+      // A move the vault's format conversion holds back answers a code.
+      setError(errorMessage(e) || 'Move failed');
     } finally {
       setBusy(null);
       setProgress(null);
@@ -124,7 +126,7 @@ export default function MailStorageLocation({ readOnly = false, title, descripti
         setNotice(t('settings.mailLocation.backDefaultStorageLocationMail'));
       }
     } catch (e) {
-      setError(typeof e === 'string' ? e : e.message || 'Reset failed');
+      setError(errorMessage(e) || 'Reset failed');
     } finally {
       setBusy(null);
       setProgress(null);

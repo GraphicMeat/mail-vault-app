@@ -20,6 +20,7 @@
 //! code already did on this failure branch). `moveId` guards against a
 //! stale or mismatched finalize ever committing a move it wasn't answering.
 
+use crate::format_migration_job;
 use crate::handlers::common::{blocking, done, str_arg};
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
@@ -42,6 +43,9 @@ macro_rules! req {
 pub struct PendingMove {
     pub move_id: String,
     pub src_root: PathBuf,
+    /// Where the copy went, spelled as the daemon that opens it will spell
+    /// its root.
+    pub dst_root: PathBuf,
     pub present: Vec<&'static str>,
 }
 
@@ -104,6 +108,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // Remember which vault is ours, at the app dir — same as
                     // the app's old `adopt()` did.
                     let _ = vault_layout::write_marker(&state.app_dir, &marker);
+                    // The folder's own marker says how its mail is stored. A
+                    // format this process read for the same root before is
+                    // of another file now.
+                    mailvault_core::message_store::invalidate_vault_format(&dir);
                     Ok(json!({"ok": true, "kind": inspection.kind, "vaultId": marker.vault_id}))
                 })
                 .await
@@ -153,21 +161,22 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         }
                     }
 
+                    // A conversion in progress writes the vault message by
+                    // message; a stopped one is no job and follows the move.
+                    if let Some(job_id) = format_migration_job::move_blocker(&state, &src_root) {
+                        return Err(format!("{}: {job_id}", format_migration_job::E_FORMAT_MOVE_BLOCKED));
+                    }
+
                     let events = state.events.clone();
                     let (present, copied, bytes) = vault_ops::copy_and_verify(&src_root, &dst_root, &|p| {
                         events.emit("vault-move-progress", serde_json::to_value(&p).unwrap_or_default());
                     })?;
 
-                    let marker = vault_layout::read_marker(&dst_root).unwrap_or(vault_layout::VaultMarker {
-                        app: "mailvault".into(),
-                        vault_id: vault_layout::new_vault_id(),
-                        created_at: vault_layout::now_millis(),
-                    });
-                    vault_layout::write_marker(&dst_root, &marker)?;
+                    vault_ops::carry_marker(&src_root, &dst_root)?;
 
                     let move_id = uuid::Uuid::new_v4().to_string();
                     *state.pending_move.lock().unwrap_or_else(|p| p.into_inner()) =
-                        Some(PendingMove { move_id: move_id.clone(), src_root, present });
+                        Some(PendingMove { move_id: move_id.clone(), src_root, dst_root: dst_root.clone(), present });
 
                     Ok(json!({
                         "moveId": move_id,
@@ -205,6 +214,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     if !commit {
                         return Ok(json!({"sourceRemoved": false}));
                     }
+                    format_migration_job::follow_move(&state.app_dir, &pending.src_root, &pending.dst_root);
                     let source_removed = vault_ops::remove_sources(&pending.src_root, &pending.present);
                     Ok(json!({"sourceRemoved": source_removed}))
                 })
@@ -386,6 +396,194 @@ mod tests {
         let fin = route(&state, "vault_move_finalize", &json!({"moveId": "x", "commit": true}), json!(1)).await.unwrap();
         assert!(fin.error.is_some());
         let _ = std::fs::remove_dir_all(&app);
+    }
+
+    // ── Task 10: the storage format and its conversion on a move ──
+
+    use mailvault_core::message_store::{self, Format};
+    use std::path::Path;
+
+    /// A conversion journal of the vault at `root`, as `format_migration_job` writes one.
+    fn journal(app: &Path, root: &Path, id: &str, state: &str) {
+        let dir = app.join("format_migrations");
+        std::fs::create_dir_all(&dir).unwrap();
+        let j = json!({"version": 1, "jobId": id, "vault": root.to_string_lossy(), "to": "jmap", "oldFiles": "retire",
+                       "stamp": "20261012-101500", "mailboxes": [], "done": 3, "total": 9, "failed": [], "state": state, "updatedAt": 1});
+        std::fs::write(dir.join(format!("{id}.json")), j.to_string()).unwrap();
+    }
+
+    fn journal_vault(app: &Path, id: &str) -> Value {
+        let raw = std::fs::read(app.join("format_migrations").join(format!("{id}.json"))).unwrap();
+        serde_json::from_slice::<Value>(&raw).unwrap()["vault"].clone()
+    }
+
+    /// A Maildir vault of one message at `src`.
+    fn one_message(src: &Path) {
+        std::fs::create_dir_all(src.join("Maildir")).unwrap();
+        std::fs::write(src.join(format!("Maildir/1{INFO_PREFIX}S.eml")), b"hello").unwrap();
+    }
+
+    async fn move_to(state: &Arc<DaemonState>, dst: &Path) -> RpcResponse {
+        route(state, "vault_move_to", &json!({"path": dst.to_string_lossy()}), json!(1)).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn vault_move_to_is_refused_while_a_conversion_is_paused_or_was_cut_off() {
+        let (app, src, dst) = (scratch("held-app"), scratch("held-src"), scratch("held-dst"));
+        one_message(&src);
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        let id = "3f1e0c1a-0000-4000-8000-00000000000a";
+        vault_layout::write_marker_value(&src, "storageMigration", id).unwrap();
+        // Paused by the user, or running when a quit or a crash cut it off.
+        for held in ["paused", "running"] {
+            journal(&app, &src, id, held);
+            let refused = move_to(&state, &dst).await.error.expect("refused").message;
+            assert_eq!(refused, format!("E_FORMAT_MOVE_BLOCKED: {id}"), "{held}");
+            assert!(!dst.join("Maildir").exists(), "nothing copied ({held})");
+            assert!(state.pending_move.lock().unwrap().is_none());
+        }
+        for dir in [app, src, dst] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_move_to_waits_for_a_live_conversion_and_goes_once_it_is_cancelled() {
+        let (app, src, dst) = (scratch("live-app"), scratch("live-src"), scratch("live-dst"));
+        one_message(&src);
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        crate::format_migration_job::faults(&state).hold = true;
+        let call = |method: &'static str, params: Value| {
+            let state = Arc::clone(&state);
+            async move { crate::handlers::storage_format::route(&state, method, &params, json!(1)).await.unwrap() }
+        };
+        let started = call("storage_format_convert", json!({"to": "jmap", "oldFiles": "retire"})).await;
+        let id = started.result.expect("started")["jobId"].as_str().unwrap().to_string();
+        assert_eq!(move_to(&state, &dst).await.error.expect("refused").message, format!("E_FORMAT_MOVE_BLOCKED: {id}"));
+        assert!(!dst.join("Maildir").exists());
+
+        call("storage_format_cancel", json!({})).await.result.expect("cancelled");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let got = call("storage_format_get", json!({})).await.result.unwrap();
+            if got["migration"]["state"] == "cancelled" {
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline, "the job never ended: {got}");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let moved = move_to(&state, &dst).await;
+        assert!(moved.result.is_some(), "a cancelled conversion is no job: {:?}", moved.error.map(|e| e.message));
+        assert_eq!(vault_layout::read_marker_value(&dst, "storageFormat").as_deref(), Some("jmap"), "the target format came along");
+        for dir in [app, src, dst] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// Another host's job on a shared vault, a reset app data dir or a marker
+    /// write that failed twice leaves a job row no journal here explains.
+    #[tokio::test]
+    async fn vault_move_to_is_not_held_by_a_job_row_alone() {
+        let (app, src, dst) = (scratch("row-app"), scratch("row-src"), scratch("row-dst"));
+        one_message(&src);
+        vault_layout::write_marker_value(&src, "storageMigration", "3f1e0c1a-0000-4000-8000-00000000000b").unwrap();
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        let moved = move_to(&state, &dst).await;
+        assert!(moved.result.is_some(), "{:?}", moved.error.map(|e| e.message));
+        assert!(dst.join(format!("Maildir/1{INFO_PREFIX}S.eml")).exists());
+        assert_eq!(vault_layout::read_marker_value(&dst, "storageMigration").as_deref(), Some(""), "the copy names no job");
+        for dir in [app, src, dst] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_move_takes_a_stopped_conversion_along_when_it_commits() {
+        let (app, src, stray, dst) = (scratch("stopped-app"), scratch("stopped-src"), scratch("stopped-stray"), scratch("stopped-dst"));
+        one_message(&src);
+        message_store::set_vault_format(&src, Format::Jmap).unwrap();
+        vault_layout::write_marker_value(&src, "storageMigration", "").unwrap();
+        let id = "3f1e0c1a-0000-4000-8000-00000000000c";
+        let other = "3f1e0c1a-0000-4000-8000-00000000000d";
+        journal(&app, &src, id, "cancelled");
+        journal(&app, Path::new("/some/other/vault"), other, "failed");
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        let finalize = |move_id: String, commit: bool| {
+            let state = Arc::clone(&state);
+            async move { route(&state, "vault_move_finalize", &json!({"moveId": move_id, "commit": commit}), json!(2)).await.unwrap() }
+        };
+
+        // An aborted move leaves it with the vault it stayed in.
+        let move_id = move_to(&state, &stray).await.result.expect("copied")["moveId"].as_str().unwrap().to_string();
+        finalize(move_id, false).await.result.expect("aborted");
+        assert_eq!(journal_vault(&app, id), json!(src.to_string_lossy()));
+
+        let move_id = move_to(&state, &dst).await.result.expect("copied")["moveId"].as_str().unwrap().to_string();
+        crate::custody::close(&state);
+        assert_eq!(finalize(move_id, true).await.result.expect("committed")["sourceRemoved"], json!(true));
+        assert_eq!(journal_vault(&app, id), json!(dst.to_string_lossy()), "it names the new folder");
+        assert_eq!(journal_vault(&app, other), json!("/some/other/vault"), "another vault's is left alone");
+
+        // The daemon that opens the vault there offers it again.
+        let next = DaemonState::for_test(dst.clone(), app.clone(), true);
+        let got = crate::format_migration_job::get(&next, &dst);
+        assert_eq!(got["format"], json!("jmap"));
+        assert_eq!((got["migration"]["jobId"].clone(), got["migration"]["state"].clone()), (json!(id), json!("cancelled")), "{got}");
+        crate::custody::close(&next);
+        for dir in [app, src, stray, dst] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_move_to_carries_the_storage_format_and_drops_a_cached_one() {
+        let (app, src, dst) = (scratch("format-app"), scratch("format-src"), scratch("format-dst"));
+        message_store::set_vault_format(&src, Format::Jmap).unwrap();
+        message_store::write(&src, "acct", "INBOX", 4, b"Subject: four\r\n\r\nfour\r\n", &[]).unwrap();
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        // This process asked about the destination before the move.
+        assert_eq!(message_store::vault_format(&dst), Format::Maildir);
+
+        let moved = move_to(&state, &dst).await;
+        assert!(moved.result.is_some(), "{:?}", moved.error.map(|e| e.message));
+        assert_eq!(message_store::vault_format(&dst), Format::Jmap);
+        assert_eq!(message_store::read_raw(&dst, "acct", "INBOX", 4).unwrap().as_deref(), Some(&b"Subject: four\r\n\r\nfour\r\n"[..]));
+        for dir in [app, src, dst] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// The app data dir keeps its marker when the vault moves out of it.
+    #[tokio::test]
+    async fn vault_move_to_default_writes_maildir_over_a_stale_jmap_row() {
+        let (app, src) = (scratch("back-app"), scratch("back-src"));
+        one_message(&src);
+        vault_layout::write_marker_value(&app, "storageFormat", "jmap").unwrap();
+        vault_layout::write_marker_value(&app, "storageMigration", "3f1e0c1a-0000-4000-8000-00000000000e").unwrap();
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        let moved = route(&state, "vault_move_to_default", &json!({}), json!(1)).await.unwrap();
+        assert!(moved.result.is_some(), "{:?}", moved.error.map(|e| e.message));
+        assert_eq!(vault_layout::read_marker_value(&app, "storageFormat").as_deref(), Some("maildir"));
+        assert_eq!(vault_layout::read_marker_value(&app, "storageMigration").as_deref(), Some(""));
+        for dir in [app, src] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_adopt_rereads_a_storage_format_this_process_cached() {
+        let (app, target) = (scratch("adopt-format-app"), scratch("adopt-format"));
+        std::fs::create_dir_all(target.join("Maildir")).unwrap();
+        assert_eq!(message_store::vault_format(&target), Format::Maildir, "asked before: no marker");
+        // Converted elsewhere since: the folder's marker says jmap now.
+        vault_layout::write_marker_value(&target, "storageFormat", "jmap").unwrap();
+        let state = DaemonState::for_test(app.clone(), app.clone(), true);
+        let adopted = route(&state, "vault_adopt", &json!({"path": target.to_string_lossy()}), json!(1)).await.unwrap();
+        assert!(adopted.result.is_some(), "{:?}", adopted.error.map(|e| e.message));
+        assert_eq!(message_store::vault_format(&target), Format::Jmap);
+        for dir in [app, target] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
     }
 
     #[tokio::test]
