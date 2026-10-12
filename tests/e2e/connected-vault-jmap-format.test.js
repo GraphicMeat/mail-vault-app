@@ -2,10 +2,11 @@
  * E2E: the vault's message storage format, converted both ways through the
  * real app (Plan B Task 11).
  *
- * Seeded: 40 messages of luke's mock IMAP INBOX archived into the vault, 80 in
- * an MBOX import kept as a folder of luke's own ("On this computer"), and a
- * two-message canary folder imported under yoda. 122 messages over two
- * accounts; the job converts the whole vault, so whatever else the app cached
+ * Seeded: luke's mock IMAP INBOX archived into the vault (uids 1..40; fewer
+ * when an earlier spec of the same wdio run deleted some from the shared
+ * mock), 80 in an MBOX import kept as a folder of luke's own ("On this
+ * computer"), and a two-message canary folder imported under yoda. 122
+ * messages over two accounts when the INBOX is whole; the job converts the whole vault, so whatever else the app cached
  * by the time Convert is pressed (bodies of opened folders) converts too, and
  * every count below is scoped to the seeded folders.
  *
@@ -369,6 +370,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
   let deletedSeed = null;
   let mboxDir = null; // where this spec writes its .mbox files
   let jmapSets = null; // uid sets of the seeded folders, in JMAP, before the move
+  let seededTotal = 0; // messages the conversion must cover: the archived INBOX + SEEDS + CANARIES
 
   const FOLDERS = ['inbox', 'local', 'canary'];
   const folderOf = (which, at = root) => {
@@ -513,12 +515,14 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
     for (const dir of work) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('seeds 122 messages over two accounts: luke\'s IMAP INBOX archived, an MBOX folder, a canary folder', async function () {
+  it('seeds the vault over two accounts: luke\'s IMAP INBOX archived, an MBOX folder, a canary folder', async function () {
     // luke's INBOX, archived into the vault: what an IMAP account's vault
     // folder is. "Luke message 1..40" are uids 1..40 (mockImap.js `mailbox`,
     // uidStart 1). Opening the folder first fills its header cache, which the
     // conversion's rehome gate reads (Plan B 7b D7).
     await switchToFolder(LUKE, 'INBOX');
+    // The mock IMAP servers live for the whole wdio run, so an earlier spec may
+    // have deleted some of these: the archive then skips them ("not found").
     const uids = Array.from({ length: 40 }, (_, k) => k + 1);
     const archived = await must('archive_emails', invoke('daemon_rpc', {
       method: 'archive_emails',
@@ -575,7 +579,12 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
       if (m) seedUid.set(Number(m[1]), f.uid);
     }
     const sets = seededSets();
-    expect(uids.every((uid) => sets.inbox.includes(uid))).toBe(true);
+    // Every uid asked for was archived or reported missing on the server: none lost on the way.
+    expect(archived.completed + archived.errors).toBe(uids.length);
+    if (archived.errors) expect(String(archived.lastError)).toMatch(/not found/i);
+    expect(archived.completed).toBeGreaterThanOrEqual(20);
+    expect(sets.inbox.length).toBeGreaterThanOrEqual(archived.completed);
+    seededTotal = sets.inbox.length + SEEDS + CANARIES;
     expect(sets.local.length).toBe(SEEDS);
     expect(sets.canary.length).toBe(CANARIES);
     expect(seedUid.size).toBe(SEEDS);
@@ -586,7 +595,7 @@ describe('Vault storage format: Maildir to JMAP and back, through the app', func
   it('converts to JMAP: the chip counts, opens stay under 300 ms, a flag lands, Pause and Resume steer it', async function () {
     await startConversion(EN.jmap);
     const first = await waitChipRunning(1, 'the chip never showed the conversion running');
-    expect(first.total).toBeGreaterThanOrEqual(122);
+    expect(first.total).toBeGreaterThanOrEqual(seededTotal);
     expect(first.controls).toEqual(expect.arrayContaining(['format-migration-pause', 'format-migration-cancel']));
 
     // The UI stays responsive while it runs.
