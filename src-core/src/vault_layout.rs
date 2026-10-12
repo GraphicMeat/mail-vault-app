@@ -13,7 +13,7 @@ use std::path::Path;
 
 /// Mail-data directories that live in the vault. Everything else under the app
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
-pub const VAULT_DIRS: [&str; 10] = [
+pub const VAULT_DIRS: [&str; 11] = [
     "Maildir",          // the messages
     "message_blobs",    // the JMAP storage format's raw message bytes (`jmap_store::blobs`)
     "retired",          // old files a storage format conversion kept aside (`retired/format-<stamp>/`), until the user deletes them
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn a_move_carries_the_contacts_dir() {
         assert!(VAULT_DIRS.contains(&"Contacts"), "a vault move must carry the contacts.vcf safety copy");
-        assert_eq!(VAULT_DIRS.len(), 9);
+        assert_eq!(VAULT_DIRS.len(), 11);
     }
 
     #[test]
