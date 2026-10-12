@@ -53,6 +53,11 @@ export default function MailStorageLocation({ readOnly = false, title, descripti
   }, [loadStatus]);
 
   const pickFolder = async (title) => {
+    // WebDriver cannot drive the native folder panel, so under VITE_E2E a spec
+    // names the folder (mboxUpload's `__MV_MBOX_SOURCE__` seam). The flag is
+    // compiled out of a shipped build.
+    const injected = import.meta.env.VITE_E2E === '1' ? window.__MV_VAULT_FOLDER__ : null;
+    if (injected) return injected;
     const { open } = await import('@tauri-apps/plugin-dialog');
     return open({ directory: true, title });
   };

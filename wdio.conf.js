@@ -600,6 +600,11 @@ export const config = {
           // pass over a seeded backlog lasts long enough to see and to interrupt.
           // Vaults under 500 files never pause. Release builds ignore it.
           MAILVAULT_E2E_INDEX_BATCH_PAUSE_MS: '4000',
+          // Debug daemons wait this long before each message a storage format
+          // conversion converts, so connected-vault-jmap-format can open, flag,
+          // pause and kill while a run of about 120 messages is still going.
+          // Only that spec converts. Release builds ignore it.
+          MAILVAULT_E2E_FORMAT_MESSAGE_PAUSE_MS: '80',
         },
       });
 

@@ -995,6 +995,54 @@ impl Runner {
     }
 }
 
+// ── e2e pacing ──────────────────────────────────────────────────────────────
+
+/// Test seam for e2e only: how long the worker waits before each message
+/// (`MAILVAULT_E2E_FORMAT_MESSAGE_PAUSE_MS`, set by wdio.conf.js), so a spec
+/// can open, flag, pause and kill while a run of a hundred messages is still
+/// going; unpaced, a debug daemon converts them in well under a second. Pure,
+/// so the unit test never touches the process environment. Its only non-test
+/// caller is `e2e_pause_before_message`'s `cfg(debug_assertions)` arm, so it
+/// is gated the same way (search_index.rs `batch_pause` has the reason).
+#[cfg(any(debug_assertions, test))]
+pub(crate) fn message_pause(setting: Option<&str>) -> Option<Duration> {
+    let ms: u64 = setting?.trim().parse().ok()?;
+    if ms == 0 {
+        return None;
+    }
+    Some(Duration::from_millis(ms.min(5_000)))
+}
+
+/// Called between two messages, outside every lock and outside the vault
+/// gate (`convert_mailbox`'s retry loop, so a retried message waits again).
+#[cfg(debug_assertions)]
+fn e2e_pause_before_message() {
+    let setting = std::env::var("MAILVAULT_E2E_FORMAT_MESSAGE_PAUSE_MS").ok();
+    if let Some(pause) = message_pause(setting.as_deref()) {
+        std::thread::sleep(pause);
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn e2e_pause_before_message() {}
+
+#[cfg(test)]
+mod e2e_pacing_tests {
+    use super::message_pause;
+    use std::time::Duration;
+
+    #[test]
+    fn the_e2e_message_pause_reads_a_positive_capped_setting_only() {
+        assert_eq!(message_pause(Some("80")), Some(Duration::from_millis(80)));
+        assert_eq!(message_pause(Some(" 80 ")), Some(Duration::from_millis(80)));
+        assert_eq!(message_pause(Some("0")), None, "0 is unpaced");
+        assert_eq!(message_pause(None), None, "unset is unpaced");
+        assert_eq!(message_pause(Some("soon")), None);
+        assert_eq!(message_pause(Some("-5")), None);
+        assert_eq!(message_pause(Some("999999")), Some(Duration::from_secs(5)), "capped");
+    }
+}
+
 // ── the conversion ──────────────────────────────────────────────────────────
 
 /// The conversion: every mailbox of the vault, every uid its old format
@@ -1281,6 +1329,7 @@ impl Runner {
                     if let Some(ended) = self.between_messages() {
                         return Err(ended);
                     }
+                    e2e_pause_before_message();
                     crate::search_index::yield_to_foreground(&self.state.search_index);
                     let outcome = self.convert_message(account, dir, uid, dates.get(&uid).map(String::as_str));
                     // Short of converted while the vault was out of reach, the
