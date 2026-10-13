@@ -538,8 +538,8 @@ describe('Blitz reader on the real app', function () {
       yellow: centre(yellow, dpr),
       cyan: centre(cyan, dpr),
       purple: centre(purple, dpr),
-      // On the heading's own text: inside the document at any pane width (the
-      // document is the pane wide, 386 px on the Windows box), on content that is not a link.
+      // Inside the document at any pane width (it is the pane wide, 386 px on the
+      // Windows box), above the table and left of every block link: content, not a link.
       nonLink: { x: 60, y: 26 },
     };
     log('located', located);
