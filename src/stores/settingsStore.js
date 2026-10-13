@@ -115,10 +115,10 @@ const normalizeExplorerDateDepth = value => value === 'day' ? 'day' : 'month';
 // What a two-finger trackpad swipe on a message row does, per side.
 export const SWIPE_ACTIONS = ['archive', 'delete', 'toggleRead', 'star', 'snooze', 'move', 'none'];
 const normalizeSwipeAction = (value, fallback) => SWIPE_ACTIONS.includes(value) ? value : fallback;
-// Lines of message preview under each list row: 0 (off, the list as it always
-// was), 1, 2 or 3. Anything else reads as off.
 // 'web' is the iframe reader; 'blitz' is the optional native renderer module.
 export const normalizeEmailRenderer = v => (v === 'blitz' ? 'blitz' : 'web');
+// Lines of message preview under each list row: 0 (off, the list as it always
+// was), 1, 2 or 3. Anything else reads as off.
 export const normalizeListPreviewLines = value => [0, 1, 2, 3].includes(value) ? value : 0;
 // The social export's last-used style. Never the redact choice (on every time
 // the panel opens) and never an own image (in memory only): a stored image
