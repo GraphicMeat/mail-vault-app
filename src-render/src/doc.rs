@@ -166,6 +166,7 @@ impl RenderDoc {
         if doc.tree().len() > MAX_NODES || exceeds_depth(&doc) {
             return Err(OpenError::TooComplex);
         }
+        strip_svg_references(&mut doc);
         // Everything blitz asked for while parsing is decided here: images are
         // queued, stylesheets, fonts, @import and frames are answered empty.
         apply(&mut doc, net.as_ref());
@@ -329,6 +330,40 @@ fn exceeds_depth(doc: &HtmlDocument) -> bool {
         }
     }
     false
+}
+
+const SVG_NS: &str = "http://www.w3.org/2000/svg";
+
+/// Make inline SVG unable to name a resource. usvg, which draws `<svg>` for
+/// blitz-dom, treats any `href` that is not a `data:` URL as a local file path
+/// (and a UNC path on Windows is a network share), so a mail could read a file
+/// of this machine into the picture. Runs after parsing and before layout, the
+/// moment blitz-dom serialises each `<svg>` for usvg. It removes every `image`
+/// and `feImage` element and every `href` / `xlink:href` on an SVG element that
+/// is not an in-document `#id` reference. Flat pass over the node slab: no
+/// recursion, whatever the nesting. (The HTML parser turns `<image>` outside
+/// SVG into `<img>`, which goes through `BridgeNet` like any other image.)
+fn strip_svg_references(doc: &mut HtmlDocument) {
+    let ids: Vec<NodeId> = doc.tree().iter().map(|(id, _)| id).collect();
+    let mut images = Vec::new();
+    for id in ids {
+        let Some(el) = doc.get_node_mut(id).and_then(|n| n.element_data_mut()) else { continue };
+        let tag: &str = &el.name.local;
+        if tag.eq_ignore_ascii_case("image") || tag.eq_ignore_ascii_case("feimage") {
+            images.push(id);
+        } else if &*el.name.ns == SVG_NS {
+            el.attrs.retain(|a| &*a.name.local != "href" || a.value.starts_with('#'));
+        }
+    }
+    if !images.is_empty() {
+        let mut edit = doc.mutate();
+        for id in images {
+            // An image inside an image went with its parent.
+            if edit.doc.get_node(id).is_some() {
+                edit.remove_and_drop_node(id);
+            }
+        }
+    }
 }
 
 fn tile_px(opts: &RenderOptions) -> (u32, u32) {

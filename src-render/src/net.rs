@@ -34,8 +34,8 @@ use std::sync::{Arc, Mutex};
 pub const MAX_IMAGE_PIXELS: u64 = 16_000_000;
 /// All images of one document together may not exceed this many pixels.
 pub const MAX_DOC_IMAGE_PIXELS: u64 = 64_000_000;
-/// Bytes whose header declares no size (SVG, CSS, fonts, anything unrecognised)
-/// pass through only up to this length.
+/// Bytes whose header declares no size (CSS, fonts, anything unrecognised; SVG
+/// and gzip never pass, see `reaches_usvg`) pass through only up to this length.
 pub const MAX_UNSIZED_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -132,7 +132,12 @@ impl BridgeNet {
     /// May these bytes go on to a decoder? Reads only the header: an image
     /// that declares more than MAX_IMAGE_PIXELS, or would push the document
     /// past MAX_DOC_IMAGE_PIXELS, is refused before anything is decoded.
+    /// SVG and gzip are refused outright, whatever the URL or declared type
+    /// said: see `reaches_usvg`.
     fn admit(&self, bytes: &[u8]) -> bool {
+        if reaches_usvg(bytes) {
+            return false;
+        }
         match imagesize::blob_size(bytes) {
             Ok(size) => {
                 let px = (size.width as u64).saturating_mul(size.height as u64);
@@ -173,6 +178,24 @@ impl NetProvider for BridgeNet {
             _ => handler.bytes(url, Bytes::new()),
         }
     }
+}
+
+/// Would blitz-dom hand these bytes to usvg? Its image handler tries the raster
+/// decoders and then falls back to usvg for anything they reject, whatever the
+/// URL or the declared type said. usvg resolves every non-`data:` image href of
+/// an SVG as a local file path (a UNC share on Windows), so SVG bytes would let
+/// a mail read the machine's files. usvg also inflates gzip (svgz) first. So
+/// refuse gzip, and refuse any markup that mentions `svg` (an XML prolog, a
+/// comment, a doctype, a BOM, whitespace or a namespace prefix may all come
+/// before the root element). Raster formats begin with binary magic, never `<`.
+/// The caller runs this before anything else, on every admitted byte string.
+fn reaches_usvg(bytes: &[u8]) -> bool {
+    if bytes.starts_with(&[0x1f, 0x8b]) {
+        return true;
+    }
+    let body = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF][..]).unwrap_or(bytes);
+    let body = &body[body.iter().position(|b| !b.is_ascii_whitespace()).unwrap_or(body.len())..];
+    body.first() == Some(&b'<') && body.windows(3).any(|w| w.eq_ignore_ascii_case(b"svg"))
 }
 
 /// The resolved `src` of every `<img>`: the urls blitz fetches as images while parsing.
