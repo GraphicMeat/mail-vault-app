@@ -39,7 +39,8 @@ import { patchEverywhere } from '../stores/messageRows';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { CloseViewerButton } from './email/CloseViewerButton';
 import { Button } from './ui/Button';
-import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
+import { scanEmailLinks } from '../utils/linkSafety';
+import { activateEmailLink, openExternalUrl } from '../utils/emailLinkActivation';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
@@ -503,31 +504,13 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     const handleClick = (e) => {
       const link = e.target.closest('a');
       if (!link || !link.href) return;
-      // An address in the body composes here instead of waking the OS mail
-      // client, which is not the vault this message lives in.
-      if (link.href.startsWith('mailto:')) {
-        e.preventDefault();
-        e.stopPropagation();
-        openMailtoCompose(link.href, selectedEmail?._accountId);
-        return;
-      }
-      if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      // Check link safety before opening
-      if (linkSafetyEnabled && linkSafetyClickConfirm) {
-        const alert = checkLinkAlert(link);
-        if (alert) {
-          setLinkSafetyAlert(alert);
-          return;
-        }
-      }
-      const url = link.href;
-      import('@tauri-apps/plugin-shell').then(({ open }) => {
-        open(url);
-      }).catch(() => {
-        window.open(url, '_blank');
-      });
+      // The rule for what a click does lives in one shared util so the iframe
+      // and the Blitz reader cannot drift.
+      const result = activateEmailLink(
+        { href: link.href, alert: link.getAttribute('data-link-alert'), title: link.getAttribute('title'), text: link.textContent },
+        { accountId: selectedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm, openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl },
+      );
+      if (result !== 'ignored') { e.preventDefault(); e.stopPropagation(); }
     };
 
     // Inline images open in the system viewer and save like an attachment.
