@@ -220,6 +220,9 @@ function EmailListComponent({ stacked = false }) {
   // Why the open view could not be worked out (the index is rebuilding, off
   // or closed), or null. Said in place of the rows, not as an empty list.
   const viewUnavailable = useViewStore(s => (s.activeViewId ? s.unavailableReason : null));
+  // A view runs on the daemon. Until its rows land, everything the list holds
+  // belongs to the folder behind it, so none of that may be drawn as the view.
+  const viewLoading = useViewStore(s => !!s.activeViewId && s.loading);
   const closeView = useViewStore(s => s.closeView);
   const searchResults = useSearchStore(s => s.searchResults);
   const searchHasAttachments = useSearchStore(s => !!s.searchFilters?.hasAttachments);
@@ -1214,11 +1217,26 @@ function EmailListComponent({ stacked = false }) {
     : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes')
       : activeMailbox === 'INBOX' ? t('sidebar.inbox')
         : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox);
-  const mailboxSummary = formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly });
+  const mailboxSummary = viewLoading ? '' : formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly });
   const mailboxScopeLabel = mailboxScope && t('list.acrossFolders', { count: mailboxScope.paths.length });
   const vaultShareLabel = vaultShare && t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
     inVault: formatCount(vaultShare.inVault), loaded: formatCount(vaultShare.loaded),
   });
+
+  // Placeholders while a folder switch or a view is still loading.
+  const skeletonRows = (
+    <div data-testid="email-list-skeleton" className="flex flex-col">
+      {Array.from({ length: 12 }, (_, i) => (
+        <div key={i} style={{ height: ROW_HEIGHT }} className="flex items-center gap-3 px-4 border-b border-mail-border animate-pulse">
+          <div className="w-4 h-4 rounded bg-mail-border/50" />
+          <div className="w-4 h-4 rounded bg-mail-border/30" />
+          <div className="w-32 h-3.5 rounded bg-mail-border/40" />
+          <div className="flex-1 h-3.5 rounded bg-mail-border/30" />
+          <div className="w-16 h-3 rounded bg-mail-border/20" />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div data-stacked={stacked || undefined} className="mail-list flex flex-col h-full min-h-0 overflow-hidden">
@@ -1228,7 +1246,7 @@ function EmailListComponent({ stacked = false }) {
             <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text truncate" title={mailboxTitle}>
               {mailboxTitle}
             </h2>
-            <MailboxHeaderSummary summary={mailboxSummary} scope={mailboxScopeLabel} dateRange={dateRange} searchActive={searchActive} />
+            <MailboxHeaderSummary summary={mailboxSummary} scope={mailboxScopeLabel} dateRange={dateRange} searchActive={searchActive || viewLoading} />
           </div>
           {activeView?.def?.hasAttachments ? <ViewAttachmentsDownload view={activeView} />
             : searchActive && searchHasAttachments && <ViewAttachmentsDownload rows={searchResults} name={t('list.searchResults')} />}
@@ -1246,7 +1264,7 @@ function EmailListComponent({ stacked = false }) {
             <Search size={16} /><span>{t('workspace.search')}</span>
           </button>
         </div>
-        <MailboxCustodyStatus vaultShare={vaultShare} vaultShareLabel={vaultShareLabel} searchActive={searchActive} />
+        <MailboxCustodyStatus vaultShare={vaultShare} vaultShareLabel={vaultShareLabel} searchActive={searchActive || viewLoading} />
       </div>
       <div className="mail-list-toolbar" role="toolbar" aria-label={t('workspace.listControls')}>
         {/* Searching has already narrowed the list to the hits, so "select
@@ -1349,6 +1367,8 @@ function EmailListComponent({ stacked = false }) {
         )}
         {activeView && viewUnavailable ? (
           <ViewUnavailableState reason={viewUnavailable} />
+        ) : viewLoading ? (
+          skeletonRows
         ) : isExplorer ? (
           <ExplorerView emails={searchActive ? searchResults : sortedEmails}
             conversationEmails={mergedEmails || (searchActive ? searchResults : sortedEmails)}
@@ -1378,18 +1398,7 @@ function EmailListComponent({ stacked = false }) {
                 derivedFrom={searchActive ? searchResults : sortedEmails} />;
             }} />
         ) : (loading && rowCount === 0) || skeletonOn ? (
-          /* Skeleton rows — lightweight placeholders during transitions */
-          <div className="flex flex-col">
-            {Array.from({ length: 12 }, (_, i) => (
-              <div key={i} style={{ height: ROW_HEIGHT }} className="flex items-center gap-3 px-4 border-b border-mail-border animate-pulse">
-                <div className="w-4 h-4 rounded bg-mail-border/50" />
-                <div className="w-4 h-4 rounded bg-mail-border/30" />
-                <div className="w-32 h-3.5 rounded bg-mail-border/40" />
-                <div className="flex-1 h-3.5 rounded bg-mail-border/30" />
-                <div className="w-16 h-3 rounded bg-mail-border/20" />
-              </div>
-            ))}
-          </div>
+          skeletonRows
         ) : rowCount === 0 ? (
           <div
             data-testid="email-list-empty-state"
@@ -1810,7 +1819,7 @@ function EmailListComponent({ stacked = false }) {
           </div>
         )}
       </div>
-      {showScrubber && !skeletonOn && (
+      {showScrubber && !skeletonOn && !viewLoading && (
         <DateScrubber scrollRef={scrollContainerRef} virtualizer={virtualizer} buckets={monthList}
           segments={scrubber.segments} onJump={scrubber.jump} loading={scrubber.jumping} headerActions={headerActions} />
       )}

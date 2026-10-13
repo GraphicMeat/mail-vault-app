@@ -1010,6 +1010,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Opening a saved view is a click the person waits on, read off the same
+    /// index lock the indexer and the sidebar's badge counts take. The badges
+    /// are bookkeeping and must not count as a click.
+    #[test]
+    fn opening_a_view_is_foreground_and_counting_the_badges_is_not() {
+        assert!(crate::search_index::is_foreground_method("views.evaluate"));
+        assert!(!crate::search_index::is_foreground_method("views.counts"));
+    }
+
     // ── The mail-dir gate ──────────────────────────────────────────────
 
     #[tokio::test]

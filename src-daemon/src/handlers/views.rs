@@ -266,6 +266,7 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
     let (date_from, date_to) = views::date_window(def, now);
     SearchRequest {
         account_id: account.account_id.clone(),
+        account_ids: Vec::new(),
         query: def.query.clone(),
         mailboxes: (!def.mailboxes.is_empty()).then(|| def.mailboxes.clone()),
         mailboxes_excluded: def
@@ -397,48 +398,68 @@ fn evaluate(
     limit: usize,
 ) -> Result<Value, String> {
     let now = now_secs();
+    // Accounts the view filters alike are one statement. Every FTS probe runs
+    // over the whole index whatever account it is for, so one statement per
+    // account paid for the same match once per account: ~0.18s each on a
+    // 19-account vault, held on the index lock a click waits on. An account
+    // whose filters differ (its own address, its own bin, its own tags) gets
+    // its own. No account named is every account: a view made before a second
+    // account was added must not empty itself when one arrives.
+    let mut batches: Vec<(SearchRequest, Vec<&Account>)> = Vec::new();
+    for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
+        let mut request = request_for(def, account, keys, now);
+        request.account_id.clear();
+        match batches.iter_mut().find(|(alike, _)| *alike == request) {
+            Some((_, group)) => group.push(account),
+            None => batches.push((request, vec![account])),
+        }
+    }
     let mut rows: Vec<Value> = Vec::new();
     let mut total = 0u64;
-    // No account named is every account: a view made before a second account
-    // was added must not empty itself when one arrives.
-    let in_scope = accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id));
-    for account in in_scope {
-        let request = request_for(def, account, keys, now);
-        match crate::search_index::search_page_reply(&state.search_index, &request)? {
+    for (mut request, group) in batches {
+        request.account_ids = group.iter().map(|account| account.account_id.clone()).collect();
+        // `views.counts` wants the totals and nothing else: no page, no row
+        // JSON per view per account only to throw it away.
+        request.limit = Some(limit);
+        let page = match crate::search_index::search_page(&state.search_index, &request)? {
             // An index that cannot answer says so. An empty list would read as
             // "nothing matches this view", which is a different statement.
             Err(reason) => return Ok(serde_json::json!({ "available": false, "reason": reason, "rows": [] })),
-            Ok(result) => {
-                total += result.page.total;
-                // `views.counts` wants the totals and nothing else. Assembling
-                // every row's JSON per view per account, on the sidebar path,
-                // only to throw it away is the 50k cliff.
-                if limit == 0 {
-                    continue;
-                }
-                let mut page = crate::search_index::assemble_rows(&result.page);
-                // The same custody proof search reads: an archived copy the
-                // server no longer holds is "local only" here too, not a row
-                // that still offers to delete itself from the server.
-                let custody = crate::custody::with_conn(state, |conn| {
-                    mailvault_core::custody::entries::entries_for_account(conn, &account.account_id)
-                })
-                .map(crate::handlers::mail_search::custody_by_vault_uid)
-                .unwrap_or_default();
-                for row in &mut page {
-                    let vault_dir = row.get("vaultDir").and_then(Value::as_str).unwrap_or("").to_owned();
-                    crate::handlers::mail_search::stamp_local_row(
-                        row,
-                        &account.account_id,
-                        &vault_dir,
-                        &account.known_mailboxes,
-                        false,
-                        &custody,
-                    );
-                }
-                overlay_server_flags(state, &account.account_id, &mut page);
-                rows.append(&mut page);
+            Ok(page) => page,
+        };
+        total += page.total;
+        for account in group {
+            let hits: Vec<_> = page.hits.iter().filter(|hit| hit.account_id == account.account_id).cloned().collect();
+            // The custody read below walks every entry the account holds.
+            if hits.is_empty() {
+                continue;
             }
+            let mut page = crate::search_index::assemble_rows(&mailvault_core::search_index::query::SearchPage {
+                hits,
+                total: 0,
+                needles: page.needles.clone(),
+            });
+            // The same custody proof search reads: an archived copy the
+            // server no longer holds is "local only" here too, not a row
+            // that still offers to delete itself from the server.
+            let custody = crate::custody::with_conn(state, |conn| {
+                mailvault_core::custody::entries::entries_for_account(conn, &account.account_id)
+            })
+            .map(crate::handlers::mail_search::custody_by_vault_uid)
+            .unwrap_or_default();
+            for row in &mut page {
+                let vault_dir = row.get("vaultDir").and_then(Value::as_str).unwrap_or("").to_owned();
+                crate::handlers::mail_search::stamp_local_row(
+                    row,
+                    &account.account_id,
+                    &vault_dir,
+                    &account.known_mailboxes,
+                    false,
+                    &custody,
+                );
+            }
+            overlay_server_flags(state, &account.account_id, &mut page);
+            rows.append(&mut page);
         }
     }
     // Newest first across every account, the way the list already reads.
@@ -674,6 +695,61 @@ mod tests {
         assert_eq!(row["uid"], 4);
         assert_eq!(row["serverDeleted"], true);
         assert_eq!(row["source"], "local-only");
+    }
+
+    /// A view over every account ran one index statement per account, each
+    /// re-running the same whole-index FTS match: ~0.18s an account on a real
+    /// 19-account vault, under the one index lock, for the sidebar's badges as
+    /// much as for the click. Accounts the view filters the same way are one
+    /// statement; only an account whose filters differ gets its own.
+    #[tokio::test]
+    async fn a_view_over_accounts_it_filters_alike_asks_the_index_once() {
+        let s = st();
+        {
+            let conn = index_db::open(&s.data_dir).unwrap();
+            let p = mailvault_core::maildir::INFO_PREFIX;
+            seed(&conn, 1, &format!("1{p}S.eml"), "Lease one", true, "<one@x.test>");
+            seed(&conn, 2, &format!("2{p}S.eml"), "Lease two", true, "<two@x.test>");
+            seed(&conn, 3, &format!("3{p}S.eml"), "Other", false, "<three@x.test>");
+            conn.execute("UPDATE messages SET account_id = 'b', date_utc = date_utc + 60 WHERE uid = 2", []).unwrap();
+            // The merge across accounts sorts by the row's own date.
+            conn.execute(
+                "UPDATE messages SET row_json = json_set(row_json, '$.date',
+                   CASE uid WHEN 2 THEN 'Tue, 08 Sep 2026 10:01:00 +0000' ELSE 'Tue, 08 Sep 2026 10:00:00 +0000' END)",
+                [],
+            )
+            .unwrap();
+            index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
+            *lock(&s.search_index.db) = Some(conn);
+        }
+        let three = json!([
+            { "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX"] },
+            { "accountId": "b", "address": "you@x.test", "knownMailboxes": ["INBOX"] },
+            { "accountId": "c", "address": "them@x.test", "knownMailboxes": ["INBOX"] }
+        ]);
+        let out = call(&s, "views.evaluate", json!({ "def": { "hasAttachments": true }, "accounts": three })).await;
+        assert_eq!(s.search_index.search_scopes.lock().unwrap().len(), 1, "one statement for three accounts");
+        let rows: Vec<(String, u64)> = out["rows"].as_array().unwrap().iter()
+            .map(|r| (r["_accountId"].as_str().unwrap().to_owned(), r["uid"].as_u64().unwrap()))
+            .collect();
+        assert_eq!(rows, vec![("b".to_owned(), 2), ("a".to_owned(), 1)], "newest first, each row its own account");
+        assert_eq!(out["total"], 2);
+
+        // "Addressed to me" names each account's own address: no longer alike.
+        s.search_index.search_scopes.lock().unwrap().clear();
+        call(&s, "views.evaluate", json!({ "def": { "toMe": true }, "accounts": three })).await;
+        assert_eq!(s.search_index.search_scopes.lock().unwrap().len(), 3);
+
+        // The badges: one statement per view, and the same total the click shows.
+        s.search_index.search_scopes.lock().unwrap().clear();
+        let total = evaluate_def(&s, &ViewDef { has_attachments: true, ..Default::default() }, &three);
+        assert_eq!(total, 2);
+        assert_eq!(s.search_index.search_scopes.lock().unwrap().len(), 1);
+    }
+
+    fn evaluate_def(s: &Arc<DaemonState>, def: &ViewDef, accounts: &Value) -> u64 {
+        let accounts: Vec<Account> = serde_json::from_value(accounts.clone()).unwrap();
+        super::evaluate(s, def, &accounts, &HashMap::new(), 0).unwrap()["total"].as_u64().unwrap()
     }
 
     async fn evaluate(s: &Arc<DaemonState>, def: Value) -> Value {

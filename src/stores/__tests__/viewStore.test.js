@@ -273,6 +273,31 @@ describe('the badge counts after a change', () => {
     expect(useViewStore.getState().counts).toEqual({ v1: 2 });
   });
 
+  // Opening a view, saving one and every tag change asked for a count of
+  // their own, past the scheduler: each one evaluates every view over every
+  // account, and they stacked on the index the next click waits on.
+  it('a direct count while one is running waits for it, and asks once more after', async () => {
+    let answer = null;
+    harness.daemonCall.mockImplementation(method => (method === 'views.counts'
+      ? new Promise(resolve => { answer = resolve; })
+      : Promise.resolve({})));
+    const first = useViewStore.getState().refreshCounts();
+    const second = useViewStore.getState().refreshCounts();
+    const third = useViewStore.getState().refreshCounts();
+    scheduleViewCountsRefresh();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(countCalls()).toHaveLength(1);
+
+    answer({ v1: 1 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(countCalls()).toHaveLength(2);
+    answer({ v1: 2 });
+    await Promise.all([first, second, third]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(countCalls()).toHaveLength(2);
+    expect(useViewStore.getState().counts).toEqual({ v1: 2 });
+  });
+
   it('asks nothing while no view is loaded', async () => {
     useViewStore.setState({ views: [] });
     scheduleViewCountsRefresh();
@@ -369,6 +394,20 @@ describe('what a view is called', () => {
     expect(second).toBe(true);
     expect(useViewStore.getState().activeViewId).toBe('v1');
     expect(useSearchStore.getState().searchResults.map(r => r.uid)).toEqual([2]);
+  });
+
+  // The list draws a skeleton while a view runs; a view closed mid-run must
+  // not leave the next mailbox behind one.
+  it('closing a view while it is still running leaves nothing loading', async () => {
+    let release;
+    harness.daemonCall.mockReturnValueOnce(new Promise(resolve => { release = resolve; }));
+    const opening = useViewStore.getState().openView(STARRED);
+    expect(useViewStore.getState().loading).toBe(true);
+    useViewStore.getState().closeView();
+    expect(useViewStore.getState().loading).toBe(false);
+    release({ available: true, rows: [row(1)], total: 1 });
+    await opening;
+    expect(useViewStore.getState().loading).toBe(false);
   });
 
   it('refreshes the counts once the view it opened has run', async () => {

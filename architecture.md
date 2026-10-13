@@ -323,6 +323,14 @@ the same shape the search's index lane produces, so the list renders them with
 no second path. The app never evaluates a view itself: a set difference against
 a partly loaded list is a guess, not a view.
 
+Accounts whose requests are equal but for the account run as one statement
+(`SearchRequest::account_ids`): every FTS probe is uncorrelated and scans the
+whole index, so a statement per account paid for the same match once per
+account, on the index lock a click waits on. `views.counts` asks with
+`limit: Some(0)`, which counts without reading a page. `views.evaluate` is a
+foreground RPC; the app runs one `views.counts` at a time and shows skeleton
+rows while a view evaluates, never the folder behind it.
+
 Two rules the definitions follow, both learned from bugs of the same shape:
 
 - **A starter stores no name.** "Needs reply" written into `views.name` would

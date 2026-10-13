@@ -24,10 +24,14 @@ pub struct MatchPlan {
     pub needles: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SearchRequest {
     pub account_id: String,
+    /// Several accounts in one statement, in place of `account_id` when not
+    /// empty. Every FTS probe is uncorrelated and runs over the whole index,
+    /// so one statement per account paid for the same match once per account.
+    pub account_ids: Vec<String>,
     pub query: String,
     /// Server paths; sanitized here.
     pub mailboxes: Option<Vec<String>>,
@@ -64,7 +68,7 @@ pub struct SearchRequest {
     /// from `app.db`, the rows from here. `Some(empty)` matches nothing, which
     /// is what a tag nobody has used means.
     pub msg_keys: Option<Vec<String>>,
-    /// Default 500, max 2000.
+    /// Default 500, max 2000. `Some(0)` counts and reads no page.
     pub limit: Option<usize>,
     /// Hits to skip, for a caller that walks past the cap one page at a time.
     pub offset: usize,
@@ -77,6 +81,7 @@ pub const MSG_KEY_SQL: &str =
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchHit {
+    pub account_id: String,
     pub vault_dir: String,
     pub uid: u32,
     /// The name the row's flags read off (`message_store::flags_name` of
@@ -357,8 +362,14 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
         None => plan_query(&req.query),
     };
     // `clauses` and `args` grow together: every `?` is pushed with its value.
-    let mut clauses: Vec<String> = vec!["m.account_id = ?".into()];
-    let mut args: Vec<Value> = vec![Value::Text(req.account_id.clone())];
+    let (mut clauses, mut args): (Vec<String>, Vec<Value>) = if req.account_ids.is_empty() {
+        (vec!["m.account_id = ?".into()], vec![Value::Text(req.account_id.clone())])
+    } else {
+        (
+            vec![format!("m.account_id IN ({})", vec!["?"; req.account_ids.len()].join(","))],
+            req.account_ids.iter().cloned().map(Value::Text).collect(),
+        )
+    };
 
     if let Some(groups) = &groups {
         // Only operators and no words is no text filter at all.
@@ -502,6 +513,9 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
         )
         .map_err(|e| e.to_string())?;
 
+    if req.limit == Some(0) {
+        return Ok(SearchPage { hits: Vec::new(), total: u64::try_from(total).unwrap_or(0), needles: plan.needles });
+    }
     // Formatted from the clamped usize only, never from request text.
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let offset = req.offset;
@@ -519,13 +533,13 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     select_args.extend(args.iter().cloned());
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id, m.snippet, m.flags FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit} OFFSET {offset}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id, m.snippet, m.flags, m.account_id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit} OFFSET {offset}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
         .query_map(rusqlite::params_from_iter(select_args.iter()), |r| {
             let filename = crate::message_store::flags_name(&r.get::<_, String>(2)?, &r.get::<_, String>(10)?);
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)?, snippet: r.get(9)? })
+            Ok(SearchHit { account_id: r.get(11)?, vault_dir: r.get(0)?, uid: r.get(1)?, filename, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)?, snippet: r.get(9)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
@@ -1024,6 +1038,39 @@ mod tests {
 
     fn req(account: &str, q: &str) -> SearchRequest {
         SearchRequest { account_id: account.into(), query: q.into(), ..Default::default() }
+    }
+
+    /// A saved view over every account used to run one statement per account,
+    /// and each statement re-ran the same uncorrelated FTS match over the
+    /// whole index: on a real 19-account vault a nine-phrase view cost ~0.18s
+    /// per account whatever the account held. One statement reads them all.
+    #[test]
+    fn one_statement_reads_every_account_it_names_newest_first() {
+        let (_tmp, db) = fixture();
+        let both = SearchRequest { account_ids: vec!["luke".into(), "vader".into()], ..req("", "message 1") };
+        let g = crate::search_index::lock(&db);
+        let page = search(g.as_ref().unwrap(), &both).unwrap();
+        let got: Vec<(String, String, u32)> = page.hits.iter().map(|h| (h.account_id.clone(), h.vault_dir.clone(), h.uid)).collect();
+        assert_eq!(
+            got,
+            vec![("vader".to_string(), "INBOX".to_string(), 1), ("luke".to_string(), "INBOX".to_string(), 1)],
+            "both accounts, newest first, each hit naming its account"
+        );
+        assert_eq!(page.total, 2);
+        let only_luke = SearchRequest { account_ids: vec!["luke".into()], ..req("vader", "message 1") };
+        let page = search(g.as_ref().unwrap(), &only_luke).unwrap();
+        assert_eq!(page.hits.iter().map(|h| h.account_id.as_str()).collect::<Vec<_>>(), vec!["luke"], "the list wins over account_id");
+    }
+
+    /// The sidebar's badges want a number, not a page: the page SELECT and its
+    /// body/attachment probes ran again for every view, every account.
+    #[test]
+    fn a_zero_limit_counts_without_reading_a_page() {
+        let (_tmp, db) = fixture();
+        let g = crate::search_index::lock(&db);
+        let page = search(g.as_ref().unwrap(), &SearchRequest { limit: Some(0), ..req("luke", "") }).unwrap();
+        assert_eq!(page.total, 4);
+        assert!(page.hits.is_empty(), "{:?}", page.hits);
     }
 
     fn coverage_fixture() -> (tempfile::TempDir, rusqlite::Connection) {

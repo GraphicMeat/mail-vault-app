@@ -1888,9 +1888,32 @@ describe('a saved view drives the grouping', () => {
     const { useFieldStore } = await import('../../stores/fieldStore');
     useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, activeMailbox: 'INBOX' });
     useSettingsStore.setState({ emailListView: 'list', explorerGrouping: 'date', viewOverrides: {} });
-    useViewStore.setState({ views: [], activeViewId: null });
+    useViewStore.setState({ views: [], activeViewId: null, loading: false });
     useFieldStore.setState({ fields: {}, byRow: {} });
   });
+
+  // Opening a view is a daemon round trip. While it ran, the list kept the
+  // folder behind the view on screen under the view's name: its rows, its
+  // count, its date range and its vault share, with no sign anything was
+  // still coming. Both surfaces, since a grouped view opens in the explorer.
+  for (const [surface, def] of [['list', {}], ['explorer', { group: 'sender' }]]) {
+    it(`a view still running shows the skeleton in the ${surface}, never the folder behind it`, async () => {
+      const { container } = await mount({ def });
+      const { useViewStore } = await import('../../stores/viewStore');
+      act(() => { useViewStore.setState({ loading: true }); });
+      await settle();
+      expect(container.querySelector('[data-testid="email-list-skeleton"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="email-row"]')).toBeNull();
+      expect(container.querySelector('[data-testid="explorer-view"]')).toBeNull();
+      expect(container.querySelector('[data-testid="email-list-count"]').textContent).toBe('');
+      expect(container.querySelector('.mail-list-date-range')).toBeNull();
+      expect(container.querySelector('[data-testid="email-list-vault-share"]')).toBeNull();
+
+      act(() => { useViewStore.setState({ loading: false }); });
+      await settle();
+      expect(container.querySelector('[data-testid="email-list-skeleton"]')).toBeNull();
+    });
+  }
 
   it('renders the explorer surface with the view’s grouping while the list mode is still “list”', async () => {
     const { container } = await mount({ def: { group: 'sender' } });

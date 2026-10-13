@@ -117,6 +117,9 @@ let runGeneration = 0;
 /// The editor's preview runs its own generation: a keystroke in Settings must
 /// not cancel the view somebody has open on the mail screen.
 let previewGeneration = 0;
+/// The count on its way, and the one queued behind it (`refreshCounts`).
+let countsInFlight = null;
+let countsNext = null;
 
 export const useViewStore = create((set, get) => ({
   views: [],
@@ -141,15 +144,32 @@ export const useViewStore = create((set, get) => ({
 
   /// `keepOnEmpty`: the daemon answers `{}` while the index cannot count, and a
   /// change made mid-build should not blank badges that were true a moment ago.
-  refreshCounts: async ({ keepOnEmpty = false } = {}) => {
-    try {
-      const counts = await daemonCall('views.counts', { accounts: accountsPayload() });
-      const next = counts && typeof counts === 'object' ? counts : {};
-      if (keepOnEmpty && !Object.keys(next).length) return;
-      set({ counts: next });
-    } catch {
-      // A count that would not come is not worth an error in the sidebar.
+  /// One count at a time. Each runs every view over every account on the
+  /// index lock a view being opened waits on, and opening a view, saving one,
+  /// a tag change and the scheduler below all ask: run side by side they
+  /// stacked into seconds of lock the next click queued behind. A call made
+  /// while one runs gets the single count that starts after it.
+  refreshCounts: ({ keepOnEmpty = false } = {}) => {
+    if (countsInFlight) {
+      countsNext ??= countsInFlight.then(() => {
+        countsNext = null;
+        return get().refreshCounts({ keepOnEmpty });
+      });
+      return countsNext;
     }
+    countsInFlight = (async () => {
+      try {
+        const counts = await daemonCall('views.counts', { accounts: accountsPayload() });
+        const next = counts && typeof counts === 'object' ? counts : {};
+        if (keepOnEmpty && !Object.keys(next).length) return;
+        set({ counts: next });
+      } catch {
+        // A count that would not come is not worth an error in the sidebar.
+      } finally {
+        countsInFlight = null;
+      }
+    })();
+    return countsInFlight;
   },
 
   openView: async (view) => {
@@ -208,7 +228,7 @@ export const useViewStore = create((set, get) => ({
 
   closeView: () => {
     runGeneration += 1;
-    set({ activeViewId: null, unavailableReason: null });
+    set({ activeViewId: null, unavailableReason: null, loading: false });
     useSearchStore.getState().clearSearch();
   },
 
@@ -353,4 +373,6 @@ export function __resetViewCountsForTests() {
   countsTimer = null;
   countsRunning = false;
   countsAgain = false;
+  countsInFlight = null;
+  countsNext = null;
 }

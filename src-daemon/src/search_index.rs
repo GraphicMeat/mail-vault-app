@@ -39,7 +39,7 @@ pub fn is_foreground_method(method: &str) -> bool {
             | "maildir_delete_many" | "load_email_cache_partial" | "load_email_cache_by_uids" | "vault_rows"
             | "vault_search" | "mail_search_start" | "imap_set_flags" | "imap_delete_email" | "imap_move_emails"
             | "graph_set_read" | "graph_set_flagged" | "graph_delete_message" | "graph_move_emails"
-            | "archive_emails" | "bulk_delete_emails" | "search.suggest"
+            | "archive_emails" | "bulk_delete_emails" | "search.suggest" | "views.evaluate"
             | "people.list" | "people.get" | "people.stats" | "people.messages" | "people.suggest" | "people.review.list"
     )
 }
@@ -428,6 +428,46 @@ pub(crate) fn search_page_reply(
     st: &SearchIndexState,
     request: &core::query::SearchRequest,
 ) -> Result<Result<SearchPageReply, &'static str>, String> {
+    let reply = match with_index(st, request, |conn| {
+        core::query::search(conn, request).and_then(|page| {
+            db::scope_coverage(conn, &request.account_id, request.mailboxes.as_deref())
+                .map(|coverage| SearchPageReply { page, coverage })
+        })
+    })? {
+        Ok(reply) => reply,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    // A requested folder the index never listed may be one the vault has no
+    // mail in at all; only the disk can tell, read here with the index lock
+    // released so a slow drive never stalls another reader.
+    let mut reply = reply;
+    db::settle_unlisted_folders(&mut reply.coverage, &st.vault_root.join("Maildir"), &request.account_id);
+    #[cfg(test)]
+    {
+        let hook = g(&st.search_batch_hook).clone();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+    Ok(Ok(reply))
+}
+
+/// One page and its total, with no coverage: what a saved view reads, over
+/// every account `request.account_ids` names in a single statement.
+pub(crate) fn search_page(
+    st: &SearchIndexState,
+    request: &core::query::SearchRequest,
+) -> Result<Result<core::query::SearchPage, &'static str>, String> {
+    with_index(st, request, |conn| core::query::search(conn, request))
+}
+
+/// Runs `query` on the index once its first pass is done, or says why it
+/// cannot. An error asks for a recovery: the connection may be the fault.
+fn with_index<T>(
+    st: &SearchIndexState,
+    request: &core::query::SearchRequest,
+    query: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
+) -> Result<Result<T, &'static str>, String> {
     if *g(&st.enabled) == Some(false) {
         return Ok(Err("off"));
     }
@@ -443,27 +483,12 @@ pub(crate) fn search_page_reply(
             Ok(true) => {
                 #[cfg(test)]
                 g(&st.search_scopes).push(request.mailboxes.clone());
-                core::query::search(conn, request).and_then(|page| {
-                db::scope_coverage(conn, &request.account_id, request.mailboxes.as_deref())
-                    .map(|coverage| SearchPageReply { page, coverage })
-                })
+                #[cfg(not(test))]
+                let _ = request;
+                query(conn)
             }
         }
     };
-    // A requested folder the index never listed may be one the vault has no
-    // mail in at all; only the disk can tell, read here with the index lock
-    // released so a slow drive never stalls another reader.
-    let result = result.map(|mut reply| {
-        db::settle_unlisted_folders(&mut reply.coverage, &st.vault_root.join("Maildir"), &request.account_id);
-        reply
-    });
-    #[cfg(test)]
-    if matches!(&result, Ok(_)) {
-        let hook = g(&st.search_batch_hook).clone();
-        if let Some(hook) = hook {
-            hook();
-        }
-    }
     match result {
         Ok(result) => Ok(Ok(result)),
         Err(error) => {
@@ -1755,6 +1780,7 @@ mod tests {
         use mailvault_core::search_index::query::{SearchHit, SearchPage};
         let page = SearchPage {
             hits: vec![SearchHit {
+                account_id: "a".into(),
                 vault_dir: "INBOX".into(),
                 uid: 7,
                 filename: format!("7{INFO_PREFIX}AS.eml"),
@@ -1781,6 +1807,7 @@ mod tests {
         use mailvault_core::search_index::query::{SearchHit, SearchPage};
         let page = SearchPage {
             hits: vec![SearchHit {
+                account_id: "a".into(),
                 vault_dir: "INBOX".into(),
                 uid: 5,
                 filename: format!("5{INFO_PREFIX}.eml"),
