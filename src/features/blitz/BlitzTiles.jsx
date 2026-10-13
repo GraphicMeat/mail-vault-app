@@ -17,8 +17,10 @@ function useDevicePixelRatio() {
 }
 
 // A body drawn by the daemon's Blitz worker: PNG tiles fetched as they near
-// the viewport, links found by hit-testing in the worker.
-export default function BlitzTiles({ html, theme, onLink, onFailure, sizing = 'content' }) {
+// the viewport, links found by hit-testing in the worker. While `privacy` is
+// on, the hover URL chip is not drawn at all: a URL can carry a name that the
+// pre-pass does not know to mask (a calendar slug, a ?name= query).
+export default function BlitzTiles({ html, theme, onLink, onFailure, sizing = 'content', privacy = false }) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -162,7 +164,7 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, sizing = 'c
           })}
         </div>
       )}
-      {hover && (
+      {hover && !privacy && (
         <div data-testid="blitz-link-chip" className="sticky bottom-0 left-0 max-w-[60%] truncate text-xs px-2 py-1 rounded bg-mail-surface border border-mail-border text-mail-text-muted">
           {hover.href}
         </div>

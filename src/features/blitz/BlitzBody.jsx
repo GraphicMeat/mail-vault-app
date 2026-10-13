@@ -12,8 +12,6 @@ import FailureBubble from './FailureBubble';
 
 const bubbled = new Set(); // message keys that already showed the bubble this session
 
-// The readable text of an HTML body for the failure view. Style, script and
-// noscript text is code, not content.
 // A cheap content signature (djb2): tells two messages apart when the caller has no key for them.
 const signature = (text) => {
   let h = 5381;
@@ -21,6 +19,8 @@ const signature = (text) => {
   return `${text.length}:${h >>> 0}`;
 };
 
+// The readable text of an HTML body for the failure view. Style, script and
+// noscript text is code, not content.
 const textOf = (html) => {
   try {
     const body = new DOMParser().parseFromString(html || '', 'text/html').body;
@@ -117,7 +117,7 @@ export default function BlitzBody(props) {
       {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
           so nothing built for the other state stays on screen while the new doc opens.
           A dictionary update while masking stays on does not change the key. */}
-      <BlitzTiles key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} />
+      <BlitzTiles key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} privacy={priv.active} />
     </div>
   );
 }

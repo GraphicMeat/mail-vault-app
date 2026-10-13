@@ -80,6 +80,30 @@ describe('BlitzTiles', () => {
     await waitFor(() => expect(onLink).toHaveBeenCalledWith(expect.objectContaining({ href: 'https://x.test/' })));
   });
 
+  describe('the hover URL chip', () => {
+    const hover = async (props) => {
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta() });
+      hitRender.mockResolvedValue({ link: { href: 'https://calendly.com/jane-doe?name=Jane%20Doe', text: 'book', alert: null, title: null }, fold: null });
+      render(tiles(props));
+      const t = await screen.findAllByTestId('blitz-tile');
+      fireEvent.mouseMove(t[0], { clientX: 10, clientY: 10 });
+      await waitFor(() => expect(hitRender).toHaveBeenCalled());
+      await act(async () => {});
+      return t[0].parentElement;
+    };
+    it('shows the link under the pointer', async () => {
+      await hover({});
+      expect(screen.getByTestId('blitz-link-chip').textContent).toContain('calendly.com/jane-doe');
+    });
+    it('is not drawn at all while privacy is on, whatever the link says', async () => {
+      const surface = await hover({ privacy: true });
+      expect(screen.queryByTestId('blitz-link-chip')).toBeNull();
+      expect(document.body.textContent).not.toContain('jane-doe');
+      expect(document.body.textContent).not.toContain('Jane');
+      expect(surface.style.cursor).toBe('pointer'); // the click still works
+    });
+  });
+
   it('a render-updated event for this doc swaps tile URLs to the new rev', async () => {
     let push;
     onRenderUpdated.mockImplementation(async cb => { push = cb; return () => {}; });

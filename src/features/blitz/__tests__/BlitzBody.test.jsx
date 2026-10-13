@@ -8,8 +8,8 @@ const tilesProps = vi.hoisted(() => ({ last: null }));
 vi.mock('../BlitzTiles', () => ({
   default: (p) => { tilesProps.last = p; return <div data-testid="tiles-stub"><button onClick={() => p.onFailure('render_unavailable')}>fail</button></div>; },
 }));
-const privacy = vi.hoisted(() => ({ hold: false }));
-vi.mock('../prepass/privacyDict', () => ({ usePrivacyDict: () => ({ active: false, dict: null, hold: privacy.hold }) }));
+const privacy = vi.hoisted(() => ({ hold: false, active: false }));
+vi.mock('../prepass/privacyDict', () => ({ usePrivacyDict: () => ({ active: privacy.active, dict: null, hold: privacy.hold }) }));
 import BlitzBody from '../BlitzBody';
 
 const props = (over = {}) => ({
@@ -17,7 +17,7 @@ const props = (over = {}) => ({
   theme: { dark: false, palette: 'graphite' }, onLink: vi.fn(), sizing: 'content', ...over,
 });
 
-beforeEach(() => { tilesProps.last = null; privacy.hold = false; useSettingsStore.setState({ emailRenderer: 'blitz' }); });
+beforeEach(() => { tilesProps.last = null; privacy.hold = false; privacy.active = false; useSettingsStore.setState({ emailRenderer: 'blitz' }); });
 afterEach(cleanup);
 
 describe('BlitzBody', () => {
@@ -26,6 +26,16 @@ describe('BlitzBody', () => {
     await screen.findByTestId('tiles-stub');
     expect(tilesProps.last.html).toContain('<p>Hello</p>');
     expect(tilesProps.last.html).not.toMatch(/<script nonce=/);
+  });
+  it('tells the tiles whether privacy is on, so the hover chip can stay hidden', async () => {
+    const { unmount } = render(<BlitzBody {...props({ messageKey: 'k-priv-off' })} />);
+    await screen.findByTestId('tiles-stub');
+    expect(tilesProps.last.privacy).toBe(false);
+    unmount();
+    privacy.active = true;
+    render(<BlitzBody {...props({ messageKey: 'k-priv-on' })} />);
+    await screen.findByTestId('tiles-stub');
+    expect(tilesProps.last.privacy).toBe(true);
   });
   it('privacy hold draws nothing at all', async () => {
     privacy.hold = true;
