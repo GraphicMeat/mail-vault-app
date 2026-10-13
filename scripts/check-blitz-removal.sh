@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Proves the Blitz renderer module is removable. Works on a scratch copy of the
-# checkout and never touches the real tree.
+# checkout and never edits the real tree (the only thing it writes there is the
+# gitignored cargo target dir, target/blitz-removal).
 #
 #   Phase 1 (module present): the cfg switch-off path. The daemon and the
 #   shell build with the `blitz-render` feature off.
 #   Phase 2 (module deleted): the physical-deletion path. Every file of the
 #   module is removed, the feature definitions go with it, and the app must
 #   still build and the core tests must still pass.
+#
+#   Every cargo check runs with --all-targets, so the cfg(test) modules and
+#   integration tests are compiled in both phases too (test-only lines such as
+#   the daemon's `for_test` state build the module as well).
 #
 # Run in CI on every push (job `blitz-removable`). Needs node_modules in the
 # checkout (`npm ci`) and a Rust toolchain; on Linux also the webkit dev
@@ -46,10 +51,13 @@ fi
 # A copy, not a symlink: vitest's dev server denies files outside the project
 # root, and a symlinked node_modules resolves outside it. macOS clones the files
 # (copy-on-write, instant), Linux copies (reflinks where the filesystem has them).
+# Copy the real directory even when node_modules is a symlink, so the cache
+# cleanup below can never reach through the link into the real tree.
+NM_SRC="$(cd "$ROOT/node_modules" && pwd -P)"
 if [ "$(uname -s)" = "Darwin" ]; then
-  cp -RPc "$ROOT/node_modules" node_modules
+  cp -RPc "$NM_SRC" node_modules
 else
-  cp -RP --reflink=auto "$ROOT/node_modules" node_modules
+  cp -RP --reflink=auto "$NM_SRC" node_modules
 fi
 rm -rf node_modules/.vite node_modules/.cache
 
@@ -69,8 +77,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 
 step "phase 1: feature off, module still present (cfg switch-off path)"
-cargo check -p mailvault-daemon --no-default-features
-cargo check -p mailvault --no-default-features --features custom-protocol,sparkle
+cargo check -p mailvault-daemon --no-default-features --all-targets
+cargo check -p mailvault --no-default-features --features custom-protocol,sparkle --all-targets
 
 step "phase 2: delete the module"
 rm -rf src/features/blitz src-render src-daemon/src/blitz src-tauri/src/blitz_tiles.rs
@@ -94,8 +102,8 @@ npx vite build --logLevel error
 
 step "phase 2: cargo check, module deleted"
 # The module's files are gone, so these prove every cfg line compiles out.
-cargo check -p mailvault-daemon
-cargo check -p mailvault
+cargo check -p mailvault-daemon --all-targets
+cargo check -p mailvault --all-targets
 
 step "phase 2: core tests"
 npx vitest run src/components src/stores src/features
