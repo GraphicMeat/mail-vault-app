@@ -3917,5 +3917,7 @@
   "blitz.failed.body": "Il renderer Rust ha fallito con questo messaggio. Passa al renderer standard per vederlo come è stato progettato.",
   "blitz.failed.switch": "Usa il renderer standard",
   "blitz.failed.dismiss": "Ignora",
-  "blitz.linksInMessage": "Link in questo messaggio"
+  "blitz.linksInMessage": "Link in questo messaggio",
+  "blitz.settings.title": "Renderer Rust (sperimentale)",
+  "blitz.settings.description": "Disegna i messaggi con Blitz, un motore HTML in Rust, invece della vista web del sistema. La posta non può mai eseguire codice al suo interno. Disattivalo per tornare al renderer standard."
 }

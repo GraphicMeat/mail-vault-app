@@ -9,6 +9,7 @@ import { wireConnectivityEvents, installNetMock } from './stores/connectivitySto
 import { watchTextAppearance } from './utils/appFont';
 import { watchMenuBar, watchQuitShortcut } from './utils/menuBar';
 import './styles/index.css';
+import './features/blitz';
 
 const isComposeWindow = new URLSearchParams(window.location.search).has('compose');
 const isOriginalWindow = new URLSearchParams(window.location.search).has('original');

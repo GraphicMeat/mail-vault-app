@@ -3917,5 +3917,7 @@
   "blitz.failed.body": "Rust 렌더러가 이 메시지에서 실패했습니다. 표준 렌더러로 전환하면 원래 디자인대로 볼 수 있습니다.",
   "blitz.failed.switch": "표준 렌더러 사용",
   "blitz.failed.dismiss": "닫기",
-  "blitz.linksInMessage": "이 메시지의 링크"
+  "blitz.linksInMessage": "이 메시지의 링크",
+  "blitz.settings.title": "Rust 렌더러(실험적)",
+  "blitz.settings.description": "시스템 웹 뷰 대신 Rust로 만든 HTML 엔진 Blitz로 메시지를 그립니다. 메일이 그 안에서 코드를 실행할 수는 없습니다. 끄면 표준 렌더러로 돌아갑니다."
 }

@@ -3917,5 +3917,7 @@
   "blitz.failed.body": "Der Rust-Renderer ist bei dieser Nachricht fehlgeschlagen. Wechsle zum Standard-Renderer, um sie wie gestaltet zu sehen.",
   "blitz.failed.switch": "Standard-Renderer verwenden",
   "blitz.failed.dismiss": "Schließen",
-  "blitz.linksInMessage": "Links in dieser Nachricht"
+  "blitz.linksInMessage": "Links in dieser Nachricht",
+  "blitz.settings.title": "Rust-Renderer (experimentell)",
+  "blitz.settings.description": "Zeichnet Nachrichten mit Blitz, einer HTML-Engine in Rust, statt mit der Web-Ansicht des Systems. E-Mails können darin nie Code ausführen. Schalte ihn aus, um zum Standard-Renderer zurückzukehren."
 }

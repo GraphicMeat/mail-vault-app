@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
+import React, { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useMessageListStore } from '../stores/messageListStore';
@@ -54,6 +54,8 @@ import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocati
 import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
+import { useSearchStore } from '../stores/searchStore';
+import { useAltBodyRenderer } from './email/bodyRendererRegistry';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
@@ -118,6 +120,10 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const privacyOn = usePrivacyFrameGate();
+  // An alternative body renderer (the Blitz module) replaces the iframe when one
+  // is registered and chosen; null keeps the iframe path exactly as before.
+  const AltBody = useAltBodyRenderer('reader');
+  const searchQueryForHighlight = useSearchStore(s => (s.searchActive ? s.searchQuery : ''));
   const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   // The social export's app shot can ask for a mail theme over the reader's own.
@@ -427,8 +433,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // of having quietly always said what it now says.
   const custodyLanded = useCustodyLanding(scopeKey, custody.tone);
 
-  const { iframeContent, scanAlertLevel, trackerSummary } = useMemo(() => {
-    if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null };
+  const { iframeContent, scanAlertLevel, trackerSummary, altBodyHtml, indicatorCss } = useMemo(() => {
+    if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null, altBodyHtml: '', indicatorCss: '' };
     const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
     // Scan body HTML (stable per uid → cacheable); theme/DR is layered on
     // top via buildEmailIframeHtml so toggling theme doesn't invalidate the
@@ -461,8 +467,14 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       nonce,
       privacy: privacyOn,
     });
-    return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
+    return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), altBodyHtml: renderedBody, indicatorCss: indicatorStyle };
   }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, palette, signatureDisplay, privacyOn]);
+
+  // The alternative body reports a clicked link; the same rule as the iframe's
+  // click handler decides what happens (compose, link-safety modal, open).
+  const onAltLink = useCallback(link => activateEmailLink(link, {
+    accountId: selectedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm, openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
+  }), [selectedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm]);
 
   // Privacy masking first: it must run on `load` before the search highlight.
   useBodyPrivacy(iframeRef, iframeContent, { message: selectedEmail });
@@ -617,8 +629,10 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     // Theme is NOT a dep: DR is now inlined into the iframe HTML (via the
     // iframeContent useMemo), so theme toggles don't need to tear down and
     // re-attach the load listener — which would race with the iframe reload
-    // that srcDoc changes trigger.
-  }, [selectedEmail?.html]);
+    // that srcDoc changes trigger. Whether an alternative body replaces the
+    // iframe IS a dep: switching renderers mounts a fresh iframe that needs
+    // the handlers attached.
+  }, [selectedEmail?.html, !!AltBody]);
 
   const openInWindow = () => {
     const invoke = window.__TAURI__?.core?.invoke;
@@ -863,15 +877,24 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
                 backgroundColor: emailColors.background,
               }}
             >
-              <iframe
-                ref={iframeRef}
-                srcDoc={iframeContent}
-                className="w-full border-0 h-full"
-                style={{ minHeight: '300px', display: 'block', maxWidth: '100%' }}
-                sandbox="allow-same-origin allow-popups allow-scripts"
-                title={t('viewer.emailContent')}
-                onContextMenu={e => e.preventDefault()}
-              />
+              {AltBody ? (
+                <AltBody
+                  surface="reader" messageKey={scopeKey} bodyHtml={altBodyHtml} indicatorCss={indicatorCss}
+                  plainText={selectedEmail.text} theme={{ dark: emailDarkMode, palette }} signatureDisplay={signatureDisplay}
+                  foldQuotes privacy={privacyOn} searchQuery={searchQueryForHighlight} accountId={selectedEmail._accountId}
+                  message={selectedEmail} onLink={onAltLink} sizing="content"
+                />
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={iframeContent}
+                  className="w-full border-0 h-full"
+                  style={{ minHeight: '300px', display: 'block', maxWidth: '100%' }}
+                  sandbox="allow-same-origin allow-popups allow-scripts"
+                  title={t('viewer.emailContent')}
+                  onContextMenu={e => e.preventDefault()}
+                />
+              )}
             </div>
           ) : selectedEmail._bodyError ? (
             // The body never arrived. Saying so — with the reason and a retry —

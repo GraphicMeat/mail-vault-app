@@ -3917,5 +3917,7 @@
   "blitz.failed.body": "The Rust renderer failed on this message. Switch to the standard renderer to see it as designed.",
   "blitz.failed.switch": "Use standard renderer",
   "blitz.failed.dismiss": "Dismiss",
-  "blitz.linksInMessage": "Links in this message"
+  "blitz.linksInMessage": "Links in this message",
+  "blitz.settings.title": "Rust renderer (experimental)",
+  "blitz.settings.description": "Draws messages with Blitz, a Rust HTML engine, instead of the system web view. Mail can never run code in it. Turn it off to go back to the standard renderer."
 }

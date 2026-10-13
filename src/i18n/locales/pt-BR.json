@@ -3917,5 +3917,7 @@
   "blitz.failed.body": "O renderizador Rust falhou nesta mensagem. Mude para o renderizador padrão para vê-la como foi projetada.",
   "blitz.failed.switch": "Usar o renderizador padrão",
   "blitz.failed.dismiss": "Dispensar",
-  "blitz.linksInMessage": "Links nesta mensagem"
+  "blitz.linksInMessage": "Links nesta mensagem",
+  "blitz.settings.title": "Renderizador Rust (experimental)",
+  "blitz.settings.description": "Desenha as mensagens com o Blitz, um mecanismo HTML em Rust, em vez da visualização web do sistema. Um e-mail nunca consegue executar código nele. Desative para voltar ao renderizador padrão."
 }
