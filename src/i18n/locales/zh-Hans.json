@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "字体",
   "netActivity.purposes.emailImages": "邮件图片",
   "netActivity.notShown.title": "此列表不显示的内容",
-  "netActivity.notShown.webContent": "邮件中的远程图片和其他网页内容。图片在上方计数。",
+  "netActivity.notShown.webContent": "标准渲染器在邮件中加载的网页内容,例如图片、字体和样式。Rust 渲染器的远程图片在上方计数,除此之外它不加载任何内容。",
   "netActivity.notShown.appWindow": "应用窗口自己发出的请求，例如购买验证。",
   "netActivity.notShown.updates": "应用更新的下载，在 macOS 上还包括检查更新。",
   "netActivity.notShown.innerDns": "网页请求和发送邮件内部进行的 DNS 查询。",

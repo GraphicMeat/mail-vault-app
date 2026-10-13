@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "Schriften",
   "netActivity.purposes.emailImages": "E-Mail-Bilder",
   "netActivity.notShown.title": "Was diese Liste nicht zeigt",
-  "netActivity.notShown.webContent": "Externe Bilder und andere Webinhalte in E-Mails. Bilder werden oben gezählt.",
+  "netActivity.notShown.webContent": "Webinhalte, die der Standard-Renderer in E-Mails lädt, etwa Bilder, Schriften und Stile. Die externen Bilder des Rust-Renderers werden oben gezählt; er lädt sonst nichts.",
   "netActivity.notShown.appWindow": "Anfragen, die das App-Fenster selbst stellt, etwa Kaufprüfungen.",
   "netActivity.notShown.updates": "Downloads von App-Updates und unter macOS auch die Update-Prüfung.",
   "netActivity.notShown.innerDns": "DNS-Abfragen innerhalb von Webanfragen und beim Senden von E-Mails.",

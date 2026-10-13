@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "Fuentes",
   "netActivity.purposes.emailImages": "Imágenes de correo",
   "netActivity.notShown.title": "Lo que esta lista no muestra",
-  "netActivity.notShown.webContent": "Imágenes remotas y otro contenido web dentro de los correos. Las imágenes se cuentan arriba.",
+  "netActivity.notShown.webContent": "Contenido web que el renderizador estándar carga dentro de los correos, como imágenes, fuentes y estilos. Las imágenes remotas del renderizador de Rust se cuentan arriba; no carga nada más.",
   "netActivity.notShown.appWindow": "Solicitudes que hace la propia ventana de la app, como las comprobaciones de compra.",
   "netActivity.notShown.updates": "Descargas de actualizaciones de la app y, en macOS, también la búsqueda de actualizaciones.",
   "netActivity.notShown.innerDns": "Búsquedas DNS hechas dentro de solicitudes web y del correo saliente.",
