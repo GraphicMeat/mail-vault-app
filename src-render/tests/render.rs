@@ -46,7 +46,7 @@ fn wide_content_widens_meta_width() {
 
 #[test]
 fn hit_block_link_carries_alert_and_title() {
-    let mut doc = open(&fx("links.html"), 600);
+    let doc = open(&fx("links.html"), 600);
     let l = doc.hit_link(10.0, 10.0).expect("block link");
     assert_eq!(l.href, "https://example.com/block");
     assert_eq!(l.alert.as_deref(), Some("yellow"));
@@ -55,7 +55,7 @@ fn hit_block_link_carries_alert_and_title() {
 
 #[test]
 fn hit_inline_link_resolves_through_text() {
-    let mut doc = open(&fx("links.html"), 600);
+    let doc = open(&fx("links.html"), 600);
     // The second line is the <p>: y 60..108. "Go " is about 60px, the link follows.
     let l = doc.hit_link(150.0, 84.0).expect("inline link");
     assert_eq!(l.href, "https://example.com/inline");
@@ -63,23 +63,23 @@ fn hit_inline_link_resolves_through_text() {
 
 #[test]
 fn hit_far_down_the_document() {
-    let mut doc = open(&fx("links.html"), 600);
+    let doc = open(&fx("links.html"), 600);
     let y = 60.0 + 48.0 + 1200.0 + 10.0;
     assert_eq!(doc.hit_link(10.0, y).unwrap().href, "mailto:a@example.com");
 }
 
 #[test]
 fn hit_on_background_is_none() {
-    let mut doc = open(&fx("links.html"), 600);
+    let doc = open(&fx("links.html"), 600);
     assert!(doc.hit_link(500.0, 30.0).is_none());
 }
 
 #[test]
 fn hit_after_reopen_at_new_width() {
     let html = r#"<body style="margin:0"><div style="width:50%;height:40px"></div><a href="https://x.test/" style="display:block;height:40px">x</a></body>"#;
-    let mut narrow = open(html, 400);
+    let narrow = open(html, 400);
     assert_eq!(narrow.hit_link(10.0, 50.0).unwrap().href, "https://x.test/");
-    let mut wide = open(html, 1000);
+    let wide = open(html, 1000);
     assert_eq!(wide.hit_link(10.0, 50.0).unwrap().href, "https://x.test/");
 }
 
