@@ -127,11 +127,124 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.20.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.20.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">October 13, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Join Discord from Help.</strong> Settings, Help now has a Join Discord button beside Report Bug, matching the sidebar and the report dialog.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Folders get icons in color.</strong> Every folder icon in the sidebar now has a color by kind (Inbox, Sent, Drafts, Trash and so on, plain folders and folders kept on this computer too). Right-click any folder to give it a color of your own, or reset it. To make every folder icon one color that follows the theme, choose Theme color under Settings, Appearance, Folder icons.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Contacts: a built-in address book.</strong> Open Contacts in the sidebar for one card per person, built from your own mail plus what you add: how many emails you received from, sent to and copied them, the full correspondence with each contact by date, suggestions that say why they were made, a review queue for addresses found in your mail, merge with a preview that you can undo, and vCard import and export. A copy of your contacts is kept in your vault and is included in backups and in an account transfer. Contacts stay on this computer and are not synced with any provider.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A Teal color palette, to go with the teal app icon.</strong> Pick it in Settings, Appearance, Colors, beside Indigo and Graphite, in light or dark. Dark gets teal-tinted ink and light gets cream paper, and controls, Insights charts and chat bubbles follow the accent. Graphite stays the default for new installs and your saved choice is not touched.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A code sent to you by email is one click from the clipboard.</strong> When a verification code, one-time passcode or PIN lands in your inbox, a small bubble in the top-right corner, where minimized drafts sit, shows the code and who sent it, with Copy and Copy & delete. Copy & delete puts the code on the clipboard and moves the email to Trash with the usual undo. Click the bubble to open the email, or its x to dismiss it; it leaves on its own after ten minutes. A code in the subject is read at once; a subject that only announces one ("Sign in to Acme") has its body read for it. Order numbers, phone numbers, amounts, dates and promo codes are not offered.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>JMAP accounts.</strong> Add an account on a JMAP server. Sign in with a password or an API token (on Fastmail, that is an API token you create in its settings), and the server is found from your address when your server publishes it (Fastmail is built in); otherwise enter its address. A server outside your own domain (other than Fastmail's) asks you to confirm it before your password or token goes to it. New mail arrives through push, with polling as a fallback, and sending uses your server's identities, so send-as aliases come straight from the server.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Store your vault in JMAP format.</strong> Each message keeps its original bytes plus a standard JMAP JSON record, and identical messages in several folders are stored once. Convert either way at any time in Settings > Storage, keeping the old files aside or deleting them after each message is verified. Conversion runs in the background and picks up where it left off after a restart.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Go to mailbox, from any search result or All Inboxes row.</strong> Right-click an email found by a search, or listed in All Inboxes, and choose Go to mailbox: the search closes, its own account and folder open, and the email opens in its full conversation with that message expanded and scrolled to. It is added to your existing right-click menu once; remove it in Settings, Quick actions if you don't want it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search results and All Inboxes rows show which account each email is in.</strong> The account's colored initial, as in the sidebar, sits before the sender, and pointing at a row lights that account in the sidebar. Search results from All Inboxes had no account marker before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Open or save a picture in an email.</strong> Double-click a picture in the body of an email to open it in Preview on a Mac, or in your default image viewer on Windows and Linux. In the reading pane, right-click it for Open in Preview (Open Image on Windows and Linux) and Save As. This works for pictures sent inside the email; a picture loaded from the web is left alone, and an SVG drawing can be saved but is not opened.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Saved views open fast, and show they are loading.</strong> Opening a view such as one filtered by sender could take ten seconds with many accounts, while the list still showed the folder you came from under the view's name, with that folder's count and dates. The list now shows placeholder rows until the view's mail arrives. The view's mail is read in one pass over all your accounts instead of one pass per account. The counts beside your views are worked out one at a time and no longer hold up the view you open.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Deleting an Outlook email that Outlook already removed works.</strong> A note to yourself, or any message deleted elsewhere, failed with "Graph delete_message failed (404)" and could not be deleted; it now leaves like any other delete.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Notes to Self drops notes the server no longer has.</strong> A note MailVault deleted, or one a check found in no folder on the server, leaves the board (your vault copy stays, and search still finds it). The open board also lists again by itself after a sync, so a new note shows up without pressing Refresh.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An old forward no longer joins a new email with the same subject.</strong> A "Fw:" or "Re:" email without reply headers was put into any conversation with the same subject, so a forward from two years ago opened as the first message of a new, unrelated email. Such a message now joins a conversation only when it has a message within 30 days of it, and the nearest one when there are several.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A phrase in the search box stays one tag.</strong> Typing <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">project re 1</code> and pressing Enter now adds one tag instead of three, so each Enter adds one search term. Operators (<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">from:ann</code>), exclusions (<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">-word</code>), quoted runs and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">||</code> / <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">&&</code> still become tags of their own.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Reply and Reply all on mail you sent.</strong> Open an email from Sent, in search results or in a folder, and the reading pane now offers Reply and Reply all (Reply all only when there is more than one person to reach). Both write to the people you sent it to, never to yourself.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pictures in an email keep their shape.</strong> A screenshot pasted into an email from Outlook, such as a Power BI report, was squashed sideways to fit the reading pane. It now shrinks to fit at its own proportions, in the reading pane, chat view and exports.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Delete everywhere removes an inbox email from the server too.</strong> On a message in the inbox it only moved the server copy to Trash, so the email was still on your server while the copies on this computer and in the backup went. It now deletes the server copy for good, like it already did in every other folder.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Delete everywhere in the reader works on an email not yet in your vault.</strong> On a message only the server held ("On the server, not saved to your vault yet") the button did nothing, and in the full-size reader and the chat view it was missing. It now asks to delete it from the server for good, which is everywhere it is. On a message your vault holds, opened from the Server view, the confirmation now names the vault copy too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An update that failed to install finishes after a restart.</strong> On a Mac, the first update attempt after installing MailVault from a download could end with "An error occurred while running the updater": macOS refused Sparkle's installer its cache folder on the app's first run, so nothing was installed until MailVault was quit and reopened. MailVault now says what happened and offers Restart and install; after the restart the update, already downloaded, is offered ready to install.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Delete everywhere says why it removed nothing.</strong> From the reader, the row menu, the selection bar and the chat view, a purge that was refused by the server, or held back because the folder's UIDVALIDITY could not be trusted, showed no message and the mail simply came back. It now raises the same warning the list shows, with how many were removed and how many were not.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.19.2">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.19.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">October 10, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
@@ -163,6 +276,21 @@
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The sidebar footer is tidier.</strong> The six icons (privacy mode, report a bug, refer a friend, Discord, X, light or dark) are one connected block with no gaps. Below it, the email count sits on a single line with a thin progress bar while mail downloads, and a nightly's long build tag moves to its own small line under the version instead of wrapping.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
               <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
             </span>
@@ -188,6 +316,10 @@
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>The compose window's To, Cc and Bcc follow the app's language.</strong> They stayed English beside a translated From and Subject ("Von:" / "Betreff:" over "To:" / "Cc:" / "Bcc:"). The three captions and the contacts button next to each ("Pick To from contacts") now read in German, Spanish, French, Italian, Japanese, Korean, Portuguese and Chinese.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>AI writing answers in the language of your mail.</strong> Shorten, Draft a reply, Change tone, Summarize and Action items could come back in English for a German, French or Italian message, because the request to the model was in English only. Each one now asks for the language of the email.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>

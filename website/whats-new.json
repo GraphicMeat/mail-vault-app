@@ -1,4 +1,5 @@
 {
+  "2.20.0": "Contacts is a built-in address book made from your own mail, JMAP accounts (Fastmail built in) join IMAP and Outlook, and a code sent to you by email is one click from the clipboard. Folders get icons in color, a Teal palette arrives, and any search result can jump to its mailbox.",
   "2.19.2": "Send asks when you mention an attachment but forgot it, a reminder pins your sent email when nobody replies, and the unread filter tells you when a folder cannot have unread mail. IONOS accounts no longer get a false DKIM warning, the compose window scrolls as one, and many more screens speak your language.",
   "2.19.1": "Archive works on Outlook.com accounts signed in with Microsoft, sending a big attachment is faster, and the list toolbar stays on one row.",
   "2.19.0": "A focus session can now run on a calm pixel-art scene of countryside, sea or town whose day follows your session. Outlook.com accounts signed in with Microsoft can send mail again, sending through port 465 works, new mail shows up in views and search again, and the unread number beside an account matches its list.",

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.20.0] - 2026-10-13
+
 ### Added
 - **Join Discord from Help.** Settings, Help now has a Join Discord button beside Report Bug, matching the sidebar and the report dialog.
 - **Folders get icons in color.** Every folder icon in the sidebar now has a color by kind (Inbox, Sent, Drafts, Trash and so on, plain folders and folders kept on this computer too). Right-click any folder to give it a color of your own, or reset it. To make every folder icon one color that follows the theme, choose Theme color under Settings, Appearance, Folder icons.
