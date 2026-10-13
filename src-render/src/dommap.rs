@@ -490,6 +490,29 @@ mod tests {
     }
 
     #[test]
+    fn a_mismatched_root_keeps_its_line_breaks_in_plain_text() {
+        for (html, want) in [("<p>x<br>y</p>", "x\ny"), ("<p><br>x <br> y<br></p>", "\nx \ny\n")] {
+            let mut d = doc(html);
+            let root = inline_roots(&d)[0];
+            corrupt(&mut d, root);
+            let e = |offset| Endpoint { node: root.as_u64(), offset };
+            let out = serialize(&mut d, e(0), e(3));
+            assert_eq!(out.text, want, "{html}");
+        }
+    }
+
+    #[test]
+    fn a_mismatched_root_does_not_copy_a_nested_inline_root_twice() {
+        let mut d = doc("<p>a <span style=\"display:inline-block\">box</span> z</p>");
+        let roots = inline_roots(&d);
+        assert_eq!(roots.len(), 2, "the p and the inline-block");
+        corrupt(&mut d, roots[0]);
+        let len = d.get_node(roots[1]).unwrap().element_data().unwrap().inline_layout_data.as_ref().unwrap().text.len();
+        let out = serialize(&mut d, Endpoint { node: roots[0].as_u64(), offset: 1 }, Endpoint { node: roots[1].as_u64(), offset: len });
+        assert_eq!(out.text, "a z\n\nbox", "{out:?}");
+    }
+
+    #[test]
     fn a_mismatched_anonymous_block_is_addressed_through_its_wrapped_children() {
         let mut d = doc("lead <b>bold</b><div>block</div>");
         let roots = inline_roots(&d);

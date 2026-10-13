@@ -145,44 +145,55 @@ fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize) -> Str
 }
 
 /// The degraded copy of a root: its DOM text, skipping everything `skipped`
-/// skips (so it agrees with the element-granular markup), `<br>` as a newline,
-/// whitespace collapsed unless the root preserves it. Generated content has no
-/// DOM text, and a root that is itself generated copies nothing.
+/// skips (so it agrees with the element-granular markup) and nested inline
+/// roots (inline-blocks, floats: `ranges` returns those as roots of their own),
+/// `<br>` as a newline, whitespace collapsed unless the root preserves it.
+/// Generated content has no DOM text, and a root that is itself generated
+/// copies nothing.
 fn dom_plain(doc: &BaseDocument, root: NodeId) -> String {
-    fn walk(doc: &BaseDocument, id: NodeId, out: &mut String) {
+    struct Walk {
+        out: String,
+        collapse: bool,
+        prev_ws: bool,
+    }
+    fn walk(doc: &BaseDocument, id: NodeId, w: &mut Walk) {
         let Some(n) = doc.get_node(id) else { return };
         for c in n.children.iter().copied() {
             let Some(cn) = doc.get_node(c) else { continue };
-            if skipped(cn) {
+            if skipped(cn) || is_inline_root(cn) {
                 continue;
             }
             if let Some(t) = cn.text_data() {
-                out.push_str(&t.content);
+                for ch in t.content.chars() {
+                    let ws = w.collapse && ch.is_ascii_whitespace();
+                    if !(ws && w.prev_ws) {
+                        w.out.push(if ws { ' ' } else { ch });
+                    }
+                    w.prev_ws = ws;
+                }
             } else if tag(cn) == Some("br") {
-                out.push('\n');
+                // A break is a break: later spaces fold into it, nothing folds it away.
+                w.out.push('\n');
+                w.prev_ws = true;
             } else {
-                walk(doc, c, out);
+                walk(doc, c, w);
             }
         }
+    }
+    fn is_inline_root(n: &Node) -> bool {
+        n.flags.is_inline_root() && n.element_data().is_some_and(|e| e.inline_layout_data.is_some())
     }
     if pseudo_owner(doc, root).is_some() {
         return String::new();
     }
-    let mut raw = String::new();
-    walk(doc, root, &mut raw);
-    if !doc.get_node(root).and_then(|n| n.primary_styles()).map_or(true, |s| collapses(&s)) {
-        return raw;
+    let collapse = doc.get_node(root).and_then(|n| n.primary_styles()).map_or(true, |s| collapses(&s));
+    let mut w = Walk { out: String::new(), collapse, prev_ws: false };
+    walk(doc, root, &mut w);
+    if collapse {
+        w.out.trim_matches(' ').to_string()
+    } else {
+        w.out
     }
-    let mut out = String::with_capacity(raw.len());
-    let mut prev_ws = false;
-    for c in raw.chars() {
-        let ws = c.is_ascii_whitespace();
-        if !(ws && prev_ws) {
-            out.push(if ws { ' ' } else { c });
-        }
-        prev_ws = ws;
-    }
-    out.trim_matches(' ').to_string()
 }
 
 fn floor(text: &str, mut o: usize) -> usize {
@@ -374,11 +385,13 @@ fn clone_range(doc: &BaseDocument, r: &Range, node: NodeId, out: &mut String) {
             }
             // A partially contained ancestor that contributes nothing (the
             // selection starts at its very end, or ends at its very start) is dropped.
-            let mut inner = String::new();
-            clone_range(doc, r, child, &mut inner);
-            if !inner.is_empty() {
-                out.push_str(&open_tag(c));
-                out.push_str(&inner);
+            let before = out.len();
+            out.push_str(&open_tag(c));
+            let opened = out.len();
+            clone_range(doc, r, child, out);
+            if out.len() == opened {
+                out.truncate(before);
+            } else {
                 out.push_str("</");
                 out.push_str(t);
                 out.push('>');
