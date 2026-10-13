@@ -1,4 +1,5 @@
 import { buildBlitzDocument } from './document';
+import { stampParityIds } from '../parity/parityIds';
 import { applyPrivacyRedaction } from '../../../utils/iframePrivacyRedact';
 import { markFolds } from './folds';
 import { markUnselectable } from './unselectable';
@@ -36,7 +37,8 @@ export async function runPrepass(props, { privacy = { active: false, dict: null 
   //    AFTER privacy, so a mark never splits a name before the redaction pass sees it.
   markUnselectable(doc);
   if (props.searchQuery) markSearch(doc, props.searchQuery);
-  // 6. Parity ids (plan B).
+  // 6. Parity ids (plan B): only under the e2e harness's __MV_PARITY__.
+  stampParityIds(doc);
   // 7. Serialize.
   return { html: `<!doctype html>\n${doc.documentElement.outerHTML}`, doc };
 }

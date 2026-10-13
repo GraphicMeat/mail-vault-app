@@ -234,6 +234,48 @@ describe('BlitzTiles', () => {
     });
   });
 
+  describe('parity root attributes and the palette (plan B)', () => {
+    afterEach(() => { delete globalThis.__MV_PARITY__; });
+    const root = () => screen.getByTestId('blitz-email-body');
+
+    it('carries none without __MV_PARITY__', async () => {
+      openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta() });
+      render(tiles());
+      await screen.findAllByTestId('blitz-tile');
+      expect(root().getAttributeNames().filter((n) => n.startsWith('data-mv-parity'))).toEqual([]);
+    });
+    it('under __MV_PARITY__: doc, the width SENT to render.open, rev and theme', async () => {
+      globalThis.__MV_PARITY__ = true;
+      paneWidth = 5000;
+      openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta({ cssWidth: 3999, tileCount: 1, cssHeight: 100 }) });
+      render(tiles({ theme: { dark: true, palette: 'graphite' } }));
+      await screen.findAllByTestId('blitz-tile');
+      expect(root().getAttribute('data-mv-parity-doc')).toBe('9');
+      expect(root().getAttribute('data-mv-parity-width')).toBe('4000'); // sent, not meta.cssWidth
+      expect(root().getAttribute('data-mv-parity-rev')).toBe('1');
+      expect(root().getAttribute('data-mv-parity-theme')).toBe('dark');
+    });
+    it('the rev attribute follows a render-updated event', async () => {
+      globalThis.__MV_PARITY__ = true;
+      let push;
+      onRenderUpdated.mockImplementation(async cb => { push = cb; return () => {}; });
+      openRender.mockResolvedValue({ docId: 6, rev: 1, meta: meta() });
+      render(tiles());
+      await screen.findAllByTestId('blitz-tile');
+      await act(async () => { push({ docId: 6, rev: 2, meta: meta() }); });
+      expect(root().getAttribute('data-mv-parity-rev')).toBe('2');
+      expect(root().getAttribute('data-mv-parity-theme')).toBe('light');
+    });
+    it('a palette change reopens the doc', async () => {
+      openRender.mockResolvedValue({ docId: 1, rev: 1, meta: meta() });
+      const { rerender } = render(tiles({ theme: { dark: true, palette: 'graphite' } }));
+      await screen.findAllByTestId('blitz-tile');
+      expect(openRender).toHaveBeenCalledTimes(1);
+      rerender(tiles({ theme: { dark: true, palette: 'teal' } }));
+      await waitFor(() => expect(openRender).toHaveBeenCalledTimes(2));
+    });
+  });
+
   it('any open rejection is a failure, whatever it looks like (render_bad_request, a plain object, a string)', async () => {
     for (const rejection of [{ code: 'render_bad_request' }, 'render_bad_request', new Error('render_bad_request')]) {
       const onFailure = vi.fn();

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 const redact = vi.hoisted(() => ({ throws: false }));
 vi.mock('../../../utils/iframePrivacyRedact', () => ({
   applyPrivacyRedaction: (doc, dict) => {
@@ -80,5 +80,18 @@ describe('runPrepass', () => {
     const c = await runPrepass(props(), { privacy: { active: true, dict: { names: ['Alice'] } } });
     const d = await runPrepass(props(), { privacy: { active: true, dict: { names: ['Alice'] } } });
     expect(d.html).toBe(c.html);
+  });
+  describe('parity ids (plan B)', () => {
+    afterEach(() => { delete globalThis.__MV_PARITY__; });
+    it('stamps data-mv-id on body descendants only under __MV_PARITY__', async () => {
+      const off = await runPrepass(props({ bodyHtml: '<div><p>a</p><p>b</p></div>' }), { privacy: { active: false } });
+      expect(off.doc.querySelector('[data-mv-id]')).toBeNull();
+      expect(off.html).not.toContain('data-mv-id');
+      globalThis.__MV_PARITY__ = true;
+      const on = await runPrepass(props({ bodyHtml: '<div><p>a</p><p>b</p></div>' }), { privacy: { active: false } });
+      const ids = [...on.doc.body.querySelectorAll('[data-mv-id]')].map((e) => e.getAttribute('data-mv-id'));
+      expect(ids).toEqual(expect.arrayContaining(['div[1]', 'div[1]/p[1]', 'div[1]/p[2]']));
+      expect(on.html).toContain('data-mv-id="div[1]/p[2]"');
+    });
   });
 });

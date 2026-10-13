@@ -34,7 +34,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
   const dpr = useDevicePixelRatio();
-  const [doc, setDoc] = useState(null); // { docId, rev, meta }
+  const [doc, setDoc] = useState(null); // { docId, rev, meta, sentWidth }
   const [hover, setHover] = useState(null);
   const [hoverFold, setHoverFold] = useState(null); // id of the fold toggle under the pointer
   const textLayerRef = useRef(null);
@@ -95,7 +95,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }, []);
 
   const dark = !!theme?.dark;
-  const palette = theme?.palette;
+  const palette = theme?.palette; // not sent yet, but a palette change must reopen the doc
   useEffect(() => {
     if (!width) return undefined;
     const my = ++gen.current;
@@ -111,7 +111,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
         // The old doc keeps its tiles on screen until this one replaces it; only then is it closed.
         const prev = docIdRef.current;
         docIdRef.current = r.docId;
-        setDoc(r);
+        setDoc({ ...r, sentWidth: cssWidth });
         // Toggle ids repeat across docs: what was under the pointer is not known for this one.
         setHover(null); setHoverFold(null);
         if (prev != null && prev !== r.docId) closeRender(prev);
@@ -119,7 +119,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
       // Any rejection is a failure (render_bad_request, render_too_complex, a plain object, a string).
       .catch((e) => { if (my === gen.current) fail(e?.message || e?.code || String(e)); });
     return () => { gen.current++; };
-  }, [html, width, dpr, dark, fail]);
+  }, [html, width, dpr, dark, palette, fail]);
 
   // The current doc closes with the component, not with each re-open.
   useEffect(() => () => {
@@ -323,8 +323,15 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const hoverFoldInfo = m?.folds?.find(f => f.id === hoverFold);
   // The iframe's quote toggle carries this title; a signature toggle has none.
   const foldTitle = hoverFoldInfo?.kind === 'quote' ? (hoverFoldInfo.open ? labels.quoteHideTitle : labels.quoteShowTitle) : undefined;
+  // The parity harness (e2e) reads these to pair this surface with the iframe's.
+  const parityAttrs = globalThis.__MV_PARITY__ && doc ? {
+    'data-mv-parity-doc': String(doc.docId),
+    'data-mv-parity-width': String(doc.sentWidth),
+    'data-mv-parity-rev': String(doc.rev),
+    'data-mv-parity-theme': dark ? 'dark' : 'light',
+  } : null;
   return (
-    <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body" data-doc-id={doc?.docId}
+    <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body" data-doc-id={doc?.docId} {...parityAttrs}
       // Focusable like the iframe's document: a click focuses it, Tab leaves it, no ring.
       tabIndex={-1}
       className={`w-full overflow-x-auto relative${scrollsInside ? ' overflow-y-auto' : ''}`} style={{ outline: 'none', ...boxStyle }}>
