@@ -152,9 +152,8 @@ fn each_tile_paints_its_own_slice_at_scale_2() {
 
 fn paints(html: &str) -> Vec<mailvault_render::net::FetchRequest> {
     use mailvault_render::net::BridgeNet;
-    use std::sync::Arc;
     let net = BridgeNet::new(true);
-    let mut doc = RenderDoc::open(html, RenderOptions::new(300, 1.0), Some(net.clone() as Arc<_>))
+    let mut doc = RenderDoc::open(html, RenderOptions::new(300, 1.0), Some(net.clone()))
         .unwrap_or_else(|_| panic!("open failed for {html}"));
     doc.apply_resources();
     let png = doc.tile_png(0).unwrap();

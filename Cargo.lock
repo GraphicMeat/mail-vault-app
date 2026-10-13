@@ -4960,6 +4960,7 @@ dependencies = [
  "blitz-paint",
  "blitz-traits",
  "data-url",
+ "imagesize",
  "png 0.17.16",
  "serde",
  "serde_json",

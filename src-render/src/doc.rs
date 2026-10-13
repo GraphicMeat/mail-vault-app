@@ -2,6 +2,7 @@ use anyrender::ImageRenderer;
 use anyrender_vello_cpu::VelloCpuImageRenderer;
 use blitz_dom::{local_name, DocumentConfig, NodeId, Point};
 use blitz_html::HtmlDocument;
+use crate::net::{img_srcs, BridgeNet};
 use blitz_traits::net::NetProvider;
 use blitz_traits::shell::{ColorScheme, Viewport};
 use serde::Serialize;
@@ -26,6 +27,8 @@ pub const MAX_TILE_PIXELS: u64 = 33_554_432;
 pub const MAX_DEPTH: usize = 256;
 /// Resolution base for relative URLs. `.invalid` is reserved (RFC 6761): it never resolves.
 const BASE_URL: &str = "http://invalid.invalid/";
+/// Any value at or above blitz-dom's sub-document nesting limit turns iframes off.
+const NO_SUBDOCUMENTS: usize = 1000;
 
 /// Plans B and D add fields (theme, transparency). Construct with `new` or
 /// `..Default::default()`, never a bare literal, so their additions compile.
@@ -100,7 +103,7 @@ pub struct RenderDoc {
 }
 
 impl RenderDoc {
-    pub fn open(html: &str, opts: RenderOptions, net: Option<Arc<dyn NetProvider>>) -> Result<Self, OpenError> {
+    pub fn open(html: &str, opts: RenderOptions, net: Option<Arc<BridgeNet>>) -> Result<Self, OpenError> {
         if html.len() > MAX_HTML_BYTES {
             return Err(OpenError::TooLarge);
         }
@@ -116,19 +119,32 @@ impl RenderDoc {
         let (px_w, px_h) = tile_px(&opts);
         let config = DocumentConfig {
             viewport: Some(Viewport::new(px_w, px_h, opts.scale, ColorScheme::Light)),
-            net_provider: net,
+            net_provider: net.clone().map(|n| n as Arc<dyn NetProvider>),
             // Without a base, blitz-dom falls back to a `data:` URL that cannot
             // resolve anything, and `resolve_url` then panics on the first relative
             // `src` / `href` / `@import`. An unresolvable http base turns every
             // relative or protocol-relative URL into an `http:` one, which the net
             // provider answers empty without queueing.
             base_url: Some(BASE_URL.to_string()),
+            // blitz-dom loads an <iframe> only below its own nesting limit (10).
+            // Sub-documents have no place in a mail reader: they parse outside
+            // the node and depth checks, and fetch on their own.
+            subdocument_depth: NO_SUBDOCUMENTS,
             ..Default::default()
         };
+        if let Some(n) = &net {
+            n.begin_parse();
+        }
         let mut doc = HtmlDocument::from_html(html, config);
         if doc.tree().len() > MAX_NODES || exceeds_depth(&doc) {
             return Err(OpenError::TooComplex);
         }
+        if let Some(n) = &net {
+            // Everything blitz asked for while parsing is decided now: images are
+            // queued, stylesheets, fonts, @import and frames are answered empty.
+            n.end_parse(&img_srcs(&doc));
+        }
+        doc.handle_messages();
         doc.resolve(0.0);
         Ok(Self { doc, opts })
     }
@@ -137,6 +153,11 @@ impl RenderDoc {
     pub fn apply_resources(&mut self) {
         self.doc.handle_messages();
         self.doc.resolve(0.0);
+    }
+
+    /// How many <iframe> sub-documents were loaded (always 0: they are switched off).
+    pub fn subdocument_count(&self) -> usize {
+        self.doc.sub_document_node_ids().len()
     }
 
     pub fn has_pending_critical(&self) -> bool {

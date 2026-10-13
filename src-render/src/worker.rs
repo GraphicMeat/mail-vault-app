@@ -109,7 +109,7 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             let net_for_doc = net.clone();
             let built = guarded(|| {
                 pre_open(&html);
-                RenderDoc::open(&html, opts, Some(net_for_doc as Arc<_>)).map(|mut d| {
+                RenderDoc::open(&html, opts, Some(net_for_doc)).map(|mut d| {
                     d.apply_resources(); // data: images answered during parse
                     let meta = d.meta();
                     (d, meta)
