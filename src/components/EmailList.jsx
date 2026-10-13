@@ -223,6 +223,8 @@ function EmailListComponent({ stacked = false }) {
   // A view runs on the daemon. Until its rows land, everything the list holds
   // belongs to the folder behind it, so none of that may be drawn as the view.
   const viewLoading = useViewStore(s => !!s.activeViewId && s.loading);
+  // What the open view holds, from the daemon: the rows on screen are one page.
+  const viewTotal = useViewStore(s => (s.activeViewId ? s.counts[s.activeViewId] : undefined));
   const closeView = useViewStore(s => s.closeView);
   const searchResults = useSearchStore(s => s.searchResults);
   const searchHasAttachments = useSearchStore(s => !!s.searchFilters?.hasAttachments);
@@ -1217,7 +1219,10 @@ function EmailListComponent({ stacked = false }) {
     : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes')
       : activeMailbox === 'INBOX' ? t('sidebar.inbox')
         : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox);
-  const mailboxSummary = viewLoading ? '' : formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly });
+  const mailboxSummary = viewLoading ? ''
+    // A view's rows are its own: the folder behind it has no say in the count.
+    : activeView && searchActive ? formatListCount({ shown: displayEmails.length, loaded: searchResults.length, total: viewTotal ?? searchResults.length, unreadOnly })
+      : formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly });
   const mailboxScopeLabel = mailboxScope && t('list.acrossFolders', { count: mailboxScope.paths.length });
   const vaultShareLabel = vaultShare && t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
     inVault: formatCount(vaultShare.inVault), loaded: formatCount(vaultShare.loaded),

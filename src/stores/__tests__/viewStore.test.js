@@ -47,6 +47,8 @@ beforeEach(() => {
   };
   useViewStore.setState({ views: [], counts: {}, activeViewId: null, unavailableReason: null, loading: false });
   useSearchStore.getState().clearSearch();
+  // A count one spec left pending would hold every later count behind it.
+  __resetViewCountsForTests();
 });
 
 describe('saved views', () => {
@@ -408,6 +410,16 @@ describe('what a view is called', () => {
     release({ available: true, rows: [row(1)], total: 1 });
     await opening;
     expect(useViewStore.getState().loading).toBe(false);
+  });
+
+  // The list's header counts the view; the run that just happened is the
+  // freshest number there is, ahead of the badge count it asks for after.
+  it('keeps the total the view just ran with as its count', async () => {
+    harness.daemonCall.mockImplementation(method => (method === 'views.evaluate'
+      ? Promise.resolve({ available: true, rows: [row(1)], total: 76 })
+      : new Promise(() => {})));
+    await useViewStore.getState().openView(STARRED);
+    expect(useViewStore.getState().counts['builtin-starred']).toBe(76);
   });
 
   it('refreshes the counts once the view it opened has run', async () => {

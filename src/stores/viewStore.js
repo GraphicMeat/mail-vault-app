@@ -218,7 +218,10 @@ export const useViewStore = create((set, get) => ({
       }
       if (mine !== runGeneration) return false;
     }
-    set({ loading: false });
+    set(state => ({
+      loading: false,
+      ...(typeof reply.total === 'number' ? { counts: { ...state.counts, [id]: reply.total } } : {}),
+    }));
     useSearchStore.getState().showRows(rows);
     // The badge beside every view is only true as of its last count, and
     // opening one is the moment a person looks at them.

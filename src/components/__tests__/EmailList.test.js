@@ -1915,6 +1915,28 @@ describe('a saved view drives the grouping', () => {
     });
   }
 
+  // Once the view's rows landed the count still read the folder's total
+  // ("76 of 4,094 emails"), a claim about the folder under the view's name.
+  it('counts the view’s own mail, not the folder behind it', async () => {
+    const { container } = await mount({ def: {} });
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    const search = useSearchStore.getState();
+    try {
+      Object.assign(search, { searchActive: true, searchResults: makeEmails(3) });
+      act(() => {
+        useMailStore.setState({ totalEmails: 4094 });
+        useViewStore.setState({ counts: { v1: 3 } });
+      });
+      await settle();
+      expect(container.querySelector('[data-testid="email-list-count"]').textContent).toBe('3 emails');
+    } finally {
+      Object.assign(search, { searchActive: false, searchResults: [] });
+      useViewStore.setState({ counts: {} });
+    }
+  });
+
   it('renders the explorer surface with the view’s grouping while the list mode is still “list”', async () => {
     const { container } = await mount({ def: { group: 'sender' } });
     expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('sender');

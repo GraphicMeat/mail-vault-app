@@ -31,6 +31,8 @@ pub struct SearchRequest {
     /// Several accounts in one statement, in place of `account_id` when not
     /// empty. Every FTS probe is uncorrelated and runs over the whole index,
     /// so one statement per account paid for the same match once per account.
+    /// Daemon-side only: never read off an RPC's params.
+    #[serde(skip)]
     pub account_ids: Vec<String>,
     pub query: String,
     /// Server paths; sanitized here.
