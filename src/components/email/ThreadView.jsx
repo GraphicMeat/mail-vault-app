@@ -23,6 +23,7 @@ import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, attachEmailIframeAutoSize, emailScriptNonce } from '../../utils/emailIframeTemplate';
+import { attachImageDoubleClick } from '../../utils/emailImages';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import {
   Paperclip,
@@ -213,6 +214,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
         if (doc) doc.addEventListener('click', handleClick);
+        if (doc) attachImageDoubleClick(doc, () => loadedEmail?.attachments);
         // Dark Reader is inlined into the iframe HTML (see useMemo above);
         // runs during load, so no post-load injection is needed here.
       } catch (e) {}

@@ -22,6 +22,7 @@ import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
+import { attachImageDoubleClick } from '../../utils/emailImages';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
 import { useMailFonts } from '../../hooks/useMailFonts';
@@ -247,6 +248,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
         if (!doc) return;
         doc.addEventListener('contextmenu', (e) => e.preventDefault());
+        attachImageDoubleClick(doc, () => email?.attachments);
         doc.addEventListener('click', (e) => {
           const link = e.target.closest('a');
           if (!link || !link.href) return;

@@ -46,6 +46,7 @@ import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors, getChatLinkColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, keepImageProportions, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
+import { attachImageDoubleClick } from '../utils/emailImages';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 import { TagChips } from './TagChips';
@@ -639,6 +640,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           const doc = iframe.contentDocument || iframe.contentWindow?.document;
           if (doc) {
             doc.addEventListener('contextmenu', (e) => e.preventDefault());
+            attachImageDoubleClick(doc, () => mergedEmail?.attachments);
             doc.addEventListener('click', (e) => {
               const link = e.target.closest('a');
               if (!link || !link.href) return;

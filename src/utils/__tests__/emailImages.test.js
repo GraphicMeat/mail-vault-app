@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 const saver = vi.hoisted(() => ({ openInDefaultApp: vi.fn(async () => '/cache/x'), saveOneFile: vi.fn(async () => null) }));
 vi.mock('../../services/export/exportSaver', () => saver);
 
-import { imageFileFromSrc, openEmailImage, inlineImageAt, imageForDoubleClick } from '../emailImages';
+import { imageFileFromSrc, openEmailImage, inlineImageAt, imageForDoubleClick, canOpenImage, attachImageDoubleClick } from '../emailImages';
 
 const PNG = 'iVBORw0KGgo=';
 
@@ -90,5 +90,72 @@ describe('inlineImageAt / imageForDoubleClick', () => {
     expect(imageForDoubleClick(img)).toBeNull();
     // The menu still offers it: a right click does not follow the link.
     expect(inlineImageAt(img)).not.toBeNull();
+  });
+});
+
+describe('the file type is the image\'s, never the sender\'s', () => {
+  it('keeps the attachment name but takes the extension from the image type', () => {
+    // An `.html` name would open the picture's bytes in a browser.
+    const attachments = [{ filename: 'chart.html', content: PNG }];
+    expect(imageFileFromSrc(`data:image/png;base64,${PNG}`, attachments).name).toBe('chart.png');
+  });
+
+  it('opens raster images in the viewer, not an svg (a browser on most Macs, and it can carry script)', () => {
+    expect(canOpenImage(imageFileFromSrc(`data:image/png;base64,${PNG}`))).toBe(true);
+    expect(canOpenImage(imageFileFromSrc(`data:image/jpeg;base64,${PNG}`))).toBe(true);
+    expect(canOpenImage(imageFileFromSrc(`data:image/svg+xml;base64,${PNG}`))).toBe(false);
+  });
+});
+
+describe('attachImageDoubleClick', () => {
+  const src = `data:image/png;base64,${PNG}`;
+  const dblclick = (el) => el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+  it('opens an inline image on double click, and stops when detached', async () => {
+    window.__TAURI__ = {};
+    try {
+      saver.openInDefaultApp.mockClear();
+      document.body.innerHTML = `<img src="${src}">`;
+      const detach = attachImageDoubleClick(document, () => [{ filename: 'chart.png', content: PNG }]);
+      dblclick(document.querySelector('img'));
+      expect(saver.openInDefaultApp).toHaveBeenCalledTimes(1);
+      expect(saver.openInDefaultApp.mock.calls[0][0].name).toMatch(/^chart-.+\.png$/);
+      detach();
+      dblclick(document.querySelector('img'));
+      expect(saver.openInDefaultApp).toHaveBeenCalledTimes(1);
+    } finally {
+      delete window.__TAURI__;
+    }
+  });
+
+  it('attaching twice to one document opens once', () => {
+    window.__TAURI__ = {};
+    try {
+      saver.openInDefaultApp.mockClear();
+      document.body.innerHTML = `<img src="${src}">`;
+      attachImageDoubleClick(document, () => []);
+      const detach = attachImageDoubleClick(document, () => []);
+      dblclick(document.querySelector('img'));
+      expect(saver.openInDefaultApp).toHaveBeenCalledTimes(1);
+      detach();
+    } finally {
+      delete window.__TAURI__;
+    }
+  });
+
+  it('leaves a linked image, an svg and text alone', () => {
+    window.__TAURI__ = {};
+    try {
+      saver.openInDefaultApp.mockClear();
+      document.body.innerHTML = `<a href="https://example.com"><img id="a" src="${src}"></a><img id="s" src="data:image/svg+xml;base64,${PNG}"><p>x</p>`;
+      const detach = attachImageDoubleClick(document, () => []);
+      dblclick(document.getElementById('a'));
+      dblclick(document.getElementById('s'));
+      dblclick(document.querySelector('p'));
+      expect(saver.openInDefaultApp).not.toHaveBeenCalled();
+      detach();
+    } finally {
+      delete window.__TAURI__;
+    }
   });
 });
