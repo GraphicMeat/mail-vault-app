@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useT } from '../../i18n/index.js';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { AddressText } from '../../components/email/AddressText';
+import { maskString } from '../../utils/privacy/piiDetector';
 import { runPrepass } from './prepass';
 import { usePrivacyDict } from './prepass/privacyDict';
 import BlitzTiles from './BlitzTiles';
@@ -9,8 +11,14 @@ import FailureBubble from './FailureBubble';
 
 const bubbled = new Set(); // message keys that already showed the bubble this session
 
+// The readable text of an HTML body for the failure view. Style, script and
+// noscript text is code, not content.
 const textOf = (html) => {
-  try { return new DOMParser().parseFromString(html || '', 'text/html').body.textContent?.trim() || ''; } catch { return ''; }
+  try {
+    const body = new DOMParser().parseFromString(html || '', 'text/html').body;
+    for (const el of body.querySelectorAll('style, script, noscript, template')) el.remove();
+    return body.textContent?.trim() || '';
+  } catch { return ''; }
 };
 
 /** @param {import('./types').AltBodyProps} props */
@@ -54,10 +62,22 @@ export default function BlitzBody(props) {
   };
 
   if (failed) {
+    // The standard plain-text view's own masking (AddressText), fed the same
+    // dictionary the pre-pass uses: the global names plus this message's own
+    // parties. While the dictionary loads (hold) no body text is shown at all.
+    // maskString runs first so a name only the message knows is masked too;
+    // AddressText then masks again and honours peek, linkifying and the
+    // mailto href drop.
+    const shown = plainText || textOf(bodyHtml);
+    const text = priv.active ? maskString(shown, priv.dict) : shown;
     return (
       <div className={className} style={style}>
         <p data-testid="blitz-failure-notice" className="text-xs text-mail-text-muted mb-2">{t('blitz.failed.notice')}</p>
-        <div className="email-content email-plain-body whitespace-pre-wrap rounded-lg">{plainText || textOf(bodyHtml)}</div>
+        {!priv.hold && (
+          <div className="email-content email-plain-body whitespace-pre-wrap rounded-lg">
+            <AddressText text={text} accountId={props.accountId ?? message?._accountId} />
+          </div>
+        )}
         <AnimatePresence>
           {bubble === messageKey && (
             <FailureBubble
