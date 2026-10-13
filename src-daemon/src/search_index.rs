@@ -40,6 +40,7 @@ pub fn is_foreground_method(method: &str) -> bool {
             | "vault_search" | "mail_search_start" | "imap_set_flags" | "imap_delete_email" | "imap_move_emails"
             | "graph_set_read" | "graph_set_flagged" | "graph_delete_message" | "graph_move_emails"
             | "archive_emails" | "bulk_delete_emails" | "search.suggest" | "views.evaluate"
+            | "views.keywords" | "views.keyword_detail"
             | "people.list" | "people.get" | "people.stats" | "people.messages" | "people.suggest" | "people.review.list"
     )
 }
@@ -478,6 +479,21 @@ fn with_index<T>(
     request: &core::query::SearchRequest,
     query: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
 ) -> Result<Result<T, &'static str>, String> {
+    with_ready_index(st, |conn| {
+        #[cfg(test)]
+        g(&st.search_scopes).push(request.mailboxes.clone());
+        #[cfg(not(test))]
+        let _ = request;
+        query(conn)
+    })
+}
+
+/// `with_index` without a search request: one index lock hold, or why the
+/// index cannot answer (`off`, `unavailable`, `building`).
+fn with_ready_index<T>(
+    st: &SearchIndexState,
+    query: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
+) -> Result<Result<T, &'static str>, String> {
     if *g(&st.enabled) == Some(false) {
         return Ok(Err("off"));
     }
@@ -490,13 +506,7 @@ fn with_index<T>(
         match db::first_pass_done_checked(conn) {
             Ok(false) => return Ok(Err("building")),
             Err(e) => Err(e),
-            Ok(true) => {
-                #[cfg(test)]
-                g(&st.search_scopes).push(request.mailboxes.clone());
-                #[cfg(not(test))]
-                let _ = request;
-                query(conn)
-            }
+            Ok(true) => query(conn),
         }
     };
     match result {
@@ -506,6 +516,63 @@ fn with_index<T>(
             Err(error)
         }
     }
+}
+
+/// How many indexed messages there are, over every account: the `N` the
+/// view builder weighs a word's document frequency against.
+pub(crate) fn total_docs(st: &SearchIndexState) -> Result<Result<u64, &'static str>, String> {
+    with_ready_index(st, |conn| {
+        conn.query_row("SELECT count(*) FROM messages", [], |r| r.get::<_, i64>(0))
+            .map(|n| n.max(0) as u64)
+            .map_err(|e| e.to_string())
+    })
+}
+
+/// Whether the index holds this message's body text (`BODY_INDEXED`), so a
+/// word of it the index has never seen is noise rather than mail not read yet.
+pub(crate) fn body_indexed(
+    st: &SearchIndexState,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+) -> Result<Result<bool, &'static str>, String> {
+    let vault_dir = core::text::vault_dir_name(mailbox);
+    with_ready_index(st, |conn| {
+        conn.prepare_cached(
+            "SELECT EXISTS(SELECT 1 FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3 AND body_state = ?4)",
+        )
+        .and_then(|mut stmt| {
+            stmt.query_row(rusqlite::params![account_id, vault_dir, uid, reconcile::BODY_INDEXED], |r| r.get::<_, i64>(0))
+        })
+        .map(|n| n == 1)
+        .map_err(|e| e.to_string())
+    })
+}
+
+/// How many indexed messages hold `term`, matched the way a search for it
+/// is (`query::word_clause`): 3+ characters is a phrase in the trigram
+/// table, a shorter CJK word is its characters in the unicode61 one. One
+/// lock hold per term, so the indexer and a click get the lock between probes.
+pub(crate) fn term_doc_count(st: &SearchIndexState, term: &str) -> Result<Result<u64, &'static str>, String> {
+    let (table, needle) = if term.chars().count() >= 3 {
+        ("msg_fts", core::query::fts_string(term))
+    } else if term.chars().any(core::text::is_cjk) {
+        ("msg_cjk", core::query::fts_string(&core::text::cjk_units(term)))
+    } else {
+        // Under a trigram and not CJK: no table can count it.
+        return Ok(Ok(0));
+    };
+    let sql = if table == "msg_fts" {
+        "SELECT count(*) FROM msg_fts WHERE msg_fts MATCH ?1"
+    } else {
+        "SELECT count(*) FROM msg_cjk WHERE msg_cjk MATCH ?1"
+    };
+    with_ready_index(st, |conn| {
+        conn.prepare_cached(sql)
+            .and_then(|mut stmt| stmt.query_row([needle.as_str()], |r| r.get::<_, i64>(0)))
+            .map(|n| n.max(0) as u64)
+            .map_err(|e| e.to_string())
+    })
 }
 
 pub fn search_reply(st: &SearchIndexState, request: &core::query::SearchRequest) -> Result<serde_json::Value, String> {
@@ -1665,10 +1732,10 @@ mod tests {
     #[test]
     fn only_what_a_person_waits_on_counts_as_foreground() {
         use crate::search_index::is_foreground_method as fg;
-        for m in ["maildir_read_light", "maildir_set_flags", "maildir_delete_many", "imap_delete_email", "load_email_cache_by_uids", "vault_rows", "search.suggest"] {
+        for m in ["maildir_read_light", "maildir_set_flags", "maildir_delete_many", "imap_delete_email", "load_email_cache_by_uids", "vault_rows", "search.suggest", "views.keywords", "views.keyword_detail"] {
             assert!(fg(m), "{m}");
         }
-        for m in ["search_index_status", "search_index_configure", "ping", "save_email_cache", "sync.watch", "prefetch_attachments"] {
+        for m in ["search_index_status", "search_index_configure", "ping", "save_email_cache", "sync.watch", "prefetch_attachments", "views.hidden_members"] {
             assert!(!fg(m), "{m} must not hold the index back");
         }
     }
