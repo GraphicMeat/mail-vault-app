@@ -3,6 +3,7 @@
 
 pub mod attachments;
 pub mod db;
+pub mod keywords;
 pub mod plan;
 pub mod query;
 pub mod reconcile;
