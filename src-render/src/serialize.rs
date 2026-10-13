@@ -1,9 +1,12 @@
 //! Rich and plain copy of a selection given in layout coordinates.
 //!
-//! The plain text comes from blitz's own selection model (so the highlight
-//! logic and the copy agree), joined the way WebKit joins blocks. The rich
-//! markup is our own `Range.cloneContents()`: blitz's `outer_html` writes
-//! unescaped text and `<x />`.
+//! The plain text uses the range rule of blitz's selection model
+//! (`get_text_selection_ranges`: first root from its offset, last root up to
+//! its offset, whole roots between) over the visible roots we already hold,
+//! joined the way WebKit joins blocks. blitz's own range walk dedups with
+//! `Vec::contains`, quadratic in the root count; a test proves ours returns the
+//! same ranges. The rich markup is our own `Range.cloneContents()`: blitz's
+//! `outer_html` writes unescaped text and `<x />`.
 use crate::dommap::{align, collapses, dom_end_point, dom_point, pseudo_owner, DomPoint};
 use crate::text::{inline_roots, is_unselectable, NOSELECT_ATTR};
 use blitz_dom::{BaseDocument, LocalName, Node, NodeData, NodeId};
@@ -28,7 +31,7 @@ const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "inpu
 const STRUCTURAL: &[&str] = &["table", "thead", "tbody", "tfoot", "tr", "ul", "ol"];
 const INLINE: &[&str] = &["a", "b", "strong", "i", "em", "u", "s", "span", "font", "code", "sup", "sub", "small", "big", "mark"];
 
-pub fn serialize(doc: &mut BaseDocument, a: Endpoint, b: Endpoint) -> Serialized {
+pub fn serialize(doc: &BaseDocument, a: Endpoint, b: Endpoint) -> Serialized {
     let empty = || Serialized { html: String::new(), text: String::new() };
     let roots = inline_roots(doc);
     let order: HashMap<NodeId, usize> = roots.iter().enumerate().map(|(i, r)| (*r, i)).collect();
@@ -39,11 +42,11 @@ pub fn serialize(doc: &mut BaseDocument, a: Endpoint, b: Endpoint) -> Serialized
         std::mem::swap(&mut a, &mut b);
     }
     // Offsets come from the page: clamp them and never split a code point.
-    let (a, b) = ((a.1, snap(doc, a.1, a.2, false)), (b.1, snap(doc, b.1, b.2, true)));
+    let (a, b) = ((a.0, a.1, snap(doc, a.1, a.2, false)), (b.0, b.1, snap(doc, b.1, b.2, true)));
     if a == b {
         return empty();
     }
-    Serialized { html: markup(doc, a, b), text: plain(doc, &order, a, b) }
+    Serialized { html: markup(doc, (a.1, a.2), (b.1, b.2)), text: plain(doc, &roots, (a.0, a.2), (b.0, b.2)) }
 }
 
 /// `offset` clamped to the root's text and moved to a char boundary (down for
@@ -63,16 +66,34 @@ fn snap(doc: &BaseDocument, root: NodeId, offset: usize, up: bool) -> usize {
 
 // ── plain text ──
 
-fn plain(doc: &mut BaseDocument, order: &HashMap<NodeId, usize>, a: (NodeId, usize), b: (NodeId, usize)) -> String {
-    doc.set_text_selection(a.0, a.1, b.0, b.1);
-    let ranges = doc.get_text_selection_ranges();
-    // At once, so no tile ever paints blitz's own highlight.
-    doc.clear_text_selection();
+/// The ranges blitz's `get_text_selection_ranges` would return for a selection
+/// from `a` to `b` (root index, byte offset; `a` not after `b`), in order.
+fn ranges(doc: &BaseDocument, roots: &[NodeId], a: (usize, usize), b: (usize, usize)) -> Vec<(NodeId, usize, usize)> {
+    let mut out = Vec::new();
+    for (i, root) in roots.iter().enumerate().take(b.0 + 1).skip(a.0) {
+        let len = layout_len(doc, *root);
+        let (s, e) = match (i == a.0, i == b.0) {
+            (true, true) => (a.1, b.1),
+            (true, false) => (a.1, len),
+            (false, true) => (0, b.1),
+            (false, false) => (0, len),
+        };
+        if s < e && e <= len {
+            out.push((*root, s, e));
+        }
+    }
+    out
+}
+
+fn layout_len(doc: &BaseDocument, root: NodeId) -> usize {
+    doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()).map_or(0, |t| t.text.len())
+}
+
+fn plain(doc: &BaseDocument, roots: &[NodeId], a: (usize, usize), b: (usize, usize)) -> String {
     let mut out = String::new();
     let mut prev: Option<NodeId> = None;
-    for (root, s, e) in ranges {
-        // blitz's range walk does not know about closed folds; ours does.
-        if !order.contains_key(&root) || is_unselectable(doc, root) {
+    for (root, s, e) in ranges(doc, roots, a, b) {
+        if is_unselectable(doc, root) {
             continue;
         }
         // WebKit and Chrome put a plain space on the plain-text clipboard for nbsp.
@@ -428,5 +449,71 @@ fn escape_attr(t: &str, out: &mut String) {
             '\u{a0}' => out.push_str("&nbsp;"),
             c => out.push(c),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use blitz_dom::DocumentConfig;
+    use blitz_html::HtmlDocument;
+    use blitz_traits::shell::{ColorScheme, Viewport};
+
+    fn doc(html: &str) -> HtmlDocument {
+        let config = DocumentConfig {
+            viewport: Some(Viewport::new(400, 300, 1.0, ColorScheme::Light)),
+            base_url: Some("http://invalid.invalid/".to_string()),
+            ..Default::default()
+        };
+        let mut d = HtmlDocument::from_html(html, config);
+        d.resolve(0.0);
+        d
+    }
+
+    /// Our linear ranges equal blitz's own for every ordered pair of endpoints
+    /// (roots, and the offsets 0, 1, middle, end of each), on shapes with
+    /// tables, lists, breaks and a folded region. Anonymous blocks are left out on
+    /// purpose: blitz's range walk follows DOM children, so it misses an anonymous
+    /// block between its endpoints and re-resolves an anonymous endpoint by sibling
+    /// index (a start at a div and an end at offset 0 of a later anonymous block
+    /// yields that block and the next paragraph). Ours treats them like any root;
+    /// `anonymous_blocks_inside_and_at_the_ends_of_a_selection_are_copied` pins it.
+    #[test]
+    fn linear_ranges_equal_blitzs_for_every_endpoint_pair() {
+        let corpus = [
+            "<p>one two</p><p>three</p><div>four <b>five</b></div>",
+            "<table><tr><td>a1</td><td>b1</td></tr><tr><td>a2</td><td>b2</td></tr></table>",
+            "<ul><li>x</li><li>y <i>z</i></li></ul><ol><li>n</li></ol>",
+            "<p>a<br>b</p><p></p><p> </p><p>last</p>",
+            "<p>keep</p><blockquote style=\"display:none\"><p>folded</p></blockquote><p>after</p>",
+            "<div><p>deep</p><div><p>deeper</p></div></div><h1>h</h1>",
+        ];
+        let mut pairs = 0;
+        for html in corpus {
+            let mut d = doc(html);
+            let roots = inline_roots(&d);
+            let order: HashMap<NodeId, usize> = roots.iter().enumerate().map(|(i, r)| (*r, i)).collect();
+            let points: Vec<(usize, usize)> = roots
+                .iter()
+                .enumerate()
+                .flat_map(|(i, r)| {
+                    let len = layout_len(&d, *r);
+                    [0, 1, len / 2, len].into_iter().map(move |o| (i, o.min(len)))
+                })
+                .collect();
+            for (x, a) in points.iter().enumerate() {
+                for b in &points[x..] {
+                    if a >= b {
+                        continue; // `serialize` orders its endpoints; equal ones copy nothing
+                    }
+                    d.set_text_selection(roots[a.0], a.1, roots[b.0], b.1);
+                    let theirs: Vec<_> = d.get_text_selection_ranges().into_iter().filter(|(r, _, _)| order.contains_key(r)).collect();
+                    d.clear_text_selection();
+                    assert_eq!(ranges(&d, &roots, *a, *b), theirs, "{html:?} {a:?}..{b:?}");
+                    pairs += 1;
+                }
+            }
+        }
+        assert!(pairs > 300, "{pairs}");
     }
 }

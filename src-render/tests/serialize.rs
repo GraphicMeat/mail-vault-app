@@ -332,3 +332,12 @@ fn a_selection_over_a_ltr_rtl_boundary_copies_in_logical_order() {
         assert_eq!((out.text.as_str(), out.html.as_str()), (want, want), "bytes {a}..{b}");
     }
 }
+
+#[test]
+fn anonymous_blocks_inside_and_at_the_ends_of_a_selection_are_copied() {
+    let mut d = open("lead <b>bold</b><div>block</div>mid<p>para</p>tail");
+    let out = d.serialize(at(&d, "lead", false), at(&d, "para", true));
+    assert_eq!(out.text, "lead bold\nblock\nmid\npara", "the anonymous block between the div and the p is not lost");
+    let out = d.serialize(at(&d, "block", false), at(&d, "tail", true));
+    assert_eq!(out.text, "block\nmid\npara\n\ntail");
+}
