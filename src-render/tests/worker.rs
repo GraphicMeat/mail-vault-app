@@ -163,3 +163,17 @@ fn a_worker_that_never_panicked_stays_up_after_its_last_doc_closes() {
     assert_eq!(out.len(), 2);
     assert_eq!(out[1]["kind"], "reply");
 }
+
+#[test]
+fn text_runs_answers_unknown_docs_and_malformed_requests_with_their_req() {
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":"<p>x","cssWidth":100,"scale":1.0,"allowRemote":false}),
+        json!({"op":"textRuns","req":2,"doc":99,"index":0}),
+        json!({"op":"textRuns","req":3,"doc":1,"index":"zero"}),
+        json!({"op":"textRuns","req":4,"doc":1,"index":0}),
+    ]);
+    assert_eq!(out[1], json!({"kind":"error","req":2,"code":"render_unknown_doc"}));
+    assert_eq!(out[2], json!({"kind":"error","req":3,"code":"render_bad_request"}));
+    assert_eq!(out[3]["req"], 4);
+    assert_eq!(out[3]["ok"]["runs"][0]["text"], "x");
+}

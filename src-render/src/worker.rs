@@ -57,7 +57,7 @@ struct FamilyIn {
 /// What the stdin reader hands the document thread.
 enum Msg {
     Op(In),
-    /// A line that is JSON for an open, tile or hit with a `req`, but not a valid
+    /// A line that is JSON for an open, tile, hit or textRuns with a `req`, but not a valid
     /// one. Only this thread writes to stdout, so the reader asks it to answer.
     Bad { req: u64 },
 }

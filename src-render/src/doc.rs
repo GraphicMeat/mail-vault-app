@@ -190,8 +190,9 @@ impl RenderDoc {
     }
 
     /// The text runs whose line tops fall in tile `index`. The whole document is
-    /// walked once per layout and indexed by tile: a select-all asks for every
-    /// tile, and a walk each would hold the worker for hundreds of passes.
+    /// walked once per layout and cached, then filtered by tile: a select-all asks
+    /// for every tile, and a layout walk each would hold the worker for hundreds
+    /// of passes.
     pub fn text_runs(&self, index: u32) -> Vec<crate::text::TextRun> {
         let mut cache = self.runs.borrow_mut();
         let all = cache.get_or_insert_with(|| crate::text::all_runs(&self.doc));

@@ -7,7 +7,7 @@
 //! into its `TextLayout.text`, the same coordinates as blitz's own
 //! `set_text_selection`.
 use crate::TILE_CSS_HEIGHT;
-use blitz_dom::{BaseDocument, LocalName, Node, NodeId};
+use blitz_dom::{local_name, BaseDocument, LocalName, Node, NodeId};
 use parley::PositionedLayoutItem;
 use std::ops::Range;
 use serde::Serialize;
@@ -72,15 +72,21 @@ fn is_visibility_hidden(node: &Node) -> bool {
 }
 
 /// Padding boxes of every ancestor (from `root` up) that clips overflow.
+/// `overflow` on the root element, or on `body` when the root's is `visible`,
+/// propagates to the viewport instead of clipping that element's content (mail
+/// often sets `html,body{overflow-x:hidden}`), so those two are skipped.
 fn clip_rects(doc: &BaseDocument, root: &Node) -> Vec<(f32, f32, f32, f32)> {
     use style::values::computed::Overflow;
+    let clips = |s: &style::properties::ComputedValues| s.clone_overflow_x() != Overflow::Visible || s.clone_overflow_y() != Overflow::Visible;
+    let root_el = doc.root_element();
+    let root_clips = root_el.primary_styles().is_some_and(|s| clips(&s));
     let mut rects = Vec::new();
     let mut cur = Some(root.id);
     while let Some(n) = cur.and_then(|i| doc.get_node(i)) {
-        if n.is_element() {
+        let propagated = n.id == root_el.id || (!root_clips && n.parent == Some(root_el.id) && n.data.is_element_with_tag_name(&local_name!("body")));
+        if n.is_element() && !propagated {
             if let Some(s) = n.primary_styles() {
-                let clips = |o: Overflow| o != Overflow::Visible;
-                if clips(s.clone_overflow_x()) || clips(s.clone_overflow_y()) {
+                if clips(&s) {
                     let l = n.final_layout();
                     let p = n.absolute_position(0.0, 0.0);
                     rects.push((p.x + l.border.left, p.y + l.border.top,
@@ -100,30 +106,26 @@ fn intersects(r: &TextRun, (cx, cy, cw, ch): (f32, f32, f32, f32)) -> bool {
 
 /// The text of the glyph run that holds glyphs `first..first + count` of `run`
 /// (glyph indices in visual order, as parley numbers them). A cluster belongs to
-/// the glyph run holding its first glyph; a cluster without glyphs (the tail of
-/// a ligature) goes with the cluster logically before it.
+/// the glyph run holding its first glyph; a cluster without glyphs (a ligature
+/// component) goes with the cluster visually before it. Parley pushes a
+/// ligature's start, which holds all its glyphs, and then its components, and
+/// reverses the whole list for RTL, so visual order has components after their
+/// start in both directions.
 fn glyph_run_text_range<B: parley::Brush>(run: &parley::Run<'_, B>, first: usize, count: usize) -> Option<Range<usize>> {
     let mut seen = 0;
-    let clusters: Vec<(usize, usize, Range<usize>)> = run
-        .visual_clusters()
-        .map(|c| {
-            let glyphs = c.glyphs().count();
-            seen += glyphs;
-            (seen - glyphs, glyphs, c.text_range())
-        })
-        .collect();
-    let logical: Box<dyn Iterator<Item = &(usize, usize, Range<usize>)>> =
-        if run.is_rtl() { Box::new(clusters.iter().rev()) } else { Box::new(clusters.iter()) };
     let mut owner = 0;
     let mut span: Option<Range<usize>> = None;
-    for (start, glyphs, text) in logical {
-        if *glyphs > 0 {
-            owner = *start;
+    for c in run.visual_clusters() {
+        let glyphs = c.glyphs().count();
+        if glyphs > 0 {
+            owner = seen;
         }
+        seen += glyphs;
         if (first..first + count).contains(&owner) {
+            let text = c.text_range();
             span = Some(match span {
                 Some(s) => s.start.min(text.start)..s.end.max(text.end),
-                None => text.clone(),
+                None => text,
             });
         }
     }

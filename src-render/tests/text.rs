@@ -133,3 +133,64 @@ fn inline_block_and_table_cells_are_their_own_roots_in_document_order() {
     let texts: Vec<_> = runs.iter().map(|r| r.text.as_str()).collect();
     assert_eq!(texts, ["one", "two", "three", "four"]);
 }
+
+/// The runs of one root partition its text: logical order, no gap, no overlap.
+fn assert_partition(runs: &[mailvault_render::text::TextRun], expected: &str) {
+    assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<String>(), expected, "{runs:?}");
+    assert_eq!(runs[0].start, 0, "{runs:?}");
+    for w in runs.windows(2) {
+        assert_eq!(w[0].start + w[0].text.len(), w[1].start, "contiguous, no overlap: {w:?}");
+    }
+}
+
+fn system_doc(body: &str) -> RenderDoc {
+    let html = format!(r#"<body style="margin:0;font:20px/30px sans-serif">{body}</body>"#);
+    RenderDoc::open_with(&html, RenderOptions { css_width: 400, scale: 1.0, ..Default::default() }, None, FontLibrary::new(true).context()).unwrap()
+}
+
+#[test]
+fn rtl_run_split_by_colour_partitions_the_text_with_niqqud() {
+    // One shaped RTL run, two glyph runs (same font, different brush).
+    let text = "\u{5E9}\u{5C1}\u{5B8}\u{5DC}\u{5D5}\u{5B9}\u{5DD} \u{5E2}\u{5D5}\u{5DC}\u{5DD}";
+    let (a, b) = text.split_once(' ').unwrap();
+    let runs = system_doc(&format!(r#"<p dir="rtl" style="margin:0">{a} <span style="color:red">{b}</span></p>"#)).text_runs(0);
+    assert!(runs.len() >= 2, "{runs:?}");
+    assert_partition(&runs, text);
+}
+
+#[test]
+fn rtl_arabic_harakat_and_lam_alef_split_by_colour_partition_the_text() {
+    let text = "\u{645}\u{64E}\u{631}\u{652}\u{62D}\u{628}\u{64B}\u{627} \u{644}\u{627} \u{628}\u{627}\u{644}\u{639}\u{627}\u{644}\u{645}";
+    let (a, b) = text.split_at(text.find(' ').unwrap() + 1);
+    let runs = system_doc(&format!(r#"<p dir="rtl" style="margin:0">{a}<span style="color:red">{b}</span></p>"#)).text_runs(0);
+    assert!(runs.len() >= 2, "{runs:?}");
+    assert_partition(&runs, text);
+}
+
+#[test]
+fn ltr_decomposed_combining_mark_next_to_a_colour_split_keeps_its_base() {
+    let text = "cafe\u{301}x";
+    let runs = system_doc(r#"<p style="margin:0">cafe&#x301;<span style="color:red">x</span></p>"#).text_runs(0);
+    assert!(runs.len() >= 2, "{runs:?}");
+    assert_partition(&runs, text);
+}
+
+#[test]
+fn zwj_family_emoji_next_to_a_colour_split_stays_whole() {
+    let text = "a\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}b";
+    let runs = system_doc(r#"<p style="margin:0">a&#x1F469;&#x200D;&#x1F469;&#x200D;&#x1F467;<span style="color:red">b</span></p>"#).text_runs(0);
+    assert_partition(&runs, text);
+}
+
+#[test]
+fn root_overflow_hidden_does_not_clip_text_below_the_first_screen() {
+    // `overflow` on the root element propagates to the viewport: it is not a clip
+    // box of the content, so text far below the window height must still be
+    // returned (and blitz lays this document out 3019px tall and paints it all).
+    for body_style in ["margin:0", "margin:0;height:100%"] {
+        let html = format!(r#"<html style="height:100%;overflow-x:hidden"><body style="{body_style};font:20px/30px 'MV Mono'"><div style="height:3000px"></div><p style="margin:0">far below</p></body></html>"#);
+        let doc = RenderDoc::open_with(&html, RenderOptions { css_width: 400, scale: 1.0, ..Default::default() }, None, lib().context()).unwrap();
+        let texts: Vec<_> = doc.text_runs(3000 / TILE_CSS_HEIGHT).into_iter().map(|r| r.text).collect();
+        assert_eq!(texts, ["far below"], "{body_style}");
+    }
+}
