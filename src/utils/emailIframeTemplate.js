@@ -291,9 +291,9 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
   // The mail's own dark variant is suppressed in BOTH themes: rendered light it
   // paints black on black, rendered dark it leaves Dark Reader nothing light to
   // invert.
-  const body = neutralizeEmailDarkScheme(
+  const body = keepImageProportions(neutralizeEmailDarkScheme(
     themeTag === 'dark' ? stripInlineColorImportant(bodyHtml) : bodyHtml
-  );
+  ));
 
   // The CSP <meta> is the FIRST element in <head> so it governs everything that
   // follows — the mail's inline handlers and any <script> it carries in the
@@ -364,4 +364,47 @@ export function getContextMenuColors() {
     itemColor: '#333333',
     itemHoverBg: '#f3f4f6',
   };
+}
+
+// CSS lengths an aspect ratio can be built from. A relative width (%, em) has
+// no fixed ratio to the height, so it is left alone.
+const PX_PER = { px: 1, '': 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4, pt: 96 / 72, pc: 16 };
+const toPx = (value) => {
+  const m = String(value ?? '').trim().replace(/\s*!important$/i, '').match(/^(\d*\.?\d+)\s*([a-z]*)$/i);
+  const per = m && PX_PER[m[2].toLowerCase()];
+  return per ? +m[1] * per : null;
+};
+const IMG_TAG_RE = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+const STYLE_ATTR_RE = /(\sstyle\s*=\s*)(?:"([^"]*)"|'([^']*)')/i;
+const WIDTH_ATTR_RE = /\swidth\s*=\s*["']?([^"'\s>]+)/i;
+
+// An image whose inline style fixes its height keeps its shape when the frame
+// narrows it. `img { max-width:100%; height:auto }` clamps the width, but an
+// inline height outranks that sheet, so an Outlook or Power BI paste
+// (`style="width:12.85in;height:5.9in"`) was squashed sideways. The height
+// becomes `auto` and the sender's own width:height becomes the aspect ratio:
+// an image the frame does not narrow lays out exactly as before, spacers
+// included. An image with no width to pair with (a logo sized by height
+// alone) has no ratio to keep and is left as sent.
+export function keepImageProportions(html) {
+  if (!html || !/<img\b/i.test(html)) return html;
+  return html.replace(IMG_TAG_RE, (tag) => {
+    const style = tag.match(STYLE_ATTR_RE);
+    if (!style) return tag;
+    const quote = style[2] !== undefined ? '"' : "'";
+    const decls = (style[2] ?? style[3]).split(';');
+    const find = (prop) => decls.findIndex(d => d.split(':')[0].trim().toLowerCase() === prop);
+    const hi = find('height');
+    if (hi < 0) return tag;
+    const height = toPx(decls[hi].slice(decls[hi].indexOf(':') + 1));
+    const wi = find('width');
+    const width = wi >= 0
+      ? toPx(decls[wi].slice(decls[wi].indexOf(':') + 1))
+      : toPx(tag.match(WIDTH_ATTR_RE)?.[1]);
+    if (!height || !width) return tag;
+    decls[hi] = 'height:auto';
+    while (decls.length && !decls[decls.length - 1].trim()) decls.pop();
+    decls.push(`aspect-ratio:${+width.toFixed(2)} / ${+height.toFixed(2)}`);
+    return tag.replace(STYLE_ATTR_RE, () => `${style[1]}${quote}${decls.join(';')}${quote}`);
+  });
 }

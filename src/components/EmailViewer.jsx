@@ -54,6 +54,7 @@ import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsSto
 import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
+import { inlineImageAt, imageForDoubleClick, openEmailImage, saveEmailImage } from '../utils/emailImages';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { PgpDecryptedBadge, PgpLockedNotice } from './email/PgpStatus';
 import { getEmailColors } from '../utils/mailChrome';
@@ -521,6 +522,33 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       });
     };
 
+    // Inline images open in the system viewer and save like an attachment.
+    // Read at event time: the inline parts' bytes can arrive after the body.
+    const inlineAttachments = () => useSelectionStore.getState().selectedEmail?.attachments;
+    const openImage = (file) => {
+      // Like Open in window: the viewer is out of reach of the masking pass.
+      if (refuseWindowUnderPrivacy()) return;
+      openEmailImage(file).catch((err) => {
+        console.error('[EmailViewer] open image failed:', err);
+        useMailStore.setState({ error: t('viewer.imageOpenFailed') });
+      });
+    };
+    const saveImage = (file) => {
+      saveEmailImage(file, t('email.attachments.save')).catch((err) => {
+        console.error('[EmailViewer] save image failed:', err);
+        useMailStore.setState({ error: t('email.attachments.failedSave') });
+      });
+    };
+    const isMac = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac');
+
+    const handleDblClick = (e) => {
+      if (!window.__TAURI__) return;
+      const file = imageForDoubleClick(e.target, inlineAttachments());
+      if (!file) return;
+      e.preventDefault();
+      openImage(file);
+    };
+
     const handleContextMenu = (e) => {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (!doc) return;
@@ -536,7 +564,12 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
       const link = e.target.closest?.('a[href]');
+      const image = window.__TAURI__ ? inlineImageAt(e.target, inlineAttachments()) : null;
       const items = [
+        ...(image ? [
+          { label: isMac ? t('viewer.openImageInPreview') : t('viewer.openImage'), action: () => openImage(image) },
+          { label: t('email.attachments.save'), action: () => saveImage(image) },
+        ] : []),
         { label: t('viewer.copy'), action: () => doc.execCommand('copy') },
         ...(link ? [{
           label: t('viewer.copyLink'),
@@ -584,10 +617,12 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         // Remove listeners from previous document if any
         if (currentDoc && currentDoc !== doc) {
           currentDoc.removeEventListener('click', handleClick);
+          currentDoc.removeEventListener('dblclick', handleDblClick);
           currentDoc.removeEventListener('contextmenu', handleContextMenu);
         }
         currentDoc = doc;
         doc.addEventListener('click', handleClick);
+        doc.addEventListener('dblclick', handleDblClick);
         doc.addEventListener('contextmenu', handleContextMenu);
         // Dark Reader is inlined into the iframe HTML (see useMemo above);
         // it runs during load, so no post-load injection is needed here.
@@ -604,6 +639,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       if (currentDoc) {
         try {
           currentDoc.removeEventListener('click', handleClick);
+          currentDoc.removeEventListener('dblclick', handleDblClick);
           currentDoc.removeEventListener('contextmenu', handleContextMenu);
         } catch { /* iframe may already be detached */ }
       }

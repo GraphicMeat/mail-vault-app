@@ -2,7 +2,7 @@ import { sanitizeForExport } from './exportSanitize';
 import { t } from '../../i18n/index.js';
 import { formatDateTime } from '../../utils/dateFormat.js';
 import { REDACT_CSS } from './exportRedact';
-import { stripInlineColorImportant } from '../../utils/emailIframeTemplate';
+import { stripInlineColorImportant, keepImageProportions } from '../../utils/emailIframeTemplate';
 
 // One width, one scale, used by the rasterizer, the packer and the HTML
 // document alike. A baked iframe height is only honest while the column that
@@ -176,7 +176,7 @@ export function buildMessageDocument({ message, bodyHtml, account, mailbox, stat
   const extras = part !== 'body' && extrasHtml ? extrasHtml : '';
   const headDarkCss = part === 'head' && dark ? HEAD_DARK_CSS + (extras ? PANEL_DARK_CSS : '') : '';
   // Dark Reader needs an inline `!important` colour's priority gone, as in the reader.
-  const body = sanitizeForExport(part === 'body' && dark ? stripInlineColorImportant(bodyHtml) : bodyHtml);
+  const body = keepImageProportions(sanitizeForExport(part === 'body' && dark ? stripInlineColorImportant(bodyHtml) : bodyHtml));
   const widthCss = Number.isFinite(width) && width > 0 ? `body { max-width: ${Math.round(width)}px; }` : '';
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>${EXPORT_CSS}${widthCss}${extras ? PANEL_CSS : ''}${headDarkCss}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style>${extraHead}</head>

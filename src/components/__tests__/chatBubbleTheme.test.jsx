@@ -53,4 +53,15 @@ describe('chat HTML theme', () => {
       usePrivacyStore.setState({ enabled: false });
     }
   });
+
+  it('a pasted screenshot sized by inline style keeps its shape in the bubble', () => {
+    const email = { uid: 9, _accountId: 'demo', _mailbox: 'INBOX', date: '2026-09-01',
+      from: { name: 'Nell', address: 'nell@example.com' }, to: [], subject: 'Studio plans',
+      html: '<p><img src="a.png" style="width:12.85in;height:5.9in"></p>', text: '', flags: [] };
+    const { container } = render(<ChatBubbleView correspondent={{ name: 'Nell', email: 'nell@example.com' }}
+      threadId="studio" threadsMap={new Map([['studio', { subject: 'Studio plans', emails: [email] }]])}
+      userEmail="rowan@example.com" onBack={() => {}} />);
+    const doc = new DOMParser().parseFromString(container.querySelector('iframe').getAttribute('srcdoc'), 'text/html');
+    expect(doc.querySelector('img').getAttribute('style')).toMatch(/height:auto;aspect-ratio:/);
+  });
 });

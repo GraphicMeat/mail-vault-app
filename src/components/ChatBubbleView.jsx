@@ -45,7 +45,7 @@ import { frameBody } from '../stores/netActivityStore';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors, getChatLinkColors } from '../utils/mailChrome';
-import { neutralizeEmailDarkScheme, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
+import { neutralizeEmailDarkScheme, keepImageProportions, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 import { TagChips } from './TagChips';
@@ -571,7 +571,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           </style>
           ${privacyOn ? PRIVACY_FRAME_HEAD : ''}
         </head>
-        <body>${neutralizeEmailDarkScheme(scannedBody)}${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}</body>
+        <body>${keepImageProportions(neutralizeEmailDarkScheme(scannedBody))}${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}</body>
       </html>
     `;
     return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };

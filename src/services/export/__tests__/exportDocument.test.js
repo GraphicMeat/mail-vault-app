@@ -220,3 +220,11 @@ describe('buildMessageDocument parts', () => {
     });
   });
 });
+
+describe('buildMessageDocument image proportions', () => {
+  it('a pasted screenshot sized by inline style keeps its shape in the export', () => {
+    const html = buildMessageDocument({ message, bodyHtml: '<p><img src="a.png" style="width:12.85in;height:5.9in"></p>', part: 'body' });
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    expect(doc.querySelector('.mv-body img').getAttribute('style')).toMatch(/height:auto;aspect-ratio:/);
+  });
+});
