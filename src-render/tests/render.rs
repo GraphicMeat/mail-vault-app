@@ -23,14 +23,14 @@ fn tall_doc_reports_height_and_tile_count() {
 #[test]
 fn tile_is_png_at_device_pixels_and_last_tile_is_shorter() {
     let mut doc = RenderDoc::open(&fx("tall.html"), RenderOptions::new(600, 2.0), None).unwrap();
-    assert_eq!(png_size(&doc.tile_png(0)), (1200, 1024));
-    assert_eq!(png_size(&doc.tile_png(2)), (1200, ((1300 - 1024) * 2) as u32));
+    assert_eq!(png_size(&doc.tile_png(0).unwrap()), (1200, 1024));
+    assert_eq!(png_size(&doc.tile_png(2).unwrap()), (1200, ((1300 - 1024) * 2) as u32));
 }
 
 #[test]
 fn tile_paints_content_not_blank() {
     let mut doc = open(&fx("tall.html"), 600);
-    let png = doc.tile_png(0);
+    let png = doc.tile_png(0).unwrap();
     let mut r = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
     let mut buf = vec![0; r.output_buffer_size()];
     r.next_frame(&mut buf).unwrap();
@@ -130,7 +130,7 @@ fn assert_bands(scale: f32) {
     let tile_h = (512.0 * scale) as u32;
     let colours = [[255, 0, 0], [0, 0, 255], [0, 0xaa, 0]];
     for (i, want) in colours.iter().enumerate() {
-        let img = rgb_pixels(&doc.tile_png(i as u32));
+        let img = rgb_pixels(&doc.tile_png(i as u32).unwrap());
         assert_eq!(img.1, tile_h, "tile {i} height");
         assert_eq!(&px(&img, 0, 0), want, "tile {i} first row");
         assert_eq!(&px(&img, img.0 / 2, tile_h / 2), want, "tile {i} middle");
@@ -157,7 +157,7 @@ fn paints(html: &str) -> Vec<mailvault_render::net::FetchRequest> {
     let mut doc = RenderDoc::open(html, RenderOptions::new(300, 1.0), Some(net.clone() as Arc<_>))
         .unwrap_or_else(|_| panic!("open failed for {html}"));
     doc.apply_resources();
-    let png = doc.tile_png(0);
+    let png = doc.tile_png(0).unwrap();
     assert_eq!(&png[1..4], b"PNG", "tile renders for {html}");
     net.take_outbox()
 }

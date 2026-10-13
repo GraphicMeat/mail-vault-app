@@ -5,4 +5,7 @@ mod doc;
 pub mod net;
 pub mod worker;
 
-pub use doc::{DocMeta, LinkInfo, OpenError, RenderDoc, RenderOptions, MAX_CSS_HEIGHT, MAX_HTML_BYTES, MAX_NODES, TILE_CSS_HEIGHT};
+pub use doc::{
+    tile_dims, DocMeta, LinkInfo, OpenError, RenderDoc, RenderOptions, TileError, MAX_CSS_HEIGHT, MAX_CSS_WIDTH, MAX_DEPTH,
+    MAX_HTML_BYTES, MAX_NODES, MAX_SCALE, MAX_TILE_PIXELS, MIN_SCALE, TILE_CSS_HEIGHT,
+};

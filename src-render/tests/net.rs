@@ -14,7 +14,7 @@ fn data_url_image_is_decoded_in_process_and_never_queued() {
     let mut doc = RenderDoc::open(&html, opts(), Some(net.clone() as Arc<_>)).unwrap();
     assert!(net.take_outbox().is_empty());
     doc.apply_resources();
-    let png = doc.tile_png(0);
+    let png = doc.tile_png(0).unwrap();
     let mut r = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
     let mut buf = vec![0; r.output_buffer_size()];
     r.next_frame(&mut buf).unwrap();
@@ -57,7 +57,7 @@ fn denied_stylesheet_does_not_block_paint() {
     assert!(net.complete(out[0].id, None));
     doc.apply_resources();
     assert!(!doc.has_pending_critical(), "a denial answers the request");
-    let png = doc.tile_png(0);
+    let png = doc.tile_png(0).unwrap();
     let mut r = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
     let mut buf = vec![0; r.output_buffer_size()];
     r.next_frame(&mut buf).unwrap();

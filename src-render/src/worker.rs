@@ -2,7 +2,7 @@
 //! turns stdin lines into messages. Before relayout, everything already
 //! queued is drained, so a burst of image completions costs one layout.
 use crate::net::BridgeNet;
-use crate::{RenderDoc, RenderOptions};
+use crate::{RenderDoc, RenderOptions, MAX_CSS_WIDTH, MAX_SCALE, MIN_SCALE};
 use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -40,7 +40,26 @@ struct Open {
     rev: u32,
 }
 
-pub fn run(input: impl BufRead + Send + 'static, mut output: impl Write, pre_open: fn(&str)) -> std::io::Result<()> {
+/// Stack of the thread that owns the documents. Blitz layout, text collection,
+/// hit testing and paint recurse once per nesting level, and the process main
+/// thread has 8 MiB (macOS, Linux) or 1 MiB (Windows). MAX_DEPTH bounds the
+/// recursion; this gives it generous headroom on every OS. The memory is
+/// reserved address space, committed only as deep recursion touches it.
+const WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
+
+pub fn run(input: impl BufRead + Send + 'static, output: impl Write + Send, pre_open: fn(&str)) -> std::io::Result<()> {
+    std::thread::scope(|scope| {
+        let owner = std::thread::Builder::new()
+            .name("render-docs".into())
+            .stack_size(WORKER_STACK_BYTES)
+            .spawn_scoped(scope, move || run_loop(input, output, pre_open))?;
+        // A panic outside the per-document guards is still fatal to the worker,
+        // exactly as before: re-raise it on the calling thread.
+        owner.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    })
+}
+
+fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_open: fn(&str)) -> std::io::Result<()> {
     let (tx, rx) = mpsc::channel::<In>();
     std::thread::spawn(move || {
         for line in input.lines().map_while(Result::ok) {
@@ -86,7 +105,7 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
     match msg {
         In::Open { req, doc, html, css_width, scale, allow_remote, theme: _ } => {
             let net = BridgeNet::new(allow_remote);
-            let opts = RenderOptions::new(css_width.clamp(1, 4000), scale.clamp(0.5, 4.0));
+            let opts = RenderOptions::new(css_width.clamp(1, MAX_CSS_WIDTH as u32), scale.clamp(MIN_SCALE, MAX_SCALE));
             let net_for_doc = net.clone();
             let built = guarded(|| {
                 pre_open(&html);
@@ -107,10 +126,11 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         }
         In::Tile { req, doc, index } => match docs.get_mut(&doc) {
             Some(o) => match guarded(|| o.doc.tile_png(index)) {
-                Some(png) => {
+                Some(Ok(png)) => {
                     let png = base64::engine::general_purpose::STANDARD.encode(png);
                     line(out, json!({"kind":"reply","req":req,"ok":{"png":png}}))
                 }
+                Some(Err(e)) => line(out, json!({"kind":"error","req":req,"code":e.code()})),
                 None => {
                     discard(docs, doc);
                     unavailable(out, req)
