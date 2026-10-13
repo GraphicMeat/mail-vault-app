@@ -1,7 +1,68 @@
-Stylo (https://github.com/servo/stylo), by The Servo Project Developers.
-Licensed under the Mozilla Public License, Version 2.0.
+Stylo (https://github.com/servo/stylo) and the other Servo crates below, by The Servo Project Developers.
+Each is licensed under the Mozilla Public License, Version 2.0 (full text below).
 
-Stylo is used unmodified from crates.io (https://crates.io/crates/stylo); its source is available there.
+MailVault uses every one of them unmodified, exactly as published on crates.io. The source of
+each covered file is available from the crates.io page and the repository named with it
+(MPL 2.0, section 3.2).
+
+Linked into the Rust renderer (the daemon's render worker):
+
+  stylo 0.20.0
+      source: https://crates.io/crates/stylo/0.20.0
+      repository: https://github.com/servo/stylo
+
+  stylo_atoms 0.20.0
+      source: https://crates.io/crates/stylo_atoms/0.20.0
+      repository: https://github.com/servo/stylo
+
+  stylo_dom 0.20.0
+      source: https://crates.io/crates/stylo_dom/0.20.0
+      repository: https://github.com/servo/stylo
+
+  stylo_static_prefs 0.20.0
+      source: https://crates.io/crates/stylo_static_prefs/0.20.0
+      repository: https://github.com/servo/stylo
+
+  stylo_traits 0.20.0
+      source: https://crates.io/crates/stylo_traits/0.20.0
+      repository: https://github.com/servo/stylo
+
+  selectors 0.40.0
+      source: https://crates.io/crates/selectors/0.40.0
+      repository: https://github.com/servo/stylo
+
+  to_shmem 0.5.0
+      source: https://crates.io/crates/to_shmem/0.5.0
+      repository: https://github.com/servo/stylo
+
+  cssparser 0.37.0
+      source: https://crates.io/crates/cssparser/0.37.0
+      repository: https://github.com/servo/rust-cssparser
+
+  app_units 0.7.8
+      source: https://crates.io/crates/app_units/0.7.8
+      repository: https://github.com/servo/app_units
+
+  uluru 3.1.0
+      source: https://crates.io/crates/uluru/3.1.0
+      repository: https://github.com/servo/uluru
+
+Compiled at build time only (procedural macros, not part of the shipped binary):
+
+  stylo_derive 0.20.0
+      source: https://crates.io/crates/stylo_derive/0.20.0
+      repository: https://github.com/servo/stylo
+
+  to_shmem_derive 0.1.0
+      source: https://crates.io/crates/to_shmem_derive/0.1.0
+      repository: https://github.com/servo/stylo
+
+  cssparser-macros 0.7.1
+      source: https://crates.io/crates/cssparser-macros/0.7.1
+      repository: https://github.com/servo/rust-cssparser
+
+stylo_taffy 0.3.0-beta.2 is part of Blitz and licensed "MIT OR Apache-2.0 OR MPL-2.0";
+MailVault uses it under the MIT or Apache-2.0 terms in blitz.txt, where it is named.
 
 ----------------------------------------------------------------------
 
