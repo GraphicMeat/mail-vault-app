@@ -188,6 +188,8 @@ mod abd;
 mod app_icon;
 mod autostart;
 mod backup;
+#[cfg(feature = "blitz-render")]
+mod blitz_tiles;
 mod commands;
 mod daemon_channel;
 mod dropped_files;
@@ -2916,6 +2918,10 @@ const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 /// the mirror-spanning flag-rename forwarders (Task 2.9b); the 120s family
 /// is one big read or write; everything else is a single-row/one-mailbox op.
 fn reply_timeout(method: &str) -> Option<std::time::Duration> {
+    #[cfg(feature = "blitz-render")]
+    if let Some(t) = blitz_tiles::reply_timeout(method) {
+        return Some(t);
+    }
     use std::time::Duration;
     match method {
         "search_index_destroy" => Some(Duration::from_secs(150)),
@@ -3562,6 +3568,9 @@ fn main() {
 
     #[cfg(any(target_os = "linux", windows))]
     let builder = builder.manage(PendingUpdate::default());
+
+    #[cfg(feature = "blitz-render")]
+    let builder = blitz_tiles::register(builder);
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
@@ -4593,6 +4602,12 @@ mod tests {
     #[test]
     fn reply_timeout_bounds_the_helper_probe_so_settings_never_hangs_on_checking() {
         assert_eq!(crate::reply_timeout("ping"), Some(std::time::Duration::from_secs(10)));
+    }
+
+    #[cfg(feature = "blitz-render")]
+    #[test]
+    fn reply_timeout_delegates_render_methods_to_blitz_tiles() {
+        assert_eq!(crate::reply_timeout("render.open"), Some(std::time::Duration::from_secs(10)));
     }
 
     #[test]

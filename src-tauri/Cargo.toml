@@ -96,13 +96,15 @@ tempfile = "3"
 mock-imap = { path = "../src-mock-imap" }
 
 [features]
-default = ["custom-protocol", "sparkle"]
+default = ["custom-protocol", "sparkle", "blitz-render"]
 custom-protocol = ["tauri/custom-protocol"]
 webdriver = ["tauri-plugin-webdriver-automation"]
 # Developer ID / non-MAS macOS builds use Sparkle for auto-updates.
 sparkle = ["dep:tauri-plugin-sparkle-updater"]
 # Mac App Store build: drops Sparkle, enables StoreKit IAP for paid features.
 appstore = ["dep:objc2-store-kit"]
+# Blitz reader tiles: the `mvrender://` scheme (blitz_tiles.rs). Off = module absent.
+blitz-render = []
 
 [profile.release]
 panic = "abort"
