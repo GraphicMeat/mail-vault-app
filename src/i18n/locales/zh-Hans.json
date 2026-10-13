@@ -3918,6 +3918,6 @@
   "blitz.failed.switch": "使用标准渲染器",
   "blitz.failed.dismiss": "关闭",
   "blitz.linksInMessage": "此邮件中的链接",
-  "blitz.settings.title": "Rust 渲染器(实验性)",
-  "blitz.settings.description": "使用 Rust 编写的 HTML 引擎 Blitz 绘制邮件,而不是系统网页视图。邮件无法在其中运行任何代码。关闭后即可回到标准渲染器。"
+  "blitz.settings.title": "Rust 渲染器（实验性）",
+  "blitz.settings.description": "使用 Rust 编写的 HTML 引擎 Blitz 绘制邮件，而不是系统网页视图。邮件无法在其中运行任何代码。关闭后即可回到标准渲染器。"
 }

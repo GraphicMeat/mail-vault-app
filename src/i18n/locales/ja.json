@@ -3912,12 +3912,12 @@
   "codeBubble.copyDelete": "コピーして削除",
   "codeBubble.dismiss": "閉じる",
   "codeBubble.open": "メールを開く",
-  "blitz.failed.notice": "Rustレンダラーでこのメッセージを描画できなかったため、プレーンテキストで表示しています。",
+  "blitz.failed.notice": "Rust レンダラーでこのメッセージを描画できなかったため、プレーンテキストで表示しています。",
   "blitz.failed.title": "このメッセージを描画できませんでした",
-  "blitz.failed.body": "Rustレンダラーでこのメッセージの描画に失敗しました。標準レンダラーに切り替えると、本来のデザインで表示できます。",
+  "blitz.failed.body": "Rust レンダラーでこのメッセージの描画に失敗しました。標準レンダラーに切り替えると、本来のデザインで表示できます。",
   "blitz.failed.switch": "標準レンダラーを使用",
   "blitz.failed.dismiss": "閉じる",
   "blitz.linksInMessage": "このメッセージ内のリンク",
-  "blitz.settings.title": "Rust レンダラー(試験的)",
+  "blitz.settings.title": "Rust レンダラー（試験的）",
   "blitz.settings.description": "システムの Web ビューの代わりに、Rust 製の HTML エンジン Blitz でメッセージを描画します。メールがその中でコードを実行することはありません。オフにすると標準のレンダラーに戻ります。"
 }

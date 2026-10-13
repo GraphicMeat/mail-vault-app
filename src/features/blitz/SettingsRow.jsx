@@ -12,7 +12,7 @@ export default function SettingsRow() {
   return (
     <section className="settings-preference-group">
       <SettingRow label={t('blitz.settings.title')} description={t('blitz.settings.description')}>
-        <ToggleSwitch testId="setting-email-renderer" active={on} onClick={() => setEmailRenderer(on ? 'web' : 'blitz')} />
+        <ToggleSwitch label={t('blitz.settings.title')} testId="setting-email-renderer" active={on} onClick={() => setEmailRenderer(on ? 'web' : 'blitz')} />
       </SettingRow>
     </section>
   );

@@ -3919,5 +3919,5 @@
   "blitz.failed.dismiss": "Ignorer",
   "blitz.linksInMessage": "Liens de ce message",
   "blitz.settings.title": "Moteur de rendu Rust (expérimental)",
-  "blitz.settings.description": "Affiche les messages avec Blitz, un moteur HTML en Rust, au lieu de la vue web du système. Un e-mail ne peut jamais y exécuter de code. Désactive-le pour revenir au moteur de rendu standard."
+  "blitz.settings.description": "Affiche les messages avec Blitz, un moteur HTML en Rust, au lieu de la vue web du système. Un e-mail ne peut jamais y exécuter de code. Désactivez-le pour revenir au moteur de rendu standard."
 }
