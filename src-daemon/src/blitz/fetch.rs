@@ -1,4 +1,4 @@
-//! One remote image for the Blitz worker: https only, image/* only, capped,
+//! One remote image for the Blitz worker: https only, image/* only (never SVG), capped,
 //! anonymous (`export_fetch::send_guarded`: SSRF guard, no Referer, no cookies).
 //! Shown in Network Activity as "email images".
 use crate::export_fetch::{send_guarded, MAX_ASSET_BYTES};
@@ -6,9 +6,17 @@ use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
+/// `image/*` except SVG. The worker's SVG renderer (usvg) reads any non-`data:`
+/// image href as a local file path, so a downloaded SVG could make the worker
+/// read the machine's files; none is downloaded, and the worker refuses SVG
+/// bytes again whatever type they came with. Until Blitz is vendored with its
+/// own href resolver (plan B), SVG images simply do not draw in Blitz mode.
 fn validate_image_mime(mime: &str) -> Result<(), String> {
     let base = mime.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
-    if base.starts_with("image/") { Ok(()) } else { Err(format!("refused content-type: {}", base)) }
+    if base.starts_with("image/svg") || !base.starts_with("image/") {
+        return Err(format!("refused content-type: {}", base));
+    }
+    Ok(())
 }
 
 /// Append one body chunk, refusing the moment the running total passes `cap`.
@@ -71,9 +79,19 @@ mod tests {
     }
 
     #[test]
+    fn render_image_mime_refuses_svg_so_none_is_even_downloaded() {
+        // usvg reads any non-data href of an SVG as a local file path: the worker
+        // draws no SVG at all (tracked in architecture.md), so none is fetched.
+        for mime in ["image/svg+xml", "image/svg+xml; charset=utf-8", "IMAGE/SVG+XML", " image/svg+xml ", "image/svg"] {
+            assert!(validate_image_mime(mime).is_err(), "{mime} must be refused");
+        }
+    }
+
+    #[test]
     fn render_image_mime_accepts_only_images() {
         assert!(validate_image_mime("image/png").is_ok());
-        assert!(validate_image_mime("image/svg+xml; charset=utf-8").is_ok());
+        assert!(validate_image_mime("image/jpeg").is_ok());
+        assert!(validate_image_mime("IMAGE/WebP; q=1").is_ok());
         assert!(validate_image_mime("text/css").is_err());
         assert!(validate_image_mime("font/woff2").is_err());
     }
