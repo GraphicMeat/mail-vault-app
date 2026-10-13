@@ -126,7 +126,16 @@ impl RenderHost {
         for k in ["html", "cssWidth", "scale", "allowRemote", "theme"] {
             frame[k] = p.get(k).cloned().unwrap_or(Value::Null);
         }
-        let ok = self.call(frame, OPEN_TIMEOUT).await?;
+        let ok = match self.call(frame, OPEN_TIMEOUT).await {
+            Ok(ok) => ok,
+            Err(e) => {
+                // A busy (not hung) worker may still finish this open after we
+                // gave up. The frontend never learns the id, so drop the doc.
+                // Closing an unknown doc is a no-op in the worker.
+                let _ = self.send(json!({"op": "close", "doc": doc})).await;
+                return Err(e);
+            }
+        };
         self.open_docs.lock().unwrap().insert(doc);
         Ok(json!({"docId": doc, "rev": ok["rev"], "meta": ok["meta"]}))
     }
