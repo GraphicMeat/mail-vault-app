@@ -7,6 +7,7 @@ import {
   Info,
   Code,
   RefreshCw,
+  Wand2,
 } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { SenderInfoPopover } from './SenderInfoPopover';
@@ -42,6 +43,10 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   loadingRaw,
   showInsights,
   onToggleInsights,
+  // The view builder's toggle, beside Insights. Only a reader that can host
+  // the builder passes the handler; without it there is no button.
+  showViewBuilder = false,
+  onToggleViewBuilder,
   archivedEmailIds,
   // A reader with no actions (the compose pane's original): no Unsubscribe.
   readOnly = false,
@@ -172,6 +177,21 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
             >
               <Info size={12} />
             </button>
+
+            {/* View builder: this email's words, into a saved view */}
+            {onToggleViewBuilder && (
+              <button
+                type="button"
+                data-testid="view-builder-toggle"
+                aria-pressed={!!showViewBuilder}
+                aria-expanded={!!showViewBuilder}
+                onClick={(e) => { e.stopPropagation(); onToggleViewBuilder(); }}
+                className={`p-1.5 rounded transition-colors flex-shrink-0 ${showViewBuilder ? 'text-mail-accent-text' : 'text-mail-text-muted hover:text-mail-text'}`}
+                title={t('viewBuilder.open')} aria-label={t('viewBuilder.open')}
+              >
+                <Wand2 size={12} aria-hidden="true" />
+              </button>
+            )}
           </div>
 
           {/* Timestamp + expand chevron */}

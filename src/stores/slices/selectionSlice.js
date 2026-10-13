@@ -5,6 +5,8 @@
 import { buildThreads } from '../../utils/emailParser';
 import { mergesSentIntoThreads } from '../../utils/sentFolder';
 import { selectionKey, refreshSelectedThread } from './unifiedHelpers';
+import { useSettingsStore } from '../settingsStore';
+import { useViewHideStore } from '../viewHideStore';
 import {
   selectEmail as _selectEmail,
   _prefetchAdjacentEmails,
@@ -74,9 +76,13 @@ export const createSelectionSlice = (set, get) => ({
   // message that joined the conversation (the reply you sent, one a sync
   // brought in, the server's copy replacing a staged one) shows in the reader
   // without closing and reopening the row. No-ops unless the membership
-  // actually changed — see refreshSelectedThread.
+  // actually changed — see refreshSelectedThread. A member the list holds
+  // back because a saved view holds it ("hide view mail") stays: the same
+  // gated key set the list filters by (updateSortedEmails).
   syncSelectedThread: (threads) => {
-    const update = refreshSelectedThread(get(), threads);
+    // `getState?.`: many specs mock these stores with selectors alone.
+    const held = useSettingsStore.getState?.()?.hideViewMail ? useViewHideStore.getState?.()?.keys ?? null : null;
+    const update = refreshSelectedThread(get(), threads, held);
     if (update) set(update);
   },
 

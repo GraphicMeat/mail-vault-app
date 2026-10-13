@@ -3406,6 +3406,7 @@
   "views.moveUp": "위로",
   "views.name": "보기 이름",
   "views.new": "새 보기",
+  "viewBuilder.open": "이 이메일에서 보기 만들기",
   "viewBuilder.title": "이 이메일로 보기 만들기",
   "viewBuilder.empty": "이 이메일에는 특징적인 단어가 없습니다.",
   "viewBuilder.loading": "이 이메일의 단어를 찾는 중…",

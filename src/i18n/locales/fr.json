@@ -3406,6 +3406,7 @@
   "views.moveUp": "Monter",
   "views.name": "Nom de la vue",
   "views.new": "Nouvelle vue",
+  "viewBuilder.open": "Faire une vue avec cet e-mail",
   "viewBuilder.title": "Créer une vue à partir de cet e-mail",
   "viewBuilder.empty": "Cet e-mail ne contient aucun mot marquant.",
   "viewBuilder.loading": "Recherche des mots de cet e-mail…",

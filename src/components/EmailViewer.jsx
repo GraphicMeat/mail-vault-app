@@ -29,6 +29,7 @@ import { SourceBlocked } from './privacy/SourceBlocked';
 import { useMailFonts } from '../hooks/useMailFonts';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
+import { ViewBuilderPanel } from './email/ViewBuilderPanel';
 import { ThreadView } from './email/ThreadView';
 import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
@@ -136,6 +137,19 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const rawRequest = useRef(0);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  // The view builder is a mode the person turned on: it stays open from one
+  // email to the next (the panel reloads its words per email) and closes only
+  // on its own close button or the toggle, so it is not in the reset below.
+  // It shares the slot under the header with Sender insights, one at a time.
+  const [showViewBuilder, setShowViewBuilder] = useState(false);
+  const toggleInsights = () => {
+    if (!showInsights) setShowViewBuilder(false);
+    setShowInsights(!showInsights);
+  };
+  const toggleViewBuilder = () => {
+    if (!showViewBuilder) setShowInsights(false);
+    setShowViewBuilder(!showViewBuilder);
+  };
   // AI Compose actions (Phase 6): the viewer only ever hosts "Summarize
   // thread" — draft reply/shorten/tone/action items act on a draft, which
   // only Compose has. Read-only result: it never sends or saves anything.
@@ -770,7 +784,9 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         onToggleRaw={toggleRawSource}
         loadingRaw={loadingRaw}
         showInsights={showInsights}
-        onToggleInsights={() => setShowInsights(!showInsights)}
+        onToggleInsights={toggleInsights}
+        showViewBuilder={showViewBuilder}
+        onToggleViewBuilder={toggleViewBuilder}
         archivedEmailIds={archivedEmailIds}
       />
       <div className="px-3 pt-1"><TagChips email={selectedEmail} /></div>
@@ -825,10 +841,19 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
           )}
         </div>
 
-      {/* Sender Insights */}
+      {/* Sender Insights, or the view builder: one panel in this slot */}
       <AnimatePresence>
         {showInsights && selectedEmail?.from?.address && (
-          <SenderInsightsPanel senderEmail={selectedEmail.from.address} email={selectedEmail} />
+          <SenderInsightsPanel key="insights" senderEmail={selectedEmail.from.address} email={selectedEmail} />
+        )}
+        {showViewBuilder && (
+          <ViewBuilderPanel
+            key="view-builder"
+            email={selectedEmail}
+            accountId={selectedLocation?.accountId}
+            mailbox={selectedLocation?.mailbox}
+            onClose={() => setShowViewBuilder(false)}
+          />
         )}
       </AnimatePresence>
 

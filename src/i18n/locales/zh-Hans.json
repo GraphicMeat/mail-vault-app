@@ -3406,6 +3406,7 @@
   "views.moveUp": "上移",
   "views.name": "视图名称",
   "views.new": "新建视图",
+  "viewBuilder.open": "用此邮件制作视图",
   "viewBuilder.title": "根据此邮件创建视图",
   "viewBuilder.empty": "此邮件中没有特征词。",
   "viewBuilder.loading": "正在查找此邮件中的词语…",

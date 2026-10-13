@@ -485,8 +485,13 @@ const memberKeys = (emails) => (emails || []).map(memberKey).join(',');
  * arriving message can bridge two conversations, which renames the thread it
  * lands in. A thread the map does not hold at all (search, another folder) is
  * left standing — absence there is not evidence the conversation shrank.
+ *
+ * `held`: the `account|mailbox|uid` keys the list leaves out because a saved
+ * view holds them ("hide view mail"), or null. A member the list holds back
+ * for that reason has not left the conversation: it stays in the reader, so
+ * the message a word was just added to a view from is not closed under you.
  */
-export function refreshSelectedThread(state, threads) {
+export function refreshSelectedThread(state, threads, held = null) {
   const open = state.selectedThread;
   if (!open || !threads?.size) return null;
   let fresh = threads.get(open.threadId);
@@ -494,6 +499,21 @@ export function refreshSelectedThread(state, threads) {
     const wanted = new Set((open.emails || []).map(memberKey));
     for (const thread of threads.values()) {
       if (thread.emails.some(e => wanted.has(memberKey(e)))) { fresh = thread; break; }
+    }
+  }
+  if (fresh && held?.size) {
+    const present = new Set(fresh.emails.map(memberKey));
+    const kept = (open.emails || []).filter(e => {
+      if (present.has(memberKey(e))) return false;
+      const id = rowIdentity(e, state);
+      return !!id && held.has(`${id.accountId}|${id.mailbox}|${id.uid}`);
+    });
+    if (kept.length) {
+      const time = e => new Date(e.date || e.internalDate || 0).getTime() || 0;
+      // Oldest first, as buildThreads orders a thread's messages.
+      const emails = [...fresh.emails, ...kept].sort((a, b) => time(a) - time(b));
+      const lastEmail = emails.reduce((a, b) => (time(b) > time(a) ? b : a));
+      fresh = { ...fresh, emails, lastEmail, messageCount: emails.length };
     }
   }
   // Same members = same reader. buildThreads runs on every list change and

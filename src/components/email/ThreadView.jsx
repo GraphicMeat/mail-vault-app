@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { SenderInsightsPanel } from '../SenderInsightsPanel';
+import { ViewBuilderPanel } from './ViewBuilderPanel';
 import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
 import { TagChips } from '../TagChips';
@@ -365,6 +366,17 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   const [rawError, setRawError] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  // This message's view builder, in the Insights slot: one panel at a time,
+  // the same rule as the single reader.
+  const [showViewBuilder, setShowViewBuilder] = useState(false);
+  const toggleInsights = () => {
+    if (!showInsights) setShowViewBuilder(false);
+    setShowInsights(!showInsights);
+  };
+  const toggleViewBuilder = () => {
+    if (!showViewBuilder) setShowInsights(false);
+    setShowViewBuilder(!showViewBuilder);
+  };
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const moveButtonRef = useRef(null);
@@ -493,7 +505,9 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
           onToggleRaw={toggleRawSource}
           loadingRaw={loadingRaw}
           showInsights={showInsights}
-          onToggleInsights={() => setShowInsights(!showInsights)}
+          onToggleInsights={toggleInsights}
+          showViewBuilder={showViewBuilder}
+          onToggleViewBuilder={readOnly ? undefined : toggleViewBuilder}
           archivedEmailIds={archivedEmailIds}
         />}
         {!expanded && !compact && (
@@ -560,10 +574,19 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
         </div>
       )}
 
-      {/* Sender Insights (thread email) */}
+      {/* Sender Insights, or the view builder (thread email) */}
       <AnimatePresence>
         {showInsights && email?.from?.address && (
-          <SenderInsightsPanel senderEmail={email.from.address} email={email} />
+          <SenderInsightsPanel key="insights" senderEmail={email.from.address} email={email} />
+        )}
+        {showViewBuilder && !readOnly && (
+          <ViewBuilderPanel
+            key="view-builder"
+            email={email}
+            accountId={location?.accountId}
+            mailbox={location?.mailbox}
+            onClose={() => setShowViewBuilder(false)}
+          />
         )}
       </AnimatePresence>
 
@@ -1057,7 +1080,8 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
             signatureDisplay={signatureDisplay} shouldShowSignature={sigVisMap[selectedEmail.uid] !== false}
             onComposeReply={onComposeReply} onDelete={requestDelete} onArchive={handleQuickArchive}
             onDeleteEverywhere={requestDeleteEverywhere}
-            onToggleRead={handleQuickRead} onToggleFlag={handleQuickFlag} onActionStart={beginQuickAction} saving={saving} />
+            onToggleRead={handleQuickRead} onToggleFlag={handleQuickFlag} onActionStart={beginQuickAction} saving={saving}
+            readOnly={readOnly} />
         </div>
       )}
       </div>

@@ -3406,6 +3406,7 @@
   "views.moveUp": "上へ",
   "views.name": "ビュー名",
   "views.new": "新しいビュー",
+  "viewBuilder.open": "このメールでビューを作る",
   "viewBuilder.title": "このメールからビューを作成",
   "viewBuilder.empty": "このメールには特徴的な語句がありません。",
   "viewBuilder.loading": "このメールの語句を探しています…",
