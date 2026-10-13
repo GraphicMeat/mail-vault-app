@@ -4,6 +4,7 @@ import { useMailStore } from './mailStore';
 import { useSearchStore } from './searchStore.js';
 import { useFieldStore } from './fieldStore';
 import { useSettingsStore } from './settingsStore';
+import { useViewHideStore } from './viewHideStore';
 import { ownAddresses } from '../utils/ownAddresses';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { flattenMailboxes, resolveEmailLocation } from './slices/unifiedHelpers.js';
@@ -120,6 +121,10 @@ let previewGeneration = 0;
 /// The count on its way, and the one queued behind it (`refreshCounts`).
 let countsInFlight = null;
 let countsNext = null;
+/// The membership ask on its way, and the one queued behind it
+/// (`refreshHiddenMembers`).
+let hiddenInFlight = null;
+let hiddenNext = null;
 
 export const useViewStore = create((set, get) => ({
   views: [],
@@ -163,6 +168,10 @@ export const useViewStore = create((set, get) => ({
         const next = counts && typeof counts === 'object' ? counts : {};
         if (keepOnEmpty && !Object.keys(next).length) return;
         set({ counts: next });
+        // Whatever changed what a view counts changed what it holds. Not on
+        // the early return above: an index mid-build would answer "unknown"
+        // and briefly show every hidden message again.
+        void refreshHiddenMembers();
       } catch {
         // A count that would not come is not worth an error in the sidebar.
       } finally {
@@ -371,6 +380,56 @@ async function runScheduledCounts() {
   }
 }
 
+const hideViewMailOn = () => !!useSettingsStore.getState?.()?.hideViewMail;
+
+/// Which messages the saved views hold, for the lists that leave them out
+/// (`useViewHideStore`). Only asked while `hideViewMail` is on; off, the
+/// membership is forgotten so nothing stays hidden. The daemon runs every
+/// view over every account on the index lock for this, so one ask at a time
+/// and an ask made during one gets the single ask that starts after it, as
+/// `refreshCounts` does. A failure leaves the membership unknown, which
+/// shows everything.
+export function refreshHiddenMembers() {
+  if (!hideViewMailOn()) {
+    // A queued ask finds the setting off and asks nothing.
+    useViewHideStore.getState().clear();
+    return Promise.resolve();
+  }
+  if (hiddenInFlight) {
+    hiddenNext ??= hiddenInFlight.then(() => {
+      hiddenNext = null;
+      return refreshHiddenMembers();
+    });
+    return hiddenNext;
+  }
+  hiddenInFlight = (async () => {
+    try {
+      const reply = await daemonCall('views.hidden_members', { accounts: accountsPayload() });
+      // Turned off while the answer was on its way: it must not hide anything.
+      if (!hideViewMailOn()) useViewHideStore.getState().clear();
+      else useViewHideStore.getState().setMembers(reply);
+    } catch {
+      useViewHideStore.getState().clear();
+    } finally {
+      hiddenInFlight = null;
+    }
+  })();
+  return hiddenInFlight;
+}
+
+/// The setting flipped: on asks, off forgets. Also fires when the persisted
+/// settings load at launch. `subscribe?.`: many specs mock the settings store
+/// with `getState` alone, and importing this module must not throw there.
+let stopHideViewMailWatch = null;
+function watchHideViewMail() {
+  stopHideViewMailWatch?.();
+  stopHideViewMailWatch = useSettingsStore.subscribe?.((state, previous) => {
+    if (state.hideViewMail === previous?.hideViewMail) return;
+    void refreshHiddenMembers();
+  }) || null;
+}
+watchHideViewMail();
+
 export function __resetViewCountsForTests() {
   clearTimeout(countsTimer);
   countsTimer = null;
@@ -378,4 +437,7 @@ export function __resetViewCountsForTests() {
   countsAgain = false;
   countsInFlight = null;
   countsNext = null;
+  hiddenInFlight = null;
+  hiddenNext = null;
+  watchHideViewMail();
 }

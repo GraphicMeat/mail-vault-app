@@ -49,6 +49,16 @@ describe('settings defaults', () => {
     expect(useSettingsStore.getState().composeOpenMode).toBe('app');
   });
 
+  it('mail the views hold stays in the mailbox lists until asked', async () => {
+    const { useSettingsStore } = await loadOn('Win32');
+    const state = () => useSettingsStore.getState();
+    expect(state().hideViewMail).toBe(false);
+    state().setHideViewMail(1);
+    expect(state().hideViewMail).toBe(true);
+    state().setHideViewMail(undefined);
+    expect(state().hideViewMail).toBe(false);
+  });
+
   it('text starts in Instrument Sans at 100%, keeps only known choices, and travels in a transfer', async () => {
     const { useSettingsStore } = await loadOn('Win32');
     const { GLOBAL_SETTINGS_ALLOWLIST } = await import('../../services/transfer/settingsTransfer');

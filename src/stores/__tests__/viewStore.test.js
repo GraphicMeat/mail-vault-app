@@ -17,8 +17,9 @@ vi.mock('../../services/cacheManager', () => ({
 
 const {
   useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp, viewDefaults,
-  scheduleViewCountsRefresh, __resetViewCountsForTests,
+  scheduleViewCountsRefresh, __resetViewCountsForTests, refreshHiddenMembers,
 } = await import('../viewStore');
+const { useViewHideStore } = await import('../viewHideStore');
 const { useSettingsStore } = await import('../settingsStore');
 const { useSearchStore } = await import('../searchStore.js');
 const { useFieldStore } = await import('../fieldStore');
@@ -47,6 +48,8 @@ beforeEach(() => {
   };
   useViewStore.setState({ views: [], counts: {}, activeViewId: null, unavailableReason: null, loading: false });
   useSearchStore.getState().clearSearch();
+  useSettingsStore.setState({ hideViewMail: false });
+  useViewHideStore.getState().clear();
   // A count one spec left pending would hold every later count behind it.
   __resetViewCountsForTests();
 });
@@ -581,5 +584,107 @@ describe('Reset view is honest', () => {
     expect(useSettingsStore.getState().viewOverrides.v1).toEqual({ stamp, timeline: false });
     setViewOverride('v1', stamp, { timeline: true }, defaults);
     expect(useSettingsStore.getState().viewOverrides.v1).toBeUndefined();
+  });
+});
+
+describe('mail the views hold, hidden from the mailbox lists', () => {
+  const hiddenCalls = () => harness.daemonCall.mock.calls.filter(([method]) => method === 'views.hidden_members');
+  const HELD = { available: true, members: { 'acct-1': { INBOX: { uids: [4, 9], unread: 1 } } } };
+  const fill = () => useViewHideStore.getState().setMembers(HELD);
+
+  it('asks nothing and knows nothing while the setting is off', async () => {
+    fill();
+    await refreshHiddenMembers();
+    expect(hiddenCalls()).toHaveLength(0);
+    expect(useViewHideStore.getState().keys).toBeNull();
+  });
+
+  it('asks the daemon for every account and keeps what it answers', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.hidden_members' ? HELD : {}));
+    useSettingsStore.setState({ hideViewMail: true });
+    await refreshHiddenMembers();
+    expect(harness.daemonCall).toHaveBeenCalledWith('views.hidden_members', { accounts: [expect.objectContaining({ accountId: 'acct-1' })] });
+    expect([...useViewHideStore.getState().keys]).toEqual(['acct-1|INBOX|4', 'acct-1|INBOX|9']);
+    expect(useViewHideStore.getState().unreadByMailbox).toEqual({ 'acct-1|INBOX': 1 });
+  });
+
+  it('an index that cannot answer means unknown, so everything shows', async () => {
+    fill();
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.hidden_members' ? { available: false, members: {} } : {}));
+    useSettingsStore.setState({ hideViewMail: true });
+    await refreshHiddenMembers();
+    expect(useViewHideStore.getState().keys).toBeNull();
+  });
+
+  it('a daemon that throws leaves the membership unknown', async () => {
+    harness.daemonCall.mockImplementation(method => (method === 'views.hidden_members'
+      ? Promise.reject(new Error('gone'))
+      : Promise.resolve({})));
+    useSettingsStore.setState({ hideViewMail: true });
+    // Drain the ask the flip itself made, so the one below runs alone.
+    await refreshHiddenMembers();
+    fill();
+    await refreshHiddenMembers();
+    expect(hiddenCalls().length).toBeGreaterThan(0);
+    expect(useViewHideStore.getState().keys).toBeNull();
+  });
+
+  it('turning the setting on asks, turning it off forgets', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.hidden_members' ? HELD : {}));
+    useSettingsStore.getState().setHideViewMail(true);
+    expect(useSettingsStore.getState().hideViewMail).toBe(true);
+    await vi.waitFor(() => expect(useViewHideStore.getState().keys?.size).toBe(2));
+    expect(hiddenCalls()).toHaveLength(1);
+
+    useSettingsStore.getState().setHideViewMail(false);
+    expect(useViewHideStore.getState().keys).toBeNull();
+    expect(hiddenCalls()).toHaveLength(1);
+  });
+
+  it('a reply that lands after the setting went off does not hide anything', async () => {
+    let answer = null;
+    harness.daemonCall.mockImplementation(method => (method === 'views.hidden_members'
+      ? new Promise(resolve => { answer = resolve; })
+      : Promise.resolve({})));
+    useSettingsStore.setState({ hideViewMail: true });
+    const pending = refreshHiddenMembers();
+    useSettingsStore.setState({ hideViewMail: false });
+    answer(HELD);
+    await pending;
+    expect(useViewHideStore.getState().keys).toBeNull();
+  });
+
+  it('one call at a time, and one more for every ask made during it', async () => {
+    const answers = [];
+    harness.daemonCall.mockImplementation(method => (method === 'views.hidden_members'
+      ? new Promise(resolve => { answers.push(resolve); })
+      : Promise.resolve({})));
+    useSettingsStore.setState({ hideViewMail: true });
+    const asks = [refreshHiddenMembers(), refreshHiddenMembers(), refreshHiddenMembers(), refreshHiddenMembers()];
+    await Promise.resolve();
+    expect(hiddenCalls()).toHaveLength(1);
+
+    answers[0]({ available: true, members: {} });
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(2));
+    answers[1](HELD);
+    await Promise.all(asks);
+    expect(hiddenCalls()).toHaveLength(2);
+    expect(useViewHideStore.getState().keys.size).toBe(2);
+  });
+
+  it('a count that comes back refreshes the membership too', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(
+      method === 'views.hidden_members' ? HELD : method === 'views.counts' ? { v1: 2 } : {}));
+    useSettingsStore.setState({ hideViewMail: true });
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(1));
+    await useViewStore.getState().refreshCounts();
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(2));
+  });
+
+  it('a count while the setting is off asks nothing about membership', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.counts' ? { v1: 2 } : {}));
+    await useViewStore.getState().refreshCounts();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(hiddenCalls()).toHaveLength(0);
   });
 });
