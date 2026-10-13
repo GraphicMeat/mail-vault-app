@@ -37,4 +37,23 @@ describe('usePrivacyDict', () => {
     act(() => { vi.advanceTimersByTime(400); });
     expect(result.current.hold).toBe(false);
   });
+  it('the hold starts over for each message', () => {
+    vi.useFakeTimers();
+    state.active = true; state.ready = false;
+    const { result, rerender } = renderHook(({ k }) => usePrivacyDict({ message: null, messageKey: k, readyTimeoutMs: 300 }), { initialProps: { k: 'a' } });
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(result.current.hold).toBe(false);
+    rerender({ k: 'b' });
+    expect(result.current.hold).toBe(true); // already in the render the message changed in
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(result.current.hold).toBe(false);
+  });
+  it('a hold that was waited out for a message stays released when that message re-renders', () => {
+    vi.useFakeTimers();
+    state.active = true; state.ready = false;
+    const { result, rerender } = renderHook(({ k }) => usePrivacyDict({ message: null, messageKey: k, readyTimeoutMs: 300 }), { initialProps: { k: 'a' } });
+    act(() => { vi.advanceTimersByTime(400); });
+    rerender({ k: 'a' });
+    expect(result.current.hold).toBe(false);
+  });
 });
