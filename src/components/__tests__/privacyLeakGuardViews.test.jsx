@@ -47,6 +47,7 @@ const { notify, useFocusStore } = await import('../../stores/focusStore');
 const { setPrivacyDictionary } = await import('../../utils/privacy/privacyDictionary');
 const { buildNameDictionary } = await import('../../utils/privacy/piiDetector');
 const { ViewPreview } = await import('../ViewPreview');
+const { ViewBuilderPanel } = await import('../email/ViewBuilderPanel');
 const { ExplorerView } = await import('../ExplorerView');
 const { SnapshotList } = await import('../TimeCapsule');
 const { default: InsightsMessages } = await import('../insights/InsightsMessages');
@@ -81,6 +82,26 @@ describe('privacy leak guard: views and settings', () => {
     render(<ViewPreview def={{ starred: true }} />);
     await screen.findByTestId('view-preview-rows');
     expect(document.body.textContent).toContain(MASKED_JOANNA);
+    expectNoLeak(document.body);
+  });
+
+  it('view builder: keyword chips and the keyword hovercard', async () => {
+    useViewStore.setState({
+      views: [{ id: 'v1', name: 'Receipts', def: { query: 'invoice' } }],
+      loadKeywords: vi.fn(async () => ({ available: true, keywords: [{ term: 'kowalczyk', tf: 2, df: 3 }, { term: 'lunch', tf: 1, df: 9 }] })),
+      loadKeywordDetail: vi.fn(async () => ({ available: true, total: 3,
+        senders: [{ name: JOANNA, address: JOANNA_ADDR, count: 2 }, { name: ROKAS, address: ROKAS_ADDR, count: 1 }],
+        subjects: [{ subject: MESSAGE.subject, sender: JOANNA, count: 2 }] })),
+    });
+    render(<ViewBuilderPanel email={MESSAGE} accountId="own" mailbox="INBOX" onClose={() => {}} />);
+    const chips = await screen.findAllByRole('checkbox');
+    await act(async () => { fireEvent.focus(chips[0]); });
+    const card = await screen.findByTestId('keyword-hovercard');
+    await screen.findAllByTestId('keyword-hovercard-sender');
+    expect(document.body.textContent).toContain(MASKED_JOANNA);
+    // A distinctive word is often a surname, and arrives lowercased.
+    expect(chips[0].textContent).not.toContain('kowalczyk');
+    expect(card.textContent).not.toContain('kowalczyk');
     expectNoLeak(document.body);
   });
 
