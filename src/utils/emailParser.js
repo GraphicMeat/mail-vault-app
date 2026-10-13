@@ -678,30 +678,29 @@ export function buildThreads(emails, { subjectFallback = true } = {}) {
   // Only reply-like orphans (subject carried a Re:/Fwd: prefix) may merge — bare-subject
   // automated mail (digests, contact-form bots) reuses identical subjects across
   // unrelated messages, and merging those built giant fake threads (JWZ/Gmail rule).
+  // A subject alone is weak evidence, so an orphan only joins a thread holding a
+  // message within SUBJECT_MERGE_WINDOW_MS of it: a years-old "Fw: contract"
+  // otherwise opened as the first message of a new, unrelated "contract" mail.
   const REPLY_PREFIX = /^(re:|fwd:|fw:|re\[\d+\]:)/i;
-  const subjectToThreadId = new Map(); // "accountId\0subject" → threadId
-  const threadIdToSubjectKey = new Map(); // threadId → "accountId\0subject"
+  const SUBJECT_MERGE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+  const emailTime = (e) => {
+    const d = new Date(e.date || e.internalDate || 0).getTime();
+    return Number.isNaN(d) ? 0 : d;
+  };
+  const subjectKey = (e) => `${e._accountId || ''}\0${normalizeSubject(e.subject)}`;
 
-  for (const [threadId, threadEmails] of threadGroups) {
-    const subject = normalizeSubject(threadEmails[0].subject);
-    const acct = threadEmails[0]._accountId || '';
-    const key = `${acct}\0${subject}`;
-    threadIdToSubjectKey.set(threadId, key);
-
-    if (!subjectToThreadId.has(key)) {
-      subjectToThreadId.set(key, threadId);
-    }
-  }
-
-  // Merge threads with same normalized subject if they have no RFC threading headers
-  // Two-pass: first add all non-orphan threads, then merge orphans into canonical threads
   const mergedGroups = new Map();
   if (!subjectFallback) {
     for (const [threadId, threadEmails] of threadGroups) {
       mergedGroups.set(threadId, [...threadEmails]);
     }
   } else {
-    const orphans = []; // [threadId, threadEmails][] — single-email threads without RFC headers
+    const orphans = []; // [threadId, email][] — single-email threads without RFC headers
+    const candidates = new Map(); // "accountId\0subject" → threadId[]
+    const addCandidate = (key, threadId) => {
+      if (!candidates.has(key)) candidates.set(key, []);
+      candidates.get(key).push(threadId);
+    };
 
     for (const [threadId, threadEmails] of threadGroups) {
       const email = threadEmails[0];
@@ -710,23 +709,34 @@ export function buildThreads(emails, { subjectFallback = true } = {}) {
       const isReplyLike = REPLY_PREFIX.test((email.subject || '').trim());
 
       if (threadEmails.length === 1 && !hasRfcHeaders && isReplyLike) {
-        orphans.push([threadId, threadEmails]);
+        orphans.push([threadId, email]);
       } else {
         mergedGroups.set(threadId, [...threadEmails]);
+        addCandidate(subjectKey(email), threadId);
       }
     }
 
-    // Second pass: merge reply-like orphans into canonical threads by subject (within same account)
-    for (const [threadId, threadEmails] of orphans) {
-      const key = threadIdToSubjectKey.get(threadId);
-      const canonicalThreadId = subjectToThreadId.get(key);
+    // Second pass, oldest first so the result is order-independent: each orphan
+    // joins the same-subject thread nearest to it in time, if one is near enough.
+    orphans.sort((a, b) => emailTime(a[1]) - emailTime(b[1]));
+    for (const [threadId, email] of orphans) {
+      const key = subjectKey(email);
+      const t = emailTime(email);
+      let best = null;
+      let bestGap = Infinity;
+      for (const candidateId of candidates.get(key) || []) {
+        for (const member of mergedGroups.get(candidateId)) {
+          const gap = Math.abs(emailTime(member) - t);
+          if (gap < bestGap) { bestGap = gap; best = candidateId; }
+        }
+      }
 
-      if (canonicalThreadId !== threadId && mergedGroups.has(canonicalThreadId)) {
-        mergedGroups.get(canonicalThreadId).push(...threadEmails);
+      if (best !== null && bestGap <= SUBJECT_MERGE_WINDOW_MS) {
+        mergedGroups.get(best).push(email);
       } else {
-        // First orphan with this subject becomes the canonical target for future orphans
-        mergedGroups.set(threadId, [...threadEmails]);
-        subjectToThreadId.set(key, threadId);
+        // Nothing near: this orphan seeds its own thread for later orphans
+        mergedGroups.set(threadId, [email]);
+        addCandidate(key, threadId);
       }
     }
   }

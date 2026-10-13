@@ -70,6 +70,30 @@ describe('buildThreads subject fallback', () => {
     expect(threads.size).toBe(1);
   });
 
+  it('does NOT merge a headerless forward from years ago into a new same-subject mail', () => {
+    const old = mk({ uid: 1, subject: 'Fw: FW: sutartis', date: '2024-09-02T06:05:00Z' });
+    const fresh = mk({ uid: 2, subject: 'sutartis', date: '2026-10-13T12:13:00Z' });
+    expect(buildThreads([old, fresh]).size).toBe(2);
+    expect(buildThreads([fresh, old]).size).toBe(2);
+  });
+
+  it('does NOT merge two headerless replies far apart in time', () => {
+    const emails = [
+      mk({ uid: 1, subject: 'Re: Invoice', date: '2024-01-10T10:00:00Z' }),
+      mk({ uid: 2, subject: 'Re: Invoice', date: '2026-01-10T10:00:00Z' }),
+    ];
+    expect(buildThreads(emails).size).toBe(2);
+  });
+
+  it('merges a headerless reply into the same-subject thread near it in time', () => {
+    const original2024 = mk({ uid: 1, subject: 'Lease', date: '2024-03-01T10:00:00Z' });
+    const original2026 = mk({ uid: 2, subject: 'Lease', date: '2026-03-01T10:00:00Z' });
+    const reply2026 = mk({ uid: 3, subject: 'Re: Lease', date: '2026-03-04T10:00:00Z' });
+    const threads = [...buildThreads([original2024, original2026, reply2026]).values()];
+    const withReply = threads.find(t => t.emails.includes(reply2026));
+    expect(withReply.emails).toEqual([original2026, reply2026]);
+  });
+
   it('never merges reply-like orphans across accounts', () => {
     const emails = [
       mk({ uid: 1, subject: 'Quote', _accountId: 'A' }),
