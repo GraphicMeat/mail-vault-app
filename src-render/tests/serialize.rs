@@ -63,6 +63,20 @@ fn table_cells_join_with_tab_rows_with_newline() {
     let mut d = open(r#"<table><tr><td>a1</td><td>b1</td></tr><tr><td>a2</td><td>b2</td></tr></table>"#);
     let out = d.serialize(at(&d, "a1", false), at(&d, "b2", true));
     assert_eq!(out.text, "a1\tb1\na2\tb2");
+    assert_eq!(
+        out.html,
+        "<table><tbody><tr><td>a1</td><td>b1</td></tr><tr><td>a2</td><td>b2</td></tr></tbody></table>",
+        "rows alone would be dropped by a body-context paste"
+    );
+}
+
+#[test]
+fn list_items_keep_their_list_and_one_cell_keeps_none() {
+    let mut d = open("<ul><li>one</li><li>two</li></ul><table><tr><td>cell <b>x</b></td></tr></table>");
+    let out = d.serialize(at(&d, "one", false), at(&d, "two", true));
+    assert_eq!(out.html, "<ul><li>one</li><li>two</li></ul>");
+    let out = d.serialize(at(&d, "cell", false), at(&d, "x", true));
+    assert_eq!(out.html, "cell <b>x</b>");
 }
 
 #[test]
@@ -252,4 +266,69 @@ fn serialize_op_replies_with_html_and_text() {
     assert_eq!(out[1], json!({"kind":"reply","req":2,"ok":{"html":"<b>big</b>","text":"big"}}));
     assert_eq!(out[2], json!({"kind":"error","req":3,"code":"render_unknown_doc"}));
     assert_eq!(out[3], json!({"kind":"error","req":4,"code":"render_bad_request"}));
+}
+
+#[test]
+fn a_selection_inside_a_noselect_span_copies_nothing_in_html_either() {
+    let mut d = open(r#"<p>Hi <span class="mv-pii" data-mv-noselect>•••• ••••</span> there</p>"#);
+    // "Hi " is bytes 0..3, the mask 3..28 (nine 3-byte bullets and a space... 8 bullets + space).
+    let mask = "•••• ••••".len();
+    let out = d.serialize(root_at(&d, 0, 3), root_at(&d, 0, 3 + mask));
+    assert_eq!((out.html.as_str(), out.text.as_str()), ("", ""), "{out:?}");
+    let out = d.serialize(root_at(&d, 0, 6), root_at(&d, 0, 3 + mask - 3));
+    assert_eq!((out.html.as_str(), out.text.as_str()), ("", ""), "{out:?}");
+}
+
+#[test]
+fn plain_text_turns_nbsp_into_a_space_but_markup_keeps_it() {
+    let mut d = open("<p>a&nbsp;b</p>");
+    let out = d.serialize(at(&d, "a", false), at(&d, "b", true));
+    assert_eq!(out.text, "a b");
+    assert_eq!(out.html, "a&nbsp;b");
+}
+
+#[test]
+fn partial_ancestors_that_end_up_empty_are_not_cloned() {
+    let mut d = open("<p>abc</p><p>def</p>");
+    // Start at the very end of the first paragraph.
+    let out = d.serialize(root_at(&d, 0, 3), root_at(&d, 1, 2));
+    assert_eq!((out.text.as_str(), out.html.as_str()), ("de", "<p>de</p>"));
+    // End at offset 0 of the second paragraph.
+    let out = d.serialize(root_at(&d, 0, 1), root_at(&d, 1, 0));
+    assert_eq!((out.text.as_str(), out.html.as_str()), ("bc", "<p>bc</p>"));
+}
+
+#[test]
+fn mixed_width_scripts_and_zwj_sequences_copy_exact_slices() {
+    let s = "na\u{ef}ve \u{1f600} \u{6771}\u{4eac} \u{1f469}\u{200d}\u{1f469}\u{200d}\u{1f467}";
+    let mut d = open(&format!("<p>{s}</p>"));
+    let ix = |n: &str| s.find(n).unwrap();
+    let cases: [(usize, usize, &str); 6] = [
+        (ix("\u{ef}"), ix("\u{1f600}") + 4, "\u{ef}ve \u{1f600}"),
+        (ix("\u{6771}"), ix("\u{4eac}") + 3, "\u{6771}\u{4eac}"),
+        (ix("\u{4eac}"), ix("\u{1f469}") + 4 + 3 + 4, "\u{4eac} \u{1f469}\u{200d}\u{1f469}"),
+        (ix("\u{6771}") + 1, ix("\u{4eac}") + 1, "\u{6771}\u{4eac}"), // inside both 3-byte chars
+        (ix("\u{1f469}") + 2, s.len() - 1, "\u{1f469}\u{200d}\u{1f469}\u{200d}\u{1f467}"), // inside the 4-byte start and end
+        (0, s.len(), s),
+    ];
+    for (a, b, want) in cases {
+        let out = d.serialize(root_at(&d, 0, a), root_at(&d, 0, b));
+        assert_eq!((out.text.as_str(), out.html.as_str()), (want, want), "bytes {a}..{b}");
+    }
+}
+
+#[test]
+fn a_selection_over_a_ltr_rtl_boundary_copies_in_logical_order() {
+    let s = "abc \u{5e9}\u{5dc}\u{5d5}\u{5dd} def";
+    let mut d = open(&format!("<p>{s}</p>"));
+    let ix = |n: &str| s.find(n).unwrap();
+    let cases: [(usize, usize, &str); 3] = [
+        (ix("c"), ix("\u{5dc}") + 2, "c \u{5e9}\u{5dc}"),
+        (ix("\u{5d5}"), ix("d") + 1, "\u{5d5}\u{5dd} d"),
+        (ix("\u{5dc}") + 1, ix("\u{5dd}") + 1, "\u{5dc}\u{5d5}\u{5dd}"), // mid-letter on both ends
+    ];
+    for (a, b, want) in cases {
+        let out = d.serialize(root_at(&d, 0, a), root_at(&d, 0, b));
+        assert_eq!((out.text.as_str(), out.html.as_str()), (want, want), "bytes {a}..{b}");
+    }
 }

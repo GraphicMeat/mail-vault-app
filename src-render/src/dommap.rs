@@ -136,7 +136,7 @@ impl Sim {
 }
 
 /// `Some((owner, is_after))` when `id` is the ::before / ::after node of `owner`.
-fn pseudo_owner(doc: &BaseDocument, id: NodeId) -> Option<(NodeId, bool)> {
+pub(crate) fn pseudo_owner(doc: &BaseDocument, id: NodeId) -> Option<(NodeId, bool)> {
     let owner = doc.get_node(id)?.parent?;
     let o = doc.get_node(owner)?;
     if o.before() == Some(id) {
@@ -148,7 +148,7 @@ fn pseudo_owner(doc: &BaseDocument, id: NodeId) -> Option<(NodeId, bool)> {
     }
 }
 
-fn collapses(s: &ComputedValues) -> bool {
+pub(crate) fn collapses(s: &ComputedValues) -> bool {
     // blitz maps PreserveBreaks and BreakSpaces to parley's Preserve.
     matches!(s.clone_white_space_collapse(), Wsc::Collapse)
 }
@@ -474,7 +474,19 @@ mod tests {
         let e = |offset| Endpoint { node: root.as_u64(), offset };
         let out = serialize(&mut d, e(2), e(len));
         assert_eq!(out.html, "<p>a   lot <b>bold</b></p>", "element granularity: the whole root");
-        assert_eq!(out.text, "lot boldX", "plain text still comes from the layout text, uncut");
+        assert_eq!(out.text, "a lot bold", "the DOM text of the whole root, not the layout text with its injected X");
+    }
+
+    #[test]
+    fn a_mismatched_root_copies_no_noselect_or_generated_text_in_either_form() {
+        let mut d = doc("<style>p::before{content:\"> \"}</style><p>Hi <span data-mv-noselect>mask</span> <b>x</b></p>");
+        let root = inline_roots(&d)[0];
+        corrupt(&mut d, root);
+        let len = d.get_node(root).unwrap().element_data().unwrap().inline_layout_data.as_ref().unwrap().text.len();
+        let e = |offset| Endpoint { node: root.as_u64(), offset };
+        let out = serialize(&mut d, e(1), e(len));
+        assert_eq!(out.text, "Hi x");
+        assert_eq!(out.html, "<p>Hi  <b>x</b></p>");
     }
 
     #[test]

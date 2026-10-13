@@ -4,7 +4,7 @@
 //! logic and the copy agree), joined the way WebKit joins blocks. The rich
 //! markup is our own `Range.cloneContents()`: blitz's `outer_html` writes
 //! unescaped text and `<x />`.
-use crate::dommap::{align, dom_end_point, dom_point, DomPoint};
+use crate::dommap::{align, collapses, dom_end_point, dom_point, pseudo_owner, DomPoint};
 use crate::text::{inline_roots, is_unselectable, NOSELECT_ATTR};
 use blitz_dom::{BaseDocument, LocalName, Node, NodeData, NodeId};
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,7 @@ pub struct Serialized {
 }
 
 const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];
+const STRUCTURAL: &[&str] = &["table", "thead", "tbody", "tfoot", "tr", "ul", "ol"];
 const INLINE: &[&str] = &["a", "b", "strong", "i", "em", "u", "s", "span", "font", "code", "sup", "sub", "small", "big", "mark"];
 
 pub fn serialize(doc: &mut BaseDocument, a: Endpoint, b: Endpoint) -> Serialized {
@@ -74,7 +75,8 @@ fn plain(doc: &mut BaseDocument, order: &HashMap<NodeId, usize>, a: (NodeId, usi
         if !order.contains_key(&root) || is_unselectable(doc, root) {
             continue;
         }
-        let piece = selectable_slice(doc, root, s, e);
+        // WebKit and Chrome put a plain space on the plain-text clipboard for nbsp.
+        let piece = selectable_slice(doc, root, s, e).replace('\u{a0}', " ");
         if piece.is_empty() {
             continue;
         }
@@ -88,7 +90,8 @@ fn plain(doc: &mut BaseDocument, order: &HashMap<NodeId, usize>, a: (NodeId, usi
 }
 
 /// `text[s..e]` of `root`, less generated content and every char that comes
-/// from an unselectable DOM node. When the DOM map fails, the plain slice.
+/// from an unselectable DOM node. When the DOM map fails, the DOM text of the
+/// whole root (see `dom_plain`), like the markup.
 fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize) -> String {
     let Some(tl) = doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()) else { return String::new() };
     let e = e.min(tl.text.len());
@@ -96,7 +99,7 @@ fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize) -> Str
     if s >= e {
         return String::new();
     }
-    let Some(slots) = align(doc, root) else { return tl.text[s..e].to_string() };
+    let Some(slots) = align(doc, root) else { return dom_plain(doc, root) };
     let mut cut: Option<(NodeId, bool)> = None; // one-entry cache: runs of chars share a node
     let from = slots.partition_point(|x| x.byte < s);
     slots[from..]
@@ -118,6 +121,47 @@ fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize) -> Str
         })
         .map(|x| x.ch)
         .collect()
+}
+
+/// The degraded copy of a root: its DOM text, skipping everything `skipped`
+/// skips (so it agrees with the element-granular markup), `<br>` as a newline,
+/// whitespace collapsed unless the root preserves it. Generated content has no
+/// DOM text, and a root that is itself generated copies nothing.
+fn dom_plain(doc: &BaseDocument, root: NodeId) -> String {
+    fn walk(doc: &BaseDocument, id: NodeId, out: &mut String) {
+        let Some(n) = doc.get_node(id) else { return };
+        for c in n.children.iter().copied() {
+            let Some(cn) = doc.get_node(c) else { continue };
+            if skipped(cn) {
+                continue;
+            }
+            if let Some(t) = cn.text_data() {
+                out.push_str(&t.content);
+            } else if tag(cn) == Some("br") {
+                out.push('\n');
+            } else {
+                walk(doc, c, out);
+            }
+        }
+    }
+    if pseudo_owner(doc, root).is_some() {
+        return String::new();
+    }
+    let mut raw = String::new();
+    walk(doc, root, &mut raw);
+    if !doc.get_node(root).and_then(|n| n.primary_styles()).map_or(true, |s| collapses(&s)) {
+        return raw;
+    }
+    let mut out = String::with_capacity(raw.len());
+    let mut prev_ws = false;
+    for c in raw.chars() {
+        let ws = c.is_ascii_whitespace();
+        if !(ws && prev_ws) {
+            out.push(if ws { ' ' } else { c });
+        }
+        prev_ws = ws;
+    }
+    out.trim_matches(' ').to_string()
 }
 
 fn floor(text: &str, mut o: usize) -> usize {
@@ -185,6 +229,10 @@ fn markup(doc: &BaseDocument, a: (NodeId, usize), b: (NodeId, usize)) -> String 
     let first: HashSet<NodeId> = ancestors(doc, start.0).into_iter().collect();
     let last: HashSet<NodeId> = ancestors(doc, end.0).into_iter().collect();
     let common = ancestors(doc, end.0).into_iter().find(|n| first.contains(n)).unwrap_or(start.0);
+    // Both ends inside one noselect node (a masked value): nothing to copy.
+    if is_unselectable(doc, common) {
+        return String::new();
+    }
     let range = Range { start, end, first, last };
     let mut out = String::new();
     clone_range(doc, &range, common, &mut out);
@@ -192,14 +240,25 @@ fn markup(doc: &BaseDocument, a: (NodeId, usize), b: (NodeId, usize)) -> String 
         return out;
     }
     // The common ancestor itself (when it is an inline element) and its inline
-    // ancestors wrap the result: a partial link keeps its href.
+    // ancestors wrap the result: a partial link keeps its href. Rows, row groups
+    // and list items are meaningless to a body-context paste on their own, so a
+    // result that is made of them keeps its table or list (as WebKit does).
     let mut cur = if is_text(doc, common) { doc.get_node(common).and_then(|n| n.parent) } else { Some(common) };
+    let mut inline = true;
     while let Some(n) = cur.and_then(|i| doc.get_node(i)) {
         let Some(t) = tag(n) else { break };
-        if !INLINE.contains(&t) {
+        if skipped(n) || is_unselectable(doc, n.id) {
+            return String::new();
+        }
+        let structural = STRUCTURAL.contains(&t);
+        if !(inline && INLINE.contains(&t)) && !structural {
             break;
         }
+        inline &= !structural;
         out = format!("{}{}</{}>", open_tag(n), out, t);
+        if matches!(t, "table" | "ul" | "ol") {
+            break;
+        }
         cur = n.parent;
     }
     out
@@ -288,9 +347,17 @@ fn clone_range(doc: &BaseDocument, r: &Range, node: NodeId, out: &mut String) {
         } else if c.is_text_node() {
             clone_range(doc, r, child, out);
         } else if let Some(t) = tag(c) {
-            out.push_str(&open_tag(c));
-            if !VOID.contains(&t) {
-                clone_range(doc, r, child, out);
+            if VOID.contains(&t) {
+                out.push_str(&open_tag(c));
+                continue;
+            }
+            // A partially contained ancestor that contributes nothing (the
+            // selection starts at its very end, or ends at its very start) is dropped.
+            let mut inner = String::new();
+            clone_range(doc, r, child, &mut inner);
+            if !inner.is_empty() {
+                out.push_str(&open_tag(c));
+                out.push_str(&inner);
                 out.push_str("</");
                 out.push_str(t);
                 out.push('>');
