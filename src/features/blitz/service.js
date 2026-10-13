@@ -21,3 +21,16 @@ export async function closeRender(docId) {
 export function onRenderUpdated(cb) {
   return listen(RENDER_UPDATED, e => cb(e.payload));
 }
+export function textRunsRender(docId, index) {
+  return send('render.textRuns', { docId, index });
+}
+export function serializeRender(docId, start, end) {
+  return send('render.serialize', { docId, start, end });
+}
+export function foldRender(docId, id, open) {
+  return send('render.fold', { docId, id, open });
+}
+// Fonts are a best effort: a family that does not register leaves the stack's fallback drawing.
+export async function fontsRender(families) {
+  try { return await send('render.fonts', { families }); } catch { return { registered: [] }; }
+}

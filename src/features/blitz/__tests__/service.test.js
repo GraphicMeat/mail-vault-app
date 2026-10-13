@@ -3,7 +3,7 @@ vi.mock('../../../services/transport', () => ({ send: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: (p, proto) => `${proto}://localhost/${encodeURIComponent(p)}` }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 import { send } from '../../../services/transport';
-import { openRender, tileUrl, hitRender, closeRender } from '../service';
+import { openRender, tileUrl, hitRender, closeRender, textRunsRender, serializeRender, foldRender, fontsRender } from '../service';
 
 beforeEach(() => { send.mockReset(); });
 
@@ -24,5 +24,20 @@ describe('blitz service', () => {
     expect(send).toHaveBeenCalledWith('render.hit', { docId: 4, x: 1.5, y: 2.5 });
     send.mockRejectedValue(new Error('render_unavailable'));
     await expect(closeRender(4)).resolves.toBeUndefined();
+  });
+  it('C ops forward to their RPCs', async () => {
+    send.mockResolvedValue({});
+    await textRunsRender(4, 2);
+    expect(send).toHaveBeenLastCalledWith('render.textRuns', { docId: 4, index: 2 });
+    await serializeRender(4, { node: 1, offset: 0 }, { node: 1, offset: 3 });
+    expect(send).toHaveBeenLastCalledWith('render.serialize', { docId: 4, start: { node: 1, offset: 0 }, end: { node: 1, offset: 3 } });
+    await foldRender(4, 'q0', true);
+    expect(send).toHaveBeenLastCalledWith('render.fold', { docId: 4, id: 'q0', open: true });
+    await fontsRender(['Lora']);
+    expect(send).toHaveBeenLastCalledWith('render.fonts', { families: ['Lora'] });
+  });
+  it('fontsRender never throws', async () => {
+    send.mockRejectedValue(new Error('render_unavailable'));
+    await expect(fontsRender(['Lora'])).resolves.toEqual({ registered: [] });
   });
 });

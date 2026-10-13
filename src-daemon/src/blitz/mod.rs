@@ -20,6 +20,7 @@
 //! `blitz::fetch::fetch_render_image` (SSRF guard, https, image/* but never
 //! SVG, capped, Network Activity "email images"), at most FETCH_PARALLEL at once.
 pub mod fetch;
+pub mod fonts;
 pub mod routes;
 
 use crate::events::EventBus;
@@ -37,6 +38,9 @@ use tracing::info;
 pub const OPEN_TIMEOUT: Duration = Duration::from_secs(8);
 pub const TILE_TIMEOUT: Duration = Duration::from_secs(4);
 pub const HIT_TIMEOUT: Duration = Duration::from_secs(1);
+pub const TEXT_RUNS_TIMEOUT: Duration = Duration::from_secs(4);
+pub const SERIALIZE_TIMEOUT: Duration = Duration::from_secs(2);
+pub const FOLD_TIMEOUT: Duration = Duration::from_secs(4);
 pub const IDLE_EXIT: Duration = Duration::from_secs(120);
 /// Kill only when a call timed out AND the worker has been silent this long.
 pub const WATCHDOG: Duration = Duration::from_secs(6);
@@ -121,6 +125,36 @@ pub fn is_foreground(method: &str) -> bool {
     matches!(method, "render.open" | "render.tile" | "render.textRuns")
 }
 
+/// The font families the worker has been sent, kept whole so a respawned
+/// worker gets them again. The worker marks a family known on first sight and
+/// ignores later faces of it, so a family must only ever travel complete (all
+/// its installed faces in one frame) and at most once per worker.
+#[derive(Default)]
+struct FontFrames(Vec<Value>);
+
+impl FontFrames {
+    /// Keeps the families not kept yet and returns exactly those, as first given.
+    fn claim(&mut self, families: Vec<Value>) -> Vec<Value> {
+        let mut fresh = Vec::new();
+        for f in families {
+            if !self.has(f["family"].as_str().unwrap_or_default()) {
+                self.0.push(f.clone());
+                fresh.push(f);
+            }
+        }
+        fresh
+    }
+
+    fn has(&self, family: &str) -> bool {
+        self.0.iter().any(|k| k["family"] == family)
+    }
+
+    /// One frame with every kept family, or none when nothing is kept.
+    fn replay(&self) -> Option<Value> {
+        (!self.0.is_empty()).then(|| json!({"op": "fonts", "families": self.0}))
+    }
+}
+
 /// Ticks every 30 s and kills a worker that has been idle with no open docs.
 pub fn spawn_reaper(host: Arc<RenderHost>) {
     tokio::spawn(async move {
@@ -180,6 +214,7 @@ pub struct RenderHost {
     open_docs: StdMutex<HashSet<u64>>,
     last_used: StdMutex<Instant>,
     fetch_slots: Arc<Semaphore>,
+    font_frames: StdMutex<FontFrames>,
 }
 
 impl RenderHost {
@@ -194,6 +229,7 @@ impl RenderHost {
             open_docs: StdMutex::default(),
             last_used: StdMutex::new(Instant::now()),
             fetch_slots: Arc::new(Semaphore::new(FETCH_PARALLEL)),
+            font_frames: StdMutex::default(),
         }
     }
 
@@ -222,12 +258,43 @@ impl RenderHost {
         base64::engine::general_purpose::STANDARD.decode(ok["png"].as_str().unwrap_or_default()).map_err(|_| UNAVAILABLE.to_string())
     }
 
-    /// A slow hit (queued behind tiles) is "no link", never an error.
+    /// A slow hit (queued behind tiles) is "no link" and no fold, never an
+    /// error. A reply is passed on whole: `{link, fold}`.
     pub async fn hit(&self, doc: u64, x: f32, y: f32) -> Result<Value, String> {
         match self.call(json!({"op": "hit", "doc": doc, "x": x, "y": y}), HIT_TIMEOUT).await {
-            Err(e) if e == UNAVAILABLE => Ok(json!({"link": null})),
+            Err(e) if e == UNAVAILABLE => Ok(json!({"link": null, "fold": null})),
             other => other,
         }
+    }
+
+    pub async fn text_runs(&self, doc: u64, index: u32) -> Result<Value, String> {
+        self.call(json!({"op": "textRuns", "doc": doc, "index": index}), TEXT_RUNS_TIMEOUT).await
+    }
+
+    pub async fn serialize(&self, doc: u64, start: Value, end: Value) -> Result<Value, String> {
+        self.call(json!({"op": "serialize", "doc": doc, "start": start, "end": end}), SERIALIZE_TIMEOUT).await
+    }
+
+    /// Opens or closes one fold. The new layout reaches the frontend through
+    /// the `render-updated` event the worker also sends; fold state lives in
+    /// the document and dies with the worker (`render_unknown_doc`).
+    pub async fn fold(&self, doc: u64, id: &str, open: bool) -> Result<Value, String> {
+        self.call(json!({"op": "fold", "doc": doc, "id": id, "open": open}), FOLD_TIMEOUT).await
+    }
+
+    /// Sends the families the worker does not have yet and keeps them: a
+    /// respawned worker (idle exit, crash) is sent every kept family, whole,
+    /// before its first request. Callers pass each family with all its faces.
+    pub async fn register_fonts(&self, families: Vec<Value>) {
+        let fresh = self.font_frames.lock().unwrap().claim(families);
+        if fresh.is_empty() {
+            return;
+        }
+        let _ = self.send(json!({"op": "fonts", "families": fresh})).await;
+    }
+
+    pub fn has_font(&self, family: &str) -> bool {
+        self.font_frames.lock().unwrap().has(family)
     }
 
     /// For tests: how many workers have been started.
@@ -274,7 +341,14 @@ impl RenderHost {
                 }
             }
             if guard.is_none() {
-                *guard = Some(self.spawn().map_err(|_| UNAVAILABLE.to_string())?);
+                let w = self.spawn().map_err(|_| UNAVAILABLE.to_string())?;
+                // Written here, before the caller's own frame (same stdin, same
+                // guard), so the first request already sees every font.
+                let replay = self.font_frames.lock().unwrap().replay();
+                if let Some(frame) = replay {
+                    let _ = w.stdin.lock().await.write_all(format!("{frame}\n").as_bytes()).await;
+                }
+                *guard = Some(w);
             }
             let w = guard.as_ref().unwrap();
             epoch = w.epoch;
@@ -565,5 +639,126 @@ mod tests {
         assert!(is_foreground("render.tile"));
         assert!(is_foreground("render.textRuns"));
         assert!(!is_foreground("render.hit"), "hover traffic must not pause the index");
+    }
+
+    #[test]
+    fn foreground_list() {
+        assert!(is_foreground("render.textRuns"));
+        assert!(!is_foreground("render.serialize"));
+        assert!(!is_foreground("render.fold"));
+        assert!(!is_foreground("render.fonts"));
+    }
+
+    const FOLD_HTML: &str = "<body style=\"margin:0\"><p>Hello world</p><div data-mv-fold-toggle=\"q0\" data-mv-noselect data-mv-label-open=\"open\" data-mv-label-closed=\"closed\" style=\"display:inline-block\">closed</div><blockquote data-mv-fold=\"q0\" data-mv-fold-kind=\"quote\" data-mv-fold-open=\"false\" style=\"display:none\">Q</blockquote>";
+
+    #[tokio::test]
+    async fn text_runs_serialize_fold_round_trip() {
+        let h = host();
+        let opened = h.open(json!({"html": FOLD_HTML, "cssWidth": 300, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        let runs = h.text_runs(doc, 0).await.unwrap();
+        let r0 = &runs["runs"][0];
+        assert_eq!(r0["text"], "Hello world");
+        let s = json!({"node": r0["node"], "offset": 6});
+        let e = json!({"node": r0["node"], "offset": 11});
+        assert_eq!(h.serialize(doc, s, e).await.unwrap()["text"], "world");
+        let f = h.fold(doc, "q0", true).await.unwrap();
+        assert_eq!(f["meta"]["folds"][0]["open"], true);
+    }
+
+    #[tokio::test]
+    async fn a_hit_reply_carries_the_fold_through_unchanged() {
+        let h = host();
+        let html = "<body style=\"margin:0\"><p style=\"margin:0;height:40px\">top</p><div data-mv-fold-toggle=\"q0\" data-mv-noselect data-mv-label-open=\"open\" data-mv-label-closed=\"closed\" style=\"display:inline-block;height:20px;width:60px\">closed</div><blockquote data-mv-fold=\"q0\" data-mv-fold-kind=\"quote\" data-mv-fold-open=\"false\" style=\"display:none\">Q</blockquote>";
+        let opened = h.open(json!({"html": html, "cssWidth": 300, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        let on = h.hit(doc, 10.0, 50.0).await.unwrap();
+        assert_eq!(on["fold"], "q0", "fold id passes through hit");
+        let off = h.hit(doc, 10.0, 10.0).await.unwrap();
+        assert!(off["fold"].is_null() && off["link"].is_null());
+    }
+
+    #[tokio::test]
+    async fn fonts_are_replayed_into_a_respawned_worker() {
+        let h = host();
+        let face = base64::engine::general_purpose::STANDARD.encode(std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../src/assets/fonts/ibm-plex-mono-latin-400.woff2")).unwrap());
+        h.register_fonts(vec![json!({"family": "MV Mono", "faces": [{"data": face, "weight": 400, "style": "normal"}]})]).await;
+        // Crash the worker (debug sentinel), then open a doc in the font on the fresh one.
+        let _ = h.open(json!({"html": PANIC_SENTINEL, "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await;
+        let o = h.open(json!({"html": "<body style=\"margin:0\"><p style=\"margin:0;font:20px/30px 'MV Mono'\">abcdefghij</p>", "cssWidth": 300, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let runs = h.text_runs(o["docId"].as_u64().unwrap(), 0).await.unwrap();
+        assert!((runs["runs"][0]["w"].as_f64().unwrap() - 120.0).abs() < 0.5, "replayed font in use");
+        assert_eq!(h.spawned(), 2);
+    }
+
+    fn family(name: &str, faces: usize) -> Value {
+        json!({"family": name, "faces": (0..faces).map(|i| json!({"data": format!("{name}{i}"), "weight": 400 + 100 * i, "style": "normal"})).collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn overlapping_font_calls_send_each_family_once_and_whole() {
+        let mut kept = FontFrames::default();
+        let first = kept.claim(vec![family("A", 3), family("B", 2)]);
+        assert_eq!(first.len(), 2);
+        // The second call names B again (with a partial set of faces) and a new C.
+        let second = kept.claim(vec![family("B", 1), family("C", 4), family("C", 1)]);
+        assert_eq!(second, vec![family("C", 4)], "B is known, so its later faces never reach the worker; C once");
+        assert!(kept.has("B") && !kept.has("D"));
+        // Replay is one frame holding every family exactly as first sent.
+        let replay = kept.replay().expect("replay frame");
+        assert_eq!(replay["op"], "fonts");
+        assert_eq!(replay["families"], json!([family("A", 3), family("B", 2), family("C", 4)]));
+        assert!(FontFrames::default().replay().is_none());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn font_frames_reach_the_wire_whole_and_replay_after_a_respawn() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("frames.log");
+        let script = dir.path().join("fake-worker.sh");
+        // A worker that logs every line it reads and answers each request with an empty ok.
+        std::fs::write(&script, format!(
+            "#!/bin/sh\nwhile IFS= read -r l; do\n printf '%s\\n' \"$l\" >> '{}'\n case \"$l\" in *'\"req\":'*) r=${{l#*'\"req\":'}}; r=${{r%%[,\\}}]*}}; printf '{{\"kind\":\"reply\",\"req\":%s,\"ok\":{{}}}}\\n' \"$r\";; esac\ndone\n",
+            log.display()
+        )).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let h = RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(&script));
+        let frames = || -> Vec<Value> {
+            std::fs::read_to_string(&log).unwrap_or_default().lines().filter_map(|l| serde_json::from_str(l).ok()).collect()
+        };
+        let wait_for = |n: usize| async move {
+            for _ in 0..200 {
+                if frames().len() >= n { return; }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            panic!("only {} of {n} frames: {:?}", frames().len(), frames());
+        };
+
+        // No worker yet: nothing is written, the families are only kept.
+        h.register_fonts(vec![family("A", 3), family("B", 2)]).await;
+        assert!(frames().is_empty());
+        // The first call spawns the worker, which reads the replay before the call's own frame.
+        h.fold(7, "q0", true).await.unwrap();
+        wait_for(2).await;
+        let f = frames();
+        assert_eq!(f[0]["op"], "fonts");
+        assert_eq!(f[0]["families"], json!([family("A", 3), family("B", 2)]), "complete families in one frame");
+        assert_eq!(f[1]["op"], "fold");
+
+        // A later call overlapping B only sends the family that is new.
+        h.register_fonts(vec![family("B", 1), family("C", 4)]).await;
+        wait_for(3).await;
+        assert_eq!(frames()[2]["families"], json!([family("C", 4)]));
+
+        // Respawn: the fresh worker gets all three, whole, before its first request.
+        h.kill_epoch(h.spawned()).await;
+        h.fold(7, "q0", false).await.unwrap();
+        wait_for(5).await;
+        let f = frames();
+        assert_eq!(f[3]["families"], json!([family("A", 3), family("B", 2), family("C", 4)]));
+        assert_eq!(f[4]["op"], "fold");
+        assert_eq!(h.spawned(), 2);
     }
 }

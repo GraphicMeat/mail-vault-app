@@ -31,12 +31,14 @@ pub fn register(b: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     })
 }
 
-/// Budgets just above the daemon's own (open 8 s, tile 4 s), so the daemon's
-/// `render_unavailable` arrives first. Everything else in the family is quick.
+/// Budgets just above the daemon's own (open 8 s, tile, textRuns and fold 4 s),
+/// so the daemon's `render_unavailable` arrives first. Everything else in the
+/// family is quick.
 pub fn reply_timeout(method: &str) -> Option<Duration> {
     match method {
         "render.open" => Some(Duration::from_secs(10)),
         "render.tile" | "render.textRuns" => Some(Duration::from_secs(6)),
+        "render.fold" => Some(Duration::from_secs(6)),
         "render.image" => Some(Duration::from_secs(30)),
         "render.inspect" => Some(Duration::from_secs(6)),
         m if m.starts_with("render.") => Some(Duration::from_secs(3)),
@@ -81,7 +83,8 @@ mod tests {
         assert_eq!(reply_timeout("render.textRuns"), Some(Duration::from_secs(6)));
         assert_eq!(reply_timeout("render.image"), Some(Duration::from_secs(30)));
         assert_eq!(reply_timeout("render.inspect"), Some(Duration::from_secs(6)));
-        for m in ["render.hit", "render.close", "render.fonts", "render.serialize", "render.fold"] {
+        assert_eq!(reply_timeout("render.fold"), Some(Duration::from_secs(6)));
+        for m in ["render.hit", "render.close", "render.fonts", "render.serialize"] {
             assert_eq!(reply_timeout(m), Some(Duration::from_secs(3)), "{m}");
         }
         assert_eq!(reply_timeout("maildir_read"), None);

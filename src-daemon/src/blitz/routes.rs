@@ -48,6 +48,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             .await
             .map(|png| json!({"png": base64::engine::general_purpose::STANDARD.encode(png)})),
         "render.hit" => host.hit(doc(), params["x"].as_f64().unwrap_or(0.0) as f32, params["y"].as_f64().unwrap_or(0.0) as f32).await,
+        "render.textRuns" => host.text_runs(doc(), params["index"].as_u64().unwrap_or(0) as u32).await,
+        "render.serialize" => host.serialize(doc(), params["start"].clone(), params["end"].clone()).await,
+        "render.fold" => match params["id"].as_str() {
+            Some(fold_id) => host.fold(doc(), fold_id, params["open"].as_bool().unwrap_or(false)).await,
+            None => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "id must be a string")),
+        },
+        "render.fonts" => super::fonts::render_fonts(state, params).await,
         "render.close" => {
             host.close(doc()).await;
             Ok(json!({}))
