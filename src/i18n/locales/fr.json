@@ -3911,5 +3911,11 @@
   "codeBubble.copied": "Copié",
   "codeBubble.copyDelete": "Copier et supprimer",
   "codeBubble.dismiss": "Fermer",
-  "codeBubble.open": "Ouvrir l'e-mail"
+  "codeBubble.open": "Ouvrir l'e-mail",
+  "blitz.failed.notice": "Le moteur de rendu Rust n'a pas pu afficher ce message, il est donc présenté en texte brut.",
+  "blitz.failed.title": "Impossible d'afficher ce message",
+  "blitz.failed.body": "Le moteur de rendu Rust a échoué sur ce message. Passez au moteur de rendu standard pour le voir tel qu'il a été conçu.",
+  "blitz.failed.switch": "Utiliser le moteur de rendu standard",
+  "blitz.failed.dismiss": "Ignorer",
+  "blitz.linksInMessage": "Liens de ce message"
 }

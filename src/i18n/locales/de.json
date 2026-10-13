@@ -3911,5 +3911,11 @@
   "codeBubble.copied": "Kopiert",
   "codeBubble.copyDelete": "Kopieren & löschen",
   "codeBubble.dismiss": "Schließen",
-  "codeBubble.open": "E-Mail öffnen"
+  "codeBubble.open": "E-Mail öffnen",
+  "blitz.failed.notice": "Der Rust-Renderer konnte diese Nachricht nicht darstellen, daher wird sie als reiner Text angezeigt.",
+  "blitz.failed.title": "Nachricht konnte nicht dargestellt werden",
+  "blitz.failed.body": "Der Rust-Renderer ist bei dieser Nachricht fehlgeschlagen. Wechsle zum Standard-Renderer, um sie wie gestaltet zu sehen.",
+  "blitz.failed.switch": "Standard-Renderer verwenden",
+  "blitz.failed.dismiss": "Schließen",
+  "blitz.linksInMessage": "Links in dieser Nachricht"
 }

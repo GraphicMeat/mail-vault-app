@@ -3911,5 +3911,11 @@
   "codeBubble.copied": "복사됨",
   "codeBubble.copyDelete": "복사 후 삭제",
   "codeBubble.dismiss": "닫기",
-  "codeBubble.open": "이메일 열기"
+  "codeBubble.open": "이메일 열기",
+  "blitz.failed.notice": "Rust 렌더러가 이 메시지를 그리지 못해 일반 텍스트로 표시합니다.",
+  "blitz.failed.title": "이 메시지를 표시할 수 없습니다",
+  "blitz.failed.body": "Rust 렌더러가 이 메시지에서 실패했습니다. 표준 렌더러로 전환하면 원래 디자인대로 볼 수 있습니다.",
+  "blitz.failed.switch": "표준 렌더러 사용",
+  "blitz.failed.dismiss": "닫기",
+  "blitz.linksInMessage": "이 메시지의 링크"
 }

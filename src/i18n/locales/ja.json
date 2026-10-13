@@ -3911,5 +3911,11 @@
   "codeBubble.copied": "コピーしました",
   "codeBubble.copyDelete": "コピーして削除",
   "codeBubble.dismiss": "閉じる",
-  "codeBubble.open": "メールを開く"
+  "codeBubble.open": "メールを開く",
+  "blitz.failed.notice": "Rustレンダラーでこのメッセージを描画できなかったため、プレーンテキストで表示しています。",
+  "blitz.failed.title": "このメッセージを描画できませんでした",
+  "blitz.failed.body": "Rustレンダラーでこのメッセージの描画に失敗しました。標準レンダラーに切り替えると、本来のデザインで表示できます。",
+  "blitz.failed.switch": "標準レンダラーを使用",
+  "blitz.failed.dismiss": "閉じる",
+  "blitz.linksInMessage": "このメッセージ内のリンク"
 }

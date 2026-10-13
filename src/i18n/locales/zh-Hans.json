@@ -3911,5 +3911,11 @@
   "codeBubble.copied": "已复制",
   "codeBubble.copyDelete": "复制并删除",
   "codeBubble.dismiss": "关闭",
-  "codeBubble.open": "打开邮件"
+  "codeBubble.open": "打开邮件",
+  "blitz.failed.notice": "Rust 渲染器无法绘制这封邮件，因此以纯文本显示。",
+  "blitz.failed.title": "无法绘制这封邮件",
+  "blitz.failed.body": "Rust 渲染器在这封邮件上失败了。切换到标准渲染器即可按原设计查看。",
+  "blitz.failed.switch": "使用标准渲染器",
+  "blitz.failed.dismiss": "关闭",
+  "blitz.linksInMessage": "此邮件中的链接"
 }

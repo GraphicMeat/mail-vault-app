@@ -3911,5 +3911,11 @@
   "codeBubble.copied": "Copiado",
   "codeBubble.copyDelete": "Copiar e excluir",
   "codeBubble.dismiss": "Fechar",
-  "codeBubble.open": "Abrir o e-mail"
+  "codeBubble.open": "Abrir o e-mail",
+  "blitz.failed.notice": "O renderizador Rust não conseguiu exibir esta mensagem, então ela aparece como texto simples.",
+  "blitz.failed.title": "Não foi possível exibir esta mensagem",
+  "blitz.failed.body": "O renderizador Rust falhou nesta mensagem. Mude para o renderizador padrão para vê-la como foi projetada.",
+  "blitz.failed.switch": "Usar o renderizador padrão",
+  "blitz.failed.dismiss": "Dispensar",
+  "blitz.linksInMessage": "Links nesta mensagem"
 }
