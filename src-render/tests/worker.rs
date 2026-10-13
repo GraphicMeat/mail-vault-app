@@ -104,3 +104,24 @@ fn relative_url_mail_opens_through_the_worker() {
     assert_eq!(out[0]["kind"], "reply");
     assert_eq!(out[1]["kind"], "reply");
 }
+
+#[test]
+fn a_malformed_op_with_a_req_is_answered_not_dropped() {
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":"<p>x","cssWidth":300.5,"scale":1.0,"allowRemote":false}),
+        json!({"op":"tile","req":2,"doc":1,"index":"zero"}),
+        json!({"op":"hit","req":3,"doc":1}),
+        json!({"op":"open","req":4,"doc":1,"html":"<p>x","cssWidth":100,"scale":1.0,"allowRemote":false}),
+    ]);
+    assert_eq!(out.len(), 4, "every request is answered exactly once: {out:?}");
+    for (i, req) in [(0, 1), (1, 2), (2, 3)] {
+        assert_eq!(out[i], json!({"kind":"error","req":req,"code":"render_bad_request"}));
+    }
+    assert_eq!(out[3]["kind"], "reply", "a good op after the bad ones still works");
+}
+
+#[test]
+fn a_malformed_close_or_garbage_has_no_reply_to_send() {
+    let out = run(&[json!({"op":"close"}), json!({"op":"nope","req":9}), json!({"req":10})]);
+    assert!(out.is_empty(), "{out:?}");
+}

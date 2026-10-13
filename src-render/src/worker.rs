@@ -34,6 +34,20 @@ enum In {
     Fetched { doc: u64, fetch: u64, bytes: Option<String> },
 }
 
+/// What the stdin reader hands the document thread.
+enum Msg {
+    Op(In),
+    /// A line that is JSON for an open, tile or hit with a `req`, but not a valid
+    /// one. Only this thread writes to stdout, so the reader asks it to answer.
+    Bad { req: u64 },
+}
+
+fn bad_request(line: &str) -> Option<u64> {
+    let v: Value = serde_json::from_str(line).ok()?;
+    matches!(v["op"].as_str()?, "open" | "tile" | "hit").then_some(())?;
+    v["req"].as_u64()
+}
+
 struct Open {
     doc: RenderDoc,
     net: Arc<BridgeNet>,
@@ -60,13 +74,18 @@ pub fn run(input: impl BufRead + Send + 'static, output: impl Write + Send, pre_
 }
 
 fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_open: fn(&str)) -> std::io::Result<()> {
-    let (tx, rx) = mpsc::channel::<In>();
+    let (tx, rx) = mpsc::channel::<Msg>();
     std::thread::spawn(move || {
         for line in input.lines().map_while(Result::ok) {
-            if let Ok(msg) = serde_json::from_str::<In>(&line) {
-                if tx.send(msg).is_err() {
-                    break;
-                }
+            let msg = match serde_json::from_str::<In>(&line) {
+                Ok(op) => Msg::Op(op),
+                Err(_) => match bad_request(&line) {
+                    Some(req) => Msg::Bad { req },
+                    None => continue, // not for us, and nobody is waiting on it
+                },
+            };
+            if tx.send(msg).is_err() {
+                break;
             }
         }
     });
@@ -76,7 +95,10 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
         let mut batch = vec![first];
         batch.extend(rx.try_iter());
         for msg in batch {
-            handle(msg, &mut docs, &mut dirty, &mut output, pre_open)?;
+            match msg {
+                Msg::Op(op) => handle(op, &mut docs, &mut dirty, &mut output, pre_open)?,
+                Msg::Bad { req } => line(&mut output, json!({"kind":"error","req":req,"code":"render_bad_request"}))?,
+            }
             // Fetches go out right after the message that caused them, so the
             // order on the wire is deterministic however stdin was batched.
             flush_fetches(&docs, &mut output)?;

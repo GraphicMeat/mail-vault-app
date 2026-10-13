@@ -16,8 +16,8 @@ use crate::events::EventBus;
 use base64::Engine;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
@@ -40,6 +40,32 @@ pub const RENDER_UPDATED: &str = "render-updated";
 pub const HANG_SENTINEL: &str = "<!--mailvault-render-test-hang-->";
 #[cfg(debug_assertions)]
 pub const PANIC_SENTINEL: &str = "<!--mailvault-render-test-panic-->";
+
+/// Doc ids are unique within a process, but the shell caches tiles by
+/// `docId/rev/index` as `immutable` for the life of the webview, and a respawned
+/// daemon would otherwise hand out 1, 2, 3 again: a new mail would show an old
+/// mail's cached pixels. So each RenderHost starts at its own 2^20-wide slot of
+/// the id space. The largest start is (2^32 - 1) << 20 plus 1, below 2^52, so an
+/// id stays a safe JS integer even after a million opens.
+fn doc_id_seed(slot: u32) -> u64 {
+    ((slot as u64) << 20) + 1
+}
+
+/// A random per-process base plus a per-host counter: two hosts in one process
+/// never share a slot (the counter), two daemon boots almost never do (the base).
+fn next_doc_id_seed() -> u64 {
+    static BASE: OnceLock<u32> = OnceLock::new();
+    static HOSTS: AtomicU32 = AtomicU32::new(0);
+    let base = *BASE.get_or_init(rand::random::<u32>);
+    doc_id_seed(base.wrapping_add(HOSTS.fetch_add(1, Ordering::Relaxed)))
+}
+
+/// The watchdog measures silence from the moment the worker became busy. A
+/// request that arrives while nothing else is pending finds an idle worker, so
+/// its last output says nothing about how long it has been unresponsive.
+fn silence_clock(last_output: Instant, now: Instant, pending: usize) -> Instant {
+    if pending == 0 { now } else { last_output }
+}
 
 /// RPCs a person waits on. `render.hit` is deliberately absent: hover traffic
 /// must not pause the search index.
@@ -82,6 +108,9 @@ impl WorkerCommand {
 type Waiters = Arc<StdMutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
 
 struct Worker {
+    /// Which spawn this is (RenderHost::epoch at the time). A kill names the
+    /// epoch its caller saw, so a late timeout cannot kill a newer worker.
+    epoch: u64,
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     waiters: Waiters,
@@ -112,7 +141,7 @@ impl RenderHost {
             worker: Mutex::new(None),
             epoch: AtomicU64::new(0),
             next_req: AtomicU64::new(1),
-            next_doc: AtomicU64::new(1),
+            next_doc: AtomicU64::new(next_doc_id_seed()),
             open_docs: StdMutex::default(),
             last_used: StdMutex::new(Instant::now()),
             last_output: Arc::new(StdMutex::new(Instant::now())),
@@ -163,11 +192,18 @@ impl RenderHost {
         let _ = self.send(json!({"op": "close", "doc": doc})).await;
     }
 
-    /// Called by the reaper ticker every 30 s. Kills an idle worker.
+    /// Called by the reaper ticker every 30 s. Kills an idle worker. Idleness
+    /// is re-checked under the slot lock, so a call that arrives between the
+    /// check and the kill is never failed by it.
     pub async fn reap_idle(&self) {
-        let idle = self.last_used.lock().unwrap().elapsed() > IDLE_EXIT && self.open_docs.lock().unwrap().is_empty();
+        let mut guard = self.worker.lock().await;
+        let idle = self.last_used.lock().unwrap().elapsed() > IDLE_EXIT
+            && self.open_docs.lock().unwrap().is_empty()
+            && guard.as_ref().is_some_and(|w| w.waiters.lock().unwrap().is_empty());
         if idle {
-            self.kill().await;
+            if let Some(w) = guard.take() {
+                Self::terminate(w);
+            }
         }
     }
 
@@ -177,6 +213,7 @@ impl RenderHost {
         frame["req"] = json!(req);
         let (tx, rx) = oneshot::channel();
         let waiters;
+        let epoch;
         {
             let mut guard = self.worker.lock().await;
             // A worker that crashed (EOF already failed its waiters) must not
@@ -191,13 +228,19 @@ impl RenderHost {
                 *guard = Some(self.spawn().map_err(|_| UNAVAILABLE.to_string())?);
             }
             let w = guard.as_ref().unwrap();
+            epoch = w.epoch;
             waiters = w.waiters.clone();
-            w.waiters.lock().unwrap().insert(req, tx);
+            {
+                let mut pending = w.waiters.lock().unwrap();
+                let mut last = self.last_output.lock().unwrap();
+                *last = silence_clock(*last, Instant::now(), pending.len());
+                pending.insert(req, tx);
+            }
             let mut stdin = w.stdin.lock().await;
             if stdin.write_all(format!("{frame}\n").as_bytes()).await.is_err() {
                 drop(stdin);
                 drop(guard);
-                self.kill().await;
+                self.kill_epoch(epoch).await;
                 return Err(UNAVAILABLE.into());
             }
         }
@@ -209,7 +252,7 @@ impl RenderHost {
                 // kill only if the worker has gone silent: busy is not hung.
                 waiters.lock().unwrap().remove(&req);
                 if self.last_output.lock().unwrap().elapsed() >= WATCHDOG {
-                    self.kill().await;
+                    self.kill_epoch(epoch).await;
                 }
                 Err(UNAVAILABLE.into())
             }
@@ -224,16 +267,24 @@ impl RenderHost {
         Ok(())
     }
 
-    async fn kill(&self) {
-        if let Some(mut w) = self.worker.lock().await.take() {
-            let _ = w.child.start_kill();
-            for (_, tx) in w.waiters.lock().unwrap().drain() {
-                let _ = tx.send(Err(UNAVAILABLE.into()));
+    /// Kill the worker of spawn `epoch`, if it is still the one in the slot.
+    async fn kill_epoch(&self, epoch: u64) {
+        let mut guard = self.worker.lock().await;
+        if guard.as_ref().is_some_and(|w| w.epoch == epoch) {
+            if let Some(w) = guard.take() {
+                Self::terminate(w);
             }
+            // Every doc died with the worker. The frontend re-opens on
+            // render_unknown_doc and shows its failure view.
+            self.open_docs.lock().unwrap().clear();
         }
-        // Every doc died with the worker. The frontend re-opens on
-        // render_unknown_doc and shows its failure view.
-        self.open_docs.lock().unwrap().clear();
+    }
+
+    fn terminate(mut w: Worker) {
+        let _ = w.child.start_kill();
+        for (_, tx) in w.waiters.lock().unwrap().drain() {
+            let _ = tx.send(Err(UNAVAILABLE.into()));
+        }
     }
 
     fn spawn(&self) -> std::io::Result<Worker> {
@@ -289,7 +340,7 @@ impl RenderHost {
                 let _ = tx.send(Err(UNAVAILABLE.into()));
             }
         });
-        Ok(Worker { child, stdin, waiters, dead })
+        Ok(Worker { epoch, child, stdin, waiters, dead })
     }
 }
 
@@ -371,6 +422,38 @@ mod tests {
         assert!(h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.is_ok(),
             "a crashed worker is reaped and the next open spawns a fresh one");
         assert_eq!(h.spawned(), 2);
+    }
+
+    #[test]
+    fn doc_ids_stay_js_safe_and_differ_between_hosts() {
+        let first = |h: &RenderHost| h.next_doc.load(Ordering::Relaxed);
+        let (a, b) = (host(), host());
+        assert_ne!(first(&a), first(&b), "two hosts must not hand out the same first doc id");
+        // The widest slot plus a million opens is still below 2^53.
+        assert!(doc_id_seed(u32::MAX) + (1 << 20) < (1u64 << 53));
+        assert_eq!(doc_id_seed(0), 1, "slot 0 starts at 1, never 0");
+    }
+
+    #[test]
+    fn silence_is_measured_from_when_the_worker_became_busy() {
+        let old = Instant::now() - Duration::from_secs(60);
+        let now = Instant::now();
+        assert_eq!(silence_clock(old, now, 0), now, "idle worker: its last line is not silence");
+        assert_eq!(silence_clock(old, now, 1), old, "already busy: keep counting from the last line");
+        assert_eq!(silence_clock(old, now, 5), old);
+    }
+
+    #[tokio::test]
+    async fn a_late_kill_for_another_workers_epoch_spares_the_live_one() {
+        let h = host();
+        let opened = h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        let live = h.spawned();
+        h.kill_epoch(live + 7).await; // a timeout that belongs to some earlier, dead worker
+        assert!(h.tile(doc, 0).await.is_ok(), "the live worker and its doc survive");
+        assert_eq!(h.spawned(), 1);
+        h.kill_epoch(live).await;
+        assert_eq!(h.tile(doc, 0).await.unwrap_err(), "render_unknown_doc", "killing the right epoch does kill it");
     }
 
     #[test]
