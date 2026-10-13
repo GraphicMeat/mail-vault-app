@@ -14,8 +14,6 @@ pub fn mono_lib() -> FontLibrary {
 }
 fn opts() -> RenderOptions { RenderOptions { css_width: 400, scale: 1.0, ..Default::default() } }
 
-// Needs `text_runs` (Task 3); Task 3 Step 1 removes this attribute.
-#[cfg(any())]
 #[test]
 fn registered_family_lays_out_and_unknown_one_does_not() {
     let html = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'MV Mono'">abcdefghij</p></body>"#;
@@ -34,8 +32,6 @@ fn woff2_is_decoded_before_registration() {
     assert!(!lib.register("MV Mono", vec![]), "second registration of a family is not new");
 }
 
-// Needs `text_runs` (Task 3); Task 3 Step 1 removes this attribute.
-#[cfg(any())]
 #[test]
 fn bullets_still_draw_with_our_own_context() {
     // We build the context ourselves, so blitz's BULLET_FONT registration is ours to do.
@@ -46,8 +42,6 @@ fn bullets_still_draw_with_our_own_context() {
     assert!(text.contains('\u{2022}'), "marker painted with the bullet font: {text:?}");
 }
 
-// Needs `text_runs` (Task 3); Task 3 Step 1 removes this attribute.
-#[cfg(any())]
 #[test]
 fn latin_ext_subset_registered_under_the_same_family_is_used_for_l_stroke() {
     let mut lib = mono_lib();
@@ -86,8 +80,6 @@ fn fonts_op_rebuilds_only_docs_naming_the_family_and_keeps_doc_id() {
     assert_eq!(updated[0]["rev"], 2);
 }
 
-// Needs the `textRuns` op (Task 3); Task 3 Step 1 removes this attribute.
-#[cfg(any())]
 #[test]
 fn rebuilt_doc_lays_out_in_the_late_font() {
     let b64 = base64::engine::general_purpose::STANDARD.encode(asset("ibm-plex-mono-latin-400.woff2"));

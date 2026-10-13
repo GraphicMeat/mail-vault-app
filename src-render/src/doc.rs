@@ -6,6 +6,7 @@ use crate::net::{img_srcs, BridgeNet};
 use blitz_traits::net::NetProvider;
 use blitz_traits::shell::{ColorScheme, Viewport};
 use serde::Serialize;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 pub const TILE_CSS_HEIGHT: u32 = 512;
@@ -101,6 +102,8 @@ pub struct RenderDoc {
     doc: HtmlDocument,
     opts: RenderOptions,
     net: Option<Arc<BridgeNet>>,
+    /// Text runs of the whole document, computed once per layout (see `text_runs`).
+    runs: RefCell<Option<Vec<crate::text::TextRun>>>,
 }
 
 /// Rounds of "decide held requests, apply the answers" before the rest are
@@ -177,12 +180,27 @@ impl RenderDoc {
         // Everything blitz asked for while parsing is decided here: images are
         // queued, stylesheets, fonts, @import and frames are answered empty.
         apply(&mut doc, net.as_ref());
-        Ok(Self { doc, opts, net })
+        Ok(Self { doc, opts, net, runs: RefCell::new(None) })
     }
 
     /// Apply resources the net provider delivered since the last call, then relayout.
     pub fn apply_resources(&mut self) {
         apply(&mut self.doc, self.net.as_ref());
+        self.invalidate_runs();
+    }
+
+    /// The text runs whose line tops fall in tile `index`. The whole document is
+    /// walked once per layout and indexed by tile: a select-all asks for every
+    /// tile, and a walk each would hold the worker for hundreds of passes.
+    pub fn text_runs(&self, index: u32) -> Vec<crate::text::TextRun> {
+        let mut cache = self.runs.borrow_mut();
+        let all = cache.get_or_insert_with(|| crate::text::all_runs(&self.doc));
+        all.iter().filter(|r| crate::text::tile_of(r) == index).cloned().collect()
+    }
+
+    /// Any relayout makes the cached runs wrong.
+    fn invalidate_runs(&self) {
+        *self.runs.borrow_mut() = None;
     }
 
     /// How many <iframe> sub-documents were loaded (always 0: they are switched off).

@@ -32,6 +32,7 @@ enum In {
     },
     Tile { req: u64, doc: u64, index: u32 },
     Hit { req: u64, doc: u64, x: f32, y: f32 },
+    TextRuns { req: u64, doc: u64, index: u32 },
     Close { doc: u64 },
     Fetched { doc: u64, fetch: u64, bytes: Option<String> },
     /// Google Font families the daemon fetched. No reply: every open doc that
@@ -63,7 +64,7 @@ enum Msg {
 
 fn bad_request(line: &str) -> Option<u64> {
     let v: Value = serde_json::from_str(line).ok()?;
-    matches!(v["op"].as_str()?, "open" | "tile" | "hit").then_some(())?;
+    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns").then_some(())?;
     v["req"].as_u64()
 }
 
@@ -207,6 +208,16 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         In::Hit { req, doc, x, y } => match docs.get(&doc) {
             Some(o) => match guarded(tainted, || o.doc.hit_link(x, y)) {
                 Some(link) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link}})),
+                None => {
+                    discard(docs, doc, tainted);
+                    unavailable(out, req)
+                }
+            },
+            None => unknown(out, req),
+        },
+        In::TextRuns { req, doc, index } => match docs.get(&doc) {
+            Some(o) => match guarded(tainted, || o.doc.text_runs(index)) {
+                Some(runs) => line(out, json!({"kind":"reply","req":req,"ok":{"runs":runs}})),
                 None => {
                     discard(docs, doc, tainted);
                     unavailable(out, req)
