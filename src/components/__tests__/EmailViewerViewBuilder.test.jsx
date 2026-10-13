@@ -41,6 +41,7 @@ const { useViewStore, refreshHiddenMembers } = await import('../../stores/viewSt
 const { invalidateChatAndThreadCaches } = await import('../../stores/slices/messageListSlice');
 const { serverUids } = await import('../../stores/slices/serverUids');
 const { buildThreads } = await import('../../utils/emailParser');
+const { useViewBuilderStore } = await import('../../stores/viewBuilderStore');
 const { EmailViewer } = await import('../EmailViewer');
 
 const message = (uid, extra = {}) => ({
@@ -69,6 +70,7 @@ beforeEach(async () => {
     threadSortOrder: 'oldest-first', signatureDisplay: 'smart', hideViewMail: false,
   });
   useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
+  useViewBuilderStore.setState({ open: false });
   loadKeywords = vi.fn(async () => ({ available: true, keywords: [{ term: 'fondue', tf: 3, df: 4 }] }));
   // What a save does once the daemon has it: the hide membership is asked again.
   addTermsToView = vi.fn(async () => {
@@ -118,21 +120,32 @@ describe('view builder in the single reader', () => {
     await waitFor(() => expect(panels()).toHaveLength(0));
   });
 
-  it('one panel at a time with sender insights', async () => {
+  it('opens beside sender insights, each on its own toggle', async () => {
     render(<EmailViewer />);
     fireEvent.click(screen.getByTestId('sender-insights-toggle'));
-    await flush();
-    expect(screen.queryAllByTestId('sender-insights-panel')).toHaveLength(1);
-
     fireEvent.click(screen.getByTestId('view-builder-toggle'));
     await flush();
+    expect(screen.queryAllByTestId('sender-insights-panel')).toHaveLength(1);
     expect(panels()).toHaveLength(1);
-    await waitFor(() => expect(screen.queryAllByTestId('sender-insights-panel')).toHaveLength(0));
 
     fireEvent.click(screen.getByTestId('sender-insights-toggle'));
+    await waitFor(() => expect(screen.queryAllByTestId('sender-insights-panel')).toHaveLength(0));
+    expect(panels()).toHaveLength(1);
+  });
+
+  it('survives the reader unmounting (two-column layout while an email loads)', async () => {
+    const first = render(<EmailViewer />);
+    fireEvent.click(screen.getByTestId('view-builder-toggle'));
     await flush();
-    expect(screen.queryAllByTestId('sender-insights-panel')).toHaveLength(1);
-    await waitFor(() => expect(panels()).toHaveLength(0));
+    first.unmount();
+    expect(useViewBuilderStore.getState().open).toBe(true);
+
+    act(() => useMailStore.setState({ selectedEmail: OTHER, selectedEmailId: '4' }));
+    render(<EmailViewer />);
+    await flush();
+    expect(panels()).toHaveLength(1);
+    expect(screen.getByTestId('view-builder-toggle').getAttribute('aria-pressed')).toBe('true');
+    expect(loadKeywords).toHaveBeenLastCalledWith(expect.objectContaining({ uid: 4 }));
   });
 
   it('stays open when another email is opened, and reloads for it', async () => {
@@ -167,20 +180,52 @@ describe('view builder in the thread reader', () => {
   };
   const rowOf = (container, uid) => container.querySelector(`[data-email-key="acct-1|INBOX|${uid}"]`);
 
-  it('each message toggles its own panel', async () => {
+  it('one panel, on the focused message; a toggle elsewhere moves it there', async () => {
     openThread();
     const { container } = render(<EmailViewer />);
-    const toggles = screen.getAllByTestId('view-builder-toggle');
-    expect(toggles).toHaveLength(2);
+    expect(screen.getAllByTestId('view-builder-toggle')).toHaveLength(2);
+
+    // The focused message is the one the thread opened on: the newest.
+    fireEvent.click(within(rowOf(container, 6)).getByTestId('view-builder-toggle'));
+    await flush();
+    expect(panels()).toHaveLength(1);
+    expect(within(rowOf(container, 6)).queryAllByTestId('view-builder-panel')).toHaveLength(1);
 
     fireEvent.click(within(rowOf(container, 5)).getByTestId('view-builder-toggle'));
     await flush();
+    await waitFor(() => expect(panels()).toHaveLength(1));
     expect(within(rowOf(container, 5)).queryAllByTestId('view-builder-panel')).toHaveLength(1);
-    expect(within(rowOf(container, 6)).queryAllByTestId('view-builder-panel')).toHaveLength(0);
-    expect(loadKeywords).toHaveBeenCalledWith(expect.objectContaining({ uid: 5 }));
+    expect(within(rowOf(container, 5)).getByTestId('view-builder-toggle').getAttribute('aria-pressed')).toBe('true');
+    expect(within(rowOf(container, 6)).getByTestId('view-builder-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(loadKeywords).toHaveBeenLastCalledWith(expect.objectContaining({ uid: 5 }));
 
     fireEvent.click(within(rowOf(container, 5)).getByTestId('view-builder-toggle'));
     await waitFor(() => expect(panels()).toHaveLength(0));
+    expect(useViewBuilderStore.getState().open).toBe(false);
+  });
+
+  it('opened in the single reader, it stays open on the thread opened next', async () => {
+    const { container } = render(<EmailViewer />);
+    fireEvent.click(screen.getByTestId('view-builder-toggle'));
+    await flush();
+    openThread();
+    await flush();
+    expect(panels()).toHaveLength(1);
+    expect(within(rowOf(container, 6)).queryAllByTestId('view-builder-panel')).toHaveLength(1);
+  });
+
+  it('in split layout it follows the message picked', async () => {
+    useSettingsStore.setState({ threadReaderLayout: 'split' });
+    useViewBuilderStore.setState({ open: true });
+    openThread();
+    render(<EmailViewer />);
+    await flush();
+    expect(panels()).toHaveLength(1);
+    expect(loadKeywords).toHaveBeenLastCalledWith(expect.objectContaining({ uid: 6 }));
+    fireEvent.click(screen.getByRole('button', { name: /^Anna\s*Fondue night 5/ }));
+    await flush();
+    await waitFor(() => expect(panels()).toHaveLength(1));
+    expect(loadKeywords).toHaveBeenLastCalledWith(expect.objectContaining({ uid: 5 }));
   });
 
   it('a toggle click does not fold the message', async () => {
@@ -235,6 +280,16 @@ describe('view builder in the thread reader', () => {
   it('with the setting off, a member gone from the list leaves the reader', () => {
     openThread();
     useViewHideStore.getState().setMembers(held(5));
+    act(() => useMailStore.getState().syncSelectedThread(buildThreads([REPLY])));
+    expect(useMailStore.getState().selectedThread.emails.map(e => e.uid)).toEqual([6]);
+  });
+
+  it('does not keep a held member that left the folder (deleted or moved elsewhere)', () => {
+    useSettingsStore.setState({ hideViewMail: true });
+    openThread();
+    useViewHideStore.getState().setMembers(held(5));
+    // Another client removed message 5: gone from the pool, yet still held by a stale answer.
+    act(() => useMailStore.setState({ emails: [REPLY] }));
     act(() => useMailStore.getState().syncSelectedThread(buildThreads([REPLY])));
     expect(useMailStore.getState().selectedThread.emails.map(e => e.uid)).toEqual([6]);
   });

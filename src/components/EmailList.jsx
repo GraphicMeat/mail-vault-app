@@ -709,7 +709,10 @@ function EmailListComponent({ stacked = false }) {
   useEffect(() => {
     // Flat mode still builds threads when the marking mode needs them: they
     // answer "which rows are siblings", never "which rows group".
-    if (isExplorer || !mergedEmails || searchActive || (threadMode === 'flat' && emailRowHighlight !== 'selection')) {
+    // Not inside a saved view either: its rows are not the folder's, and the
+    // folder's threads must not re-read (add to, drop from) a thread opened
+    // there. While the view runs, the list shows its loading state anyway.
+    if (isExplorer || !mergedEmails || searchActive || activeViewId || (threadMode === 'flat' && emailRowHighlight !== 'selection')) {
       setDeferredThreads(null);
       return;
     }
@@ -736,7 +739,7 @@ function EmailListComponent({ stacked = false }) {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [isExplorer, mergedEmails, threadFingerprint, searchActive, viewMode, threadMode, emailRowHighlight, syncSelectedThread]);
+  }, [isExplorer, mergedEmails, threadFingerprint, searchActive, activeViewId, viewMode, threadMode, emailRowHighlight, syncSelectedThread]);
 
   // Deferred sender grouping computation
   useEffect(() => {

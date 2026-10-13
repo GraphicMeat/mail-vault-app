@@ -488,7 +488,8 @@ const memberKeys = (emails) => (emails || []).map(memberKey).join(',');
  *
  * `held`: the `account|mailbox|uid` keys the list leaves out because a saved
  * view holds them ("hide view mail"), or null. A member the list holds back
- * for that reason has not left the conversation: it stays in the reader, so
+ * for that reason, and the folder still holds (`emails`, `sentEmails`,
+ * `localEmails`), has not left the conversation: it stays in the reader, so
  * the message a word was just added to a view from is not closed under you.
  */
 export function refreshSelectedThread(state, threads, held = null) {
@@ -503,10 +504,18 @@ export function refreshSelectedThread(state, threads, held = null) {
   }
   if (fresh && held?.size) {
     const present = new Set(fresh.emails.map(memberKey));
+    const keyOf = e => { const id = rowIdentity(e, state); return id && `${id.accountId}|${id.mailbox}|${id.uid}`; };
+    let pool = null;
     const kept = (open.emails || []).filter(e => {
       if (present.has(memberKey(e))) return false;
-      const id = rowIdentity(e, state);
-      return !!id && held.has(`${id.accountId}|${id.mailbox}|${id.uid}`);
+      const key = keyOf(e);
+      if (!key || !held.has(key)) return false;
+      // Held, and still in the folder's own rows. A stale membership answer
+      // must not bring back a message another client deleted or moved: the
+      // raw pool, before any list filtering, is where the folder says so.
+      pool ??= new Set([...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])]
+        .map(keyOf).filter(Boolean));
+      return pool.has(key);
     });
     if (kept.length) {
       const time = e => new Date(e.date || e.internalDate || 0).getTime() || 0;

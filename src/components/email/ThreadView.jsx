@@ -38,6 +38,7 @@ import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
 import { TagChips } from '../TagChips';
 import { useExportStore } from '../../stores/exportStore';
+import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
@@ -351,7 +352,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false, isNewest = false, threadId, readOnly = false, emailThemeDark }) {
+function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false, isNewest = false, threadId, readOnly = false, emailThemeDark, viewBuilderOpen = false, onToggleViewBuilder }) {
   const t = useT();
 
   const [, forceUpdate] = useState(0);
@@ -366,17 +367,9 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   const [rawError, setRawError] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
-  // This message's view builder, in the Insights slot: one panel at a time,
-  // the same rule as the single reader.
-  const [showViewBuilder, setShowViewBuilder] = useState(false);
-  const toggleInsights = () => {
-    if (!showInsights) setShowViewBuilder(false);
-    setShowInsights(!showInsights);
-  };
-  const toggleViewBuilder = () => {
-    if (!showViewBuilder) setShowInsights(false);
-    setShowViewBuilder(!showViewBuilder);
-  };
+  // The view builder shows on the thread's focused message only, while the
+  // mode is on (viewBuilderStore); ThreadView decides which message that is.
+  const showViewBuilder = !!viewBuilderOpen && !readOnly;
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const moveButtonRef = useRef(null);
@@ -505,9 +498,9 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
           onToggleRaw={toggleRawSource}
           loadingRaw={loadingRaw}
           showInsights={showInsights}
-          onToggleInsights={toggleInsights}
+          onToggleInsights={() => setShowInsights(!showInsights)}
           showViewBuilder={showViewBuilder}
-          onToggleViewBuilder={readOnly ? undefined : toggleViewBuilder}
+          onToggleViewBuilder={readOnly ? undefined : onToggleViewBuilder}
           archivedEmailIds={archivedEmailIds}
         />}
         {!expanded && !compact && (
@@ -574,18 +567,18 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
         </div>
       )}
 
-      {/* Sender Insights, or the view builder (thread email) */}
+      {/* Sender Insights and the view builder (thread email) */}
       <AnimatePresence>
         {showInsights && email?.from?.address && (
           <SenderInsightsPanel key="insights" senderEmail={email.from.address} email={email} />
         )}
-        {showViewBuilder && !readOnly && (
+        {showViewBuilder && (
           <ViewBuilderPanel
             key="view-builder"
             email={email}
             accountId={location?.accountId}
             mailbox={location?.mailbox}
-            onClose={() => setShowViewBuilder(false)}
+            onClose={() => useViewBuilderStore.getState().setOpen(false)}
           />
         )}
       </AnimatePresence>
@@ -849,6 +842,17 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
 
   const selectedEmail = sortedEmails.find(email => emailKey(email) === selectedMessage)
     || sortedEmails.find(email => emailKey(email) === openKey);
+  // The view builder is one mode for the whole reader (viewBuilderStore), shown
+  // on the focused message: the one picked, else the one the thread opened on.
+  // A toggle on another message moves the focus there rather than closing.
+  const viewBuilderOn = useViewBuilderStore(s => s.open);
+  const focusedKey = selectedEmail ? emailKey(selectedEmail) : null;
+  const toggleViewBuilderFor = (key) => {
+    const builder = useViewBuilderStore.getState();
+    if (builder.open && key === focusedKey) { builder.setOpen(false); return; }
+    setSelectedMessage(key);
+    builder.setOpen(true);
+  };
   useEffect(() => {
     if (readOnly || !selectedEmail) return undefined;
     // Synchronous answer: openActiveReply reads `false` as "not mine", and a
@@ -1064,6 +1068,8 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
                   saving={saving}
                   readOnly={readOnly}
                   emailThemeDark={emailThemeDark}
+                  viewBuilderOpen={viewBuilderOn && emailKey(email) === focusedKey}
+                  onToggleViewBuilder={readOnly ? undefined : () => toggleViewBuilderFor(emailKey(email))}
                 />}
               </div>
             );
@@ -1081,7 +1087,8 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
             onComposeReply={onComposeReply} onDelete={requestDelete} onArchive={handleQuickArchive}
             onDeleteEverywhere={requestDeleteEverywhere}
             onToggleRead={handleQuickRead} onToggleFlag={handleQuickFlag} onActionStart={beginQuickAction} saving={saving}
-            readOnly={readOnly} />
+            viewBuilderOpen={viewBuilderOn && !readOnly}
+            onToggleViewBuilder={readOnly ? undefined : () => toggleViewBuilderFor(emailKey(selectedEmail))} />
         </div>
       )}
       </div>

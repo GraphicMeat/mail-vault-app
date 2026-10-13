@@ -34,6 +34,7 @@ import { ThreadView } from './email/ThreadView';
 import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
 import { useExportStore } from '../stores/exportStore';
+import { useViewBuilderStore } from '../stores/viewBuilderStore';
 import { patchEverywhere } from '../stores/messageRows';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { CloseViewerButton } from './email/CloseViewerButton';
@@ -137,19 +138,13 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const rawRequest = useRef(0);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
-  // The view builder is a mode the person turned on: it stays open from one
-  // email to the next (the panel reloads its words per email) and closes only
-  // on its own close button or the toggle, so it is not in the reset below.
-  // It shares the slot under the header with Sender insights, one at a time.
-  const [showViewBuilder, setShowViewBuilder] = useState(false);
-  const toggleInsights = () => {
-    if (!showInsights) setShowViewBuilder(false);
-    setShowInsights(!showInsights);
-  };
-  const toggleViewBuilder = () => {
-    if (!showViewBuilder) setShowInsights(false);
-    setShowViewBuilder(!showViewBuilder);
-  };
+  // The view builder is a mode the person turned on, held outside the reader
+  // (viewBuilderStore): it stays open from one email to the next (the panel
+  // reloads its words per email), through this reader unmounting, and into a
+  // thread. Closed only by its own close button or the toggle.
+  const showViewBuilder = useViewBuilderStore(s => s.open);
+  const toggleViewBuilder = useViewBuilderStore(s => s.toggle);
+  const closeViewBuilder = () => useViewBuilderStore.getState().setOpen(false);
   // AI Compose actions (Phase 6): the viewer only ever hosts "Summarize
   // thread" — draft reply/shorten/tone/action items act on a draft, which
   // only Compose has. Read-only result: it never sends or saves anything.
@@ -784,7 +779,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         onToggleRaw={toggleRawSource}
         loadingRaw={loadingRaw}
         showInsights={showInsights}
-        onToggleInsights={toggleInsights}
+        onToggleInsights={() => setShowInsights(!showInsights)}
         showViewBuilder={showViewBuilder}
         onToggleViewBuilder={toggleViewBuilder}
         archivedEmailIds={archivedEmailIds}
@@ -841,7 +836,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
           )}
         </div>
 
-      {/* Sender Insights, or the view builder: one panel in this slot */}
+      {/* Sender Insights and the view builder, each on its own toggle */}
       <AnimatePresence>
         {showInsights && selectedEmail?.from?.address && (
           <SenderInsightsPanel key="insights" senderEmail={selectedEmail.from.address} email={selectedEmail} />
@@ -852,7 +847,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             email={selectedEmail}
             accountId={selectedLocation?.accountId}
             mailbox={selectedLocation?.mailbox}
-            onClose={() => setShowViewBuilder(false)}
+            onClose={closeViewBuilder}
           />
         )}
       </AnimatePresence>

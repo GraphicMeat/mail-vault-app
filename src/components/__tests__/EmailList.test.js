@@ -1895,6 +1895,20 @@ describe('a saved view drives the grouping', () => {
     useFieldStore.setState({ fields: {}, byRow: {} });
   });
 
+  // The open thread is re-read only from a folder's own threads. Inside a
+  // saved view (its rows not yet shown, or shown as search results) the
+  // folder's threads say nothing about it, and re-reading from them could add
+  // or drop members ("hide view mail" leaves held mail out of the folder).
+  it('never re-reads the open thread from the folder behind a saved view', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().syncSelectedThread.mockClear();
+    await mount({ def: {} });
+    expect(useMailStore.getState().syncSelectedThread).not.toHaveBeenCalled();
+    cleanup();
+    await mount();
+    expect(useMailStore.getState().syncSelectedThread).toHaveBeenCalled();
+  });
+
   // Opening a view is a daemon round trip. While it ran, the list kept the
   // folder behind the view on screen under the view's name: its rows, its
   // count, its date range and its vault share, with no sign anything was
