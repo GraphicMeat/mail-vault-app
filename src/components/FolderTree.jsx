@@ -7,6 +7,7 @@ import { buildMailboxTree } from '../services/workflows/mailboxTree';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { useT } from '../i18n/index.js';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useViewHideStore } from '../stores/viewHideStore';
 import { folderIconColor } from '../utils/folderIconColor';
 
 const MAILBOX_ICONS = {
@@ -42,6 +43,19 @@ function FolderIcon({ node, ...props }) {
   const style = useSettingsStore(s => s.folderIconStyle);
   const colors = useSettingsStore(s => s.folderIconColors);
   return <Icon {...props} style={{ color: folderIconColor(node, { style, colors, accountId }) }} />;
+}
+
+/**
+ * A closed folder's unread badge: STATUS's unseen count, less the unread
+ * messages a saved view holds there while "hide view mail" keeps them off the
+ * folder's list (the daemon's count, `unreadByMailbox`). Unknown (null) takes
+ * nothing off, and a STATUS older than the daemon's answer never goes below 0.
+ */
+function useUnseenOf(counts) {
+  const accountId = useContext(AccountScope);
+  const hiding = useSettingsStore(s => !!s.hideViewMail);
+  const held = useViewHideStore(s => (hiding && accountId ? s.unreadByMailbox : null));
+  return path => Math.max(0, (counts?.[path]?.unseen || 0) - (held?.[`${accountId}|${path}`] || 0));
 }
 
 // The vault-only folders (MBOX imports kept on this computer, merged in as
@@ -111,7 +125,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
   const isActive = !node.noselect && activeMailbox === node.path;
   const label = mailboxLabel(node.name);
   // The open folder's own list is the live count; STATUS is for the rest.
-  const unseen = counts?.[node.path]?.unseen || 0;
+  const unseen = useUnseenOf(counts)(node.path);
   const showCount = unseen > 0 && !isActive;
 
   return (
@@ -183,6 +197,7 @@ const searchText = value => String(value).normalize('NFKD').replace(/\p{Diacriti
 
 function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onContextMenu }) {
   const t = useT();
+  const unseenOf = useUnseenOf(counts);
   const matches = useMemo(() => {
     const words = searchText(query.trim()).split(/\s+/);
     const results = [];
@@ -205,7 +220,7 @@ function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onC
 
   return matches.map(({ node, label, trail, fullPath }) => {
     const active = activeMailbox === node.path;
-    const unseen = counts?.[node.path]?.unseen || 0;
+    const unseen = unseenOf(node.path);
     return <button type="button" key={node.path} data-testid="folder-row" data-path={node.path}
       aria-label={fullPath} aria-current={active ? 'true' : undefined} title={fullPath}
       onClick={() => onSelect(node.path)}
@@ -269,7 +284,7 @@ function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, 
   const isActive = !node.noselect && activeMailbox === node.path;
   const label = mailboxLabel(node.name);
   // Same rule as the row: the open folder's own list is the live count.
-  const unseen = counts?.[node.path]?.unseen || 0;
+  const unseen = useUnseenOf(counts)(node.path);
   const showCount = unseen > 0 && !isActive;
 
   return (
