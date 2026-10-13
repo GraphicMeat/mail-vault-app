@@ -1,4 +1,4 @@
-// ── foldDetection: where a mail's quote and signature are ──
+// foldDetection: where a mail's quote and signature are
 //
 // ONE source for two runtimes:
 //   - the reading-pane iframe: iframeQuoteFolding.js reads this file ?raw,
@@ -46,7 +46,7 @@ export function quoteFoldTargets(document) {
 
   // Text a reader would see: a blank line, &nbsp; or a zero-width space is not.
   function hasText(node) {
-    return /[^\s ​-‍﻿]/.test(node.textContent || '');
+    return /[^\s\u00a0\u200b-\u200d\ufeff]/.test(node.textContent || '');
   }
   function blank(node) {
     return !hasText(node) && !(node.nodeType === 1 && (node.nodeName === 'IMG' || node.querySelector('img')));
@@ -101,7 +101,7 @@ export function quoteFoldTargets(document) {
     /^\s*from:[\s\S]{1,200}\bsent:\s/i,
   ];
   function isMarker(el) {
-    var text = (el.textContent || '').replace(/ /g, ' ');
+    var text = (el.textContent || '').replace(/\u00a0/g, ' ');
     for (var k = 0; k < MARKERS.length; k++) {
       if (MARKERS[k].test(text)) return true;
     }

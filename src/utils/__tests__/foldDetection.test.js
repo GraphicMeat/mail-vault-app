@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../iframeQuoteFolding';
-import { quoteFoldTargets, signatureFoldTargets, styleQuoteToggle, isDarkBackground, QUOTE_TOGGLE_CSS } from '../foldDetection';
+import { quoteFoldTargets, signatureFoldTargets, styleQuoteToggle, isDarkBackground, QUOTE_TOGGLE_CSS, QUOTE_TOGGLE_DARK } from '../foldDetection';
 import GMAIL_REPLY from './fixtures/quote-fold-gmail-reply.html?raw';
 
 const FIXTURES = {
@@ -10,7 +10,8 @@ const FIXTURES = {
     <div><b>Original Message</b><br>From: Ben &lt;ben@fea.st&gt;<br>Date: Aug 22</div>
     <div>Good morning!</div><div>So much for it</div>`,
   outlook: `<div>Reply text.</div><div id="appendonsend"></div><hr>
-    <div id="divRplyFwdMsg"><b>From:</b> Person A<br><b>Sent:</b> Friday</div><div>Quoted text.</div>`,
+    <div id="divRplyFwdMsg"><b>From:</b> Person A<br>
+    <b>Sent:</b> Friday</div><div>Quoted text.</div>`,
   adjacent: '<p>Reply text.</p><blockquote><p>First.</p></blockquote>\n<br><blockquote><p>Second.</p></blockquote>',
   allQuote: '<div dir="ltr"><br></div><blockquote class="gmail_quote"><div>Quoted.</div></blockquote>',
   signature: '<p>Body.</p><div class="gmail_signature"><div>Person B</div></div>',
@@ -59,7 +60,11 @@ describe('fold detection: one source for the iframe and the pre-pass', () => {
   for (const [name, html] of Object.entries(FIXTURES)) {
     for (const mode of ['smart', 'collapsed', 'always-hide', 'always-show']) {
       it(`${name} / ${mode}: same DOM both ways`, () => {
-        expect(viaShared(html, mode)).toBe(viaScripts(html, mode));
+        const shared = viaShared(html, mode);
+        expect(shared).toBe(viaScripts(html, mode));
+        // A detector that folds nothing would agree with itself: pin that it folds.
+        if (['gmail', 'fastmail', 'outlook', 'adjacent'].includes(name)) expect(shared).toContain('data-quote-folded');
+        if (name === 'signature' && mode !== 'always-show') expect(shared).toContain('data-sig-folded');
       });
     }
   }
@@ -73,6 +78,21 @@ describe('fold detection: one source for the iframe and the pre-pass', () => {
 
   it('quote toggle styling is the exact cssText the script always wrote', () => {
     expect(QUOTE_TOGGLE_CSS).toBe('cursor:pointer;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:2px 10px;margin:6px 0;display:inline-block;font-size:13px;user-select:none;');
+  });
+
+  it('styleQuoteToggle(el, true) writes the dark style', () => {
+    const expected = document.createElement('div');
+    expected.style.cssText = QUOTE_TOGGLE_CSS;
+    expected.style.background = QUOTE_TOGGLE_DARK.background;
+    expected.style.color = QUOTE_TOGGLE_DARK.color;
+    expected.style.borderColor = QUOTE_TOGGLE_DARK.borderColor;
+    const dark = document.createElement('div');
+    styleQuoteToggle(dark, true);
+    expect(dark.style.cssText).toBe(expected.style.cssText);
+    const light = document.createElement('div');
+    styleQuoteToggle(light, false);
+    expect(light.style.cssText).not.toBe(dark.style.cssText);
+    expect(dark.style.color).not.toBe(light.style.color);
   });
 
   it('isDarkBackground keeps the script quirk: transparent reads as dark', () => {
