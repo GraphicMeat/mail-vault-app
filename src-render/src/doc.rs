@@ -64,6 +64,7 @@ pub struct DocMeta {
     pub tile_count: u32,
     pub links: Vec<LinkInfo>,
     pub plain_text: String,
+    pub folds: Vec<crate::fold::FoldInfo>,
 }
 
 #[derive(Debug)]
@@ -180,6 +181,7 @@ impl RenderDoc {
         // Everything blitz asked for while parsing is decided here: images are
         // queued, stylesheets, fonts, @import and frames are answered empty.
         apply(&mut doc, net.as_ref());
+        crate::fold::apply_toggle_theme(&mut doc);
         Ok(Self { doc, opts, net, runs: RefCell::new(None) })
     }
 
@@ -247,6 +249,7 @@ impl RenderDoc {
             tile_count,
             links: self.links(),
             plain_text: root.text_content(),
+            folds: crate::fold::read_folds(&self.doc),
         }
     }
 
@@ -264,13 +267,35 @@ impl RenderDoc {
         Ok(encode_rgb_over_white(&rgba, px_w, px_h))
     }
 
-    /// The `<a href>` under document point (x, y) in CSS px, if any.
-    pub fn hit_link(&self, x: f32, y: f32) -> Option<LinkInfo> {
+    /// Open or close fold `id` and relayout once, the same way a resource
+    /// arrival does (so CSS images in a region that was display:none are
+    /// queued). False, and nothing touched, for an unknown id or a fold
+    /// already in that state.
+    pub fn set_fold(&mut self, id: &str, open: bool) -> bool {
+        let changed = crate::fold::set_fold(&mut self.doc, id, open);
+        if changed {
+            self.apply_resources(); // also drops the cached text runs
+        }
+        changed
+    }
+
+    /// Link and fold under document point (x, y) in CSS px.
+    pub fn hit(&self, x: f32, y: f32) -> (Option<LinkInfo>, Option<String>) {
         // blitz-dom 0.3.0-beta.2 `hit` takes document coordinates (node layout
         // offsets only; the viewport scroll is not consulted and nothing is clipped
         // to the viewport), so no scroll shuffling is needed for far-down points.
-        let hit = self.doc.hit(x, y)?;
-        let mut id: Option<NodeId> = Some(hit.node_id);
+        let Some(hit) = self.doc.hit(x, y) else { return (None, None) };
+        (self.link_from(hit.node_id), crate::fold::fold_at(&self.doc, hit.node_id))
+    }
+
+    /// The `<a href>` under document point (x, y) in CSS px, if any.
+    pub fn hit_link(&self, x: f32, y: f32) -> Option<LinkInfo> {
+        self.hit(x, y).0
+    }
+
+    /// The nearest `<a href>` at or above `id`.
+    fn link_from(&self, id: NodeId) -> Option<LinkInfo> {
+        let mut id: Option<NodeId> = Some(id);
         while let Some(n) = id {
             let node = self.doc.get_node(n)?;
             if node.data.is_element_with_tag_name(&local_name!("a")) {
@@ -281,6 +306,19 @@ impl RenderDoc {
             id = node.parent;
         }
         None
+    }
+
+    #[doc(hidden)]
+    pub fn text_runs_all_including_noselect_for_test(&self) -> Vec<String> {
+        crate::text::inline_roots(&self.doc)
+            .into_iter()
+            .filter_map(|id| self.doc.get_node(id)?.element_data()?.inline_layout_data.as_deref().map(|t| t.text.clone()))
+            .collect()
+    }
+
+    #[doc(hidden)]
+    pub fn inspect_toggle_colors_for_test(&mut self, id: &str) -> (String, String) {
+        crate::fold::toggle_colors(&self.doc, id)
     }
 
     fn links(&self) -> Vec<LinkInfo> {

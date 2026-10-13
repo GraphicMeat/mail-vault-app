@@ -32,6 +32,7 @@ enum In {
     },
     Tile { req: u64, doc: u64, index: u32 },
     Hit { req: u64, doc: u64, x: f32, y: f32 },
+    Fold { req: u64, doc: u64, id: String, open: bool },
     TextRuns { req: u64, doc: u64, index: u32 },
     Serialize { req: u64, doc: u64, start: crate::serialize::Endpoint, end: crate::serialize::Endpoint },
     Close { doc: u64 },
@@ -58,14 +59,14 @@ struct FamilyIn {
 /// What the stdin reader hands the document thread.
 enum Msg {
     Op(In),
-    /// A line that is JSON for an open, tile, hit, textRuns or serialize with a `req`, but not a valid
+    /// A line that is JSON for an open, tile, hit, fold, textRuns or serialize with a `req`, but not a valid
     /// one. Only this thread writes to stdout, so the reader asks it to answer.
     Bad { req: u64 },
 }
 
 fn bad_request(line: &str) -> Option<u64> {
     let v: Value = serde_json::from_str(line).ok()?;
-    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns" | "serialize").then_some(())?;
+    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns" | "serialize" | "fold").then_some(())?;
     v["req"].as_u64()
 }
 
@@ -207,8 +208,34 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             None => unknown(out, req),
         },
         In::Hit { req, doc, x, y } => match docs.get(&doc) {
-            Some(o) => match guarded(tainted, || o.doc.hit_link(x, y)) {
-                Some(link) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link}})),
+            Some(o) => match guarded(tainted, || o.doc.hit(x, y)) {
+                Some((link, fold)) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link,"fold":fold}})),
+                None => {
+                    discard(docs, doc, tainted);
+                    unavailable(out, req)
+                }
+            },
+            None => unknown(out, req),
+        },
+        In::Fold { req, doc, id, open } => match docs.get_mut(&doc) {
+            Some(o) => match guarded(tainted, || {
+                let changed = o.doc.set_fold(&id, open);
+                (changed, o.doc.meta())
+            }) {
+                Some((changed, meta)) => {
+                    if changed {
+                        o.rev += 1;
+                    }
+                    line(out, json!({"kind":"reply","req":req,"ok":{"rev":o.rev,"meta":meta}}))?;
+                    // The same `updated` frame a resource arrival sends: the
+                    // frontend applies new layouts from the render-updated event
+                    // only, never from this reply.
+                    if changed {
+                        line(out, json!({"kind":"updated","doc":doc,"rev":o.rev,"meta":meta}))?;
+                    }
+                    Ok(())
+                }
+                // A half-mutated document must not keep serving tiles.
                 None => {
                     discard(docs, doc, tainted);
                     unavailable(out, req)
@@ -294,6 +321,7 @@ fn rebuild_for_fonts(fresh: &[String], docs: &mut HashMap<u64, Open>, out: &mut 
         let rebuilt = guarded(tainted, || {
             RenderDoc::open_with(&o.html, o.opts.clone(), Some(net_for_doc), fonts.context()).map(|mut d| {
                 d.apply_resources();
+                crate::fold::carry_folds(&o.doc, &mut d);
                 d
             })
         });
