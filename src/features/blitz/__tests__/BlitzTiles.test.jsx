@@ -116,6 +116,39 @@ describe('BlitzTiles', () => {
     });
   });
 
+  describe('the screen-reader links list', () => {
+    const links = [
+      { href: 'https://calendly.com/jane-doe?name=Jane%20Doe', text: 'book', alert: null, title: null },
+      { href: 'https://secret.test/unsub?u=42', text: '', alert: null, title: null },
+    ];
+    const nav = async (props, onLink = vi.fn()) => {
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ links }) });
+      const { container } = render(tiles({ onLink, ...props }));
+      await screen.findAllByTestId('blitz-tile');
+      return container.querySelector('nav');
+    };
+    it('keeps the hrefs while privacy is off', async () => {
+      const n = await nav({});
+      expect(n.querySelectorAll('a[href]')).toHaveLength(2);
+      expect(n.textContent).toContain('https://secret.test/unsub?u=42');
+    });
+    it('hides every href from assistive tech while privacy is on, and stays clickable', async () => {
+      const onLink = vi.fn();
+      const n = await nav({ privacy: true }, onLink);
+      expect(n.querySelectorAll('[href]')).toHaveLength(0);
+      expect(n.textContent).not.toContain('jane-doe');
+      expect(n.textContent).not.toContain('secret.test');
+      expect(n.textContent).toContain('book');
+      const entries = n.querySelectorAll('[role="link"]');
+      expect(entries).toHaveLength(1); // the entry with no text is skipped
+      expect(entries[0].getAttribute('tabindex')).toBe('0');
+      fireEvent.click(entries[0]);
+      fireEvent.keyDown(entries[0], { key: 'Enter' });
+      expect(onLink).toHaveBeenCalledTimes(2);
+      expect(onLink).toHaveBeenCalledWith(expect.objectContaining({ href: links[0].href }));
+    });
+  });
+
   it('a render-updated event for this doc swaps tile URLs to the new rev', async () => {
     let push;
     onRenderUpdated.mockImplementation(async cb => { push = cb; return () => {}; });

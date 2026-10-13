@@ -380,8 +380,14 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
       )}
       {m && m.links.length > 0 && (
         <nav aria-label={t('blitz.linksInMessage')} className="sr-only">
-          {m.links.map((l, i) => (
-            <a key={i} href={l.href} onClick={(e) => { e.preventDefault(); onLinkRef.current?.(l); }}>{l.text || l.href}</a>
+          {m.links.map((l, i) => (privacy
+            // Privacy mode: no href attribute and no href text for assistive tech, only the visible link text.
+            ? l.text && (
+              <span key={i} role="link" tabIndex={0}
+                onClick={() => onLinkRef.current?.(l)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onLinkRef.current?.(l); } }}>{l.text}</span>
+            )
+            : <a key={i} href={l.href} onClick={(e) => { e.preventDefault(); onLinkRef.current?.(l); }}>{l.text || l.href}</a>
           ))}
         </nav>
       )}
