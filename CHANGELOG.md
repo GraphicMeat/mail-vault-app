@@ -5,6 +5,7 @@
 ## [2.20.0] - 2026-10-13
 
 ### Added
+- **Hide view mail:** a list toggle keeps mail your views already hold out of your folders.
 - **Join Discord from Help.** Settings, Help now has a Join Discord button beside Report Bug, matching the sidebar and the report dialog.
 - **Folders get icons in color.** Every folder icon in the sidebar now has a color by kind (Inbox, Sent, Drafts, Trash and so on, plain folders and folders kept on this computer too). Right-click any folder to give it a color of your own, or reset it. To make every folder icon one color that follows the theme, choose Theme color under Settings, Appearance, Folder icons.
 - **Contacts: a built-in address book.** Open Contacts in the sidebar for one card per person, built from your own mail plus what you add: how many emails you received from, sent to and copied them, the full correspondence with each contact by date, suggestions that say why they were made, a review queue for addresses found in your mail, merge with a preview that you can undo, and vCard import and export. A copy of your contacts is kept in your vault and is included in backups and in an account transfer. Contacts stay on this computer and are not synced with any provider.

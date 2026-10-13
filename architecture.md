@@ -366,6 +366,36 @@ A tag-filtered view resolves its identities from `app.db` first and passes them
 to the index as a whitelist through a temp table; every `app.db` read happens
 before the index lock is taken, so no path holds both.
 
+**Hiding view mail.** With `hideViewMail` on (default off), a folder's list
+leaves out every message some saved view holds. The daemon decides membership:
+`views.hidden_members` runs each view over each account through
+`search_index::member_keys` (keys only, uncapped, no row JSON, one index lock
+hold per view and account), unions the hits per account and mailbox, skips
+local-only folders, and narrows them to the uids the header cache lists, read
+in units of 900 with the custody lock released between units, counting unread
+from the cached server flags. It is background work, not in
+`is_foreground_method`. An index or header cache that cannot answer is
+`available: false`; the app reads that, a failed call, or the setting off as
+unknown, and unknown shows everything. An empty `members` is a real "nothing
+to hide".
+
+The app keeps the answer in `viewHideStore` as `account|mailbox|uid` keys plus
+per-mailbox hidden and unread counts, and filters only through `rowVisibility`
+(`viewHidden`): the folder list, every INBOX badge (accounts not on screen too,
+through `useEmailScheduler`) and the Bulk Operations pool, which always applies
+it, since its pool is the folder's whatever the list shows. The list never
+applies it inside a view or a search: there the view's or the search's own rows
+are the point. It is asked for only while the setting is on, one ask at a time
+(an ask made during one gets the single ask after it), after each view count
+refresh, and when the setting flips. The header's total is the server's less
+the daemon's hidden count, derived for display only; store `totalEmails` stays
+the server's. A closed folder's badge is STATUS unseen less the views' unread
+there, never below zero.
+
+An accepted limit: during a search or inside a view, Explorer's conversation
+grouping draws a hit's siblings from the folder's (hidden) list, so a sibling
+a view holds that is not itself a hit drops out of the conversation there.
+
 The one-time move of the pre-SQL JSON files runs on the first open of each store and retires each file to `<name>.pre-db-<stamp>` (never deletes it). `app.db`'s import runs entirely inside one `BEGIN IMMEDIATE` with a `legacy_import` marker set in the same transaction, because the app and the daemon can both reach it at the same launch and `transfer_stats` rows accumulate rather than replace.
 
 Two files deliberately stay outside both stores: `accounts.json` (the frontend owns it, and a second writer would turn a same-process race into a cross-process one) and `email_cache/<account>_<mailbox>/graph_id_map.json` (the Outlook uid ledger, which needs a cross-process file lock and must travel with the vault). Those sidecar directories therefore still exist; they just hold nothing but the ledger.
