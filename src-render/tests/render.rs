@@ -147,3 +147,36 @@ fn each_tile_paints_its_own_slice_of_the_document() {
 fn each_tile_paints_its_own_slice_at_scale_2() {
     assert_bands(2.0);
 }
+
+// ---- Fix A, theme 1: relative URLs resolve against an unresolvable base ----
+
+fn paints(html: &str) -> Vec<mailvault_render::net::FetchRequest> {
+    use mailvault_render::net::BridgeNet;
+    use std::sync::Arc;
+    let net = BridgeNet::new(true);
+    let mut doc = RenderDoc::open(html, RenderOptions::new(300, 1.0), Some(net.clone() as Arc<_>))
+        .unwrap_or_else(|_| panic!("open failed for {html}"));
+    doc.apply_resources();
+    let png = doc.tile_png(0);
+    assert_eq!(&png[1..4], b"PNG", "tile renders for {html}");
+    net.take_outbox()
+}
+
+#[test]
+fn relative_and_odd_urls_neither_panic_nor_fetch() {
+    let bodies = [
+        r#"<img src="logo.png">ok"#,
+        r#"<img src=" ">ok"#,
+        r#"<img src="//cdn.example/x.png">ok"#,
+        r#"<img src="/abs/path.png">ok"#,
+        r#"<link rel="stylesheet" href="rel.css"><p>ok"#,
+        r#"<style>body{background:url(rel.png)}</style><p>ok"#,
+        r#"<style>@import "x.css"; p{color:red}</style><p>ok"#,
+        r#"<style>@font-face{font-family:f;src:url(rel.woff2)}</style><p style="font-family:f">ok"#,
+        r#"<p style="background:url(rel.png)">ok"#,
+    ];
+    for body in bodies {
+        let out = paints(body);
+        assert!(out.is_empty(), "{body} queued {out:?}");
+    }
+}

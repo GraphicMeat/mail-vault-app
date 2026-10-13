@@ -289,8 +289,9 @@ fn extract_pdf_subprocess_main() -> i32 {
     }
 }
 
-/// Debug-only test hook for the render worker: hang or panic on the sentinels
-/// so the host's timeout and crash paths are testable. No-op in release.
+/// Debug-only test hook for the render worker: hang or die on the sentinels
+/// so the host's timeout and crash paths are testable. No-op in release. The
+/// crash is an abort, not a panic: the worker catches panics per document.
 #[cfg(all(feature = "blitz-render", debug_assertions))]
 fn render_test_hook(html: &str) {
     if html == blitz::HANG_SENTINEL {
@@ -299,7 +300,7 @@ fn render_test_hook(html: &str) {
         }
     }
     if html == blitz::PANIC_SENTINEL {
-        panic!("render test panic");
+        std::process::abort();
     }
 }
 #[cfg(all(feature = "blitz-render", not(debug_assertions)))]

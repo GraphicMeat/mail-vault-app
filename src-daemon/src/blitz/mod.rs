@@ -34,7 +34,7 @@ const FETCH_PARALLEL: usize = 6;
 pub const UNAVAILABLE: &str = "render_unavailable";
 pub const RENDER_UPDATED: &str = "render-updated";
 
-/// Debug-build test hooks: the worker entry in main.rs hangs or panics on
+/// Debug-build test hooks: the worker entry in main.rs hangs or aborts on
 /// these exact bodies so the host's timeout and crash paths are testable.
 #[cfg(debug_assertions)]
 pub const HANG_SENTINEL: &str = "<!--mailvault-render-test-hang-->";

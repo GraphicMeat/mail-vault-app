@@ -11,6 +11,8 @@ pub const TILE_CSS_HEIGHT: u32 = 512;
 pub const MAX_HTML_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_NODES: usize = 150_000;
 pub const MAX_CSS_HEIGHT: f32 = 200_000.0;
+/// Resolution base for relative URLs. `.invalid` is reserved (RFC 6761): it never resolves.
+const BASE_URL: &str = "http://invalid.invalid/";
 
 /// Plans B and D add fields (theme, transparency). Construct with `new` or
 /// `..Default::default()`, never a bare literal, so their additions compile.
@@ -76,6 +78,12 @@ impl RenderDoc {
         let config = DocumentConfig {
             viewport: Some(Viewport::new(px_w, px_h, opts.scale, ColorScheme::Light)),
             net_provider: net,
+            // Without a base, blitz-dom falls back to a `data:` URL that cannot
+            // resolve anything, and `resolve_url` then panics on the first relative
+            // `src` / `href` / `@import`. An unresolvable http base turns every
+            // relative or protocol-relative URL into an `http:` one, which the net
+            // provider answers empty without queueing.
+            base_url: Some(BASE_URL.to_string()),
             ..Default::default()
         };
         let mut doc = HtmlDocument::from_html(html, config);

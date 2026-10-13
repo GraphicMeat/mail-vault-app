@@ -4,9 +4,13 @@ use std::io::{BufRead, BufReader};
 
 /// Run the worker on scripted input; return every output line as JSON.
 fn run(lines: &[Value]) -> Vec<Value> {
+    run_with(lines, |_| {})
+}
+
+fn run_with(lines: &[Value], pre_open: fn(&str)) -> Vec<Value> {
     let input: String = lines.iter().map(|l| format!("{l}\n")).collect();
     let mut out = Vec::new();
-    mailvault_render::worker::run(std::io::Cursor::new(input.into_bytes()), &mut out, |_| {}).unwrap();
+    mailvault_render::worker::run(std::io::Cursor::new(input.into_bytes()), &mut out, pre_open).unwrap();
     BufReader::new(&out[..]).lines().map(|l| serde_json::from_str(&l.unwrap()).unwrap()).collect()
 }
 
@@ -65,4 +69,38 @@ fn garbage_line_is_skipped_not_fatal() {
     mailvault_render::worker::run(std::io::Cursor::new(input.as_bytes().to_vec()), &mut out, |_| {}).unwrap();
     let first: Value = serde_json::from_str(std::str::from_utf8(&out).unwrap().lines().next().unwrap()).unwrap();
     assert_eq!(first["kind"], "reply");
+}
+
+fn boom_on_marker(html: &str) {
+    if html.contains("BOOM-MARKER") {
+        panic!("test panic in open");
+    }
+}
+
+#[test]
+fn a_panic_in_open_costs_that_doc_only() {
+    let open = |req: u64, doc: u64, html: &str| json!({"op":"open","req":req,"doc":doc,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false});
+    let out = run_with(
+        &[
+            open(1, 1, "<p>fine"),
+            open(2, 2, "<p>BOOM-MARKER"),
+            json!({"op":"tile","req":3,"doc":1,"index":0}),
+            json!({"op":"tile","req":4,"doc":2,"index":0}),
+        ],
+        boom_on_marker,
+    );
+    assert_eq!(out[0]["kind"], "reply");
+    assert_eq!(out[1], json!({"kind":"error","req":2,"code":"render_unavailable"}));
+    assert_eq!(out[2]["kind"], "reply", "the other doc survives and still tiles");
+    assert_eq!(out[3], json!({"kind":"error","req":4,"code":"render_unknown_doc"}), "the panicked doc is gone");
+}
+
+#[test]
+fn relative_url_mail_opens_through_the_worker() {
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":"<img src=\"logo.png\"><link rel=stylesheet href=\"s.css\">x","cssWidth":100,"scale":1.0,"allowRemote":true}),
+        json!({"op":"tile","req":2,"doc":1,"index":0}),
+    ]);
+    assert_eq!(out[0]["kind"], "reply");
+    assert_eq!(out[1]["kind"], "reply");
 }

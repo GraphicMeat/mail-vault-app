@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap};
 use std::io::{BufRead, Write};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{mpsc, Arc};
 
 #[derive(Deserialize)]
@@ -62,10 +63,16 @@ pub fn run(input: impl BufRead + Send + 'static, mut output: impl Write, pre_ope
             flush_fetches(&docs, &mut output)?;
         }
         for id in dirty {
-            if let Some(o) = docs.get_mut(&id) {
+            let Some(o) = docs.get_mut(&id) else { continue };
+            match guarded(|| {
                 o.doc.apply_resources();
-                o.rev += 1;
-                line(&mut output, json!({"kind":"updated","doc":id,"rev":o.rev,"meta":o.doc.meta()}))?;
+                o.doc.meta()
+            }) {
+                Some(meta) => {
+                    o.rev += 1;
+                    line(&mut output, json!({"kind":"updated","doc":id,"rev":o.rev,"meta":meta}))?;
+                }
+                None => discard(&mut docs, id), // no req to answer: the next tile says render_unknown_doc
             }
         }
         // A relayout can discover new resources (CSS background images).
@@ -78,28 +85,47 @@ pub fn run(input: impl BufRead + Send + 'static, mut output: impl Write, pre_ope
 fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out: &mut impl Write, pre_open: fn(&str)) -> std::io::Result<()> {
     match msg {
         In::Open { req, doc, html, css_width, scale, allow_remote, theme: _ } => {
-            pre_open(&html);
             let net = BridgeNet::new(allow_remote);
             let opts = RenderOptions::new(css_width.clamp(1, 4000), scale.clamp(0.5, 4.0));
-            match RenderDoc::open(&html, opts, Some(net.clone() as Arc<_>)) {
-                Ok(mut d) => {
+            let net_for_doc = net.clone();
+            let built = guarded(|| {
+                pre_open(&html);
+                RenderDoc::open(&html, opts, Some(net_for_doc as Arc<_>)).map(|mut d| {
                     d.apply_resources(); // data: images answered during parse
                     let meta = d.meta();
+                    (d, meta)
+                })
+            });
+            match built {
+                Some(Ok((d, meta))) => {
                     docs.insert(doc, Open { doc: d, net, rev: 1 });
                     line(out, json!({"kind":"reply","req":req,"ok":{"rev":1,"meta":meta}}))
                 }
-                Err(e) => line(out, json!({"kind":"error","req":req,"code":e.code()})),
+                Some(Err(e)) => line(out, json!({"kind":"error","req":req,"code":e.code()})),
+                None => unavailable(out, req),
             }
         }
         In::Tile { req, doc, index } => match docs.get_mut(&doc) {
-            Some(o) => {
-                let png = base64::engine::general_purpose::STANDARD.encode(o.doc.tile_png(index));
-                line(out, json!({"kind":"reply","req":req,"ok":{"png":png}}))
-            }
+            Some(o) => match guarded(|| o.doc.tile_png(index)) {
+                Some(png) => {
+                    let png = base64::engine::general_purpose::STANDARD.encode(png);
+                    line(out, json!({"kind":"reply","req":req,"ok":{"png":png}}))
+                }
+                None => {
+                    discard(docs, doc);
+                    unavailable(out, req)
+                }
+            },
             None => unknown(out, req),
         },
         In::Hit { req, doc, x, y } => match docs.get(&doc) {
-            Some(o) => line(out, json!({"kind":"reply","req":req,"ok":{"link":o.doc.hit_link(x, y)}})),
+            Some(o) => match guarded(|| o.doc.hit_link(x, y)) {
+                Some(link) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link}})),
+                None => {
+                    discard(docs, doc);
+                    unavailable(out, req)
+                }
+            },
             None => unknown(out, req),
         },
         In::Close { doc } => {
@@ -111,8 +137,12 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         In::Fetched { doc, fetch, bytes } => {
             if let Some(o) = docs.get(&doc) {
                 let bytes = bytes.and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
-                if o.net.complete(fetch, bytes) {
-                    dirty.insert(doc);
+                match guarded(|| o.net.complete(fetch, bytes)) {
+                    Some(true) => {
+                        dirty.insert(doc);
+                    }
+                    Some(false) => {}
+                    None => discard(docs, doc),
                 }
             }
             Ok(())
@@ -127,6 +157,26 @@ fn flush_fetches(docs: &HashMap<u64, Open>, out: &mut impl Write) -> std::io::Re
         }
     }
     Ok(())
+}
+
+/// Run one operation on one document. A panic (a blitz bug on hostile markup)
+/// costs that document and is reported to its caller; every other document
+/// keeps working. This relies on unwinding: a `panic = "abort"` profile would
+/// turn it into a worker exit, which the daemon host survives as before.
+fn guarded<T>(f: impl FnOnce() -> T) -> Option<T> {
+    catch_unwind(AssertUnwindSafe(f)).ok()
+}
+
+/// Drop a document whose operation panicked. Its state is suspect, so even
+/// the drop is guarded; a doc that cannot be dropped cleanly is leaked.
+fn discard(docs: &mut HashMap<u64, Open>, id: u64) {
+    if let Some(o) = docs.remove(&id) {
+        let _ = catch_unwind(AssertUnwindSafe(move || drop(o)));
+    }
+}
+
+fn unavailable(out: &mut impl Write, req: u64) -> std::io::Result<()> {
+    line(out, json!({"kind":"error","req":req,"code":"render_unavailable"}))
 }
 
 fn unknown(out: &mut impl Write, req: u64) -> std::io::Result<()> {
