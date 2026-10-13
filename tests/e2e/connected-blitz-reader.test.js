@@ -501,8 +501,11 @@ describe('Blitz reader on the real app', function () {
       docCssWidth: after.cssWidth,
     });
     // The tile PNGs themselves, so the render can be looked at after the clone is gone.
-    console.log(`[blitz-e2e] tilepng 0 ${t0.png}`);
-    console.log(`[blitz-e2e] tilepng 1 ${t1.png}`);
+    // Set BLITZ_E2E_TILE_PNG=1 to print them: they are hundreds of KB of base64 per run.
+    if (process.env.BLITZ_E2E_TILE_PNG) {
+      console.log(`[blitz-e2e] tilepng 0 ${t0.png}`);
+      console.log(`[blitz-e2e] tilepng 1 ${t1.png}`);
+    }
 
     // Not blank: a painted page holds many colours; an unpainted tile holds one.
     expect(t0.distinct).toBeGreaterThan(8);
@@ -535,9 +538,13 @@ describe('Blitz reader on the real app', function () {
       yellow: centre(yellow, dpr),
       cyan: centre(cyan, dpr),
       purple: centre(purple, dpr),
-      nonLink: { x: 590, y: 4 }, // inside the heading band, far right of any text
+      // On the heading's own text: inside the document at any pane width (the
+      // document is the pane wide, 386 px on the Windows box), on content that is not a link.
+      nonLink: { x: 60, y: 26 },
     };
     log('located', located);
+    // A point outside the document says nothing about an empty point inside it.
+    expect(located.nonLink.x).toBeLessThan(after.cssWidth);
   });
 
   it('hit-tests block links: the worker finds them and the chip shows the target', async function () {
