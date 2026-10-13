@@ -41,6 +41,9 @@ pub const HIT_TIMEOUT: Duration = Duration::from_secs(1);
 pub const TEXT_RUNS_TIMEOUT: Duration = Duration::from_secs(4);
 pub const SERIALIZE_TIMEOUT: Duration = Duration::from_secs(2);
 pub const FOLD_TIMEOUT: Duration = Duration::from_secs(4);
+/// render.inspect walks every marked element; it is harness-only traffic. Kept
+/// below the shell's 6 s reply timeout so the daemon answers first.
+pub(crate) const INSPECT_TIMEOUT: Duration = Duration::from_secs(4);
 pub const IDLE_EXIT: Duration = Duration::from_secs(120);
 /// Kill only when a call timed out AND the worker has been silent this long.
 pub const WATCHDOG: Duration = Duration::from_secs(6);
@@ -119,8 +122,8 @@ impl Silence {
     }
 }
 
-/// RPCs a person waits on. `render.hit` is deliberately absent: hover traffic
-/// must not pause the search index.
+/// RPCs a person waits on. `render.hit` and `render.inspect` are deliberately
+/// absent: hover and harness traffic must not pause the search index.
 pub fn is_foreground(method: &str) -> bool {
     matches!(method, "render.open" | "render.tile" | "render.textRuns")
 }
@@ -355,6 +358,11 @@ impl RenderHost {
 
     pub fn has_font(&self, family: &str) -> bool {
         self.font_frames.lock().unwrap().has(family)
+    }
+
+    /// Per-element measurements for the parity harness. Not foreground traffic.
+    pub async fn inspect(&self, doc: u64) -> Result<Value, String> {
+        self.call(json!({"op": "inspect", "doc": doc}), INSPECT_TIMEOUT).await
     }
 
     /// For tests: how many workers have been started.
@@ -1004,5 +1012,27 @@ mod tests {
         assert_eq!(f[2]["op"], "fold");
         assert_eq!(h.spawned(), 2, "one death, not one per spawn");
         assert!(h.has_font("BAD") && h.font_frames.lock().unwrap().claim(vec![family("BAD", 1)]).is_empty(), "and it is not asked for again");
+    }
+
+    #[test]
+    fn inspect_is_not_foreground_and_has_its_own_timeout() {
+        assert!(!is_foreground("render.inspect"), "harness traffic must not pause the search index");
+        assert!(is_foreground("render.open"));
+        assert_eq!(INSPECT_TIMEOUT, Duration::from_secs(4));
+        // The shell gives render.inspect 6 s (blitz_tiles::reply_timeout): the daemon must answer first.
+        assert!(INSPECT_TIMEOUT < Duration::from_secs(6));
+    }
+
+    #[tokio::test]
+    async fn inspect_reports_marked_elements_and_unknown_docs() {
+        let h = host();
+        let html = "<body style=\"margin:0\"><p data-mv-id=\"a\" style=\"margin:0;height:20px\">x</p></body>";
+        let opened = h.open(json!({"html": html, "cssWidth": 300, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        let got = h.inspect(doc).await.unwrap();
+        let els = got["elements"].as_array().expect("elements array");
+        assert!(els.iter().any(|e| e["mvId"] == "a" && e["tag"] == "p"), "{got}");
+        h.close(doc).await;
+        assert_eq!(h.inspect(doc).await.unwrap_err(), "render_unknown_doc");
     }
 }

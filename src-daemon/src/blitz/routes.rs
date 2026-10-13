@@ -63,6 +63,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             Err(msg) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, msg)),
         },
         "render.fonts" => super::fonts::render_fonts(state, params).await,
+        "render.inspect" => host.inspect(doc()).await,
         "render.close" => {
             host.close(doc()).await;
             Ok(json!({}))
