@@ -1,0 +1,19 @@
+[package]
+name = "mailvault-render"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "MailVault's Blitz email renderer (runs only in the daemon's render worker)"
+
+[dependencies]
+blitz-dom = { version = "=0.3.0-beta.2", features = ["floats"] }
+blitz-html = "=0.3.0-beta.2"
+blitz-paint = "=0.3.0-beta.2"
+blitz-traits = "=0.3.0-beta.2"
+anyrender = "0.13"
+anyrender_vello_cpu = "0.17"
+png = "0.17"
+data-url = "0.3"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

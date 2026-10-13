@@ -46,6 +46,11 @@ url = "2.5"
 # handlers/transfer.rs holds the transfer password and decrypted plaintext in
 # Zeroizing wrappers so they are wiped on drop. Same pin as src-core/Cargo.toml.
 zeroize = "1"
+mailvault-render = { path = "../src-render", optional = true } # blitz-render
+
+[features]
+default = ["blitz-render"] # blitz-render
+blitz-render = ["dep:mailvault-render"] # blitz-render
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
