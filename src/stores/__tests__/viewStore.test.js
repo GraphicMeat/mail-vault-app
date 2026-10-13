@@ -17,7 +17,7 @@ vi.mock('../../services/cacheManager', () => ({
 
 const {
   useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp, viewDefaults,
-  scheduleViewCountsRefresh, __resetViewCountsForTests, refreshHiddenMembers,
+  scheduleViewCountsRefresh, __resetViewCountsForTests, refreshHiddenMembers, viewQueryIsEmpty,
 } = await import('../viewStore');
 const { useViewHideStore } = await import('../viewHideStore');
 const { useSettingsStore } = await import('../settingsStore');
@@ -689,5 +689,130 @@ describe('mail the views hold, hidden from the mailbox lists', () => {
     await useViewStore.getState().refreshCounts();
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(hiddenCalls()).toHaveLength(0);
+  });
+});
+
+/// The reader pane's builder: an email's distinctive words, added to a view
+/// the person already has or made into a new one.
+describe('the view builder', () => {
+  /// `saveView` asks `views.save`, then `views.list`, then `views.counts`; one
+  /// canned reply for all of them would hand the save's answer to the list.
+  const daemon = (stored) => {
+    harness.daemonCall.mockImplementation(async (method, params) => {
+      if (method === 'views.list') return stored;
+      if (method === 'views.save') return params.view;
+      return {};
+    });
+  };
+  const saved = () => harness.daemonCall.mock.calls.filter(([method]) => method === 'views.save').map(([, params]) => params.view);
+
+  it('adds the words to a view as groups of their own and keeps its other filters', async () => {
+    const view = { ...MINE, def: { query: 'quarterly report', starred: true, accounts: ['acct-1'] } };
+    useViewStore.setState({ views: [view] });
+    daemon([view]);
+    const reply = await useViewStore.getState().addTermsToView('v1', ['invoice', 'acme']);
+    expect(reply).toEqual({ ok: true, wasEmpty: false });
+    expect(saved()).toEqual([{ ...view, def: { query: 'quarterly && report || invoice || acme', starred: true, accounts: ['acct-1'] } }]);
+  });
+
+  it('says when the view had no words before', async () => {
+    const view = { ...MINE, def: { query: '  ', unread: true } };
+    useViewStore.setState({ views: [view] });
+    daemon([view]);
+    const reply = await useViewStore.getState().addTermsToView('v1', ['invoice']);
+    expect(reply).toEqual({ ok: true, wasEmpty: true });
+    expect(saved()[0].def).toEqual({ query: 'invoice', unread: true });
+  });
+
+  it('reloads the views when this window has not seen the one asked for', async () => {
+    useViewStore.setState({ views: [] });
+    daemon([MINE]);
+    const reply = await useViewStore.getState().addTermsToView('v1', ['acme']);
+    expect(reply.ok).toBe(true);
+    expect(harness.daemonCall.mock.calls[0][0]).toBe('views.list');
+    expect(saved()[0].def.query).toBe('invoice || acme');
+  });
+
+  it('writes nothing for a view that is gone', async () => {
+    useViewStore.setState({ views: [] });
+    daemon([STARRED]);
+    const reply = await useViewStore.getState().addTermsToView('v1', ['acme']);
+    expect(reply).toEqual({ ok: false, reason: 'missing' });
+    expect(saved()).toEqual([]);
+  });
+
+  it('tells an empty query from one with words', () => {
+    expect(viewQueryIsEmpty({ def: {} })).toBe(true);
+    expect(viewQueryIsEmpty({ def: { query: '   ' } })).toBe(true);
+    expect(viewQueryIsEmpty({ def: { query: '|| &&' } })).toBe(true);
+    expect(viewQueryIsEmpty(null)).toBe(true);
+    expect(viewQueryIsEmpty({ def: { query: 'invoice' } })).toBe(false);
+  });
+
+  it('makes a view of the words, named after the first, in the email\'s account and folder', async () => {
+    useViewStore.setState({ views: [STARRED] });
+    daemon([STARRED]);
+    const reply = await useViewStore.getState().createViewFromTerms(['invoice', 'net 30'], { accountId: 'acct-1', mailbox: 'INBOX' }, false);
+    expect(reply.ok).toBe(true);
+    const [view] = saved();
+    expect(view).toMatchObject({
+      name: 'invoice', builtin: null,
+      def: { query: 'invoice || net 30', accounts: ['acct-1'], mailboxes: ['INBOX'] },
+    });
+    expect(typeof view.id).toBe('string');
+    expect(view.id).not.toBe('');
+  });
+
+  it('leaves the folder open when none is given', async () => {
+    daemon([]);
+    await useViewStore.getState().createViewFromTerms(['', 'acme'], { accountId: 'acct-1' }, true);
+    const [view] = saved();
+    expect(view.name).toBe('acme');
+    expect(view.def).toEqual({ query: 'acme', accounts: ['acct-1'], mailboxes: [] });
+  });
+
+  it('refuses a new view at the free cap, and writes nothing', async () => {
+    const full = [STARRED, MINE, { ...MINE, id: 'v2' }];
+    useViewStore.setState({ views: full });
+    daemon(full);
+    const reply = await useViewStore.getState().createViewFromTerms(['invoice'], { accountId: 'acct-1', mailbox: null }, false);
+    expect(reply).toEqual({ ok: false, reason: 'limit' });
+    expect(saved()).toEqual([]);
+  });
+
+  it('asks the daemon for an email\'s words where the email lives', async () => {
+    harness.daemonCall.mockResolvedValueOnce({ available: true, keywords: [{ term: 'invoice', tf: 3, df: 2 }] });
+    const reply = await useViewStore.getState().loadKeywords({ uid: 42, _accountId: 'acct-1', _mailbox: 'Archive' });
+    expect(harness.daemonCall).toHaveBeenCalledWith('views.keywords', { accountId: 'acct-1', mailbox: 'Archive', uid: 42 });
+    expect(reply.keywords[0].term).toBe('invoice');
+  });
+
+  it('places an unstamped email in the folder on screen', async () => {
+    harness.mailState.activeMailbox = 'Work';
+    harness.daemonCall.mockResolvedValueOnce({ available: true, keywords: [] });
+    await useViewStore.getState().loadKeywords({ uid: 7 });
+    expect(harness.daemonCall).toHaveBeenCalledWith('views.keywords', { accountId: 'acct-1', mailbox: 'Work', uid: 7 });
+  });
+
+  it('asks nothing for an email it cannot place', async () => {
+    harness.mailState.activeMailbox = 'UNIFIED';
+    const reply = await useViewStore.getState().loadKeywords({ uid: 7 });
+    expect(reply).toEqual({ available: false, keywords: [] });
+    expect(harness.daemonCall).not.toHaveBeenCalled();
+  });
+
+  it('lets a missing message fail out loud', async () => {
+    harness.daemonCall.mockRejectedValueOnce(new Error('Email UID 9 not found'));
+    await expect(useViewStore.getState().loadKeywords({ uid: 9, _accountId: 'acct-1', _mailbox: 'INBOX' })).rejects.toThrow('not found');
+  });
+
+  it('asks who and what a word finds across the person\'s accounts', async () => {
+    harness.daemonCall.mockResolvedValueOnce({ available: true, total: 2, senders: [], subjects: [] });
+    const reply = await useViewStore.getState().loadKeywordDetail('invoice');
+    const [method, params] = harness.daemonCall.mock.calls[0];
+    expect(method).toBe('views.keyword_detail');
+    expect(params.term).toBe('invoice');
+    expect(params.accounts.map(account => account.accountId)).toEqual(['acct-1']);
+    expect(reply.total).toBe(2);
   });
 });

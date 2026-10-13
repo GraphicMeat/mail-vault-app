@@ -7,8 +7,9 @@ import { useSettingsStore } from './settingsStore';
 import { useViewHideStore } from './viewHideStore';
 import { ownAddresses } from '../utils/ownAddresses';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
-import { flattenMailboxes, resolveEmailLocation } from './slices/unifiedHelpers.js';
+import { flattenMailboxes, resolveEmailLocation, rowIdentity } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
+import { appendTerms, parseGroups, serializeGroups } from '../utils/queryGroups';
 import { runAttachmentExport, startExportJob, viewExportKey } from '../services/attachmentExport';
 
 /// What a view is called. A starter carries no name in the database — storing
@@ -75,6 +76,13 @@ export const MAX_FREE_VIEWS = 3;
 /// and hiding a button is never the guard.
 export function viewLimitReached(views, premium) {
   return !premium && (views?.length || 0) >= MAX_FREE_VIEWS;
+}
+
+/// Does the view search for no words at all? Adding words to such a view
+/// narrows it from "everything its filters find" to those words, so the
+/// builder warns first. Read through the parser: a saved `|| &&` is no words.
+export function viewQueryIsEmpty(view) {
+  return !serializeGroups(parseGroups(view?.def?.query || ''));
 }
 
 /// The folders of one account, and which of them are its bin, junk and
@@ -278,6 +286,55 @@ export const useViewStore = create((set, get) => ({
     const saved = await get().saveView(view);
     return { ok: true, view: saved };
   },
+
+  /// The builder's words added to a saved view, each as a group of its own
+  /// (`appendTerms`); every other filter is kept. Answers `{ ok: true,
+  /// wasEmpty }`, `wasEmpty` saying the view searched for no words before, or
+  /// `{ ok: false, reason: 'missing' }` for a view that is gone.
+  addTermsToView: async (viewId, terms) => {
+    let view = get().views.find(saved => saved.id === viewId);
+    if (!view) view = (await get().loadViews()).find(saved => saved.id === viewId);
+    if (!view) return { ok: false, reason: 'missing' };
+    const wasEmpty = viewQueryIsEmpty(view);
+    await get().saveView({ ...view, def: { ...(view.def || {}), query: appendTerms(view.def?.query || '', terms) } });
+    return { ok: true, wasEmpty };
+  },
+
+  /// A new view of the builder's words, named after the first, reading the
+  /// email's account and, when given, its folder. Through `createView`, so the
+  /// free cap is decided in the one place: answers what it answers.
+  createViewFromTerms: async (terms, { accountId, mailbox = null } = {}, premium) => {
+    const name = (terms || []).map(term => String(term ?? '').trim()).find(Boolean) || '';
+    const view = {
+      id: globalThis.crypto?.randomUUID?.() || `view-${Date.now()}`,
+      name,
+      icon: 'tag',
+      // The daemon puts a new view last on its own (see the Views page).
+      position: 0,
+      builtin: null,
+      def: {
+        query: appendTerms('', terms),
+        accounts: accountId ? [accountId] : [],
+        mailboxes: mailbox ? [mailbox] : [],
+      },
+    };
+    return get().createView(view, premium);
+  },
+
+  /// The open email's distinctive words, best first:
+  /// `{ available, keywords: [{ term, tf, df }] }`. The email is placed the
+  /// way every other row action places it (`rowIdentity`); one that cannot be
+  /// placed (a unified row with no stamp) has no words to offer. A message the
+  /// daemon cannot find rejects.
+  loadKeywords: async (email) => {
+    const where = rowIdentity(email, useMailStore.getState());
+    if (!where || where.uid == null) return { available: false, keywords: [] };
+    return daemonCall('views.keywords', where);
+  },
+
+  /// Who sends and what subjects carry one word, across the person's accounts:
+  /// `{ available, total, senders, subjects }`.
+  loadKeywordDetail: (term) => daemonCall('views.keyword_detail', { term, accounts: accountsPayload() }),
 
   /// Every real attachment a definition finds — or, for a search, the rows on
   /// screen — written flat into `destDir` by the daemon, as a job whose

@@ -41,6 +41,23 @@ export function serializeQuery(groups) {
   return !OPERATOR.test(text) && /\s/.test(text) ? `${text} ||` : text;
 }
 
+/// Words added to a saved query, each as a group of its own: one more way in,
+/// never a narrowing of what the view already finds. A word already standing
+/// alone as a group is not added twice (case aside); one that is only part of
+/// an AND group still is, since alone it finds more.
+export function appendTerms(query, terms) {
+  const groups = parseGroups(query).filter(group => group.length);
+  const known = new Set(groups.filter(group => group.length === 1).map(([word]) => word.toLowerCase()));
+  const added = [];
+  for (const term of terms || []) {
+    const word = clean(String(term ?? ''));
+    if (!word || known.has(word.toLowerCase())) continue;
+    known.add(word.toLowerCase());
+    added.push([word]);
+  }
+  return serializeQuery([...groups, ...added]);
+}
+
 /// Typed text joins the last group; each `||` in it starts a new one, so
 /// `a && b || c` typed into an empty editor is two groups.
 export function addTyped(groups, text) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addGroup, addTyped, dropItem, parseGroups, parseSenders, removeGroup, removeWord, serializeGroups, serializeQuery } from '../queryGroups';
+import { addGroup, addTyped, appendTerms, dropItem, parseGroups, parseSenders, removeGroup, removeWord, serializeGroups, serializeQuery } from '../queryGroups';
 
 describe('view query groups', () => {
   it('reads the notation back as OR groups of AND words', () => {
@@ -79,5 +79,37 @@ describe('serializeQuery', () => {
     expect(serializeQuery([['a b', 'c']])).toBe('a b && c');
     expect(serializeQuery([['a'], ['b c']])).toBe('a || b c');
     expect(serializeQuery([[]])).toBe('');
+  });
+});
+
+/// The reader pane's builder adds an email's words to a view: each word is one
+/// more way in (an OR), never a narrowing of what the view already finds.
+describe('appendTerms', () => {
+  it('adds each word as a group of its own', () => {
+    expect(appendTerms('quarterly report', ['invoice'])).toBe('quarterly && report || invoice');
+    expect(appendTerms('', ['invoice'])).toBe('invoice');
+    expect(appendTerms('', ['invoice', 'acme'])).toBe('invoice || acme');
+  });
+
+  it('skips a word the view already has on its own, case aside', () => {
+    expect(appendTerms('a || b', ['b'])).toBe('a || b');
+    expect(appendTerms('Invoice || acme', ['invoice'])).toBe('Invoice || acme');
+    expect(appendTerms('', ['invoice', 'Invoice', ' invoice '])).toBe('invoice');
+  });
+
+  it('still adds a word that is only part of an AND group', () => {
+    expect(appendTerms('invoice && acme', ['invoice'])).toBe('invoice && acme || invoice');
+  });
+
+  it('drops blank words', () => {
+    expect(appendTerms('a', ['', '  ', null, 'b'])).toBe('a || b');
+    expect(appendTerms('a', [])).toBe('a');
+    expect(appendTerms('', [])).toBe('');
+  });
+
+  it('keeps a phrase a phrase when it is read back', () => {
+    expect(parseGroups(appendTerms('quarterly report', ['net 30']))).toEqual([['quarterly', 'report'], ['net 30']]);
+    expect(appendTerms('', ['net 30'])).toBe('net 30 ||');
+    expect(parseGroups(appendTerms('', ['net 30']))).toEqual([['net 30']]);
   });
 });
