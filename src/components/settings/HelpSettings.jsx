@@ -17,6 +17,8 @@ import { PremiumGallery } from '../onboarding/PremiumGallery';
 import { faqUrl } from '../../services/faqUrl';
 import { appLink } from '../../services/appLink.js';
 import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
+import { DiscordLogo } from '../ui/BrandGlyphs';
+import { DISCORD_INVITE } from '../../utils/communityLinks';
 
 // ponytail: the native Help menu's three links (src-tauri/src/main.rs), plus the
 // privacy policy. Kept here too because the menu bar is invisible on Windows/Linux
@@ -69,11 +71,22 @@ export function HelpSettings({ onClose, onReportBug }) {
                 {t('settings.help.reportGithubEmailDeveloper')}
               </div>
             </div>
-            <Button variant="primary"
-              onClick={() => { onReportBug?.(); onClose(); }}
-            >
-              {t('settings.help.reportBug2')}
-            </Button>
+            <div className="flex items-center gap-2">
+              <span data-testid="settings-link-discord">
+                <Button variant="subtle"
+                  onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})}
+                  data-url={DISCORD_INVITE}
+                >
+                  <DiscordLogo size={16} />
+                  {t('bugReport.joinDiscord')}
+                </Button>
+              </span>
+              <Button variant="primary"
+                onClick={() => { onReportBug?.(); onClose(); }}
+              >
+                {t('settings.help.reportBug2')}
+              </Button>
+            </div>
           </div>
 
           {LINKS().map((link) => (

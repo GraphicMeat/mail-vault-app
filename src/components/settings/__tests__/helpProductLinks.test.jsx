@@ -40,6 +40,16 @@ describe('Help & Support product links', () => {
     expect(openInBrowser).toHaveBeenCalledWith('https://graphicmeat.com');
   });
 
+  // Report a bug / suggest a feature sits next to the community link, same as
+  // the sidebar footer and the report dialog.
+  it('puts a Join Discord button beside Report a Bug', () => {
+    render(<HelpSettings onClose={() => {}} onReportBug={() => {}} />);
+    const button = screen.getByTestId('settings-link-discord').querySelector('button');
+    expect(button.dataset.url).toBe('https://discord.gg/gECE37RpD');
+    fireEvent.click(button);
+    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/gECE37RpD');
+  });
+
   // Google OAuth verification requires the privacy policy to be reachable
   // from inside the app.
   it('links the privacy policy', () => {
