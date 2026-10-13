@@ -414,6 +414,18 @@ describe('_mergePersistedSettings (persist merge for keyboardShortcuts)', () => 
   });
 });
 
+describe('emailRenderer', () => {
+  it('emailRenderer defaults to web, normalizes junk, survives an old persisted blob', () => {
+    const current = useSettingsStore.getState();
+    expect(current.emailRenderer).toBe('web');
+    expect(_mergePersistedSettings({ theme: 'dark' }, current).emailRenderer).toBe('web');
+    expect(_mergePersistedSettings({ emailRenderer: 'bogus' }, current).emailRenderer).toBe('web');
+    expect(_mergePersistedSettings({ emailRenderer: 'blitz' }, current).emailRenderer).toBe('blitz');
+    useSettingsStore.getState().setEmailRenderer('nope');
+    expect(useSettingsStore.getState().emailRenderer).toBe('web');
+  });
+});
+
 describe('sidebarLayout', () => {
   it('keeps the current stacked navigation as the default and reset layout', () => {
     expect(useSettingsStore.getState().sidebarLayout).toBe('stacked');

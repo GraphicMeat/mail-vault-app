@@ -117,6 +117,8 @@ export const SWIPE_ACTIONS = ['archive', 'delete', 'toggleRead', 'star', 'snooze
 const normalizeSwipeAction = (value, fallback) => SWIPE_ACTIONS.includes(value) ? value : fallback;
 // Lines of message preview under each list row: 0 (off, the list as it always
 // was), 1, 2 or 3. Anything else reads as off.
+// 'web' is the iframe reader; 'blitz' is the optional native renderer module.
+export const normalizeEmailRenderer = v => (v === 'blitz' ? 'blitz' : 'web');
 export const normalizeListPreviewLines = value => [0, 1, 2, 3].includes(value) ? value : 0;
 // The social export's last-used style. Never the redact choice (on every time
 // the panel opens) and never an own image (in memory only): a stored image
@@ -232,6 +234,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   swipeLeftAction: normalizeSwipeAction(persisted?.swipeLeftAction, current.swipeLeftAction),
   swipeRightAction: normalizeSwipeAction(persisted?.swipeRightAction, current.swipeRightAction),
   listPreviewLines: normalizeListPreviewLines(persisted?.listPreviewLines ?? current.listPreviewLines),
+  emailRenderer: normalizeEmailRenderer(persisted?.emailRenderer ?? current.emailRenderer),
   socialExport: normalizeSocialExport(persisted?.socialExport ?? current.socialExport),
 });
 
@@ -611,6 +614,7 @@ export const useSettingsStore = create(
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-label', // 'icon-only' | 'icon-label' | 'text-only'
       appIcon: 'purple', // 'purple' | 'teal'
+      emailRenderer: 'web', // 'web' | 'blitz', which engine draws the email body
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
       appFont: DEFAULT_APP_FONT, // an APP_FONTS id (utils/appFont.js) — the app's own UI font
       showMenuBar: true, // Linux only: the File/Logs menu bar under the title bar (utils/menuBar.js)
@@ -1434,6 +1438,7 @@ export const useSettingsStore = create(
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setAppIcon: (appIcon) => { if (['purple', 'teal'].includes(appIcon)) set({ appIcon }); },
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
+      setEmailRenderer: (v) => set({ emailRenderer: normalizeEmailRenderer(v) }),
       setShowMenuBar: (visible) => set({ showMenuBar: visible !== false }),
       setAppFont: (id) => set({ appFont: normalizeAppFont(id) }),
       setTextScale: (value) => set({ textScale: normalizeTextScale(value) }),
@@ -1689,6 +1694,7 @@ export const useSettingsStore = create(
           actionButtonDisplay: 'icon-label',
           appIcon: 'purple', // 'purple' | 'teal'
           emailViewerTheme: 'system',
+          emailRenderer: 'web',
           appFont: DEFAULT_APP_FONT,
           showMenuBar: true,
           textScale: 1,

@@ -8,6 +8,7 @@ import { DateTimePreview, ReadingPreview } from './PreferencePreview';
 import { SettingsTabs } from '../ui/SettingsTabs';
 import { QuickActionsSettings } from './QuickActionsSettings';
 import { LanguageSettings } from './LanguageSettings';
+import { BodyRendererSettingsSlot } from '../email/bodyRendererRegistry';
 import { useT } from '../../i18n/index.js';
 import '../../styles/settings-usability.css';
 
@@ -62,7 +63,11 @@ export function AppearanceSettings({ initialSection = 'colors', onSectionChange 
     <div className="appearance-settings">
       {/* Quick actions draws the person's own mail, not samples. */}
       {!['language', 'quick-actions'].includes(section) && <p className="appearance-preview-intro">{t('settings.preview.intro')}</p>}
-      {section === 'colors' && <ColorSchemeSettings />}
+      {section === 'colors' && <>
+        <ColorSchemeSettings />
+        {/* Rows contributed by registered body renderers, right after the email theme row. */}
+        <BodyRendererSettingsSlot />
+      </>}
       {section === 'text' && <TextSettings />}
       {section === 'layout' && <WorkspaceSettings windowIsNarrow={windowIsNarrow} />}
       {section === 'quick-actions' && <QuickActionsSettings />}
