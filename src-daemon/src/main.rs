@@ -288,14 +288,6 @@ fn extract_pdf_subprocess_main() -> i32 {
 }
 
 fn main() {
-    // Task 0 feasibility smoke (removed in Task 4): paint one HTML file to PNG.
-    #[cfg(feature = "blitz-render")]
-    if std::env::args().nth(1).as_deref() == Some("--render-smoke") {
-        let args: Vec<String> = std::env::args().collect();
-        let html = std::fs::read_to_string(&args[2]).expect("read html");
-        std::fs::write(&args[3], mailvault_render::smoke_png(&html, 700, 2.0)).expect("write png");
-        std::process::exit(0);
-    }
     // Before any runtime or logging exists: this process only extracts one PDF.
     #[cfg(not(target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--extract-pdf") {
