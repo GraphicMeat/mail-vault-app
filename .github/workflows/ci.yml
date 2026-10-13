@@ -21,6 +21,7 @@ on:
       - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'Cargo.toml'
       - 'Cargo.lock'
       - 'vite.config.*'
       - 'vitest.config.*'
@@ -38,6 +39,7 @@ on:
       - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'Cargo.toml'
       - 'Cargo.lock'
       - 'vite.config.*'
       - 'vitest.config.*'
@@ -77,11 +79,14 @@ jobs:
       # mailvault-core pulls async-native-tls, which on Linux binds the system
       # OpenSSL through pkg-config. mailvault-daemon pulls keyring, which on
       # Linux binds libdbus/libsecret through pkg-config too (Phase 5 moved
-      # keychain-backed credentials into the daemon).
+      # keychain-backed credentials into the daemon). The daemon's default
+      # blitz-render feature pulls mailvault-render, whose font discovery
+      # (fontique) binds fontconfig through pkg-config; DejaVu gives the
+      # daemon's render tests a face.
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev
+          sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libfontconfig1-dev fonts-dejavu-core
       - run: cargo test -p imap-proto -p mailvault-core -p mailvault-daemon -p mock-imap
       # JS integration suite drives the same mock server through imapflow — an
       # independent client implementation cross-checking the mock. Replaced the
