@@ -3,7 +3,7 @@
 // test passes trivially once the module is deleted.
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 const SRC = join(__dirname, '..', '..');               // src/
 const MODULE = join(SRC, 'features', 'blitz');
@@ -17,18 +17,36 @@ function* walk(dir) {
   }
 }
 
-// True when `text` imports the module in any form: `from '...'` (import and
-// export-from), bare `import '...'`, `import('...')` and `require('...')`.
-// The path must hold the segment `features/blitz` ending at `/` or the closing
-// quote, so `features/blitzard` is not a match. Comments are blanked first so
-// prose or commented-out code does not count. Block comments are only
-// recognised after whitespace or at line start, and line comments likewise,
-// so a glob like 'src/**/*.js' or a URL in a string never swallows real code.
-export function importsBlitz(text) {
+// True when `text` reaches the module in any form: `from '...'` (import and
+// export-from), bare `import '...'`, `import('...')`, `require('...')`,
+// `import.meta.glob(...)` / `globEager` (any quoted pattern in the call) and
+// `new URL('...', import.meta.url)`.
+// A specifier counts when it holds the segment `features/blitz` ending at `/`
+// or the end (so `features/blitzard` is not a match), or, given the importing
+// file's directory `dir`, when a relative specifier resolves into the module
+// (`../blitz` from src/features/other, `./blitz` from src/features).
+// Comments are blanked first, including a block comment right after `(`, so
+// prose or commented-out code does not count and `import(/* @vite-ignore */ 'x')`
+// is still seen. Block and line comments are only recognised after whitespace,
+// `(`, `,` or at line start, so a glob like 'src/**/*.js' or a URL in a string
+// never swallows real code.
+export function importsBlitz(text, dir) {
   const code = text
-    .replace(/(^|\s)\/\*[\s\S]*?\*\//g, '$1')
+    .replace(/(^|[\s(,])\/\*[\s\S]*?\*\//g, '$1')
     .replace(/(^|\s)\/\/.*$/gm, '$1');
-  return /\b(?:from|import|require)\s*\(?\s*(['"`])[^'"`\n]*features\/blitz(?:\/[^'"`\n]*)?\1/.test(code);
+  const specs = [];
+  const quoted = (chunk) => { for (const m of chunk.matchAll(/(['"`])([^'"`\n]*)\1/g)) specs.push(m[2]); };
+  for (const m of code.matchAll(/\b(?:from|import|require)\s*\(?\s*(['"`])([^'"`\n]*)\1/g)) specs.push(m[2]);
+  for (const m of code.matchAll(/\bimport\.meta\.glob(?:Eager)?\s*\(([^)]*)\)/g)) quoted(m[1]);
+  for (const m of code.matchAll(/\bnew\s+URL\s*\(\s*(['"`])([^'"`\n]*)\1/g)) specs.push(m[2]);
+  return specs.some((spec) => {
+    if (/(?:^|\/)features\/blitz(?:\/|$)/.test(spec)) return true;
+    if (dir && spec.startsWith('.')) {
+      const target = resolve(dir, spec);
+      return target === MODULE || target.startsWith(MODULE + sep);
+    }
+    return false;
+  });
 }
 
 describe('Blitz module boundary', () => {
@@ -36,7 +54,7 @@ describe('Blitz module boundary', () => {
     const offenders = [];
     for (const file of walk(SRC)) {
       if (file.startsWith(MODULE + sep) || ENTRIES.has(file) || file.includes(`${sep}__tests__${sep}`)) continue;
-      if (importsBlitz(readFileSync(file, 'utf8'))) offenders.push(relative(SRC, file));
+      if (importsBlitz(readFileSync(file, 'utf8'), dirname(file))) offenders.push(relative(SRC, file));
     }
     expect(offenders).toEqual([]);
   });
@@ -70,5 +88,39 @@ describe('Blitz module boundary', () => {
       "const g = 'src/**/*.js'; import x from './y';",
     ];
     for (const sample of no) expect(importsBlitz(sample), sample).toBe(false);
+  });
+
+  it('sees the forms a plain `from` scan misses: globs, `new URL`, comments after `(`, and siblings', () => {
+    const FEATURES = join(SRC, 'features');
+    const yes = [
+      ["const m = import(/* @vite-ignore */ '../features/blitz');", join(SRC, 'components')],
+      ["const m = import(/* a */ /* b */ '../features/blitz/x');", join(SRC, 'components')],
+      ["const m = import(\n  /* @vite-ignore */\n  '../features/blitz'\n);", join(SRC, 'utils')],
+      ["const all = import.meta.glob('../features/blitz/**/*.jsx');", join(SRC, 'components')],
+      ["const all = import.meta.glob(['../a/*.js', '../features/blitz/*.jsx'], { eager: true });", join(SRC, 'components')],
+      ["const all = import.meta.globEager('../features/blitz/*.js');", join(SRC, 'components')],
+      ["const u = new URL('../features/blitz/worker.js', import.meta.url);", join(SRC, 'components')],
+      ["import x from '../blitz';", join(FEATURES, 'other')],
+      ["import x from './blitz';", FEATURES],
+      ["export { x } from './blitz/index.js';", FEATURES],
+      ["const m = await import('../blitz/BlitzBody');", join(FEATURES, 'other')],
+      ["const all = import.meta.glob('../blitz/**');", join(FEATURES, 'other')],
+      ["const u = new URL('./blitz/w.js', import.meta.url);", FEATURES],
+      ["import x from '../../features/blitz';", join(FEATURES, 'other', 'deep')],
+    ];
+    for (const [sample, dir] of yes) expect(importsBlitz(sample, dir), sample).toBe(true);
+    const no = [
+      ["import x from '../blitzard';", join(FEATURES, 'other')],
+      ["import x from './blitzard';", FEATURES],
+      ["import x from '../blitz';", join(SRC, 'components')],   // src/blitz, not the module
+      ["import x from './blitz';", join(FEATURES, 'other')],     // features/other/blitz
+      ["const all = import.meta.glob('./other/**/*.jsx');", FEATURES],
+      ["const all = import.meta.glob(['./a/*.js', '../b/*.js']);", join(SRC, 'components')],
+      ["const u = new URL('./icon.png', import.meta.url);", join(SRC, 'components')],
+      ["const m = import(/* @vite-ignore */ './other');", FEATURES],
+      ["// const all = import.meta.glob('../features/blitz/**');", join(SRC, 'components')],
+      ["/* import x from '../blitz'; */", FEATURES],
+    ];
+    for (const [sample, dir] of no) expect(importsBlitz(sample, dir), sample).toBe(false);
   });
 });
