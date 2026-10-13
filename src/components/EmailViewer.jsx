@@ -524,7 +524,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
 
     // Inline images open in the system viewer and save like an attachment.
     // Read at event time: the inline parts' bytes can arrive after the body.
-    const inlineAttachments = () => useSelectionStore.getState().selectedEmail?.attachments;
+    const inlineAttachments = () => useMailStore.getState().selectedEmail?.attachments;
     const isMac = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac');
     let detachDblClick = () => {};
 
