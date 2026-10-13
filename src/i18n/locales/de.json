@@ -3735,6 +3735,7 @@
   "netActivity.purposes.accountSetup": "Konto einrichten",
   "netActivity.purposes.aliasLookup": "Alias-Abfrage",
   "netActivity.purposes.fonts": "Schriften",
+  "netActivity.purposes.emailImages": "E-Mail-Bilder",
   "netActivity.notShown.title": "Was diese Liste nicht zeigt",
   "netActivity.notShown.webContent": "Externe Bilder und andere Webinhalte in E-Mails. Bilder werden oben gezählt.",
   "netActivity.notShown.appWindow": "Anfragen, die das App-Fenster selbst stellt, etwa Kaufprüfungen.",

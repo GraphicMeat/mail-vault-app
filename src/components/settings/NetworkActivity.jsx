@@ -28,6 +28,7 @@ const PURPOSE_KEYS = {
   'account setup': 'netActivity.purposes.accountSetup',
   'alias lookup': 'netActivity.purposes.aliasLookup',
   fonts: 'netActivity.purposes.fonts',
+  'email images': 'netActivity.purposes.emailImages',
   export: 'common.export',
 };
 const RESULT_KEYS = { ok: 'netActivity.ok', cancelled: 'netActivity.cancelled' };

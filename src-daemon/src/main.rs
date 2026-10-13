@@ -9,6 +9,8 @@ mod ai_gate;
 mod attachment_extract;
 mod auth;
 mod auto_tag_worker;
+#[cfg(feature = "blitz-render")]
+mod blitz;
 mod eviction_worker;
 mod hoarder_worker;
 mod backup_zip;
@@ -287,7 +289,34 @@ fn extract_pdf_subprocess_main() -> i32 {
     }
 }
 
+/// Debug-only test hook for the render worker: hang or panic on the sentinels
+/// so the host's timeout and crash paths are testable. No-op in release.
+#[cfg(all(feature = "blitz-render", debug_assertions))]
+fn render_test_hook(html: &str) {
+    if html == blitz::HANG_SENTINEL {
+        loop {
+            std::thread::park();
+        }
+    }
+    if html == blitz::PANIC_SENTINEL {
+        panic!("render test panic");
+    }
+}
+#[cfg(all(feature = "blitz-render", not(debug_assertions)))]
+fn render_test_hook(_: &str) {}
+
 fn main() {
+    // The Blitz render worker: no runtime, no logging, no network. stdin/stdout only.
+    #[cfg(feature = "blitz-render")]
+    if std::env::args().nth(1).as_deref() == Some("--render-worker") {
+        let stdin = std::io::BufReader::new(std::io::stdin());
+        let stdout = std::io::LineWriter::new(std::io::stdout());
+        let code = match mailvault_render::worker::run(stdin, stdout, render_test_hook) {
+            Ok(()) => 0,
+            Err(_) => 1,
+        };
+        std::process::exit(code);
+    }
     // Before any runtime or logging exists: this process only extracts one PDF.
     #[cfg(not(target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--extract-pdf") {
@@ -470,6 +499,12 @@ async fn daemon_main() {
     sync_eng.attach_custody_db(Arc::clone(&custody.db));
     search_index_state.attach_custody_db(Arc::clone(&custody.db));
     contacts.attach_db(Arc::clone(&custody.db));
+    #[cfg(feature = "blitz-render")]
+    let blitz = {
+        let host = Arc::new(blitz::RenderHost::new(events.clone(), blitz::WorkerCommand::current_exe().expect("current_exe")));
+        blitz::spawn_reaper(Arc::clone(&host));
+        host
+    };
     let state = Arc::new(server::DaemonState {
         token,
         data_dir: mail_dir.clone(),
@@ -493,6 +528,8 @@ async fn daemon_main() {
         net,
         shutdown: Arc::new(tokio::sync::Notify::new()),
         events,
+        #[cfg(feature = "blitz-render")]
+        blitz,
         search_index: Arc::clone(&search_index_state),
         vault_registry,
         search_runs: std::sync::Mutex::new(std::collections::HashMap::new()),

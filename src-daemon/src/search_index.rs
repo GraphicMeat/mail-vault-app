@@ -32,6 +32,10 @@ const FOREGROUND_POLL: Duration = Duration::from_millis(25);
 
 /// RPCs a person waits on. Sync, prefetch and index calls are not: they must not hold the index back.
 pub fn is_foreground_method(method: &str) -> bool {
+    #[cfg(feature = "blitz-render")]
+    if crate::blitz::is_foreground(method) {
+        return true;
+    }
     matches!(
         method,
         "maildir_read" | "maildir_read_light" | "maildir_read_light_batch" | "maildir_read_raw_source"

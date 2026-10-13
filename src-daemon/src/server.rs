@@ -110,6 +110,9 @@ pub struct DaemonState {
     pub shutdown: Arc<tokio::sync::Notify>,
     /// Broadcast bus for `channel.open` connections; any module can `emit` into it.
     pub events: crate::events::EventBus,
+    /// The Blitz render worker's supervisor (`render.*`); the worker process is spawned lazily.
+    #[cfg(feature = "blitz-render")]
+    pub blitz: Arc<crate::blitz::RenderHost>,
     pub search_index: Arc<crate::search_index::SearchIndexState>,
     /// What the vault holds, answered from `<app_dir>/vault_registry.db`
     /// (architecture.md "Reads come from the database"). Every vault writer
@@ -671,6 +674,10 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::fonts::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    #[cfg(feature = "blitz-render")]
+    if let Some(resp) = crate::blitz::routes::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
     if let Some(resp) = crate::handlers::net_activity::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -874,6 +881,12 @@ impl DaemonState {
         // (or one shared dir) as `app_dir`, and one file under two roots wipes.
         let registry_dir = tempfile::tempdir().expect("registry tempdir").keep();
         let vault_registry = open_vault_registry(&registry_dir, &mail_dir, &search_index);
+        // The worker process is spawned on the first call, so no reaper runs in tests.
+        #[cfg(feature = "blitz-render")]
+        let blitz = Arc::new(crate::blitz::RenderHost::new(
+            events.clone(),
+            crate::blitz::WorkerCommand::current_exe().expect("current_exe"),
+        ));
         let state = Arc::new(DaemonState {
             net,
             idle,
@@ -900,6 +913,8 @@ impl DaemonState {
             vault_registry,
             search_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             events,
+            #[cfg(feature = "blitz-render")]
+            blitz,
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
