@@ -63,4 +63,12 @@ describe('runPrepass', () => {
     const { html } = await runPrepass(props({ theme: { dark: false, tableMode: 'clip' } }), { privacy: { active: false } });
     expect(html).toContain('table-layout: fixed');
   });
+  it('is deterministic: the same inputs give byte-identical HTML (no fresh nonce per run)', async () => {
+    const a = await runPrepass(props(), { privacy: { active: false } });
+    const b = await runPrepass(props(), { privacy: { active: false } });
+    expect(b.html).toBe(a.html);
+    const c = await runPrepass(props(), { privacy: { active: true, dict: { names: ['Alice'] } } });
+    const d = await runPrepass(props(), { privacy: { active: true, dict: { names: ['Alice'] } } });
+    expect(d.html).toBe(c.html);
+  });
 });

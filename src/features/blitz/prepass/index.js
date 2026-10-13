@@ -17,6 +17,10 @@ export async function runPrepass(props, { privacy = { active: false, dict: null 
     extraBody: '',
     privacy: false,
     tableMode: theme?.tableMode ?? 'preserve',
+    // Blitz runs no script, so the CSP nonce guards nothing here. A constant keeps the
+    // output byte-identical for equal inputs: a fresh random nonce per run would make
+    // every privacy-dictionary update look like a changed document and reopen it.
+    nonce: 'blitz',
   });
   // 2. Parse.
   const doc = new DOMParser().parseFromString(built, 'text/html');
