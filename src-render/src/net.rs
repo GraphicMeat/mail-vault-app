@@ -8,19 +8,23 @@
 //! ----------------------------------
 //! blitz-traits 0.3.0-beta.2 gives no way to tell: `Request` is a bare GET
 //! (url, method, empty headers, no content type) and the handler is an opaque
-//! `Box<dyn NetHandler>`. blitz-dom's call sites, however, fall into two
-//! phases that we control:
+//! `Box<dyn NetHandler>`. So the kind is inferred from WHEN blitz-dom asks,
+//! which this crate controls, and the default is deny:
 //!
-//! * While the HTML is parsed (`begin_parse` .. `end_parse`), blitz requests
-//!   `<img src>`, `<link href>` stylesheets, `<iframe src>`, `@import` and
-//!   `@font-face` urls. `https:` requests made now are held, and `end_parse`
-//!   releases only the ones whose url is the resolved `src` of an `<img>` in
-//!   the finished tree. Stylesheets, fonts, `@import` and frames are answered
-//!   empty. The iframe never makes those requests either (its CSP has no
-//!   `style-src`/`font-src` for remote hosts), so this is privacy parity.
-//! * After the parse, the only thing blitz-dom fetches is a CSS image
-//!   (`url()` in `background-image`, `list-style-image`, ... found while
-//!   styles are flushed to layout). Those are queued directly.
+//! * Every `https:` request is HELD. It is queued for the daemon only by
+//!   `settle`, and only if its url is the resolved `src` of an `<img>` in the
+//!   parsed tree. Stylesheets, fonts, `@import`, frames and anything else are
+//!   answered empty. The iframe never makes those requests either (its CSP
+//!   has no `style-src`/`font-src` for remote hosts), so this is privacy parity.
+//!   Requests are made while parsing, but also later: a `data:` stylesheet is
+//!   applied by `handle_messages` and only then requests its `@font-face`.
+//! * The one exception is the window `begin_layout` .. `end_layout`, which the
+//!   caller opens around `resolve()` only. The only thing blitz-dom fetches
+//!   there is a CSS image (`url()` in `background-image` and friends, found while
+//!   styles are flushed to layout), so those are queued directly.
+//!
+//! This classification depends on blitz-dom 0.3.0-beta.2's call sites. The
+//! tests in `tests/net.rs` pin every kind; re-run them on any blitz bump.
 use blitz_traits::net::{Bytes, NetHandler, NetProvider, Request, Url};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -45,8 +49,9 @@ pub struct BridgeNet {
     next: AtomicU64,
     /// Pixels already admitted for this document (see MAX_DOC_IMAGE_PIXELS).
     image_pixels: AtomicU64,
-    parsing: AtomicBool,
-    /// `https:` requests made during the parse, decided in `end_parse`.
+    /// True only while the caller is inside `resolve()`: see the module comment.
+    layout: AtomicBool,
+    /// `https:` requests not yet decided; `settle` or `deny_held` answers them.
     held: Mutex<Vec<(String, Box<dyn NetHandler>)>>,
     outbox: Mutex<Vec<FetchRequest>>,
     pending: Mutex<HashMap<u64, (String, Box<dyn NetHandler>)>>,
@@ -58,22 +63,29 @@ impl BridgeNet {
             allow_remote,
             next: AtomicU64::new(1),
             image_pixels: AtomicU64::new(0),
-            parsing: AtomicBool::new(false),
+            layout: AtomicBool::new(false),
             held: Mutex::default(),
             outbox: Mutex::default(),
             pending: Mutex::default(),
         })
     }
 
-    /// The HTML is about to be parsed: hold `https:` requests until `end_parse`.
-    pub fn begin_parse(&self) {
-        self.parsing.store(true, Ordering::Release);
+    /// The caller is about to run `resolve()`: https requests made now are CSS images.
+    pub fn begin_layout(&self) {
+        self.layout.store(true, Ordering::Release);
     }
 
-    /// The parse is done. Queue the held requests whose url is in `image_urls`
+    pub fn end_layout(&self) {
+        self.layout.store(false, Ordering::Release);
+    }
+
+    pub fn has_held(&self) -> bool {
+        !self.held.lock().unwrap().is_empty()
+    }
+
+    /// Decide every held request: queue the ones whose url is in `image_urls`
     /// (the resolved `src` of every `<img>`), answer all others empty.
-    pub fn end_parse(&self, image_urls: &HashSet<String>) {
-        self.parsing.store(false, Ordering::Release);
+    pub fn settle(&self, image_urls: &HashSet<String>) {
         let held = std::mem::take(&mut *self.held.lock().unwrap());
         for (url, handler) in held {
             if image_urls.contains(&url) {
@@ -82,6 +94,11 @@ impl BridgeNet {
                 handler.bytes(url, Bytes::new());
             }
         }
+    }
+
+    /// Answer every held request empty without queueing any.
+    pub fn deny_held(&self) {
+        self.settle(&HashSet::new());
     }
 
     pub fn take_outbox(&self) -> Vec<FetchRequest> {
@@ -147,10 +164,10 @@ impl NetProvider for BridgeNet {
                 handler.bytes(url, Bytes::from(bytes));
             }
             "https" if self.allow_remote => {
-                if self.parsing.load(Ordering::Acquire) {
-                    self.held.lock().unwrap().push((url, handler));
-                } else {
+                if self.layout.load(Ordering::Acquire) {
                     self.queue(url, handler);
+                } else {
+                    self.held.lock().unwrap().push((url, handler));
                 }
             }
             _ => handler.bytes(url, Bytes::new()),

@@ -2,6 +2,7 @@ use base64::Engine;
 use blitz_traits::net::{Bytes, NetHandler, NetProvider, Request, Url};
 use mailvault_render::net::BridgeNet;
 use mailvault_render::{RenderDoc, RenderOptions};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 const RED_1PX_PNG_B64: &str =
@@ -93,6 +94,11 @@ fn remote_import_font_and_frame_urls_are_never_requested() {
         r#"<iframe src="https://frame.example.com/f.html"></iframe>"#,
         r#"<iframe srcdoc="&lt;img src=&quot;https://img.example.com/in-frame.png&quot;&gt;"></iframe>"#,
         r#"<link rel="stylesheet" href="https://css.example.com/s.css"><link rel="icon" href="https://img.example.com/i.png">"#,
+        // A data: stylesheet is answered during the parse but applied afterwards: its
+        // @font-face and @import must be held to the same rule as an inline <style>.
+        r#"<link rel="stylesheet" href="data:text/css,@font-face%7Bfont-family:f%3Bsrc:url(https://fonts.example.com/f.woff2)%7D"><p style="font-family:f">x"#,
+        r#"<link rel="stylesheet" href="data:text/css,@import%20url(https://css.example.com/n.css)%3B"><p>x"#,
+        r#"<style>@import url("data:text/css,@font-face%7Bfont-family:f%3Bsrc:url(https://fonts.example.com/g.woff2)%7D");</style><p style="font-family:f">x"#,
     ];
     for html in cases {
         let q = queued_urls(html);
@@ -199,6 +205,8 @@ fn fetched_https_bytes_get_the_same_header_check() {
     let net = BridgeNet::new(true);
     let got = Arc::new(Mutex::new(None));
     net.fetch(0, Request::get(Url::parse("https://img.example.com/huge.png").unwrap()), Box::new(Rec(got.clone())));
+    assert!(net.take_outbox().is_empty(), "held until the document says it is an <img>");
+    net.settle(&HashSet::from(["https://img.example.com/huge.png".to_string()]));
     let id = net.take_outbox()[0].id;
     assert!(net.complete(id, Some(png_header(20_000, 20_000))));
     assert_eq!(*got.lock().unwrap(), Some(0), "answered empty, never handed to the decoder");

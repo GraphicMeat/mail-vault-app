@@ -100,6 +100,36 @@ impl TileError {
 pub struct RenderDoc {
     doc: HtmlDocument,
     opts: RenderOptions,
+    net: Option<Arc<BridgeNet>>,
+}
+
+/// Rounds of "decide held requests, apply the answers" before the rest are
+/// simply denied. A stylesheet that imports a stylesheet that imports ... is
+/// answered empty at the first hop, so more than a couple of rounds only
+/// happens for data: chains.
+const SETTLE_ROUNDS: usize = 4;
+
+/// Apply what the net provider delivered, deciding every held request first
+/// (see the module comment in `net.rs`), then relayout with the layout window
+/// open so CSS images are queued.
+fn apply(doc: &mut HtmlDocument, net: Option<&Arc<BridgeNet>>) {
+    if let Some(n) = net {
+        for _ in 0..SETTLE_ROUNDS {
+            if !n.has_held() {
+                break;
+            }
+            n.settle(&img_srcs(doc));
+            doc.handle_messages();
+        }
+        n.deny_held();
+        doc.handle_messages();
+        n.begin_layout();
+        doc.resolve(0.0);
+        n.end_layout();
+    } else {
+        doc.handle_messages();
+        doc.resolve(0.0);
+    }
 }
 
 impl RenderDoc {
@@ -132,27 +162,19 @@ impl RenderDoc {
             subdocument_depth: NO_SUBDOCUMENTS,
             ..Default::default()
         };
-        if let Some(n) = &net {
-            n.begin_parse();
-        }
         let mut doc = HtmlDocument::from_html(html, config);
         if doc.tree().len() > MAX_NODES || exceeds_depth(&doc) {
             return Err(OpenError::TooComplex);
         }
-        if let Some(n) = &net {
-            // Everything blitz asked for while parsing is decided now: images are
-            // queued, stylesheets, fonts, @import and frames are answered empty.
-            n.end_parse(&img_srcs(&doc));
-        }
-        doc.handle_messages();
-        doc.resolve(0.0);
-        Ok(Self { doc, opts })
+        // Everything blitz asked for while parsing is decided here: images are
+        // queued, stylesheets, fonts, @import and frames are answered empty.
+        apply(&mut doc, net.as_ref());
+        Ok(Self { doc, opts, net })
     }
 
     /// Apply resources the net provider delivered since the last call, then relayout.
     pub fn apply_resources(&mut self) {
-        self.doc.handle_messages();
-        self.doc.resolve(0.0);
+        apply(&mut self.doc, self.net.as_ref());
     }
 
     /// How many <iframe> sub-documents were loaded (always 0: they are switched off).
