@@ -180,6 +180,21 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
             }
             Ok(Value::Object(counts))
         }
+        // Every message any saved view finds, per account and mailbox, for
+        // the list that hides view mail. Background work: not foreground.
+        "views.hidden_members" => {
+            let accounts = accounts_of(params)?;
+            let (all, keys) = app_db::with(app_dir, |conn| {
+                views::ensure_starters(conn)?;
+                let all = views::list(conn)?;
+                let mut keys = HashMap::new();
+                for view in &all {
+                    keys.insert(view.id.clone(), filter_keys(conn, &view.def, &accounts)?);
+                }
+                Ok((all, keys))
+            })?;
+            hidden_members(state, &all, &accounts, &keys)
+        }
         // The editor's sender typeahead: `[{ address, name, count }]`, from
         // the same index the view runs on. No accounts named is every account.
         "views.suggest_senders" => {
@@ -336,6 +351,87 @@ fn messages_of(
         }
     }
     Ok(out)
+}
+
+/// Uids per custody lock hold in `hidden_members`.
+const HIDDEN_MEMBERS_UNIT: usize = 900;
+
+/// `{ available, members: { account: { mailbox: { uids, unread } } } }`: the
+/// union of every view's messages, narrowed to the uids the header cache
+/// lists (what the mail list shows), with `unread` counted from the cached
+/// server flags. A mailbox the account does not know (a local-only folder)
+/// is never hidden. An index or custody store that cannot answer is
+/// `available: false` with no members, which the app reads as "hide nothing";
+/// an empty `members` with `available: true` is a real "nothing to hide".
+fn hidden_members(
+    state: &DaemonState,
+    all: &[View],
+    accounts: &[Account],
+    keys: &HashMap<String, HashMap<String, Vec<String>>>,
+) -> Result<Value, String> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let unavailable = || serde_json::json!({ "available": false, "members": {} });
+    let known: HashMap<&str, &[String]> =
+        accounts.iter().map(|account| (account.account_id.as_str(), account.known_mailboxes.as_slice())).collect();
+    let mut found: BTreeMap<String, BTreeMap<String, BTreeSet<u32>>> = BTreeMap::new();
+    let empty = HashMap::new();
+    for view in all {
+        let per_view = keys.get(&view.id).unwrap_or(&empty);
+        let messages = match messages_of(state, &view.def, accounts, per_view) {
+            Ok(messages) => messages,
+            Err(e) if e.starts_with("search index unavailable") => return Ok(unavailable()),
+            Err(e) => return Err(e),
+        };
+        for (account_id, mailbox, uid) in messages {
+            // `messages_of` names a local-only folder by its vault directory.
+            if !known.get(account_id.as_str()).is_some_and(|mailboxes| mailboxes.contains(&mailbox)) {
+                continue;
+            }
+            found.entry(account_id).or_default().entry(mailbox).or_default().insert(uid);
+        }
+    }
+    let mut members = serde_json::Map::new();
+    for (account_id, mailboxes) in found {
+        let mut per_account = serde_json::Map::new();
+        for (mailbox, uids) in mailboxes {
+            let wanted: Vec<u32> = uids.into_iter().collect();
+            let mut kept: Vec<u32> = Vec::with_capacity(wanted.len());
+            let mut unread = 0u64;
+            // One custody lock hold per unit, released between units: a
+            // foreground header read waits on this lock, and a broad view
+            // over a large folder is tens of thousands of rows to parse.
+            for unit in wanted.chunks(HIDDEN_MEMBERS_UNIT) {
+                let headers = match crate::custody::with_conn(state, |conn| {
+                    mailvault_core::custody::cache::load_by_uids(conn, &account_id, &mailbox, unit)
+                }) {
+                    Ok(headers) => headers,
+                    // No cache to check against is unknown membership, not none.
+                    Err(_) => return Ok(unavailable()),
+                };
+                for header in &headers {
+                    let Some(uid) = header.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()) else {
+                        continue;
+                    };
+                    kept.push(uid);
+                    let seen = header.get("flags").and_then(Value::as_array).is_some_and(|flags| {
+                        flags.iter().any(|flag| flag.as_str().is_some_and(|flag| flag.eq_ignore_ascii_case("\\Seen")))
+                    });
+                    if !seen {
+                        unread += 1;
+                    }
+                }
+            }
+            if kept.is_empty() {
+                continue;
+            }
+            kept.sort_unstable();
+            per_account.insert(mailbox, serde_json::json!({ "uids": kept, "unread": unread }));
+        }
+        if !per_account.is_empty() {
+            members.insert(account_id, Value::Object(per_account));
+        }
+    }
+    Ok(serde_json::json!({ "available": true, "members": members }))
 }
 
 /// The flags of a row that holds no vault file come from the server, not from
@@ -1034,6 +1130,79 @@ mod tests {
         assert_eq!(out, json!([{ "term": "starred", "count": 1 }]));
         let other = call(&s, "views.suggest_terms", json!({ "prefix": "sta", "accounts": ["b"] })).await;
         assert_eq!(other, json!([]), "another account's terms are not offered");
+    }
+
+    /// Every saved view's members, unioned per account and mailbox, narrowed
+    /// to what the header cache still lists, with the unread count taken from
+    /// the cached (server) flags.
+    #[tokio::test]
+    async fn hidden_members_unions_every_view_and_keeps_only_cached_uids() {
+        let s = st();
+        index(&s); // uids 1 (starred, Seen), 2 (attachments, Seen), 3 (unread)
+        crate::custody::with_conn(&s, |conn| {
+            let h = |uid: u32, flags: Value| json!({ "uid": uid, "flags": flags, "date": "Mon, 07 Sep 2026 10:00:00 +0000" });
+            mailvault_core::custody::cache::save_headers(
+                conn, "a", "INBOX",
+                &json!({ "emails": [h(1, json!(["\\Seen", "\\Flagged"])), h(2, json!(["\\Seen"])), h(3, json!([]))] }).to_string(),
+            )
+        })
+        .unwrap();
+        // Seed the starters first, then drop them, so only v1 and v2 count:
+        // a first `ensure_starters` after the deletes would bring them back.
+        call(&s, "views.list", json!({})).await;
+        for id in ["builtin-needs-reply", "builtin-starred", "builtin-attachments"] {
+            call(&s, "views.delete", json!({ "id": id })).await;
+        }
+        call(&s, "views.save", json!({ "view": { "id": "v1", "name": "S", "icon": "star", "position": 0, "builtin": null, "def": { "starred": true } } })).await;
+        call(&s, "views.save", json!({ "view": { "id": "v2", "name": "U", "icon": "mail", "position": 1, "builtin": null, "def": { "unread": true } } })).await;
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts() })).await;
+        assert_eq!(out["available"], true, "{out}");
+        let mut uids: Vec<u64> =
+            out["members"]["a"]["INBOX"]["uids"].as_array().unwrap().iter().map(|u| u.as_u64().unwrap()).collect();
+        uids.sort();
+        assert_eq!(uids, vec![1, 3], "uid 2 is in no view: {out}");
+        assert_eq!(out["members"]["a"]["INBOX"]["unread"], 1, "{out}");
+    }
+
+    /// A message the header cache no longer lists is not on the list to hide.
+    #[tokio::test]
+    async fn hidden_members_drops_uids_the_header_cache_no_longer_holds() {
+        let s = st();
+        index(&s);
+        crate::custody::with_conn(&s, |conn| {
+            mailvault_core::custody::cache::save_headers(
+                conn, "a", "INBOX",
+                &json!({ "emails": [json!({ "uid": 2, "flags": ["\\Seen"], "date": "Mon, 07 Sep 2026 10:00:00 +0000" })] }).to_string(),
+            )
+        })
+        .unwrap();
+        call(&s, "views.save", json!({ "view": { "id": "all", "name": "All", "icon": "inbox", "position": 0, "builtin": null, "def": {} } })).await;
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts() })).await;
+        assert_eq!(out["members"]["a"]["INBOX"]["uids"], json!([2]), "{out}");
+        assert_eq!(out["members"]["a"]["INBOX"]["unread"], 0, "{out}");
+    }
+
+    /// A folder only the vault holds is never hidden: the list it would be
+    /// hidden from does not show it.
+    #[tokio::test]
+    async fn hidden_members_skips_local_only_folders() {
+        let s = st();
+        index(&s);
+        let out = call(&s, "views.hidden_members", json!({
+            "accounts": [{ "accountId": "a", "address": "me@x.test", "knownMailboxes": ["Sent"] }]
+        }))
+        .await;
+        assert_eq!(out["available"], true, "{out}");
+        assert_eq!(out["members"], json!({}), "{out}");
+    }
+
+    /// Unknown membership is not "nothing to hide": the app shows everything.
+    #[tokio::test]
+    async fn hidden_members_is_unavailable_without_an_index() {
+        let s = st(); // no index()
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts() })).await;
+        assert_eq!(out["available"], false);
+        assert_eq!(out["members"], json!({}));
     }
 
     /// Same convenience rule as `suggest_senders`: nothing to offer while the
