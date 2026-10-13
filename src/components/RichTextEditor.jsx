@@ -558,8 +558,11 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   // another field. The editor is usually built on the empty pre-init form: a
   // reply's body arrives here after onCreate placed the caret, and before
   // TipTap's deferred focus, so the editor cannot be asked whether it has it.
+  // An empty body on an empty editor is no change either: syncing it placed the
+  // caret a second time, and that deferred focus could land in another field.
   useEffect(() => {
-    if (editor && !editor.isDestroyed && content !== undefined && padEmptyLines(editor.getHTML()) !== content) {
+    if (editor && !editor.isDestroyed && content !== undefined && !(content === '' && editor.isEmpty)
+      && padEmptyLines(editor.getHTML()) !== content) {
       editor.chain().setMeta('addToHistory', false).setContent(content).run();
       // An external swap is not a resize: the next drag compares against this.
       if (imageTools) pictures.current = imageList(editor.state.doc);

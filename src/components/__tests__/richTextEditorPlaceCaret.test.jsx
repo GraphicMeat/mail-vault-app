@@ -32,13 +32,13 @@ const REPLY_BODY = '<p></p><p>--</p><p>Best,<br>Me</p>';
 const placeCaret = (editor) => editor.commands.focus(signatureCaretPos(editor.state.doc) ?? 'start');
 
 let editorRef;
-function Harness({ content, withCaret = true }) {
+function Harness({ content, withCaret = true, caret = placeCaret }) {
   editorRef = useRef(null);
   return (
     <>
       <input data-testid="elsewhere" />
       <RichTextEditor content={content} onUpdate={() => {}} editorRef={editorRef}
-        placeCaret={withCaret ? placeCaret : undefined} />
+        placeCaret={withCaret ? caret : undefined} />
     </>
   );
 }
@@ -73,5 +73,15 @@ describe('RichTextEditor placeCaret', () => {
     await waitFor(() => expect(editor.getText()).toContain('--'));
     expect(document.activeElement).toBe(elsewhere);
     expect(editor.state.selection.from).not.toBe(signatureCaretPos(editor.state.doc));
+  });
+
+  // An empty body is not a change: syncing it re-placed the caret, and that
+  // second deferred focus could land after the person had moved elsewhere.
+  it('places the caret once when built on an empty body', async () => {
+    const caret = vi.fn(placeCaret);
+    render(<Harness content="" caret={caret} />);
+    await waitFor(() => expect(editorRef.current?.view.dom.contains(document.activeElement)).toBe(true));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(caret).toHaveBeenCalledTimes(1);
   });
 });
