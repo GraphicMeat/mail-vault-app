@@ -6,6 +6,7 @@ use crate::{RenderDoc, RenderOptions, MAX_CSS_WIDTH, MAX_SCALE, MIN_SCALE};
 use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
 use std::io::{BufRead, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -90,22 +91,31 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
         }
     });
     let mut docs: HashMap<u64, Open> = HashMap::new();
+    // Set when a per-document guard caught a panic. The process is then suspect
+    // (a half-run mutator drop, a poisoned shared lock in stylo or fontique), so
+    // it serves what is still open and exits when the last document is gone: the
+    // host sees EOF and spawns a clean worker for the next call.
+    let tainted = Cell::new(false);
     while let Ok(first) = rx.recv() {
         let mut dirty = BTreeSet::new();
         let mut batch = vec![first];
         batch.extend(rx.try_iter());
         for msg in batch {
             match msg {
-                Msg::Op(op) => handle(op, &mut docs, &mut dirty, &mut output, pre_open)?,
+                Msg::Op(op) => handle(op, &mut docs, &mut dirty, &mut output, pre_open, &tainted)?,
                 Msg::Bad { req } => line(&mut output, json!({"kind":"error","req":req,"code":"render_bad_request"}))?,
             }
             // Fetches go out right after the message that caused them, so the
             // order on the wire is deterministic however stdin was batched.
             flush_fetches(&docs, &mut output)?;
+            if tainted.get() && docs.is_empty() {
+                output.flush()?;
+                return Ok(());
+            }
         }
         for id in dirty {
             let Some(o) = docs.get_mut(&id) else { continue };
-            match guarded(|| {
+            match guarded(&tainted, || {
                 o.doc.apply_resources();
                 o.doc.meta()
             }) {
@@ -113,8 +123,12 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
                     o.rev += 1;
                     line(&mut output, json!({"kind":"updated","doc":id,"rev":o.rev,"meta":meta}))?;
                 }
-                None => discard(&mut docs, id), // no req to answer: the next tile says render_unknown_doc
+                None => discard(&mut docs, id, &tainted), // no req to answer: the next tile says render_unknown_doc
             }
+        }
+        if tainted.get() && docs.is_empty() {
+            output.flush()?;
+            return Ok(());
         }
         // A relayout can discover new resources (CSS background images).
         flush_fetches(&docs, &mut output)?;
@@ -123,13 +137,13 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
     Ok(())
 }
 
-fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out: &mut impl Write, pre_open: fn(&str)) -> std::io::Result<()> {
+fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out: &mut impl Write, pre_open: fn(&str), tainted: &Cell<bool>) -> std::io::Result<()> {
     match msg {
         In::Open { req, doc, html, css_width, scale, allow_remote, theme: _ } => {
             let net = BridgeNet::new(allow_remote);
             let opts = RenderOptions::new(css_width.clamp(1, MAX_CSS_WIDTH as u32), scale.clamp(MIN_SCALE, MAX_SCALE));
             let net_for_doc = net.clone();
-            let built = guarded(|| {
+            let built = guarded(tainted, || {
                 pre_open(&html);
                 RenderDoc::open(&html, opts, Some(net_for_doc)).map(|mut d| {
                     d.apply_resources(); // data: images answered during parse
@@ -147,24 +161,24 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             }
         }
         In::Tile { req, doc, index } => match docs.get_mut(&doc) {
-            Some(o) => match guarded(|| o.doc.tile_png(index)) {
+            Some(o) => match guarded(tainted, || o.doc.tile_png(index)) {
                 Some(Ok(png)) => {
                     let png = base64::engine::general_purpose::STANDARD.encode(png);
                     line(out, json!({"kind":"reply","req":req,"ok":{"png":png}}))
                 }
                 Some(Err(e)) => line(out, json!({"kind":"error","req":req,"code":e.code()})),
                 None => {
-                    discard(docs, doc);
+                    discard(docs, doc, tainted);
                     unavailable(out, req)
                 }
             },
             None => unknown(out, req),
         },
         In::Hit { req, doc, x, y } => match docs.get(&doc) {
-            Some(o) => match guarded(|| o.doc.hit_link(x, y)) {
+            Some(o) => match guarded(tainted, || o.doc.hit_link(x, y)) {
                 Some(link) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link}})),
                 None => {
-                    discard(docs, doc);
+                    discard(docs, doc, tainted);
                     unavailable(out, req)
                 }
             },
@@ -179,12 +193,12 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         In::Fetched { doc, fetch, bytes } => {
             if let Some(o) = docs.get(&doc) {
                 let bytes = bytes.and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
-                match guarded(|| o.net.complete(fetch, bytes)) {
+                match guarded(tainted, || o.net.complete(fetch, bytes)) {
                     Some(true) => {
                         dirty.insert(doc);
                     }
                     Some(false) => {}
-                    None => discard(docs, doc),
+                    None => discard(docs, doc, tainted),
                 }
             }
             Ok(())
@@ -203,17 +217,24 @@ fn flush_fetches(docs: &HashMap<u64, Open>, out: &mut impl Write) -> std::io::Re
 
 /// Run one operation on one document. A panic (a blitz bug on hostile markup)
 /// costs that document and is reported to its caller; every other document
-/// keeps working. This relies on unwinding: a `panic = "abort"` profile would
-/// turn it into a worker exit, which the daemon host survives as before.
-fn guarded<T>(f: impl FnOnce() -> T) -> Option<T> {
-    catch_unwind(AssertUnwindSafe(f)).ok()
+/// keeps working until the worker retires (see `tainted` in `run_loop`). This
+/// relies on unwinding: a `panic = "abort"` profile would turn it into a worker
+/// exit, which the daemon host survives as before.
+fn guarded<T>(tainted: &Cell<bool>, f: impl FnOnce() -> T) -> Option<T> {
+    let r = catch_unwind(AssertUnwindSafe(f)).ok();
+    if r.is_none() {
+        tainted.set(true);
+    }
+    r
 }
 
 /// Drop a document whose operation panicked. Its state is suspect, so even
 /// the drop is guarded; a doc that cannot be dropped cleanly is leaked.
-fn discard(docs: &mut HashMap<u64, Open>, id: u64) {
+fn discard(docs: &mut HashMap<u64, Open>, id: u64, tainted: &Cell<bool>) {
     if let Some(o) = docs.remove(&id) {
-        let _ = catch_unwind(AssertUnwindSafe(move || drop(o)));
+        if catch_unwind(AssertUnwindSafe(move || drop(o))).is_err() {
+            tainted.set(true);
+        }
     }
 }
 

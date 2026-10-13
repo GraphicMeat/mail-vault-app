@@ -125,3 +125,41 @@ fn a_malformed_close_or_garbage_has_no_reply_to_send() {
     let out = run(&[json!({"op":"close"}), json!({"op":"nope","req":9}), json!({"req":10})]);
     assert!(out.is_empty(), "{out:?}");
 }
+
+// A caught panic leaves the process in an unknown state (a half-run mutator
+// drop, a shared lock poisoned in stylo or fontique), so the worker serves its
+// remaining documents and then exits for the host to respawn clean.
+fn open_op(req: u64, doc: u64, html: &str) -> Value {
+    json!({"op":"open","req":req,"doc":doc,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false})
+}
+
+#[test]
+fn a_worker_that_caught_a_panic_exits_once_its_last_doc_is_closed() {
+    let out = run_with(
+        &[
+            open_op(1, 1, "<p>fine"),
+            open_op(2, 2, "<p>BOOM-MARKER"),
+            json!({"op":"tile","req":3,"doc":1,"index":0}),
+            json!({"op":"close","doc":1}),
+            open_op(4, 3, "<p>after"),
+            json!({"op":"tile","req":5,"doc":3,"index":0}),
+        ],
+        boom_on_marker,
+    );
+    assert_eq!(out[1], json!({"kind":"error","req":2,"code":"render_unavailable"}));
+    assert_eq!(out[2]["kind"], "reply", "tainted, but the other doc is still served");
+    assert_eq!(out.len(), 3, "after the last doc closed the worker is gone, so later requests get no answer: {out:?}");
+}
+
+#[test]
+fn a_worker_that_caught_a_panic_with_no_other_doc_exits_at_once() {
+    let out = run_with(&[open_op(1, 1, "<p>BOOM-MARKER"), open_op(2, 2, "<p>next")], boom_on_marker);
+    assert_eq!(out, vec![json!({"kind":"error","req":1,"code":"render_unavailable"})], "the panic is answered, then the worker exits");
+}
+
+#[test]
+fn a_worker_that_never_panicked_stays_up_after_its_last_doc_closes() {
+    let out = run(&[open_op(1, 1, "<p>x"), json!({"op":"close","doc":1}), open_op(2, 2, "<p>y")]);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[1]["kind"], "reply");
+}
