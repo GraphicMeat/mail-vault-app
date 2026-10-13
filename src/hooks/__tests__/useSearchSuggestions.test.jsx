@@ -30,7 +30,8 @@ afterEach(() => {
 const settle = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
 describe('fetchSearchSuggestions', () => {
-  it('turns a sender into a from: tag and a word into its own tags', async () => {
+  // A term is committed the way typed text is: a phrase stays one tag.
+  it('turns a sender into a from: tag and a term into one tag', async () => {
     vi.useRealTimers();
     daemonCall.mockResolvedValue([
       { kind: 'sender', address: 'ann@acme.test', name: 'Ann Lee', count: 3 },
@@ -42,7 +43,7 @@ describe('fetchSearchSuggestions', () => {
     expect(found).toEqual([
       { key: 'sender:ann@acme.test', kind: 'sender', tags: ['from:ann@acme.test'], label: 'Ann Lee', detail: 'ann@acme.test', count: 3 },
       { key: 'sender:@acme.test', kind: 'sender', tags: ['from:@acme.test'], label: '@acme.test', detail: '', count: 5 },
-      { key: 'term:quarterly report', kind: 'term', tags: ['quarterly', 'report'], label: 'quarterly report', detail: '', count: 2 },
+      { key: 'term:quarterly report', kind: 'term', tags: ['quarterly report'], label: 'quarterly report', detail: '', count: 2 },
     ]);
   });
 

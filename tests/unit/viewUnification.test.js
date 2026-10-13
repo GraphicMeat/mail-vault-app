@@ -162,6 +162,8 @@ describe('EmailSenderInfo', () => {
 
 describe('EmailActionBar', () => {
   let EmailActionBar;
+  // A bar left mounted answers the next test's queries too.
+  afterEach(cleanup);
 
   beforeEach(async () => {
     const mod = await import('../../src/components/email/EmailActionBar.jsx');
@@ -196,7 +198,8 @@ describe('EmailActionBar', () => {
     expect(screen.getByLabelText('Archive')).toBeTruthy();
   });
 
-  it('hides reply buttons for sent emails', () => {
+  // Replying to your own sent mail writes to the people you sent it to.
+  it('keeps reply buttons on sent emails', () => {
     cleanup();
     const { container } = render(
       React.createElement(EmailActionBar, {
@@ -214,11 +217,10 @@ describe('EmailActionBar', () => {
         singleRecipient: false,
       })
     );
-    // Reply and Reply All should not be in this render
     const buttons = container.querySelectorAll('button');
     const labels = Array.from(buttons).map(b => b.getAttribute('aria-label')).filter(Boolean);
-    expect(labels).not.toContain('Reply');
-    expect(labels).not.toContain('Reply All');
+    expect(labels).toContain('Reply');
+    expect(labels).toContain('Reply All');
     expect(labels).toContain('Forward');
   });
 

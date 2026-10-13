@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 // Gmail keeps sent mail in "[Gmail]/Sent Mail" and Outlook in "Sent Items".
-// A check for a folder named exactly "sent" missed both, so your own sent
-// message was offered Reply and quick replies as if someone had written to you.
+// A check for a folder named exactly "sent" missed both. Your own sent message
+// offers Reply, which writes to the people you sent it to, and Reply all only
+// when there is more than one of them: the one person here is not "all".
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, within } from '@testing-library/react';
@@ -23,10 +24,10 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
   }) };
 });
 
-function renderViewer(mailbox) {
+function renderViewer(mailbox, to = [{ address: 'a@example.test' }]) {
   const email = {
     uid: 5, _accountId: 'acct-1', _mailbox: mailbox, subject: 'Question',
-    from: { name: 'Me', address: 'me@example.test' }, to: [{ address: 'a@example.test' }],
+    from: { name: 'Me', address: 'me@example.test' }, to,
     html: '<p>Sent text.</p>', text: 'Sent text.', attachments: [], flags: ['\\Seen'], date: '2026-09-26',
   };
   useThemeStore.setState({ palette: 'graphite', theme: 'light' });
@@ -52,8 +53,14 @@ describe('EmailViewer on your own sent mail', () => {
     expect(bar.queryAllByRole('button', { name: /^Reply$/ })).toHaveLength(1);
   });
 
-  it.each(['Sent', '[Gmail]/Sent Mail', 'Sent Items', 'INBOX.Sent'])('offers no Reply in %s', (mailbox) => {
+  it.each(['Sent', '[Gmail]/Sent Mail', 'Sent Items', 'INBOX.Sent'])('offers Reply but not Reply all to one recipient in %s', (mailbox) => {
     const bar = renderViewer(mailbox);
-    expect(bar.queryAllByRole('button', { name: /^Reply$/ })).toHaveLength(0);
+    expect(bar.queryAllByRole('button', { name: /^Reply$/ })).toHaveLength(1);
+    expect(bar.queryAllByRole('button', { name: /^Reply all$/i })).toHaveLength(0);
+  });
+
+  it('offers Reply all on sent mail to several people', () => {
+    const bar = renderViewer('[Gmail]/Sent Mail', [{ address: 'a@example.test' }, { address: 'b@example.test' }]);
+    expect(bar.queryAllByRole('button', { name: /^Reply all$/i })).toHaveLength(1);
   });
 });

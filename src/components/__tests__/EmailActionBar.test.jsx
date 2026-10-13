@@ -206,10 +206,11 @@ describe('EmailActionBar — no button without a handler', () => {
 });
 
 describe('EmailActionBar — context rules', () => {
-  it('drops reply actions on a sent email', () => {
+  // Replying to your own sent mail writes to the people you sent it to.
+  it('keeps Reply and Reply All on a sent email', () => {
     renderBar({ isSentEmail: true });
-    expect(labels()).not.toContain('Reply');
-    expect(labels()).not.toContain('Reply All');
+    expect(labels()).toContain('Reply');
+    expect(labels()).toContain('Reply All');
   });
 
   it('drops Reply All when there is only one recipient', () => {
