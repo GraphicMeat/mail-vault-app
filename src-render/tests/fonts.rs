@@ -1,0 +1,117 @@
+use base64::Engine;
+use mailvault_render::fonts::{FaceData, FontLibrary};
+use mailvault_render::{RenderDoc, RenderOptions};
+use serde_json::{json, Value};
+use std::io::{BufRead, BufReader};
+
+fn asset(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/../src/assets/fonts/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+pub fn mono_lib() -> FontLibrary {
+    let mut lib = FontLibrary::new(false);
+    lib.register("MV Mono", vec![FaceData { data: asset("ibm-plex-mono-latin-400.woff2"), weight: 400, style: "normal".into() }]);
+    lib
+}
+fn opts() -> RenderOptions { RenderOptions { css_width: 400, scale: 1.0, ..Default::default() } }
+
+// Needs `text_runs` (Task 3); Task 3 Step 1 removes this attribute.
+#[cfg(any())]
+#[test]
+fn registered_family_lays_out_and_unknown_one_does_not() {
+    let html = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'MV Mono'">abcdefghij</p></body>"#;
+    let with = RenderDoc::open_with(html, opts(), None, mono_lib().context()).unwrap();
+    let runs = with.text_runs(0);
+    assert_eq!(runs.len(), 1);
+    // Plex Mono advance is 0.6em: 10 chars x 12px.
+    assert!((runs[0].w - 120.0).abs() < 0.5, "w {}", runs[0].w);
+}
+
+#[test]
+fn woff2_is_decoded_before_registration() {
+    let mut lib = FontLibrary::new(false);
+    assert!(lib.register("MV Mono", vec![FaceData { data: asset("ibm-plex-mono-latin-400.woff2"), weight: 400, style: "normal".into() }]));
+    assert!(lib.has("mv mono"), "case-insensitive");
+    assert!(!lib.register("MV Mono", vec![]), "second registration of a family is not new");
+}
+
+// Needs `text_runs` (Task 3); Task 3 Step 1 removes this attribute.
+#[cfg(any())]
+#[test]
+fn bullets_still_draw_with_our_own_context() {
+    // We build the context ourselves, so blitz's BULLET_FONT registration is ours to do.
+    let html = r#"<body style="margin:0"><ul style="list-style-position:inside;font:20px/30px 'MV Mono';margin:0;padding:0"><li>x</li></ul></body>"#;
+    let doc = RenderDoc::open_with(html, opts(), None, mono_lib().context()).unwrap();
+    let text: String = doc.text_runs(0).iter().map(|r| r.text.clone()).collect();
+    assert!(text.contains('x'));
+    assert!(text.contains('\u{2022}'), "marker painted with the bullet font: {text:?}");
+}
+
+// Needs `text_runs` (Task 3); Task 3 Step 1 removes this attribute.
+#[cfg(any())]
+#[test]
+fn latin_ext_subset_registered_under_the_same_family_is_used_for_l_stroke() {
+    let mut lib = mono_lib();
+    lib.register("MV Mono Ext", vec![
+        FaceData { data: asset("ibm-plex-mono-latin-400.woff2"), weight: 400, style: "normal".into() },
+        FaceData { data: asset("ibm-plex-mono-latin-ext-400.woff2"), weight: 400, style: "normal".into() },
+    ]);
+    let html = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'MV Mono Ext'">aŁa</p></body>"#;
+    let doc = RenderDoc::open_with(html, opts(), None, lib.context()).unwrap();
+    let runs = doc.text_runs(0);
+    // One font for all three: one run, monospace width. A fallback font for Ł splits the run.
+    assert_eq!(runs.len(), 1, "{runs:?}");
+    assert!((runs[0].w - 36.0).abs() < 0.5);
+}
+
+fn run_worker(lines: &[Value]) -> Vec<Value> {
+    let input: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    let mut out = Vec::new();
+    mailvault_render::worker::run_with_fonts(std::io::Cursor::new(input.into_bytes()), &mut out, |_| {}, FontLibrary::new(false)).unwrap();
+    BufReader::new(&out[..]).lines().map(|l| serde_json::from_str(&l.unwrap()).unwrap()).collect()
+}
+
+#[test]
+fn fonts_op_rebuilds_only_docs_naming_the_family_and_keeps_doc_id() {
+    let b64 = base64::engine::general_purpose::STANDARD.encode(asset("ibm-plex-mono-latin-400.woff2"));
+    let names = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'Late Mono', serif">abc</p></body>"#;
+    let other = r#"<body style="margin:0"><p>latemono explorations of late mono-spaced type</p></body>"#;
+    let out = run_worker(&[
+        json!({"op":"open","req":1,"doc":1,"html":names,"cssWidth":300,"scale":1.0,"allowRemote":false}),
+        json!({"op":"open","req":2,"doc":2,"html":other,"cssWidth":300,"scale":1.0,"allowRemote":false}),
+        json!({"op":"fonts","families":[{"family":"Late Mono","faces":[{"data":b64,"weight":400,"style":"normal"}]}]}),
+    ]);
+    let updated: Vec<_> = out.iter().filter(|v| v["kind"] == "updated").collect();
+    assert_eq!(updated.len(), 1, "only doc 1 names the family");
+    assert_eq!(updated[0]["doc"], 1);
+    assert_eq!(updated[0]["rev"], 2);
+}
+
+// Needs the `textRuns` op (Task 3); Task 3 Step 1 removes this attribute.
+#[cfg(any())]
+#[test]
+fn rebuilt_doc_lays_out_in_the_late_font() {
+    let b64 = base64::engine::general_purpose::STANDARD.encode(asset("ibm-plex-mono-latin-400.woff2"));
+    let names = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'Late Mono', serif">abc</p></body>"#;
+    let out = run_worker(&[
+        json!({"op":"open","req":1,"doc":1,"html":names,"cssWidth":300,"scale":1.0,"allowRemote":false}),
+        json!({"op":"fonts","families":[{"family":"Late Mono","faces":[{"data":b64,"weight":400,"style":"normal"}]}]}),
+        json!({"op":"textRuns","req":3,"doc":1,"index":0}),
+    ]);
+    let runs = out.iter().find(|v| v["req"] == 3).unwrap();
+    assert!((runs["ok"]["runs"][0]["w"].as_f64().unwrap() - 36.0).abs() < 0.5, "rebuilt doc uses the font");
+}
+
+#[test]
+fn rebuild_answers_images_from_cache_and_never_refetches() {
+    let b64 = base64::engine::general_purpose::STANDARD.encode(asset("ibm-plex-mono-latin-400.woff2"));
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+    let html = r#"<body style="margin:0;font-family:'Late Mono'"><img src="https://i.test/a.png" width=10 height=10>x</body>"#;
+    let out = run_worker(&[
+        json!({"op":"open","req":1,"doc":1,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":true}),
+        json!({"op":"fetched","doc":1,"fetch":1,"bytes":png}),
+        json!({"op":"fonts","families":[{"family":"Late Mono","faces":[{"data":b64,"weight":400,"style":"normal"}]}]}),
+    ]);
+    let fetches = out.iter().filter(|v| v["kind"] == "fetch").count();
+    assert_eq!(fetches, 1, "the rebuild took the image from the cache: {out:?}");
+    assert_eq!(out.iter().filter(|v| v["kind"] == "updated").last().unwrap()["rev"], 3);
+}

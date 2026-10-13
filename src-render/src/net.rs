@@ -55,10 +55,19 @@ pub struct BridgeNet {
     held: Mutex<Vec<(String, Box<dyn NetHandler>)>>,
     outbox: Mutex<Vec<FetchRequest>>,
     pending: Mutex<HashMap<u64, (String, Box<dyn NetHandler>)>>,
+    /// Bytes every answered https fetch delivered, by URL: a rebuild (fonts op)
+    /// answers from here instead of fetching again through Network Activity.
+    cache: Mutex<HashMap<String, Vec<u8>>>,
 }
 
 impl BridgeNet {
     pub fn new(allow_remote: bool) -> Arc<Self> {
+        Self::with_cache(allow_remote, HashMap::new())
+    }
+
+    /// A provider that already holds the bytes of earlier fetches: a request
+    /// for one of those urls is answered at once and never queued.
+    pub fn with_cache(allow_remote: bool, cache: HashMap<String, Vec<u8>>) -> Arc<Self> {
         Arc::new(Self {
             allow_remote,
             next: AtomicU64::new(1),
@@ -67,7 +76,19 @@ impl BridgeNet {
             held: Mutex::default(),
             outbox: Mutex::default(),
             pending: Mutex::default(),
+            cache: Mutex::new(cache),
         })
+    }
+
+    /// Number this provider's fetches after `prev`'s, so a late answer to one
+    /// of `prev`'s in-flight fetches can never complete one of ours.
+    pub fn continue_ids_after(&self, prev: &BridgeNet) {
+        self.next.store(prev.next.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+
+    /// What the answered https fetches delivered (admitted bytes only), by URL.
+    pub fn cache(&self) -> HashMap<String, Vec<u8>> {
+        self.cache.lock().unwrap().clone()
     }
 
     /// The caller is about to run `resolve()`: https requests made now are CSS images.
@@ -109,6 +130,9 @@ impl BridgeNet {
     pub fn complete(&self, id: u64, bytes: Option<Vec<u8>>) -> bool {
         let Some((url, handler)) = self.pending.lock().unwrap().remove(&id) else { return false };
         let bytes = bytes.filter(|b| self.admit(b)).unwrap_or_default();
+        if !bytes.is_empty() {
+            self.cache.lock().unwrap().insert(url.clone(), bytes.clone());
+        }
         handler.bytes(url, Bytes::from(bytes));
         true
     }
@@ -124,6 +148,15 @@ impl BridgeNet {
     }
 
     fn queue(&self, url: String, handler: Box<dyn NetHandler>) {
+        // Only urls that were admitted as images are cached, and `queue` is
+        // reached only for images, so the cache sits behind the same gate.
+        let cached = self.cache.lock().unwrap().get(&url).cloned();
+        if let Some(bytes) = cached {
+            // Counted against this document's pixel budget like a fresh answer.
+            let bytes = if self.admit(&bytes) { bytes } else { Vec::new() };
+            handler.bytes(url, Bytes::from(bytes));
+            return;
+        }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         self.pending.lock().unwrap().insert(id, (url.clone(), handler));
         self.outbox.lock().unwrap().push(FetchRequest { id, url });

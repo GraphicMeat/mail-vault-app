@@ -1,6 +1,7 @@
 //! The render worker's loop. One thread owns every document; a reader thread
 //! turns stdin lines into messages. Before relayout, everything already
 //! queued is drained, so a burst of image completions costs one layout.
+use crate::fonts::{FaceData, FontLibrary};
 use crate::net::BridgeNet;
 use crate::{RenderDoc, RenderOptions, MAX_CSS_WIDTH, MAX_SCALE, MIN_SCALE};
 use base64::Engine;
@@ -33,6 +34,23 @@ enum In {
     Hit { req: u64, doc: u64, x: f32, y: f32 },
     Close { doc: u64 },
     Fetched { doc: u64, fetch: u64, bytes: Option<String> },
+    /// Google Font families the daemon fetched. No reply: every open doc that
+    /// names a new family is rebuilt in place (see `rebuild_for_fonts`).
+    Fonts { families: Vec<FamilyIn> },
+}
+
+#[derive(Deserialize)]
+struct FaceIn {
+    data: String,
+    weight: u16,
+    #[serde(default)]
+    style: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FamilyIn {
+    family: String,
+    faces: Vec<FaceIn>,
 }
 
 /// What the stdin reader hands the document thread.
@@ -53,6 +71,10 @@ struct Open {
     doc: RenderDoc,
     net: Arc<BridgeNet>,
     rev: u32,
+    /// What a rebuild (fonts op) needs to open the same document again.
+    html: String,
+    opts: RenderOptions,
+    allow_remote: bool,
 }
 
 /// Stack of the thread that owns the documents. Blitz layout, text collection,
@@ -63,18 +85,24 @@ struct Open {
 const WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
 
 pub fn run(input: impl BufRead + Send + 'static, output: impl Write + Send, pre_open: fn(&str)) -> std::io::Result<()> {
+    run_with_fonts(input, output, pre_open, FontLibrary::new(true))
+}
+
+/// `run` with the caller's font library (tests pass one without system fonts,
+/// so geometry depends only on the repo's fonts).
+pub fn run_with_fonts(input: impl BufRead + Send + 'static, output: impl Write + Send, pre_open: fn(&str), fonts: FontLibrary) -> std::io::Result<()> {
     std::thread::scope(|scope| {
         let owner = std::thread::Builder::new()
             .name("render-docs".into())
             .stack_size(WORKER_STACK_BYTES)
-            .spawn_scoped(scope, move || run_loop(input, output, pre_open))?;
+            .spawn_scoped(scope, move || run_loop(input, output, pre_open, fonts))?;
         // A panic outside the per-document guards is still fatal to the worker,
         // exactly as before: re-raise it on the calling thread.
         owner.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
     })
 }
 
-fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_open: fn(&str)) -> std::io::Result<()> {
+fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_open: fn(&str), mut fonts: FontLibrary) -> std::io::Result<()> {
     let (tx, rx) = mpsc::channel::<Msg>();
     std::thread::spawn(move || {
         for line in input.lines().map_while(Result::ok) {
@@ -102,7 +130,7 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
         batch.extend(rx.try_iter());
         for msg in batch {
             match msg {
-                Msg::Op(op) => handle(op, &mut docs, &mut dirty, &mut output, pre_open, &tainted)?,
+                Msg::Op(op) => handle(op, &mut docs, &mut dirty, &mut output, pre_open, &tainted, &mut fonts)?,
                 Msg::Bad { req } => line(&mut output, json!({"kind":"error","req":req,"code":"render_bad_request"}))?,
             }
             // Fetches go out right after the message that caused them, so the
@@ -137,15 +165,17 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
     Ok(())
 }
 
-fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out: &mut impl Write, pre_open: fn(&str), tainted: &Cell<bool>) -> std::io::Result<()> {
+fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out: &mut impl Write, pre_open: fn(&str), tainted: &Cell<bool>, fonts: &mut FontLibrary) -> std::io::Result<()> {
     match msg {
         In::Open { req, doc, html, css_width, scale, allow_remote, theme: _ } => {
             let net = BridgeNet::new(allow_remote);
             let opts = RenderOptions::new(css_width.clamp(1, MAX_CSS_WIDTH as u32), scale.clamp(MIN_SCALE, MAX_SCALE));
             let net_for_doc = net.clone();
+            let stored = opts.clone();
+            let font_ctx = fonts.context();
             let built = guarded(tainted, || {
                 pre_open(&html);
-                RenderDoc::open(&html, opts, Some(net_for_doc)).map(|mut d| {
+                RenderDoc::open_with(&html, opts, Some(net_for_doc), font_ctx).map(|mut d| {
                     d.apply_resources(); // data: images answered during parse
                     let meta = d.meta();
                     (d, meta)
@@ -153,7 +183,7 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             });
             match built {
                 Some(Ok((d, meta))) => {
-                    docs.insert(doc, Open { doc: d, net, rev: 1 });
+                    docs.insert(doc, Open { doc: d, net, rev: 1, html, opts: stored, allow_remote });
                     line(out, json!({"kind":"reply","req":req,"ok":{"rev":1,"meta":meta}}))
                 }
                 Some(Err(e)) => line(out, json!({"kind":"error","req":req,"code":e.code()})),
@@ -190,6 +220,23 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             }
             Ok(())
         }
+        In::Fonts { families } => {
+            let mut fresh: Vec<String> = Vec::new();
+            for f in families {
+                let faces = f
+                    .faces
+                    .into_iter()
+                    .filter_map(|face| {
+                        let data = base64::engine::general_purpose::STANDARD.decode(face.data).ok()?;
+                        Some(FaceData { data, weight: face.weight, style: face.style.unwrap_or_else(|| "normal".into()) })
+                    })
+                    .collect();
+                if fonts.register(&f.family, faces) {
+                    fresh.push(f.family.to_lowercase());
+                }
+            }
+            rebuild_for_fonts(&fresh, docs, out, tainted, fonts)
+        }
         In::Fetched { doc, fetch, bytes } => {
             if let Some(o) = docs.get(&doc) {
                 let bytes = bytes.and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
@@ -204,6 +251,61 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             Ok(())
         }
     }
+}
+
+/// Open again, in place, every document whose html names one of the `fresh`
+/// (lowercased) families: same `doc` id, `rev + 1`, an `updated` frame. blitz
+/// keeps a document's font context private, so this is the only way a family
+/// that arrives late reaches a document already open. Images come from the old
+/// net's cache, so nothing is fetched twice. A document that fails to reopen
+/// keeps its previous render.
+fn rebuild_for_fonts(fresh: &[String], docs: &mut HashMap<u64, Open>, out: &mut impl Write, tainted: &Cell<bool>, fonts: &FontLibrary) -> std::io::Result<()> {
+    let mut ids: Vec<u64> = docs.iter().filter(|(_, o)| names_any_family(&o.html, fresh)).map(|(id, _)| *id).collect();
+    ids.sort_unstable();
+    for id in ids {
+        let Some(o) = docs.get(&id) else { continue };
+        let net = BridgeNet::with_cache(o.allow_remote, o.net.cache());
+        // A fetch still in flight for the old net must not be mistaken for one
+        // of the new net's: its late answer finds no pending id and is dropped.
+        net.continue_ids_after(&o.net);
+        let net_for_doc = net.clone();
+        let rebuilt = guarded(tainted, || {
+            RenderDoc::open_with(&o.html, o.opts.clone(), Some(net_for_doc), fonts.context()).map(|mut d| {
+                d.apply_resources();
+                d
+            })
+        });
+        match rebuilt {
+            Some(Ok(d)) => {
+                let Some(o) = docs.get_mut(&id) else { continue };
+                o.net.fail_all();
+                o.doc = d;
+                o.net = net;
+                o.rev += 1;
+                line(out, json!({"kind":"updated","doc":id,"rev":o.rev,"meta":o.doc.meta()}))?;
+            }
+            Some(Err(_)) => {} // it opened once, so this is not expected; keep the old render
+            None => discard(docs, id, tainted),
+        }
+    }
+    Ok(())
+}
+
+fn names_any_family(html: &str, fresh: &[String]) -> bool {
+    if fresh.is_empty() {
+        return false;
+    }
+    let lower = html.to_lowercase();
+    fresh.iter().any(|f| names_family(&lower, f))
+}
+
+/// `html` (lowercased) names `family` (lowercased) as a whole name between
+/// CSS or attribute delimiters: "lora" matches `font-family: Lora, serif`
+/// but not "explorations". A false positive (the name in prose) only costs
+/// one harmless rebuild.
+fn names_family(html: &str, family: &str) -> bool {
+    let delim = |c: Option<char>| c.map_or(true, |c| matches!(c, ':' | ',' | ';' | '\'' | '"' | '{' | '}' | '(' | ')' | '=') || c.is_whitespace());
+    html.match_indices(family).any(|(i, _)| delim(html[..i].chars().next_back()) && delim(html[i + family.len()..].chars().next()))
 }
 
 fn flush_fetches(docs: &HashMap<u64, Open>, out: &mut impl Write) -> std::io::Result<()> {

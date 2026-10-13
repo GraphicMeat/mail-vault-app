@@ -4961,9 +4961,11 @@ dependencies = [
  "blitz-traits",
  "data-url",
  "imagesize",
+ "parley",
  "png 0.17.16",
  "serde",
  "serde_json",
+ "stylo",
 ]
 
 [[package]]

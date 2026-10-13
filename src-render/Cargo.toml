@@ -19,3 +19,6 @@ imagesize = "0.15"
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The same stylo blitz-dom declares, so one copy resolves; fontique is reached through parley.
+style = { package = "stylo", version = "0.20" }
+parley = "0.11"

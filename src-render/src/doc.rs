@@ -1,6 +1,6 @@
 use anyrender::ImageRenderer;
 use anyrender_vello_cpu::VelloCpuImageRenderer;
-use blitz_dom::{local_name, DocumentConfig, NodeId, Point};
+use blitz_dom::{local_name, DocumentConfig, FontContext, NodeId, Point};
 use blitz_html::HtmlDocument;
 use crate::net::{img_srcs, BridgeNet};
 use blitz_traits::net::NetProvider;
@@ -134,6 +134,12 @@ fn apply(doc: &mut HtmlDocument, net: Option<&Arc<BridgeNet>>) {
 
 impl RenderDoc {
     pub fn open(html: &str, opts: RenderOptions, net: Option<Arc<BridgeNet>>) -> Result<Self, OpenError> {
+        Self::open_with(html, opts, net, crate::fonts::FontLibrary::new(true).context())
+    }
+
+    /// `open` with the caller's fonts: blitz-dom keeps a document's font context
+    /// private, so the worker hands each document a clone of its master one.
+    pub fn open_with(html: &str, opts: RenderOptions, net: Option<Arc<BridgeNet>>, fonts: FontContext) -> Result<Self, OpenError> {
         if html.len() > MAX_HTML_BYTES {
             return Err(OpenError::TooLarge);
         }
@@ -150,6 +156,7 @@ impl RenderDoc {
         let config = DocumentConfig {
             viewport: Some(Viewport::new(px_w, px_h, opts.scale, ColorScheme::Light)),
             net_provider: net.clone().map(|n| n as Arc<dyn NetProvider>),
+            font_ctx: Some(fonts),
             // Without a base, blitz-dom falls back to a `data:` URL that cannot
             // resolve anything, and `resolve_url` then panics on the first relative
             // `src` / `href` / `@import`. An unresolvable http base turns every

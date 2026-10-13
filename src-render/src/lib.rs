@@ -2,7 +2,12 @@
 //! worker process (`mailvault-daemon --render-worker`), never in the daemon
 //! itself: a panic here must cost one worker, not the daemon.
 mod doc;
+pub mod dommap;
+pub mod fold;
+pub mod fonts;
 pub mod net;
+pub mod serialize;
+pub mod text;
 pub mod worker;
 
 pub use doc::{
