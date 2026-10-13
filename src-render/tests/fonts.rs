@@ -110,8 +110,42 @@ fn rebuild_answers_images_from_cache_and_never_refetches() {
         json!({"op":"open","req":1,"doc":1,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":true}),
         json!({"op":"fetched","doc":1,"fetch":1,"bytes":png}),
         json!({"op":"fonts","families":[{"family":"Late Mono","faces":[{"data":b64,"weight":400,"style":"normal"}]}]}),
+        json!({"op":"tile","req":5,"doc":1,"index":0}),
     ]);
     let fetches = out.iter().filter(|v| v["kind"] == "fetch").count();
     assert_eq!(fetches, 1, "the rebuild took the image from the cache: {out:?}");
     assert_eq!(out.iter().filter(|v| v["kind"] == "updated").last().unwrap()["rev"], 3);
+    let tile = out.iter().find(|v| v["req"] == 5).unwrap();
+    assert!(has_red(tile["ok"]["png"].as_str().unwrap()), "the rebuilt doc paints the cached image, not a blank");
+}
+
+/// Any pure red pixel (the 1px test PNG, stretched). The line box puts the image
+/// below the tile's top edge, so (0,0) is not it.
+fn has_red(png_b64: &str) -> bool {
+    let png = base64::engine::general_purpose::STANDARD.decode(png_b64).unwrap();
+    let mut r = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
+    let mut buf = vec![0; r.output_buffer_size()];
+    r.next_frame(&mut buf).unwrap();
+    buf.chunks(3).any(|p| p == [255, 0, 0])
+}
+
+#[test]
+fn a_net_built_from_the_old_cache_serves_the_image_without_a_fetch() {
+    use mailvault_render::net::BridgeNet;
+    let png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+    let png = base64::engine::general_purpose::STANDARD.decode(png_b64).unwrap();
+    let html = r#"<body style="margin:0"><img src="https://i.test/a.png" width=10 height=10></body>"#;
+    let old = BridgeNet::new(true);
+    let _doc = RenderDoc::open_with(html, opts(), Some(old.clone()), mono_lib().context()).unwrap();
+    let id = old.take_outbox()[0].id;
+    assert!(old.complete(id, Some(png.clone())));
+    let cache = old.cache();
+    assert_eq!(cache.get("https://i.test/a.png"), Some(&png), "the answered fetch is cached");
+
+    let net = BridgeNet::with_cache(true, cache);
+    let mut doc = RenderDoc::open_with(html, opts(), Some(net.clone()), mono_lib().context()).unwrap();
+    assert!(net.take_outbox().is_empty(), "served from the cache, nothing queued");
+    doc.apply_resources();
+    let tile = base64::engine::general_purpose::STANDARD.encode(doc.tile_png(0).unwrap());
+    assert!(has_red(&tile), "the cached image is painted");
 }

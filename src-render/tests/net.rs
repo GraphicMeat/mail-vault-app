@@ -211,3 +211,20 @@ fn fetched_https_bytes_get_the_same_header_check() {
     assert!(net.complete(id, Some(png_header(20_000, 20_000))));
     assert_eq!(*got.lock().unwrap(), Some(0), "answered empty, never handed to the decoder");
 }
+
+#[test]
+fn a_successor_net_numbers_its_fetches_after_the_old_net() {
+    let a = BridgeNet::new(true);
+    let _doc_a = RenderDoc::open(r#"<img src="https://img.example.com/a.png">"#, opts(), Some(a.clone())).unwrap();
+    let a_id = a.take_outbox()[0].id;
+
+    let b = BridgeNet::with_cache(true, a.cache());
+    b.continue_ids_after(&a);
+    let _doc_b = RenderDoc::open(r#"<img src="https://img.example.com/b.png">"#, opts(), Some(b.clone())).unwrap();
+    let out = b.take_outbox();
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].url, "https://img.example.com/b.png");
+    assert!(out[0].id > a_id, "b {} must come after a {a_id}", out[0].id);
+    assert!(!b.complete(a_id, Some(vec![1, 2, 3])), "a late answer to a's fetch cannot complete b's");
+    assert!(b.complete(out[0].id, None), "b's own id still completes");
+}
