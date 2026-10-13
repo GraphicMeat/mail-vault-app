@@ -528,48 +528,81 @@ pub(crate) fn total_docs(st: &SearchIndexState) -> Result<Result<u64, &'static s
     })
 }
 
-/// Whether the index holds this message's body text (`BODY_INDEXED`), so a
-/// word of it the index has never seen is noise rather than mail not read yet.
-pub(crate) fn body_indexed(
+/// What the index holds of one message, for the view builder.
+pub(crate) struct IndexedMessage {
+    /// Its body text is in the index (`BODY_INDEXED`), so a word of it the
+    /// index has never seen is noise rather than mail not read yet.
+    pub body_indexed: bool,
+    /// The Message-ID indexed for this uid: a uid reused after a mailbox
+    /// reset is a different message.
+    pub message_id: Option<String>,
+}
+
+/// The index's row for one message (`None` when it has none), or why the
+/// index cannot answer. Also the readiness gate a cached answer goes through.
+pub(crate) fn indexed_message(
     st: &SearchIndexState,
     account_id: &str,
     mailbox: &str,
     uid: u32,
-) -> Result<Result<bool, &'static str>, String> {
+) -> Result<Result<Option<IndexedMessage>, &'static str>, String> {
     let vault_dir = core::text::vault_dir_name(mailbox);
     with_ready_index(st, |conn| {
         conn.prepare_cached(
-            "SELECT EXISTS(SELECT 1 FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3 AND body_state = ?4)",
+            "SELECT body_state, message_id FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3 LIMIT 1",
         )
         .and_then(|mut stmt| {
-            stmt.query_row(rusqlite::params![account_id, vault_dir, uid, reconcile::BODY_INDEXED], |r| r.get::<_, i64>(0))
+            stmt.query_row(rusqlite::params![account_id, vault_dir, uid], |r| {
+                Ok(IndexedMessage {
+                    body_indexed: r.get::<_, i64>(0)? == reconcile::BODY_INDEXED,
+                    message_id: r.get::<_, Option<String>>(1)?,
+                })
+            })
+            .optional()
         })
-        .map(|n| n == 1)
         .map_err(|e| e.to_string())
+    })
+}
+
+/// Every account the index holds mail for, for a request that names none.
+pub(crate) fn indexed_accounts(st: &SearchIndexState) -> Result<Result<Vec<String>, &'static str>, String> {
+    with_ready_index(st, |conn| {
+        conn.prepare_cached("SELECT DISTINCT account_id FROM messages ORDER BY account_id")
+            .and_then(|mut stmt| stmt.query_map([], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>())
+            .map_err(|e| e.to_string())
     })
 }
 
 /// How many indexed messages hold `term`, matched the way a search for it
 /// is (`query::word_clause`): 3+ characters is a phrase in the trigram
-/// table, a shorter CJK word is its characters in the unicode61 one. One
+/// table, a shorter CJK word is its characters in the unicode61 one. Counting
+/// stops at `cap` (`keywords::df_cap`): past it the word is cut whatever its
+/// exact count, and a word in half the mail is half the index to walk. One
 /// lock hold per term, so the indexer and a click get the lock between probes.
-pub(crate) fn term_doc_count(st: &SearchIndexState, term: &str) -> Result<Result<u64, &'static str>, String> {
-    let (table, needle) = if term.chars().count() >= 3 {
-        ("msg_fts", core::query::fts_string(term))
+pub(crate) fn term_doc_count(
+    st: &SearchIndexState,
+    term: &str,
+    cap: Option<u64>,
+) -> Result<Result<u64, &'static str>, String> {
+    let (sql, needle) = if term.chars().count() >= 3 {
+        (
+            "SELECT count(*) FROM (SELECT 1 FROM msg_fts WHERE msg_fts MATCH ?1 LIMIT ?2)",
+            core::query::fts_string(term),
+        )
     } else if term.chars().any(core::text::is_cjk) {
-        ("msg_cjk", core::query::fts_string(&core::text::cjk_units(term)))
+        (
+            "SELECT count(*) FROM (SELECT 1 FROM msg_cjk WHERE msg_cjk MATCH ?1 LIMIT ?2)",
+            core::query::fts_string(&core::text::cjk_units(term)),
+        )
     } else {
         // Under a trigram and not CJK: no table can count it.
         return Ok(Ok(0));
     };
-    let sql = if table == "msg_fts" {
-        "SELECT count(*) FROM msg_fts WHERE msg_fts MATCH ?1"
-    } else {
-        "SELECT count(*) FROM msg_cjk WHERE msg_cjk MATCH ?1"
-    };
+    // SQLite reads a negative LIMIT as none.
+    let limit: i64 = cap.map_or(-1, |cap| i64::try_from(cap).unwrap_or(i64::MAX));
     with_ready_index(st, |conn| {
         conn.prepare_cached(sql)
-            .and_then(|mut stmt| stmt.query_row([needle.as_str()], |r| r.get::<_, i64>(0)))
+            .and_then(|mut stmt| stmt.query_row(rusqlite::params![needle, limit], |r| r.get::<_, i64>(0)))
             .map(|n| n.max(0) as u64)
             .map_err(|e| e.to_string())
     })

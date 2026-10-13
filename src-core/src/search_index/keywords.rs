@@ -106,6 +106,14 @@ impl Counts {
     }
 }
 
+/// The most document frequency `rank` needs to see for a mailbox of
+/// `total_docs`: a word in more than a fifth of the mail is dropped whatever
+/// its exact count, so a probe may stop counting at `n/5 + 1`. `None` below
+/// the size where that cut applies (every count matters there).
+pub fn df_cap(total_docs: u64) -> Option<u64> {
+    (total_docs >= MIN_DOCS_FOR_COMMON_CUT).then(|| total_docs / 5 + 1)
+}
+
 /// The message's words with their weighted counts: lowercased, split on
 /// anything not alphanumeric, 4 to 25 chars (2 to 8 when CJK), no numbers,
 /// ids, hashes, URL or email pieces, base64 or other long blobs, and no body
@@ -383,6 +391,28 @@ mod tests {
         let cands = vec![("alpha".to_string(), 1)];
         let err = rank(cands, 1000, |_: &str| Err("index busy".to_string()), 10, false).unwrap_err();
         assert_eq!(err, "index busy");
+    }
+
+    /// A count capped at `df_cap` ranks exactly as the true count: above the
+    /// cut it is still dropped, below it it is the exact df.
+    #[test]
+    fn a_df_capped_at_df_cap_ranks_like_the_exact_df() {
+        assert_eq!(df_cap(49), None, "a small mailbox needs every count");
+        let n = 60;
+        let cap = df_cap(n).unwrap();
+        assert_eq!(cap, 13);
+        let cands = vec![("common".to_string(), 1), ("edge".to_string(), 1), ("rare".to_string(), 1)];
+        let exact = |t: &str| Ok(match t { "common" => 40, "edge" => 12, _ => 2 });
+        let capped = |t: &str| exact(t).map(|d: u64| d.min(cap));
+        let a = rank(cands.clone(), n, exact, 10, true).unwrap();
+        let b = rank(cands, n, capped, 10, true).unwrap();
+        assert_eq!(a, b);
+        assert_eq!(ranked(&b), vec!["rare", "edge"]);
+        // Exactly a fifth stays; one more is cut.
+        let at = rank(vec![("fifth".to_string(), 1)], n, |_| Ok(12), 10, true).unwrap();
+        assert_eq!(ranked(&at), vec!["fifth"]);
+        let over = rank(vec![("over".to_string(), 1)], n, |_| Ok(cap), 10, true).unwrap();
+        assert!(over.is_empty());
     }
 
     #[test]

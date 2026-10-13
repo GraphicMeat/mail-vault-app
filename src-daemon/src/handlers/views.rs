@@ -264,47 +264,63 @@ fn cache_keywords(key: String, reply: Value) {
 /// distinctive words, at most 15, best first. The text is what the index
 /// itself stores for the message (subject and stripped body); each word's
 /// document frequency is one index probe, the lock released between probes
-/// so a click never waits behind the whole list. An index that cannot answer
-/// (off, closed, still building) is `available: false` with no words, and is
-/// never cached.
+/// so a click never waits behind the whole list, and each probe stops
+/// counting where the "too common" cut would drop the word anyway. An index
+/// that cannot answer (off, closed, still building) is `available: false`
+/// with no words, cached or not.
 fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
-    use mailvault_core::search_index::keywords::{candidates, rank};
+    use mailvault_core::search_index::keywords::{candidates, df_cap, rank};
     let account_id = params.get("accountId").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("Missing accountId")?;
     let mailbox = params.get("mailbox").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("Missing mailbox")?;
     let uid = params.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()).ok_or("Missing uid")?;
-    // The data dir keeps two daemon states (tests) apart; production has one.
-    let key = format!("{}|{account_id}|{mailbox}|{uid}", state.data_dir.display());
-    if let Some(reply) = cached_keywords(&key) {
-        return Ok(reply);
-    }
     let unavailable = || serde_json::json!({ "available": false, "keywords": [] });
     let index = &state.search_index;
-    let Ok(total) = crate::search_index::total_docs(index)? else { return Ok(unavailable()) };
+    // The readiness gate comes before the cache: an index switched off or
+    // rebuilding answers nothing, whatever it said earlier.
+    let Ok(row) = crate::search_index::indexed_message(index, account_id, mailbox, uid)? else {
+        return Ok(unavailable());
+    };
     // A message whose body the index holds has every word of it counted at
     // least once, so a word the index never saw is noise. One not indexed
     // yet keeps such words: the mailbox has simply not read it.
-    let Ok(indexed) = crate::search_index::body_indexed(index, account_id, mailbox, uid)? else {
-        return Ok(unavailable());
-    };
+    let body_indexed = row.as_ref().is_some_and(|row| row.body_indexed);
+    // Only an indexed body's answer is kept: one read before the indexer
+    // reaches the message changes once it does. The Message-ID tells a uid
+    // reused after a mailbox reset from the message it used to name, and the
+    // data dir keeps two daemon states (tests) apart.
+    let key = body_indexed.then(|| {
+        let message_id = row.as_ref().and_then(|row| row.message_id.as_deref()).unwrap_or("");
+        format!("{}|{account_id}|{mailbox}|{uid}|{message_id}", state.data_dir.display())
+    });
+    if let Some(reply) = key.as_deref().and_then(cached_keywords) {
+        return Ok(reply);
+    }
+    let Ok(total) = crate::search_index::total_docs(index)? else { return Ok(unavailable()) };
     // Called on a blocking thread (`route`), so it may wait here.
     let raw = tokio::runtime::Handle::current()
         .block_on(crate::raw_message::raw_message(state, account_id, mailbox, uid, true))?;
     let doc = crate::search_index::index_doc_from_light(&raw, uid, "")
         .ok_or_else(|| format!("Email UID {uid} could not be parsed"))?;
     let words = candidates(&doc.subject, &doc.body_text, KEYWORD_CANDIDATES);
+    let cap = df_cap(total);
     let mut gone = false;
     let ranked = rank(
         words,
         total,
-        |term| match crate::search_index::term_doc_count(index, term)? {
-            Ok(df) => Ok(df),
-            Err(reason) => {
-                gone = true;
-                Err(reason.to_string())
+        |term| {
+            // A person is waiting on every probe: the indexer stays parked
+            // for the whole loop, not just its first lock hold.
+            crate::search_index::note_foreground(index);
+            match crate::search_index::term_doc_count(index, term, cap)? {
+                Ok(df) => Ok(df),
+                Err(reason) => {
+                    gone = true;
+                    Err(reason.to_string())
+                }
             }
         },
         KEYWORDS_KEPT,
-        indexed,
+        body_indexed,
     );
     // The index went away between probes: unknown, not "no keywords".
     if gone {
@@ -315,7 +331,9 @@ fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         .map(|k| serde_json::json!({ "term": k.term, "tf": k.tf, "df": k.df }))
         .collect();
     let reply = serde_json::json!({ "available": true, "keywords": keywords });
-    cache_keywords(key, reply.clone());
+    if let Some(key) = key {
+        cache_keywords(key, reply.clone());
+    }
     Ok(reply)
 }
 
@@ -355,20 +373,27 @@ fn account_ids_of(params: &Value) -> Vec<String> {
 
 /// `{ available, total, senders: [{ name, address, count }], subjects:
 /// [{ subject, sender, count }] }` for the messages a search for `term`
-/// finds across `accounts` (up to the index's 2000-hit cap; `total` is how
-/// many were read). Senders group by lowercased address; subjects by their
-/// text without `Re:`/`Fwd:`, case aside, each naming its most frequent
-/// sender. Ten of each, most first; equal counts in key order. No accounts
-/// named is an empty answer.
+/// finds across `accounts` (`total` is every match; the lists are read from
+/// the first 2000, the index's per-query cap). Senders group by lowercased
+/// address; subjects by their text without `Re:`/`Fwd:`, case aside, each
+/// naming its most frequent sender. Ten of each, most first; equal counts in
+/// key order. No accounts named is every account.
 fn keyword_detail(state: &DaemonState, params: &Value) -> Result<Value, String> {
     use std::collections::{BTreeMap, HashMap};
     let term = params.get("term").and_then(Value::as_str).map(str::trim).filter(|t| !t.is_empty()).ok_or("Missing term")?;
-    let account_ids = account_ids_of(params);
-    let reply = |available: bool, total: usize, senders: Vec<Value>, subjects: Vec<Value>| {
+    let reply = |available: bool, total: u64, senders: Vec<Value>, subjects: Vec<Value>| {
         serde_json::json!({ "available": available, "total": total, "senders": senders, "subjects": subjects })
     };
+    let mut account_ids = account_ids_of(params);
+    // No accounts named is every account, as in the editor's typeaheads.
     if account_ids.is_empty() {
-        return Ok(reply(true, 0, Vec::new(), Vec::new()));
+        account_ids = match crate::search_index::indexed_accounts(&state.search_index)? {
+            Ok(all) => all,
+            Err(_) => return Ok(reply(false, 0, Vec::new(), Vec::new())),
+        };
+        if account_ids.is_empty() {
+            return Ok(reply(true, 0, Vec::new(), Vec::new()));
+        }
     }
     let request = SearchRequest { account_ids, query: term.to_string(), limit: Some(DETAIL_HITS), ..Default::default() };
     let page = match crate::search_index::search_page(&state.search_index, &request)? {
@@ -421,7 +446,7 @@ fn keyword_detail(state: &DaemonState, params: &Value) -> Result<Value, String> 
             serde_json::json!({ "subject": shown, "sender": sender, "count": count })
         })
         .collect();
-    Ok(reply(true, page.hits.len(), sender_rows, subject_rows))
+    Ok(reply(true, page.total, sender_rows, subject_rows))
 }
 
 /// The definition to run: a saved view by id, or one handed over inline (which
@@ -1460,12 +1485,16 @@ mod tests {
     /// One indexed message with its words in the full-text tables, the way a
     /// sweep writes it: the `messages` row, then `msg_fts` under its id.
     fn seed_text(conn: &rusqlite::Connection, uid: u32, name: &str, address: &str, subject: &str, body: &str) {
+        seed_text_in(conn, "a", uid, name, address, subject, body);
+    }
+
+    fn seed_text_in(conn: &rusqlite::Connection, account: &str, uid: u32, name: &str, address: &str, subject: &str, body: &str) {
         let p = mailvault_core::maildir::INFO_PREFIX;
         let row = json!({ "uid": uid, "subject": subject, "from": {"name": name, "address": address} });
         conn.execute(
             "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
                from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags)
-             VALUES ('a','INBOX',?1,?2,0,0,?3,1788825600,?4,?5,?6,'me@x.test',0,1,?7,'S')",
+             VALUES (?8,'INBOX',?1,?2,0,0,?3,1788825600,?4,?5,?6,'me@x.test',0,1,?7,'S')",
             rusqlite::params![
                 uid,
                 format!("{uid}{p}S.eml"),
@@ -1474,6 +1503,7 @@ mod tests {
                 name.to_lowercase(),
                 subject.to_lowercase(),
                 row.to_string(),
+                account,
             ],
         )
         .unwrap();
@@ -1523,6 +1553,26 @@ mod tests {
         assert_eq!(objects, out);
     }
 
+    /// The accounts named are the accounts read; none named is every one.
+    /// `total` is every match, not just the rows aggregated.
+    #[tokio::test]
+    async fn keyword_detail_reads_only_the_accounts_it_names() {
+        let s = st();
+        open_index(&s, |conn| {
+            seed_text_in(conn, "a", 1, "Ann", "ann@x.test", "Fondue night", "fondue");
+            seed_text_in(conn, "b", 1, "Bob", "bob@x.test", "Fondue recipe", "fondue");
+            seed_text_in(conn, "b", 2, "Bob", "bob@x.test", "Fondue again", "fondue");
+        });
+        let only_a = call(&s, "views.keyword_detail", json!({ "term": "fondue", "accounts": ["a"] })).await;
+        assert_eq!(only_a["total"], 1, "{only_a}");
+        assert_eq!(only_a["senders"], json!([{ "name": "Ann", "address": "ann@x.test", "count": 1 }]));
+        let every = call(&s, "views.keyword_detail", json!({ "term": "fondue" })).await;
+        assert_eq!(every["total"], 3, "{every}");
+        assert_eq!(every["senders"][0], json!({ "name": "Bob", "address": "bob@x.test", "count": 2 }));
+        let empty = call(&s, "views.keyword_detail", json!({ "term": "fondue", "accounts": [] })).await;
+        assert_eq!(empty, every);
+    }
+
     #[tokio::test]
     async fn keyword_detail_is_unavailable_without_an_index() {
         let s = st();
@@ -1532,30 +1582,50 @@ mod tests {
         assert_eq!(out["subjects"], json!([]));
     }
 
+    /// 61 indexed messages: uid 1 is the one opened, "meeting" is in half the
+    /// mail, "budget" in exactly a fifth of the first 60, uid 61 is listed but
+    /// its body not read yet.
+    fn keyword_index(s: &Arc<DaemonState>) {
+        open_index(s, |conn| {
+            seed_text(conn, 1, "Ann", "ann@x.test", "Quokka fondue", "quokka fondue meeting budget");
+            seed_text(conn, 2, "Ann", "ann@x.test", "", "fondue meeting");
+            for uid in 3..=30 {
+                seed_text(conn, uid, "Bob", "bob@x.test", "", "meeting agenda");
+            }
+            for uid in 31..=41 {
+                seed_text(conn, uid, "Cat", "cat@x.test", "", "lunch budget");
+            }
+            for uid in 42..=60 {
+                seed_text(conn, uid, "Cat", "cat@x.test", "", "lunch plans");
+            }
+            seed_text(conn, 61, "Dan", "dan@x.test", "", "");
+            conn.execute("UPDATE messages SET body_state = 0 WHERE uid = 61", []).unwrap();
+        });
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        for uid in [1, 61, 99] {
+            std::fs::write(cur.join(format!("{uid}{p}S.eml")), keyword_eml("quokka fondue meeting budget")).unwrap();
+        }
+    }
+
+    fn keyword_eml(first_line: &str) -> String {
+        format!(
+            "From: ann@x.test\r\nSubject: Quokka fondue\r\nMIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\n{first_line}\r\nunseenword here\r\n> quotedword\r\n"
+        )
+    }
+
+    fn terms_of(out: &Value) -> Vec<String> {
+        out["keywords"].as_array().unwrap().iter().map(|k| k["term"].as_str().unwrap().to_owned()).collect()
+    }
+
     /// The open message's distinctive words: its own rare words, never a word
     /// a fifth of the mailbox uses, never a quoted line, and (once the index
     /// holds the message's body) never a word the index has not seen.
     #[tokio::test]
     async fn keywords_rank_the_messages_rare_words_against_the_index() {
         let s = st();
-        open_index(&s, |conn| {
-            seed_text(conn, 1, "Ann", "ann@x.test", "Quokka fondue", "quokka fondue meeting");
-            seed_text(conn, 2, "Ann", "ann@x.test", "", "fondue meeting");
-            for uid in 3..=30 {
-                seed_text(conn, uid, "Bob", "bob@x.test", "", "meeting agenda");
-            }
-            for uid in 31..=60 {
-                seed_text(conn, uid, "Cat", "cat@x.test", "", "lunch plans");
-            }
-        });
-        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
-        std::fs::create_dir_all(&cur).unwrap();
-        let p = mailvault_core::maildir::INFO_PREFIX;
-        let eml = "From: ann@x.test\r\nSubject: Quokka fondue\r\nMIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nquokka fondue meeting\r\nunseenword here\r\n> quotedword\r\n";
-        std::fs::write(cur.join(format!("1{p}S.eml")), eml).unwrap();
-        // Not in the index at all: its unseen words stay.
-        std::fs::write(cur.join(format!("99{p}S.eml")), eml).unwrap();
-
+        keyword_index(&s);
         let params = json!({ "accountId": "a", "mailbox": "INBOX", "uid": 1 });
         let out = call(&s, "views.keywords", params.clone()).await;
         assert_eq!(
@@ -1563,15 +1633,89 @@ mod tests {
             json!({ "available": true, "keywords": [
                 { "term": "quokka", "tf": 4, "df": 1 },
                 { "term": "fondue", "tf": 4, "df": 2 },
+                // Right at the cut: kept, with its exact count.
+                { "term": "budget", "tf": 1, "df": 12 },
             ] })
         );
         assert_eq!(call(&s, "views.keywords", params).await, out, "asked again, same answer");
 
         let fresh = call(&s, "views.keywords", json!({ "accountId": "a", "mailbox": "INBOX", "uid": 99 })).await;
-        let terms: Vec<&str> = fresh["keywords"].as_array().unwrap().iter().map(|k| k["term"].as_str().unwrap()).collect();
-        assert!(terms.contains(&"unseenword"), "{fresh}");
-        assert!(!terms.contains(&"meeting"), "a fifth of the mail is not distinctive: {fresh}");
-        assert!(!terms.contains(&"quotedword"), "{fresh}");
+        let terms = terms_of(&fresh);
+        assert!(terms.contains(&"unseenword".to_owned()), "not in the index at all: {fresh}");
+        assert!(!terms.contains(&"meeting".to_owned()), "a fifth of the mail is not distinctive: {fresh}");
+        assert!(!terms.contains(&"quotedword".to_owned()), "{fresh}");
+    }
+
+    /// A listed message whose body the index has not read yet has words the
+    /// index never saw; they are its words, not noise.
+    #[tokio::test]
+    async fn keywords_keep_unseen_words_while_the_body_is_not_indexed() {
+        let s = st();
+        keyword_index(&s);
+        let out = call(&s, "views.keywords", json!({ "accountId": "a", "mailbox": "INBOX", "uid": 61 })).await;
+        let terms = terms_of(&out);
+        assert!(terms.contains(&"unseenword".to_owned()), "{out}");
+        assert!(terms.contains(&"here".to_owned()), "{out}");
+    }
+
+    /// Each probe stops counting where the "too common" cut drops the word
+    /// anyway; under the cap the count is exact.
+    #[tokio::test]
+    async fn a_df_probe_stops_at_the_cap() {
+        let s = st();
+        keyword_index(&s);
+        let index = &s.search_index;
+        let count = |term: &str, cap: Option<u64>| crate::search_index::term_doc_count(index, term, cap).unwrap().unwrap();
+        assert_eq!(count("meeting", None), 30);
+        assert_eq!(count("meeting", Some(13)), 13, "capped above the cut");
+        assert_eq!(count("budget", Some(13)), 12, "exact below it");
+        assert_eq!(count("fondue", Some(13)), 2);
+    }
+
+    /// A remembered answer still goes through the readiness gate: an index
+    /// switched off, or rebuilding, answers nothing.
+    #[tokio::test]
+    async fn a_cached_answer_is_not_served_by_an_index_that_cannot_answer() {
+        let s = st();
+        keyword_index(&s);
+        let params = json!({ "accountId": "a", "mailbox": "INBOX", "uid": 1 });
+        assert_eq!(call(&s, "views.keywords", params.clone()).await["available"], true);
+        *crate::search_index::g(&s.search_index.enabled) = Some(false);
+        assert_eq!(call(&s, "views.keywords", params.clone()).await, json!({ "available": false, "keywords": [] }));
+        *crate::search_index::g(&s.search_index.enabled) = None;
+        lock(&s.search_index.db)
+            .as_ref()
+            .unwrap()
+            .execute("DELETE FROM meta WHERE key = ?1", [index_db::FIRST_PASS_DONE])
+            .unwrap();
+        assert_eq!(call(&s, "views.keywords", params).await, json!({ "available": false, "keywords": [] }));
+    }
+
+    /// A uid reused after a mailbox reset names a different message: the
+    /// answer cached for the old one is not its answer.
+    #[tokio::test]
+    async fn a_reused_uid_is_not_answered_from_the_old_messages_cache() {
+        let s = st();
+        keyword_index(&s);
+        let params = json!({ "accountId": "a", "mailbox": "INBOX", "uid": 1 });
+        assert!(terms_of(&call(&s, "views.keywords", params.clone()).await).contains(&"quokka".to_owned()));
+        {
+            let guard = lock(&s.search_index.db);
+            let conn = guard.as_ref().unwrap();
+            let id: i64 = conn.query_row("SELECT id FROM messages WHERE uid = 1", [], |r| r.get(0)).unwrap();
+            conn.execute("UPDATE messages SET message_id = '<new-1@x.test>' WHERE id = ?1", [id]).unwrap();
+            conn.execute("DELETE FROM msg_fts WHERE rowid = ?1", [id]).unwrap();
+            conn.execute(
+                "INSERT INTO msg_fts(rowid, subject, addrs, body, attach) VALUES (?1, 'Quokka fondue', '', 'zebra crossing', '')",
+                [id],
+            )
+            .unwrap();
+        }
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        std::fs::write(cur.join(format!("1{p}S.eml")), keyword_eml("zebra crossing")).unwrap();
+        let out = call(&s, "views.keywords", params).await;
+        assert!(terms_of(&out).contains(&"zebra".to_owned()), "{out}");
     }
 
     /// Unknown, not "no keywords": the app shows nothing rather than a guess.
