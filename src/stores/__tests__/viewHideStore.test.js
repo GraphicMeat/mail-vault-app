@@ -58,6 +58,42 @@ describe('view hide store', () => {
     expect(s.unreadByMailbox).toEqual({ 'a|INBOX': 0, 'a|Work/Q4': 2, 'b|INBOX': 1 });
   });
 
+  it('an unchanged answer keeps the same set and maps, a changed one replaces them', () => {
+    const reply = () => ({ available: true, members: { a: { INBOX: { uids: [1, 3], unread: 1 } } } });
+    useViewHideStore.getState().setMembers(reply());
+    const first = useViewHideStore.getState();
+    useViewHideStore.getState().setMembers(reply());
+    const same = useViewHideStore.getState();
+    expect(same.keys).toBe(first.keys);
+    expect(same.unreadByMailbox).toBe(first.unreadByMailbox);
+    expect(same.hiddenByMailbox).toBe(first.hiddenByMailbox);
+
+    // Same keys, one fewer unread: the badge changes, so the answer is new.
+    useViewHideStore.getState().setMembers({ available: true, members: { a: { INBOX: { uids: [1, 3], unread: 0 } } } });
+    const unread = useViewHideStore.getState();
+    expect(unread.unreadByMailbox).toEqual({ 'a|INBOX': 0 });
+    expect(unread.unreadByMailbox).not.toBe(first.unreadByMailbox);
+    // ...but the rows hidden did not, so the lists keep their set.
+    expect(unread.keys).toBe(first.keys);
+
+    useViewHideStore.getState().setMembers({ available: true, members: { a: { INBOX: { uids: [1, 4], unread: 0 } } } });
+    const changed = useViewHideStore.getState();
+    expect(changed.keys).not.toBe(first.keys);
+    expect([...changed.keys]).toEqual(['a|INBOX|1', 'a|INBOX|4']);
+  });
+
+  it('clearing what is already unknown notifies nobody', () => {
+    let notified = 0;
+    const stop = useViewHideStore.subscribe(() => { notified += 1; });
+    useViewHideStore.getState().clear();
+    useViewHideStore.getState().setMembers({ available: false });
+    expect(notified).toBe(0);
+    useViewHideStore.getState().setMembers({ available: true, members: {} });
+    useViewHideStore.getState().setMembers({ available: true, members: {} });
+    expect(notified).toBe(1);
+    stop();
+  });
+
   it('clear goes back to unknown', () => {
     useViewHideStore.getState().setMembers({ available: true, members: { a: { INBOX: { uids: [1], unread: 1 } } } });
     useViewHideStore.getState().clear();

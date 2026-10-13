@@ -20,7 +20,7 @@ export const GLOBAL_SETTINGS_ALLOWLIST = [
   'refreshInterval', 'refreshOnLaunch', 'badgeEnabled', 'badgeMode', 'markAsReadMode',
   'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'updateTrack',
   'autoDownloadAttachments', 'attachmentReminder', 'layoutMode', 'viewStyle', 'emailListStyle', 'listPreviewLines', 'listDensity', 'folderIconStyle', 'emailListGrouping',
-  'emailListView', 'listTimelineVisible', 'explorerGrouping', 'explorerDateDepth',
+  'emailListView', 'listTimelineVisible', 'hideViewMail', 'explorerGrouping', 'explorerDateDepth',
   'insightsPreferences', 'threadReaderLayout', 'threadSortOrder', 'threadMode',
   'emailRowHighlight', 'dateFormat', 'customDateFormat', 'timeFormat', 'language',
   'signatureDisplay', 'actionButtonDisplay', 'emailViewerTheme', 'appFont', 'textScale', 'showMenuBar', 'sidebarStyle',

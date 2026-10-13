@@ -57,6 +57,8 @@ describe('settings defaults', () => {
     expect(state().hideViewMail).toBe(true);
     state().setHideViewMail(undefined);
     expect(state().hideViewMail).toBe(false);
+    const { GLOBAL_SETTINGS_ALLOWLIST } = await import('../../services/transfer/settingsTransfer');
+    expect(GLOBAL_SETTINGS_ALLOWLIST).toContain('hideViewMail');
   });
 
   it('text starts in Instrument Sans at 100%, keeps only known choices, and travels in a transfer', async () => {

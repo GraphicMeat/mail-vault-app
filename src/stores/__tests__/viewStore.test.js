@@ -646,11 +646,14 @@ describe('mail the views hold, hidden from the mailbox lists', () => {
     harness.daemonCall.mockImplementation(method => (method === 'views.hidden_members'
       ? new Promise(resolve => { answer = resolve; })
       : Promise.resolve({})));
+    // The flip on is the only ask: no second call queues a follow-up that
+    // would clear on its own and hide a missing guard.
     useSettingsStore.setState({ hideViewMail: true });
-    const pending = refreshHiddenMembers();
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(1));
     useSettingsStore.setState({ hideViewMail: false });
     answer(HELD);
-    await pending;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(hiddenCalls()).toHaveLength(1);
     expect(useViewHideStore.getState().keys).toBeNull();
   });
 

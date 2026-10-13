@@ -10,7 +10,11 @@ import { create } from 'zustand';
 /// view store fills it (`refreshHiddenMembers`).
 const UNKNOWN = { keys: null, unreadByMailbox: null, hiddenByMailbox: null };
 
-export const useViewHideStore = create(set => ({
+const sameSet = (a, b) => a instanceof Set && a.size === b.size && [...b].every(key => a.has(key));
+const sameCounts = (a, b) => !!a && Object.keys(a).length === Object.keys(b).length
+  && Object.keys(b).every(box => a[box] === b[box]);
+
+export const useViewHideStore = create((set, get) => ({
   /// `${accountId}|${mailbox}|${uid}` of every held message, or null.
   keys: null,
   /// `${accountId}|${mailbox}` → unread messages hidden there, or null.
@@ -20,10 +24,9 @@ export const useViewHideStore = create(set => ({
 
   setMembers: reply => {
     if (!reply?.available) {
-      set(UNKNOWN);
+      get().clear();
       return;
     }
-    // A new Set per answer: its identity changing is what repaints the lists.
     const keys = new Set();
     const unreadByMailbox = {};
     const hiddenByMailbox = {};
@@ -36,8 +39,20 @@ export const useViewHideStore = create(set => ({
         unreadByMailbox[box] = Number.isFinite(held?.unread) ? held.unread : 0;
       }
     }
-    set({ keys, unreadByMailbox, hiddenByMailbox });
+    // Identity is what repaints: a part that did not change keeps the object
+    // it had, and an answer that changed nothing sets nothing. Every count
+    // refresh asks again, and most of those answers are the same.
+    const current = get();
+    const next = {};
+    if (!sameSet(current.keys, keys)) next.keys = keys;
+    if (!sameCounts(current.unreadByMailbox, unreadByMailbox)) next.unreadByMailbox = unreadByMailbox;
+    if (!sameCounts(current.hiddenByMailbox, hiddenByMailbox)) next.hiddenByMailbox = hiddenByMailbox;
+    if (Object.keys(next).length) set(next);
   },
 
-  clear: () => set(UNKNOWN),
+  clear: () => {
+    const current = get();
+    if (current.keys === null && current.unreadByMailbox === null && current.hiddenByMailbox === null) return;
+    set(UNKNOWN);
+  },
 }));
