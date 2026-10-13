@@ -67,13 +67,19 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, sizing = 'c
     if (!width) return undefined;
     const my = ++gen.current;
     failed.current = false;
-    openRender({ html, cssWidth: width, scale: dpr, allowRemote: true, theme: { mode: dark ? 'dark' : 'light' } })
+    // The daemon rejects a width outside 1..4000 css px or a scale outside 0.5..4, which
+    // would show the failure view on an ultrawide pane or a zoomed display. The layout
+    // below uses the width the daemon answers with (meta.cssWidth), not this request.
+    const cssWidth = Math.min(4000, Math.max(1, Math.round(width)));
+    const scale = Math.min(4, Math.max(0.5, dpr));
+    openRender({ html, cssWidth, scale, allowRemote: true, theme: { mode: dark ? 'dark' : 'light' } })
       .then((r) => {
         if (my !== gen.current) { closeRender(r.docId); return; }
         docIdRef.current = r.docId;
         setDoc(r);
       })
-      .catch((e) => { if (my === gen.current) fail(e?.message || String(e)); });
+      // Any rejection is a failure (render_bad_request, render_too_complex, a plain object, a string).
+      .catch((e) => { if (my === gen.current) fail(e?.message || e?.code || String(e)); });
     return () => {
       gen.current++;
       if (docIdRef.current != null) { closeRender(docIdRef.current); docIdRef.current = null; }
