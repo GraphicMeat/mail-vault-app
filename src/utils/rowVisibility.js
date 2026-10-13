@@ -16,7 +16,12 @@ import { isHiddenFromInbox } from './autoTagInboxFilter';
  *    isHiddenFromInbox);
  *  - a message deleted here and not yet reconciled (a tombstone), so stale
  *    cache hydration on an account/folder switch cannot resurrect it;
- *  - a message a local snooze holds out of the folder it is still in.
+ *  - a message a local snooze holds out of the folder it is still in;
+ *  - a message a saved view holds, while "hide mail views hold" is on
+ *    (`viewHidden`: the daemon's complete `account|mailbox|uid` key set, or
+ *    null for unknown, which hides nothing). Never inside a view or a
+ *    search (`inView`): there the view's or the search's own rows are what
+ *    the person asked to see.
  *
  * A row is placed by where it lives (rowIdentity), never by the view's folder.
  * A row carrying `isArchived` (stamped by the derivation) is taken at its
@@ -31,16 +36,21 @@ export function rowVisibility({
   hiddenTagIds = null,
   tagsByRow = null,
   localSnoozes = null,
+  viewHidden = null,
+  inView = false,
 }) {
   const view = { activeAccountId, activeMailbox };
   const spans = unifiedInbox || activeMailbox === 'UNIFIED';
+  const viewHolds = viewHidden?.size && !inView ? viewHidden : null;
   return (e) => {
     const archived = typeof e.isArchived === 'boolean' ? e.isArchived : vaultHas(archivedEmailIds, e, view);
     if (!archived && e.flags?.includes('\\Deleted')) return false;
     if (isHiddenFromInbox(e, { hiddenTagIds, tagsByRow, unifiedInbox, activeMailbox, activeAccountId })) return false;
-    if (deleteTombstones?.size) {
+    if (deleteTombstones?.size || viewHolds) {
       const id = rowIdentity(e, view);
-      if (id && deleteTombstones.has(`${id.accountId}|${id.mailbox}|${id.uid}`)) return false;
+      const key = id && `${id.accountId}|${id.mailbox}|${id.uid}`;
+      if (key && deleteTombstones?.has(key)) return false;
+      if (key && viewHolds?.has(key)) return false;
     }
     if (localSnoozes?.size && e.messageId && localSnoozes.has(localSnoozeKey(
       e._accountId || activeAccountId, e._mailbox || (spans ? 'INBOX' : activeMailbox), e.messageId))) return false;

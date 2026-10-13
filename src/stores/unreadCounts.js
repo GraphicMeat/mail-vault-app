@@ -23,6 +23,7 @@ import { localSnoozeKeys, useSnoozeStore } from './snoozeStore';
 import { dueFollowUps, useFollowUpStore } from './followUpStore';
 import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
+import { useViewHideStore } from './viewHideStore';
 import { rowVisibility } from '../utils/rowVisibility';
 
 const settings = () => useSettingsStore.getState();
@@ -36,7 +37,11 @@ export function setListStore(store) {
 
 /// Would `accountId`'s INBOX list show a row of its cache? The list's own rule
 /// set: a delete still owed to the server, \Deleted not yet expunged, an
-/// auto-tag hide and a local snooze keep a message off it. A refused delete
+/// auto-tag hide, a local snooze and a saved view holding it (while
+/// `hideViewMail` is on) keep a message off it. Whatever is on screen: the
+/// badge is the account's INBOX, so an open view or search changes nothing.
+/// The view hide set is one store for every account, so a badge of an account
+/// not on screen reads the same answer. A refused delete
 /// left its row tombstoned while every sync brought it back unread from the
 /// server's copy: "1" on the badge, "No unread messages" in the list.
 /// `tombstones: false` is for a shift: a delete lays its tombstone before it
@@ -53,6 +58,7 @@ function shownInInbox(accountId, { tombstones = true } = {}) {
     hiddenTagIds,
     tagsByRow: hiddenTagIds.size ? useTagStore.getState().byRow : null,
     localSnoozes: localSnoozeKeys(useSnoozeStore.getState().rows),
+    viewHidden: settings().hideViewMail ? useViewHideStore.getState().keys : null,
   });
 }
 

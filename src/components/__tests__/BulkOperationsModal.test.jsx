@@ -101,9 +101,9 @@ vi.mock('../../stores/mailStore', () => ({
 }));
 
 // Search hits are rows a ticked key can name, as the selection bar reads them.
-const useSearchStoreMock = create(() => ({ searchResults: [] }));
+const useSearchStoreMock = create(() => ({ searchResults: [], searchActive: false }));
 vi.mock('../../stores/searchStore', () => ({
-  useSearchStore: (selector) => useSearchStoreMock(selector),
+  useSearchStore: Object.assign((selector) => useSearchStoreMock(selector), { getState: () => useSearchStoreMock.getState() }),
 }));
 
 vi.mock('../../services/db', () => ({
@@ -114,9 +114,9 @@ vi.mock('../../services/db', () => ({
 // Backup-configured flag the legend reads. A plain mutable object, same
 // pattern as `archivedEmailIds`/`tombstones` above — mutate it per-test,
 // reset in beforeEach.
-const backupState = { externalBackupLocation: null, billingProfile: null };
+const backupState = { externalBackupLocation: null, billingProfile: null, hideViewMail: false };
 vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: (selector) => selector(backupState),
+  useSettingsStore: Object.assign((selector) => selector(backupState), { getState: () => backupState }),
   // The real rule lives in the store; the modal only asks it.
   hasPremiumAccess: (profile) => !!profile?.premiumAccess,
 }));
@@ -133,6 +133,8 @@ import { BulkOperationsModal } from '../BulkOperationsModal';
 import { useAutoTagStore } from '../../stores/autoTagStore';
 import { useSnoozeStore } from '../../stores/snoozeStore';
 import { useTagStore } from '../../stores/tagStore';
+import { useViewHideStore } from '../../stores/viewHideStore';
+import { useViewStore } from '../../stores/viewStore';
 
 describe('BulkOperationsModal', () => {
   beforeEach(() => {
@@ -146,7 +148,10 @@ describe('BulkOperationsModal', () => {
       unifiedInbox: false,
       mailboxScope: null,
     });
-    useSearchStoreMock.setState({ searchResults: [] });
+    useSearchStoreMock.setState({ searchResults: [], searchActive: false });
+    useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
+    useViewStore.setState({ activeViewId: null });
+    backupState.hideViewMail = false;
     archivedEmailIds.clear();
     mockDaemonCall.mockReset();
     useAutoTagStore.setState({ rules: [] });
@@ -269,6 +274,45 @@ describe('BulkOperationsModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
 
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4] });
+  });
+
+  describe('mail a saved view holds', () => {
+    beforeEach(() => {
+      backupState.hideViewMail = true;
+      useViewHideStore.setState({ keys: new Set(['acct-1|INBOX|4']) });
+      // The list's own window already leaves the held message out.
+      useMessageListStoreMock.setState({ sortedEmails: [WINDOW[0]] });
+    });
+
+    it('leaves it out of the pool while the setting is on', async () => {
+      const onConfirm = vi.fn();
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+      fireEvent.click(screen.getByText('All'));
+      expect(screen.getByText('2 emails selected')).toBeTruthy();
+      fireEvent.click(screen.getByText('Next'));
+      fireEvent.click(screen.getByText('Archive'));
+      fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
+    });
+
+    it('keeps it with the setting off', async () => {
+      backupState.hideViewMail = false;
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      expect(screen.getByText('3 emails selected')).toBeTruthy();
+    });
+
+    it('keeps it while a saved view is open', async () => {
+      useViewStore.setState({ activeViewId: 'v1' });
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      expect(screen.getByText('3 emails selected')).toBeTruthy();
+    });
   });
 
   it('a tombstone names the message by its own folder', async () => {

@@ -66,3 +66,31 @@ describe('auto-tag hide in a folder branch rooted at the Inbox', () => {
     expect(rows.map(r => r._mailbox)).toEqual(['INBOX/Sub']);
   });
 });
+
+// "Hide mail views hold": the daemon's complete set of `account|mailbox|uid`
+// keys, placed by where each row lives, never by the folder on screen.
+describe('mail a saved view holds', () => {
+  it('a row a view holds is hidden in its folder', () => {
+    const visible = rowVisibility({ activeAccountId: 'a', activeMailbox: 'INBOX', viewHidden: new Set(['a|INBOX|7']) });
+    expect(visible({ uid: 7 })).toBe(false);
+    expect(visible({ uid: 8 })).toBe(true);
+  });
+
+  it('unified rows are keyed by their own account and mailbox', () => {
+    const visible = rowVisibility({ activeMailbox: 'UNIFIED', unifiedInbox: true, viewHidden: new Set(['b|INBOX|7']) });
+    expect(visible({ uid: 7, _accountId: 'b', _mailbox: 'INBOX' })).toBe(false);
+    expect(visible({ uid: 7, _accountId: 'a', _mailbox: 'INBOX' })).toBe(true);
+  });
+
+  it('null set hides nothing; inside a view hides nothing', () => {
+    expect(rowVisibility({ activeAccountId: 'a', activeMailbox: 'INBOX', viewHidden: null })({ uid: 7 })).toBe(true);
+    expect(rowVisibility({ activeAccountId: 'a', activeMailbox: 'INBOX', viewHidden: new Set(['a|INBOX|7']), inView: true })({ uid: 7 })).toBe(true);
+  });
+
+  it('the derivation leaves a held row out of the list', () => {
+    const rows = deriveDisplayRows({
+      emails: [row(1), row(2)], ...VIEW, viewHidden: new Set(['a1|INBOX|1']),
+    });
+    expect(rows.map(r => r.uid)).toEqual([2]);
+  });
+});

@@ -14,6 +14,7 @@ vi.mock('../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 
 const { useSnoozeStore } = await import('../snoozeStore');
 const { useFollowUpStore } = await import('../followUpStore');
+const { useViewHideStore } = await import('../viewHideStore');
 const {
   selectTotalUnread, unreadRows, isCompleteCache, recountInbox, shiftInbox, addArrivals, applyRecounts, forgetAccount,
   shiftFollowUps,
@@ -24,7 +25,8 @@ const unread = (uid, extra = {}) => ({ uid, flags: [], ...extra });
 const seen = (uid) => ({ uid, flags: ['\\Seen'] });
 
 beforeEach(() => {
-  settings.setState({ unreadPerAccount: { a1: 7, a2: 5 }, hiddenAccounts: {}, displayNames: {}, getOrderedAccounts: undefined });
+  settings.setState({ unreadPerAccount: { a1: 7, a2: 5 }, hiddenAccounts: {}, displayNames: {}, getOrderedAccounts: undefined, hideViewMail: false });
+  useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
   useSnoozeStore.setState({ rows: [] });
   useFollowUpStore.setState({ rows: [] });
 });
@@ -180,5 +182,31 @@ describe('follow-up reminders', () => {
     expect(counts().a1).toBe(7);
     shiftFollowUps([], [due('new', 'a1', { announced: false })]);
     expect(counts().a1).toBe(8);
+  });
+});
+
+// "Hide mail views hold": a message a saved view holds is off the INBOX list
+// while the setting is on, so it is no unread message the badge may count.
+describe('mail a saved view holds', () => {
+  const held = { available: true, members: { a1: { INBOX: { uids: [1], unread: 1 } } } };
+
+  it('is not counted while the setting is on', () => {
+    settings.setState({ hideViewMail: true });
+    useViewHideStore.getState().setMembers(held);
+    recountInbox('a1', { emails: [unread(1), unread(2), seen(3)], totalEmails: 3 });
+    expect(counts().a1).toBe(1);
+  });
+
+  it('is counted with the setting off', () => {
+    useViewHideStore.getState().setMembers(held);
+    recountInbox('a1', { emails: [unread(1), unread(2), seen(3)], totalEmails: 3 });
+    expect(counts().a1).toBe(2);
+  });
+
+  it('a held message moving does not move the count', () => {
+    settings.setState({ hideViewMail: true });
+    useViewHideStore.getState().setMembers(held);
+    shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: unread(1) }], -1);
+    expect(counts().a1).toBe(7);
   });
 });

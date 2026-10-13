@@ -13,6 +13,7 @@ import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
 import { useSnoozeStore } from './snoozeStore';
 import { useFollowUpStore } from './followUpStore';
+import { useViewHideStore } from './viewHideStore';
 import { registerRows, setIdentityStore, mapList } from './messageRows';
 import { setListStore, shiftFollowUps } from './unreadCounts';
 
@@ -159,6 +160,14 @@ useAutoTagStore.subscribe((state, prev) => {
 // (deriveDisplayRows), so a new, woken or reloaded row re-derives it.
 useSnoozeStore.subscribe((state, prev) => {
   if (state.rows !== prev.rows) useMailStore.getState().updateSortedEmails();
+});
+
+// "Hide mail views hold": a new answer from the daemon (or the setting going
+// off, which forgets it) changes which rows a folder shows. The store keeps a
+// set's identity while its members are unchanged, so a count refresh that
+// asks again and hears the same answer repaints nothing.
+useViewHideStore.subscribe((state, prev) => {
+  if (state.keys !== prev.keys) useMailStore.getState().updateSortedEmails();
 });
 
 // A due follow-up reminder is pinned above the inbox list, never a row of it
