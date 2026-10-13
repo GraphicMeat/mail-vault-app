@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useT } from '../../i18n/index.js';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { AddressText } from '../../components/email/AddressText';
 import { maskString } from '../../utils/privacy/piiDetector';
+import { emailKey } from '../../stores/slices/unifiedHelpers';
 import { runPrepass } from './prepass';
 import { usePrivacyDict } from './prepass/privacyDict';
 import BlitzTiles from './BlitzTiles';
@@ -13,6 +14,13 @@ const bubbled = new Set(); // message keys that already showed the bubble this s
 
 // The readable text of an HTML body for the failure view. Style, script and
 // noscript text is code, not content.
+// A cheap content signature (djb2): tells two messages apart when the caller has no key for them.
+const signature = (text) => {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return `${text.length}:${h >>> 0}`;
+};
+
 const textOf = (html) => {
   try {
     const body = new DOMParser().parseFromString(html || '', 'text/html').body;
@@ -23,42 +31,55 @@ const textOf = (html) => {
 
 /** @param {import('./types').AltBodyProps} props */
 export default function BlitzBody(props) {
-  const { messageKey, bodyHtml, documentHtml, indicatorCss, plainText, theme, message, onLink, sizing, className, style } = props;
+  const { bodyHtml, documentHtml, indicatorCss, plainText, theme, message, onLink, sizing, className, style } = props;
   const t = useT();
+  // emailScopeKey is null for a message whose location cannot be resolved. All such
+  // messages must not share one failure, bubble and pre-pass state, so they get a key
+  // from the message's own identity and content.
+  const body = documentHtml ?? bodyHtml ?? plainText ?? '';
+  const sig = useMemo(() => signature(body), [body]);
+  const key = props.messageKey ?? `~${message ? emailKey(message) : ''}~${sig}`;
   const setEmailRenderer = useSettingsStore(s => s.setEmailRenderer);
   // Failure, bubble and pre-passed HTML are stored with the message they belong
-  // to and read back only while messageKey still matches. A new message so
+  // to and read back only while key still matches. A new message so
   // starts clean in the very render it arrives in, with no frame of the old
   // message's tiles or failure view.
   const [failure, setFailure] = useState(null); // { key, code }
   const [bubble, setBubble] = useState(null); // key whose bubble is open
-  const [prepassed, setPrepassed] = useState(null); // { key, html }
-  const failed = failure?.key === messageKey;
-  const html = prepassed?.key === messageKey ? prepassed.html : null;
+  const [prepassed, setPrepassed] = useState(null); // { key, html, masked }
+  const failed = failure?.key === key;
 
   // Leaving a message forgets its failure, so coming back to it tries Blitz again.
-  useEffect(() => () => { setFailure(null); setBubble(null); }, [messageKey]);
+  useEffect(() => () => { setFailure(null); setBubble(null); }, [key]);
 
-  const priv = usePrivacyDict({ message });
+  const priv = usePrivacyDict({ message, messageKey: key });
+  // Derived in render, so no frame is ever painted from HTML built for another
+  // privacy state: HTML pre-passed unmasked is never served once masking is on
+  // (privacy turned on, a peek released, a capture mask), and masked HTML is
+  // not served while a peek shows the real text. A hold serves nothing.
+  const html = !priv.hold && prepassed?.key === key && prepassed.masked === priv.active ? prepassed.html : null;
   // A privacy hold clears the body at once. Any other re-run (theme, search,
   // folds) keeps the old tiles up until the new HTML lands, so typing a search
   // does not blank the body on every keystroke.
   useEffect(() => {
     if (priv.hold) { setPrepassed(null); return undefined; }
     let live = true;
+    const masked = priv.active;
     runPrepass(props, { privacy: priv })
       .then(r => {
         // Same HTML again keeps the old state object, so an identical re-run renders nothing.
-        if (live) setPrepassed(p => (p && p.key === messageKey && p.html === r.html ? p : { key: messageKey, html: r.html }));
+        // `masked` is part of the match: a body with nothing to mask gives the same HTML
+        // either way, and must still be served once privacy is on.
+        if (live) setPrepassed(p => (p && p.key === key && p.masked === masked && p.html === r.html ? p : { key, html: r.html, masked }));
       })
       .catch(err => { console.error('[blitz] pre-pass failed; the body stays hidden', err); if (live) setPrepassed(null); });
     return () => { live = false; };
-  }, [messageKey, bodyHtml, documentHtml, indicatorCss, theme?.tableMode, theme?.dark, theme?.palette, priv.active, priv.dict, priv.hold]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, bodyHtml, documentHtml, indicatorCss, theme?.tableMode, theme?.dark, theme?.palette, priv.active, priv.dict, priv.hold]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onFailure = (code) => {
-    console.warn('[blitz] could not draw', messageKey, code);
-    setFailure({ key: messageKey, code });
-    if (!bubbled.has(messageKey)) { bubbled.add(messageKey); setBubble(messageKey); }
+    console.warn('[blitz] could not draw', key, code);
+    setFailure({ key, code });
+    if (!bubbled.has(key)) { bubbled.add(key); setBubble(key); }
   };
 
   if (failed) {
@@ -79,7 +100,7 @@ export default function BlitzBody(props) {
           </div>
         )}
         <AnimatePresence>
-          {bubble === messageKey && (
+          {bubble === key && (
             <FailureBubble
               key="blitz-failure-bubble"
               onSwitch={() => { setBubble(null); setEmailRenderer('web'); }}
@@ -93,7 +114,10 @@ export default function BlitzBody(props) {
   if (html == null) return <div className={className} style={style} data-testid="blitz-privacy-hold" />;
   return (
     <div className={className} style={style}>
-      <BlitzTiles html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} />
+      {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
+          so nothing built for the other state stays on screen while the new doc opens.
+          A dictionary update while masking stays on does not change the key. */}
+      <BlitzTiles key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} />
     </div>
   );
 }
