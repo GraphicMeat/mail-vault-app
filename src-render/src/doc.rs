@@ -136,7 +136,7 @@ impl RenderDoc {
     }
 
     /// The `<a href>` under document point (x, y) in CSS px, if any.
-    pub fn hit_link(&mut self, x: f32, y: f32) -> Option<LinkInfo> {
+    pub fn hit_link(&self, x: f32, y: f32) -> Option<LinkInfo> {
         // blitz-dom 0.3.0-beta.2 `hit` takes document coordinates (node layout
         // offsets only; the viewport scroll is not consulted and nothing is clipped
         // to the viewport), so no scroll shuffling is needed for far-down points.

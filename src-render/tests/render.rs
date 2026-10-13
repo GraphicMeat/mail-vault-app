@@ -112,3 +112,38 @@ fn absurd_height_is_clamped() {
     let m = open(html, 600).meta();
     assert!(m.css_height <= mailvault_render::MAX_CSS_HEIGHT);
 }
+
+fn rgb_pixels(png: &[u8]) -> (u32, u32, Vec<u8>) {
+    let mut r = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
+    let mut buf = vec![0; r.output_buffer_size()];
+    let info = r.next_frame(&mut buf).unwrap();
+    (info.width, info.height, buf)
+}
+fn px(img: &(u32, u32, Vec<u8>), x: u32, y: u32) -> [u8; 3] {
+    let i = ((y * img.0 + x) * 3) as usize;
+    [img.2[i], img.2[i + 1], img.2[i + 2]]
+}
+
+fn assert_bands(scale: f32) {
+    let mut doc = RenderDoc::open(&fx("bands.html"), RenderOptions::new(600, scale), None).unwrap();
+    assert_eq!(doc.meta().tile_count, 3);
+    let tile_h = (512.0 * scale) as u32;
+    let colours = [[255, 0, 0], [0, 0, 255], [0, 0xaa, 0]];
+    for (i, want) in colours.iter().enumerate() {
+        let img = rgb_pixels(&doc.tile_png(i as u32));
+        assert_eq!(img.1, tile_h, "tile {i} height");
+        assert_eq!(&px(&img, 0, 0), want, "tile {i} first row");
+        assert_eq!(&px(&img, img.0 / 2, tile_h / 2), want, "tile {i} middle");
+        assert_eq!(&px(&img, 0, tile_h - 1), want, "tile {i} last row");
+    }
+}
+
+#[test]
+fn each_tile_paints_its_own_slice_of_the_document() {
+    assert_bands(1.0);
+}
+
+#[test]
+fn each_tile_paints_its_own_slice_at_scale_2() {
+    assert_bands(2.0);
+}
