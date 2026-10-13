@@ -66,10 +66,30 @@ export function formatTag(key, value) {
   return `${key}:${quote(bare)}`;
 }
 
-/// What typed text becomes when it is committed: its words, quotes kept only
-/// where the person typed them.
+/// A word that is a tag of its own: an operator, an exclusion, a quoted run
+/// or a joiner. Every other word is free text and joins its neighbours.
+const standalone = word => OPERATOR_TAG.test(word) || (word.length > 1 && word.startsWith('-')) || word.includes('"') || word === '||' || word === '&&';
+
+/// What typed text becomes when it is committed: each run of free words one
+/// phrase tag (`project re 1`), each operator, exclusion, quoted run and
+/// joiner its own. Quotes stay only where the person typed them.
 export function commitText(text) {
-  return tokenizeQuery(text);
+  const tags = [];
+  let phrase = [];
+  const flush = () => {
+    if (phrase.length) tags.push(phrase.join(' '));
+    phrase = [];
+  };
+  for (const word of tokenizeQuery(text)) {
+    if (standalone(word)) {
+      flush();
+      tags.push(word);
+    } else {
+      phrase.push(word);
+    }
+  }
+  flush();
+  return tags;
 }
 
 const same = tag => tag.toLocaleLowerCase();

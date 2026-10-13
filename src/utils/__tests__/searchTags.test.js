@@ -85,10 +85,14 @@ describe('parseTag and formatTag', () => {
 });
 
 describe('editing a list of tags', () => {
-  it('commits typed text as its words, never adding quotes the server lane would search for', () => {
-    expect(commitText('  quarterly report ')).toEqual(['quarterly', 'report']);
+  it('commits typed words as one phrase tag, setting operators, quotes, exclusions and joiners apart', () => {
+    expect(commitText('  quarterly report ')).toEqual(['quarterly report']);
+    expect(commitText('project re 1')).toEqual(['project re 1']);
     expect(commitText('from:ann invoice')).toEqual(['from:ann', 'invoice']);
+    expect(commitText('big invoice from:ann q3 report')).toEqual(['big invoice', 'from:ann', 'q3 report']);
     expect(commitText('"quarterly report"')).toEqual(['"quarterly report"'], 'quotes the person typed stay');
+    expect(commitText('a b -c d')).toEqual(['a b', '-c', 'd']);
+    expect(commitText('a b || c d')).toEqual(['a b', '||', 'c d']);
     expect(commitText('  ')).toEqual([]);
   });
 

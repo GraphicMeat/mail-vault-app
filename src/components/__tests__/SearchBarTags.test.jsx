@@ -103,6 +103,17 @@ describe('committing tags', () => {
     expect(harness.settingsState.addSearchToHistory).toHaveBeenCalledWith('invoice from:ann');
   });
 
+  it('keeps a typed phrase as one tag per Enter, searching its words together', async () => {
+    render(<SearchBar />);
+    commit('project re 1', 'invoice');
+    expect(tagTexts()).toEqual(['project re 1', 'invoice']);
+
+    press('Enter');
+    await flush();
+    await flush();
+    expect(useSearchStore.getState().searchQuery).toBe('project re 1 invoice');
+  });
+
   it('keeps one tag for the same term typed twice', () => {
     render(<SearchBar />);
     commit('Invoice', 'invoice');
