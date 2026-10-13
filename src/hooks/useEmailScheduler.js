@@ -105,6 +105,12 @@ function viewCountsStale() {
     .catch(error => console.warn('[scheduler] Could not count the saved views again:', error));
 }
 
+function notesStale() {
+  import('../stores/notesStore')
+    .then(({ scheduleNotesReload }) => scheduleNotesReload())
+    .catch(error => console.warn('[scheduler] Could not list the notes board again:', error));
+}
+
 function rereadNoteFlags(accountId, mailbox) {
   import('../stores/notesStore')
     .then(({ useNotesStore }) => useNotesStore.getState().rereadCopyFlags(accountId, mailbox))
@@ -287,7 +293,10 @@ export function useEmailScheduler() {
         // Any change can move a saved view's badge: a read, a star, an
         // arrival, or a removal, which the feed reports without a count of
         // its own. Once per reply, and the store coalesces it further.
-        if (byFolder.size) viewCountsStale();
+        if (byFolder.size) {
+          viewCountsStale();
+          notesStale();
+        }
         let repaint = false, flagsMoved = false;
         for (const c of byFolder.values()) {
           if (stopped) break;

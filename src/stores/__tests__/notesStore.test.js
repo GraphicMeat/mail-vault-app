@@ -34,7 +34,7 @@ vi.mock('../../services/workflows/messageMutations', () => ({
   setDeleteUndo: (...args) => harness.setDeleteUndo(...args),
 }));
 
-const { useNotesStore, boardColumns, serverCopies, canToggleStar, AUTO_COLUMNS } = await import('../notesStore');
+const { useNotesStore, boardColumns, serverCopies, canToggleStar, AUTO_COLUMNS, scheduleNotesReload } = await import('../notesStore');
 const { useTagStore } = await import('../tagStore');
 const { useSettingsStore } = await import('../settingsStore');
 
@@ -617,5 +617,60 @@ describe('useNotesStore', () => {
       { accountId: 'b', mailbox: 'INBOX', uid: 3 },
     ] });
     expect(serverCopies(note, accounts).map(copy => copy.uid)).toEqual([1]);
+  });
+});
+
+/// A sync changed some folder while the board is open: a new note arrived, or
+/// a copy the server no longer holds is now off the daemon's list. The board
+/// lists again on its own, once per burst, without a spinner or an error.
+describe('scheduleNotesReload', () => {
+  const listCalls = () => harness.daemonCall.mock.calls.filter(([method]) => method === 'notes.list').length;
+
+  it('lists the open board again, once for a burst of changes', async () => {
+    harness.daemonCall.mockResolvedValue({ cards: [card('old')] });
+    await useNotesStore.getState().open();
+    harness.daemonCall.mockResolvedValue({ cards: [card('new')] });
+    vi.useFakeTimers();
+    try {
+      scheduleNotesReload();
+      scheduleNotesReload();
+      expect(listCalls()).toBe(1);
+      await vi.runAllTimersAsync();
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(listCalls()).toBe(2);
+    expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['new']);
+  });
+
+  it('does nothing while the board is closed', async () => {
+    vi.useFakeTimers();
+    try {
+      scheduleNotesReload();
+      await vi.runAllTimersAsync();
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(listCalls()).toBe(0);
+  });
+
+  it('keeps the board as it was when the background list fails, with no spinner', async () => {
+    harness.daemonCall.mockResolvedValue({ cards: [card('kept')] });
+    await useNotesStore.getState().open();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let fail;
+    harness.daemonCall.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+    vi.useFakeTimers();
+    try {
+      scheduleNotesReload();
+      await vi.runAllTimersAsync();
+      expect(useNotesStore.getState().status).toBe('ready');
+      fail(new Error('index busy'));
+      await vi.runAllTimersAsync();
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+    }
+    expect(useNotesStore.getState()).toMatchObject({ status: 'ready', cards: [expect.objectContaining({ key: 'kept' })] });
   });
 });

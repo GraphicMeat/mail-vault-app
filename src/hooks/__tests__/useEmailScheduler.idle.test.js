@@ -59,8 +59,10 @@ vi.mock('../../stores/viewStore', () => ({
   scheduleViewCountsRefresh: (...a) => mockScheduleViewCounts(...a),
 }));
 const mockRereadCopyFlags = vi.fn();
+const mockScheduleNotesReload = vi.fn();
 vi.mock('../../stores/notesStore', () => ({
   useNotesStore: { getState: () => ({ rereadCopyFlags: (...a) => mockRereadCopyFlags(...a) }) },
+  scheduleNotesReload: (...a) => mockScheduleNotesReload(...a),
 }));
 
 vi.mock('../../services/workflows/replayOps', () => ({
@@ -142,6 +144,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     mockLoadUnifiedInbox.mockClear();
     mockScheduleViewCounts.mockClear();
     mockRereadCopyFlags.mockClear();
+    mockScheduleNotesReload.mockClear();
     mockOfferCode.mockClear();
     mockGetHeaders.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
     mockGetAllHeaders.mockReset().mockResolvedValue(null);
@@ -439,6 +442,22 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await vi.waitFor(() => expect(mockScheduleViewCounts).toHaveBeenCalled());
 
       expect(mockRereadCopyFlags).not.toHaveBeenCalled();
+    });
+
+    // A new note, or a copy now proven gone from the server, changes the
+    // board's cards: it lists again, once per reply.
+    it('has the notes board list again once per reply that changed anything', async () => {
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [reply({ gen: 2, changes: [
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+        { gen: 2, accountId: 'a2', mailbox: 'Sent', newEmails: 0, updatedFlags: 0, at: 2 },
+      ] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      await vi.waitFor(() => expect(mockScheduleNotesReload).toHaveBeenCalled());
+      expect(mockScheduleNotesReload).toHaveBeenCalledTimes(1);
     });
 
     it('leaves an arrival-only reload alone', async () => {

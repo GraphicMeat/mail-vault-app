@@ -138,11 +138,30 @@ fn list(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
 
     let candidates = crate::search_index::notes_candidates(&state.search_index, &sql_own)?;
 
+    // The vault keeps mail the server no longer holds; the board does not. A
+    // copy custody proves gone (`serverDeleted`: we deleted it; `serverAbsent`:
+    // a probe found it in no folder) is left out, and a card with no copy left
+    // with it. No custody (no vault yet) proves nothing: every copy stays.
+    let mut custody: HashMap<String, HashMap<(String, u32), Value>> = HashMap::new();
+    let mut server_gone = |account_id: &str, vault_dir: &str, uid: u32| {
+        let entries = custody.entry(account_id.to_string()).or_insert_with(|| {
+            crate::custody::with_conn(state, |conn| mailvault_core::custody::entries::entries_for_account(conn, account_id))
+                .map(crate::handlers::mail_search::custody_by_vault_uid)
+                .unwrap_or_default()
+        });
+        entries.get(&(vault_dir.to_string(), uid)).is_some_and(|entry| {
+            ["serverDeleted", "serverAbsent"].iter().any(|field| entry.get(*field).and_then(Value::as_bool) == Some(true))
+        })
+    };
+
     let mut order: Vec<String> = Vec::new();
     let mut cards: HashMap<String, Card> = HashMap::new();
     for candidate in candidates {
         let recipients = notes_to_self::split_to_lc(&candidate.to_lc);
         if !notes_to_self::is_note_to_self(&candidate.from_addr_lc, &recipients, &own_normalized) {
+            continue;
+        }
+        if server_gone(&candidate.account_id, &candidate.vault_dir, candidate.uid) {
             continue;
         }
         let snippet = candidate.snippet.clone().unwrap_or_default();
@@ -339,6 +358,49 @@ mod tests {
         let cards = out["cards"].as_array().unwrap();
         assert_eq!(cards.len(), 1, "{cards:?}");
         assert_eq!(cards[0]["copies"].as_array().unwrap().len(), 2);
+    }
+
+    /// The vault entry for one copy, as custody records it.
+    fn custody_entry(s: &Arc<DaemonState>, account: &str, mailbox: &str, entry: Value) {
+        crate::custody::open_into(s).unwrap();
+        crate::custody::with_conn(s, |conn| mailvault_core::custody::entries::upsert(conn, account, mailbox, &[entry]).map(|_| ()))
+            .unwrap();
+    }
+
+    /// The vault keeps mail the server no longer holds; the board does not.
+    /// A copy custody proves gone (we deleted it, or a probe found it
+    /// nowhere) leaves the card, and the card keeps the copies still there.
+    #[tokio::test]
+    async fn a_copy_the_server_no_longer_holds_leaves_the_card() {
+        let s = st();
+        let conn = open_index(&s);
+        note_row(&conn, "a", "Sent", 1, "S", Some("<g1@x.test>"), "me@x.test", "me@x.test", "Half gone", 100);
+        note_row(&conn, "a", "INBOX", 7, "S", Some("<g1@x.test>"), "me@x.test", "me@x.test", "Half gone", 100);
+        install(&s, conn);
+        custody_entry(&s, "a", "INBOX", json!({ "uid": 7, "source": "local", "serverAbsent": true }));
+        custody_entry(&s, "a", "Sent", json!({ "uid": 1, "source": "local", "serverDeleted": false, "serverAbsent": false }));
+        let out = call(&s, "notes.list", json!({ "accounts": accounts(&[("a", "me@x.test")]) })).await;
+        let cards = out["cards"].as_array().unwrap();
+        assert_eq!(cards.len(), 1, "{cards:?}");
+        let copies = cards[0]["copies"].as_array().unwrap();
+        assert_eq!(copies.len(), 1, "{copies:?}");
+        assert_eq!(copies[0]["mailbox"], "Sent");
+    }
+
+    #[tokio::test]
+    async fn a_note_whose_every_copy_is_gone_from_the_server_is_off_the_board() {
+        let s = st();
+        let conn = open_index(&s);
+        note_row(&conn, "a", "Sent", 1, "S", Some("<g2@x.test>"), "me@x.test", "me@x.test", "All gone", 100);
+        note_row(&conn, "a", "INBOX", 7, "S", Some("<g2@x.test>"), "me@x.test", "me@x.test", "All gone", 100);
+        note_row(&conn, "a", "Sent", 2, "S", Some("<g3@x.test>"), "me@x.test", "me@x.test", "Still here", 200);
+        install(&s, conn);
+        custody_entry(&s, "a", "Sent", json!({ "uid": 1, "source": "local", "serverDeleted": true }));
+        custody_entry(&s, "a", "INBOX", json!({ "uid": 7, "source": "local", "serverAbsent": true }));
+        let out = call(&s, "notes.list", json!({ "accounts": accounts(&[("a", "me@x.test")]) })).await;
+        let cards = out["cards"].as_array().unwrap();
+        assert_eq!(cards.len(), 1, "{cards:?}");
+        assert_eq!(cards[0]["subject"], "Still here");
     }
 
     /// An alias is one of your own addresses: a note sent from it to your

@@ -103,10 +103,12 @@ export const useNotesStore = create((set, get) => ({
     set({ isOpen: false, status: 'idle', cards: [], filter: '', detailOpen: false, openKey: null });
   },
 
-  load: async () => {
+  /// `quiet`: a list the board asks for by itself (scheduleNotesReload). No
+  /// spinner, and a failure keeps the board as it is.
+  load: async ({ quiet = false } = {}) => {
     const mine = ++generation;
     offBoard = new Set();
-    set({ status: 'loading' });
+    if (!quiet) set({ status: 'loading' });
     try {
       // The daemon names each copy's folder from these lists, so they are
       // complete before it is asked.
@@ -119,7 +121,7 @@ export const useNotesStore = create((set, get) => ({
     } catch (error) {
       if (mine !== generation) return;
       console.warn('[notes] could not list notes:', error?.message || error);
-      set({ status: 'error' });
+      if (!quiet) set({ status: 'error' });
     }
   },
 
@@ -283,6 +285,24 @@ async function tagChanged(copies) {
 }
 
 /// Runs one action for a card unless one is already running for it.
+const RELOAD_DELAY_MS = 2000;
+let reloadTimer = null;
+
+/// A sync changed a folder: list the open board again, once per burst. A new
+/// note shows up, and a copy custody now proves gone from the server leaves
+/// (`notes.list`). A star, Done or delete still running owns its card, so the
+/// list waits for it.
+export function scheduleNotesReload() {
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    reloadTimer = null;
+    const { isOpen, busy } = useNotesStore.getState();
+    if (!isOpen) return;
+    if (Object.keys(busy).length) return scheduleNotesReload();
+    useNotesStore.getState().load({ quiet: true });
+  }, RELOAD_DELAY_MS);
+}
+
 function guarded(card, action) {
   const { busy } = useNotesStore.getState();
   if (busy[card.key]) return Promise.resolve(undefined);
