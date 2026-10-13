@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import * as db from '../services/db';
-import { describeMessageState, useBackedUp } from './email/MessageStateIcon';
+import { describeMessageState, isBackedUp, useBackedUp } from './email/MessageStateIcon';
 import { custodyRowFor } from '../stores/slices/custody';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { useSearchHighlight } from '../hooks/useSearchHighlight';
@@ -66,7 +66,7 @@ import { ReadDelayProgress } from './ReadDelayProgress';
 import { TagChips } from './TagChips';
 import { FieldStrip } from './FieldStrip';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
-import { describePurge, describeReaderDelete } from '../utils/custodyCopy';
+import { describeReaderPurge, describeReaderDelete } from '../utils/custodyCopy';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
 import { QuickReplyChips } from './email/QuickReplyChips';
 import { AiComposeActions } from './ai/AiComposeActions';
@@ -106,7 +106,6 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // yet" vs "also still on the server"). Gold is decided by custodySource,
   // which never asks a uid set — see stores/slices/custody.js.
   const serverKnown = useMailStore(s => s.serverUids.complete);
-  const backedUpKeys = useMailStore(s => s.backedUpKeys);
 
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   // Effective state, not the raw flag: a stale `true` left behind by a lapsed
@@ -365,8 +364,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     if (!location) return;
     const localOnly = target.source === 'local-only' || target._origin === 'local-only';
     const archived = isRowArchived(target, state, archivedEmailIds) || localOnly;
-    const backup = !!backedUpKeys?.has(`${location.accountId}:${location.mailbox}:${target.uid}`);
-    const copy = describePurge({ server: !localOnly, vault: archived, backup }, 1);
+    const backup = isBackedUp({ ...target, _accountId: location.accountId, _mailbox: location.mailbox }, state) === true;
+    const copy = describeReaderPurge({ server: !localOnly, vault: archived, backup }, 1);
     if (!copy) return;
     setPendingPurge({
       copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },

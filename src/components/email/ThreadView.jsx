@@ -57,11 +57,11 @@ import { QuickReplyChips } from './QuickReplyChips';
 import { AiComposeActions } from '../ai/AiComposeActions';
 import { accountIdsOf } from '../../services/aiClient';
 import { boundedThreadText } from '../../utils/quickReplies';
-import { describePurge, describeReaderDelete } from '../../utils/custodyCopy';
+import { describeReaderPurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../../services/workflows/messageMutations';
 import { startThreadReadTimer, stopThreadReadTimer, forgetThreadReadTimer } from '../../services/workflows/threadReadTimer';
-import { ConnectedStateIcon } from './MessageStateIcon';
+import { ConnectedStateIcon, isBackedUp } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
 import { isOutgoingMailboxName } from '../../utils/sentFolder';
 import { AddressText } from './AddressText';
@@ -727,9 +727,10 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
     const location = resolveEmailLocation(email, state);
     if (!location) return;
     const localOnly = email.source === 'local-only' || email._origin === 'local-only';
-    const archived = !!email.isArchived || localOnly;
-    const backup = state.backedUpKeys?.has(`${location.accountId}:${location.mailbox}:${email.uid}`);
-    const copy = describePurge({ server: !localOnly, vault: archived, backup: !!backup }, 1);
+    // Server view writes isArchived false on every row; the vault's keys still hold it.
+    const archived = isRowArchived(email, state) || localOnly;
+    const backup = isBackedUp({ ...email, _accountId: location.accountId, _mailbox: location.mailbox }, state) === true;
+    const copy = describeReaderPurge({ server: !localOnly, vault: archived, backup }, 1);
     if (!copy) return;
     const key = selectionKey(email, state);
     setPendingDelete({

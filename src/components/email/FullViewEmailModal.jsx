@@ -35,7 +35,7 @@ import { TagChips } from '../TagChips';
 import { FieldStrip } from '../FieldStrip';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
-import { describePurge, describeReaderDelete } from '../../utils/custodyCopy';
+import { describeReaderPurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { useExportStore } from '../../stores/exportStore';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
@@ -179,7 +179,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     ? { ...email, _accountId: emailLocation.accountId, _mailbox: emailLocation.mailbox }
     : email;
   const isBackedUp = isEmailBackedUp(backupEmail, backupScan) === true;
-  const purgeDescription = describePurge({ server: !isLocalOnly, vault: isArchived || isLocalOnly, backup: isBackedUp }, 1);
+  const purgeDescription = describeReaderPurge({ server: !isLocalOnly, vault: isArchived || isLocalOnly, backup: isBackedUp }, 1);
   const requestDelete = (target = email) => {
     const state = useMailStore.getState();
     const location = resolveEmailLocation(target, state);
@@ -349,7 +349,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             }}
             onToggleFlag={target => useMailStore.getState().toggleFlagged(selectionKey(target, useMailStore.getState()))}
             onDeleteEverywhere={purgeDescription && emailLocation ? target => {
-              const purge = describePurge({ server: !isLocalOnly, vault: isRowArchived(target, useMailStore.getState(), archivedEmailIds) || isLocalOnly, backup: isBackedUp }, 1);
+              const purge = describeReaderPurge({ server: !isLocalOnly, vault: isRowArchived(target, useMailStore.getState(), archivedEmailIds) || isLocalOnly, backup: isBackedUp }, 1);
               if (!purge) return;
               const key = selectionKey(target, useMailStore.getState());
               setPendingDelete({ executor: () => purgeEverywhereReporting([key]), copy: { title: purge.title, description: purge.description, confirmLabel: purge.label } });

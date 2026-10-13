@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { vaultClause, describeServerDelete, describePurge, describeReaderDelete } from '../custodyCopy';
+import { vaultClause, describeServerDelete, describePurge, describeReaderPurge, describeReaderDelete } from '../custodyCopy';
 
 // The bug this replaced: every "Delete from server" confirmation said "This
 // cannot be undone", whether or not a vault copy existed. These assertions
@@ -116,5 +116,23 @@ describe('describeReaderDelete', () => {
     expect(describeReaderDelete({ archived: true })).toMatch(/keep the archived copy/);
     expect(describeReaderDelete({})).toMatch(/permanently deleted from the server/);
     expect(describeReaderDelete({ localOnly: true, archived: true })).toMatch(/only exists in your local archive/);
+  });
+});
+
+// The reader offers Delete everywhere whatever the custody: on a message only
+// the server holds, the purge reaches the one place that holds it.
+describe('describeReaderPurge', () => {
+  it('names the server when only the server holds the message', () => {
+    const copy = describeReaderPurge({ server: true, vault: false, backup: false }, 1);
+    expect(copy.label).toBe('Delete from server');
+    expect(copy.description).toMatch(/cannot be undone/);
+  });
+
+  it('is describePurge wherever that names a scope', () => {
+    expect(describeReaderPurge({ server: true, vault: true, backup: false }, 1)).toEqual(describePurge({ server: true, vault: true, backup: false }, 1));
+  });
+
+  it('offers nothing when nothing holds it', () => {
+    expect(describeReaderPurge({}, 1)).toBeNull();
   });
 });

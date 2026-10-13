@@ -53,7 +53,7 @@ import { TagChips } from './TagChips';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { useExportStore } from '../stores/exportStore';
-import { describePurge, describeReaderDelete } from '../utils/custodyCopy';
+import { describeReaderPurge, describeReaderDelete } from '../utils/custodyCopy';
 import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../services/workflows/messageMutations';
@@ -322,7 +322,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const isRead = !!email.flags?.includes('\\Seen');
   const backupScan = { backedUpKeys, backedUpScopes, backupConfigured, activeAccountId, activeMailbox };
   const isBackedUp = isEmailBackedUp(scopedEmail, backupScan) === true;
-  const purgeDescription = emailLocation && describePurge({
+  const purgeDescription = emailLocation && describeReaderPurge({
     server: !isLocalOnly, vault: isArchived || isLocalOnly, backup: isBackedUp,
   }, 1);
 
@@ -383,7 +383,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     if (!location) return;
     const scopedTarget = { ...target, _accountId: location.accountId, _mailbox: location.mailbox };
     const localOnly = target.source === 'local-only' || target._origin === 'local-only';
-    const copy = describePurge({
+    const copy = describeReaderPurge({
       server: !localOnly,
       vault: isRowArchived(target, state, archivedEmailIds) || localOnly || isArchived,
       backup: isEmailBackedUp(scopedTarget, {

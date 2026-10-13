@@ -97,3 +97,22 @@ export function describePurge({ server = false, vault = false, backup = false } 
     description: t('custody.purgeNothingLeft', { count: total }),
   };
 }
+
+/**
+ * The reader's "Delete everywhere". A row hides it over a message only the
+ * server holds (Delete from server sits beside it); the reader offers it
+ * whatever the custody, and may have no other delete on its bar. There the
+ * purge reaches the one place that holds the message, named as such.
+ *
+ * @returns {{label:string, title:string, description:string}|null}
+ *          null when nothing holds them
+ */
+export function describeReaderPurge(scope = {}, total = 1) {
+  const copy = describePurge(scope, total);
+  if (copy || !scope.server) return copy;
+  return {
+    label: t('rowMenu.deleteServer'),
+    title: t('rowMenu.deletePermanently2'),
+    description: t('custody.purgeNothingLeft', { count: total }),
+  };
+}

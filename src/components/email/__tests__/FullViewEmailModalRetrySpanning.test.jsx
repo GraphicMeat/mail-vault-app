@@ -287,15 +287,22 @@ describe('FullViewEmailModal actions', () => {
     expect(screen.queryByRole('heading', { name: 'First body' })).toBeNull();
   });
 
-  it('uses backup scope/configuration before offering Delete everywhere', () => {
+  // No backup drive: stale backup keys prove nothing, so the purge names the
+  // server alone. The reader offers it whatever the custody (2026-10-13: it
+  // was hidden here and a dead click in the main reader).
+  it('uses backup scope/configuration to name what Delete everywhere reaches', async () => {
     configureReaderActions(readerAction('deleteEverywhere'));
     const target = fullMessage({ uid: 76, isArchived: false, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
     const key = `${ACCOUNT_B.id}:Sent:76`;
-    renderModal(vi.fn(), vi.fn(), target, spanningState({
+    const view = renderModal(vi.fn(), vi.fn(), target, spanningState({
       backedUpKeys: new Set([key]), backedUpScopes: new Set([`${ACCOUNT_B.id}:Sent`]), backupConfigured: false,
     }));
 
-    expect(screen.queryByTestId('reader-action-deleteEverywhere')).toBeNull();
+    fireEvent.click(view.getByTestId('reader-action-deleteEverywhere'));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getAllByRole('button').at(-1).textContent.trim()).toBe('Delete from server');
+    await confirmDelete();
+    await waitFor(() => expect(actionMutations.purgeEverywhere).toHaveBeenCalledWith([key]));
   });
 
   it('offers backup-backed purge and waits for its portal confirmation', async () => {

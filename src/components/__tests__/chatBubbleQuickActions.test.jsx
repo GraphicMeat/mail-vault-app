@@ -208,10 +208,14 @@ describe('chat bubble configurable actions', () => {
     expect(mailStore.getState().setSelection).not.toHaveBeenCalled();
     cleanup();
 
+    // No backup drive: stale backup keys prove nothing, so the purge names
+    // the server alone (the reader offers it whatever the custody).
     mailStore.setState({ backedUpKeys: new Set([key]), backedUpScopes: new Set([`${ACCOUNT_B.id}:Sent`]), backupConfigured: false });
     renderChat(email({ uid: 76 }));
     fireEvent.mouseEnter(screen.getByRole('group').parentElement.parentElement);
-    expect(screen.queryByTestId('chat-action-deleteEverywhere')).toBeNull();
+    fireEvent.click(actionButton('deleteEverywhere'));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getAllByRole('button').at(-1).textContent.trim()).toBe('rowMenu.deleteServer');
   });
 
   it('moves, marks read, and stars with the full account-mailbox key', async () => {
