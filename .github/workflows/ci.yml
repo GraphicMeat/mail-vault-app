@@ -24,6 +24,7 @@ on:
       - 'Cargo.lock'
       - 'vite.config.*'
       - 'vitest.config.*'
+      - 'scripts/check-blitz-removal.sh'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -40,6 +41,7 @@ on:
       - 'Cargo.lock'
       - 'vite.config.*'
       - 'vitest.config.*'
+      - 'scripts/check-blitz-removal.sh'
       - '.github/workflows/ci.yml'
 jobs:
   unit-integration:
@@ -118,6 +120,39 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libfontconfig1-dev fonts-dejavu-core
       - run: cargo test -p mailvault-render
+
+  # The Blitz renderer module must stay removable: delete it from a scratch copy
+  # and build and test what is left (scripts/check-blitz-removal.sh). Needs the
+  # same Tauri shell deps as the e2e job, since it runs `cargo check -p mailvault`.
+  blitz-removable:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/blitz-removal
+          key: rust-blitz-removal-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-blitz-removal-
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev libglib2.0-dev libdbus-1-dev \
+            libsecret-1-dev patchelf
+      - run: npm ci
+      - run: bash scripts/check-blitz-removal.sh
 
   e2e:
     runs-on: ubuntu-22.04
