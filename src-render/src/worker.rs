@@ -33,6 +33,7 @@ enum In {
     Tile { req: u64, doc: u64, index: u32 },
     Hit { req: u64, doc: u64, x: f32, y: f32 },
     TextRuns { req: u64, doc: u64, index: u32 },
+    Serialize { req: u64, doc: u64, start: crate::serialize::Endpoint, end: crate::serialize::Endpoint },
     Close { doc: u64 },
     Fetched { doc: u64, fetch: u64, bytes: Option<String> },
     /// Google Font families the daemon fetched. No reply: every open doc that
@@ -57,14 +58,14 @@ struct FamilyIn {
 /// What the stdin reader hands the document thread.
 enum Msg {
     Op(In),
-    /// A line that is JSON for an open, tile, hit or textRuns with a `req`, but not a valid
+    /// A line that is JSON for an open, tile, hit, textRuns or serialize with a `req`, but not a valid
     /// one. Only this thread writes to stdout, so the reader asks it to answer.
     Bad { req: u64 },
 }
 
 fn bad_request(line: &str) -> Option<u64> {
     let v: Value = serde_json::from_str(line).ok()?;
-    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns").then_some(())?;
+    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns" | "serialize").then_some(())?;
     v["req"].as_u64()
 }
 
@@ -218,6 +219,16 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         In::TextRuns { req, doc, index } => match docs.get(&doc) {
             Some(o) => match guarded(tainted, || o.doc.text_runs(index)) {
                 Some(runs) => line(out, json!({"kind":"reply","req":req,"ok":{"runs":runs}})),
+                None => {
+                    discard(docs, doc, tainted);
+                    unavailable(out, req)
+                }
+            },
+            None => unknown(out, req),
+        },
+        In::Serialize { req, doc, start, end } => match docs.get_mut(&doc) {
+            Some(o) => match guarded(tainted, || o.doc.serialize(start, end)) {
+                Some(copy) => line(out, json!({"kind":"reply","req":req,"ok":copy})),
                 None => {
                     discard(docs, doc, tainted);
                     unavailable(out, req)
