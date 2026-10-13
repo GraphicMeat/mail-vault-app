@@ -14,7 +14,6 @@ import { useAutoTagStore } from '../stores/autoTagStore';
 import { useTagStore } from '../stores/tagStore';
 import { useSnoozeStore, localSnoozeKeys } from '../stores/snoozeStore';
 import { useViewHideStore } from '../stores/viewHideStore';
-import { useViewStore } from '../stores/viewStore';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { formatCount } from '../utils/formatCount';
 import { archivedSelectionKeys, loadedRows } from '../utils/quickActionFacts';
@@ -209,7 +208,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
         // see (deleted and awaiting reconcile, \Deleted on the server, kept off
         // the Inbox by an auto-tag rule, held by a local snooze, held by a
         // saved view while "hide mail views hold" is on) must not be silently
-        // re-archived or re-deleted by a bulk run.
+        // re-archived or re-deleted by a bulk run. The pool is always this
+        // folder's, so the view hide applies even while a view or a search is
+        // what the list shows.
         const { deleteTombstones, archivedEmailIds: archived } = useMailStore.getState();
         const hiddenTagIds = useAutoTagStore.getState().hiddenTagIds();
         // Tags load per page of rows, and a row whose tags are not known is
@@ -231,7 +232,6 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
           tagsByRow: hiddenTagIds.size ? useTagStore.getState().byRow : null,
           localSnoozes: localSnoozeKeys(useSnoozeStore.getState().rows),
           viewHidden: useSettingsStore.getState().hideViewMail ? useViewHideStore.getState().keys : null,
-          inView: !!useViewStore.getState().activeViewId || !!useSearchStore.getState().searchActive,
         });
         // Newest first, same order the list renders and the drain reads in —
         // bulk progress then works down from the most recent message.

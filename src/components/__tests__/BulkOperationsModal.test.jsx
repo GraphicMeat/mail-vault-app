@@ -306,12 +306,14 @@ describe('BulkOperationsModal', () => {
       expect(screen.getByText('3 emails selected')).toBeTruthy();
     });
 
-    it('keeps it while a saved view is open', async () => {
+    // The pool is always the folder's, whatever the list shows above it.
+    it('leaves it out even while a saved view or a search is open', async () => {
       useViewStore.setState({ activeViewId: 'v1' });
+      useSearchStoreMock.setState({ searchActive: true });
       render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
       await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
       fireEvent.click(screen.getByText('All'));
-      expect(screen.getByText('3 emails selected')).toBeTruthy();
+      expect(screen.getByText('2 emails selected')).toBeTruthy();
     });
   });
 

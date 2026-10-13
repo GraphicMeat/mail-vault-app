@@ -4,6 +4,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore, selectOwnAddresses } from '../stores/settingsStore';
 import { localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
+import { useViewHideStore } from '../stores/viewHideStore';
 import { recountInbox, addArrivals, isCompleteCache, selectTotalUnread, unreadRows } from '../stores/unreadCounts';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
@@ -210,6 +211,29 @@ export function useEmailScheduler() {
       const [accountId, mailbox] = key.split('\x01');
       if (before.has(key) !== after.has(key) && mailbox === 'INBOX' && accountId !== listed) changed.add(accountId);
     }
+    for (const accountId of changed) recountInboxUnread(accountId, 0);
+  }), []);
+
+  // "Hide mail views hold": a new answer about which messages the saved views
+  // hold (or the setting going off, which forgets it: `keys` goes null) moves
+  // an inbox's badge with no sync to report it. Every account whose INBOX
+  // keys changed is recounted from its cache, but the list on screen, which
+  // recounts its own (updateSortedEmails). `null` is an empty set here.
+  useEffect(() => useViewHideStore.subscribe((state, prev) => {
+    if (state.keys === prev.keys) return;
+    const before = prev.keys || new Set(), after = state.keys || new Set();
+    const s = useMailStore.getState();
+    const listed = !s.unifiedInbox && !s.mailboxScope && s.activeMailbox === 'INBOX' && isCompleteCache(s) ? s.activeAccountId : null;
+    const changed = new Set();
+    const note = (key, other) => {
+      if (other.has(key)) return;
+      const box = key.slice(0, key.lastIndexOf('|'));
+      if (!box.endsWith('|INBOX')) return;
+      const accountId = box.slice(0, -'|INBOX'.length);
+      if (accountId !== listed) changed.add(accountId);
+    };
+    for (const key of before) note(key, after);
+    for (const key of after) note(key, before);
     for (const accountId of changed) recountInboxUnread(accountId, 0);
   }), []);
 

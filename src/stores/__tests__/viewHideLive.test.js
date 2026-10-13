@@ -13,9 +13,8 @@ if (!globalThis.window) {
 }
 vi.stubGlobal('navigator', { onLine: true });
 
-const listeners = {};
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: (name, cb) => { listeners[name] = cb; return Promise.resolve(() => {}); },
+  listen: () => Promise.resolve(() => {}),
   emit: () => Promise.resolve(),
 }));
 
@@ -89,11 +88,12 @@ vi.mock('../../services/workflows/refreshAccounts', async (importOriginal) => ({
 }));
 
 const mockSetUnread = vi.fn();
-let mockHideViewMail = true;
-vi.mock('../settingsStore', () => ({
-  effectiveSearchMailboxConcurrency: () => 1,
-  useSettingsStore: {
-    getState: () => ({
+// A real store: viewStore's watcher subscribes to `hideViewMail` flips.
+vi.mock('../settingsStore', async () => {
+  const { create } = await import('zustand');
+  return {
+    effectiveSearchMailboxConcurrency: () => 1,
+    useSettingsStore: create(() => ({
       cacheLimitMB: 128,
       hiddenAccounts: {},
       unreadPerAccount: {},
@@ -103,15 +103,17 @@ vi.mock('../settingsStore', () => ({
       linkSafetyEnabled: false,
       markAsReadMode: 'manual',
       markAsReadDelay: 3,
-      hideViewMail: mockHideViewMail,
+      hideViewMail: true,
       setUnreadForAccount: (...a) => mockSetUnread(...a),
       addSearchToHistory: () => {},
-    }),
-  },
-}));
+    })),
+  };
+});
 
 const { useMailStore } = await import('../mailStore');
 const { useViewHideStore } = await import('../viewHideStore');
+const { useSettingsStore } = await import('../settingsStore');
+const { daemonCall } = await import('../../services/daemonClient');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 
 const A1 = { id: 'a1', email: 'me@one.co', imapHost: 'h', password: 'x' };
@@ -124,7 +126,7 @@ const shown = () => useMailStore.getState().sortedEmails.map(e => e.uid);
 
 describe('mail a saved view holds, in the folder on screen', () => {
   beforeEach(() => {
-    mockHideViewMail = true;
+    useSettingsStore.setState({ hideViewMail: true });
     useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
     useMailStore.setState({
       accounts: [A1], activeAccountId: 'a1', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null,
@@ -153,7 +155,7 @@ describe('mail a saved view holds, in the folder on screen', () => {
     expect(shown()).toEqual([4]);
 
     // What viewStore does when the setting flips off: it forgets the answer.
-    mockHideViewMail = false;
+    useSettingsStore.setState({ hideViewMail: false });
     useViewHideStore.getState().clear();
 
     expect(shown()).toEqual([5, 4]);
@@ -163,7 +165,7 @@ describe('mail a saved view holds, in the folder on screen', () => {
     useViewHideStore.getState().setMembers(held(5));
     expect(shown()).toEqual([4]);
 
-    mockHideViewMail = false;
+    useSettingsStore.setState({ hideViewMail: false });
     useMailStore.getState().updateSortedEmails();
 
     expect(shown()).toEqual([5, 4]);
@@ -174,5 +176,25 @@ describe('mail a saved view holds, in the folder on screen', () => {
     useViewHideStore.getState().setMembers({ available: false });
 
     expect(shown()).toEqual([5, 4]);
+  });
+
+  // Imported last, on purpose: from here on viewStore's watcher answers every
+  // flip of the setting, which the cases above drive by hand.
+  it('follows the setting itself: on asks the daemon, off brings the mail back', async () => {
+    const { refreshHiddenMembers } = await import('../viewStore');
+    daemonCall.mockImplementation(async (method) => (method === 'views.hidden_members' ? held(5) : []));
+    try {
+      useSettingsStore.setState({ hideViewMail: false });
+      await refreshHiddenMembers();
+      expect(shown()).toEqual([5, 4]);
+
+      useSettingsStore.setState({ hideViewMail: true });
+      await vi.waitFor(() => expect(shown()).toEqual([4]));
+
+      useSettingsStore.setState({ hideViewMail: false });
+      expect(shown()).toEqual([5, 4]);
+    } finally {
+      daemonCall.mockReset().mockResolvedValue([]);
+    }
   });
 });

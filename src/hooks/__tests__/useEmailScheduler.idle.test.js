@@ -122,6 +122,7 @@ vi.mock('../../stores/settingsStore', () => ({
 const { ownAddresses } = await import('../../utils/ownAddresses.js');
 const { useEmailScheduler } = await import('../useEmailScheduler');
 const { useSnoozeStore } = await import('../../stores/snoozeStore');
+const { useViewHideStore } = await import('../../stores/viewHideStore');
 const { shiftInbox, selectTotalUnread } = await import('../../stores/unreadCounts');
 const { saveRestoreDescriptor, getRestoreDescriptor } = await import('../../services/cacheManager');
 
@@ -914,6 +915,47 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await flush();
       useSnoozeStore.setState({ rows: [] });
 
+      expect(mockGetAllHeaders).not.toHaveBeenCalled();
+    });
+
+    // "Hide mail views hold": a saved view taking a message of an inbox not on
+    // screen (or the setting going off, which forgets the answer) changes what
+    // that inbox's list shows with no sync to say so. Its badge is recounted.
+    it('recounts an inbox a saved view takes a message out of, or gives back', async () => {
+      useSnoozeStore.setState({ rows: [] });
+      useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
+      settingsStore.setState({ hideViewMail: true, unreadPerAccount: { a2: 2 } });
+      mailStore.setState(unifiedOpen);
+      mockGetAllHeaders.mockResolvedValue({ totalEmails: 2, emails: [{ uid: 7, flags: [] }, { uid: 1, flags: [] }] });
+      try {
+        renderHook(() => useEmailScheduler());
+        await flush();
+        useViewHideStore.getState().setMembers({ available: true, members: { a2: { INBOX: { uids: [7], unread: 1 } } } });
+        await flush();
+
+        expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
+        expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
+
+        useViewHideStore.getState().clear();
+        await flush();
+        expect(settingsStore.getState().unreadPerAccount.a2).toBe(2);
+      } finally {
+        useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
+        settingsStore.setState({ hideViewMail: false });
+      }
+    });
+
+    it('leaves a held inbox on screen to its list', async () => {
+      useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a2', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null });
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+      useViewHideStore.getState().setMembers({ available: true, members: { a2: { INBOX: { uids: [7], unread: 1 } }, a1: { Work: { uids: [3], unread: 0 } } } });
+      await flush();
+      useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
+
+      // a2's inbox is the list on screen, and a1 only had a non-inbox folder change.
       expect(mockGetAllHeaders).not.toHaveBeenCalled();
     });
 
