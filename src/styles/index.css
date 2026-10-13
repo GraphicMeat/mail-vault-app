@@ -1115,23 +1115,18 @@ input[type="range"]::-moz-range-thumb:hover {
 .reader-key { min-width: 22px; padding: 2px 5px; border: 1px solid var(--mail-border); border-radius: 4px; background: var(--mail-surface); font: inherit; }
 [role="button"]:focus-visible, [role="separator"]:focus-visible, select:focus-visible { outline: 2px solid var(--mail-accent); outline-offset: 2px; }
 @container mail-list (min-width: 480px) { .mail-list-date-range { display: inline; } }
-/* One row at every width: the labelled controls need ~600px, so below that
+/* One row at every width: the labelled controls (and the icon-only Hide view
+   mail toggle) need ~600px, so below that
    the words go (the buttons keep their names and tooltips) rather than a
    second row appearing. */
 @container mail-list (max-width: 640px) {
   .mail-toolbar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .mail-toolbar-button { min-width: 30px; }
 }
-/* "Hide view mail" (a folder's toolbar only, never with a view's Reset) has
-   the longest label, ~215px in French: it goes icon-only (~34px) from 800px,
-   and the rest still fit labelled down to 640px beside it. */
-@container mail-list (max-width: 800px) {
-  .mail-hide-view-toggle .mail-toolbar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .mail-hide-view-toggle { min-width: 30px; }
-}
-/* Icon-only, the row needs ~376px (with Hide view mail) and the pane can be
-   dragged to 300px: the select takes a row of its own for that whole range
-   instead of the switch wrapping a few pixels at a time. */
+/* Icon-only, the row needs ~376px (~342px plus the always icon-only Hide
+   view mail toggle) and the pane can be dragged to 300px: the select takes a
+   row of its own for that whole range instead of the switch wrapping a few
+   pixels at a time. */
 @container mail-list (max-width: 380px) {
   .mail-thread-select { order: 1; max-width: none; width: 100%; margin: 0 4px; }
 }

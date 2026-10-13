@@ -2561,9 +2561,11 @@ describe('the hide view mail toggle', () => {
     const { useSettingsStore } = await import('../../stores/settingsStore');
     expect(toggle(container).getAttribute('aria-pressed')).toBe('false');
     expect(toggle(container).classList.contains('is-active')).toBe(false);
-    expect(toggle(container).querySelector('.mail-toolbar-label').textContent).toBe('Hide view mail');
-    // The class the toolbar's width budget keys on (listToolbarLayout.test.js).
-    expect(toggle(container).classList.contains('mail-hide-view-toggle')).toBe(true);
+    // Icon-only at every width: the words are its name and its tooltip, so
+    // the toolbar's labelled budget never has to fit the longest locale's.
+    expect(toggle(container).querySelector('.mail-toolbar-label')).toBeNull();
+    expect(toggle(container).textContent).toBe('');
+    expect(toggle(container).getAttribute('aria-label')).toBe('Hide view mail');
     expect(toggle(container).getAttribute('title')).toBe('Hide mail your views already hold');
     fireEvent.click(toggle(container));
     await settle();
@@ -2585,6 +2587,16 @@ describe('the hide view mail toggle', () => {
   it('is not offered inside a view', async () => {
     const { container } = await mount({ activeViewId: 'v1' });
     expect(toggle(container)).toBeNull();
+  });
+
+  // The view's row may not be loaded yet: an open view id is enough to be
+  // inside one, for the button and for the header total alike.
+  it('is not offered, and subtracts nothing, while a view id is open whose view is not loaded', async () => {
+    const { container } = await mount({
+      activeViewId: 'not-loaded', hideViewMail: true, totalEmails: 2000, hiddenByMailbox: { 'acc1|INBOX': 2 },
+    });
+    expect(toggle(container)).toBeNull();
+    expect(count()).toBe('2 of 2,000 emails');
   });
 
   it('is not offered when there are no views to hold anything', async () => {

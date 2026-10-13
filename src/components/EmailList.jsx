@@ -230,7 +230,9 @@ function EmailListComponent({ stacked = false }) {
   const closeView = useViewStore(s => s.closeView);
   // "Hide view mail" is a folder's switch: inside a view the view's rows are
   // the point, and with no views there is nothing for it to hide.
-  const hideToggleOffered = useViewStore(s => !s.activeViewId && s.views.length > 0);
+  const viewCount = useViewStore(s => s.views.length);
+  const activeViewId = useViewStore(s => s.activeViewId);
+  const hideToggleOffered = !activeViewId && viewCount > 0;
   const hideViewMail = useSettingsStore(s => s.hideViewMail);
   const setHideViewMail = useSettingsStore(s => s.setHideViewMail);
   const searchResults = useSearchStore(s => s.searchResults);
@@ -616,7 +618,9 @@ function EmailListComponent({ stacked = false }) {
   const hiddenByMailbox = useViewHideStore(s => s.hiddenByMailbox);
   const viewHeldKeys = useViewHideStore(s => s.keys);
   const loadedEmails = useMessageListStore(s => s.emails);
-  const hidingViewMail = hideViewMail && !activeView && !searchActive;
+  // Inside a view by its id, as the toggle reads it: a view whose row is not
+  // loaded yet is still open.
+  const hidingViewMail = hideViewMail && !activeViewId && !searchActive;
   const hiddenFromTotal = useMemo(() => {
     if (!hidingViewMail) return 0;
     // All Inboxes counts what its accounts' inboxes loaded, so it gives back
@@ -1354,11 +1358,13 @@ function EmailListComponent({ stacked = false }) {
           aria-pressed={timelineVisible} title={t('list.timelineToggle')}
           onClick={toggleTimelineVisible}><Clock3 size={14} /><span className="mail-toolbar-label">{t('list.timeline')}</span></button>}
         {/* Every mode: the hide filters the folder's rows, which the explorer
-            draws too. */}
+            draws too. Icon-only at every width, like Reset: its words are its
+            name and tooltip, so the labelled toolbar never has to fit them. */}
         {hideToggleOffered && <button type="button"
-          data-testid="hide-view-mail-toggle" className={`mail-toolbar-button mail-hide-view-toggle ${hideViewMail ? 'is-active' : ''}`}
-          aria-pressed={!!hideViewMail} title={hideViewMail ? t('list.hideViewMailOn') : t('list.hideViewMailOff')}
-          onClick={() => setHideViewMail(!hideViewMail)}><EyeOff size={14} /><span className="mail-toolbar-label">{t('list.hideViewMail')}</span></button>}
+          data-testid="hide-view-mail-toggle" className={`mail-toolbar-button ${hideViewMail ? 'is-active' : ''}`}
+          aria-pressed={!!hideViewMail} aria-label={t('list.hideViewMail')}
+          title={hideViewMail ? t('list.hideViewMailOn') : t('list.hideViewMailOff')}
+          onClick={() => setHideViewMail(!hideViewMail)}><EyeOff size={14} /></button>}
         {/* The switch is pinned to the right edge and always last: the controls
             before it come and go with the mode, and it must not move under the
             pointer when they do. */}

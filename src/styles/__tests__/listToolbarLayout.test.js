@@ -34,23 +34,6 @@ describe('list toolbar labels', () => {
   });
 });
 
-// "Hide view mail" sits in a folder's toolbar (never beside a view's Reset)
-// and has the longest label, ~215px in French on top of the ~600px the other
-// labelled controls need. Its own label goes from a wider list, matched by the
-// class the button carries (EmailList.test.js checks it); the others keep
-// theirs down to the compact width.
-describe('the Hide view mail toggle', () => {
-  it('hides its label visually from a list wide enough for the longest one', () => {
-    const at = css.indexOf('.mail-hide-view-toggle .mail-toolbar-label {');
-    expect(at, 'the label rule scoped to the toggle').toBeGreaterThan(-1);
-    const opener = css.lastIndexOf('@container mail-list', at);
-    expect(Number(css.slice(opener, at).match(/max-width: (\d+)px/)?.[1])).toBeGreaterThanOrEqual(800);
-    const label = css.slice(at, css.indexOf('}', at));
-    expect(label).toMatch(/clip-path:\s*inset\(50%\)/);
-    expect(label).not.toMatch(/display:\s*none|visibility:\s*hidden/);
-  });
-});
-
 // Icon-only, the controls need ~376px (Hide view mail included) and the list
 // pane can be dragged to 300px. Between those the row would wrap by a few pixels at a time, so the
 // thread select drops to a row of its own for the whole narrow range, and the
