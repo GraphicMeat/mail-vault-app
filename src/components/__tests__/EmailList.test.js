@@ -224,6 +224,9 @@ vi.mock('../../stores/settingsStore', async () => {
     billingProfile: null,
     listTimelineVisible: false,
     setListTimelineVisible: vi.fn(value => store.setState({ listTimelineVisible: value })),
+    // The real store's default: off, nothing a view holds is hidden.
+    hideViewMail: false,
+    setHideViewMail: vi.fn(value => store.setState({ hideViewMail: Boolean(value) })),
     // A real store underneath, so a saved view's layout change re-renders the
     // list the way the app's store does.
     viewOverrides: {},
@@ -2506,5 +2509,158 @@ describe('rows that join the list fade in', () => {
     const { container, rerender } = await paint([]);
     await paint([1, 2], rerender);
     expect(appearing(container).sort()).toEqual(['1', '2']);
+  });
+});
+
+// "Hide view mail": a toolbar switch for the setting, and the header total
+// that leaves out what the switch hides. The rows are filtered upstream
+// (rowVisibility); the count is the server's total less what the daemon says
+// the saved views hold, and never fewer than the rows on screen.
+describe('the hide view mail toggle', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+  const toggle = container => container.querySelector('[data-testid="hide-view-mail-toggle"]');
+  const count = () => screen.getByTestId('email-list-count').textContent;
+
+  const mount = async ({
+    views = [{ id: 'v1', name: 'Saved', def: {} }], activeViewId = null, hideViewMail = false,
+    totalEmails = 2, sortedEmails = makeEmails(2), emails, activeMailbox = 'INBOX', mailboxScope = null,
+    unifiedInbox = false, hiddenByMailbox = null, keys = null,
+  } = {}) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    const { useViewHideStore } = await import('../../stores/viewHideStore');
+    useMailStore.setState({
+      sortedEmails, totalEmails, emails: emails ?? sortedEmails, activeMailbox, activeAccountId: 'acc1', mailboxScope, unifiedInbox,
+      unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
+    });
+    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', viewOverrides: {}, hideViewMail });
+    useViewStore.setState({ views, activeViewId });
+    useViewHideStore.setState({ keys, hiddenByMailbox, unreadByMailbox: null });
+    const { EmailList } = await import('../EmailList.jsx');
+    const utils = render(React.createElement(EmailList.type));
+    await settle();
+    return utils;
+  };
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    const { useViewHideStore } = await import('../../stores/viewHideStore');
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, emails: undefined, activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false });
+    useSettingsStore.setState({ emailListView: 'list', hideViewMail: false, viewOverrides: {} });
+    useSettingsStore.getState().setHideViewMail.mockClear();
+    useViewStore.setState({ views: [], activeViewId: null, loading: false });
+    useViewHideStore.setState({ keys: null, hiddenByMailbox: null, unreadByMailbox: null });
+  });
+
+  it('turns the setting on and off, and says which it is', async () => {
+    const { container } = await mount();
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    expect(toggle(container).getAttribute('aria-pressed')).toBe('false');
+    expect(toggle(container).classList.contains('is-active')).toBe(false);
+    expect(toggle(container).querySelector('.mail-toolbar-label').textContent).toBe('Hide view mail');
+    // The class the toolbar's width budget keys on (listToolbarLayout.test.js).
+    expect(toggle(container).classList.contains('mail-hide-view-toggle')).toBe(true);
+    expect(toggle(container).getAttribute('title')).toBe('Hide mail your views already hold');
+    fireEvent.click(toggle(container));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMail).toHaveBeenLastCalledWith(true);
+    expect(toggle(container).getAttribute('aria-pressed')).toBe('true');
+    expect(toggle(container).classList.contains('is-active')).toBe(true);
+    expect(toggle(container).getAttribute('title')).toBe('Showing folders without mail your views hold');
+    fireEvent.click(toggle(container));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMail).toHaveBeenLastCalledWith(false);
+    expect(toggle(container).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('sits before the list/explorer switch, which stays last', async () => {
+    const { container } = await mount();
+    expect(toggle(container).nextElementSibling.classList.contains('mail-list-view-switch')).toBe(true);
+  });
+
+  it('is not offered inside a view', async () => {
+    const { container } = await mount({ activeViewId: 'v1' });
+    expect(toggle(container)).toBeNull();
+  });
+
+  it('is not offered when there are no views to hold anything', async () => {
+    const { container } = await mount({ views: [] });
+    expect(toggle(container)).toBeNull();
+  });
+
+  it('counts a folder without the mail the views hold there', async () => {
+    await mount({ hideViewMail: true, totalEmails: 2000, hiddenByMailbox: { 'acc1|INBOX': 2, 'acc1|Work': 7 } });
+    expect(count()).toBe('2 of 1,998 emails');
+  });
+
+  it('counts the whole folder with the switch off, whatever the views hold', async () => {
+    await mount({ hideViewMail: false, totalEmails: 2000, hiddenByMailbox: { 'acc1|INBOX': 2 } });
+    expect(count()).toBe('2 of 2,000 emails');
+  });
+
+  it('subtracts nothing while the membership is unknown', async () => {
+    await mount({ hideViewMail: true, totalEmails: 2000, hiddenByMailbox: null });
+    expect(count()).toBe('2 of 2,000 emails');
+  });
+
+  it('never counts fewer than the rows on screen', async () => {
+    await mount({ hideViewMail: true, totalEmails: 5, hiddenByMailbox: { 'acc1|INBOX': 10 } });
+    expect(count()).toBe('2 emails');
+  });
+
+  it('counts a folder branch without what the views hold in each of its folders', async () => {
+    await mount({
+      hideViewMail: true, totalEmails: 300, activeMailbox: 'Projects',
+      mailboxScope: { root: 'Projects', paths: ['Projects', 'Projects/A'] },
+      hiddenByMailbox: { 'acc1|Projects': 3, 'acc1|Projects/A': 4, 'acc1|INBOX': 50 },
+    });
+    expect(count()).toBe('2 of 293 emails');
+  });
+
+  it('in All Inboxes, counts the loaded rows the views hold off the total', async () => {
+    const row = (uid, account) => ({ ...makeEmails(1)[0], uid, subject: `u${uid}${account}`, _accountId: account, _mailbox: 'INBOX' });
+    const loaded = [row(1, 'acc1'), row(2, 'acc1'), row(1, 'acc2'), row(3, 'acc2')];
+    await mount({
+      hideViewMail: true, totalEmails: 100, activeMailbox: 'UNIFIED',
+      emails: loaded, sortedEmails: [loaded[0], loaded[3]],
+      // acc1|Work|9 is held but never loaded here, so it cannot be counted off.
+      keys: new Set(['acc1|INBOX|2', 'acc2|INBOX|1', 'acc1|Work|9']),
+      hiddenByMailbox: { 'acc1|INBOX': 40, 'acc2|INBOX': 40 },
+    });
+    expect(count()).toBe('2 of 98 emails');
+  });
+
+  it('reads a unified store as spanning even when its mailbox names a folder', async () => {
+    const row = (uid, account) => ({ ...makeEmails(1)[0], uid, subject: `u${uid}${account}`, _accountId: account, _mailbox: 'INBOX' });
+    const loaded = [row(1, 'acc1'), row(1, 'acc2')];
+    await mount({
+      hideViewMail: true, totalEmails: 50, activeMailbox: 'INBOX', unifiedInbox: true,
+      emails: loaded, sortedEmails: [loaded[0]],
+      keys: new Set(['acc2|INBOX|1']),
+      // One account's folder count must not be taken off a cross-account total.
+      hiddenByMailbox: { 'acc1|INBOX': 30 },
+    });
+    expect(count()).toBe('1 of 49 emails');
+  });
+
+  it('calls a folder whose shown rows are all loaded complete, not "loaded"', async () => {
+    await mount({ hideViewMail: true, totalEmails: 4, hiddenByMailbox: { 'acc1|INBOX': 2 } });
+    expect(count()).toBe('2 emails');
+    expect(screen.getByTestId('email-list-vault-share').textContent).toBe('In your vault: 0 of 2');
+  });
+
+  it('leaves a search alone: its rows are not hidden, so neither is its count', async () => {
+    const { useSearchStore } = await import('../../stores/searchStore');
+    Object.assign(useSearchStore.getState(), { searchActive: true, searchResults: makeEmails(2) });
+    try {
+      await mount({ hideViewMail: true, totalEmails: 2000, hiddenByMailbox: { 'acc1|INBOX': 2 } });
+      expect(count()).toBe('2 of 2,000 emails');
+    } finally {
+      Object.assign(useSearchStore.getState(), { searchActive: false, searchResults: [] });
+    }
   });
 });

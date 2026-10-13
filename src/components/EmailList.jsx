@@ -5,13 +5,14 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation, viewOwnAddresses } from '../stores/slices/unifiedHelpers';
+import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation, viewOwnAddresses, rowIdentity } from '../stores/slices/unifiedHelpers';
 import { mergesSentIntoThreads } from '../utils/sentFolder';
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
 import { useViewStore, viewLabel, effectiveViewConfig, viewDefaults, viewPresentationStamp, currentListView } from '../stores/viewStore';
 import { ViewAttachmentsDownload, useTimelineDownload, PeriodDownloadButtons } from './ViewAttachmentsDownload';
 import { useSearchStore } from '../stores/searchStore';
+import { useViewHideStore } from '../stores/viewHideStore';
 import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
 import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
@@ -51,6 +52,7 @@ import {
   Network,
   Clock3,
   RotateCcw,
+  EyeOff,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { FollowUpPinnedRows } from './FollowUpPinnedRows';
@@ -226,6 +228,11 @@ function EmailListComponent({ stacked = false }) {
   // What the open view holds, from the daemon: the rows on screen are one page.
   const viewTotal = useViewStore(s => (s.activeViewId ? s.counts[s.activeViewId] : undefined));
   const closeView = useViewStore(s => s.closeView);
+  // "Hide view mail" is a folder's switch: inside a view the view's rows are
+  // the point, and with no views there is nothing for it to hide.
+  const hideToggleOffered = useViewStore(s => !s.activeViewId && s.views.length > 0);
+  const hideViewMail = useSettingsStore(s => s.hideViewMail);
+  const setHideViewMail = useSettingsStore(s => s.setHideViewMail);
   const searchResults = useSearchStore(s => s.searchResults);
   const searchHasAttachments = useSearchStore(s => !!s.searchFilters?.hasAttachments);
   const flagSeq = useUiStore(s => s._flagSeq);
@@ -602,11 +609,46 @@ function EmailListComponent({ stacked = false }) {
     return { loaded, inVault, pct: Math.round((inVault / loaded) * 100) };
   }, [sortedEmails]);
 
+  // "Hide view mail": how many of the folder's messages the switch keeps off
+  // this list, so the header's total is the folder as shown. The header only:
+  // store `totalEmails` stays the server's. Never inside a view or a search,
+  // whose rows nothing hides, and unknown membership (null) subtracts nothing.
+  const hiddenByMailbox = useViewHideStore(s => s.hiddenByMailbox);
+  const viewHeldKeys = useViewHideStore(s => s.keys);
+  const loadedEmails = useMessageListStore(s => s.emails);
+  const hidingViewMail = hideViewMail && !activeView && !searchActive;
+  const hiddenFromTotal = useMemo(() => {
+    if (!hidingViewMail) return 0;
+    // All Inboxes counts what its accounts' inboxes loaded, so it gives back
+    // only the loaded rows the daemon's key set holds (each message once).
+    // Spanning as rowVisibility reads it.
+    if (unifiedInbox || activeMailbox === 'UNIFIED') {
+      if (!viewHeldKeys?.size || !loadedEmails?.length) return 0;
+      const view = { activeAccountId, activeMailbox };
+      const held = new Set();
+      for (const e of loadedEmails) {
+        const id = rowIdentity(e, view);
+        const key = id && `${id.accountId}|${id.mailbox}|${id.uid}`;
+        if (key && viewHeldKeys.has(key)) held.add(key);
+      }
+      return held.size;
+    }
+    // A folder (or a folder branch, whose total is its folders' sum) gives
+    // back what the daemon says it hides in each of them.
+    if (!hiddenByMailbox) return 0;
+    const paths = mailboxScope?.paths?.length ? mailboxScope.paths : [activeMailbox];
+    return paths.reduce((sum, path) => sum + (hiddenByMailbox[`${activeAccountId}|${path}`] || 0), 0);
+  }, [hidingViewMail, unifiedInbox, activeMailbox, activeAccountId, mailboxScope, viewHeldKeys, loadedEmails, hiddenByMailbox]);
+  // The folder's total as this list shows it.
+  const shownTotal = hidingViewMail ? totalEmails - hiddenFromTotal : totalEmails;
+
   // ponytail: the "loaded" suffix only earns its place while the server still
   // holds rows this window hasn't paged in — otherwise it invites a scroll that
   // can never move either number. Vault view is never partial in that sense:
   // its rows come off disk, while totalEmails keeps counting the server.
-  const windowIsPartial = viewMode !== 'local' && sortedEmails.length < totalEmails;
+  // A hidden message is not one still to page in: measured against the
+  // total less what "hide view mail" keeps off.
+  const windowIsPartial = viewMode !== 'local' && sortedEmails.length < shownTotal;
 
   // Count emails with alerts — used in fingerprints to invalidate caches when alerts change
   const alertCount = useMemo(() => {
@@ -1222,7 +1264,12 @@ function EmailListComponent({ stacked = false }) {
   const mailboxSummary = viewLoading ? ''
     // A view's rows are its own: the folder behind it has no say in the count.
     : activeView && searchActive ? formatListCount({ shown: displayEmails.length, loaded: searchResults.length, total: viewTotal ?? searchResults.length, unreadOnly })
-      : formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly });
+      : formatListCount({
+        shown: displayEmails.length, loaded: sortedEmails.length, unreadOnly,
+        // Never fewer than the rows on screen: the daemon's count and the
+        // server's total are read at different moments.
+        total: hidingViewMail ? Math.max(displayEmails.length, shownTotal) : totalEmails,
+      });
   const mailboxScopeLabel = mailboxScope && t('list.acrossFolders', { count: mailboxScope.paths.length });
   const vaultShareLabel = vaultShare && t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
     inVault: formatCount(vaultShare.inVault), loaded: formatCount(vaultShare.loaded),
@@ -1306,6 +1353,12 @@ function EmailListComponent({ stacked = false }) {
           data-testid="timeline-toggle" className={`mail-toolbar-button ${timelineVisible ? 'is-active' : ''}`}
           aria-pressed={timelineVisible} title={t('list.timelineToggle')}
           onClick={toggleTimelineVisible}><Clock3 size={14} /><span className="mail-toolbar-label">{t('list.timeline')}</span></button>}
+        {/* Every mode: the hide filters the folder's rows, which the explorer
+            draws too. */}
+        {hideToggleOffered && <button type="button"
+          data-testid="hide-view-mail-toggle" className={`mail-toolbar-button mail-hide-view-toggle ${hideViewMail ? 'is-active' : ''}`}
+          aria-pressed={!!hideViewMail} title={hideViewMail ? t('list.hideViewMailOn') : t('list.hideViewMailOff')}
+          onClick={() => setHideViewMail(!hideViewMail)}><EyeOff size={14} /><span className="mail-toolbar-label">{t('list.hideViewMail')}</span></button>}
         {/* The switch is pinned to the right edge and always last: the controls
             before it come and go with the mode, and it must not move under the
             pointer when they do. */}

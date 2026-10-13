@@ -1122,10 +1122,17 @@ input[type="range"]::-moz-range-thumb:hover {
   .mail-toolbar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .mail-toolbar-button { min-width: 30px; }
 }
-/* Icon-only, the row needs ~342px and the pane can be dragged to 300px: the
-   select takes a row of its own for that whole range instead of the switch
-   wrapping a few pixels at a time. */
-@container mail-list (max-width: 350px) {
+/* "Hide view mail" (a folder's toolbar only, never with a view's Reset) has
+   the longest label, ~215px in French: it goes icon-only (~34px) from 800px,
+   and the rest still fit labelled down to 640px beside it. */
+@container mail-list (max-width: 800px) {
+  .mail-hide-view-toggle .mail-toolbar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .mail-hide-view-toggle { min-width: 30px; }
+}
+/* Icon-only, the row needs ~376px (with Hide view mail) and the pane can be
+   dragged to 300px: the select takes a row of its own for that whole range
+   instead of the switch wrapping a few pixels at a time. */
+@container mail-list (max-width: 380px) {
   .mail-thread-select { order: 1; max-width: none; width: 100%; margin: 0 4px; }
 }
 @container mail-list (max-width: 300px) {
