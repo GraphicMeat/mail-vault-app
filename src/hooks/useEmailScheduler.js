@@ -105,14 +105,20 @@ function viewCountsStale() {
     .catch(error => console.warn('[scheduler] Could not count the saved views again:', error));
 }
 
+// One import for both notes calls below, which a flag change fires in the
+// same tick: vitest's mocker hands the second of two imports in flight the
+// real module, so a test saw the board reread nothing.
+let notesStore = null;
+const loadNotesStore = () => (notesStore ||= import('../stores/notesStore'));
+
 function notesStale() {
-  import('../stores/notesStore')
+  loadNotesStore()
     .then(({ scheduleNotesReload }) => scheduleNotesReload())
     .catch(error => console.warn('[scheduler] Could not list the notes board again:', error));
 }
 
 function rereadNoteFlags(accountId, mailbox) {
-  import('../stores/notesStore')
+  loadNotesStore()
     .then(({ useNotesStore }) => useNotesStore.getState().rereadCopyFlags(accountId, mailbox))
     .catch(error => console.warn('[scheduler] Could not repaint the notes board:', error));
 }
