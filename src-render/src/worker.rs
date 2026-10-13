@@ -35,6 +35,7 @@ enum In {
     Fold { req: u64, doc: u64, id: String, open: bool },
     TextRuns { req: u64, doc: u64, index: u32 },
     Serialize { req: u64, doc: u64, start: crate::serialize::Endpoint, end: crate::serialize::Endpoint },
+    Inspect { req: u64, doc: u64 },
     Close { doc: u64 },
     Fetched { doc: u64, fetch: u64, bytes: Option<String> },
     /// Google Font families the daemon fetched. No reply: every open doc that
@@ -59,14 +60,14 @@ struct FamilyIn {
 /// What the stdin reader hands the document thread.
 enum Msg {
     Op(In),
-    /// A line that is JSON for an open, tile, hit, fold, textRuns or serialize with a `req`, but not a valid
+    /// A line that is JSON for an open, tile, hit, fold, textRuns, serialize or inspect with a `req`, but not a valid
     /// one. Only this thread writes to stdout, so the reader asks it to answer.
     Bad { req: u64 },
 }
 
 fn bad_request(line: &str) -> Option<u64> {
     let v: Value = serde_json::from_str(line).ok()?;
-    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns" | "serialize" | "fold").then_some(())?;
+    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns" | "serialize" | "fold" | "inspect").then_some(())?;
     v["req"].as_u64()
 }
 
@@ -256,6 +257,16 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         In::Serialize { req, doc, start, end } => match docs.get(&doc) {
             Some(o) => match guarded(tainted, || o.doc.serialize(start, end)) {
                 Some(copy) => line(out, json!({"kind":"reply","req":req,"ok":copy})),
+                None => {
+                    discard(docs, doc, tainted);
+                    unavailable(out, req)
+                }
+            },
+            None => unknown(out, req),
+        },
+        In::Inspect { req, doc } => match docs.get_mut(&doc) {
+            Some(o) => match guarded(tainted, || o.doc.inspect()) {
+                Some(elements) => line(out, json!({"kind":"reply","req":req,"ok":{"elements":elements}})),
                 None => {
                     discard(docs, doc, tainted);
                     unavailable(out, req)

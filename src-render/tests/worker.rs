@@ -189,3 +189,23 @@ fn text_runs_names_the_tiles_whose_roots_run_into_this_one() {
     assert_eq!(out[1]["ok"]["runs"], json!([]));
     assert_eq!(out[1]["ok"]["owners"], json!([0]));
 }
+
+#[test]
+fn inspect_op_reports_marked_elements() {
+    let html = r#"<body style="margin:0"><p data-mv-id="p[1]" style="color:#ff0000">x</p></body>"#;
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":4,"html":html,"cssWidth":300,"scale":1.0,"allowRemote":false}),
+        json!({"op":"inspect","req":2,"doc":4}),
+        json!({"op":"inspect","req":3,"doc":99}),
+    ]);
+    let els = out[1]["ok"]["elements"].as_array().unwrap();
+    assert_eq!(els[0]["mvId"], "p[1]");
+    assert_eq!(els[0]["color"], json!([255.0, 0.0, 0.0, 1.0]));
+    assert_eq!(out[2]["code"], "render_unknown_doc");
+}
+
+#[test]
+fn a_malformed_inspect_is_answered_not_dropped() {
+    let out = run(&[json!({"op":"inspect","req":1,"doc":"one"})]);
+    assert_eq!(out, vec![json!({"kind":"error","req":1,"code":"render_bad_request"})]);
+}

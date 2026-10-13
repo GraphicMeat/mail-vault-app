@@ -278,6 +278,12 @@ impl RenderDoc {
         Ok(encode_rgb_over_white(&rgba, px_w, px_h))
     }
 
+    /// Parity measurements for every `[data-mv-id]` element (see inspect.rs).
+    pub fn inspect(&mut self) -> Vec<crate::inspect::InspectedElement> {
+        crate::inspect::reset_scroll(&mut self.doc);
+        crate::inspect::collect(&self.doc)
+    }
+
     /// Open or close fold `id` and relayout once, the same way a resource
     /// arrival does (so CSS images in a region that was display:none are
     /// queued). False, and nothing touched, for an unknown id or a fold

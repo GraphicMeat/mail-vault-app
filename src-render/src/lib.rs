@@ -5,6 +5,7 @@ mod doc;
 pub mod dommap;
 pub mod fold;
 pub mod fonts;
+pub mod inspect;
 pub mod net;
 pub mod serialize;
 pub mod text;

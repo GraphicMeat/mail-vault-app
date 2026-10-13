@@ -4966,6 +4966,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stylo",
+ "stylo_traits",
 ]
 
 [[package]]
