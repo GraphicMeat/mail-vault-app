@@ -1,14 +1,24 @@
 //! Supervises the Blitz render worker (`mailvault-daemon --render-worker`).
 //!
 //! One worker, spawned lazily on the first `render.open`, killed after
-//! IDLE_EXIT with no open docs. Any timeout or EOF kills it, fails every
-//! waiter with `render_unavailable` (the body shows its failure view) and
-//! the next call spawns a fresh one. Rendering never runs in this process:
-//! the release profile is panic=abort.
+//! IDLE_EXIT with no open docs. A timeout alone never kills it (busy is not
+//! hung): the kill needs a timed-out call AND WATCHDOG of silence from the
+//! worker while it owes an answer (`Silence`). EOF, a failed stdin write and
+//! the reaper end it too; every waiter then fails with `render_unavailable`
+//! (the body shows its failure view) and the next call spawns a fresh one.
+//! Rendering never runs in this process.
+//!
+//! The worker survives a panic in one document: each operation runs under
+//! `catch_unwind`, which needs panic=unwind. The `[profile.release]
+//! panic = "abort"` in this crate's manifest is ignored (cargo ignores a
+//! workspace member's profile tables and the root sets none), so the build
+//! unwinds; a build that really aborted would turn such a panic into a worker
+//! exit, which this host handles like any crash. After a caught panic the worker exits once its last
+//! document closes, so the next call gets a clean process.
 //!
 //! The worker has no network. Its `fetch` lines are fetched here through
-//! `blitz::fetch::fetch_render_image` (SSRF guard, https, image/*, capped,
-//! Network Activity "email images"), at most FETCH_PARALLEL at once.
+//! `blitz::fetch::fetch_render_image` (SSRF guard, https, image/* but never
+//! SVG, capped, Network Activity "email images"), at most FETCH_PARALLEL at once.
 pub mod fetch;
 pub mod routes;
 
@@ -61,10 +71,48 @@ fn next_doc_id_seed() -> u64 {
 }
 
 /// The watchdog measures silence from the moment the worker became busy. A
-/// request that arrives while nothing else is pending finds an idle worker, so
-/// its last output says nothing about how long it has been unresponsive.
-fn silence_clock(last_output: Instant, now: Instant, pending: usize) -> Instant {
-    if pending == 0 { now } else { last_output }
+/// request that arrives while it owes no answer finds an idle worker, so its
+/// last output says nothing about how long it has been unresponsive.
+fn silence_clock(since: Instant, now: Instant, owed: usize) -> Instant {
+    if owed == 0 { now } else { since }
+}
+
+/// What the watchdog knows about one worker. `owed` counts the requests written
+/// to it that it has not answered yet. A caller that timed out gives up its
+/// waiter, but the worker still owes the reply, so a hung worker stays "busy"
+/// however many calls come and go; only the worker's own output moves the clock.
+struct Silence {
+    /// Start of the current silence: the last worker output, or the moment it
+    /// went from owing nothing to owing something.
+    since: Instant,
+    owed: usize,
+}
+
+impl Silence {
+    fn new(now: Instant) -> Self {
+        Self { since: now, owed: 0 }
+    }
+
+    /// A request is about to be written.
+    fn request(&mut self, now: Instant) {
+        self.since = silence_clock(self.since, now, self.owed);
+        self.owed += 1;
+    }
+
+    /// The worker wrote a line that answers nothing (fetch, updated).
+    fn line(&mut self, now: Instant) {
+        self.since = now;
+    }
+
+    /// The worker answered one request, whether or not anyone still waits for it.
+    fn reply(&mut self, now: Instant) {
+        self.since = now;
+        self.owed = self.owed.saturating_sub(1);
+    }
+
+    fn silent_for(&self, now: Instant) -> Duration {
+        now.saturating_duration_since(self.since)
+    }
 }
 
 /// RPCs a person waits on. `render.hit` is deliberately absent: hover traffic
@@ -117,6 +165,9 @@ struct Worker {
     /// Set by the stdout reader on EOF: the worker is gone even if the OS has
     /// not reported its exit to `try_wait` yet.
     dead: Arc<AtomicBool>,
+    /// Fed by this worker's stdout reader and by `call`; read by the watchdog.
+    /// Per spawn, so a dying worker's last lines cannot move a new one's clock.
+    silence: Arc<StdMutex<Silence>>,
 }
 
 pub struct RenderHost {
@@ -128,8 +179,6 @@ pub struct RenderHost {
     next_doc: AtomicU64,
     open_docs: StdMutex<HashSet<u64>>,
     last_used: StdMutex<Instant>,
-    /// Bumped by the stdout reader on every line; the watchdog reads it.
-    last_output: Arc<StdMutex<Instant>>,
     fetch_slots: Arc<Semaphore>,
 }
 
@@ -144,7 +193,6 @@ impl RenderHost {
             next_doc: AtomicU64::new(next_doc_id_seed()),
             open_docs: StdMutex::default(),
             last_used: StdMutex::new(Instant::now()),
-            last_output: Arc::new(StdMutex::new(Instant::now())),
             fetch_slots: Arc::new(Semaphore::new(FETCH_PARALLEL)),
         }
     }
@@ -213,6 +261,7 @@ impl RenderHost {
         frame["req"] = json!(req);
         let (tx, rx) = oneshot::channel();
         let waiters;
+        let silence;
         let epoch;
         {
             let mut guard = self.worker.lock().await;
@@ -230,10 +279,10 @@ impl RenderHost {
             let w = guard.as_ref().unwrap();
             epoch = w.epoch;
             waiters = w.waiters.clone();
+            silence = w.silence.clone();
             {
                 let mut pending = w.waiters.lock().unwrap();
-                let mut last = self.last_output.lock().unwrap();
-                *last = silence_clock(*last, Instant::now(), pending.len());
+                silence.lock().unwrap().request(Instant::now());
                 pending.insert(req, tx);
             }
             let mut stdin = w.stdin.lock().await;
@@ -249,9 +298,10 @@ impl RenderHost {
             Ok(Err(_)) => Err(UNAVAILABLE.into()), // worker died; reader already failed us
             Err(_) => {
                 // Timed out. Forget this waiter (a late reply is dropped), and
-                // kill only if the worker has gone silent: busy is not hung.
+                // kill only if the worker has gone silent: busy is not hung. The
+                // forgotten request is still owed, so this does not restart the clock.
                 waiters.lock().unwrap().remove(&req);
-                if self.last_output.lock().unwrap().elapsed() >= WATCHDOG {
+                if silence.lock().unwrap().silent_for(Instant::now()) >= WATCHDOG {
                     self.kill_epoch(epoch).await;
                 }
                 Err(UNAVAILABLE.into())
@@ -274,8 +324,8 @@ impl RenderHost {
             if let Some(w) = guard.take() {
                 Self::terminate(w);
             }
-            // Every doc died with the worker. The frontend re-opens on
-            // render_unknown_doc and shows its failure view.
+            // Every doc died with the worker. A tile asked for one of them
+            // answers render_unknown_doc and the body shows its failure view.
             self.open_docs.lock().unwrap().clear();
         }
     }
@@ -295,16 +345,24 @@ impl RenderHost {
         let epoch = self.epoch.fetch_add(1, Ordering::Relaxed) + 1;
         info!("render worker #{epoch} started");
         let (events, slots, w2, s2) = (self.events.clone(), self.fetch_slots.clone(), waiters.clone(), stdin.clone());
-        let last_output = self.last_output.clone();
+        let silence = Arc::new(StdMutex::new(Silence::new(Instant::now())));
+        let heard = silence.clone();
         let dead = Arc::new(AtomicBool::new(false));
         let dead_on_eof = dead.clone();
-        *last_output.lock().unwrap() = Instant::now();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                *last_output.lock().unwrap() = Instant::now();
-                let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
-                match v["kind"].as_str() {
+                let Ok(v) = serde_json::from_str::<Value>(&line) else {
+                    heard.lock().unwrap().line(Instant::now());
+                    continue;
+                };
+                let kind = v["kind"].as_str();
+                if matches!(kind, Some("reply") | Some("error")) {
+                    heard.lock().unwrap().reply(Instant::now());
+                } else {
+                    heard.lock().unwrap().line(Instant::now());
+                }
+                match kind {
                     Some("reply") | Some("error") => {
                         let req = v["req"].as_u64().unwrap_or(0);
                         if let Some(tx) = w2.lock().unwrap().remove(&req) {
@@ -340,7 +398,7 @@ impl RenderHost {
                 let _ = tx.send(Err(UNAVAILABLE.into()));
             }
         });
-        Ok(Worker { epoch, child, stdin, waiters, dead })
+        Ok(Worker { epoch, child, stdin, waiters, dead, silence })
     }
 }
 
@@ -441,6 +499,51 @@ mod tests {
         assert_eq!(silence_clock(old, now, 0), now, "idle worker: its last line is not silence");
         assert_eq!(silence_clock(old, now, 1), old, "already busy: keep counting from the last line");
         assert_eq!(silence_clock(old, now, 5), old);
+    }
+
+    #[test]
+    fn a_timed_out_call_does_not_restart_the_silence_clock() {
+        let t0 = Instant::now();
+        let mut s = Silence::new(t0);
+        s.request(t0); // a tile the spinning worker never answers
+        // It times out at TILE_TIMEOUT and its waiter is forgotten: the clock hears
+        // nothing about that. The next tile then arrives while the first is still owed.
+        s.request(t0 + TILE_TIMEOUT);
+        let later = t0 + 2 * TILE_TIMEOUT;
+        assert_eq!(s.silent_for(later), 2 * TILE_TIMEOUT, "silent since the first request, not the second");
+        assert!(s.silent_for(later) >= WATCHDOG, "so the second timeout kills the hung worker");
+    }
+
+    #[test]
+    fn a_reply_restarts_the_clock_and_an_answered_worker_is_idle_again() {
+        let t0 = Instant::now();
+        let secs = Duration::from_secs;
+        let mut s = Silence::new(t0);
+        s.request(t0);
+        s.request(t0 + secs(1));
+        s.reply(t0 + secs(2));
+        assert_eq!(s.silent_for(t0 + secs(3)), secs(1), "a reply is output: the count starts again");
+        s.reply(t0 + secs(3));
+        // Everything is answered: the next request finds an idle worker, whose age proves nothing.
+        s.request(t0 + secs(60));
+        assert_eq!(s.silent_for(t0 + secs(61)), secs(1));
+    }
+
+    #[test]
+    fn other_output_proves_life_but_does_not_clear_what_is_owed() {
+        let t0 = Instant::now();
+        let secs = Duration::from_secs;
+        let mut s = Silence::new(t0);
+        s.request(t0);
+        s.line(t0 + secs(5)); // e.g. a fetch or updated line
+        assert_eq!(s.silent_for(t0 + secs(6)), secs(1));
+        s.request(t0 + secs(7)); // still owed: no restart
+        assert_eq!(s.silent_for(t0 + secs(8)), secs(3));
+        s.reply(t0 + secs(8));
+        s.reply(t0 + secs(8));
+        s.reply(t0 + secs(8)); // a reply too many (never sent by the worker) cannot underflow
+        s.request(t0 + secs(9));
+        assert_eq!(s.silent_for(t0 + secs(10)), secs(1));
     }
 
     #[tokio::test]
