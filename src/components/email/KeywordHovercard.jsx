@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom';
 import { useT } from '../../i18n/index.js';
 import { useViewStore } from '../../stores/viewStore';
 import { useViewportShift } from '../../hooks/useViewportShift';
-import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { hasOpenDialog, registerPopoverLayer } from '../../hooks/useDialogA11y';
 import { Private } from '../privacy/Private';
+import { PrivateWord } from '../privacy/PrivateWord';
 import { Z } from '../ui/layers';
 
 /// Senders and subjects a card lists. The daemon caps its reply at the same
@@ -13,22 +13,6 @@ import { Z } from '../ui/layers';
 const TOP = 10;
 /// How long a card rests on one word before asking the daemon about it.
 const FETCH_DELAY = 150;
-
-/**
- * A keyword as privacy mode shows it. The daemon hands words over lowercased,
- * and the name detector only takes a capitalised word for a name (lowercase
- * "mark" is a verb), so a surname picked out of a message would show as
- * plain text. A lone word is read as it would be written capitalised: a word
- * that could be someone's name is masked.
- */
-export function PrivateWord({ word }) {
-  const mask = usePrivateAttr();
-  const text = String(word ?? '');
-  const titled = text.charAt(0).toUpperCase() + text.slice(1);
-  const masked = mask(titled, 'text');
-  if (!masked || masked === titled) return text;
-  return <span className="mv-private" aria-hidden="true">{masked.toLowerCase()}</span>;
-}
 
 /**
  * Who sends a word and the subjects it turns up in, across the person's mail,
@@ -49,11 +33,13 @@ export function KeywordHovercard({ id, term, anchorEl, open, onEnter, onLeave, o
   const loadKeywordDetail = useViewStore(state => state.loadKeywordDetail);
   const [details, setDetails] = useState({});
   const asked = useRef(new Set());
-  const mounted = useRef(true);
+  const mounted = useRef(false);
   const cardRef = useRef(null);
   const [pos, setPos] = useState(null);
 
-  useEffect(() => () => { mounted.current = false; }, []);
+  // Set in the body, not only at creation: StrictMode runs this effect's
+  // cleanup and then the effect again, and a flag left false drops every reply.
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   // Asked a beat after the card opens or moves to another word: tabbing along
   // the chips opens each card at once, and must not ask about each one.
@@ -87,6 +73,17 @@ export function KeywordHovercard({ id, term, anchorEl, open, onEnter, onLeave, o
   const close = useCallback(() => onClose?.(), [onClose]);
   useEffect(() => (open ? registerPopoverLayer(close) : undefined), [open, close]);
 
+  // A scroll anywhere but in the card moves the chip out from under it.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onScroll = (event) => {
+      if (cardRef.current && event.target instanceof Node && cardRef.current.contains(event.target)) return;
+      close();
+    };
+    document.addEventListener('scroll', onScroll, true);
+    return () => document.removeEventListener('scroll', onScroll, true);
+  }, [open, close]);
+
   if (!open || !term || !pos) return null;
 
   const entry = details[term];
@@ -97,11 +94,11 @@ export function KeywordHovercard({ id, term, anchorEl, open, onEnter, onLeave, o
 
   let body;
   if (!entry) {
-    body = <p className="text-xs text-mail-text-muted">{t('viewBuilder.loading')}</p>;
+    body = <p className="text-xs text-mail-text-muted">{t('viewBuilder.detailLoading')}</p>;
   } else if (entry.status === 'error') {
-    body = <p className="text-xs text-mail-text-muted">{t('viewBuilder.error')}</p>;
+    body = <p className="text-xs text-mail-text-muted">{t('viewBuilder.detailError')}</p>;
   } else if (!reply?.available) {
-    body = <p className="text-xs text-mail-text-muted">{t('viewBuilder.unavailable')}</p>;
+    body = <p className="text-xs text-mail-text-muted">{t('viewBuilder.detailUnavailable')}</p>;
   } else if (!senders.length && !subjects.length) {
     body = <p className="text-xs text-mail-text-muted">{t('common.noMatches')}</p>;
   } else {

@@ -101,6 +101,10 @@ describe('privacy leak guard: views and settings', () => {
     expect(document.body.textContent).toContain(MASKED_JOANNA);
     // A distinctive word is often a surname, and arrives lowercased.
     expect(chips[0].textContent).not.toContain('kowalczyk');
+    // Masked, it still has a name to be read by: the filler, never the word.
+    expect(chips[0].getAttribute('aria-label')).toBe(chips[0].textContent);
+    expect(chips[0].getAttribute('aria-label')).toMatch(/^x+$/);
+    expect(chips[1].getAttribute('aria-label')).toBeNull();
     expect(card.textContent).not.toContain('kowalczyk');
     expectNoLeak(document.body);
   });

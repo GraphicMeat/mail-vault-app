@@ -6,7 +6,8 @@ import { useViewStore, viewLabel, viewQueryIsEmpty, MAX_FREE_VIEWS } from '../..
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { Button } from '../ui/Button';
 import { Combobox } from '../ui/Combobox';
-import { KeywordHovercard, PrivateWord } from './KeywordHovercard';
+import { KeywordHovercard } from './KeywordHovercard';
+import { usePrivateWord } from '../privacy/PrivateWord';
 
 /// Hover this long on a chip before its card opens: a pointer crossing the row
 /// opens nothing, and asks the daemon nothing.
@@ -15,6 +16,30 @@ const OPEN_DELAY = 250;
 const CLOSE_GRACE = 150;
 
 const NOTICE_KEYS = { added: 'viewBuilder.added', created: 'viewBuilder.created', saveFailed: 'viewBuilder.saveFailed' };
+
+/**
+ * One word to pick. Masked by privacy mode, its name is the filler on screen:
+ * the masked run is aria-hidden, and the word itself must never be the name.
+ */
+function KeywordChip({ term, checked, describedBy, ...handlers }) {
+  const { text, masked } = usePrivateWord(term);
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={masked ? text : undefined}
+      aria-describedby={describedBy}
+      {...handlers}
+      className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors ${checked
+        ? 'border-mail-accent bg-mail-accent/10 text-mail-accent-text'
+        : 'border-mail-border bg-mail-surface text-mail-text hover:bg-mail-surface-hover'}`}
+    >
+      {checked && <Check size={11} aria-hidden="true" />}
+      {masked ? <span className="mv-private" aria-hidden="true">{text}</span> : text}
+    </button>
+  );
+}
 
 /**
  * The open email's distinctive words as chips, to be added to a saved view or
@@ -74,7 +99,11 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
 
   const emailRef = useRef(email);
   emailRef.current = email;
-  const identity = [email?._accountId ?? accountId ?? '', email?._mailbox ?? mailbox ?? '', email?.uid ?? '', email?.messageId ?? ''].join('\u0000');
+  // The email's own stamp first, the props only for a row that carries none:
+  // the same order for the identity and for the view made from it.
+  const whereAccount = email?._accountId ?? accountId ?? null;
+  const whereMailbox = email?._mailbox ?? mailbox ?? null;
+  const identity = [whereAccount ?? '', whereMailbox ?? '', email?.uid ?? '', email?.messageId ?? ''].join('\u0000');
 
   useEffect(() => {
     const ticket = ++request.current;
@@ -82,6 +111,7 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
     setSelected(new Set());
     setArmed(false);
     setNotice(null);
+    setBusy(false);
     closeCard();
     Promise.resolve()
       .then(() => loadKeywords(emailRef.current))
@@ -113,8 +143,10 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
     setNotice(null);
   };
 
-  const done = (kind) => {
-    if (!alive.current) return;
+  // A save answered after the email changed belongs to the email it was made
+  // on: no confirmation on, and no clearing of, the one open now.
+  const done = (ticket, kind) => {
+    if (!alive.current || ticket !== request.current) return;
     setNotice(kind);
     if (kind === 'added' || kind === 'created') setSelected(new Set());
   };
@@ -123,31 +155,33 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
     if (!terms.length || !target || busy) return;
     // Words added to a view that searches for none narrow it to those words.
     if (!confirmed && viewQueryIsEmpty(target)) { setArmed(true); setNotice(null); return; }
+    const ticket = request.current;
     setArmed(false);
     setBusy(true);
     try {
       const reply = await addTermsToView(target.id, terms);
-      done(reply?.ok ? 'added' : 'saveFailed');
+      done(ticket, reply?.ok ? 'added' : 'saveFailed');
     } catch {
-      done('saveFailed');
+      done(ticket, 'saveFailed');
     } finally {
-      if (alive.current) setBusy(false);
+      if (alive.current && ticket === request.current) setBusy(false);
     }
   };
 
   const createView = async () => {
     if (!terms.length || busy) return;
+    const ticket = request.current;
     setArmed(false);
     setBusy(true);
     try {
-      const where = { accountId: accountId ?? email?._accountId ?? null, mailbox: mailboxOnly && mailbox ? mailbox : null };
+      const where = { accountId: whereAccount, mailbox: mailboxOnly && whereMailbox ? whereMailbox : null };
       const reply = await createViewFromTerms(terms, where, premium);
-      if (reply?.ok) done('created');
-      else done(reply?.reason === 'limit' ? 'limit' : 'saveFailed');
+      if (reply?.ok) done(ticket, 'created');
+      else done(ticket, reply?.reason === 'limit' ? 'limit' : 'saveFailed');
     } catch {
-      done('saveFailed');
+      done(ticket, 'saveFailed');
     } finally {
-      if (alive.current) setBusy(false);
+      if (alive.current && ticket === request.current) setBusy(false);
     }
   };
 
@@ -179,12 +213,11 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
               {load.keywords.map(({ term }) => {
                 const checked = selected.has(term);
                 return (
-                  <button
+                  <KeywordChip
                     key={term}
-                    type="button"
-                    role="checkbox"
-                    aria-checked={checked}
-                    aria-describedby={hover?.term === term ? cardId : undefined}
+                    term={term}
+                    checked={checked}
+                    describedBy={hover?.term === term ? cardId : undefined}
                     // A click that focused nothing (an already focused chip,
                     // or WebKit, which never focuses a clicked button) must
                     // not leave the flag to swallow the next Tab.
@@ -194,13 +227,7 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
                     onPointerLeave={() => { pointerFocus.current = false; hoverOut(); }}
                     onFocus={e => focusIn(term, e.currentTarget)}
                     onBlur={() => { pointerFocus.current = false; hoverOut(); }}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors ${checked
-                      ? 'border-mail-accent bg-mail-accent/10 text-mail-accent-text'
-                      : 'border-mail-border bg-mail-surface text-mail-text hover:bg-mail-surface-hover'}`}
-                  >
-                    {checked && <Check size={11} aria-hidden="true" />}
-                    <PrivateWord word={term} />
-                  </button>
+                  />
                 );
               })}
             </div>
@@ -224,7 +251,7 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
                 disabled={nothingPicked || busy} onClick={createView}>
                 {t('viewBuilder.newView')}
               </Button>
-              {mailbox && (
+              {whereMailbox && (
                 <label className="inline-flex items-center gap-1.5 text-xs text-mail-text-muted cursor-pointer">
                   <input type="checkbox" className="custom-checkbox" data-testid="view-builder-this-mailbox"
                     checked={mailboxOnly} onChange={e => setMailboxOnly(e.target.checked)} />

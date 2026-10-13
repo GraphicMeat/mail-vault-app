@@ -114,6 +114,33 @@ describe('ViewBuilderPanel', () => {
     expect(store.getState().createViewFromTerms).toHaveBeenLastCalledWith(['fondue'], { accountId: 'acct-1', mailbox: 'INBOX' }, false);
   });
 
+  it('reads the account and folder off the email before the props', async () => {
+    await renderPanel({ email: { ...EMAIL, _accountId: 'acct-2', _mailbox: 'Archive' } });
+    fireEvent.click(chip('fondue'));
+    fireEvent.click(screen.getByTestId('view-builder-this-mailbox'));
+    await act(async () => { fireEvent.click(screen.getByTestId('view-builder-new')); });
+    expect(store.getState().createViewFromTerms).toHaveBeenLastCalledWith(['fondue'], { accountId: 'acct-2', mailbox: 'Archive' }, false);
+  });
+
+  it('a save that lands after the email changed leaves the new email alone', async () => {
+    let finish;
+    make({
+      addTermsToView: vi.fn(() => new Promise(r => { finish = r; })),
+      loadKeywords: vi.fn(async (email) => ({ available: true, keywords: email.uid === 8 ? [{ term: 'raclette', tf: 1, df: 1 }] : KEYWORDS })),
+    });
+    const { rerender } = await renderPanel();
+    fireEvent.click(chip('fondue'));
+    pickTarget('v-full');
+    await act(async () => { fireEvent.click(screen.getByTestId('view-builder-add')); });
+    rerender(<ViewBuilderPanel email={{ ...EMAIL, uid: 8 }} accountId="acct-1" mailbox="INBOX" onClose={() => {}} />);
+    await flush();
+    fireEvent.click(chip('raclette'));
+    await act(async () => { finish({ ok: true, wasEmpty: false }); });
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(chip('raclette').getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByTestId('view-builder-add').disabled).toBe(false);
+  });
+
   it('shows the free plan limit when a new view is refused', async () => {
     make({ createViewFromTerms: vi.fn(async () => ({ ok: false, reason: 'limit' })) });
     await renderPanel();
@@ -236,6 +263,28 @@ describe('KeywordHovercard', () => {
     fireEvent.click(chip('fondue'));
     await act(async () => { fireEvent.focus(chip('gruyere')); });
     expect(screen.getByTestId('keyword-hovercard')).toBeTruthy();
+  });
+
+  it('shows the details under React.StrictMode', async () => {
+    render(<React.StrictMode><ViewBuilderPanel email={EMAIL} accountId="acct-1" mailbox="INBOX" onClose={() => {}} /></React.StrictMode>);
+    await flush();
+    await act(async () => { fireEvent.focus(chip('fondue')); });
+    expect((await screen.findAllByTestId('keyword-hovercard-sender')).length).toBe(10);
+  });
+
+  it('speaks of the word, not the email, while loading', async () => {
+    await renderPanel();
+    await act(async () => { fireEvent.focus(chip('fondue')); });
+    expect(screen.getByTestId('keyword-hovercard').textContent).toContain('viewBuilder.detailLoading');
+  });
+
+  it('closes when the reader scrolls, not when the card itself does', async () => {
+    await renderPanel();
+    await act(async () => { fireEvent.focus(chip('fondue')); });
+    fireEvent.scroll(screen.getByTestId('keyword-hovercard'));
+    expect(screen.getByTestId('keyword-hovercard')).toBeTruthy();
+    fireEvent.scroll(screen.getByTestId('view-builder-panel'));
+    expect(screen.queryByTestId('keyword-hovercard')).toBeNull();
   });
 
   it('opens at once on keyboard focus', async () => {
