@@ -133,8 +133,8 @@ export const QUICK_ACTION_RULES = {
     selection: { disable: ['serverActions', 'junk'] },
     reader: { hide: ['writable', 'spamRoute', 'notLocalOnly', 'notLocalFolder'] },
   },
-  reply: { ...SELECTION_UNSUPPORTED, reader: { hide: ['notSent', 'handler'], disable: ['idle'] } },
-  replyAll: { ...SELECTION_UNSUPPORTED, reader: { hide: ['notSent', 'handler', 'multiRecipient'], disable: ['idle'] } },
+  reply: { ...SELECTION_UNSUPPORTED, reader: { hide: ['handler'], disable: ['idle'] } },
+  replyAll: { ...SELECTION_UNSUPPORTED, reader: { hide: ['handler', 'multiRecipient'], disable: ['idle'] } },
   forward: { ...SELECTION_UNSUPPORTED, reader: { hide: ['handler'], disable: ['idle'] } },
   replyTemplate: {
     row: { disable: ['template'] },

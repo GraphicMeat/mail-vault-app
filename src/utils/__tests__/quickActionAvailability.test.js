@@ -30,6 +30,12 @@ describe('quickActionAvailability', () => {
     }
   });
 
+  it('Reply and Reply all stay on the reader for a sent message', () => {
+    expect(check('reader', { action: 'reply' }, { sent: true }).hidden).toBe(false);
+    expect(check('reader', { action: 'replyAll' }, { sent: true, singleRecipient: false }).hidden).toBe(false);
+    expect(check('reader', { action: 'replyAll' }, { sent: true, singleRecipient: true }).hidden).toBe(true);
+  });
+
   it('Go to mailbox is a row action that shows only when the row has somewhere to go', () => {
     expect(QUICK_ACTION_SURFACE_ACTIONS.row).toContain('goToMailbox');
     expect(QUICK_ACTION_SURFACE_ACTIONS.selection).not.toContain('goToMailbox');
