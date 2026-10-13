@@ -371,23 +371,29 @@ fn hidden_members(
 ) -> Result<Value, String> {
     use std::collections::{BTreeMap, BTreeSet};
     let unavailable = || serde_json::json!({ "available": false, "members": {} });
-    let known: HashMap<&str, &[String]> =
-        accounts.iter().map(|account| (account.account_id.as_str(), account.known_mailboxes.as_slice())).collect();
+    let now = now_secs();
     let mut found: BTreeMap<String, BTreeMap<String, BTreeSet<u32>>> = BTreeMap::new();
     let empty = HashMap::new();
     for view in all {
         let per_view = keys.get(&view.id).unwrap_or(&empty);
-        let messages = match messages_of(state, &view.def, accounts, per_view) {
-            Ok(messages) => messages,
-            Err(e) if e.starts_with("search index unavailable") => return Ok(unavailable()),
-            Err(e) => return Err(e),
-        };
-        for (account_id, mailbox, uid) in messages {
-            // `messages_of` names a local-only folder by its vault directory.
-            if !known.get(account_id.as_str()).is_some_and(|mailboxes| mailboxes.contains(&mailbox)) {
-                continue;
+        for account in accounts.iter().filter(|account| view.def.accounts.is_empty() || view.def.accounts.contains(&account.account_id)) {
+            // Keys only, uncapped, one index lock hold per (view, account):
+            // no row JSON, no snippet, no page walk.
+            let request = request_for(&view.def, account, per_view, now);
+            let hits = match crate::search_index::member_keys(&state.search_index, &request)? {
+                Ok(hits) => hits,
+                Err(_) => return Ok(unavailable()),
+            };
+            for (_, vault_dir, uid) in hits {
+                let (mailbox, local_only, _) =
+                    crate::handlers::mail_search::mailbox_for_vault_dir(&vault_dir, &account.known_mailboxes);
+                // A local-only (or ambiguous) folder is not on the list it
+                // would be hidden from.
+                if local_only {
+                    continue;
+                }
+                found.entry(account.account_id.clone()).or_default().entry(mailbox).or_default().insert(uid);
             }
-            found.entry(account_id).or_default().entry(mailbox).or_default().insert(uid);
         }
     }
     let mut members = serde_json::Map::new();
@@ -406,7 +412,10 @@ fn hidden_members(
                 }) {
                     Ok(headers) => headers,
                     // No cache to check against is unknown membership, not none.
-                    Err(_) => return Ok(unavailable()),
+                    Err(e) => {
+                        tracing::warn!("[views] hidden_members: header cache unreadable for {account_id}: {e}");
+                        return Ok(unavailable());
+                    }
                 };
                 for header in &headers {
                     let Some(uid) = header.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()) else {
@@ -1180,6 +1189,43 @@ mod tests {
         let out = call(&s, "views.hidden_members", json!({ "accounts": accounts() })).await;
         assert_eq!(out["members"]["a"]["INBOX"]["uids"], json!([2]), "{out}");
         assert_eq!(out["members"]["a"]["INBOX"]["unread"], 0, "{out}");
+    }
+
+    /// A folder past one custody unit (900 uids) is read in several lock
+    /// holds; every unit's uids and unread count add up.
+    #[tokio::test]
+    async fn hidden_members_accumulates_across_custody_units() {
+        let s = st();
+        let total = HIDDEN_MEMBERS_UNIT as u32 + 150;
+        {
+            let conn = index_db::open(&s.data_dir).unwrap();
+            let p = mailvault_core::maildir::INFO_PREFIX;
+            conn.execute_batch("BEGIN").unwrap();
+            for uid in 1..=total {
+                seed(&conn, uid, &format!("{uid}{p}S.eml"), "Bulk", false, &format!("<b{uid}@x.test>"));
+            }
+            conn.execute_batch("COMMIT").unwrap();
+            index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
+            *lock(&s.search_index.db) = Some(conn);
+        }
+        // Every uid cached, plus one the index does not hold; every tenth is
+        // unread on the server.
+        let emails: Vec<Value> = (1..=total + 1)
+            .map(|uid| {
+                let flags = if uid % 10 == 0 { json!([]) } else { json!(["\\Seen"]) };
+                json!({ "uid": uid, "flags": flags, "date": "Mon, 07 Sep 2026 10:00:00 +0000" })
+            })
+            .collect();
+        crate::custody::with_conn(&s, |conn| {
+            mailvault_core::custody::cache::save_headers(conn, "a", "INBOX", &json!({ "emails": emails }).to_string())
+        })
+        .unwrap();
+        call(&s, "views.save", json!({ "view": { "id": "all", "name": "All", "icon": "inbox", "position": 0, "builtin": null, "def": {} } })).await;
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts() })).await;
+        let uids: Vec<u64> =
+            out["members"]["a"]["INBOX"]["uids"].as_array().unwrap().iter().map(|u| u.as_u64().unwrap()).collect();
+        assert_eq!(uids, (1..=u64::from(total)).collect::<Vec<_>>());
+        assert_eq!(out["members"]["a"]["INBOX"]["unread"], u64::from(total / 10));
     }
 
     /// A folder only the vault holds is never hidden: the list it would be

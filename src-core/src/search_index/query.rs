@@ -344,7 +344,10 @@ fn column_match_sql(queries: &[(&'static str, String)]) -> String {
         .join(" OR ")
 }
 
-pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<SearchPage, String> {
+/// The WHERE clause (over `messages m`), its bound values in order, and the
+/// match plan the page's snippet and column probes read. Every reader of a
+/// request goes through here, so a filter means the same thing in each.
+fn where_clause(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<(String, Vec<Value>, MatchPlan), String> {
     let groups = boolean_groups(&req.query);
     let plan = match &groups {
         // Every word is a needle, so a hit's snippet and body/attachment
@@ -506,7 +509,11 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
         clauses.push(format!("{MSG_KEY_SQL} IN (SELECT k FROM temp.view_keys)"));
     }
 
-    let where_sql = clauses.join(" AND ");
+    Ok((clauses.join(" AND "), args, plan))
+}
+
+pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<SearchPage, String> {
+    let (where_sql, args, plan) = where_clause(conn, req)?;
     let total: i64 = conn
         .query_row(
             &format!("SELECT count(*) FROM messages m WHERE {where_sql}"),
@@ -549,6 +556,24 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
         .collect();
 
     Ok(SearchPage { hits, total: u64::try_from(total).unwrap_or(0), needles: plan.needles })
+}
+
+/// Every `(account_id, vault_dir, uid)` the request matches: the same filters
+/// as `search`, with no page cap, no row JSON and no snippet or column probes.
+/// For a caller that needs a view's whole membership as keys, not rows to show.
+/// `limit` and `offset` are ignored.
+pub fn member_keys(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Vec<(String, String, u32)>, String> {
+    let (where_sql, args, _) = where_clause(conn, req)?;
+    let mut st = conn
+        .prepare(&format!("SELECT m.account_id, m.vault_dir, m.uid FROM messages m WHERE {where_sql}"))
+        .map_err(|e| e.to_string())?;
+    let rows = st
+        .query_map(rusqlite::params_from_iter(args.iter()), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?
+        // Same as `search`: a row whose uid does not decode is skipped.
+        .filter_map(Result::ok)
+        .collect();
+    Ok(rows)
 }
 
 /// A sender the index has seen, or a whole domain (`@acme.test`, no name).
@@ -1095,6 +1120,50 @@ mod tests {
                 rusqlite::params![account, vault_dir, uid, format!("{uid}{INFO_PREFIX}.eml"), body_state],
             ).unwrap();
         }
+    }
+
+    /// A view's whole membership as keys: every filter `search` applies, and
+    /// no page cap, so a folder past MAX_LIMIT comes back whole.
+    #[test]
+    fn member_keys_honours_the_filters_and_has_no_page_cap() {
+        let (_tmp, db) = fixture();
+        {
+            let g = crate::search_index::lock(&db);
+            let conn = g.as_ref().unwrap();
+            let keys = |req: SearchRequest| {
+                let mut keys = member_keys(conn, &req).unwrap();
+                keys.sort();
+                keys
+            };
+            assert_eq!(keys(req("luke", "invoice")), vec![("luke".to_string(), "INBOX".to_string(), 2)]);
+            assert_eq!(keys(SearchRequest { mailboxes_excluded: vec!["Projects/2026".into()], ..req("luke", "") }).len(), 3);
+            assert_eq!(
+                keys(SearchRequest { msg_keys: Some(vec!["luke.INBOX.1@x.test".into()]), ..req("luke", "") }),
+                vec![("luke".to_string(), "INBOX".to_string(), 1)]
+            );
+            assert!(keys(SearchRequest { msg_keys: Some(Vec::new()), ..req("luke", "") }).is_empty());
+            // A page limit is not a membership limit.
+            assert_eq!(keys(SearchRequest { limit: Some(1), offset: 1, ..req("luke", "") }).len(), 4);
+            let both = keys(SearchRequest { account_ids: vec!["luke".into(), "vader".into()], ..req("", "message 1") });
+            assert_eq!(
+                both,
+                vec![("luke".to_string(), "INBOX".to_string(), 1), ("vader".to_string(), "INBOX".to_string(), 1)]
+            );
+        }
+
+        let (_tmp, conn) = coverage_fixture();
+        let over = MAX_LIMIT as u32 + 100;
+        conn.execute_batch("BEGIN").unwrap();
+        seed_rows(&conn, "big", "INBOX", over, 0);
+        seed_rows(&conn, "big", "Spam", 5, 0);
+        seed_rows(&conn, "other", "INBOX", 5, 0);
+        conn.execute("UPDATE messages SET flags = 'F' WHERE account_id = 'big' AND vault_dir = 'INBOX' AND uid <= 7", []).unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+        let all = member_keys(&conn, &SearchRequest { mailboxes_excluded: vec!["Spam".into()], ..req("big", "") }).unwrap();
+        assert_eq!(all.len(), over as usize, "past MAX_LIMIT, uncapped");
+        assert!(all.iter().all(|(account, dir, _)| account == "big" && dir == "INBOX"));
+        let starred = member_keys(&conn, &SearchRequest { starred: Some(true), ..req("big", "") }).unwrap();
+        assert_eq!(starred.len(), 7);
     }
 
     #[test]

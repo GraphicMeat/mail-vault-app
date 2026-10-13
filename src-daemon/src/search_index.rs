@@ -461,6 +461,16 @@ pub(crate) fn search_page(
     with_index(st, request, |conn| core::query::search(conn, request))
 }
 
+/// Every `(account_id, vault_dir, uid)` a request matches, uncapped and
+/// without row JSON, under one index lock hold; the inner `Err` says why the
+/// index cannot answer (`off`, `unavailable`, `building`).
+pub(crate) fn member_keys(
+    st: &SearchIndexState,
+    request: &core::query::SearchRequest,
+) -> Result<Result<Vec<(String, String, u32)>, &'static str>, String> {
+    with_index(st, request, |conn| core::query::member_keys(conn, request))
+}
+
 /// Runs `query` on the index once its first pass is done, or says why it
 /// cannot. An error asks for a recovery: the connection may be the fault.
 fn with_index<T>(
