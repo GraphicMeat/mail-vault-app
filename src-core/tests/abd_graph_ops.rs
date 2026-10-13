@@ -349,6 +349,33 @@ async fn permanent_delete_posts_permanent_delete() {
     assert_eq!(r[0].path, "/me/messages/pd-1/permanentDelete");
 }
 
+/// A message Outlook no longer holds (deleted elsewhere, an earlier try that
+/// landed) is already what the delete asked for.
+#[tokio::test]
+async fn delete_message_of_a_message_already_gone_succeeds() {
+    route("/me/messages/dm-gone", |_| {
+        Resp::json(404, serde_json::json!({"error": {"code": "ErrorItemNotFound", "message": "The specified object was not found in the store., The process failed to get the correct properties."}}))
+    });
+    client().delete_message("dm-gone").await.unwrap();
+    let r = seen("/me/messages/dm-gone");
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].method, "DELETE");
+}
+
+/// Only a missing item counts as done: any other 404 or failure still fails.
+#[tokio::test]
+async fn delete_message_other_failures_still_fail() {
+    route("/me/messages/dm-nomailbox", |_| {
+        Resp::json(404, serde_json::json!({"error": {"code": "MailboxNotEnabledForRESTAPI"}}))
+    });
+    route("/me/messages/dm-500", |_| Resp::json(500, serde_json::json!({"error": {"code": "ErrorInternalServerError"}})));
+    let c = client();
+    let e = c.delete_message("dm-nomailbox").await.unwrap_err();
+    assert!(e.contains("(404)") && e.contains("MailboxNotEnabledForRESTAPI"), "{e}");
+    let e = c.delete_message("dm-500").await.unwrap_err();
+    assert!(e.contains("(500)"), "{e}");
+}
+
 #[tokio::test]
 async fn find_by_internet_message_id_filters_and_returns_every_hit() {
     route("/me/mailFolders/fb-f/messages", |r| {

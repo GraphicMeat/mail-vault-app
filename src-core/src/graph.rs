@@ -290,6 +290,12 @@ fn is_size_property(id: &str) -> bool {
     id == "integer0x0e08" || id == "integer0xe08"
 }
 
+/// `error.code` of a Graph error body (`{"error":{"code":"ErrorItemNotFound",…}}`).
+fn error_code(body: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    v.get("error")?.get("code")?.as_str().map(str::to_string)
+}
+
 /// RFC 3986 percent-encoding of one URL component (unreserved characters pass).
 fn percent_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -860,8 +866,14 @@ impl GraphClient {
     }
 
     /// Delete a message (moves to Deleted Items by default in Graph API).
+    ///
+    /// A 404 `ErrorItemNotFound` is success: the message is already not there
+    /// (deleted in Outlook, or an earlier try that landed), which is what the
+    /// delete asked for. A message moved away on the server answers the same
+    /// (Graph gives it a new id); the next list shows it where it went. Any
+    /// other 404 still fails.
     pub async fn delete_message(&self, message_id: &str) -> Result<(), String> {
-        let url = format!("{}/me/messages/{}", graph_base(), message_id);
+        let url = format!("{}/me/messages/{}", graph_base(), percent_encode(message_id));
 
         let resp = self
             .client
@@ -883,6 +895,9 @@ impl GraphClient {
                 return Err(format!("Graph delete_message failed (429:retry_after={}) {}", retry_after, body));
             }
             let body = resp.text().await.unwrap_or_default();
+            if status == reqwest::StatusCode::NOT_FOUND && error_code(&body).as_deref() == Some("ErrorItemNotFound") {
+                return Ok(());
+            }
             return Err(format!(
                 "Graph delete_message failed ({}) {}",
                 status.as_u16(),
