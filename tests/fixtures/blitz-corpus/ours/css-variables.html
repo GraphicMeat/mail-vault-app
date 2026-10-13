@@ -1,0 +1,8 @@
+<style>
+:root{--brand:#ffffff;--ink:#222222;--card:var(--brand);--line:#dddddd}
+.card{background:var(--card);color:var(--ink);border:1px solid var(--line);padding:12px}
+.badge{background-color:var(--missing, #ffcc00);color:var(--ink)}
+.shade{box-shadow:0 2px 4px var(--line)}
+</style>
+<div class="card">Card with variable colours <span class="badge">badge</span></div>
+<div class="shade" style="--local:#0066cc;color:var(--local)">Inline variable</div>

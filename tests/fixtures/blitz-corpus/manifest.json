@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "sources": {
+    "cerberus": {
+      "repo": "emailmonday/Cerberus",
+      "commit": "af3cec9dd12fbbea0c6e9a1b0bf82a0479726957",
+      "license": "cerberus/LICENSE",
+      "spdx": "MIT"
+    },
+    "leemunroe": {
+      "repo": "leemunroe/responsive-html-email-template",
+      "commit": "60b5b6ddf9600e4b7d7e1ef60e5a3a8f1e56e186",
+      "license": "leemunroe/license.txt",
+      "spdx": "MIT"
+    },
+    "postmark": {
+      "repo": "ActiveCampaign/postmark-templates",
+      "commit": "fa73527acb4eb59cf673a54572d213e908f1515c",
+      "license": "postmark/LICENSE",
+      "spdx": "MIT"
+    }
+  },
+  "fixtures": [
+    {
+      "id": "ours/basic-typography",
+      "file": "ours/basic-typography.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/tables-legacy",
+      "file": "ours/tables-legacy.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/style-media-attr",
+      "file": "ours/style-media-attr.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/already-dark",
+      "file": "ours/already-dark.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/inline-important",
+      "file": "ours/inline-important.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/css-variables",
+      "file": "ours/css-variables.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/gradients-shadows",
+      "file": "ours/gradients-shadows.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/preheader-hidden",
+      "file": "ours/preheader-hidden.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/bg-images",
+      "file": "ours/bg-images.html",
+      "source": "ours"
+    },
+    {
+      "id": "cerberus/hybrid",
+      "file": "cerberus/cerberus-hybrid.html",
+      "source": "cerberus",
+      "upstreamPath": "cerberus-hybrid.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (10); Google Fonts imports removed"
+    },
+    {
+      "id": "cerberus/hybrid-inbody",
+      "file": "cerberus/cerberus-hybrid-inbody.html",
+      "source": "cerberus",
+      "upstreamPath": "cerberus-hybrid.html",
+      "modified": "as cerberus/hybrid, plus its <head> <style> blocks copied to the start of <body>"
+    },
+    {
+      "id": "cerberus/fluid",
+      "file": "cerberus/cerberus-fluid.html",
+      "source": "cerberus",
+      "upstreamPath": "cerberus-fluid.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (4); Google Fonts imports removed"
+    },
+    {
+      "id": "cerberus/fluid-inbody",
+      "file": "cerberus/cerberus-fluid-inbody.html",
+      "source": "cerberus",
+      "upstreamPath": "cerberus-fluid.html",
+      "modified": "as cerberus/fluid, plus its <head> <style> blocks copied to the start of <body>"
+    },
+    {
+      "id": "cerberus/responsive",
+      "file": "cerberus/cerberus-responsive.html",
+      "source": "cerberus",
+      "upstreamPath": "cerberus-responsive.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (10); Google Fonts imports removed"
+    },
+    {
+      "id": "cerberus/responsive-inbody",
+      "file": "cerberus/cerberus-responsive-inbody.html",
+      "source": "cerberus",
+      "upstreamPath": "cerberus-responsive.html",
+      "modified": "as cerberus/responsive, plus its <head> <style> blocks copied to the start of <body>"
+    },
+    {
+      "id": "leemunroe/inlined",
+      "file": "leemunroe/email-inlined.html",
+      "source": "leemunroe",
+      "upstreamPath": "email-inlined.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (0); Google Fonts imports removed"
+    },
+    {
+      "id": "leemunroe/inlined-inbody",
+      "file": "leemunroe/email-inlined-inbody.html",
+      "source": "leemunroe",
+      "upstreamPath": "email-inlined.html",
+      "modified": "as leemunroe/inlined, plus its <head> <style> blocks copied to the start of <body>"
+    },
+    {
+      "id": "postmark/welcome",
+      "file": "postmark/welcome.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/welcome/content.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (0); Google Fonts imports removed"
+    },
+    {
+      "id": "postmark/welcome-inbody",
+      "file": "postmark/welcome-inbody.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/welcome/content.html",
+      "modified": "as postmark/welcome, plus its <head> <style> blocks copied to the start of <body>"
+    },
+    {
+      "id": "postmark/receipt",
+      "file": "postmark/receipt.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/receipt/content.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (0); Google Fonts imports removed"
+    },
+    {
+      "id": "postmark/receipt-inbody",
+      "file": "postmark/receipt-inbody.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/receipt/content.html",
+      "modified": "as postmark/receipt, plus its <head> <style> blocks copied to the start of <body>"
+    },
+    {
+      "id": "postmark/password-reset",
+      "file": "postmark/password-reset.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/password-reset/content.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (0); Google Fonts imports removed"
+    },
+    {
+      "id": "postmark/password-reset-inbody",
+      "file": "postmark/password-reset-inbody.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/password-reset/content.html",
+      "modified": "as postmark/password-reset, plus its <head> <style> blocks copied to the start of <body>"
+    },
+    {
+      "id": "postmark/invoice",
+      "file": "postmark/invoice.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/invoice/content.html",
+      "modified": "remote images and backgrounds replaced by data: placeholders (0); Google Fonts imports removed"
+    },
+    {
+      "id": "postmark/invoice-inbody",
+      "file": "postmark/invoice-inbody.html",
+      "source": "postmark",
+      "upstreamPath": "templates-inlined/basic/invoice/content.html",
+      "modified": "as postmark/invoice, plus its <head> <style> blocks copied to the start of <body>"
+    }
+  ]
+}
