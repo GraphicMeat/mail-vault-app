@@ -49,4 +49,30 @@ describe('activateEmailLink', () => {
     expect(d.openMailtoCompose).not.toHaveBeenCalled();
     expect(d.setLinkSafetyAlert).not.toHaveBeenCalled();
   });
+
+  // The Blitz worker returns the attribute as written; the DOM normalises the scheme's case.
+  it.each(['MAILTO:a@b.c', 'Mailto:a@b.c', 'mAiLtO:a@b.c'])('composes %s in-app like the lowercase scheme', (href) => {
+    const d = deps();
+    expect(activateEmailLink({ href }, d)).toBe('compose');
+    expect(d.openMailtoCompose).toHaveBeenCalledWith(href, 'acc');
+    expect(d.openUrl).not.toHaveBeenCalled();
+  });
+  it.each(['CID:x', 'Cid:x', 'TEL:123', 'Tel:123', '#Top'])('ignores %j whatever its case', (href) => {
+    const d = deps();
+    expect(activateEmailLink({ href }, d)).toBe('ignored');
+    expect(d.openUrl).not.toHaveBeenCalled();
+    expect(d.openMailtoCompose).not.toHaveBeenCalled();
+  });
+  it('an uppercase https scheme still opens, and still goes through link safety', () => {
+    const d = deps();
+    expect(activateEmailLink({ href: 'HTTPS://ok.test/' }, d)).toBe('opened');
+    expect(d.openUrl).toHaveBeenCalledWith('HTTPS://ok.test/');
+    const d2 = deps();
+    expect(activateEmailLink({ href: 'HTTPS://evil.test/', alert: 'red' }, d2)).toBe('alert');
+  });
+  it('does not treat a lookalike scheme as a mailto', () => {
+    const d = deps();
+    expect(activateEmailLink({ href: 'xmailto:a@b.c' }, d)).toBe('opened');
+    expect(d.openMailtoCompose).not.toHaveBeenCalled();
+  });
 });
