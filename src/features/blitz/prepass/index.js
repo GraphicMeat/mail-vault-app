@@ -1,4 +1,4 @@
-import { buildEmailIframeHtml } from '../../../utils/emailIframeTemplate';
+import { buildBlitzDocument } from './document';
 import { applyPrivacyRedaction } from '../../../utils/iframePrivacyRedact';
 import { markFolds } from './folds';
 import { markUnselectable } from './unselectable';
@@ -11,19 +11,15 @@ import { markSearch } from './search';
 export async function runPrepass(props, { privacy = { active: false, dict: null }, openFolds = new Set() } = {}) {
   const { documentHtml, bodyHtml, indicatorCss, theme } = props;
   // 1. Build: the exact document the surface's iframe would get, minus viewer scripts.
-  //    buildEmailIframeHtml emits no <script> of its own (only a CSP <meta>); scripts
-  //    arrive through extraHead/extraBody, passed empty here, and through the mail.
-  const built = documentHtml ?? buildEmailIframeHtml({
+  //    buildBlitzDocument wraps the same core builder as the iframe (plan B owns the dark
+  //    build: themeTag and stripInlineColorImportant follow theme.dark). It emits no
+  //    <script> of its own (only a CSP <meta>); scripts arrive through the mail.
+  const built = documentHtml ?? buildBlitzDocument({
     bodyHtml,
-    themeTag: 'light',
-    extraHead: indicatorCss ? `<style>${indicatorCss}</style>` : '',
-    extraBody: '',
-    privacy: false,
+    indicatorCss,
+    dark: !!theme?.dark,
     tableMode: theme?.tableMode ?? 'preserve',
-    // Blitz runs no script, so the CSP nonce guards nothing here. A constant keeps the
-    // output byte-identical for equal inputs: a fresh random nonce per run would make
-    // every privacy-dictionary update look like a changed document and reopen it.
-    nonce: 'blitz',
+    privacy: false,
   });
   // 2. Parse.
   const doc = new DOMParser().parseFromString(built, 'text/html');

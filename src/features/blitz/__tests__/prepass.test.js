@@ -63,6 +63,16 @@ describe('runPrepass', () => {
     const { html } = await runPrepass(props({ theme: { dark: false, tableMode: 'clip' } }), { privacy: { active: false } });
     expect(html).toContain('table-layout: fixed');
   });
+  it('builds the dark document when theme.dark: inline colour importants are dropped, light keeps them', async () => {
+    const bodyHtml = '<h2 style="color:#000 !important; font-size:20px !important">Hi</h2>';
+    const dark = await runPrepass(props({ bodyHtml, theme: { dark: true } }), { privacy: { active: false } });
+    expect(dark.html).toContain('color:#000;');
+    expect(dark.html).toContain('font-size:20px !important');
+    expect(dark.html).toContain('data-mv-theme="dark"');
+    const light = await runPrepass(props({ bodyHtml, theme: { dark: false } }), { privacy: { active: false } });
+    expect(light.html).toContain('color:#000 !important');
+    expect(light.html).toContain('data-mv-theme="light"');
+  });
   it('is deterministic: the same inputs give byte-identical HTML (no fresh nonce per run)', async () => {
     const a = await runPrepass(props(), { privacy: { active: false } });
     const b = await runPrepass(props(), { privacy: { active: false } });
