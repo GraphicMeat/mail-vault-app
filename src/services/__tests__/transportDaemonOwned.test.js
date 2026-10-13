@@ -21,6 +21,22 @@ describe('daemon-owned commands', () => {
     expect(block).toContain("'storage.fetch_mode_changed'");
   });
 
+  // The Blitz module's ten render RPCs (dotted, so the flat-name list below
+  // does not see them). Each one must route to the daemon under its own name.
+  it('owns the ten render.* names and routes each to the daemon', async () => {
+    const names = ['render.open', 'render.tile', 'render.hit', 'render.close', 'render.fonts',
+      'render.textRuns', 'render.serialize', 'render.fold', 'render.image', 'render.inspect'];
+    const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
+    const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
+    for (const n of names) {
+      expect(block).toContain(`'${n}'`);
+      DAEMON_OWNED.add(n); // the beforeEach clears the live set; restore the declared members
+      daemonCall.mockResolvedValue({ ok: n });
+      await expect(send(n, { docId: 3 })).resolves.toEqual({ ok: n });
+      expect(daemonCall).toHaveBeenLastCalledWith(n, { docId: 3 });
+    }
+  });
+
   it('owns aliases.discover (send-as alias discovery)', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
     const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));

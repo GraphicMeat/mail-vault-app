@@ -273,6 +273,11 @@ export const DAEMON_OWNED = new Set([
   // keyed by accountId), replacing the app's old single global
   // `BackupCancelToken` — Tauri twin deleted in this same task.
   'backup_cancel',
+  // The Blitz renderer module (src/features/blitz): the daemon's render worker
+  // opens, tiles, hit-tests and closes documents. Dotted names, no Tauri twin;
+  // the module is the only caller.
+  'render.open', 'render.tile', 'render.hit', 'render.close', 'render.fonts',
+  'render.textRuns', 'render.serialize', 'render.fold', 'render.image', 'render.inspect',
 ]);
 
 async function sendToDaemon(command, args) {
