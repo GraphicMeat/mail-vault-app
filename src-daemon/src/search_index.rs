@@ -531,7 +531,9 @@ pub(crate) fn total_docs(st: &SearchIndexState) -> Result<Result<u64, &'static s
 /// What the index holds of one message, for the view builder.
 pub(crate) struct IndexedMessage {
     /// Its body text is in the index (`BODY_INDEXED`), so a word of it the
-    /// index has never seen is noise rather than mail not read yet.
+    /// index has never seen is noise rather than mail not read yet. Part of
+    /// the `views.keywords` cache key: the indexer reaching the body retires
+    /// the answer worked out before it did.
     pub body_indexed: bool,
     /// The Message-ID indexed for this uid: a uid reused after a mailbox
     /// reset is a different message.

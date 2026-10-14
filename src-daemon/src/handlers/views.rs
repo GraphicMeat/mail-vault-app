@@ -235,7 +235,8 @@ const DETAIL_HITS: usize = 2000;
 const DETAIL_TOP: usize = 10;
 
 /// Recent `views.keywords` replies. Reopening a message asks again, and its
-/// answer is up to 150 index probes that move only as the mailbox grows.
+/// answer is a read of the message plus up to 150 index probes that move only
+/// as the mailbox grows.
 fn keyword_cache() -> &'static std::sync::Mutex<std::collections::VecDeque<(String, Value)>> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::VecDeque<(String, Value)>>> =
         std::sync::OnceLock::new();
@@ -284,15 +285,22 @@ fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     // least once, so a word the index never saw is noise. One not indexed
     // yet keeps such words: the mailbox has simply not read it.
     let body_indexed = row.as_ref().is_some_and(|row| row.body_indexed);
-    // Only an indexed body's answer is kept: one read before the indexer
-    // reaches the message changes once it does. The Message-ID tells a uid
-    // reused after a mailbox reset from the message it used to name, and the
-    // data dir keeps two daemon states (tests) apart.
-    let key = body_indexed.then(|| {
-        let message_id = row.as_ref().and_then(|row| row.message_id.as_deref()).unwrap_or("");
-        format!("{}|{account_id}|{mailbox}|{uid}|{message_id}", state.data_dir.display())
-    });
-    if let Some(reply) = key.as_deref().and_then(cached_keywords) {
+    // Every answer is kept, an unread body's too: stepping through a folder
+    // the indexer has not reached (or an On Demand one) would otherwise read,
+    // maybe fetch, the message and probe the index again on every keypress.
+    // What the index holds of the message is in the key (no row, body not
+    // read, body indexed), so the indexer reaching it changes the key and
+    // the answer is worked out again. The Message-ID tells a uid reused
+    // after a mailbox reset from the message it used to name, and the data
+    // dir keeps two daemon states (tests) apart.
+    let held = match &row {
+        None => "none",
+        Some(_) if body_indexed => "body",
+        Some(_) => "listed",
+    };
+    let message_id = row.as_ref().and_then(|row| row.message_id.as_deref()).unwrap_or("");
+    let key = format!("{}|{account_id}|{mailbox}|{uid}|{message_id}|{held}", state.data_dir.display());
+    if let Some(reply) = cached_keywords(&key) {
         return Ok(reply);
     }
     let Ok(total) = crate::search_index::total_docs(index)? else { return Ok(unavailable()) };
@@ -331,9 +339,7 @@ fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         .map(|k| serde_json::json!({ "term": k.term, "tf": k.tf, "df": k.df }))
         .collect();
     let reply = serde_json::json!({ "available": true, "keywords": keywords });
-    if let Some(key) = key {
-        cache_keywords(key, reply.clone());
-    }
+    cache_keywords(key, reply.clone());
     Ok(reply)
 }
 
@@ -636,27 +642,22 @@ fn hidden_members(
             let mut unread = 0u64;
             // One custody lock hold per unit, released between units: a
             // foreground header read waits on this lock, and a broad view
-            // over a large folder is tens of thousands of rows to parse.
+            // over a large folder is tens of thousands of rows. Only each
+            // row's uid and flags are read, never the whole header.
             for unit in wanted.chunks(HIDDEN_MEMBERS_UNIT) {
-                let headers = match crate::custody::with_conn(state, |conn| {
-                    mailvault_core::custody::cache::load_by_uids(conn, &account_id, &mailbox, unit)
+                let listed = match crate::custody::with_conn(state, |conn| {
+                    mailvault_core::custody::cache::flags_by_uids(conn, &account_id, &mailbox, unit)
                 }) {
-                    Ok(headers) => headers,
+                    Ok(listed) => listed,
                     // No cache to check against is unknown membership, not none.
                     Err(e) => {
                         tracing::warn!("[views] hidden_members: header cache unreadable for {account_id}: {e}");
                         return Ok(unavailable());
                     }
                 };
-                for header in &headers {
-                    let Some(uid) = header.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()) else {
-                        continue;
-                    };
-                    kept.push(uid);
-                    let seen = header.get("flags").and_then(Value::as_array).is_some_and(|flags| {
-                        flags.iter().any(|flag| flag.as_str().is_some_and(|flag| flag.eq_ignore_ascii_case("\\Seen")))
-                    });
-                    if !seen {
+                for (uid, flags) in &listed {
+                    kept.push(*uid);
+                    if !flags.iter().any(|flag| flag.eq_ignore_ascii_case("\\Seen")) {
                         unread += 1;
                     }
                 }
@@ -1716,6 +1717,30 @@ mod tests {
         std::fs::write(cur.join(format!("1{p}S.eml")), keyword_eml("zebra crossing")).unwrap();
         let out = call(&s, "views.keywords", params).await;
         assert!(terms_of(&out).contains(&"zebra".to_owned()), "{out}");
+    }
+
+    /// A message whose body the index has not read yet (a folder still being
+    /// indexed, an On Demand one) is answered from the cache too: stepping
+    /// through such a folder with the builder open must not re-read (or
+    /// fetch) the message and re-probe the index on every keypress. The body
+    /// reaching the index changes the key, so the answer is worked out again.
+    #[tokio::test]
+    async fn a_not_yet_indexed_bodys_answer_is_cached_until_the_body_is_indexed() {
+        let s = st();
+        keyword_index(&s);
+        let params = json!({ "accountId": "a", "mailbox": "INBOX", "uid": 61 });
+        let first = call(&s, "views.keywords", params.clone()).await;
+        assert!(terms_of(&first).contains(&"unseenword".to_owned()), "{first}");
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
+        let eml = cur.join(format!("61{}S.eml", mailvault_core::maildir::INFO_PREFIX));
+        std::fs::remove_file(&eml).unwrap();
+        let resp = route(&s, "views.keywords", &params, json!(1)).await.expect("routed");
+        assert_eq!(resp.result, Some(first.clone()), "served from the cache, the message not read again: {:?}", resp.error);
+        std::fs::write(&eml, keyword_eml("quokka fondue meeting budget")).unwrap();
+        lock(&s.search_index.db).as_ref().unwrap().execute("UPDATE messages SET body_state = 1 WHERE uid = 61", []).unwrap();
+        let after = call(&s, "views.keywords", params).await;
+        assert!(!terms_of(&after).contains(&"unseenword".to_owned()), "worked out again once indexed: {after}");
+        assert!(terms_of(&after).contains(&"quokka".to_owned()), "{after}");
     }
 
     /// Unknown, not "no keywords": the app shows nothing rather than a guess.
