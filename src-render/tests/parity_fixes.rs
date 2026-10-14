@@ -357,3 +357,16 @@ fn line_height_normal_follows_the_font_metrics() {
     assert_eq!(h("small"), 18.0, "the strut of the 16px block holds a line with only an 11px span");
     assert_eq!(h("fixed"), 22.0, "the block's 22px line-height floors the span");
 }
+
+/// Text widths are fractional: WebKit lays a run out at its advance to 1/64 px (LayoutUnit),
+/// blitz-dom rounded every content width up to a whole px, which added up across a row
+/// (leemunroe: a cell 4.45 wide came out 5, the button table 4.6 wider). Harness iframe
+/// (ours/table-border-attr, wide): table 244.44, cells 162.39 and 74.05 at 14px Arial.
+#[test]
+fn text_content_widths_are_not_rounded_up_to_whole_pixels() {
+    let els = inspect_at(&fx("fractional-text-widths.html"), 576);
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    for (id, iframe) in [("t", 244.44), ("c1", 162.39), ("c2", 74.05)] {
+        assert!((w(id) - iframe).abs() <= 0.25, "{id}: {}, iframe {iframe}", w(id));
+    }
+}

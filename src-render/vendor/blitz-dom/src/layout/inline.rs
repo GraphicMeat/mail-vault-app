@@ -427,8 +427,10 @@ impl BaseDocument {
                     AvailableSpace::Definite(limit) => (limit * scale)
                         .min(max_content_width + float_width)
                         .max(min_content_width),
-                }
-                .ceil();
+                };
+                // MailVault parity fix (plan B): round up to 1/64 px, WebKit's LayoutUnit, not to
+                // a whole px (the sum of a row's cells was off by up to a px per cell).
+                let computed_width = ceil_to_layout_unit(computed_width);
 
                 let style_width = node_size.width.map(|w| w * scale);
                 let min_width = node_min_size.width.map(|w| w * scale);
@@ -469,7 +471,7 @@ impl BaseDocument {
                 .inline_layout_data = Some(inline_layout);
 
             let measured_size = inputs.known_dimensions.unwrap_or(taffy::Size {
-                width: width.ceil() / scale,
+                width: ceil_to_layout_unit(width) / scale,
                 // Height is ignored if RequestedAxis if Horizontal
                 height: 0.0,
             });
@@ -1188,4 +1190,11 @@ fn layout_abspos_child(
             margin: resolved_margin,
         },
     );
+}
+
+/// MailVault parity fix (plan B): round up to 1/64 px (WebKit's `LayoutUnit::fromFloatCeil`). The
+/// slack of a hair keeps a width that is exactly on the grid from falling short of the
+/// advance the lines are broken at.
+fn ceil_to_layout_unit(width: f32) -> f32 {
+    (width * 64.0 + 0.01).ceil() / 64.0
 }
