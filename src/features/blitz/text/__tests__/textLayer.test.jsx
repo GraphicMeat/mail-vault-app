@@ -2,10 +2,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import React, { createRef } from 'react';
+import { readFileSync } from 'node:fs';
 vi.mock('../../service', () => ({ textRunsRender: vi.fn() }));
 import { textRunsRender } from '../../service';
 import TextLayer from '../TextLayer';
-import { utf8Length, utf16ToUtf8, graphemeCount, fitRun } from '../textMetrics';
+import { utf8Length, utf16ToUtf8, graphemeCount, fitRun, createMeasure } from '../textMetrics';
 
 const meta = { cssWidth: 600, cssHeight: 1100, tileCssHeight: 512, tileCount: 3, links: [], folds: [] };
 const run = (o) => ({ x: 0, y: 0, w: 70, h: 30, text: 'abcdefg', fontPx: 20, node: 5, start: 0, ...o });
@@ -34,6 +35,47 @@ describe('textMetrics', () => {
     const r = fitRun(run({ text: '́', w: 0.5 }), () => 0);
     expect(Number.isFinite(r.letterSpacing)).toBe(true);
     expect(fitRun(run({ text: '', w: 3 }), measure).letterSpacing).toBe(0);
+  });
+});
+
+describe('textMetrics fixes', () => {
+  it('fitRun gives letter-spacing 0 when a non-empty text measures 0', () => {
+    expect(fitRun(run({ text: 'abc', w: 50 }), () => 0).letterSpacing).toBe(0);
+  });
+  it('createMeasure falls back to a DOM canvas when OffscreenCanvas has no 2d context, and sets the font only on change', () => {
+    const fonts = [];
+    const ctx = { set font(v) { fonts.push(v); }, get font() { return fonts[fonts.length - 1] ?? ''; }, measureText: (t) => ({ width: t.length * 5 }) };
+    const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+    globalThis.OffscreenCanvas = class { getContext() { return null; } };
+    try {
+      const m = createMeasure('serif');
+      expect(m('abcd', 10)).toBe(20);
+      expect(m('ab', 10)).toBe(10);
+      expect(m('abcd', 12)).toBe(20);
+      expect(fonts).toEqual(['10px serif', '12px serif']);
+    } finally { delete globalThis.OffscreenCanvas; spy.mockRestore(); }
+  });
+  it('createMeasure remembers a definitive no-context and returns 0', () => {
+    const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    try {
+      const m = createMeasure('serif');
+      expect(m('abc', 10)).toBe(0);
+      expect(m('abd', 10)).toBe(0);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally { spy.mockRestore(); }
+  });
+});
+
+describe('blitz.css', () => {
+  const css = readFileSync('src/features/blitz/blitz.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  it('the layer sets no cursor of its own, so the box cursor shows through; hover makes the layer and spans pointers', () => {
+    const layer = css.match(/\.mv-blitz-text\s*\{([^}]*)\}/)[1];
+    expect(layer).not.toMatch(/cursor/);
+    expect(css).toMatch(/\.mv-blitz-text\[data-hover="true"\],\s*\.mv-blitz-text\[data-hover="true"\] span\s*\{\s*cursor:\s*pointer/);
+  });
+  it('pins the properties the flow math assumes', () => {
+    const layer = css.match(/\.mv-blitz-text\s*\{([^}]*)\}/)[1];
+    for (const d of ['direction: ltr', 'text-align: left', 'text-indent: 0', 'word-spacing: normal', 'text-transform: none', 'font-weight: normal', 'font-style: normal']) expect(layer).toContain(d);
   });
 });
 
@@ -105,7 +147,7 @@ describe('TextLayer', () => {
     expect(textRunsRender.mock.calls.map(c => c[1]).sort()).toEqual([0, 1, 2]);
   });
 
-  it('a failed runs fetch leaves that tile empty and is retried on the next rev, never thrown', async () => {
+  it('a failed runs fetch leaves that tile empty and never throws', async () => {
     textRunsRender.mockRejectedValueOnce(new Error('render_unavailable'));
     render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
     await waitFor(() => expect(textRunsRender).toHaveBeenCalledTimes(1));
@@ -133,5 +175,48 @@ describe('TextLayer', () => {
     expect(ref.current.firstSpan().textContent).toBe('a');
     expect(ref.current.lastSpan().textContent).toBe('b');
     expect(ref.current.layerEl().dataset.testid ?? ref.current.layerEl().getAttribute('data-testid')).toBe('blitz-text-layer');
+  });
+
+  it('a tab is drawn as a space so the flow width stays the measured width', async () => {
+    textRunsRender.mockResolvedValue({ runs: [run({ text: 'a\tb', w: 15 })] });
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
+    expect(document.querySelector('.mv-blitz-text span').textContent).toBe('a b');
+  });
+
+  it('a rev change keeps the live span nodes until the new reply replaces them', async () => {
+    textRunsRender.mockResolvedValue({ runs: [run({ text: 'same', w: 40 })] });
+    const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
+    const before = document.querySelector('.mv-blitz-text span');
+    let resolve2;
+    textRunsRender.mockImplementationOnce(() => new Promise(r => { resolve2 = r; }));
+    rerender(<TextLayer docId={1} rev={2} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(textRunsRender).toHaveBeenCalledTimes(2));
+    expect(document.querySelector('.mv-blitz-text span')).toBe(before); // not blanked while rev 2 is in flight
+    await act(async () => { resolve2({ runs: [run({ text: 'same', w: 40, x: 5 })] }); });
+    expect(document.querySelector('.mv-blitz-text span')).toBe(before); // same node, restyled
+    expect(before.style.left).toBe('0px');
+  });
+
+  it('a docId change clears every tile at once', async () => {
+    textRunsRender.mockResolvedValueOnce({ runs: [run({ text: 'old' })] });
+    const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
+    textRunsRender.mockImplementationOnce(() => new Promise(() => {}));
+    rerender(<TextLayer docId={2} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(0);
+  });
+
+  it('a hover or shown-set change does not refit spans of loaded tiles', async () => {
+    textRunsRender.mockResolvedValue({ runs: [run({ text: 'abc', w: 20 })] });
+    const m = vi.fn(measure);
+    const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={m} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
+    const calls = m.mock.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    rerender(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={m} hover />);
+    rerender(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={m} />);
+    expect(m.mock.calls.length).toBe(calls);
   });
 });

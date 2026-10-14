@@ -28,24 +28,38 @@ export function graphemeCount(s) {
 export function fitRun(run, measure) {
   const n = graphemeCount(run.text);
   if (!n) return { letterSpacing: 0, width: run.w };
-  const measured = measure(run.text, run.fontPx) || 0;
+  const measured = measure(run.text, run.fontPx);
+  // No measurement (no canvas, or a font with no advance): spreading the whole
+  // width over the graphemes would be a wild guess, so leave the natural width.
+  if (!(measured > 0)) return { letterSpacing: 0, width: run.w };
   const letterSpacing = (run.w - measured) / n;
   return { letterSpacing: Number.isFinite(letterSpacing) ? letterSpacing : 0, width: run.w };
 }
 
+function canvasContext() {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    try {
+      const c = new OffscreenCanvas(1, 1).getContext('2d');
+      if (c) return c;
+    } catch { /* fall through to a DOM canvas */ }
+  }
+  try {
+    return typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
+  } catch { return null; }
+}
+
 /** Canvas text width in CSS px, in the layer's own font. */
 export function createMeasure(fontFamily) {
-  let ctx = null;
+  let ctx;
+  let font = '';
   const cache = new Map();
   return (text, fontPx) => {
     const key = `${fontPx}\u0000${text}`;
     if (cache.has(key)) return cache.get(key);
-    if (!ctx) {
-      const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
-      ctx = canvas.getContext('2d');
-    }
+    if (ctx === undefined) ctx = canvasContext(); // null is definitive: not retried
     if (!ctx) return 0;
-    ctx.font = `${fontPx}px ${fontFamily}`;
+    const f = `${fontPx}px ${fontFamily}`;
+    if (f !== font) { ctx.font = f; font = f; }
     const w = ctx.measureText(text).width;
     if (cache.size > 5000) cache.clear();
     cache.set(key, w);

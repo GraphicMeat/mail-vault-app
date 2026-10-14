@@ -3,7 +3,16 @@
   --mv-blitz-text-font: sans-serif; /* keep in step with LAYER_FONT in text/TextLayer.jsx */
   user-select: text;
   -webkit-user-select: text;
-  cursor: default;
+  /* No cursor here: the layer covers the box, so it inherits the box's (a link
+     with no text, such as an image link, shows its pointer through it). */
+  /* The flow math (left = x - sum of earlier widths) assumes these. */
+  direction: ltr;
+  text-align: left;
+  text-indent: 0;
+  word-spacing: normal;
+  text-transform: none;
+  font-weight: normal;
+  font-style: normal;
 }
 .mv-blitz-text span {
   color: transparent;
@@ -12,6 +21,7 @@
   white-space: pre;
   cursor: text;
 }
+.mv-blitz-text[data-hover="true"],
 .mv-blitz-text[data-hover="true"] span { cursor: pointer; }
 /* The app paints every selection in its accent (styles/index.css ::selection).
    The iframe never sees that rule; this one restores the iframe's colours
