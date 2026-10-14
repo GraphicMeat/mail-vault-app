@@ -209,3 +209,38 @@ fn a_malformed_inspect_is_answered_not_dropped() {
     let out = run(&[json!({"op":"inspect","req":1,"doc":"one"})]);
     assert_eq!(out, vec![json!({"kind":"error","req":1,"code":"render_bad_request"})]);
 }
+
+#[test]
+fn dark_open_paints_the_dr_background() {
+    let html = r#"<html><head><style>body{margin:0;background:#ffffff}</style></head><body data-mv-id="b"></body></html>"#;
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false,
+               "theme":{"mode":"dark","bg":"#0a0a12","fg":"#e8e8ef","brightness":100,"contrast":100,"sepia":0}}),
+        json!({"op":"inspect","req":2,"doc":1}),
+    ]);
+    assert_eq!(out[1]["ok"]["elements"][0]["backgroundColor"], json!([10.0, 10.0, 18.0, 1.0]));
+}
+
+#[test]
+fn a_light_theme_does_not_touch_the_document() {
+    let html = r#"<html><head><style>body{margin:0;background:#ffffff}</style></head><body data-mv-id="b"></body></html>"#;
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false,"theme":{"mode":"light"}}),
+        json!({"op":"inspect","req":2,"doc":1}),
+    ]);
+    assert_eq!(out[1]["ok"]["elements"][0]["backgroundColor"], json!([255.0, 255.0, 255.0, 1.0]));
+}
+
+#[test]
+fn open_without_theme_and_with_null_bg_both_reply_ok() {
+    let html = r#"<html><body data-mv-id="p"><p>x</p></body></html>"#;
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false}),
+        json!({"op":"open","req":2,"doc":2,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false,
+               "theme":{"mode":"dark","bg":null,"fg":"#e8e8ef"}}),
+        json!({"op":"open","req":3,"doc":3,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false,"theme":null}),
+    ]);
+    for (i, frame) in out.iter().filter(|f| f["kind"] != "fetch").take(3).enumerate() {
+        assert_eq!(frame["kind"], "reply", "open {} failed: {frame}", i + 1);
+    }
+}

@@ -1,6 +1,7 @@
 //! The render worker's loop. One thread owns every document; a reader thread
 //! turns stdin lines into messages. Before relayout, everything already
 //! queued is drained, so a burst of image completions costs one layout.
+use crate::dark::DarkTheme;
 use crate::fonts::{FaceData, FontLibrary};
 use crate::net::BridgeNet;
 use crate::{RenderDoc, RenderOptions, MAX_CSS_WIDTH, MAX_SCALE, MIN_SCALE};
@@ -16,7 +17,6 @@ use std::sync::{mpsc, Arc};
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
 enum In {
-    // `theme` is accepted now and applied by plan B (dark mode); light is the only path in A.
     Open {
         req: u64,
         doc: u64,
@@ -27,7 +27,6 @@ enum In {
         #[serde(rename = "allowRemote")]
         allow_remote: bool,
         #[serde(default)]
-        #[allow(dead_code)] // read by plan B
         theme: Option<serde_json::Value>,
     },
     Tile { req: u64, doc: u64, index: u32 },
@@ -69,6 +68,34 @@ fn bad_request(line: &str) -> Option<u64> {
     let v: Value = serde_json::from_str(line).ok()?;
     matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns" | "serialize" | "fold" | "inspect").then_some(())?;
     v["req"].as_u64()
+}
+
+/// `open.theme` as the frontend sends it (`blitzThemeFor`): `{mode:'light'}` or
+/// `{mode:'dark', bg, fg, brightness, contrast, sepia}`.
+#[derive(Deserialize, Default)]
+struct WireTheme {
+    mode: Option<String>,
+    bg: Option<String>,
+    fg: Option<String>,
+    brightness: Option<f64>,
+    contrast: Option<f64>,
+    sepia: Option<f64>,
+}
+
+/// `open.theme` -> Dark Reader settings. A missing, null or unparsable theme,
+/// or any mode but "dark", renders light. `bg: null` (plan D's transparent
+/// canvas) is valid: an empty pole falls back to DR's default in
+/// `DarkTheme::theme`.
+fn dark_from_wire(theme: Option<&Value>) -> Option<DarkTheme> {
+    let w: WireTheme = theme.cloned().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+    (w.mode.as_deref() == Some("dark")).then(|| DarkTheme {
+        bg: w.bg.unwrap_or_default(),
+        fg: w.fg.unwrap_or_default(),
+        brightness: w.brightness.unwrap_or(100.0),
+        contrast: w.contrast.unwrap_or(100.0),
+        sepia: w.sepia.unwrap_or(0.0),
+        top_level: false,
+    })
 }
 
 struct Open {
@@ -171,9 +198,12 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
 
 fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out: &mut impl Write, pre_open: fn(&str), tainted: &Cell<bool>, fonts: &mut FontLibrary) -> std::io::Result<()> {
     match msg {
-        In::Open { req, doc, html, css_width, scale, allow_remote, theme: _ } => {
+        In::Open { req, doc, html, css_width, scale, allow_remote, theme } => {
             let net = BridgeNet::new(allow_remote);
-            let opts = RenderOptions::new(css_width.clamp(1, MAX_CSS_WIDTH as u32), scale.clamp(MIN_SCALE, MAX_SCALE));
+            let opts = RenderOptions {
+                dark: dark_from_wire(theme.as_ref()),
+                ..RenderOptions::new(css_width.clamp(1, MAX_CSS_WIDTH as u32), scale.clamp(MIN_SCALE, MAX_SCALE))
+            };
             let net_for_doc = net.clone();
             let stored = opts.clone();
             let font_ctx = fonts.context();
