@@ -13,6 +13,16 @@
   text-transform: none;
   font-weight: normal;
   font-style: normal;
+  /* The spans' z-index below stays inside the layer: transparent text must
+     never rise over app chrome that overlaps the reader. */
+  isolation: isolate;
+}
+/* A root's lines wrap at the <wbr> between its 0 px wide line wrappers, and
+   only there (TextLayer.jsx Root). line-height 0: no strut, so a line box is
+   exactly as tall as its spans. */
+.mv-blitz-text .mv-blitz-root {
+  white-space: normal;
+  line-height: 0;
 }
 .mv-blitz-text span {
   color: transparent;
@@ -20,6 +30,21 @@
   vertical-align: top;
   white-space: pre;
   cursor: text;
+}
+/* Text above every root's empty hit area: a later root's padding must not
+   cover an earlier root's text (a float, a column). */
+.mv-blitz-text span[data-node] {
+  position: relative;
+  z-index: 1;
+}
+/* The height of lines the worker left out (unselectable), so the next line box
+   sits where its line is drawn. Never a caret position. */
+.mv-blitz-text .mv-blitz-gap {
+  display: inline-block;
+  width: 0;
+  cursor: inherit;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .mv-blitz-text[data-hover="true"],
 .mv-blitz-text[data-hover="true"] span { cursor: pointer; }

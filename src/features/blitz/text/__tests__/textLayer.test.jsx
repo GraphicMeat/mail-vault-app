@@ -73,6 +73,16 @@ describe('blitz.css', () => {
     expect(layer).not.toMatch(/cursor/);
     expect(css).toMatch(/\.mv-blitz-text\[data-hover="true"\],\s*\.mv-blitz-text\[data-hover="true"\] span\s*\{\s*cursor:\s*pointer/);
   });
+  it('a root wraps only at its <wbr>s with no strut, and span stacking stays inside the layer', () => {
+    const layer = css.match(/\.mv-blitz-text\s*\{([^}]*)\}/)[1];
+    expect(layer).toContain('isolation: isolate');
+    const root = css.match(/\.mv-blitz-text \.mv-blitz-root\s*\{([^}]*)\}/)[1];
+    expect(root).toContain('white-space: normal');
+    expect(root).toContain('line-height: 0');
+    const text = css.match(/\.mv-blitz-text span\[data-node\]\s*\{([^}]*)\}/)[1];
+    expect(text).toContain('position: relative');
+    expect(text).toContain('z-index: 1');
+  });
   it('pins the properties the flow math assumes', () => {
     const layer = css.match(/\.mv-blitz-text\s*\{([^}]*)\}/)[1];
     for (const d of ['direction: ltr', 'text-align: left', 'text-indent: 0', 'word-spacing: normal', 'text-transform: none', 'font-weight: normal', 'font-style: normal']) expect(layer).toContain(d);
@@ -83,21 +93,21 @@ describe('TextLayer', () => {
   it('fetches runs for shown tiles only and renders one span per run in a root div', async () => {
     textRunsRender.mockImplementation(async (_d, i) => ({ runs: i === 0 ? [run({}), run({ x: 80, start: 7, text: ' more' })] : [] }));
     render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(2));
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(2));
     expect(textRunsRender).toHaveBeenCalledTimes(1);
     expect(textRunsRender).toHaveBeenCalledWith(1, 0);
-    const spans = [...document.querySelectorAll('.mv-blitz-text span')];
+    const spans = [...document.querySelectorAll('.mv-blitz-text span[data-node]')];
     expect(spans[0].dataset.node).toBe('5');
     expect(spans[1].dataset.start).toBe('7');
-    expect(spans[1].style.left).toBe('10px'); // x 80 minus flow 70
+    expect(spans[1].style.marginLeft).toBe('10px'); // x 80 minus flow 70
     expect(spans[0].closest('[data-tile]').dataset.tile).toBe('0');
   });
 
   it('spans keep logical order and dir=auto (RTL)', async () => {
     textRunsRender.mockResolvedValue({ runs: [run({ text: 'שלום ', x: 200, start: 0 }), run({ text: 'abc', x: 100, start: 9 })] });
     render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(2));
-    const spans = [...document.querySelectorAll('.mv-blitz-text span')];
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(2));
+    const spans = [...document.querySelectorAll('.mv-blitz-text span[data-node]')];
     expect(spans.map(s => s.textContent)).toEqual(['שלום ', 'abc']);
     expect(spans.every(s => s.getAttribute('dir') === 'auto')).toBe(true);
   });
@@ -105,20 +115,78 @@ describe('TextLayer', () => {
   it('tile containers exist for every tile in order, so a late tile lands in reading order', async () => {
     textRunsRender.mockImplementation(async (_d, i) => ({ runs: [run({ node: 10 + i, y: i * 512, text: `t${i}` })] }));
     const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([2])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(1));
     rerender(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0, 2])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(2));
-    expect([...document.querySelectorAll('.mv-blitz-text span')].map(s => s.textContent)).toEqual(['t0', 't2']);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(2));
+    expect([...document.querySelectorAll('.mv-blitz-text span[data-node]')].map(s => s.textContent)).toEqual(['t0', 't2']);
   });
 
-  it('a <br> newline never reaches a span (it would break the flow line)', async () => {
+  it('a <br> newline never reaches a span: the next line is a line box of its own, not a newline', async () => {
     textRunsRender.mockResolvedValue({ runs: [run({ text: 'x\n', w: 20, start: 0 }), run({ text: 'y', x: 0, y: 30, w: 10, start: 2 })] });
     render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(2));
-    const [a, b] = document.querySelectorAll('.mv-blitz-text span');
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(2));
+    const [a, b] = document.querySelectorAll('.mv-blitz-text span[data-node]');
     expect(a.textContent).toBe('x ');
     expect(b.textContent).not.toMatch(/\n/);
-    expect(b.style.top).toBe('30px');
+    expect(b.closest('.mv-blitz-line')).not.toBe(a.closest('.mv-blitz-line'));
+    expect(b.style.top).toBe('0px'); // the line box is already at 30
+  });
+
+  it('a root is one block whose visual lines are soft-wrapped line wrappers: no <br>, no newline, one <wbr> between lines', async () => {
+    textRunsRender.mockResolvedValue({ runs: [
+      run({ text: 'aaaa ', x: 10, w: 50, start: 0 }),
+      run({ text: 'bbbb ', x: 60, w: 50, start: 5, fontPx: 24 }),
+      run({ text: 'cccc', x: 10, y: 30, w: 40, start: 10 }),
+    ] });
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(3));
+    const roots = document.querySelectorAll('.mv-blitz-root');
+    expect(roots).toHaveLength(1);
+    const root = roots[0];
+    const lines = [...root.querySelectorAll('.mv-blitz-line')];
+    expect(lines.map(l => l.querySelectorAll('span[data-node]').length)).toEqual([2, 1]);
+    expect(root.querySelector('br')).toBeNull();
+    expect(root.querySelectorAll('wbr')).toHaveLength(1);
+    expect(root.textContent).toBe('aaaa bbbb cccc');
+    // 0 px wide: it wraps at every <wbr>; its hit area is padding out to the layer's edge.
+    expect(root.style.width).toBe('0px');
+    expect(root.style.left).toBe('10px');
+    expect(root.style.paddingRight).toBe('590px');
+    // The flow offset restarts on each line.
+    expect(lines[0].querySelectorAll('span[data-node]')[1].style.marginLeft).toBe('0px');
+    expect(lines[1].querySelector('span[data-node]').style.marginLeft).toBe('0px');
+  });
+
+  it('lines the worker left out become a gap box of their height, so the next line box sits at its drawn top', async () => {
+    textRunsRender.mockResolvedValue({ runs: [run({ text: 'one ', start: 0 }), run({ text: 'three', y: 60, start: 9 })] });
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(2));
+    const gaps = document.querySelectorAll('.mv-blitz-gap');
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].style.height).toBe('30px');
+    expect(gaps[0].getAttribute('aria-hidden')).toBe('true');
+    expect(gaps[0].dataset.node).toBeUndefined();
+    expect(document.querySelectorAll('.mv-blitz-text span[data-node]')[1].style.top).toBe('0px');
+  });
+
+  it("a root's hit area stops at the next root on its right that shares its height", async () => {
+    textRunsRender.mockResolvedValue({ runs: [
+      run({ node: 5, text: 'left', x: 0, w: 50, start: 0 }),
+      run({ node: 6, text: 'right', x: 300, w: 50, start: 0 }),
+      run({ node: 7, text: 'below', x: 0, y: 100, w: 50, start: 0 }),
+    ] });
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-root')).toHaveLength(3));
+    const pad = [...document.querySelectorAll('.mv-blitz-root')].map(r => r.style.paddingRight);
+    expect(pad).toEqual(['300px', '300px', '600px']);
+  });
+
+  it('a paragraph is fetched with the tile of its first line: a shown tile loads the owner tiles it names', async () => {
+    textRunsRender.mockImplementation(async (_d, i) => (i === 2 ? { runs: [], owners: [0] } : { runs: [run({ text: `t${i}` })] }));
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([2])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(1));
+    expect(textRunsRender.mock.calls.map(c => c[1]).sort()).toEqual([0, 2]);
+    expect(document.querySelector('[data-tile="0"] span[data-node]').textContent).toBe('t0');
   });
 
   it('a late reply for an older rev is dropped', async () => {
@@ -126,9 +194,9 @@ describe('TextLayer', () => {
     textRunsRender.mockImplementationOnce(() => new Promise(r => { resolveOld = r; })).mockResolvedValue({ runs: [run({ text: 'new' })] });
     const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
     rerender(<TextLayer docId={1} rev={2} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    await waitFor(() => expect(document.querySelector('.mv-blitz-text span')?.textContent).toBe('new'));
+    await waitFor(() => expect(document.querySelector('.mv-blitz-text span[data-node]')?.textContent).toBe('new'));
     await act(async () => { resolveOld({ runs: [run({ text: 'old' })] }); });
-    expect([...document.querySelectorAll('.mv-blitz-text span')].map(s => s.textContent)).toEqual(['new']);
+    expect([...document.querySelectorAll('.mv-blitz-text span[data-node]')].map(s => s.textContent)).toEqual(['new']);
   });
 
   it('a new rev drops cached runs and refetches', async () => {
@@ -151,7 +219,7 @@ describe('TextLayer', () => {
     textRunsRender.mockRejectedValueOnce(new Error('render_unavailable'));
     render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
     await waitFor(() => expect(textRunsRender).toHaveBeenCalledTimes(1));
-    expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(0);
+    expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(0);
   });
 
   it('one root div per inline root, runs of a root keep logical order, hover flips the cursor flag', async () => {
@@ -159,7 +227,7 @@ describe('TextLayer', () => {
     const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
     await waitFor(() => expect(document.querySelectorAll('.mv-blitz-root')).toHaveLength(2));
     const roots = [...document.querySelectorAll('.mv-blitz-root')];
-    expect(roots[0].querySelectorAll('span')).toHaveLength(2);
+    expect(roots[0].querySelectorAll('span[data-node]')).toHaveLength(2);
     expect(roots[1].style.top).toBe('40px');
     expect(screen.getByTestId('blitz-text-layer').dataset.hover).toBeUndefined();
     rerender(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} hover />);
@@ -180,39 +248,39 @@ describe('TextLayer', () => {
   it('a tab is drawn as a space so the flow width stays the measured width', async () => {
     textRunsRender.mockResolvedValue({ runs: [run({ text: 'a\tb', w: 15 })] });
     render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
-    expect(document.querySelector('.mv-blitz-text span').textContent).toBe('a b');
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(1));
+    expect(document.querySelector('.mv-blitz-text span[data-node]').textContent).toBe('a b');
   });
 
   it('a rev change keeps the live span nodes until the new reply replaces them', async () => {
     textRunsRender.mockResolvedValue({ runs: [run({ text: 'same', w: 40 })] });
     const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
-    const before = document.querySelector('.mv-blitz-text span');
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(1));
+    const before = document.querySelector('.mv-blitz-text span[data-node]');
     let resolve2;
     textRunsRender.mockImplementationOnce(() => new Promise(r => { resolve2 = r; }));
     rerender(<TextLayer docId={1} rev={2} meta={meta} shownTiles={new Set([0])} measure={measure} />);
     await waitFor(() => expect(textRunsRender).toHaveBeenCalledTimes(2));
-    expect(document.querySelector('.mv-blitz-text span')).toBe(before); // not blanked while rev 2 is in flight
+    expect(document.querySelector('.mv-blitz-text span[data-node]')).toBe(before); // not blanked while rev 2 is in flight
     await act(async () => { resolve2({ runs: [run({ text: 'same', w: 40, x: 5 })] }); });
-    expect(document.querySelector('.mv-blitz-text span')).toBe(before); // same node, restyled
-    expect(before.style.left).toBe('0px');
+    expect(document.querySelector('.mv-blitz-text span[data-node]')).toBe(before); // same node, restyled
+    expect(before.style.marginLeft).toBe('0px');
   });
 
   it('a docId change clears every tile at once', async () => {
     textRunsRender.mockResolvedValueOnce({ runs: [run({ text: 'old' })] });
     const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(1));
     textRunsRender.mockImplementationOnce(() => new Promise(() => {}));
     rerender(<TextLayer docId={2} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
-    expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(0);
+    expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(0);
   });
 
   it('a hover or shown-set change does not refit spans of loaded tiles', async () => {
     textRunsRender.mockResolvedValue({ runs: [run({ text: 'abc', w: 20 })] });
     const m = vi.fn(measure);
     const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={m} />);
-    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span')).toHaveLength(1));
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-text span[data-node]')).toHaveLength(1));
     const calls = m.mock.calls.length;
     expect(calls).toBeGreaterThan(0);
     rerender(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={m} hover />);

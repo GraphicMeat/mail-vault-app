@@ -71,8 +71,8 @@ function within(span, container, offset, fallback) {
 }
 
 // Between two selected spans: a new inline root is a new line. Within one
-// root (a paragraph that crosses a tile is two elements with one data-node)
-// the byte gap between the spans decides: none means the text is contiguous.
+// root the byte gap between the spans decides (a dropped unselectable run
+// leaves one): none means the text is contiguous.
 function separator(prev, span) {
   if (prev.dataset.node !== span.dataset.node) return '\n';
   const gap = Number(span.dataset.start) - (Number(prev.dataset.start) + utf8Length(prev.textContent));
