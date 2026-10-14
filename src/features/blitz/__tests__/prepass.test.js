@@ -8,6 +8,7 @@ vi.mock('../../../utils/iframePrivacyRedact', () => ({
   },
 }));
 import { runPrepass } from '../prepass';
+import { buildEmailIframeHtml } from '../../../utils/emailIframeTemplate';
 
 const props = (over = {}) => ({ bodyHtml: '<p>Hi Alice</p><script>evil()</script>', indicatorCss: 'a{outline:1px}', theme: { dark: false }, ...over });
 
@@ -58,6 +59,18 @@ describe('runPrepass', () => {
     const { html } = await runPrepass(props({ documentHtml: '<html><body style="padding:8px"><p>own doc</p></body></html>' }), { privacy: { active: false } });
     expect(html).toContain('own doc');
     expect(html).toContain('padding:8px');
+  });
+  it('clamps tables to the pane exactly like the reader iframe (no tableMode passed by either)', async () => {
+    // EmailViewer passes no tableMode to buildEmailIframeHtml and none in the AltBody theme,
+    // so both sides take the template's 'preserve' default.
+    const clamp = 'table { max-width: 100% !important; width: auto !important; }';
+    const iframe = buildEmailIframeHtml({ bodyHtml: '<table width="600"><tr><td>x</td></tr></table>' });
+    expect(iframe).toContain(clamp);
+    for (const theme of [{ dark: false, palette: 'graphite' }, { dark: true, palette: 'graphite' }]) {
+      const { html } = await runPrepass(props({ bodyHtml: '<table width="600"><tr><td>x</td></tr></table>', theme }), { privacy: { active: false } });
+      expect(html).toContain(clamp);
+      expect(html).not.toContain('table-layout: fixed');
+    }
   });
   it('honours theme.tableMode like the iframe template', async () => {
     const { html } = await runPrepass(props({ theme: { dark: false, tableMode: 'clip' } }), { privacy: { active: false } });
