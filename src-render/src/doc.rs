@@ -37,6 +37,8 @@ const NO_SUBDOCUMENTS: usize = 1000;
 pub struct RenderOptions {
     pub css_width: u32,
     pub scale: f32,
+    /// Dark Reader settings; None renders light (plan B).
+    pub dark: Option<crate::dark::DarkTheme>,
 }
 
 impl RenderOptions {
@@ -178,7 +180,10 @@ impl RenderDoc {
         if doc.tree().len() > MAX_NODES || exceeds_depth(&doc) {
             return Err(OpenError::TooComplex);
         }
-        crate::styles::rewrite(&mut doc, |_, _| crate::styles::Rewrite::default());
+        match &opts.dark {
+            Some(theme) => crate::dark::apply(&mut doc, theme),
+            None => crate::styles::rewrite(&mut doc, |_, _| crate::styles::Rewrite::default()),
+        }
         strip_svg_references(&mut doc);
         // Everything blitz asked for while parsing is decided here: images are
         // queued, stylesheets, fonts, @import and frames are answered empty.

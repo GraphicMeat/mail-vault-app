@@ -1,13 +1,17 @@
 //! Dark Reader 4.9.120, ported to Rust for the Blitz renderer (plan B).
 //! `apply` (Task 13) reproduces in the Blitz DOM what DR writes into the
 //! iframe's DOM; the colour engine lives in the submodules.
+use blitz_dom::{ns, BaseDocument, LocalName, NodeId, QualName};
 use serde::Deserialize;
+use std::collections::HashMap;
 
 pub mod color;
+pub mod cssom;
 pub mod math_eval;
 pub mod matrix;
 pub mod modify_colors;
 pub mod modify_css;
+pub mod sheets;
 pub mod text;
 
 /// DR's `Theme`, limited to the fields the dynamic engine reads (definitions.d.ts).
@@ -116,6 +120,49 @@ impl DarkTheme {
     pub fn profile(&self) -> Profile {
         Profile { is_iframe: !self.top_level, ..Profile::WEBKIT_IFRAME }
     }
+}
+
+/// What Dark Reader leaves in the iframe's DOM once it has settled,
+/// reproduced in the Blitz DOM. `RenderDoc::open` calls this after parse and
+/// before the first resolve. Order follows DR's createDynamicStyleOverrides:
+/// sheets first (sync rules), then inline styles. The static sheets come
+/// last, because they carry every colour the rest registered.
+///
+/// Cascade: Blitz orders author sheets by NodeId, so no `<style>` is added
+/// next to the others. The static sheets are prepended to the text of the
+/// first `<style>` (DR inserts its own before the document's first) and each
+/// sheet's sync rules are appended to that sheet's own text.
+pub fn apply(doc: &mut BaseDocument, dark: &DarkTheme) {
+    let mut cx = DarkCx::new(dark.theme(), dark.profile());
+    if crate::styles::style_nodes(doc).is_empty() {
+        ensure_style_node(doc);
+    }
+    let styles = crate::styles::style_nodes(doc);
+    let mut suffix: HashMap<NodeId, String> = HashMap::new();
+    for s in &styles {
+        // DR does not manage a <style media="print"> (shouldManageStyle).
+        if !sheets::is_managed_media(s.media.as_deref()) {
+            continue;
+        }
+        let css = crate::styles::with_rules(doc, s.id, |rules, g| sheets::sync_css(rules, g, &mut cx)).unwrap_or_default();
+        if !css.is_empty() {
+            suffix.insert(s.id, format!("\n{css}"));
+        }
+    }
+    let prefix = modify_css::static_sheets(&mut cx);
+    crate::styles::rewrite(doc, |i, id| crate::styles::Rewrite {
+        prefix: if i == 0 { format!("{prefix}\n") } else { String::new() },
+        suffix: suffix.remove(&id).unwrap_or_default(),
+    });
+}
+
+/// A document with no `<style>` still needs DR's static sheets. With no other
+/// author sheet to order against, a new node at the top of `<head>` is safe.
+fn ensure_style_node(doc: &mut BaseDocument) {
+    let parent = doc.find_head_node().map(|n| n.id).unwrap_or_else(|| doc.root_element().id);
+    let mut m = doc.mutate();
+    let style = m.create_element(QualName::new(None, ns!(html), LocalName::from("style")), vec![]);
+    m.prepend_nodes(parent, &[style]);
 }
 
 #[cfg(test)]
