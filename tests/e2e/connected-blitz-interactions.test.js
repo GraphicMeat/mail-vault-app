@@ -678,6 +678,18 @@ async function kit(name, ...args) {
   if (out && out.missing) { await ensureKit(); return (await browser.execute((n, a) => ({ v: window.__mvc[n](...a) }), name, args)).v; }
   return out.v;
 }
+// The quotes of the compose windows the app keeps in its session (settings
+// file, `mailvault-compose-session`): what a reply really carries.
+async function sessionQuotes() {
+  const raw = await browser.executeAsync((done) => {
+    window.__TAURI__.core.invoke('read_settings_json').then(done, () => done('{}'));
+  });
+  let windows;
+  try { windows = JSON.parse(raw || '{}')['mailvault-compose-session']; } catch { windows = null; }
+  if (typeof windows === 'string') { try { windows = JSON.parse(windows); } catch { windows = null; } }
+  return (Array.isArray(windows) ? windows : []).map((w) => w && w.initialData && w.initialData._quotedHtml).filter((q) => typeof q === 'string');
+}
+
 async function kitAsync(name, ...args) {
   if (!kitReady) await ensureKit();
   const run = () => browser.executeAsync((n, a, done) => {
@@ -1405,6 +1417,8 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
         out[mode] = { selectMs, copyMs: Date.now() - t0, tilesBefore: before && { tiles: before.tiles, withSrc: before.withSrc }, selLen: selText.length, sel: c, hasLast: c.plain.includes('ZZLASTZZ'), plainLen: c.plain.length };
       }
       log('copy.selectAll', { web: { ...out.web, sel: brief(out.web.sel) }, blitz: { ...out.blitz, sel: brief(out.blitz.sel) } });
+      const ctaLine = (s) => String(s || '').split(/\r?\n/).filter((l) => /Ctabefore|Ctabutton|Btnlabel/.test(l));
+      log('copy.selectAll.cta', { web: ctaLine(out.web.sel.plain), blitz: ctaLine(out.blitz.sel.plain) });
       log('copy.selectAll.diff', { plain: firstDiff(norm(out.web.sel.plain), norm(out.blitz.sel.plain)), flat: firstDiff(flat(out.web.sel.plain), flat(out.blitz.sel.plain)), htmlTextEqual: visible(out.web.sel.html) === visible(out.blitz.sel.html) });
       ck(out.blitz.hasLast, 'Blitz select-all copy lacks the last paragraph');
       ck(out.web.hasLast, 'iframe select-all copy lacks the last paragraph');
@@ -1513,22 +1527,33 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
         await openFixture(mode);
         ck(await kit('select', mode, 'Brline one', 'Brline three'), `${mode}: select failed`);
         const selText = await kit('selText', mode);
-        // What EmailViewer.selectedReplyHtml passes on: replySelection's escape of Selection.toString.
+        // replySelection's escape of Selection.toString: what the reply quoted before Blitz handed
+        // out its own selection text. Logged for comparison with earlier runs, not asserted.
         const quote = await kit('replyQuote', mode);
+        // A previous reply's session must be gone, so the one read below is this reply's.
+        await browser.waitUntil(async () => !(await sessionQuotes()).some((q) => q.includes('Brline')), { timeout: 8_000, interval: 250 }).catch(() => {});
         await browser.execute(() => document.activeElement && document.activeElement.blur && document.activeElement.blur());
         await browser.keys('r'); // the app's reply shortcut: it reads the live selection like the Reply button
         await browser.waitUntil(modalOpen, { timeout: 15_000, interval: 200, timeoutMsg: `${mode}: compose did not open on r` }).catch(() => {});
-        await browser.pause(800);
-        got[mode] = { selText, quote, composeOpened: await modalOpen() };
+        // What the compose really got: its quote after the header paragraph (replyQuote.js buildQuoteBlocks).
+        let composed = null;
+        await browser.waitUntil(async () => {
+          const q = (await sessionQuotes()).find((x) => x.includes('Brline'));
+          composed = q == null ? null : q.slice(q.indexOf('</p>') + 4);
+          return composed != null;
+        }, { timeout: 10_000, interval: 250 }).catch(() => {});
+        got[mode] = { selText, quote, composed, composeOpened: await modalOpen() };
         await closeComposeHard();
       }
       log('reply.quote', got);
-      log('reply.quote.diff', { toString: firstDiff(got.web.selText, got.blitz.selText), quote: firstDiff(got.web.quote, got.blitz.quote), brInWeb: (got.web.quote.match(/<br>/g) || []).length, brInBlitz: (got.blitz.quote.match(/<br>/g) || []).length });
+      const brs = (s) => (String(s || '').match(/<br>/g) || []).length;
+      log('reply.quote.diff', { toString: firstDiff(got.web.selText, got.blitz.selText), quote: firstDiff(got.web.quote, got.blitz.quote), composed: firstDiff(got.web.composed || '', got.blitz.composed || ''), brInWeb: brs(got.web.composed), brInBlitz: brs(got.blitz.composed) });
       for (const m of ['web', 'blitz']) {
         ck(got[m].composeOpened, `${m}: the reply never opened`);
-        ck(got[m].quote.includes('Brline one') && got[m].quote.includes('Brline three'), `${m}: the quote lacks the selection: ${got[m].quote}`);
+        ck(got[m].composed != null, `${m}: the reply's compose session never showed a quote`);
+        ck(String(got[m].composed).includes('Brline one') && String(got[m].composed).includes('Brline three'), `${m}: the quote lacks the selection: ${got[m].composed}`);
       }
-      ck(got.blitz.quote === got.web.quote, `quoted text differs: iframe ${JSON.stringify(got.web.quote)} vs blitz ${JSON.stringify(got.blitz.quote)}`);
+      ck(got.blitz.composed === got.web.composed, `quoted text differs: iframe ${JSON.stringify(got.web.composed)} vs blitz ${JSON.stringify(got.blitz.composed)}`);
     });
   });
 
