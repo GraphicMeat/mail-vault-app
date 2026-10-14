@@ -419,7 +419,7 @@ fn rehome_pass(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Res
                     touched.iter().map(|u| format!("{}_{}_{}_", vault_files::fs_safe(account_id), vault_files::fs_safe(mailbox), u)).collect();
                 for entry in std::fs::read_dir(root.join("attachment_cache")).into_iter().flatten().flatten() {
                     if prefixes.iter().any(|p| entry.file_name().to_string_lossy().starts_with(p.as_str())) {
-                        let _ = std::fs::remove_file(entry.path());
+                        let _ = vault_files::remove_cache_entry(&entry.path());
                     }
                 }
             }
@@ -706,15 +706,17 @@ mod tests {
         seed_old_import(&s, v.path(), 1);
         let cache_dir = v.path().join("attachment_cache");
         fs::create_dir_all(&cache_dir).unwrap();
-        fs::write(cache_dir.join("acc_INBOX_5_0_old.pdf"), b"import's").unwrap();
-        fs::write(cache_dir.join("acc_INBOX_50_0_other.pdf"), b"uid 50's").unwrap();
+        for (part, bytes) in [("acc_INBOX_5_0", b"import's"), ("acc_INBOX_50_0", b"uid 50's")] {
+            fs::create_dir_all(cache_dir.join(part)).unwrap();
+            fs::write(cache_dir.join(part).join("a.pdf"), bytes).unwrap();
+        }
         let reg = &s.vault_registry;
         assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![5], vec![5])));
 
         rehome_imports_for(&s, "acc", "INBOX").unwrap().expect("a pass ran");
 
-        assert!(!cache_dir.join("acc_INBOX_5_0_old.pdf").exists());
-        assert!(cache_dir.join("acc_INBOX_50_0_other.pdf").exists());
+        assert!(!cache_dir.join("acc_INBOX_5_0").exists());
+        assert!(cache_dir.join("acc_INBOX_50_0").join("a.pdf").exists());
         let b = maildir::IMPORT_UID_BASE;
         assert_eq!(reg.uid_sets(v.path(), "acc", "INBOX"), Some((vec![b], vec![b])));
         assert_eq!(reg.listing_count(), 2, "the rehome invalidated, so the folder was listed again");

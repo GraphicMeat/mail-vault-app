@@ -976,7 +976,10 @@ pub fn evict_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: 
             continue;
         }
         for file in attachments {
-            let _ = fs::remove_file(file);
+            let _ = fs::remove_file(&file);
+            if let Some(dir) = file.parent() {
+                let _ = fs::remove_dir(dir);
+            }
         }
     }
     evicted.sort_unstable();
@@ -1197,9 +1200,11 @@ pub fn migrate_email_dirs(
 }
 
 // ── Attachment cache ──────────────────────────────────────────────────────────
-// One file per (account, mailbox, uid, part) under <root>/attachment_cache,
+// One folder per (account, mailbox, uid, part) under <root>/attachment_cache,
 // named so a click, the prefetch and the "already downloaded" check all land
-// on the same path without a registry.
+// on the same path without a registry. The file inside keeps the sender's
+// name: drag-out, Open and Open With hand that file to Finder, another app or
+// another email, and a cache key in its name would travel with it.
 
 pub fn fs_safe(s: &str) -> String {
     s.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect()
@@ -1242,7 +1247,13 @@ pub fn win32_safe(leaf: &str) -> String {
 
 pub fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
     let leaf = safe_leaf(filename);
-    cache_dir.join(format!("{}_{}_{}_{}_{}", fs_safe(account_id), fs_safe(mailbox), uid, index, leaf))
+    cache_dir.join(format!("{}_{}_{}_{}", fs_safe(account_id), fs_safe(mailbox), uid, index)).join(leaf)
+}
+
+/// Remove one `attachment_cache` entry: a part's folder, or a file of the
+/// old flat layout.
+pub fn remove_cache_entry(path: &Path) -> std::io::Result<()> {
+    if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) }
 }
 
 fn write_part_to_cache(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, part: &mailparse::ParsedMail) -> Result<PathBuf, String> {
@@ -1250,7 +1261,8 @@ fn write_part_to_cache(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u
     if dest.exists() {
         return Ok(dest);
     }
-    fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create attachment cache dir: {}", e))?;
+    let dir = dest.parent().unwrap_or(cache_dir);
+    fs::create_dir_all(dir).map_err(|e| format!("Failed to create attachment cache dir: {}", e))?;
     let body = part.get_body_raw().map_err(|e| format!("Failed to get attachment body: {}", e))?;
     write_atomic(&dest, &body).map_err(|e| format!("Failed to write file: {}", e))?;
     mark_from_internet(&dest);
@@ -1302,10 +1314,12 @@ pub fn cached_attachment_path(root: &Path, raw: &[u8], account_id: &str, mailbox
 /// `keep` does not claim. The cache outlives nothing on its own: an On Demand
 /// message has no vault `.eml` whose eviction would take its parts along.
 ///
-/// A file is placed by its name (`attachment_cache_path`:
-/// `{account}_{mailbox}_{uid}_{index}_{leaf}`, both `fs_safe`) against
-/// `mailboxes`, the longest matching prefix winning. A file no listed mailbox
-/// places, whose name does not parse, or whose age cannot be read is kept.
+/// A part's folder is placed by its name (`attachment_cache_path`:
+/// `{account}_{mailbox}_{uid}_{index}`, both `fs_safe`) against `mailboxes`,
+/// the longest matching prefix winning. A folder no listed mailbox places,
+/// whose name does not parse, or whose age cannot be read is kept. A plain
+/// file is the old flat layout's, which no lookup finds any more: stale once
+/// old, whoever holds its message.
 pub fn stale_attachment_cache_files(
     cache_dir: &Path,
     mailboxes: &[(String, String)],
@@ -1317,16 +1331,21 @@ pub fn stale_attachment_cache_files(
         mailboxes.iter().map(|(a, m)| (format!("{}_{}_", fs_safe(a), fs_safe(m)), a.as_str(), m.as_str())).collect();
     let mut stale = Vec::new();
     for entry in entries.flatten() {
+        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < older_than);
+        if entry.file_type().is_ok_and(|t| t.is_file()) {
+            if old {
+                stale.push(entry.path());
+            }
+            continue;
+        }
         let name = entry.file_name().to_string_lossy().into_owned();
         let Some((prefix, account, mailbox)) = prefixes.iter().filter(|(p, _, _)| name.starts_with(p.as_str())).max_by_key(|(p, _, _)| p.len()) else {
             continue;
         };
-        let mut rest = name[prefix.len()..].splitn(3, '_');
-        let (Some(Ok(uid)), Some(Ok(_index)), Some(_leaf)) = (rest.next().map(str::parse::<u32>), rest.next().map(str::parse::<usize>), rest.next()) else {
+        let Some((Ok(uid), Ok(_index))) = name[prefix.len()..].split_once('_').map(|(u, i)| (u.parse::<u32>(), i.parse::<usize>())) else {
             continue;
         };
-        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < older_than);
-        if old && entry.file_type().is_ok_and(|t| t.is_file()) && !keep(account, mailbox, uid) {
+        if old && entry.file_type().is_ok_and(|t| t.is_dir()) && !keep(account, mailbox, uid) {
             stale.push(entry.path());
         }
     }
@@ -2510,7 +2529,10 @@ R0lGODlhAQABAAAAACw=\r\n\
     fn cache_attachment_writes_the_part_once() {
         let (_d, cur, cache) = maildir_with(&[(7, &multipart_with_attachment())]);
         let path = cache_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap();
-        assert_eq!(leaf(&path), "acct_INBOX_7_0_report.pdf");
+        // The file keeps the sender's name: a drag to Finder or into another
+        // email carries this leaf, so the cache key lives in its folder.
+        assert_eq!(leaf(&path), "report.pdf");
+        assert_eq!(leaf(path.parent().unwrap()), "acct_INBOX_7_0");
         assert_eq!(fs::read(&path).unwrap(), b"%PDF-1.4\n");
 
         let again = cache_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap();
@@ -2524,8 +2546,8 @@ R0lGODlhAQABAAAAACw=\r\n\
             .replace("filename=\"report.pdf\"", "filename=\"../../escape.pdf\"");
         let (_d, cur, cache) = maildir_with(&[(7, raw.as_bytes())]);
         let path = cache_attachment_in(&cache, &eml_at(&cur, 7), "acct", "INBOX", 7, 0).unwrap();
-        assert_eq!(path.parent().unwrap(), cache);
-        assert_eq!(leaf(&path), "acct_INBOX_7_0_escape.pdf");
+        assert_eq!(path.parent().unwrap().parent().unwrap(), cache);
+        assert_eq!(leaf(&path), "escape.pdf");
     }
 
     #[test]
@@ -2560,9 +2582,13 @@ R0lGODlhAQABAAAAACw=\r\n\
     #[test]
     fn stale_attachment_cache_files_are_the_old_unclaimed_ones_of_a_listed_mailbox() {
         let dir = tempfile::tempdir().unwrap();
-        for name in ["acct_INBOX_5_0_a.pdf", "acct_INBOX_7_0_b.pdf", "acct_Sent_5_1_c.pdf", "other_INBOX_5_0_d.pdf", "acct_INBOX_x_0_e.pdf", "junk.txt"] {
-            fs::write(dir.path().join(name), b"x").unwrap();
+        for (part, leaf) in [("acct_INBOX_5_0", "a.pdf"), ("acct_INBOX_7_0", "b.pdf"), ("acct_Sent_5_1", "c.pdf"), ("other_INBOX_5_0", "d.pdf"), ("acct_INBOX_x_0", "e.pdf"), ("junk", "f.pdf")] {
+            fs::create_dir_all(dir.path().join(part)).unwrap();
+            fs::write(dir.path().join(part).join(leaf), b"x").unwrap();
         }
+        // The old flat layout: nothing looks a file up by that name any more,
+        // so it goes whoever holds its message.
+        fs::write(dir.path().join("acct_INBOX_7_1_old.pdf"), b"x").unwrap();
         let mailboxes = [("acct".to_string(), "INBOX".to_string()), ("acct".to_string(), "Sent".to_string())];
         let mut asked = Vec::new();
         let mut keep = |a: &str, m: &str, uid: u32| {
@@ -2577,8 +2603,9 @@ R0lGODlhAQABAAAAACw=\r\n\
             .collect();
         stale.sort();
 
-        // uid 7 is claimed; `other` is no listed account; `x` is no uid; junk has no place.
-        assert_eq!(stale, vec!["acct_INBOX_5_0_a.pdf".to_string(), "acct_Sent_5_1_c.pdf".to_string()]);
+        // uid 7 is claimed; `other` is no listed account; `x` is no uid; junk
+        // has no place; a flat file is the old layout's.
+        assert_eq!(stale, vec!["acct_INBOX_5_0".to_string(), "acct_INBOX_7_1_old.pdf".to_string(), "acct_Sent_5_1".to_string()]);
         asked.sort();
         assert_eq!(asked, vec!["acct/INBOX/5", "acct/INBOX/7", "acct/Sent/5"]);
         // Nothing is older than the epoch.
@@ -2730,10 +2757,10 @@ R0lGODlhAQABAAAAACw=\r\n\
         ]);
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
         let (written, seen) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", Marks::default(), &noop_gate).unwrap();
-        let names: Vec<String> = written.iter().map(|p| leaf(p)).collect();
+        let names: Vec<String> = written.iter().map(|p| leaf(p.parent().unwrap())).collect();
         // The photo only: the cid: logo is part of the HTML and the unnamed
         // 1x1 gif is a tracking pixel — neither is something the user attached.
-        assert_eq!(names, vec!["acct_INBOX_9_0_photo.png", "acct_INBOX_5_0_report.pdf"]);
+        assert_eq!(names, vec!["acct_INBOX_9_0", "acct_INBOX_5_0"]);
         assert_eq!(seen, Marks { server: 9, import: 0 });
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 2);
 
@@ -2749,7 +2776,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         ]);
         let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
         let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", Marks { server: 5, import: 0 }, &noop_gate).unwrap();
-        assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_9_0_photo.png"]);
+        assert_eq!(written.iter().map(|p| leaf(p.parent().unwrap())).collect::<Vec<_>>(), vec!["acct_INBOX_9_0"]);
     }
 
     /// An mbox import numbers from `IMPORT_UID_BASE`. Its uid sorting first
@@ -2771,7 +2798,7 @@ R0lGODlhAQABAAAAACw=\r\n\
             (12, &photo_with_inline_and_pixel()),
         ]);
         let (written, _) = prefetch_attachments_in(&cache2, &cur2, "acct", "INBOX", seen, &noop_gate).unwrap();
-        assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_12_0_photo.png"], "new server mail is swept; the seen import is not");
+        assert_eq!(written.iter().map(|p| leaf(p.parent().unwrap())).collect::<Vec<_>>(), vec!["acct_INBOX_12_0"], "new server mail is swept; the seen import is not");
     }
 
     // Task 2.6 fix round 1, I1: the per-file gate must hold each file's
@@ -2813,7 +2840,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let cache = root.join("attachment_cache");
         let mut entries: Vec<String> = fs::read_dir(&cache).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
         entries.sort();
-        assert_eq!(entries, vec!["acct_INBOX_9_0_photo.png"]);
+        assert_eq!(entries, vec!["acct_INBOX_9_0"]);
 
         // The high-water mark is not advanced on error — same contract as
         // before this fix, the next sweep starts from scratch.
@@ -2939,6 +2966,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         let uids: HashSet<u32> = [1, 2].into_iter().collect();
         assert_eq!(evict_files(&reg, root, "acct", "INBOX", &uids).unwrap(), vec![1]);
         assert!(!cached[0].exists(), "the evicted message's extracted attachment goes");
+        assert!(!cached[0].parent().unwrap().exists(), "and the folder it was kept in");
         assert!(cached[1].exists(), "an archived message's stays");
         assert!(cached[2].exists(), "another message's stays");
     }

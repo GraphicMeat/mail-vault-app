@@ -881,7 +881,7 @@ mod tests {
         seed_email(t.path(), "acc", "INBOX", 7);
         call(&s, "cache_attachment", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "attachmentIndex": 0})).await;
         let r = call(&s, "cached_attachment_path", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "attachmentIndex": 0})).await;
-        let want = t.path().join("attachment_cache").join("acc_INBOX_7_0_pixel.png").to_string_lossy().to_string();
+        let want = t.path().join("attachment_cache").join("acc_INBOX_7_0").join("pixel.png").to_string_lossy().to_string();
         assert_eq!(r.result.unwrap(), json!(want));
     }
 

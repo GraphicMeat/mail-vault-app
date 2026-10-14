@@ -314,7 +314,7 @@ pub(crate) async fn prune_attachment_cache(state: &Arc<DaemonState>, older_than:
         });
         let removed = stale
             .iter()
-            .filter(|path| with_vault_write(&state, |_| std::fs::remove_file(path).map_err(|e| e.to_string())).is_ok())
+            .filter(|path| with_vault_write(&state, |_| vault_files::remove_cache_entry(path).map_err(|e| e.to_string())).is_ok())
             .count();
         if removed > 0 {
             info!("[raw] removed {removed} attachment cache file(s) of messages kept nowhere on this computer");
@@ -782,16 +782,22 @@ mod tests {
             .result
             .expect("stored");
         let cache = dir.join("attachment_cache");
-        let (vault_part, orphan) = (cache.join("acc1_INBOX_7_0_kept.pdf"), cache.join("acc1_INBOX_5_0_gone.pdf"));
-        std::fs::write(&vault_part, PDF).unwrap();
-        std::fs::write(&orphan, PDF).unwrap();
+        let (vault_part, orphan) = (cache.join("acc1_INBOX_7_0").join("kept.pdf"), cache.join("acc1_INBOX_5_0").join("gone.pdf"));
+        // The old flat layout's copy of the vault message's part: no lookup
+        // finds it any more.
+        let legacy = cache.join("acc1_INBOX_7_0_kept.pdf");
+        for path in [&vault_part, &orphan, &legacy] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, PDF).unwrap();
+        }
         let later = std::time::SystemTime::now() + Duration::from_secs(60);
 
         assert_eq!(prune_attachment_cache(&s, std::time::UNIX_EPOCH).await, 0, "nothing is a day old yet");
         let removed = prune_attachment_cache(&s, later).await;
 
-        assert_eq!(removed, 1);
-        assert!(!orphan.exists(), "uid 5 is kept nowhere");
+        assert_eq!(removed, 2);
+        assert!(!orphan.parent().unwrap().exists(), "uid 5 is kept nowhere");
+        assert!(!legacy.exists(), "the old layout's file is read by nothing");
         assert!(vault_part.exists(), "uid 7 is in the vault");
         assert!(Path::new(in_memory.as_str().unwrap()).exists(), "uid 1 is in memory");
         let _ = std::fs::remove_dir_all(&dir);
