@@ -9,7 +9,7 @@
  * @property {string} messageKey Stable per message (scopeKey / rowKey); drives once-per-message UX.
  * @property {string} bodyHtml The SAME pre-processed body the surface's iframe uses, before
  *   buildEmailIframeHtml (cid to data:, linkify, tracker strip, link-safety scan already applied).
- * @property {string} [documentHtml] The complete srcdoc a surface builds itself (ChatBubbleView,
+ * @property {string} [documentHtml] The complete document HTML a surface builds itself (ChatBubbleView,
  *   OriginalFrame, export canvas). When present, the pre-pass uses it instead of building from
  *   bodyHtml, after stripping scripts, so the CSS stays byte-identical by construction.
  * @property {string} [indicatorCss] Link-safety indicator style, if any.

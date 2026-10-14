@@ -101,7 +101,7 @@ describe('no probe frame', () => {
     expect(files.length).toBeGreaterThan(10);
     for (const f of files) {
       const src = readFileSync(f, 'utf8');
-      expect(src, f).not.toMatch(/<iframe|createElement\(\s*['"]iframe|getDarkReaderInlineScripts|darkReaderInject/);
+      expect(src, f).not.toMatch(/<iframe|createElement\(\s*[`'"]iframe|srcdoc|getDarkReaderInlineScripts|darkReaderInject|domProbe/i);
     }
   });
 });
