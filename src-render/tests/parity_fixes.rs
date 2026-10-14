@@ -43,6 +43,12 @@ fn cellspacing_sets_border_spacing() {
 }
 
 #[test]
+fn table_align_center_centres_the_table() {
+    let els = inspect(&fx("tables-legacy.html"));
+    assert_eq!(get(&els, "centred").rect.clone().unwrap().x, 100.0);
+}
+
+#[test]
 fn cellpadding_is_per_table_and_never_shared_between_look_alike_cells() {
     let html = r#"<body style="margin:0"><table cellspacing="0" cellpadding="10"><tr><td data-mv-id="a" style="width:50px">x</td></tr></table>
 <table cellspacing="0" cellpadding="0"><tr><td data-mv-id="b" style="width:50px">x</td></tr></table>

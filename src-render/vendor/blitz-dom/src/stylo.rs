@@ -944,7 +944,16 @@ impl<'a> TElement for BlitzNode<'a> {
             let name = &attr.name.local;
             let value = attr.value.as_str();
 
-            if *name == local_name!("align") {
+            if *name == local_name!("align") && *tag == local_name!("table") {
+                // MailVault parity fix (plan B): table[align=center] centres the table
+                // (auto inline margins); it does not align the text of its cells.
+                // left and right stay with the UA sheet's float rules.
+                if value.trim().eq_ignore_ascii_case("center") {
+                    for decl in hint_declarations("margin-left:auto;margin-right:auto") {
+                        push_style(decl);
+                    }
+                }
+            } else if *name == local_name!("align") {
                 use style::values::specified::TextAlign;
                 let keyword = match value {
                     "left" => Some(StyloTextAlign::MozLeft),
