@@ -291,16 +291,22 @@ fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     // What the index holds of the message is in the key (no row, body not
     // read, body indexed), so the indexer reaching it changes the key and
     // the answer is worked out again. The Message-ID tells a uid reused
-    // after a mailbox reset from the message it used to name, and the data
-    // dir keeps two daemon states (tests) apart.
+    // after a mailbox reset from the message it used to name (for a message
+    // the index has no row for, the header cache's), and the data dir keeps
+    // two daemon states (tests) apart. No Message-ID anywhere: not cached.
     let held = match &row {
         None => "none",
         Some(_) if body_indexed => "body",
         Some(_) => "listed",
     };
-    let message_id = row.as_ref().and_then(|row| row.message_id.as_deref()).unwrap_or("");
-    let key = format!("{}|{account_id}|{mailbox}|{uid}|{message_id}|{held}", state.data_dir.display());
-    if let Some(reply) = cached_keywords(&key) {
+    let message_id = match &row {
+        Some(row) => row.message_id.clone(),
+        None => listed_message_id(state, account_id, mailbox, uid),
+    };
+    let key = message_id
+        .filter(|id| !id.is_empty())
+        .map(|id| format!("{}|{account_id}|{mailbox}|{uid}|{id}|{held}", state.data_dir.display()));
+    if let Some(reply) = key.as_deref().and_then(cached_keywords) {
         return Ok(reply);
     }
     let Ok(total) = crate::search_index::total_docs(index)? else { return Ok(unavailable()) };
@@ -339,8 +345,22 @@ fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         .map(|k| serde_json::json!({ "term": k.term, "tf": k.tf, "df": k.df }))
         .collect();
     let reply = serde_json::json!({ "available": true, "keywords": keywords });
-    cache_keywords(key, reply.clone());
+    if let Some(key) = key {
+        cache_keywords(key, reply.clone());
+    }
     Ok(reply)
+}
+
+/// The Message-ID the header cache lists for `uid`, if it lists one (the
+/// check `raw_message` makes of a copy it did not read from the vault). A
+/// store that cannot be read names none.
+fn listed_message_id(state: &DaemonState, account_id: &str, mailbox: &str, uid: u32) -> Option<String> {
+    let rows = crate::custody::with_conn(state, |conn| {
+        mailvault_core::custody::cache::load_by_uids(conn, account_id, mailbox, &[uid])
+    })
+    .ok()?;
+    let row = rows.into_iter().next()?;
+    row.get("messageId").or_else(|| row.get("message_id")).and_then(Value::as_str).map(str::to_string)
 }
 
 /// A subject without its reply and forward prefixes (`Re: Fwd: re:`).
@@ -1741,6 +1761,38 @@ mod tests {
         let after = call(&s, "views.keywords", params).await;
         assert!(!terms_of(&after).contains(&"unseenword".to_owned()), "worked out again once indexed: {after}");
         assert!(terms_of(&after).contains(&"quokka".to_owned()), "{after}");
+    }
+
+    /// A message the index has no row for yet (no vault copy: On Demand) is
+    /// cached too, keyed on the Message-ID the header cache lists for it: a
+    /// uid reused after a mailbox reset names another message and is worked
+    /// out again.
+    #[tokio::test]
+    async fn an_unindexed_uids_answer_is_keyed_on_the_listed_message_id() {
+        let s = st();
+        keyword_index(&s); // uid 99: an .eml, no index row
+        let list = |message_id: &str| {
+            crate::custody::with_conn(&s, |conn| {
+                mailvault_core::custody::cache::save_headers(
+                    conn, "a", "INBOX",
+                    &json!({ "emails": [{ "uid": 99, "messageId": message_id, "flags": ["\\Seen"], "date": "Mon, 07 Sep 2026 10:00:00 +0000" }] }).to_string(),
+                )
+            })
+            .unwrap();
+        };
+        list("<old@x.test>");
+        let params = json!({ "accountId": "a", "mailbox": "INBOX", "uid": 99 });
+        let first = call(&s, "views.keywords", params.clone()).await;
+        assert!(terms_of(&first).contains(&"quokka".to_owned()), "{first}");
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
+        let eml = cur.join(format!("99{}S.eml", mailvault_core::maildir::INFO_PREFIX));
+        std::fs::remove_file(&eml).unwrap();
+        let resp = route(&s, "views.keywords", &params, json!(1)).await.expect("routed");
+        assert_eq!(resp.result, Some(first.clone()), "served from the cache: {:?}", resp.error);
+        list("<new@x.test>");
+        std::fs::write(&eml, keyword_eml("zebra crossing")).unwrap();
+        let after = call(&s, "views.keywords", params).await;
+        assert!(terms_of(&after).contains(&"zebra".to_owned()), "another message under the old uid: {after}");
     }
 
     /// Unknown, not "no keywords": the app shows nothing rather than a guess.
