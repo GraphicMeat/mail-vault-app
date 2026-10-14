@@ -660,9 +660,10 @@ impl TableTreeWrapper<'_> {
     /// When the preferred widths do not fit, the overflow is taken from the auto columns
     /// first, then from the specified ones, the percentage ones last (WebKit's
     /// AutoTableLayout), each cut in proportion to the room it has above its minimum content
-    /// width. A table of auto width whose columns ask for percentages is as wide as the widest
-    /// of them needs (clamped to the room it has), which taffy does not know. Tables with
-    /// spanning cells are not handled.
+    /// width. An auto-width table whose columns ask for percentages is, laid out in a known
+    /// room, as wide as the widest of them needs (clamped to the room), which taffy does not
+    /// know; its reported min/max-content size is left as taffy's. Tables with rowspans are
+    /// not handled.
     fn webkit_column_widths(
         &mut self,
         table_width: f32,
@@ -734,39 +735,40 @@ impl TableTreeWrapper<'_> {
             && ctx.style.size.width.tag() == taffy::CompactLength::AUTO_TAG
             && inputs.known_dimensions.width.is_none()
         {
-            // The widest the columns ask for (WebKit's computeIntrinsicLogicalWidths): every
-            // column at its preferred width, the auto and length ones also scaled up so that the
-            // percentage ones get their share, and each percentage column's maximum content
-            // at its percentage.
-            let preferred = |i: usize| match ctx.column_prefs[i] {
-                Some(ColumnPref::Length(pref)) => pref.max(min[i]),
-                _ => max[i].max(min[i]),
-            };
-            let all: f32 = (0..n).map(preferred).sum();
-            let rest: f32 = (0..n)
-                .filter(|&i| !matches!(ctx.column_prefs[i], Some(ColumnPref::Percent(_))))
-                .map(preferred)
-                .sum();
-            let mut wanted = all;
-            if percent_total < 1.0 {
-                wanted = wanted.max(rest / (1.0 - percent_total));
-            }
-            for i in 0..n {
-                if let Some(ColumnPref::Percent(f)) = ctx.column_prefs[i] {
-                    if f > 0.0 {
-                        wanted = wanted.max(preferred(i) / (f * percent_scale));
+            if let taffy::AvailableSpace::Definite(room) = inputs.available_space.width {
+                // The table's own width (not the width it reports as its intrinsic size to a
+                // parent: WebKit keeps the two apart, which is why a percentage table in a
+                // spanning cell does not widen the table around it): as wide as the columns
+                // ask for, every one at its preferred width, the auto and length ones scaled
+                // up so that the percentage ones get their share (WebKit's
+                // scaledWidthFromPercentColumns), clamped to the room the table has.
+                let preferred = |i: usize| match ctx.column_prefs[i] {
+                    Some(ColumnPref::Length(pref)) => pref.max(min[i]),
+                    _ => max[i].max(min[i]),
+                };
+                let all: f32 = (0..n).map(preferred).sum();
+                let rest: f32 = (0..n)
+                    .filter(|&i| !matches!(ctx.column_prefs[i], Some(ColumnPref::Percent(_))))
+                    .map(preferred)
+                    .sum();
+                let mut wanted = all;
+                if percent_total < 1.0 {
+                    wanted = wanted.max(rest / (1.0 - percent_total));
+                }
+                for i in 0..n {
+                    if let Some(ColumnPref::Percent(f)) = ctx.column_prefs[i] {
+                        if f > 0.0 {
+                            wanted = wanted.max(preferred(i) / (f * percent_scale));
+                        }
                     }
                 }
+                let mut widest = (wanted + chrome).min(room);
+                let max_width = ctx.style.max_size.width.into_raw();
+                if max_width.tag() == taffy::CompactLength::LENGTH_TAG {
+                    widest = widest.min(max_width.value());
+                }
+                table_width = table_width.max(widest);
             }
-            let mut widest = wanted + chrome;
-            if let taffy::AvailableSpace::Definite(room) = inputs.available_space.width {
-                widest = widest.min(room);
-            }
-            let max_width = ctx.style.max_size.width.into_raw();
-            if max_width.tag() == taffy::CompactLength::LENGTH_TAG {
-                widest = widest.min(max_width.value());
-            }
-            table_width = table_width.max(widest);
         }
         let available = table_width - chrome;
         let mut width: Vec<f32> = (0..n)

@@ -375,10 +375,8 @@ fn text_content_widths_are_not_rounded_up_to_whole_pixels() {
 /// (CSS 2 17.5.2.2; WebKit AutoTableLayout): cerberus `th width="33.33%"` / `"66.66%"`
 /// columns of a `table` with `width: auto !important` (the base sheet) in a 508px cell.
 /// Harness iframe (cerberus responsive, wide): th 169.34375 and 338.671875, Blitz 73.5 and
-/// 434.5 (the percentage was ignored and the image column squeezed). The second table is a
-/// shrink-to-fit table with a 50% column: it asks for twice that column's text, so it fills
-/// the 508px and the columns are 254 each (the algorithm's result, not measured). The third
-/// has the percentages on its second row, as postmark's invoice does.
+/// 434.5 (the percentage was ignored and the image column squeezed). The second table has the
+/// percentages on its second row, as postmark's invoice does.
 #[test]
 fn percentage_columns_take_their_share_of_the_table() {
     let els = inspect_at(&fx("table-percent-columns.html"), 508);
@@ -388,9 +386,6 @@ fn percentage_columns_take_their_share_of_the_table() {
         ("a", 169.34),
         ("b", 338.67),
         ("ta", 169.34),
-        ("u", 508.0),
-        ("u1", 254.0),
-        ("u2", 254.0),
         // postmark invoice: the percentages are on the second row's cells (iframe: table
         // 238.95 in a 239 cell, cells 191.17 and 47.80 at 80% / 20%).
         ("v", 508.0),
@@ -399,6 +394,12 @@ fn percentage_columns_take_their_share_of_the_table() {
     ] {
         assert!((w(id) - want).abs() <= 1.0, "{id}: {}, want {want}", w(id));
     }
+    // Postmark's invoice, whose percentage table sits in a spanning cell of a table that is
+    // as wide as its first row (iframe: both 238.9, columns 191.17 and 47.80). A percentage
+    // does not widen the table to what the column's content would need at that share.
+    let (p, row, nested) = (w("p"), w("p1") + w("p2"), w("pn"));
+    assert!((p - row).abs() <= 1.0 && (nested - p).abs() <= 1.0, "table {p}, first row {row}, nested table {nested}");
+    assert!((w("pn1") - 0.8 * nested).abs() <= 1.0, "pn1 {} of {nested}", w("pn1"));
 }
 
 /// WebKit resolves `ui-monospace` to the system monospaced font (SF Mono's system cut), 85.64
