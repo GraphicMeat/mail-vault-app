@@ -428,8 +428,15 @@ pub fn override_inline(doc: &BaseDocument, id: NodeId, cx: &mut DarkCx) -> Inlin
             set_custom_prop("fill", "color", &fill, &style, cx, Some("fill"), &mut out);
         }
     }
-    // Task 15: variablesStore.addInlineStyleForMatching(element.style) when the style attribute holds "--".
+    // `addInlineStyleForMatching(element.style)` is `variables::collect_inline`, run
+    // before this pass so that every variable has its settled type.
     out
+}
+
+/// True for the elements `override_inline` leaves before its end: DR never
+/// queues their style for variable matching either.
+pub(super) fn skips_inline_override(doc: &BaseDocument, id: NodeId, mode: u8) -> bool {
+    is_svg_el(doc, id) && mode == 1 && svg_has_logo_class(doc, id)
 }
 
 /// Every element DR's `INLINE_STYLE_SELECTOR` matches, in tree order.

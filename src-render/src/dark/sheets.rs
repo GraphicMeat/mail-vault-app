@@ -19,6 +19,14 @@ pub fn is_managed_media(media_attr: Option<&str>) -> bool {
     !media_attr.is_some_and(|m| IGNORED_MEDIA.contains(&m.to_lowercase().as_str()))
 }
 
+/// `iterateCSSRules`' test for an `@media` block: screen, all or a bare
+/// query is managed; so is anything that is not only print and its kin.
+pub fn media_applies(queries: &[String]) -> bool {
+    let screen_or_all_or_query = queries.iter().any(|q| q.starts_with("screen") || q.starts_with("all") || q.starts_with('('));
+    let not_screen = !screen_or_all_or_query && queries.iter().any(|q| IGNORED_MEDIA.iter().any(|i| q.starts_with(i)));
+    screen_or_all_or_query || !not_screen
+}
+
 /// The sync sheet DR writes after this sheet's `<style>`: every rule with at
 /// least one modifiable declaration, with its media/layer/nesting groups.
 pub fn sync_css(rules: &[CssRule], g: &SharedRwLockReadGuard, cx: &mut DarkCx) -> String {
@@ -48,9 +56,7 @@ fn write_rules(rules: &[CssRule], g: &SharedRwLockReadGuard, cx: &mut DarkCx, ou
             }
             CssRule::Media(m) => {
                 let queries: Vec<String> = m.media_queries.read_with(g).media_queries.iter().map(|q| q.to_css_string()).collect();
-                let screen_or_all_or_query = queries.iter().any(|q| q.starts_with("screen") || q.starts_with("all") || q.starts_with('('));
-                let not_screen = !screen_or_all_or_query && queries.iter().any(|q| IGNORED_MEDIA.iter().any(|i| q.starts_with(i)));
-                if screen_or_all_or_query || !not_screen {
+                if media_applies(&queries) {
                     let mut inner = String::new();
                     write_rules(&m.rules.read_with(g).0, g, cx, &mut inner);
                     if !inner.is_empty() {

@@ -81,14 +81,21 @@ pub fn modifiable_declaration(property: &str, value: &str, rule: &dyn RuleStyle,
     Some(ModifiedDecl { property, value: modifier, important, source_value: value.to_string() })
 }
 
-/// `--*` declarations (variables.ts). Task 15 replaces this body.
-fn variable_modifier(_property: &str, _value: &str, _rule: &dyn RuleStyle, _cx: &mut DarkCx) -> Option<DeclValue> {
-    None
+/// `--*` declarations (variables.ts). The store is moved out for the call: the
+/// modifier needs `&mut DarkCx` (palette, bg-image modifier), and never reads `cx.vars`.
+fn variable_modifier(property: &str, value: &str, rule: &dyn RuleStyle, cx: &mut DarkCx) -> Option<DeclValue> {
+    let vars = std::mem::take(&mut cx.vars);
+    let out = vars.modifier_for_variable(property, value, rule, cx);
+    cx.vars = vars;
+    Some(DeclValue::Vars(out))
 }
 
-/// `var()`-dependent declarations (variables.ts). Task 15 replaces this body.
-fn var_dependant_modifier(_property: &str, _value: &str, _cx: &mut DarkCx) -> Option<String> {
-    None
+/// `var()`-dependent declarations (variables.ts), same take-and-restore.
+fn var_dependant_modifier(property: &str, value: &str, cx: &mut DarkCx) -> Option<String> {
+    let vars = std::mem::take(&mut cx.vars);
+    let out = vars.modifier_for_var_dependant(property, value, cx);
+    cx.vars = vars;
+    out
 }
 
 fn color_modifier(prop: &str, value: &str, rule: &dyn RuleStyle, cx: &mut DarkCx) -> Option<String> {
@@ -410,5 +417,10 @@ pub fn static_sheets(cx: &mut DarkCx) -> String {
     let vars = variables_style(cx);
     let registered: String = cx.palette.root_declarations().iter().map(|(k, v)| format!("\n    {k}: {v};")).collect();
     let vars = format!("{}{}\n}}", vars.trim_end_matches('}').trim_end(), registered);
-    [ua, inline, vars].join("\n")
+    let mut sheets = vec![ua, inline, vars];
+    // darkreader--root-vars: `<html>`'s own variables (computed by `apply`).
+    if !cx.root_vars_css.is_empty() {
+        sheets.push(cx.root_vars_css.clone());
+    }
+    sheets.join("\n")
 }

@@ -14,6 +14,7 @@ pub mod modify_colors;
 pub mod modify_css;
 pub mod sheets;
 pub mod text;
+pub mod variables;
 
 /// DR's `Theme`, limited to the fields the dynamic engine reads (definitions.d.ts).
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -59,11 +60,15 @@ pub struct DarkCx {
     pub theme: Theme,
     pub profile: Profile,
     pub palette: modify_colors::Palette,
+    /// The settled types of the document's CSS custom properties.
+    pub vars: variables::VariablesStore,
+    /// `darkreader--root-vars`: `<html>`'s own variables, once `apply` has typed them.
+    pub root_vars_css: String,
 }
 
 impl DarkCx {
     pub fn new(theme: Theme, profile: Profile) -> Self {
-        DarkCx { theme, profile, palette: modify_colors::Palette::default() }
+        DarkCx { theme, profile, palette: modify_colors::Palette::default(), vars: variables::VariablesStore::default(), root_vars_css: String::new() }
     }
 }
 
@@ -126,7 +131,8 @@ impl DarkTheme {
 /// What Dark Reader leaves in the iframe's DOM once it has settled,
 /// reproduced in the Blitz DOM. `RenderDoc::open` calls this after parse and
 /// before the first resolve. Order follows DR's createDynamicStyleOverrides:
-/// sheets first (sync rules), then inline styles. The static sheets come
+/// custom properties are typed first (`match_variables`), then sheets (sync
+/// rules), then inline styles. The static sheets come
 /// last, because they carry every colour the rest registered.
 ///
 /// Cascade: Blitz orders author sheets by NodeId, so no `<style>` is added
@@ -143,6 +149,10 @@ pub fn apply(doc: &mut BaseDocument, dark: &DarkTheme, layout: &mut dyn FnMut(&m
         ensure_style_node(doc);
     }
     let styles = crate::styles::style_nodes(doc);
+    match_variables(doc, &styles, &mut cx);
+    let vars = std::mem::take(&mut cx.vars);
+    cx.root_vars_css = vars.root_vars_style(&mut cx);
+    cx.vars = vars;
     let mut suffix: HashMap<NodeId, String> = HashMap::new();
     for s in &styles {
         // DR does not manage a <style media="print"> (shouldManageStyle).
@@ -163,6 +173,40 @@ pub fn apply(doc: &mut BaseDocument, dark: &DarkTheme, layout: &mut dyn FnMut(&m
         prefix: if i == 0 { format!("{prefix}\n") } else { String::new() },
         suffix: suffix.remove(&id).unwrap_or_default(),
     });
+}
+
+/// DR's two `matchVariablesAndDependents` passes, in the order its
+/// `createDynamicStyleOverrides` makes them: the sheets (with `<html>`'s own
+/// variables), then the inline styles. Each pass sees the types the last left.
+fn match_variables(doc: &BaseDocument, styles: &[crate::styles::StyleNode], cx: &mut DarkCx) {
+    let is_safari = cx.profile.is_safari;
+    for s in styles {
+        // A <style> DR does not manage never reaches its variable store.
+        if sheets::is_managed_media(s.media.as_deref()) {
+            crate::styles::with_rules(doc, s.id, |rules, g| variables::collect_rules(&mut cx.vars, rules, g, is_safari));
+        }
+    }
+    variables::collect_root(&mut cx.vars, doc, is_safari);
+    cx.vars.match_variables();
+    variables::collect_inline(&mut cx.vars, doc, cx.theme.mode, is_safari);
+    cx.vars.match_variables();
+}
+
+/// The sync rules per managed `<style>`, as `apply` would append them, for the
+/// Dark Reader vector tests. Not part of the worker's surface.
+#[doc(hidden)]
+pub fn debug_sync_css(html: &str, dark: &DarkTheme) -> Vec<String> {
+    let doc = blitz_html::HtmlDocument::from_html(html, blitz_dom::DocumentConfig { base_url: Some("http://invalid.invalid/".to_string()), ..Default::default() });
+    let mut cx = DarkCx::new(dark.theme(), dark.profile());
+    let styles = crate::styles::style_nodes(&doc);
+    match_variables(&doc, &styles, &mut cx);
+    let mut out = Vec::new();
+    for s in &styles {
+        if sheets::is_managed_media(s.media.as_deref()) {
+            out.push(crate::styles::with_rules(&doc, s.id, |rules, g| sheets::sync_css(rules, g, &mut cx)).unwrap_or_default());
+        }
+    }
+    out
 }
 
 /// A document with no `<style>` still needs DR's static sheets. With no other

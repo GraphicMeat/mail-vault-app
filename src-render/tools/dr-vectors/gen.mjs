@@ -62,7 +62,7 @@ globalThis.document = {
   addEventListener() {}, removeEventListener() {}, dispatchEvent() {},
   querySelector() { return null; }, querySelectorAll() { return []; },
   createElement() { return { style: { colorScheme: '' }, setAttribute() {}, getContext() { return null; } }; },
-  documentElement: { style: {} }, head: null,
+  documentElement: { style: {}, getAttribute() { return null; } }, head: null,
 };
 const m = await import(pathToFileURL(bundle).href);
 
@@ -174,8 +174,68 @@ const staticSheets = Object.entries(themes).map(([name, t]) => {
   return { theme: name, userAgent, inline: m.getInlineOverrideStyle(), variables };
 });
 
+// CSS variables: fake CSSOM rules (array-like style declarations, as
+// iterateCSSDeclarations reads them) through DR's own VariablesStore.
+const fakeStyle = (decls, shorthands = {}) => {
+  const s = decls.map(([p]) => p);
+  s.getPropertyValue = (p) => (p in shorthands ? shorthands[p] : ((decls.find(([q]) => q === p) || [])[1] || ''));
+  s.getPropertyPriority = () => '';
+  s.cssText = [...decls, ...Object.entries(shorthands)].map(([p, v]) => `${p}: ${v};`).join(' ');
+  return s;
+};
+const VAR_CASES = [
+  { id: 'chain', css: ':root{--brand:#ffffff;--card:var(--brand)}.card{background-color:var(--card)}',
+    rules: [{ selector: ':root', decls: [['--brand', '#ffffff'], ['--card', 'var(--brand)']] }, { selector: '.card', decls: [['background-color', 'var(--card)']] }] },
+  { id: 'text-and-bg', css: ':root{--c:#333333}.a{color:var(--c)}.b{background-color:var(--c)}',
+    rules: [{ selector: ':root', decls: [['--c', '#333333']] }, { selector: '.a', decls: [['color', 'var(--c)']] }, { selector: '.b', decls: [['background-color', 'var(--c)']] }] },
+  { id: 'fallback', css: '.badge{background-color:var(--missing, #ffcc00);color:var(--ink, #333333)}',
+    rules: [{ selector: '.badge', decls: [['background-color', 'var(--missing, #ffcc00)'], ['color', 'var(--ink, #333333)']] }] },
+  { id: 'raw-rgb', css: ':root{--rgb:0, 102, 204}.x{color:rgb(var(--rgb))}.y{background-color:rgba(var(--rgb), 0.5)}',
+    rules: [{ selector: ':root', decls: [['--rgb', '0, 102, 204']] }, { selector: '.x', decls: [['color', 'rgb(var(--rgb))']] }, { selector: '.y', decls: [['background-color', 'rgba(var(--rgb), 0.5)']] }] },
+  { id: 'border', css: ':root{--line:#cccccc}.z{border-top-color:var(--line)}',
+    rules: [{ selector: ':root', decls: [['--line', '#cccccc']] }, { selector: '.z', decls: [['border-top-color', 'var(--line)']] }] },
+  { id: 'shadow', css: ':root{--sh:rgba(0, 0, 0, 0.25)}.s{box-shadow:0 1px 2px var(--sh)}',
+    rules: [{ selector: ':root', decls: [['--sh', 'rgba(0, 0, 0, 0.25)']] }, { selector: '.s', decls: [['box-shadow', '0 1px 2px var(--sh)']] }] },
+  { id: 'gradient', css: ':root{--g:linear-gradient(#ffffff, #000000)}.h{background-image:var(--g)}',
+    rules: [{ selector: ':root', decls: [['--g', 'linear-gradient(#ffffff, #000000)']] }, { selector: '.h', decls: [['background-image', 'var(--g)']] }] },
+  { id: 'shorthand', css: ':root{--brand:#ffffff}.k{background:var(--brand)}',
+    rules: [{ selector: ':root', decls: [['--brand', '#ffffff']] }, { selector: '.k', decls: [['background-color', ''], ['background-image', '']], shorthands: { background: 'var(--brand)' } }] },
+];
+const varCases = [];
+for (const vc of VAR_CASES) {
+  m.clearColorPalette();
+  m.variablesStore.clear();
+  const rules = vc.rules.map((r) => ({ selectorText: r.selector, style: fakeStyle(r.decls, r.shorthands) }));
+  m.variablesStore.addRulesForMatching(rules);
+  m.variablesStore.matchVariablesAndDependents();
+  const t = themes.indigo;
+  const lines = rules.map((rule) => {
+    const ready = [];
+    const it = (property, value) => {
+      const d = m.getModifiableCSSDeclaration(property, value, rule, m.variablesStore, [], null);
+      if (!d) return;
+      const v = typeof d.value === 'function' ? d.value(t) : d.value;
+      // A pending Promise has no settled form; a vector must never hold one.
+      if (v instanceof Promise) throw new Error(`var case ${vc.id}: ${property} is still pending`);
+      if (property.startsWith('--') && v && typeof v === 'object') {
+        if (v.declarations.length === 0) ready.push([d.property, d.sourceValue]);
+        for (const x of v.declarations) {
+          if (x.value instanceof Promise) throw new Error(`var case ${vc.id}: ${x.property} is still pending`);
+          ready.push([x.property, x.value]);
+        }
+      } else ready.push([d.property, v]);
+    };
+    const s = rule.style;
+    if (s.cssText.includes('var(')) for (const p of ['background', 'border', 'border-color', 'border-bottom', 'border-left', 'border-right', 'border-top', 'outline', 'outline-color']) { const v = s.getPropertyValue(p); if (v && v.includes('var(')) it(p, v); }
+    for (let i = 0; i < s.length; i++) { const v = s.getPropertyValue(s[i]).trim(); if (v) it(s[i], v); }
+    if (!ready.length) return null;
+    return `${rule.selectorText} {${ready.filter(([, v]) => v).map(([p, v]) => ` ${p}: ${v};`).join('')} }`;
+  }).filter(Boolean);
+  varCases.push({ id: vc.id, css: vc.css, lines });
+}
+
 const json = JSON.stringify({
   meta: { version, commit: COMMIT, profile: 'webkit-iframe', ua: UA },
-  themes, parse, hsl, strings, modify, matrix, declarations, static: staticSheets,
+  themes, parse, hsl, strings, modify, matrix, declarations, static: staticSheets, varCases,
 });
 process.stdout.write(`===DR-VECTORS-BEGIN===\n${json}\n===DR-VECTORS-END===\n`);

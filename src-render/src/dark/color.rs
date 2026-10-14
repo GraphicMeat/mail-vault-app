@@ -310,6 +310,92 @@ fn get_numbers_from_string(input: &str, range: &[f64], units: &[(&str, f64)]) ->
     numbers
 }
 
+/// `getRGBValues`: the numbers of a bare `r, g, b[, a]` / `r g b[ / a]` list (a CSS
+/// variable's value in `rgb(var(--x))`), or None when the text is anything else.
+pub fn get_rgb_values(input: &str) -> Option<[f64; 4]> {
+    let b = input.as_bytes();
+    let mut i = 0;
+    let mut digit_sequence = false;
+    let mut digits_count = 0;
+    let mut float_digits_count: i32 = -1;
+    let mut delimiter = b' ';
+    let mut channel: i32 = -1;
+    let mut result: Option<[f64; 4]> = None;
+    while i < b.len() {
+        let c = b[i];
+        if c.is_ascii_digit() || c == b'.' {
+            if !digit_sequence {
+                digit_sequence = true;
+                digits_count = 0;
+                float_digits_count = -1;
+                channel += 1;
+                if channel == 3 {
+                    if let Some(r) = result.as_mut() {
+                        r[3] = 0.0;
+                    }
+                }
+                if channel > 3 {
+                    return None;
+                }
+            }
+            if c == b'.' {
+                if float_digits_count > 0 {
+                    return None;
+                }
+                float_digits_count = 0;
+            } else {
+                let d = (c - b'0') as f64;
+                let r = result.get_or_insert([0.0, 0.0, 0.0, 1.0]);
+                let ch = channel as usize;
+                if float_digits_count > -1 {
+                    float_digits_count += 1;
+                    r[ch] += d / 10f64.powi(float_digits_count);
+                } else {
+                    digits_count += 1;
+                    if digits_count > 3 {
+                        return None;
+                    }
+                    r[ch] = r[ch] * 10.0 + d;
+                }
+            }
+        } else if c == b'%' {
+            if channel < 0 || channel > 3 || delimiter != b' ' {
+                return None;
+            }
+            let r = result.as_mut()?;
+            let ch = channel as usize;
+            r[ch] = if ch < 3 { js_round(r[ch] * 255.0 / 100.0) } else { r[ch] / 100.0 };
+            digit_sequence = false;
+        } else {
+            digit_sequence = false;
+            match c {
+                b' ' => {
+                    if channel == 0 {
+                        delimiter = c;
+                    }
+                }
+                b',' => {
+                    if channel == -1 {
+                        return None;
+                    }
+                    delimiter = b',';
+                }
+                b'/' => {
+                    if channel != 2 || delimiter != b' ' {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
+        }
+        i += 1;
+    }
+    if !(2..=3).contains(&channel) {
+        return None;
+    }
+    result
+}
+
 fn parse_rgb(c: &str) -> Option<Rgba> {
     let n = get_numbers_from_string(c, &[255.0, 255.0, 255.0, 1.0], &[("%", 100.0)]);
     if n.len() < 3 {
@@ -369,8 +455,8 @@ pub fn lower_calc_expression(color: &str) -> String {
     color
 }
 
-/// JS number to string, for the integers `Math.round` yields.
-fn fmt_js_number(x: f64) -> String {
+/// JS number to string: exact for integers, and for fractions inside 1e-6..1e21 (where Rust's shortest round-trip form agrees).
+pub fn fmt_js_number(x: f64) -> String {
     if x.is_nan() {
         "NaN".into()
     } else if x.is_infinite() {
