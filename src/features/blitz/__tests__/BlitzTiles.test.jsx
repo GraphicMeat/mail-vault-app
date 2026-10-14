@@ -10,6 +10,9 @@ vi.mock('../service', () => ({
   serializeRender: vi.fn(async () => ({ html: '', text: '' })),
   foldRender: vi.fn(async () => ({ rev: 1, meta: {} })),
 }));
+vi.mock('../theme/darkSwatch', () => ({ darkUiColors: vi.fn(async () => null) }));
+import { darkUiColors } from '../theme/darkSwatch';
+import { lightSelectionColor } from '../text/selectionColors';
 import { openRender, hitRender, closeRender, onRenderUpdated, textRunsRender, serializeRender, foldRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
 import { replySelection } from '../../../utils/replySelection';
@@ -803,5 +806,122 @@ describe('body context menu', () => {
     await screen.findByTestId('blitz-context-menu');
     expect(document.body.textContent).not.toContain('jane-doe');
     expect(document.body.textContent).not.toContain('Jane');
+  });
+});
+
+describe('dark mode colours', () => {
+  const ui = (bg, sel) => ({
+    menu: { menuBg: bg, menuBorder: 'rgb(60, 65, 68)', itemColor: 'rgb(200, 195, 188)', itemHoverBg: 'rgb(30, 33, 34)', menuShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' },
+    selection: sel, paper: { r: 24, g: 26, b: 27 },
+  });
+  const GRAPHITE = ui('rgb(24, 26, 27)', { r: 0, g: 40, b: 150, a: 0.85 });
+  const TEAL = ui('rgb(10, 21, 23)', { r: 0, g: 30, b: 120, a: 0.9 });
+  const dark = (palette = 'graphite') => ({ dark: true, palette });
+  const sel = () => screen.getByTestId('blitz-text-layer').style.getPropertyValue('--mv-blitz-sel-bg');
+  const inactive = () => screen.getByTestId('blitz-text-layer').style.getPropertyValue('--mv-blitz-sel-inactive-bg');
+  const LIGHT = (({ r, g, b, a }) => `rgba(${r}, ${g}, ${b}, ${a})`)(lightSelectionColor()); // this engine's highlight, blended
+
+  beforeEach(() => {
+    darkUiColors.mockImplementation(async (theme) => (theme.palette === 'teal' ? TEAL : GRAPHITE));
+    hitRender.mockResolvedValue({ link: null, fold: null });
+    let doc = 0;
+    openRender.mockImplementation(async () => ({ docId: ++doc, rev: 1, meta: meta() }));
+  });
+  let highlightSpy;
+  const highlightIs = (color) => { highlightSpy = vi.spyOn(window, 'getComputedStyle').mockReturnValue({ color }); };
+  afterEach(() => { highlightSpy?.mockRestore(); highlightSpy = undefined; });
+
+  it('light mode paints the light selection and never asks for the dark swatch', async () => {
+    render(tiles());
+    await screen.findByTestId('blitz-text-layer');
+    await waitFor(() => expect(sel()).toBe(LIGHT));
+    expect(inactive()).not.toBe('');
+    expect(darkUiColors).not.toHaveBeenCalled();
+  });
+
+  it('dark mode paints the swatch selection (inactive window the same, as Dark Reader keeps it) and the swatch menu', async () => {
+    render(tiles({ theme: dark() }));
+    await screen.findByTestId('blitz-text-layer');
+    await waitFor(() => expect(sel()).toBe('rgba(0, 40, 150, 0.85)'));
+    expect(inactive()).toBe('rgba(0, 40, 150, 0.85)');
+    expect(darkUiColors).toHaveBeenCalledWith(expect.objectContaining({ dark: true, palette: 'graphite' }));
+    fireEvent.contextMenu(screen.getAllByTestId('blitz-tile')[0], { clientX: 40, clientY: 50 });
+    const menu = await screen.findByTestId('blitz-context-menu');
+    expect(menu.style.background).toContain('rgb(24, 26, 27)');
+    expect(menu.style.borderColor || menu.style.border).toContain('rgb(60, 65, 68)');
+    expect(screen.getAllByTestId('blitz-ctx-item')[0].style.color).toBe('rgb(200, 195, 188)');
+  });
+
+  it('a swatch that could not render leaves dark mode on the light colours', async () => {
+    darkUiColors.mockResolvedValue(null);
+    render(tiles({ theme: dark() }));
+    await screen.findByTestId('blitz-text-layer');
+    await waitFor(() => expect(sel()).toBe(LIGHT));
+    fireEvent.contextMenu(screen.getAllByTestId('blitz-tile')[0], { clientX: 40, clientY: 50 });
+    expect((await screen.findByTestId('blitz-context-menu')).style.background).toContain('rgb(255, 255, 255)');
+  });
+
+  it('dark to light and back re-paints the selection without remounting the body', async () => {
+    const { rerender } = render(tiles({ theme: dark() }));
+    await waitFor(() => expect(sel()).toBe('rgba(0, 40, 150, 0.85)'));
+    const body = screen.getByTestId('blitz-email-body');
+    rerender(tiles({ theme: { dark: false, palette: 'graphite' } }));
+    await waitFor(() => expect(sel()).toBe(LIGHT));
+    rerender(tiles({ theme: dark() }));
+    await waitFor(() => expect(sel()).toBe('rgba(0, 40, 150, 0.85)'));
+    expect(screen.getByTestId('blitz-email-body')).toBe(body);
+  });
+
+  it('a palette flip re-paints from that palette swatch and does not re-open the doc', async () => {
+    const { rerender } = render(tiles({ theme: dark('graphite') }));
+    await waitFor(() => expect(sel()).toBe('rgba(0, 40, 150, 0.85)'));
+    await waitFor(() => expect(screen.getByTestId('blitz-email-body').getAttribute('data-doc-id')).toBe('1'));
+    rerender(tiles({ theme: dark('teal') }));
+    await waitFor(() => expect(sel()).toBe('rgba(0, 30, 120, 0.9)'));
+    expect(openRender).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('blitz-email-body').getAttribute('data-doc-id')).toBe('1');
+  });
+
+  it('a reply for a palette that is no longer current is dropped', async () => {
+    let late;
+    darkUiColors.mockImplementationOnce(() => new Promise(r => { late = r; })).mockImplementation(async () => TEAL);
+    const { rerender } = render(tiles({ theme: dark('graphite') }));
+    await screen.findByTestId('blitz-text-layer');
+    rerender(tiles({ theme: dark('teal') }));
+    await waitFor(() => expect(sel()).toBe('rgba(0, 30, 120, 0.9)'));
+    await act(async () => { late(GRAPHITE); });
+    expect(sel()).toBe('rgba(0, 30, 120, 0.9)');
+  });
+
+  it('an open menu closes on a theme flip and on a palette flip: no stale colours', async () => {
+    const { rerender } = render(tiles({ theme: dark('graphite') }));
+    await waitFor(() => expect(sel()).toBe('rgba(0, 40, 150, 0.85)'));
+    const open = async () => {
+      fireEvent.contextMenu(screen.getAllByTestId('blitz-tile')[0], { clientX: 40, clientY: 50 });
+      await screen.findByTestId('blitz-context-menu');
+    };
+    await open();
+    rerender(tiles({ theme: dark('teal') }));
+    await waitFor(() => expect(screen.queryByTestId('blitz-context-menu')).toBeNull());
+    await open();
+    expect(screen.getByTestId('blitz-context-menu').style.background).toContain('rgb(10, 21, 23)');
+    rerender(tiles({ theme: { dark: false, palette: 'teal' } }));
+    await waitFor(() => expect(screen.queryByTestId('blitz-context-menu')).toBeNull());
+  });
+
+  it('light mode re-reads the system highlight when the window regains focus (accent colour change)', async () => {
+    render(tiles());
+    await waitFor(() => expect(sel()).toBe(LIGHT));
+    highlightIs('rgb(0, 96, 212)');
+    act(() => { window.dispatchEvent(new Event('focus')); });
+    expect(sel()).toBe('rgba(0, 56, 201, 0.8)');
+  });
+
+  it('dark mode ignores window focus: its highlight does not come from the OS', async () => {
+    render(tiles({ theme: dark() }));
+    await waitFor(() => expect(sel()).toBe('rgba(0, 40, 150, 0.85)'));
+    highlightIs('rgb(0, 96, 212)');
+    act(() => { window.dispatchEvent(new Event('focus')); });
+    expect(sel()).toBe('rgba(0, 40, 150, 0.85)');
   });
 });

@@ -30,3 +30,10 @@
   background-color: var(--mv-blitz-sel-bg, rgba(128, 188, 255, 0.6));
   color: transparent;
 }
+/* Window not focused: the engine's own inactive highlight (selectionColors.js),
+   as the iframe shows it. A rule of its own: an engine without :window-inactive
+   drops this rule and keeps the one above. */
+.mv-blitz-text span::selection:window-inactive {
+  background-color: var(--mv-blitz-sel-inactive-bg, var(--mv-blitz-sel-bg, rgba(128, 188, 255, 0.6)));
+  color: transparent;
+}

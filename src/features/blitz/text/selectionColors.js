@@ -62,6 +62,28 @@ export function lightSelectionColor() {
   return blendWithWhite(c || FALLBACK_HIGHLIGHT);
 }
 
-export function applySelectionColors(layerEl, { r, g, b, a }) {
-  layerEl?.style.setProperty('--mv-blitz-sel-bg', `rgba(${r}, ${g}, ${b}, ${a})`);
+// The highlight WebKit paints while the window is not focused (grey on macOS), as
+// an engine colour keyword. Only WebKit has it: elsewhere the keyword is unknown, the
+// declaration would be dropped and a probe would read the inherited text colour, so
+// support is asked first. Without it the inactive highlight is the active one.
+const INACTIVE_KEYWORD = '-apple-system-unemphasized-selected-text-background';
+
+/** The inactive-window highlight, blended like the active one (WebKit blends both), or `active`. */
+export function inactiveSelectionColor(active) {
+  if (!globalThis.CSS?.supports?.('color', INACTIVE_KEYWORD)) return active;
+  const probe = document.createElement('span');
+  probe.style.cssText = `position:absolute;visibility:hidden;color:${INACTIVE_KEYWORD}`;
+  document.body.appendChild(probe);
+  const c = parseRgb(getComputedStyle(probe).color);
+  probe.remove();
+  return c ? blendWithWhite(c) : active;
+}
+
+// `inactive` is what ::selection:window-inactive paints (blitz.css). It is the active
+// colour unless given: Dark Reader's author ::selection rule has no inactive variant,
+// so in dark the iframe keeps its highlight when the window blurs.
+export function applySelectionColors(layerEl, active, inactive = active) {
+  const rgba = ({ r, g, b, a }) => `rgba(${r}, ${g}, ${b}, ${a})`;
+  layerEl?.style.setProperty('--mv-blitz-sel-bg', rgba(active));
+  layerEl?.style.setProperty('--mv-blitz-sel-inactive-bg', rgba(inactive));
 }

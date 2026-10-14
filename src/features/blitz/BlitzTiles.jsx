@@ -6,7 +6,8 @@ import TextLayer from './text/TextLayer';
 import { createCopyController } from './text/clipboard';
 import { selectionInLayer, selectLayer } from './text/selection';
 import { useBodyKeyboard } from './text/useBodyKeyboard';
-import { applySelectionColors, lightSelectionColor } from './text/selectionColors';
+import { applySelectionColors, inactiveSelectionColor, lightSelectionColor } from './text/selectionColors';
+import { darkUiColors } from './theme/darkSwatch';
 import BodyContextMenu from './menu/BodyContextMenu';
 import { menuColorsFor } from './menu/menuColors';
 import { viewportShift } from '../../hooks/useViewportShift';
@@ -85,6 +86,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }, []);
 
   const dark = !!theme?.dark;
+  const palette = theme?.palette;
   useEffect(() => {
     if (!width) return undefined;
     const my = ++gen.current;
@@ -199,8 +201,9 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     if (link) onLinkRef.current?.(link);
   }, [hitAt, toggleFold, menu]);
 
-  // The menu belongs to the doc it was opened on: a message switch or re-open closes it.
-  useEffect(() => { menuSeq.current++; setMenu(null); }, [html, doc?.docId]);
+  // The menu belongs to the doc it was opened on: a message switch or re-open closes it. A theme or
+  // palette flip closes it too: its inline colours are those of the theme it opened in.
+  useEffect(() => { menuSeq.current++; setMenu(null); }, [html, doc?.docId, dark, palette]);
 
   const onContextMenu = useCallback(async (e) => {
     e.preventDefault();
@@ -270,11 +273,40 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }, []);
   useBodyKeyboard(boxRef, { selectAll: selectAllBody, layerEl: () => textLayerRef.current?.layerEl() });
 
-  // Selection colour: the engine default in light (dark: Task 15).
+  // Dark Reader's menu and selection colours for this palette (theme/darkSwatch.js). Kept while
+  // the next palette's arrive (a flip between dark palettes never flashes the light colours), and
+  // dropped on leaving dark. The menu and the selection read the same value: one swatch per body.
+  const [darkUi, setDarkUi] = useState(null);
+  useEffect(() => {
+    let gone = false;
+    if (!dark) { setDarkUi(null); return undefined; }
+    darkUiColors({ dark, palette }).then(c => { if (!gone) setDarkUi(c); }, () => { if (!gone) setDarkUi(null); });
+    return () => { gone = true; };
+  }, [dark, palette]);
+
+  // Selection colour. Dark: Dark Reader's, as the iframe shows it, in the active and the inactive
+  // window alike (its author rule has no inactive variant). Light: the engine's highlight, grey
+  // while the window is inactive.
+  const paintLightSelection = useCallback(() => {
+    const el = textLayerRef.current?.layerEl();
+    if (!el) return;
+    const active = lightSelectionColor();
+    applySelectionColors(el, active, inactiveSelectionColor(active));
+  }, []);
   useEffect(() => {
     const el = textLayerRef.current?.layerEl();
-    if (el && !dark) applySelectionColors(el, lightSelectionColor());
-  }, [doc?.docId, dark]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!el) return;
+    if (dark && darkUi) applySelectionColors(el, darkUi.selection);
+    else paintLightSelection();
+  }, [doc?.docId, dark, darkUi, paintLightSelection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The OS accent colour changes while the app is in the background (System Settings), so the
+  // highlight is read again when the window comes back. The light highlight is the OS's; dark's is not.
+  useEffect(() => {
+    if (dark && darkUi) return undefined;
+    window.addEventListener('focus', paintLightSelection);
+    return () => window.removeEventListener('focus', paintLightSelection);
+  }, [dark, darkUi, paintLightSelection]);
 
   // 'content' is exactly the document's height; the other two scroll inside.
   const scrollsInside = sizing === 'fill' || (sizing && typeof sizing === 'object');
@@ -319,7 +351,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
             <BodyContextMenu
               at={menu.at}
               link={menu.link}
-              colors={menuColorsFor(theme, null)} // dark swatch: Task 15
+              colors={menuColorsFor(theme, darkUi?.menu)}
               clampTo={clampTo}
               inBody={inBody}
               onCopy={() => document.execCommand('copy')}
