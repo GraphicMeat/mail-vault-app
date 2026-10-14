@@ -28,7 +28,7 @@ const SOURCES = {
     },
   },
 };
-const OURS = ['basic-typography', 'tables-legacy', 'style-media-attr', 'already-dark', 'inline-important', 'css-variables', 'gradients-shadows', 'preheader-hidden', 'bg-images'];
+const OURS = ['basic-typography', 'tables-legacy', 'style-media-attr', 'already-dark', 'inline-important', 'css-variables', 'gradients-shadows', 'preheader-hidden', 'bg-images', 'table-600-narrow', 'table-border-attr', 'table-cell-edges'];
 
 const raw = (repo, commit, path) => `https://raw.githubusercontent.com/${repo}/${commit}/${path}`;
 async function get(url) {
