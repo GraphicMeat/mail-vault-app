@@ -282,7 +282,7 @@ export async function removeFont(family) {
 // is not a failure of the font; it is asked again.
 const mailFailed = new Set();
 
-async function familyForMail(family, blocking) {
+export async function familyForMail(family, blocking) {
   if (useFontStore.getState().installed.includes(family)) return true;
   if (blocking() || mailFailed.has(family)) return false;
   try {

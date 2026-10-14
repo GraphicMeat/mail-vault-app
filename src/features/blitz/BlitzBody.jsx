@@ -7,6 +7,7 @@ import { maskString } from '../../utils/privacy/piiDetector';
 import { emailKey } from '../../stores/slices/unifiedHelpers';
 import { runPrepass } from './prepass';
 import { usePrivacyDict } from './prepass/privacyDict';
+import { prepareMailFonts, useBlitzMailFonts } from './fonts/useBlitzMailFonts';
 import BlitzTiles from './BlitzTiles';
 import FailureBubble from './FailureBubble';
 
@@ -52,6 +53,7 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
   const [failure, setFailure] = useState(null); // { key, code }
   const [bubble, setBubble] = useState(null); // key whose bubble is open
   const [prepassed, setPrepassed] = useState(null); // { key, html, masked }
+  const [pendingFonts, setPendingFonts] = useState(null); // { key, list }: mail fonts not installed yet
   const failed = failure?.key === key;
 
   // Leaving a message forgets its failure, so coming back to it tries Blitz again.
@@ -91,7 +93,11 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
     let live = true;
     const masked = priv.active;
     runPrepass({ ...props, searchQuery: query }, { privacy: priv, openFolds: folds.current.open })
+      // Installed mail fonts reach the worker before the body is handed to the tiles (capped at 300 ms),
+      // so the first layout uses them. The rest download after open and reflow the doc when they land.
+      .then(async r => ({ ...r, fonts: await prepareMailFonts(r.doc) }))
       .then(r => {
+        if (live) setPendingFonts(f => (f && f.key === key && f.list.join('|') === r.fonts.pending.join('|') ? f : { key, list: r.fonts.pending }));
         // Same HTML again keeps the old state object, so an identical re-run renders nothing.
         // `masked` is part of the match: a body with nothing to mask gives the same HTML
         // either way, and must still be served once privacy is on.
@@ -100,6 +106,8 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
       .catch(err => { console.error('[blitz] pre-pass failed; the body stays hidden', err); if (live) setPrepassed(null); });
     return () => { live = false; };
   }, [key, bodyHtml, documentHtml, indicatorCss, theme?.tableMode, theme?.dark, theme?.palette, props.signatureDisplay, props.foldQuotes, query, priv.active, priv.dict, priv.hold]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useBlitzMailFonts({ families: pendingFonts?.key === key ? pendingFonts.list : [], messageKey: key });
 
   const onFailure = (code) => {
     console.warn('[blitz] could not draw', key, code);
