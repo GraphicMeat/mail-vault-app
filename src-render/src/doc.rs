@@ -428,15 +428,16 @@ fn exceeds_depth(doc: &HtmlDocument) -> bool {
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
 
-/// Make inline SVG unable to name a resource. usvg, which draws `<svg>` for
-/// blitz-dom, treats any `href` that is not a `data:` URL as a local file path
-/// (and a UNC path on Windows is a network share), so a mail could read a file
-/// of this machine into the picture. Runs after parsing and before layout, the
-/// moment blitz-dom serialises each `<svg>` for usvg. It removes every `image`
-/// and `feImage` element and every `href` / `xlink:href` on an SVG element that
-/// is not an in-document `#id` reference. Flat pass over the node slab: no
-/// recursion, whatever the nesting. (The HTML parser turns `<image>` outside
-/// SVG into `<img>`, which goes through `BridgeNet` like any other image.)
+/// Make inline SVG unable to name a resource, as a second line behind the href
+/// resolver of the vendored blitz-dom (`parse_svg_image`), which already answers no
+/// non-`data:` href. Runs after parsing and before layout, the moment blitz-dom
+/// serialises each `<svg>` for usvg. It removes every `image` and `feImage` element
+/// whose `href` / `xlink:href` is not a `data:` url or an in-document `#id`
+/// reference (`data:` rasters paint, within the resolver's pixel caps), and removes
+/// every `href` / `xlink:href` on any other SVG element that is not a `#id`
+/// reference. Flat pass over the node slab: no recursion, whatever the nesting.
+/// (The HTML parser turns `<image>` outside SVG into `<img>`, which goes through
+/// `BridgeNet` like any other image.)
 fn strip_svg_references(doc: &mut HtmlDocument) {
     let ids: Vec<NodeId> = doc.tree().iter().map(|(id, _)| id).collect();
     let mut images = Vec::new();
@@ -444,7 +445,9 @@ fn strip_svg_references(doc: &mut HtmlDocument) {
         let Some(el) = doc.get_node_mut(id).and_then(|n| n.element_data_mut()) else { continue };
         let tag: &str = &el.name.local;
         if tag.eq_ignore_ascii_case("image") || tag.eq_ignore_ascii_case("feimage") {
-            images.push(id);
+            if el.attrs.iter().any(|a| &*a.name.local == "href" && !is_data_or_fragment(&a.value)) {
+                images.push(id);
+            }
         } else if &*el.name.ns == SVG_NS {
             el.attrs.retain(|a| &*a.name.local != "href" || a.value.starts_with('#'));
         }
@@ -458,6 +461,11 @@ fn strip_svg_references(doc: &mut HtmlDocument) {
             }
         }
     }
+}
+
+/// `data:` (any case, no leading space: a url usvg would trim is refused here, the safe side) or `#id`.
+fn is_data_or_fragment(href: &str) -> bool {
+    href.starts_with('#') || href.get(..5).is_some_and(|p| p.eq_ignore_ascii_case("data:"))
 }
 
 fn tile_px(opts: &RenderOptions) -> (u32, u32) {

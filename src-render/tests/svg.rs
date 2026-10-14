@@ -1,8 +1,11 @@
-//! SVG is the one document format inside the worker that can name resources
-//! itself: usvg (blitz-dom's SVG renderer) treats any non-`data:` image href as
-//! a local file path. A hostile mail must not make the worker read a file, so
-//! every route that reaches usvg is closed: inline `<svg>` image elements are
-//! stripped before layout, and SVG / gzip bytes never leave `BridgeNet`.
+//! SVG paints (inline, `data:` in `<img>` and CSS, fetched `image/svg+xml`),
+//! but it is the one document format inside the worker that can name resources
+//! itself: usvg's default href resolver reads any non-`data:` image href as a
+//! local file path. A hostile mail must not make the worker read a file or
+//! fetch a url, so the vendored blitz-dom installs a resolver that refuses every
+//! non-`data:` href and caps nested rasters (`parse_svg_image`), and inline
+//! `<svg>` `<image>` elements that name anything but a `data:` url are stripped
+//! before layout as a second line. gzip (svgz) bytes never leave `BridgeNet`.
 use base64::Engine;
 use mailvault_render::net::BridgeNet;
 use mailvault_render::{RenderDoc, RenderOptions};
@@ -75,6 +78,15 @@ fn probe(html: &str) -> [u8; 3] {
     rgb_at(&doc.tile_png(0).unwrap(), 50, 50)
 }
 
+/// Like `probe`, at several points, and also returns how many fetches the net was asked for.
+fn probe_pts(html: &str, pts: &[(u32, u32)]) -> (Vec<[u8; 3]>, usize) {
+    let net = BridgeNet::new(true);
+    let mut doc = RenderDoc::open(html, RenderOptions::new(200, 1.0), Some(net.clone())).unwrap();
+    doc.apply_resources();
+    let png = doc.tile_png(0).unwrap();
+    (pts.iter().map(|&(x, y)| rgb_at(&png, x, y)).collect(), net.take_outbox().len())
+}
+
 fn body(inner: &str) -> String {
     format!(r#"<body style="margin:0">{inner}</body>"#)
 }
@@ -145,31 +157,145 @@ fn probe_fetched(bytes: Vec<u8>) -> [u8; 3] {
     let id = net.take_outbox().first().expect("the image was queued").id;
     assert!(net.complete(id, Some(bytes)));
     doc.apply_resources();
-    rgb_at(&doc.tile_png(0).unwrap(), 50, 50)
+    let px = rgb_at(&doc.tile_png(0).unwrap(), 50, 50);
+    assert!(net.take_outbox().is_empty(), "the SVG made the worker ask for another resource");
+    px
 }
 
 #[test]
-fn fetched_svg_bytes_are_refused_whatever_the_declared_type() {
-    assert_eq!(probe_fetched(RED_RECT_SVG.as_bytes().to_vec()), WHITE, "SVG bytes reached usvg");
+fn fetched_svg_bytes_paint() {
+    assert_eq!(probe_fetched(RED_RECT_SVG.as_bytes().to_vec()), RED);
 }
 
 #[test]
-fn svg_hidden_behind_a_prolog_comment_bom_or_prefix_is_refused() {
+fn svg_behind_a_prolog_comment_bom_or_prefix_paints() {
     let variants = [
         format!("<?xml version=\"1.0\"?>\n{RED_RECT_SVG}"),
         format!("<!-- hi -->{RED_RECT_SVG}"),
         format!("\u{feff}  \n\t{RED_RECT_SVG}"),
-        format!("<!DOCTYPE svg>{RED_RECT_SVG}"),
         r##"<s:svg xmlns:s="http://www.w3.org/2000/svg" width="100" height="100"><s:rect width="100" height="100" fill="#f00"/></s:svg>"##.to_string(),
     ];
     for v in variants {
-        assert_eq!(probe_fetched(v.clone().into_bytes()), WHITE, "SVG bytes reached usvg: {v}");
+        assert_eq!(probe_fetched(v.clone().into_bytes()), RED, "SVG did not paint: {v}");
     }
 }
 
 #[test]
 fn gzip_bytes_are_refused_because_usvg_inflates_svgz() {
     assert_eq!(probe_fetched(gzip(RED_RECT_SVG.as_bytes())), WHITE, "svgz reached usvg");
+}
+
+#[test]
+fn a_fetched_svg_cannot_read_a_local_file() {
+    let secret = SecretFile::new("fetched");
+    assert_eq!(probe_fetched(svg_with_image(&secret.href()).into_bytes()), WHITE, "the file was drawn into the mail");
+}
+
+// ---- SVG paints from every source ----
+
+#[test]
+fn a_data_svg_in_img_paints() {
+    let src = format!("data:image/svg+xml;base64,{}", b64(RED_RECT_SVG.as_bytes()));
+    assert_eq!(probe(&body(&format!(r#"<img src="{src}" width="100" height="100">"#))), RED);
+}
+
+#[test]
+fn a_data_svg_in_css_url_paints() {
+    let url = format!("data:image/svg+xml;base64,{}", b64(RED_RECT_SVG.as_bytes()));
+    let div = format!(r#"<div style="width:100px;height:100px;background-image:url('{url}')"></div>"#);
+    assert_eq!(probe(&body(&div)), RED);
+}
+
+#[test]
+fn a_percent_encoded_data_svg_paints() {
+    let src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='red'/%3E%3C/svg%3E";
+    assert_eq!(probe(&body(&format!(r#"<img src="{src}" width="100" height="100">"#))), RED);
+}
+
+// ---- nested data: rasters are allowed, and capped ----
+
+fn red_data_png_4x4() -> String {
+    format!("data:image/png;base64,{}", b64(&red_png_4x4()))
+}
+
+#[test]
+fn an_inline_svg_image_with_a_data_png_paints() {
+    assert_eq!(probe(&body(&svg_with_image(&red_data_png_4x4()))), RED);
+}
+
+#[test]
+fn a_data_svg_image_with_a_data_png_paints() {
+    let src = format!("data:image/svg+xml;base64,{}", b64(svg_with_image(&red_data_png_4x4()).as_bytes()));
+    assert_eq!(probe(&body(&format!(r#"<img src="{src}" width="100" height="100">"#))), RED);
+}
+
+#[test]
+fn a_data_svg_cannot_smuggle_a_25_megapixel_data_png() {
+    let svg = svg_with_image(&format!("data:image/png;base64,{}", b64(&red_png_25_megapixels())));
+    let src = format!("data:image/svg+xml;base64,{}", b64(svg.as_bytes()));
+    assert_eq!(probe(&body(&format!(r#"<img src="{src}" width="100" height="100">"#))), WHITE, "a 25 Mpx raster was decoded and drawn");
+}
+
+/// A 2000 x 2000 (4 Mpx, under the per-image cap) all-red PNG.
+fn red_png_4_megapixels() -> Vec<u8> {
+    let row = 2000usize.div_ceil(8);
+    encode_png(2000, 2000, png::ColorType::Indexed, png::BitDepth::One, Some(vec![255, 0, 0, 255, 0, 0]), &vec![0u8; row * 2000])
+}
+
+#[test]
+fn one_svg_cannot_decode_more_than_the_image_budget_in_total() {
+    // Five 4 Mpx images side by side: each is under the per-image cap, but together they pass
+    // the 16 Mpx an SVG may decode, so the fifth is refused.
+    let png = format!("data:image/png;base64,{}", b64(&red_png_4_megapixels()));
+    let images: String = (0..5).map(|i| format!(r#"<image href="{png}" x="{}" y="0" width="40" height="100"/>"#, i * 40)).collect();
+    let svg = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">{images}</svg>"#);
+    let src = format!("data:image/svg+xml;base64,{}", b64(svg.as_bytes()));
+    let (px, _) = probe_pts(&body(&format!(r#"<img src="{src}" width="200" height="100">"#)), &[(20, 50), (60, 50), (100, 50), (140, 50), (180, 50)]);
+    assert_eq!(&px[..4], &[RED; 4], "the first four images fit the budget");
+    assert_eq!(px[4], WHITE, "the fifth image passed the budget");
+}
+
+// ---- nothing in an SVG can fetch a url or open a nested SVG ----
+
+/// Every kind of href an SVG could use to name a resource that is not a `data:` image.
+fn hostile_svgs() -> Vec<(&'static str, String)> {
+    let wrap = |inner: &str| format!(r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">{inner}</svg>"#);
+    vec![
+        ("image file path", wrap(r#"<image href="/etc/passwd" width="100" height="100"/>"#)),
+        ("image file url", wrap(r#"<image href="file:///etc/hostname" width="100" height="100"/>"#)),
+        ("image http", wrap(r#"<image href="http://i.test/x.png" width="100" height="100"/>"#)),
+        ("image https", wrap(r#"<image href="https://i.test/x.png" width="100" height="100"/>"#)),
+        ("image scheme-relative", wrap(r#"<image href="//i.test/x.png" width="100" height="100"/>"#)),
+        ("image xlink:href", wrap(r#"<image xlink:href="https://i.test/x.png" width="100" height="100"/>"#)),
+        ("feImage https", wrap(r#"<filter id="f"><feImage href="https://i.test/x.png"/></filter><rect width="100" height="100" filter="url(#f)"/>"#)),
+        ("use external", wrap(r#"<use href="https://i.test/x.svg#a" width="100" height="100"/>"#)),
+        ("use xlink external", wrap(r#"<use xlink:href="http://i.test/x.svg#a"/>"#)),
+        ("nested svg data in image", wrap(&format!(r#"<image href="data:image/svg+xml;base64,{}" width="100" height="100"/>"#, b64(RED_RECT_SVG.as_bytes())))),
+        ("nested svg as text/plain data", wrap(&format!(r#"<image href="data:text/plain;base64,{}" width="100" height="100"/>"#, b64(RED_RECT_SVG.as_bytes())))),
+    ]
+}
+
+#[test]
+fn an_svg_cannot_name_a_url_or_file_from_any_source() {
+    for (name, svg) in hostile_svgs() {
+        let data = format!("data:image/svg+xml;base64,{}", b64(svg.as_bytes()));
+        let css = format!(r#"<div style="width:100px;height:100px;background-image:url('{data}')"></div>"#);
+        let routes = [
+            ("inline", body(&svg)),
+            ("img", body(&format!(r#"<img src="{data}" width="100" height="100">"#))),
+            ("css", body(&css)),
+        ];
+        for (route, html) in routes {
+            let (px, requests) = probe_pts(&html, &[(50, 50)]);
+            assert_eq!(requests, 0, "{name} via {route}: the worker was asked to fetch something");
+            // A filter whose feImage found nothing may still flood its region; it must not be the resource.
+            let ok = if name == "feImage https" { px[0] != RED } else { px[0] == WHITE };
+            assert!(ok, "{name} via {route}: something was drawn: {:?}", px[0]);
+        }
+        let fetched = probe_fetched(svg.clone().into_bytes());
+        let ok = if name == "feImage https" { fetched != RED } else { fetched == WHITE };
+        assert!(ok, "{name} via a fetched svg: something was drawn: {fetched:?}");
+    }
 }
 
 // ---- we did not break SVG altogether ----

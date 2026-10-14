@@ -34,9 +34,13 @@ use std::sync::{Arc, Mutex};
 pub const MAX_IMAGE_PIXELS: u64 = 16_000_000;
 /// All images of one document together may not exceed this many pixels.
 pub const MAX_DOC_IMAGE_PIXELS: u64 = 64_000_000;
-/// Bytes whose header declares no size (CSS, fonts, anything unrecognised; SVG
-/// and gzip never pass, see `reaches_usvg`) pass through only up to this length.
+/// Bytes whose header declares no size (CSS, fonts, anything unrecognised; gzip
+/// never passes, see `is_gzip`) pass through only up to this length.
 pub const MAX_UNSIZED_BYTES: usize = 64 * 1024;
+/// SVG markup declares no pixel size either, but real artwork is larger than CSS or
+/// a font hint: it passes up to this length. Whatever it embeds is capped by the
+/// SVG href resolver in the vendored blitz-dom (`parse_svg_image`).
+pub const MAX_SVG_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FetchRequest {
@@ -165,10 +169,10 @@ impl BridgeNet {
     /// May these bytes go on to a decoder? Reads only the header: an image
     /// that declares more than MAX_IMAGE_PIXELS, or would push the document
     /// past MAX_DOC_IMAGE_PIXELS, is refused before anything is decoded.
-    /// SVG and gzip are refused outright, whatever the URL or declared type
-    /// said: see `reaches_usvg`.
+    /// gzip is refused outright, whatever the URL or declared type said: see
+    /// `is_gzip`. SVG markup is admitted up to MAX_SVG_BYTES.
     fn admit(&self, bytes: &[u8]) -> bool {
-        if reaches_usvg(bytes) {
+        if is_gzip(bytes) {
             return false;
         }
         match imagesize::blob_size(bytes) {
@@ -183,6 +187,7 @@ impl BridgeNet {
                     })
                     .is_ok()
             }
+            Err(_) if looks_like_svg(bytes) => bytes.len() <= MAX_SVG_BYTES,
             Err(_) => bytes.len() <= MAX_UNSIZED_BYTES,
         }
     }
@@ -213,19 +218,19 @@ impl NetProvider for BridgeNet {
     }
 }
 
-/// Would blitz-dom hand these bytes to usvg? Its image handler tries the raster
-/// decoders and then falls back to usvg for anything they reject, whatever the
-/// URL or the declared type said. usvg resolves every non-`data:` image href of
-/// an SVG as a local file path (a UNC share on Windows), so SVG bytes would let
-/// a mail read the machine's files. usvg also inflates gzip (svgz) first. So
-/// refuse gzip, and refuse any markup that mentions `svg` (an XML prolog, a
-/// comment, a doctype, a BOM, whitespace or a namespace prefix may all come
-/// before the root element). Raster formats begin with binary magic, never `<`.
-/// The caller runs this before anything else, on every admitted byte string.
-fn reaches_usvg(bytes: &[u8]) -> bool {
-    if bytes.starts_with(&[0x1f, 0x8b]) {
-        return true;
-    }
+/// Is this a gzip stream? blitz-dom's image handler tries the raster decoders and
+/// then falls back to usvg for anything they reject, and usvg inflates gzip (svgz)
+/// before parsing, with no cap on the inflated size. Refused whatever the URL or
+/// the declared type said. (Plain SVG is fine: the vendored blitz-dom parses it
+/// with a resolver that cannot read a file or a url, see `parse_svg_image`.)
+fn is_gzip(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0x1f, 0x8b])
+}
+
+/// Markup that mentions `svg`: an XML prolog, a comment, a doctype, a BOM,
+/// whitespace or a namespace prefix may all come before the root element. Raster
+/// formats begin with binary magic, never `<`.
+fn looks_like_svg(bytes: &[u8]) -> bool {
     let body = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF][..]).unwrap_or(bytes);
     let body = &body[body.iter().position(|b| !b.is_ascii_whitespace()).unwrap_or(body.len())..];
     body.first() == Some(&b'<') && body.windows(3).any(|w| w.eq_ignore_ascii_case(b"svg"))
