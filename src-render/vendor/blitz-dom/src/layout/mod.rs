@@ -332,6 +332,8 @@ impl BaseDocument {
                     };
                     let context = Arc::clone(context);
 
+                    // MailVault parity fix (plan B): tables lay out through `layout_table` (column
+                    // widths, row heights and cell fill in table.rs) instead of a bare grid pass.
                     let mut table_wrapper = TableTreeWrapper {
                         doc: self,
                         ctx: context,
@@ -358,6 +360,8 @@ impl BaseDocument {
                 }
 
                 // The default CSS file will set
+                // MailVault parity fix (plan B): a block with no block context, and a flow-root,
+                // establish a new block formatting context (`compute_block_root_layout`).
                 match node.style().display {
                     Display::Block => match block_ctx {
                         Some(block_ctx) => compute_block_layout(self, node_id, inputs, Some(block_ctx)),

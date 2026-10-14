@@ -1165,7 +1165,9 @@ impl<'a> TElement for BlitzNode<'a> {
                 // comma-separated list of family names.
                 let families: Vec<String> = value
                     .split(',')
-                    .map(|f| f.trim().chars().filter(|c| !matches!(c, '"' | '\\' | '\n' | '\r')).collect::<String>())
+                    // Inside a quoted CSS string only `"`, `\` and a newline (LF, CR or FF)
+                    // can end or escape it: drop those and every other control character.
+                    .map(|f| f.trim().chars().filter(|c| !matches!(c, '"' | '\\') && !c.is_control()).collect::<String>())
                     .filter(|f| !f.is_empty())
                     .map(|f| format!("\"{f}\""))
                     .collect();
@@ -1179,12 +1181,17 @@ impl<'a> TElement for BlitzNode<'a> {
             if *tag == local_name!("font") && &**name == "size" {
                 // MailVault parity fix (plan B): font[size] maps to a font-size keyword
                 // (the "rules for parsing a legacy font size": 1-7, or +n / -n from 3).
+                // One sign at most, then the leading digits; a value too large saturates.
                 let trimmed = value.trim();
-                let digits = trimmed.trim_start_matches(['+', '-']);
-                if let Ok(n) = digits.parse::<i32>() {
+                let digits = trimmed.strip_prefix(['+', '-']).unwrap_or(trimmed);
+                let len = digits.bytes().take_while(u8::is_ascii_digit).count();
+                if len > 0 {
+                    let n = digits[..len]
+                        .bytes()
+                        .fold(0i32, |n, d| n.saturating_mul(10).saturating_add((d - b'0') as i32));
                     let level = match trimmed.chars().next() {
-                        Some('+') => 3 + n,
-                        Some('-') => 3 - n,
+                        Some('+') => 3i32.saturating_add(n),
+                        Some('-') => 3i32.saturating_sub(n),
                         _ => n,
                     }
                     .clamp(1, 7);

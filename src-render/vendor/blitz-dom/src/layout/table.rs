@@ -269,15 +269,18 @@ fn push_table_cell(
 ) {
     let node = &doc.nodes[node_id];
     let stylo_style = &node.primary_styles().unwrap();
+    // MailVault parity fix (plan B): HTML's span rules. colspan: a failed parse or 0 is 1,
+    // above 1000 is 1000 (0 underflowed the spacing maths and huge spans overflowed the
+    // column counter). rowspan: above 65534 is 65534 (0, "to the end of the group", is
+    // treated as 1 as before).
     let colspan: u16 = node
         .attr(local_name!("colspan"))
-        .and_then(|val| val.parse().ok())
-        .unwrap_or(1);
+        .and_then(parse_non_negative_integer)
+        .map_or(1, |v| v.clamp(1, 1000) as u16);
     let rowspan: u16 = node
         .attr(local_name!("rowspan"))
-        .and_then(|val| val.parse::<u16>().ok())
-        .map(|v| v.clamp(1, 65534))
-        .unwrap_or(1);
+        .and_then(parse_non_negative_integer)
+        .map_or(1, |v| v.clamp(1, 65534) as u16);
     let mut style = stylo_taffy::to_taffy_style(stylo_style);
 
     if first_cell_border.is_none() {
@@ -404,6 +407,19 @@ fn push_table_cell(
     });
 
     *col += colspan;
+}
+
+/// MailVault parity fix (plan B): the HTML "rules for parsing non-negative integers" (leading
+/// whitespace, an optional `+`, then the leading digits), saturating instead of failing on
+/// a value too large to hold.
+fn parse_non_negative_integer(value: &str) -> Option<u64> {
+    let s = value.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let s = s.strip_prefix('+').unwrap_or(s);
+    let digits = s.bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 {
+        return None;
+    }
+    Some(s[..digits].bytes().fold(0u64, |n, d| n.saturating_mul(10).saturating_add((d - b'0') as u64)))
 }
 
 /// Whether a child of a table row belongs in the row's anonymous cell: a

@@ -56,9 +56,12 @@ impl FontMetricsProvider for BlitzFontMetricsProvider {
         // let fb_language = locale.and_then(crate::swash_convert::locale_to_fontique);
         // query.set_fallbacks(fontique::FallbackKey::new(fb_script, fb_language.as_ref()));
 
+        // MailVault parity fix (plan B): the automatic opsz follows the font size here too, so
+        // metrics come from the same optical cut the text is shaped with.
         let variations = stylo_to_parley::font_variations(
             &font_styles.font_variation_settings,
             font_size.px(),
+            stylo_to_parley::optical_sizing_auto(font_styles),
         );
         // let features = self.rcx.features(style.font_features).unwrap_or(&[]);
 
