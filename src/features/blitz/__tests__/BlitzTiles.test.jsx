@@ -424,3 +424,119 @@ describe('BlitzTiles', () => {
     });
   });
 });
+
+describe('fold toggles', () => {
+  const foldMeta = (open) => meta({ folds: [{ id: 'q0', kind: 'quote', open }, { id: 's0', kind: 'signature', open: false }] });
+
+  it('click on a toggle folds through the worker; the render-updated event swaps rev/meta; no link opens', async () => {
+    let push;
+    onRenderUpdated.mockImplementation(async cb => { push = cb; return () => {}; });
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    foldRender.mockResolvedValue({ rev: 2, meta: foldMeta(true) });
+    const onLink = vi.fn();
+    const onFoldToggled = vi.fn();
+    render(tiles({ onLink, onFoldToggled }));
+    const imgs = await screen.findAllByTestId('blitz-tile');
+    fireEvent.click(imgs[0], { clientX: 5, clientY: 5 });
+    await waitFor(() => expect(foldRender).toHaveBeenCalledWith(4, 'q0', true));
+    await waitFor(() => expect(onFoldToggled).toHaveBeenCalledWith('q0', true));
+    expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('4%2F1%2F0'); // reply not applied
+    await act(async () => { push({ docId: 4, rev: 2, meta: foldMeta(true) }); });
+    expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('4%2F2%2F0');
+    expect(onLink).not.toHaveBeenCalled();
+  });
+
+  it('a second click closes it again (open state read from meta.folds)', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(true) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    render(tiles());
+    fireEvent.click((await screen.findAllByTestId('blitz-tile'))[0]);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledWith(4, 'q0', false));
+  });
+
+  it('hover over a quote toggle shows pointer and the iframe title; signature has no title', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValueOnce({ link: null, fold: 'q0' }).mockResolvedValueOnce({ link: null, fold: 's0' });
+    render(tiles());
+    const layer = await screen.findByTestId('blitz-text-layer');
+    fireEvent.mouseMove(layer, { clientX: 5, clientY: 5 });
+    await waitFor(() => expect(layer.getAttribute('data-hover')).toBe('true'));
+    expect(layer.closest('[title]')?.getAttribute('title')).toBe('Show quoted text');
+    fireEvent.mouseMove(layer, { clientX: 5, clientY: 300 });
+    await waitFor(() => expect(layer.closest('[title]')).toBeNull());
+  });
+
+  it('an open quote toggle hides with the hide title; leaving the body clears hover and title', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(true) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    render(tiles());
+    const layer = await screen.findByTestId('blitz-text-layer');
+    fireEvent.mouseMove(layer, { clientX: 5, clientY: 5 });
+    await waitFor(() => expect(layer.closest('[title]')?.getAttribute('title')).toBe('Hide quoted text'));
+    expect(layer.closest('[role=presentation]').style.cursor).toBe('pointer');
+    fireEvent.mouseLeave(layer.closest('[role=presentation]'));
+    await waitFor(() => expect(layer.closest('[title]')).toBeNull());
+    expect(layer.getAttribute('data-hover')).toBeNull();
+    expect(layer.closest('[role=presentation]').style.cursor).toBe('default');
+  });
+
+  it('a toggle inside a link folds and never opens the link; no URL chip for it', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValue({ link: { href: 'https://x.test/' }, fold: 'q0' });
+    const onLink = vi.fn();
+    render(tiles({ onLink }));
+    const layer = await screen.findByTestId('blitz-text-layer');
+    fireEvent.mouseMove(layer, { clientX: 5, clientY: 5 });
+    await waitFor(() => expect(layer.getAttribute('data-hover')).toBe('true'));
+    expect(screen.queryByTestId('blitz-link-chip')).toBeNull();
+    fireEvent.click((await screen.findAllByTestId('blitz-tile'))[0]);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledWith(4, 'q0', true));
+    expect(onLink).not.toHaveBeenCalled();
+  });
+
+  it('a click that ends a drag-selection never toggles a fold', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: { ...foldMeta(false), tileCount: 1, cssHeight: 100 } });
+    textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    const onFoldToggled = vi.fn();
+    render(tiles({ onFoldToggled }));
+    const span = await screen.findByText('hello');
+    const r = document.createRange(); r.setStart(span.firstChild, 0); r.setEnd(span.firstChild, 3);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    fireEvent.click(span);
+    await new Promise(res => setTimeout(res, 0));
+    expect(foldRender).not.toHaveBeenCalled();
+    expect(onFoldToggled).not.toHaveBeenCalled();
+    window.getSelection().removeAllRanges();
+  });
+
+  it('a rejected fold reverts the recorded state and does not throw; the next click works', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    foldRender.mockRejectedValueOnce(new Error('render_unknown_doc')).mockResolvedValue({ rev: 1, meta: {} });
+    const onFoldToggled = vi.fn();
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    render(tiles({ onFoldToggled }));
+    const img = (await screen.findAllByTestId('blitz-tile'))[0];
+    fireEvent.click(img);
+    await waitFor(() => expect(onFoldToggled.mock.calls).toEqual([['q0', true], ['q0', false]]));
+    expect(debug).toHaveBeenCalled();
+    fireEvent.click(img);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(2));
+    debug.mockRestore();
+  });
+
+  it('a stale double click re-sends the same state and leaves nothing pending', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    foldRender.mockResolvedValue({ rev: 1, meta: {} }); // idempotent no-op: no updated event ever comes
+    render(tiles());
+    const img = (await screen.findAllByTestId('blitz-tile'))[0];
+    fireEvent.click(img);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(1));
+    fireEvent.click(img);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(2));
+    expect(foldRender.mock.calls.map(c => c[2])).toEqual([true, true]);
+  });
+});

@@ -1,6 +1,7 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useT } from '../../i18n/index.js';
-import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serializeRender } from './service';
+import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serializeRender, foldRender } from './service';
+import { foldLabels } from './prepass/folds';
 import TextLayer from './text/TextLayer';
 import { createCopyController } from './text/clipboard';
 import { selectionInLayer, selectLayer } from './text/selection';
@@ -32,7 +33,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const dpr = useDevicePixelRatio();
   const [doc, setDoc] = useState(null); // { docId, rev, meta }
   const [hover, setHover] = useState(null);
-  const [hoverFold, setHoverFold] = useState(null); // set by fold-toggle hover (fold clicks)
+  const [hoverFold, setHoverFold] = useState(null); // id of the fold toggle under the pointer
   const textLayerRef = useRef(null);
   // The owner (BlitzBody) reaches the selectable text through this: reply quotes the selection under it.
   useImperativeHandle(ref, () => ({ layerEl: () => textLayerRef.current?.layerEl() ?? null }), []);
@@ -40,6 +41,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const tileEls = useRef([]);
   const gen = useRef(0);
   const docIdRef = useRef(null);
+  const docRef = useRef(null); // the latest doc, for a click handler that awaits a hit reply
   const failed = useRef(false);
   const hitBusy = useRef(false);
   const inside = useRef(false);
@@ -52,6 +54,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   onLinkRef.current = onLink;
   onFailureRef.current = onFailure;
   onFoldToggledRef.current = onFoldToggled; // called with (id, open) when a fold toggle is clicked
+  docRef.current = doc;
 
   const fail = useCallback((code) => {
     if (failed.current) return;
@@ -128,35 +131,59 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     return () => { gone = true; unlisten?.(); };
   }, []);
 
+  // The reply carries both: a toggle inside a link hits the link and the fold.
   const hitAt = useCallback(async (clientX, clientY, target) => {
-    if (!doc) return null;
+    if (!doc) return { link: null, fold: null };
     const docId = doc.docId;
     const rect = target.getBoundingClientRect();
     try {
       const r = await hitRender(docId, clientX - rect.left, clientY - rect.top);
       // The doc was closed or replaced while the worker answered.
-      return docIdRef.current === docId ? (r?.link ?? null) : null;
-    } catch { return null; }
+      if (docIdRef.current !== docId) return { link: null, fold: null };
+      return { link: r?.link ?? null, fold: r?.fold ?? null, docId };
+    } catch { return { link: null, fold: null }; }
   }, [doc]);
+
+  // The new layout comes back as render-updated (the worker's `updated` frame), the same
+  // path every relayout takes; the reply is not applied here. The worker ignores a fold
+  // already in the requested state, so a stale double click only re-sends it: nothing waits
+  // for a rev. The owner is told at click time, and told back if the worker refuses.
+  const toggleFold = useCallback(async (docId, id) => {
+    const d = docRef.current;
+    const f = d && d.docId === docId ? d.meta?.folds?.find(x => x.id === id) : null;
+    if (!f) return;
+    const open = !f.open;
+    onFoldToggledRef.current?.(id, open);
+    try {
+      await foldRender(docId, id, open);
+    } catch (e) {
+      console.debug('[blitz] fold toggle refused', id, e?.message || e);
+      onFoldToggledRef.current?.(id, !open);
+    }
+  }, []);
 
   const onMove = useCallback(async (e) => {
     if (hitBusy.current) return;
     hitBusy.current = true;
     inside.current = true;
-    const link = await hitAt(e.clientX, e.clientY, e.currentTarget);
+    const { link, fold } = await hitAt(e.clientX, e.clientY, e.currentTarget);
     hitBusy.current = false;
-    if (inside.current) setHover(link);
+    if (!inside.current) return;
+    // A toggle inside a link is a toggle: no URL chip for what a click will not open.
+    setHover(fold ? null : link);
+    setHoverFold(fold);
   }, [hitAt]);
 
-  const onLeave = useCallback(() => { inside.current = false; setHover(null); }, []);
+  const onLeave = useCallback(() => { inside.current = false; setHover(null); setHoverFold(null); }, []);
 
   const onClick = useCallback(async (e) => {
-    // A click that ended a drag-selection selects text; it never opens a link.
+    // A click that ended a drag-selection selects text; it never opens a link or toggles a fold.
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && selectionInLayer(sel, textLayerRef.current?.layerEl())) return;
-    const link = await hitAt(e.clientX, e.clientY, e.currentTarget);
+    const { link, fold, docId } = await hitAt(e.clientX, e.clientY, e.currentTarget);
+    if (fold) { void toggleFold(docId, fold); return; }
     if (link) onLinkRef.current?.(link);
-  }, [hitAt]);
+  }, [hitAt, toggleFold]);
 
   // Copy: serialize ahead, write synchronously on copy (text/clipboard.js). The
   // controller is rebuilt per rev (a fold toggle changes what a range covers),
@@ -214,15 +241,19 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     : (sizing && typeof sizing === 'object' ? { maxHeight: sizing.collapsedMax } : undefined);
 
   const m = doc?.meta;
+  const labels = useMemo(() => foldLabels(), [t]);
+  const hoverFoldInfo = m?.folds?.find(f => f.id === hoverFold);
+  // The iframe's quote toggle carries this title; a signature toggle has none.
+  const foldTitle = hoverFoldInfo?.kind === 'quote' ? (hoverFoldInfo.open ? labels.quoteHideTitle : labels.quoteShowTitle) : undefined;
   return (
     <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body" data-doc-id={doc?.docId}
       // Focusable like the iframe's document: a click focuses it, Tab leaves it, no ring.
       tabIndex={-1}
       className={`w-full overflow-x-auto relative${scrollsInside ? ' overflow-y-auto' : ''}`} style={{ outline: 'none', ...boxStyle }}>
       {m && (
-        <div role="presentation" onMouseMove={onMove} onMouseLeave={onLeave} onClick={onClick}
+        <div role="presentation" title={foldTitle} onMouseMove={onMove} onMouseLeave={onLeave} onClick={onClick}
           onContextMenu={e => e.preventDefault()}
-          style={{ position: 'relative', width: m.cssWidth, height: m.cssHeight, cursor: hover ? 'pointer' : 'default' }}>
+          style={{ position: 'relative', width: m.cssWidth, height: m.cssHeight, cursor: hover || hoverFold ? 'pointer' : 'default' }}>
           {Array.from({ length: m.tileCount }, (_, i) => {
             const top = i * m.tileCssHeight;
             const tileDoc = doc.docId;
