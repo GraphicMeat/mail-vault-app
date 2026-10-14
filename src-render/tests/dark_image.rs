@@ -228,3 +228,15 @@ fn a_dark_logo_background_paints_light() {
     let px = &buf[..ch];
     assert!(px[0] > 150, "the logo ink should paint light on the dark page: {px:?}");
 }
+
+#[test]
+fn a_body_background_attribute_data_image_is_analysed_too() {
+    use blitz_dom::local_name;
+    let url = data_url(&half_transparent(40, 20, [32, 32, 32]));
+    let html = format!("<!doctype html><html><body background=\"{url}\">x</body></html>");
+    let doc = blitz_html::HtmlDocument::from_html(&html, blitz_dom::DocumentConfig::default());
+    let body = doc.tree().iter().find(|(_, n)| n.attr(local_name!("background")).is_some()).map(|(id, _)| id).expect("body");
+    let edits = mailvault_render::dark::inline::override_inline(&doc, body, &mut cx());
+    let bg = edits.props.iter().find(|(k, _)| k == "--darkreader-inline-bgimage").expect("bgimage override").1.clone();
+    assert!(bg.starts_with("url(\"data:image/png;base64,") && !bg.contains(&url), "the background attribute kept its original image");
+}
