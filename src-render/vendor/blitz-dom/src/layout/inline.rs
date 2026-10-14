@@ -288,6 +288,9 @@ impl BaseDocument {
             ..child_inputs
         };
 
+        // MailVault parity fix (plan B): see `TextLayout::strut_below`.
+        let strut_below = inline_layout.strut_below;
+
         // Update inline boxes
         for ibox in inline_layout.layout.inline_boxes_mut() {
             let style = self.nodes[NodeId::from_u64(ibox.id)].style();
@@ -308,7 +311,8 @@ impl BaseDocument {
                 ibox.width = (margin.left + margin.right + output.size.width) * scale;
                 // Vertical margins adjust the space the box reserves in the line, but the
                 // reserved space cannot be negative.
-                ibox.height = (margin.top + margin.bottom + output.size.height).max(0.0) * scale;
+                ibox.height =
+                    (margin.top + margin.bottom + output.size.height).max(0.0) * scale + strut_below;
             }
         }
 

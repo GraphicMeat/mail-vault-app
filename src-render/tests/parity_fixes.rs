@@ -251,3 +251,18 @@ fn a_no_break_space_at_the_edge_of_a_text_run_keeps_its_width() {
     assert!((w("indented") - w("plain") - 2.0 * nbsp).abs() <= 1.0, "two leading nbsp: {} vs {}", w("indented"), w("plain"));
     assert!((w("trailing") - w("plain") - nbsp).abs() <= 1.0, "trailing nbsp: {} vs {}", w("trailing"), w("plain"));
 }
+
+/// A line box always holds the strut of its block's font and line-height, so a cell with
+/// one inline `<img>` is the image plus the part of the strut below the baseline: at
+/// `line-height` 22px that is 6px (harness iframe, cerberus header cell: padding 20px, an
+/// image 50px tall, cell 96px; Blitz 90 and every y below it 6px short). A block image has
+/// no line box.
+#[test]
+fn a_line_with_only_an_image_keeps_the_strut_below_the_baseline() {
+    let els = inspect(&fx("line-with-only-an-image.html"));
+    let r = |id: &str| get(&els, id).rect.clone().unwrap();
+    assert!((r("inline").h - 96.0).abs() <= 1.0, "cell with an inline image: {}, iframe 96", r("inline").h);
+    assert_eq!(r("logo").y - r("inline").y, 20.0, "the image sits at the top of the line");
+    assert_eq!(r("block").h, 90.0, "a block image has no strut");
+    assert_eq!(r("block").y, r("inline").y + r("inline").h);
+}

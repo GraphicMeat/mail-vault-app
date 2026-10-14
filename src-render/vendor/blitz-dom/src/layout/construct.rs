@@ -1141,6 +1141,32 @@ pub(crate) fn build_inline_layout_into(
     }
 
     text_layout.text = builder.build_into(&mut text_layout.layout);
+
+    // MailVault parity fix (plan B): every line box has a strut, an empty inline box
+    // with the block's own font and line-height (CSS 2 10.8.1, standards mode), and a
+    // baseline-aligned image sits above the part of it below the baseline: a cell with
+    // a lone `<img>` is the image's height plus ~6px at `line-height: 1.6`. Parley's
+    // lines carry the strut through their text runs, so a line with only inline boxes
+    // has none. The space is added to the boxes' reserved height instead (the box
+    // itself is placed at the top of it), which gives the same line box.
+    text_layout.strut_below = 0.0;
+    if text_layout.text.is_empty()
+        && text_layout
+            .layout
+            .inline_boxes()
+            .iter()
+            .any(|b| b.kind == InlineBoxKind::InFlow)
+    {
+        let mut probe = parley::layout::Layout::<TextBrush>::new();
+        let mut probe_builder = layout_ctx.tree_builder(font_ctx, scale, true, &parley_style);
+        probe_builder.push_text("x");
+        probe_builder.build_into(&mut probe);
+        probe.break_all_lines(None);
+        if let Some(line) = probe.lines().next() {
+            let metrics = line.metrics();
+            text_layout.strut_below = (metrics.block_max_coord - metrics.baseline).max(0.0);
+        }
+    }
     return;
 
     fn build_inline_layout_recursive(

@@ -26,6 +26,10 @@ pub struct TextLayout {
     pub text: String,
     pub content_widths: Option<ContentWidths>,
     pub layout: parley::layout::Layout<TextBrush>,
+    // MailVault parity fix (plan B): how far below the baseline the strut of the
+    // block's own font reaches (device px), for a layout with inline boxes but no
+    // text, whose lines have no text run to carry it. See `build_inline_layout_into`.
+    pub strut_below: f32,
 }
 
 impl TextLayout {
