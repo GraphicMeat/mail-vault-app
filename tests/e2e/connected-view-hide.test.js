@@ -11,8 +11,13 @@
  * view, and Needs reply or Attachments can hold other INBOX mail, which would
  * move the count by more than the one message this view finds. The view is
  * saved before they go, so no list the window loads in between holds none.
+ *
+ * The message is archived first: a view finds what the search index holds, and
+ * the index is built from the vault, so a message only the server has is in no
+ * view (and so is never hidden).
  */
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 const LUKE = 'luke@mock.test';
 const VIEW_ID = 'e2e-view-hide';
@@ -70,8 +75,30 @@ describe('Hide view mail', function () {
 
     const fresh = (await rows()).filter((r) => /Luke message \d\d(?!\d)/.test(r.text)
       && !r.icon?.startsWith('archived') && !r.icon?.startsWith('local-only'));
-    expect(fresh.length).toBeGreaterThan(0);
-    subject = fresh[0].text.match(/Luke message \d\d/)[0];
+    // The pick connected-view-query-groups archives: two-digit, never archived.
+    expect(fresh.length).toBeGreaterThan(3);
+    subject = fresh[fresh.length - 3].text.match(/Luke message \d\d/)[0];
+    // Into the vault, so the index (and with it the view) can find it.
+    const clicked = await browser.execute((source) => {
+      const re = new RegExp(source);
+      for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+        if (!re.test(row.innerText || '')) continue;
+        row.querySelector('input[type="checkbox"]')?.click();
+        return true;
+      }
+      return false;
+    }, exact(subject).source);
+    expect(clicked).toBe(true);
+    expect(await clickSelectionAction('archive')).toBe(true);
+    await browser.waitUntil(async () => (await rows()).some((r) => exact(subject).test(r.text) && r.icon?.startsWith('archived')), {
+      timeout: 60_000, interval: 300, timeoutMsg: `"${subject}" never became an archived row`,
+    });
+    // Leave nothing selected: the selection bar is not what this spec is about.
+    await browser.execute(() => {
+      for (const box of document.querySelectorAll('[data-testid="email-row"] input[type="checkbox"]')) {
+        if (box.checked) box.click();
+      }
+    });
 
     const lukeId = await browser.execute((email) =>
       (window.__MAIL_STORE__?.getState().accounts || []).find((a) => a.email === email)?.id || null, LUKE);
