@@ -868,6 +868,13 @@ impl<'a> TElement for BlitzNode<'a> {
             None
         }
 
+        // MailVault parity fix (plan B): the pixel width a table's `border` attribute
+        // stands for. A number is taken as is; a present attribute that does not
+        // parse (`<table border>`, `border="x"`) means 1px.
+        fn table_border_px(value: &str) -> u32 {
+            style::servo::attr::parse_unsigned_integer(value.chars()).unwrap_or(1)
+        }
+
         /// The HTML "rules for parsing dimension values" -- Stylo's
         /// implementation of them -- packaged as a specified
         /// `<length-percentage>`. `ignoring_zero` selects the spec's separate
@@ -1152,6 +1159,38 @@ impl<'a> TElement for BlitzNode<'a> {
                 }
             }
 
+            if *tag == local_name!("table") && *name == local_name!("border") {
+                // MailVault parity fix (plan B): table[border] gives the table an N px
+                // border (outset when non-zero). With frame or rules present the UA
+                // sheet's frame/rules rules own the style.
+                let px = table_border_px(value);
+                let owns_style = elem
+                    .attrs()
+                    .iter()
+                    .any(|a| matches!(&*a.name.local, "frame" | "rules"));
+                let css = if px > 0 && !owns_style {
+                    format!("border-width:{px}px;border-style:outset")
+                } else {
+                    format!("border-width:{px}px")
+                };
+                for decl in hint_declarations(&css) {
+                    push_style(decl);
+                }
+            }
+
+            if *tag == local_name!("table") && &**name == "bordercolor" {
+                use style::values::specified::Color;
+                // MailVault parity fix (plan B): table[bordercolor] sets the border colour
+                // (legacy colour parse); the UA sheet lets rows and cells inherit it.
+                if let Ok(color) = style::servo::attr::parse_legacy_color(value) {
+                    let color = Color::from_absolute_color(color);
+                    push_style(PropertyDeclaration::BorderTopColor(color.clone()));
+                    push_style(PropertyDeclaration::BorderRightColor(color.clone()));
+                    push_style(PropertyDeclaration::BorderBottomColor(color.clone()));
+                    push_style(PropertyDeclaration::BorderLeftColor(color));
+                }
+            }
+
             if *tag == local_name!("table") && &**name == "cellspacing" {
                 // MailVault parity fix (plan B): table[cellspacing] maps to border-spacing.
                 if let Ok(px) = style::servo::attr::parse_unsigned_integer(value.chars()) {
@@ -1168,6 +1207,16 @@ impl<'a> TElement for BlitzNode<'a> {
         }
 
         if *tag == local_name!("td") || *tag == local_name!("th") {
+            // MailVault parity fix (plan B): a table with a non-zero border attribute
+            // gives each of its cells a 1px inset border (unless rules governs them).
+            if cell_table_attr(self, "border").is_some_and(|v| table_border_px(v) > 0)
+                && cell_table_attr(self, "rules").is_none()
+            {
+                for decl in hint_declarations("border-width:1px;border-style:inset") {
+                    push_style(decl);
+                }
+            }
+
             // MailVault parity fix (plan B): table[cellpadding] pads each of its cells.
             if let Some(px) = cell_table_attr(self, "cellpadding")
                 .and_then(|v| style::servo::attr::parse_unsigned_integer(v.chars()).ok())

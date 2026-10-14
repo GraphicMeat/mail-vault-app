@@ -66,3 +66,23 @@ fn legacy_colour_attributes_follow_the_html_parsing_rules() {
     assert_eq!(get(&els, "a").background_color, Some([0.0, 255.0, 0.0, 1.0]));
     assert_eq!(get(&els, "b").background_color, Some([0.0, 0.0, 0.0, 0.0]), "transparent is not a legacy colour");
 }
+
+#[test]
+fn table_border_attribute_defaults_to_one_px_when_present_but_not_a_number() {
+    let html = r#"<body style="margin:0"><table data-mv-id="empty" border><tr><td data-mv-id="ec">x</td></tr></table>
+<table data-mv-id="junk" border="thick"><tr><td>x</td></tr></table></body>"#;
+    let els = inspect(html);
+    for id in ["empty", "junk"] {
+        let t = get(&els, id);
+        assert_eq!((t.border_top_width, t.border_left_width), (Some(1.0), Some(1.0)), "{id}");
+    }
+    assert_eq!(get(&els, "ec").border_top_width, Some(1.0));
+}
+
+#[test]
+fn table_bordercolor_colours_the_table_and_is_inherited_by_its_cells() {
+    let html = r##"<body style="margin:0"><table data-mv-id="t" border="2" bordercolor="#336699"><tr><td data-mv-id="c">x</td></tr></table></body>"##;
+    let els = inspect(html);
+    assert_eq!(get(&els, "t").border_top_color, Some([51.0, 102.0, 153.0, 1.0]));
+    assert_eq!(get(&els, "c").border_left_color, Some([51.0, 102.0, 153.0, 1.0]));
+}

@@ -163,15 +163,20 @@ fn border_widths_are_used_px_per_side() {
     assert_eq!(json["borderLeftWidth"], 5.0);
 }
 
-// Engine gap (blitz-dom applies no `border` presentational hint on tables, so a
-// <table border=3> reports and draws no border). Un-ignore when the engine fix
-// lands; the parity fixture ours/table-border-attr shows the same diff.
 #[test]
-#[ignore = "engine: blitz-dom ignores the table border attribute"]
 fn table_border_attribute_gives_the_table_a_border() {
-    // HTML rendering section: table[border=N] draws an N px table border.
-    let html = r#"<body style="margin:0"><table data-mv-id="t" border="3"><tr><td data-mv-id="c">x</td></tr></table></body>"#;
+    // HTML rendering section: table[border=N] draws an N px table border, and
+    // every td/th of a table with a non-zero border gets a 1px inset border.
+    let html = r#"<body style="margin:0"><table data-mv-id="t" border="3"><tr><th data-mv-id="h">x</th><td data-mv-id="c">x</td></tr></table>
+<table data-mv-id="zero" border="0"><tr><td data-mv-id="zc">x</td></tr></table></body>"#;
     let els = RenderDoc::open(html, RenderOptions { css_width: 300, scale: 1.0, ..Default::default() }, None).unwrap().inspect();
     let t = by_id(&els, "t");
-    assert_eq!((t.border_top_width, t.border_left_width), (Some(3.0), Some(3.0)), "table border attribute");
+    assert_eq!((t.border_top_width, t.border_right_width, t.border_bottom_width, t.border_left_width), (Some(3.0), Some(3.0), Some(3.0), Some(3.0)), "table border attribute");
+    for id in ["h", "c"] {
+        let cell = by_id(&els, id);
+        assert_eq!((cell.border_top_width, cell.border_right_width, cell.border_bottom_width, cell.border_left_width), (Some(1.0), Some(1.0), Some(1.0), Some(1.0)), "cell {id}");
+    }
+    let zero = by_id(&els, "zero");
+    assert_eq!((zero.border_top_width, zero.border_left_width), (Some(0.0), Some(0.0)), "border=0 draws nothing");
+    assert_eq!(by_id(&els, "zc").border_top_width, Some(0.0), "cells of a border=0 table stay unbordered");
 }
