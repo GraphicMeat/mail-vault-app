@@ -288,7 +288,8 @@ export const useViewStore = create((set, get) => ({
   },
 
   /// The builder's words added to a saved view, each as a group of its own
-  /// (`appendTerms`); every other filter is kept. Answers `{ ok: true,
+  /// (`appendTerms`); every other filter is kept, and a view that already has
+  /// every word is not saved again. Answers `{ ok: true,
   /// wasEmpty }`, `wasEmpty` saying the view searched for no words before, or
   /// `{ ok: false, reason: 'missing' }` for a view that is gone.
   addTermsToView: async (viewId, terms) => {
@@ -296,7 +297,11 @@ export const useViewStore = create((set, get) => ({
     if (!view) view = (await get().loadViews()).find(saved => saved.id === viewId);
     if (!view) return { ok: false, reason: 'missing' };
     const wasEmpty = viewQueryIsEmpty(view);
-    await get().saveView({ ...view, def: { ...(view.def || {}), query: appendTerms(view.def?.query || '', terms) } });
+    const before = view.def?.query || '';
+    const query = appendTerms(before, terms);
+    // Every word already its own group: nothing to save, nothing to re-run.
+    if (query === appendTerms(before, [])) return { ok: true, wasEmpty };
+    await get().saveView({ ...view, def: { ...(view.def || {}), query } });
     return { ok: true, wasEmpty };
   },
 

@@ -733,6 +733,24 @@ describe('the view builder', () => {
     expect(saved()[0].def.query).toBe('invoice || acme');
   });
 
+  it('saves nothing when every word already stands alone in the view', async () => {
+    const view = { ...MINE, def: { query: 'invoice || acme', starred: true } };
+    useViewStore.setState({ views: [view] });
+    daemon([view]);
+    const reply = await useViewStore.getState().addTermsToView('v1', ['Invoice', 'acme']);
+    expect(reply).toEqual({ ok: true, wasEmpty: false });
+    expect(saved()).toEqual([]);
+  });
+
+  it('saves nothing for no words, and still says the view had none', async () => {
+    const view = { ...MINE, def: { query: '  ', unread: true } };
+    useViewStore.setState({ views: [view] });
+    daemon([view]);
+    const reply = await useViewStore.getState().addTermsToView('v1', ['', '  ']);
+    expect(reply).toEqual({ ok: true, wasEmpty: true });
+    expect(saved()).toEqual([]);
+  });
+
   it('writes nothing for a view that is gone', async () => {
     useViewStore.setState({ views: [] });
     daemon([STARRED]);
