@@ -46,6 +46,9 @@ function resolve(container, offset, layerEl, all, edge) {
   return span ? [span, span.textContent.length] : null;
 }
 
+// A selection only partly inside the layer (a drag from the header into the
+// body, one body of a thread) clamps to the layer's first/last span. How text
+// outside the layer, or several bodies, compose into one copy is plan D's call.
 export function selectionEndpoints(selection, layerEl) {
   if (!selectionInLayer(selection, layerEl)) return null;
   const all = spans(layerEl);
@@ -67,21 +70,29 @@ function within(span, container, offset, fallback) {
   return span.contains(container) ? offset : fallback;
 }
 
+// Between two selected spans: a new inline root is a new line. Within one
+// root (a paragraph that crosses a tile is two elements with one data-node)
+// the byte gap between the spans decides: none means the text is contiguous.
+function separator(prev, span) {
+  if (prev.dataset.node !== span.dataset.node) return '\n';
+  const gap = Number(span.dataset.start) - (Number(prev.dataset.start) + utf8Length(prev.textContent));
+  return gap > 0 ? ' ' : '';
+}
+
 /** The selected layer text, roots joined by "\n": the plain-copy fallback. */
 export function layerPlainText(selection, layerEl) {
   if (!selectionInLayer(selection, layerEl)) return '';
   const r = selection.getRangeAt(0);
   let out = '';
-  let lastRoot = null;
+  let prev = null;
   for (const span of spans(layerEl)) {
     if (!r.intersectsNode(span)) continue;
     const t = span.textContent;
     const from = within(span, r.startContainer, r.startOffset, 0);
     const to = within(span, r.endContainer, r.endOffset, t.length);
-    const root = span.closest('.mv-blitz-root');
-    if (lastRoot && root !== lastRoot) out += '\n';
+    if (prev) out += separator(prev, span);
     out += t.slice(from, to);
-    lastRoot = root;
+    prev = span;
   }
   return out;
 }

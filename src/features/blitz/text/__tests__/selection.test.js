@@ -62,6 +62,11 @@ describe('selectionEndpoints', () => {
     const [a] = el.querySelectorAll('span');
     expect(layerPlainText(select(a, 0, a, 1), el)).toBe('naïve 😀 東京');
   });
+  it('layerPlainText: one paragraph split over two root elements gets no newline; a gap in data-start gets a space', () => {
+    const e = layer(`<div data-tile="0"><div class="mv-blitz-root">${span(4, 0, 'split ')}</div></div><div data-tile="1"><div class="mv-blitz-root">${span(4, 6, 'para')}${span(4, 11, 'gap')}</div></div>`);
+    const [a, , c] = e.querySelectorAll('span');
+    expect(layerPlainText(select(a.firstChild, 0, c.firstChild, 3), e)).toBe('split para gap');
+  });
   it('selectLayer selects first to last span', () => {
     const spans = el.querySelectorAll('span');
     selectLayer(el, spans[0], spans[spans.length - 1]);

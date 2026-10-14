@@ -164,12 +164,25 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
       layerEl: () => textLayerRef.current?.layerEl(),
       serialize: (s, e) => serializeRender(doc.docId, s, e),
     });
-    const onSel = () => ctl.onSelectionChange();
-    const onCopy = (e) => ctl.onCopy(e);
-    document.addEventListener('selectionchange', onSel);
-    document.addEventListener('copy', onCopy);
+    // A drag is serialized when it ends, a key-driven selection on key up, and
+    // anything else (select all, a script) on a short pause.
+    const on = [
+      ['selectionchange', () => ctl.onSelectionChange()],
+      ['pointerdown', (e) => ctl.onPointerDown(e.target)],
+      ['pointerup', () => ctl.onPointerUp()],
+      ['pointercancel', () => ctl.onPointerUp()],
+      ['keyup', () => ctl.onKeyUp()],
+      ['copy', (e) => ctl.onCopy(e)],
+    ];
+    for (const [type, fn] of on) document.addEventListener(type, fn, type !== 'copy');
+    const onBlur = () => ctl.onPointerUp(); // a pointer up lost to another window
+    window.addEventListener('blur', onBlur);
     ctl.onSelectionChange();
-    return () => { ctl.dispose(); document.removeEventListener('selectionchange', onSel); document.removeEventListener('copy', onCopy); };
+    return () => {
+      ctl.dispose();
+      for (const [type, fn] of on) document.removeEventListener(type, fn, type !== 'copy');
+      window.removeEventListener('blur', onBlur);
+    };
   }, [doc?.docId, doc?.rev]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Selection colour: the engine default in light (dark: Task 15).

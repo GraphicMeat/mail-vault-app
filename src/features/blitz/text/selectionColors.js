@@ -36,9 +36,20 @@ export function overlayFor(target, paper) {
 // The classic macOS highlight, for an engine that cannot resolve `Highlight`.
 const FALLBACK_HIGHLIGHT = { r: 179, g: 215, b: 255 };
 
+// Only an opaque sRGB colour is trusted: color(display-p3 ...) or a translucent
+// rgba would blend to a different colour than the engine's own default.
 function parseRgb(s) {
-  const m = String(s).match(/\d+(\.\d+)?/g) || [];
-  return m.length >= 3 ? { r: +m[0], g: +m[1], b: +m[2] } : null;
+  const m = /^rgba?\(([^)]+)\)$/.exec(String(s).trim());
+  if (!m) return null;
+  const parts = m[1].split(/[\s,/]+/).filter(Boolean);
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  const [r, g, b] = parts.slice(0, 3).map(Number);
+  if (![r, g, b].every(Number.isFinite)) return null;
+  if (parts.length === 4) {
+    const a = parts[3].endsWith('%') ? parseFloat(parts[3]) / 100 : Number(parts[3]);
+    if (a !== 1) return null;
+  }
+  return { r, g, b };
 }
 
 /** The system highlight, read from a probe, as the engine would blend it. */

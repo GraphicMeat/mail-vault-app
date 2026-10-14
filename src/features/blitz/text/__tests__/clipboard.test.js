@@ -89,3 +89,135 @@ describe('createCopyController', () => {
     expect(data['text/plain']).toBe('hello');
   });
 });
+
+function selectHello(el) {
+  const span = el.querySelector('span');
+  const r = document.createRange(); r.setStart(span.firstChild, 0); r.setEnd(span.firstChild, 5);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+}
+const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+
+describe('createCopyController: selection end, coalescing, bounded upgrade', () => {
+  it('a drag serializes at pointer up, not on the pause mid-drag', async () => {
+    const serialize = vi.fn().mockResolvedValue({ html: '<p>x</p>', text: 'x' });
+    const { el, ctl } = setup(serialize);
+    ctl.onPointerDown(el.querySelector('span'));
+    selectAcross(el);
+    ctl.onSelectionChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(serialize).not.toHaveBeenCalled();
+    ctl.onPointerUp();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(serialize).toHaveBeenCalledTimes(1);
+    expect(serialize).toHaveBeenCalledWith({ node: 1, offset: 6 }, { node: 7, offset: 3 });
+  });
+
+  it('a pointer down outside the layer does not hold selectionchange back', async () => {
+    const serialize = vi.fn().mockResolvedValue({ html: 'x', text: 'x' });
+    const { el, ctl } = setup(serialize);
+    ctl.onPointerDown(document.body);
+    selectAcross(el);
+    ctl.onSelectionChange();
+    await vi.advanceTimersByTimeAsync(120);
+    expect(serialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('key up (shift-extend, select all) serializes at once', async () => {
+    const serialize = vi.fn().mockResolvedValue({ html: 'x', text: 'x' });
+    const { el, ctl } = setup(serialize);
+    selectAcross(el);
+    ctl.onKeyUp();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(serialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('at most one serialize in flight plus one trailing: the middle selection is dropped', async () => {
+    const first = deferred();
+    const serialize = vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue({ html: 'B', text: 'B' });
+    const { el, ctl } = setup(serialize);
+    selectAcross(el); ctl.onKeyUp();
+    const span = el.querySelector('span');
+    const sel = (a, b) => { const r = document.createRange(); r.setStart(span.firstChild, a); r.setEnd(span.firstChild, b); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); };
+    sel(0, 2); ctl.onKeyUp();
+    sel(0, 5); ctl.onKeyUp();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(serialize).toHaveBeenCalledTimes(1);
+    first.resolve({ html: 'A', text: 'A' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(serialize).toHaveBeenCalledTimes(2);
+    expect(serialize).toHaveBeenLastCalledWith({ node: 1, offset: 0 }, { node: 1, offset: 5 });
+  });
+
+  it('a reply whose selection is no longer current is never cached', async () => {
+    const first = deferred();
+    const serialize = vi.fn().mockReturnValueOnce(first.promise).mockReturnValue(new Promise(() => {}));
+    const { el, ctl } = setup(serialize);
+    selectAcross(el); ctl.onKeyUp();
+    selectHello(el);
+    first.resolve({ html: '<i>A</i>', text: 'A' });
+    await vi.advanceTimersByTimeAsync(0);
+    const { e, data } = copyEvent();
+    ctl.onCopy(e);
+    expect(data['text/plain']).toBe('hello');
+    expect(data['text/html']).toBeUndefined();
+  });
+
+  it('the promise upgrade gives up after 800 ms', async () => {
+    globalThis.ClipboardItem = class { constructor(items) { this.items = items; } };
+    Object.defineProperty(navigator, 'clipboard', { value: { write: vi.fn().mockResolvedValue() }, configurable: true });
+    const { el, ctl } = setup(vi.fn(() => new Promise(() => {})));
+    selectAcross(el);
+    const { e } = copyEvent();
+    ctl.onCopy(e);
+    const item = navigator.clipboard.write.mock.calls[0][0][0];
+    const outcome = item.items['text/html'].then(() => 'ok', () => 'rejected');
+    await vi.advanceTimersByTimeAsync(799);
+    let settled = false; outcome.then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await outcome).toBe('rejected');
+  });
+
+  it('a later copy event rejects the blobs of an older one', async () => {
+    const d = deferred();
+    globalThis.ClipboardItem = class { constructor(items) { this.items = items; } };
+    Object.defineProperty(navigator, 'clipboard', { value: { write: vi.fn().mockResolvedValue() }, configurable: true });
+    const { el, ctl } = setup(vi.fn(() => d.promise));
+    selectAcross(el);
+    ctl.onCopy(copyEvent().e);
+    const item = navigator.clipboard.write.mock.calls[0][0][0];
+    const outcome = item.items['text/html'].then(() => 'ok', () => 'rejected');
+    ctl.onCopy(copyEvent().e);
+    d.resolve({ html: '<b>x</b>', text: 'x' });
+    expect(await outcome).toBe('rejected');
+  });
+});
+
+describe('createCopyController: nothing to write', () => {
+  it('a cached empty result falls back to the layer text', async () => {
+    const { el, ctl } = setup(vi.fn().mockResolvedValue({ html: '', text: '' }));
+    selectAcross(el);
+    ctl.onSelectionChange();
+    await vi.advanceTimersByTimeAsync(120);
+    const { e, data } = copyEvent();
+    ctl.onCopy(e);
+    expect(e.preventDefault).toHaveBeenCalled();
+    expect(data['text/plain']).toBe('world\nfar');
+    expect(data['text/html']).toBeUndefined();
+  });
+
+  it('empty serialize result and empty layer text: the event is left alone', async () => {
+    const { el, ctl } = setup(vi.fn().mockResolvedValue({ html: '', text: '' }));
+    const r = document.createRange(); r.setStart(el, 1); r.setEnd(el, 2);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    ctl.onSelectionChange();
+    await vi.advanceTimersByTimeAsync(120);
+    const { e, data } = copyEvent();
+    ctl.onCopy(e);
+    expect(e.preventDefault).not.toHaveBeenCalled();
+    expect(data).toEqual({});
+  });
+});

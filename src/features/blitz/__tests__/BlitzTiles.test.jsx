@@ -256,6 +256,22 @@ describe('BlitzTiles', () => {
     expect(onLink).not.toHaveBeenCalled();
   });
 
+  it('a drag is serialized when the pointer is released, not while it is still down', async () => {
+    openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
+    serializeRender.mockResolvedValue({ html: '<p>hel</p>', text: 'hel' });
+    render(tiles());
+    const span = await screen.findByText('hello');
+    fireEvent.pointerDown(span);
+    const r = document.createRange(); r.setStart(span.firstChild, 0); r.setEnd(span.firstChild, 3);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    document.dispatchEvent(new Event('selectionchange'));
+    await new Promise(res => setTimeout(res, 250));
+    expect(serializeRender).not.toHaveBeenCalled();
+    fireEvent.pointerUp(span);
+    await waitFor(() => expect(serializeRender).toHaveBeenCalledWith(5, { node: 1, offset: 0 }, { node: 1, offset: 3 }));
+  });
+
   it('a selection is serialized by endpoints and copy writes both formats', async () => {
     openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
     textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'héllo', fontPx: 16, node: 1, start: 0 }] });
