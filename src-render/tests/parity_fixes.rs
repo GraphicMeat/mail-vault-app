@@ -397,3 +397,15 @@ fn ui_monospace_is_the_system_monospaced_font() {
     let w = get(&els, "mono").rect.clone().unwrap().w - 8.0;
     assert!((w - 85.64).abs() <= 0.5, "ui-monospace text: {w}, system monospaced 85.64");
 }
+
+/// getBoundingClientRect of an inline is its border box: the text's content area (rounded
+/// ascent + descent) plus the element's own padding and border. Harness iframe
+/// (ours/basic-typography, `code { padding: 1px 4px }`, 12.6px): 93.68 x 17 for the text
+/// "inline code", which Blitz reported without the padding (83.4 x 14.7).
+#[test]
+fn an_inline_rect_includes_its_padding() {
+    let els = inspect(&fx("inline-padding-and-ui-monospace.html"));
+    let r = |id: &str| get(&els, id).rect.clone().unwrap();
+    let (plain, padded) = (r("plain"), r("padded"));
+    assert_eq!((padded.w - plain.w, padded.h - plain.h), (8.0, 2.0), "1px 4px of padding");
+}

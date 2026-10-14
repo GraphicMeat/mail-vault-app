@@ -234,20 +234,23 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
     let pos = root.absolute_position(0.0, 0.0);
     let ox = pos.x as f64 + (fl.padding.left + fl.border.left) as f64;
     let oy = pos.y as f64 + (fl.padding.top + fl.border.top) as f64;
-    let mut acc: Option<(f64, f64, f64, f64)> = None;
-    let mut add = |x0: f64, y0: f64, x1: f64, y1: f64| {
-        acc = Some(match acc {
-            Some((a, b, c, d)) => (a.min(x0), b.min(y0), c.max(x1), d.max(y1)),
-            None => (x0, y0, x1, y1),
-        });
-    };
+    // One box per line the element has fragments on.
+    let mut fragments: Vec<(f64, f64, f64, f64)> = Vec::new();
     for line in layout.lines() {
+        let mut acc: Option<(f64, f64, f64, f64)> = None;
+        let mut add = |x0: f64, y0: f64, x1: f64, y1: f64| {
+            acc = Some(match acc {
+                Some((a, b, c, d)) => (a.min(x0), b.min(y0), c.max(x1), d.max(y1)),
+                None => (x0, y0, x1, y1),
+            });
+        };
         for item in line.items() {
             match item {
                 PositionedLayoutItem::GlyphRun(run) if is_descendant_or_self(doc, run.style().brush.id, id) => {
+                    // WebKit's content area is the rounded ascent plus the rounded descent.
                     let m = run.run().metrics();
                     let x0 = run.offset() as f64;
-                    add(x0, (run.baseline() - m.ascent) as f64, x0 + run.advance() as f64, (run.baseline() + m.descent) as f64);
+                    add(x0, (run.baseline() - m.ascent.round()) as f64, x0 + run.advance() as f64, (run.baseline() + m.descent.round()) as f64);
                 }
                 PositionedLayoutItem::InlineBox(b) if is_descendant_or_self(doc, NodeId::from_u64(b.id), id) => {
                     add(b.x as f64, b.y as f64, (b.x + b.width) as f64, (b.y + b.height) as f64 - strut);
@@ -255,8 +258,35 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
                 _ => {}
             }
         }
+        fragments.extend(acc);
     }
-    let (x0, y0, x1, y1) = acc?;
+    // The element's own padding and border belong to its box: the first fragment starts
+    // and the last ends with them, and each fragment's box is taller by the vertical ones
+    // (a `<code>` with `padding: 1px 4px` is 8px wider and 2px taller than its text).
+    if let Some(s) = node.primary_styles() {
+        let used = |w: &style::values::computed::BorderSideWidth, st: style::values::computed::BorderStyle| {
+            if st.none_or_hidden() { 0.0 } else { w.0.to_f64_px() }
+        };
+        let pad = s.get_padding();
+        let border = s.get_border();
+        let basis = style::values::computed::CSSPixelLength::new(0.0);
+        let edge = |p: &style::values::computed::LengthPercentage, w: f64| (p.resolve(basis).px() as f64 + w) * scale;
+        let left = edge(&pad.padding_left.0, used(&border.border_left_width, border.border_left_style));
+        let right = edge(&pad.padding_right.0, used(&border.border_right_width, border.border_right_style));
+        let top = edge(&pad.padding_top.0, used(&border.border_top_width, border.border_top_style));
+        let bottom = edge(&pad.padding_bottom.0, used(&border.border_bottom_width, border.border_bottom_style));
+        if let Some(first) = fragments.first_mut() {
+            first.0 -= left;
+        }
+        if let Some(last) = fragments.last_mut() {
+            last.2 += right;
+        }
+        for f in fragments.iter_mut() {
+            f.1 -= top;
+            f.3 += bottom;
+        }
+    }
+    let (x0, y0, x1, y1) = fragments.into_iter().reduce(|(a, b, c, d), (x0, y0, x1, y1)| (a.min(x0), b.min(y0), c.max(x1), d.max(y1)))?;
     Some(InspectRect { x: ox + x0 / scale, y: oy + y0 / scale, w: (x1 - x0) / scale, h: (y1 - y0) / scale })
 }
 
