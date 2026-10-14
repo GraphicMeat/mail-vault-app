@@ -79,7 +79,11 @@ function separator(prev, span) {
   return gap > 0 ? ' ' : '';
 }
 
-/** The selected layer text, roots joined by "\n": the plain-copy fallback. */
+/**
+ * The selected layer text, roots joined by "\n": the plain-copy and reply
+ * fallback. A span that draws a newline or a tab as a space keeps its real
+ * text in `data-raw` (same length), and that is what is read.
+ */
 export function layerPlainText(selection, layerEl) {
   if (!selectionInLayer(selection, layerEl)) return '';
   const r = selection.getRangeAt(0);
@@ -87,7 +91,8 @@ export function layerPlainText(selection, layerEl) {
   let prev = null;
   for (const span of spans(layerEl)) {
     if (!r.intersectsNode(span)) continue;
-    const t = span.textContent;
+    const shown = span.textContent;
+    const t = span.dataset.raw?.length === shown.length ? span.dataset.raw : shown;
     const from = within(span, r.startContainer, r.startOffset, 0);
     const to = within(span, r.endContainer, r.endOffset, t.length);
     if (prev) out += separator(prev, span);

@@ -58,6 +58,12 @@ describe('selectionEndpoints', () => {
     const body = document.body;
     expect(selectionEndpoints(select(a, 0, body, body.childNodes.length), el)).toEqual({ start: { node: 5, offset: 0 }, end: { node: 9, offset: 4 } });
   });
+  it('layerPlainText takes the raw text of a span that draws a newline or a tab as a space', () => {
+    const e = layer(`<div data-tile="0"><div class="mv-blitz-root"><span data-node="4" data-start="0" data-raw="a\tb\n">a b </span></div><div class="mv-blitz-root">${span(4, 4, 'next')}</div></div>`);
+    const [a, b] = e.querySelectorAll('span');
+    expect(layerPlainText(select(a.firstChild, 0, b.firstChild, 2), e)).toBe('a\tb\nne');
+    expect(layerPlainText(select(a.firstChild, 1, a.firstChild, 3), e)).toBe('\tb');
+  });
   it('layerPlainText reads a boundary on the span element itself', () => {
     const [a] = el.querySelectorAll('span');
     expect(layerPlainText(select(a, 0, a, 1), el)).toBe('naïve 😀 東京');

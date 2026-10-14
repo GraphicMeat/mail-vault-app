@@ -37,6 +37,19 @@ const RootlessBody = forwardRef(function RootlessBody(_props, ref) {
   return <div data-testid="rootless">no layer</div>;
 });
 
+// A body whose own selection text differs from the DOM's Selection.toString:
+// the Blitz layer draws a <br> newline as a space, its copy text keeps it.
+const textOf = { value: 'Brline one\nBrline two & <3>' };
+const TextBody = forwardRef(function TextBody(_props, ref) {
+  const root = useRef(null);
+  useImperativeHandle(ref, () => ({ selectionRoot: () => root.current, selectionText: () => textOf.value }), []);
+  return (
+    <div ref={root} data-testid="text-layer" className="mv-blitz-text">
+      <span>Brline one </span><span>Brline two &amp; &lt;3&gt;</span>
+    </div>
+  );
+});
+
 const mail = {
   uid: 1, _accountId: 'acct-1', _mailbox: 'INBOX', subject: 'S',
   from: { name: 'A', address: 'a@example.test' }, to: [{ address: 'me@example.test' }],
@@ -117,6 +130,48 @@ describe('Reply quotes a selection in an alternative body', () => {
     await act(async () => { openActiveReply('reply'); });
     expect(onComposeReply).toHaveBeenCalledWith('reply', expect.objectContaining({ _selectedQuoteHtml: '' }));
     outside.remove();
+  });
+
+  describe('a body that hands out its own selection text', () => {
+    const selectAll = (el) => {
+      const r = document.createRange(); r.selectNodeContents(el);
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    };
+    beforeEach(() => {
+      textOf.value = 'Brline one\nBrline two & <3>';
+      _resetBodyRenderersForTest();
+      registerBodyRenderer('blitz', { Body: TextBody });
+    });
+
+    it('quotes that text, escaped exactly as replySelection escapes', async () => {
+      const onComposeReply = vi.fn();
+      const { getByTestId } = show(onComposeReply);
+      selectAll(getByTestId('text-layer'));
+      expect(replySelection(getByTestId('text-layer'), document.getSelection())).toBe('Brline one Brline two &amp; &lt;3&gt;');
+      await act(async () => { openActiveReply('reply'); });
+      expect(onComposeReply).toHaveBeenCalledWith('reply', expect.objectContaining({ _selectedQuoteHtml: 'Brline one<br>Brline two &amp; &lt;3&gt;' }));
+    });
+
+    it('a selection outside the body still quotes nothing', async () => {
+      const onComposeReply = vi.fn();
+      show(onComposeReply);
+      const outside = document.createElement('p');
+      outside.textContent = 'elsewhere';
+      document.body.appendChild(outside);
+      selectAll(outside);
+      await act(async () => { openActiveReply('reply'); });
+      expect(onComposeReply).toHaveBeenCalledWith('reply', expect.objectContaining({ _selectedQuoteHtml: '' }));
+      outside.remove();
+    });
+
+    it('with no text from the body, the selected DOM text is quoted', async () => {
+      textOf.value = '';
+      const onComposeReply = vi.fn();
+      const { getByTestId } = show(onComposeReply);
+      selectAll(getByTestId('text-layer'));
+      await act(async () => { openActiveReply('reply'); });
+      expect(onComposeReply).toHaveBeenCalledWith('reply', expect.objectContaining({ _selectedQuoteHtml: 'Brline one Brline two &amp; &lt;3&gt;' }));
+    });
   });
 
   it('a body with no selection root quotes nothing, whatever is selected', async () => {

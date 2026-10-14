@@ -128,6 +128,14 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120 }) {
         navigator.clipboard?.write?.([item])?.catch?.((err) => note('rich upgrade rejected', err));
       } catch (err) { note('no promise ClipboardItem', err); }
     },
+    // The serialized plain text of the current selection, when it is already
+    // in: a reply quotes it synchronously. Never asks the worker.
+    cachedText() {
+      try {
+        const { ep, key } = current();
+        return ep && cache.key === key && cache.result ? cache.result.text : null;
+      } catch { return null; }
+    },
     dispose() { clearTimeout(timer); },
   };
 }

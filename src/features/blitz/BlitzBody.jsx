@@ -30,7 +30,7 @@ const textOf = (html) => {
   } catch { return ''; }
 };
 
-/** @type {React.ForwardRefExoticComponent<import('./types').AltBodyProps & React.RefAttributes<{ selectionRoot(): HTMLElement | null }>>} */
+/** @type {React.ForwardRefExoticComponent<import('./types').AltBodyProps & React.RefAttributes<{ selectionRoot(): HTMLElement | null, selectionText(): string }>>} */
 const BlitzBody = forwardRef(function BlitzBody(props, ref) {
   const { bodyHtml, documentHtml, indicatorCss, plainText, theme, message, onLink, sizing, className, style } = props;
   const t = useT();
@@ -38,7 +38,12 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
   // Reply quotes what the user selected: the text layer is real DOM, so the
   // reader's replySelection works on it as on the iframe's body. Null while
   // held for privacy or after a failure (the plain fallback is not the root).
-  useImperativeHandle(ref, () => ({ selectionRoot: () => tilesRef.current?.layerEl?.() ?? null }), []);
+  // selectionText is the selection's copy text (the layer draws a <br> newline
+  // as a space, so the DOM's own Selection.toString loses it); '' with no tiles.
+  useImperativeHandle(ref, () => ({
+    selectionRoot: () => tilesRef.current?.layerEl?.() ?? null,
+    selectionText: () => tilesRef.current?.selectionText?.() ?? '',
+  }), []);
   // emailScopeKey is null for a message whose location cannot be resolved. All such
   // messages must not share one failure, bubble and pre-pass state, so they get a key
   // from the message's own identity and content.

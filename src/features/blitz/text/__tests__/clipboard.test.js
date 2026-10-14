@@ -67,6 +67,22 @@ describe('createCopyController', () => {
     expect(data['text/plain']).toBe('world\nfar');
   });
 
+  it('cachedText is the warm plain text of the current selection only, and never asks serialize', async () => {
+    const serialize = vi.fn().mockResolvedValue({ html: '<p>world</p><p>far</p>', text: 'world\n\nfar' });
+    const { el, ctl } = setup(serialize);
+    selectAcross(el);
+    expect(ctl.cachedText()).toBeNull(); // cold
+    expect(serialize).not.toHaveBeenCalled();
+    ctl.onSelectionChange();
+    await vi.advanceTimersByTimeAsync(120);
+    expect(ctl.cachedText()).toBe('world\n\nfar');
+    const span = el.querySelector('span');
+    const r = document.createRange(); r.setStart(span.firstChild, 0); r.setEnd(span.firstChild, 5);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    expect(ctl.cachedText()).toBeNull(); // another selection: not its text
+    expect(serialize).toHaveBeenCalledTimes(1);
+  });
+
   it('a selection outside the layer is left to the webview', () => {
     const { ctl } = setup(vi.fn());
     window.getSelection().removeAllRanges();

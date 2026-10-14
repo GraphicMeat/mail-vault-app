@@ -4,7 +4,7 @@ import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serialize
 import { foldLabels } from './prepass/folds';
 import TextLayer from './text/TextLayer';
 import { createCopyController } from './text/clipboard';
-import { selectionInLayer, selectLayer } from './text/selection';
+import { layerPlainText, selectionInLayer, selectLayer } from './text/selection';
 import { useBodyKeyboard } from './text/useBodyKeyboard';
 import { applySelectionColors, inactiveSelectionColor, lightSelectionColor } from './text/selectionColors';
 import BodyContextMenu from './menu/BodyContextMenu';
@@ -38,8 +38,18 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const [hover, setHover] = useState(null);
   const [hoverFold, setHoverFold] = useState(null); // id of the fold toggle under the pointer
   const textLayerRef = useRef(null);
+  const copyRef = useRef(null); // the live copy controller (one per rev)
   // The owner (BlitzBody) reaches the selectable text through this: reply quotes the selection under it.
-  useImperativeHandle(ref, () => ({ layerEl: () => textLayerRef.current?.layerEl() ?? null }), []);
+  // selectionText is what a copy would put on the plain clipboard: the serialized text once it is in
+  // (a drag or key selection is serialized as it ends), until then the layer's own text.
+  useImperativeHandle(ref, () => ({
+    layerEl: () => textLayerRef.current?.layerEl() ?? null,
+    selectionText: () => {
+      const el = textLayerRef.current?.layerEl();
+      if (!el) return '';
+      return copyRef.current?.cachedText() || layerPlainText(window.getSelection(), el);
+    },
+  }), []);
   const [shown, setShown] = useState(() => new Set([0, 1]));
   const tileEls = useRef([]);
   const gen = useRef(0);
@@ -237,6 +247,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
       layerEl: () => textLayerRef.current?.layerEl(),
       serialize: (s, e) => serializeRender(doc.docId, s, e),
     });
+    copyRef.current = ctl;
     // A drag is serialized when it ends, a key-driven selection on key up, and
     // anything else (select all, a script) on a short pause.
     const on = [
@@ -253,6 +264,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     ctl.onSelectionChange();
     return () => {
       ctl.dispose();
+      if (copyRef.current === ctl) copyRef.current = null;
       for (const [type, fn] of on) document.removeEventListener(type, fn, type !== 'copy');
       window.removeEventListener('blur', onBlur);
     };

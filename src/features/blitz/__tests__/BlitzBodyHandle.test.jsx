@@ -6,7 +6,7 @@ const tilesProps = vi.hoisted(() => ({ hold: false }));
 vi.mock('../BlitzTiles', () => ({
   default: forwardRef(function TilesStub(p, ref) {
     const el = useRef(null);
-    useImperativeHandle(ref, () => ({ layerEl: () => el.current }), []);
+    useImperativeHandle(ref, () => ({ layerEl: () => el.current, selectionText: () => 'from the tiles' }), []);
     return <div ref={el} data-testid="layer-stub"><button onClick={() => p.onFailure('render_unavailable')}>fail</button></div>;
   }),
 }));
@@ -25,6 +25,13 @@ describe('BlitzBody handle', () => {
     expect(ref.current.selectionRoot()).toBe(screen.getByTestId('layer-stub'));
   });
 
+  it('selectionText is the tiles\' selection text', async () => {
+    const ref = createRef();
+    render(<BlitzBody ref={ref} {...props} messageKey="k-handle-text" />);
+    await waitFor(() => expect(screen.getByTestId('layer-stub')).toBeTruthy());
+    expect(ref.current.selectionText()).toBe('from the tiles');
+  });
+
   it('selectionRoot is null while held for privacy', async () => {
     tilesProps.hold = true;
     const ref = createRef();
@@ -32,6 +39,7 @@ describe('BlitzBody handle', () => {
     await new Promise(r => setTimeout(r, 0));
     expect(screen.queryByTestId('layer-stub')).toBeNull();
     expect(ref.current.selectionRoot()).toBeNull();
+    expect(ref.current.selectionText()).toBe('');
   });
 
   it('selectionRoot is null after a failure: the plain fallback is not the selection root', async () => {
@@ -40,5 +48,6 @@ describe('BlitzBody handle', () => {
     fireEvent.click(await screen.findByText('fail'));
     await screen.findByTestId('blitz-failure-notice');
     expect(ref.current.selectionRoot()).toBeNull();
+    expect(ref.current.selectionText()).toBe('');
   });
 });

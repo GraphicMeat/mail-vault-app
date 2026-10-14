@@ -64,7 +64,7 @@ import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/ifram
 import { PgpDecryptedBadge, PgpLockedNotice } from './email/PgpStatus';
 import { getEmailColors } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
-import { replySelection } from '../utils/replySelection';
+import { quoteText, replySelection, selectionWithin } from '../utils/replySelection';
 import { registerActiveReply } from '../utils/composeOpener';
 import { AddressText } from './email/AddressText';
 import { ReadDelayProgress } from './ReadDelayProgress';
@@ -165,9 +165,14 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const altBodyRef = useRef(null);
   const selectedReplyHtml = () => {
     const frame = iframeRef.current;
-    return frame?.contentDocument
-      ? replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.())
-      : replySelection(altBodyRef.current?.selectionRoot?.() ?? plainBodyRef.current, document.getSelection());
+    if (frame?.contentDocument) return replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.());
+    // An alternative body may hand out its own text for the selection (Blitz:
+    // the copy text, whose <br> newlines its layer draws as spaces).
+    const alt = altBodyRef.current;
+    const altRoot = alt?.selectionRoot?.();
+    const selection = document.getSelection();
+    const own = altRoot && alt.selectionText && selectionWithin(altRoot, selection) ? alt.selectionText() : '';
+    return own ? quoteText(own) : replySelection(altRoot ?? plainBodyRef.current, selection);
   };
   // While the index snippet stands in for the body (`_bodyLoading`), a reply
   // or forward resolves the real body first (replyTarget), the way the row

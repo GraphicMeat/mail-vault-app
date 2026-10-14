@@ -231,8 +231,11 @@ function Root({ group, right, measure }) {
         // A <br> is "\n" in the layout text and a tab would expand to a tab
         // stop under white-space:pre while the canvas measures it as a space:
         // both are drawn as a space, same byte and UTF-16 length, offsets
-        // unchanged (copy goes through serialize, which keeps the real characters).
-        return <span key={r.start} dir="auto" data-node={r.node} data-start={r.start} style={style}>{r.text.replace(/[\n\r\t]/g, ' ')}</span>;
+        // unchanged. Copy goes through serialize, which keeps the real
+        // characters; `data-raw` keeps them for the layer's own text
+        // (layerPlainText: the copy and reply floor).
+        const shown = r.text.replace(/[\n\r\t]/g, ' ');
+        return <span key={r.start} dir="auto" data-node={r.node} data-start={r.start} data-raw={shown === r.text ? undefined : r.text} style={style}>{shown}</span>;
       });
       nodes.push(<span key={`l${first}`} className="mv-blitz-line">{spans}</span>);
       if (li + 1 < lines.length) {

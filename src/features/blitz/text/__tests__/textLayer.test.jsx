@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 vi.mock('../../service', () => ({ textRunsRender: vi.fn() }));
 import { textRunsRender } from '../../service';
 import TextLayer, { groupSegments, stackLines } from '../TextLayer';
+import { layerPlainText } from '../selection';
 import { utf8Length, utf16ToUtf8, graphemeCount, fitRun, createMeasure } from '../textMetrics';
 
 const meta = { cssWidth: 600, cssHeight: 1100, tileCssHeight: 512, tileCount: 3, links: [], folds: [] };
@@ -276,6 +277,22 @@ describe('TextLayer', () => {
     expect(roots.map(r => r.querySelectorAll('.mv-blitz-line').length)).toEqual([1, 1, 1]);
     const spans = [...document.querySelectorAll('span[data-node]')];
     expect(spans.map(x => [x.dataset.node, x.dataset.start])).toEqual([['5', '0'], ['5', '4'], ['5', '8']]);
+  });
+
+  it('a hard newline drawn as a space stays in the selected layer text (the copy and reply floor)', async () => {
+    textRunsRender.mockResolvedValue({ runs: [
+      run({ text: 'Brline one\n', w: 110, start: 0, seg: 0 }),
+      run({ text: 'Brline two\n', w: 110, y: 30, start: 11, seg: 11 }),
+      run({ text: 'Brline three', w: 120, y: 60, start: 22, seg: 22 }),
+    ] });
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('span[data-node]')).toHaveLength(3));
+    const spans = [...document.querySelectorAll('span[data-node]')];
+    expect(spans.map(s => s.textContent)).toEqual(['Brline one ', 'Brline two ', 'Brline three']);
+    const r = document.createRange(); r.setStart(spans[0].firstChild, 0); r.setEnd(spans[2].firstChild, 12);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    expect(layerPlainText(window.getSelection(), document.querySelector('.mv-blitz-text'))).toBe('Brline one\nBrline two\nBrline three');
+    window.getSelection().removeAllRanges();
   });
 
   it('owners are followed one step from a shown tile, not chained through owner tiles', async () => {

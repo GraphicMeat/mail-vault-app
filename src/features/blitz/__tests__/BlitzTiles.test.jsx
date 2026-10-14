@@ -382,6 +382,54 @@ describe('BlitzTiles', () => {
     expect(ref.current.layerEl()).toBe(layer);
   });
 
+  describe('selectionText (what a reply quotes)', () => {
+    const lines = [
+      { x: 0, y: 0, w: 50, h: 20, text: 'one\n', fontPx: 16, node: 1, start: 0, seg: 0 },
+      { x: 0, y: 20, w: 50, h: 20, text: 'two', fontPx: 16, node: 1, start: 4, seg: 4 },
+    ];
+    const selectLines = () => {
+      const [a, b] = document.querySelectorAll('span[data-node]');
+      const r = document.createRange(); r.setStart(a.firstChild, 0); r.setEnd(b.firstChild, 3);
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    };
+    afterEach(() => window.getSelection().removeAllRanges());
+
+    it('is the serialized plain text of the current selection once it has landed', async () => {
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+      textRunsRender.mockResolvedValue({ runs: lines });
+      serializeRender.mockResolvedValue({ html: 'one<br>two', text: 'serialized one\ntwo' });
+      const ref = React.createRef();
+      render(tiles({ ref }));
+      await screen.findByText('two');
+      selectLines();
+      document.dispatchEvent(new Event('selectionchange'));
+      await waitFor(() => expect(serializeRender).toHaveBeenCalledWith(5, { node: 1, offset: 0 }, { node: 1, offset: 7 }));
+      await waitFor(() => expect(ref.current.selectionText()).toBe('serialized one\ntwo'));
+    });
+
+    it('before serialize has landed it is the layer text, with its hard newlines', async () => {
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+      textRunsRender.mockResolvedValue({ runs: lines });
+      serializeRender.mockImplementation(() => new Promise(() => {}));
+      const ref = React.createRef();
+      render(tiles({ ref }));
+      await screen.findByText('two');
+      selectLines();
+      expect(ref.current.selectionText()).toBe('one\ntwo');
+    });
+
+    it('is empty with no selection in the body, and before a doc opens', async () => {
+      const ref = React.createRef();
+      let resolve;
+      openRender.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+      render(tiles({ ref }));
+      expect(ref.current.selectionText()).toBe('');
+      await act(async () => resolve({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) }));
+      window.getSelection().removeAllRanges();
+      expect(ref.current.selectionText()).toBe('');
+    });
+  });
+
   describe('reply quote from the text layer', () => {
     const runs = (over = {}) => [
       { x: 0, y: 0, w: 50, h: 20, text: 'Hello ', fontPx: 16, node: 1, start: 0, ...over },
