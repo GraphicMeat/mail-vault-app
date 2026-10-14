@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { t } from '../../../i18n/index.js';
+import { useT } from '../../../i18n/index.js';
 
 // The iframe's right-click menu (EmailViewer.jsx handleContextMenu), as an
 // app element: same items, labels, order, look and behaviour. It is fixed at
@@ -11,6 +11,7 @@ import { t } from '../../../i18n/index.js';
 // `inBody(target)` is true for a press in the body: that press is left to the
 // body's click handler, which closes the menu and swallows the click.
 export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll, onClose, clampTo, inBody }) {
+  const t = useT();
   const ref = useRef(null);
   const [active, setActive] = useState(-1); // the keyboard / hover highlight
 
