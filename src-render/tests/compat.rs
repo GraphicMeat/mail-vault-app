@@ -16,14 +16,24 @@ fn within<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'st
     rx.recv_timeout(limit).unwrap_or_else(|_| panic!("did not finish within {limit:?}"))
 }
 
+/// ~`n` x 22 bytes of the phrase in body text, and as much again inside one style attribute.
+fn phrase_mail(n: usize) -> String {
+    let text = "word-break:break-word ".repeat(n);
+    format!(r#"<p>{text}</p><div style="{text}">x</div>"#)
+}
+
 #[test]
 fn a_mail_full_of_the_phrase_is_rewritten_in_linear_time() {
-    // ~1.1 MB of the phrase in body text, and as much again inside one style attribute.
-    let text = "word-break:break-word ".repeat(50_000);
-    let html = format!(r#"<p>{text}</p><div style="{text}">x</div>"#);
-    let (out, took) = within(Duration::from_secs(30), move || rewrite(&html).len());
+    // 2.2 MB took 24.6 s when every match rescanned the text before it. Linear: four times
+    // the input takes about four times as long (quadratic would be sixteen), and the big one
+    // stays far inside the worker's open budget even in a debug build.
+    let (small, big) = (phrase_mail(12_500), phrase_mail(50_000));
+    let (_, t_small) = within(Duration::from_secs(30), move || rewrite(&small).len());
+    let (out, t_big) = within(Duration::from_secs(30), move || rewrite(&big).len());
+    eprintln!("0.55 MB {t_small:?}, 2.2 MB {t_big:?}");
     assert!(out > 0);
-    assert!(took < Duration::from_secs(1), "took {took:?}");
+    assert!(t_big < Duration::from_secs(5), "2.2 MB took {t_big:?}");
+    assert!(t_big < t_small * 10 + Duration::from_millis(200), "0.55 MB {t_small:?}, 2.2 MB {t_big:?}");
 }
 
 #[test]
