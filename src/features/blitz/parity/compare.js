@@ -122,10 +122,23 @@ export function isApproved(entry) {
     && /^\d{4}-\d{2}-\d{2}$/.test(entry.approvedOn || '');
 }
 
+// A parity id path (parityIds.js): `tag[n]` segments joined by '/', n from 1. A tag is
+// an element's localName, which in mail includes Office prefixes such as `o:p`.
+const SEGMENT = '[a-z][a-z0-9:._-]*\\[[1-9]\\d*\\]';
+const PARITY_ID = new RegExp(`^${SEGMENT}(/${SEGMENT})*$`);
+
+/** An entry names one element (or `*`) and one field (or `*`), never both as `*`:
+ * that would whitelist a whole fixture. */
+export function isValidKnownDiff(entry) {
+  if (!entry || typeof entry.mvId !== 'string' || typeof entry.field !== 'string') return false;
+  if (entry.mvId === '*' && entry.field === '*') return false;
+  return entry.mvId === '*' || PARITY_ID.test(entry.mvId);
+}
+
 const any = (want, got) => want === '*' || want === got;
 
 export function matchKnownDiff(knownDiffs, { fixture, mode, width, mvId, field }) {
-  return (knownDiffs?.entries || []).find((e) => isApproved(e)
+  return (knownDiffs?.entries || []).find((e) => isApproved(e) && isValidKnownDiff(e)
     && e.fixture === fixture && any(e.mode, mode) && any(e.width, width)
     && any(e.mvId, mvId) && any(e.field, field)) || null;
 }
@@ -137,5 +150,6 @@ export function compareFixture({ fixture, mode, width, iframe, blitz, knownDiffs
     return k ? { ...d, known: k.reason } : d;
   });
   const failing = annotated.filter((d) => !d.known);
-  return { fixture, mode, width, compared, passed: failing.length === 0, failing, known: annotated.filter((d) => d.known) };
+  // A case that compared nothing (no ids on either side) proves nothing: it fails.
+  return { fixture, mode, width, compared, passed: compared > 0 && failing.length === 0, failing, known: annotated.filter((d) => d.known) };
 }

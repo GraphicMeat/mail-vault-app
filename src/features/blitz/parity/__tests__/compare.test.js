@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BORDER_WIDTH_FIELDS, parseCssColor, parsePx, parseWeight, clusterLineCount, compareElements, compareFixture, isApproved } from '../compare';
+import { BORDER_WIDTH_FIELDS, parseCssColor, parsePx, parseWeight, clusterLineCount, compareElements, compareFixture, isApproved, isValidKnownDiff, matchKnownDiff } from '../compare';
 
 const el = (over = {}) => ({
   mvId: 'p[1]', tag: 'p', rendered: true, rect: { x: 0, y: 0, w: 100, h: 20 },
@@ -89,5 +89,25 @@ describe('known diffs', () => {
     expect(r.known.map((d) => d.known)).toEqual(['canvas parse']);
     const r2 = compareFixture({ fixture: 'ours/x', mode: 'light', width: 'wide', iframe: [el()], blitz: [blitz({ color: [9, 9, 9, 1] })], knownDiffs: { version: 1, entries: [entry] } });
     expect(r2.passed).toBe(false);
+  });
+  it('an entry that wildcards both the element and the field is invalid and matches nothing', () => {
+    const all = { ...entry, mvId: '*', field: '*' };
+    expect(isValidKnownDiff(all)).toBe(false);
+    expect(matchKnownDiff({ version: 1, entries: [all] }, { fixture: 'ours/x', mode: 'dark', width: 'wide', mvId: 'p[1]', field: 'color' })).toBe(null);
+    expect(isValidKnownDiff({ ...entry, mvId: '*' })).toBe(true);
+    expect(isValidKnownDiff({ ...entry, field: '*' })).toBe(true);
+  });
+  it('an entry needs a parity id path (or *) as mvId', () => {
+    expect(isValidKnownDiff(entry)).toBe(true);
+    expect(isValidKnownDiff({ ...entry, mvId: 'table[1]/tr[2]/td[1]' })).toBe(true);
+    for (const mvId of [undefined, '', 'p1', 'p[1]/', ' p[1]', 'p[0]']) expect(isValidKnownDiff({ ...entry, mvId })).toBe(false);
+  });
+});
+
+describe('compareFixture', () => {
+  it('never passes a case that compared nothing', () => {
+    const r = compareFixture({ fixture: 'ours/x', mode: 'light', width: 'wide', iframe: [], blitz: [], knownDiffs: { version: 1, entries: [] } });
+    expect(r.compared).toBe(0);
+    expect(r.passed).toBe(false);
   });
 });

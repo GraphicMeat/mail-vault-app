@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
-import { isApproved, COLOR_FIELDS, BORDER_WIDTH_FIELDS } from '../compare';
+import { isApproved, isValidKnownDiff, COLOR_FIELDS, BORDER_WIDTH_FIELDS } from '../compare';
 
 const CORPUS = new URL('../../../../../tests/fixtures/blitz-corpus/', import.meta.url);
 const read = (p) => readFileSync(new URL(p, CORPUS), 'utf8');
@@ -40,6 +40,7 @@ describe('blitz corpus', () => {
       expect(['light', 'dark', '*']).toContain(e.mode);
       expect(['wide', 375, '*']).toContain(e.width);
       expect(FIELDS.has(e.field)).toBe(true);
+      expect(isValidKnownDiff(e)).toBe(true);
       expect(isApproved(e)).toBe(true);
     }
   });
