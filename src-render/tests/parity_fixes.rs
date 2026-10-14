@@ -559,3 +559,15 @@ fn an_inline_block_with_negative_margins_fits_in_the_room_they_give() {
     assert!(near(w("cell"), 300.0), "cell {}", w("cell"));
     assert!(near(w("d"), 282.0), "cell content 280 + 2: {}", w("d"));
 }
+
+/// The iframe's line count skips a text node `trim()` empties, and JS `trim` strips a lone
+/// no-break space. blitz-dom keeps a nbsp from collapsing by wrapping it in word joiners
+/// (U+2060), which Rust's `trim` leaves: a `<td>&nbsp;</td>` spacer added a line to its row
+/// (leemunroe: 14 lines in the table, the iframe 13).
+#[test]
+fn a_nbsp_spacer_cell_adds_no_line_to_its_row() {
+    let els = inspect(&fx("nbsp-at-text-edges.html"));
+    assert_eq!(get(&els, "spacer").line_count, None);
+    assert_eq!(get(&els, "word").line_count, Some(1));
+    assert_eq!(get(&els, "row").line_count, Some(1));
+}

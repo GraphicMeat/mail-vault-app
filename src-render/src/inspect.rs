@@ -102,9 +102,12 @@ fn line_spans(doc: &BaseDocument, el: NodeId) -> Vec<(f64, f64)> {
             for item in line.items() {
                 if let PositionedLayoutItem::GlyphRun(run) = item {
                     // The harness skips whitespace-only text nodes and rects without height
-                    // (cerberus sets `font-size: 0` on the cell holding its columns).
+                    // (cerberus sets `font-size: 0` on the cell holding its columns). A no-break
+                    // space blitz-dom keeps from collapsing is wrapped in word joiners: JS `trim`
+                    // sees the bare nbsp (whitespace) in the iframe's text node.
                     let text = inline.text.get(run.run().text_range()).unwrap_or("");
-                    if is_descendant_or_self(doc, run.style().brush.id, el) && !text.trim().is_empty() {
+                    let blank = text.chars().all(|c| c.is_whitespace() || c == '\u{2060}');
+                    if is_descendant_or_self(doc, run.style().brush.id, el) && !blank {
                         // A text fragment's rect, as `Range.getClientRects` gives it: the
                         // rounded ascent and descent around the baseline, not the line box.
                         let m = run.run().metrics();
