@@ -5,10 +5,13 @@
 // fold-paint gate a debug build misses on every run (a known, permanent red
 // that would hide the reds that rotate between battery runs), and it downloads
 // Lora and Merriweather from fonts.googleapis.com, which that suite's "no real
-// credentials or network" promise rules out. This conf selects it by name.
+// credentials or network" promise rules out. The shared conf's `exclude` keeps
+// `--suite connected-ci` and the full run off it; this conf clears that list
+// and selects the spec by name.
 //
-// Runs on the Mac mini only, one app instance at a time: `npm run test:e2e:blitz`.
-// Matches no suite glob, so CI never selects it.
+// Runs on the Mac mini only, one app instance at a time:
+//   npm run build:e2e && npx wdio run wdio.blitz.conf.js
+// CI never selects it.
 import { config as base } from './wdio.conf.js';
 
 export const config = {
