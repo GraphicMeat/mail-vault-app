@@ -32,6 +32,8 @@ const TextLayer = forwardRef(function TextLayer({ docId, rev, meta, shownTiles, 
 
   // Runs of another doc are never shown, not even for the one render before the effect below runs.
   const runsByTile = store.docId === docId ? store.map : null;
+  const held = useRef(runsByTile);
+  held.current = runsByTile;
 
   useEffect(() => {
     requested.current = new Map();
@@ -67,9 +69,13 @@ const TextLayer = forwardRef(function TextLayer({ docId, rev, meta, shownTiles, 
     return go(index);
   }, [docId, rev]);
 
+  // A new rev asks again for every tile that holds runs, not only the shown
+  // ones: a tile loaded as an owner (or by select-all) would otherwise keep a
+  // root at its old place, and draw it twice once it moved to a shown tile.
   useEffect(() => {
     if (docId == null) return;
     for (const i of shownTiles) if (i < meta.tileCount) load(i);
+    for (const i of held.current?.keys() ?? []) if (i < meta.tileCount) load(i);
   }, [key, shownTiles, meta.tileCount, load, docId]);
 
   useImperativeHandle(ref, () => ({

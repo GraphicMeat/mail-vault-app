@@ -189,6 +189,23 @@ describe('TextLayer', () => {
     expect(document.querySelector('[data-tile="0"] span[data-node]').textContent).toBe('t0');
   });
 
+  it('a new rev asks again for every tile it holds, not only the shown ones: a root that moved tile is never drawn twice', async () => {
+    let rev = 1;
+    // Rev 1: the paragraph's first line is in tile 1, which only tile 2's owners name. Rev 2: it moved to tile 2.
+    textRunsRender.mockImplementation(async (_d, i) => {
+      if (i === 1) return { runs: rev === 1 ? [run({ node: 9, y: 500, text: 'para' })] : [] };
+      if (i === 2) return rev === 1 ? { runs: [], owners: [1] } : { runs: [run({ node: 9, y: 520, text: 'para' })] };
+      return { runs: [] };
+    });
+    const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([2])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('span[data-node="9"]')).toHaveLength(1));
+    rev = 2;
+    rerender(<TextLayer docId={1} rev={2} meta={meta} shownTiles={new Set([2])} measure={measure} />);
+    await waitFor(() => expect(document.querySelector('[data-tile="2"] span[data-node="9"]')).not.toBeNull());
+    await waitFor(() => expect(textRunsRender.mock.calls.filter(c => c[1] === 1)).toHaveLength(2));
+    await waitFor(() => expect(document.querySelectorAll('span[data-node="9"]')).toHaveLength(1));
+  });
+
   it('a late reply for an older rev is dropped', async () => {
     let resolveOld;
     textRunsRender.mockImplementationOnce(() => new Promise(r => { resolveOld = r; })).mockResolvedValue({ runs: [run({ text: 'new' })] });
