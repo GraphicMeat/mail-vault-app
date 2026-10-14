@@ -116,3 +116,16 @@ fn interleaved_variable_definitions_do_not_make_the_chain_walk_quadratic() {
     let (light, dark) = open_times(html, Duration::from_secs(120));
     assert_dark_is_linear(light, dark);
 }
+
+#[test]
+fn a_dense_variable_graph_does_not_make_the_walk_pay_per_edge() {
+    // 550 variables that each name the same 550 targets: a walk visits ~1100 names but pops
+    // ~300k edges. Each interleaved pair adds a reference, so no result is reusable.
+    let targets: String = (0..550).map(|i| format!("var(--t{i}) ")).collect();
+    let mids: String = (0..550).map(|i| format!("--m{i}:{targets};")).collect();
+    let all: String = (0..550).map(|i| format!("var(--m{i}) ")).collect();
+    let rules: String = (0..1500).map(|i| format!(".a{i}{{background:var(--r)}}.b{i}{{--d{i}:var(--z)}}")).collect();
+    let html = format!("<style>:root{{{mids}--r:{all};}}{rules}</style><p>x</p>");
+    let (light, dark) = open_times(html, Duration::from_secs(120));
+    assert_dark_is_linear(light, dark);
+}

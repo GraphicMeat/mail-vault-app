@@ -42,7 +42,7 @@ const MAX_NESTING: usize = 64;
 /// `rgb(var(--a), var(--a), var(--a))` chains grow as 3^depth.
 const MAX_INSERT_CALLS: usize = 2048;
 const MAX_INSERT_LEN: usize = 64 * 1024;
-/// Names `findVarRef` / `iterateVarRefs` may visit in one match pass. A chain of
+/// Names and edges `findVarRef` / `iterateVarRefs` may pop in one match pass. A chain of
 /// thousands of variables used by thousands of rules is otherwise walked once per
 /// rule; past the budget a variable's type is simply not inferred from its refs.
 const MAX_REF_VISITS: usize = 1 << 20;
@@ -340,18 +340,19 @@ impl VariablesStore {
         left > 0
     }
 
-    /// `findVarRef`: depth first, each name visited once, first hit wins.
+    /// `findVarRef`: depth first, each name visited once, first hit wins. Every pop costs a visit.
     /// Iterative: a mail can chain thousands of variables. The outer None means the
     /// pass's visit budget ran out before an answer.
     fn find_var_ref(&self, var_name: &str, found: impl Fn(&Self, &str) -> bool) -> Option<Option<String>> {
         let mut seen: HashSet<String> = HashSet::new();
         let mut todo = vec![var_name.to_string()];
         while let Some(name) = todo.pop() {
-            if !seen.insert(name.clone()) {
-                continue;
-            }
+            // Every pop is charged, a revisit too: the edges are the work, not the names.
             if !self.visit() {
                 return None;
+            }
+            if !seen.insert(name.clone()) {
+                continue;
             }
             if found(self, &name) {
                 return Some(Some(name));
@@ -370,11 +371,11 @@ impl VariablesStore {
         let mut seen: HashSet<String> = HashSet::new();
         let mut todo = vec![var_name.to_string()];
         while let Some(name) = todo.pop() {
-            if !seen.insert(name.clone()) {
-                continue;
-            }
             if !self.visit() {
                 return None;
+            }
+            if !seen.insert(name.clone()) {
+                continue;
             }
             if let Some(refs) = self.var_refs.get(&name) {
                 todo.extend(refs.order.values().rev().cloned());
