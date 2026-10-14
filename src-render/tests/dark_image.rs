@@ -287,3 +287,21 @@ fn a_document_cannot_emit_more_than_its_budget_of_filtered_images() {
     assert!(emitted <= 16 * 1024 * 1024, "emitted {emitted} bytes of filtered images");
     assert!(kept > 0, "past the budget an image keeps its url");
 }
+
+#[test]
+fn one_url_used_thousands_of_times_is_charged_for_every_use() {
+    // A cache hit still writes the filtered image into the sheet once more.
+    let mut c = cx();
+    let url = data_url(&noisy_light(7));
+    let mut emitted = 0usize;
+    let mut kept = 0;
+    for _ in 0..5000 {
+        match bg_image_value(&url, &mut c) {
+            Some(v) => emitted += v.len(),
+            None => kept += 1,
+        }
+    }
+    eprintln!("emitted {emitted} bytes, kept {kept} urls");
+    assert!(emitted <= 16 * 1024 * 1024, "emitted {emitted} bytes of filtered images");
+    assert!(kept > 0, "past the budget a use keeps its url");
+}

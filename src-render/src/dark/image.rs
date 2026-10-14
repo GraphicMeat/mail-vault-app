@@ -185,7 +185,16 @@ pub fn bg_image_value(url: &str, cx: &mut DarkCx) -> Option<String> {
         return None;
     }
     if let Some(e) = cx.images.entries.get(url) {
-        return e.value.clone();
+        // The cached value is written into the sheet again by this use, so it is charged again.
+        let v = e.value.as_ref()?;
+        if v == "none" {
+            return Some(v.clone());
+        }
+        if v.len() > MAX_DOC_OUTPUT_BYTES - cx.images.emitted_bytes.min(MAX_DOC_OUTPUT_BYTES) {
+            return None;
+        }
+        cx.images.emitted_bytes += v.len();
+        return Some(v.clone());
     }
     let img = decode_within(url, &mut cx.images.decoded_pixels);
     let details = img.as_ref().map(analyze);
