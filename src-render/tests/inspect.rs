@@ -133,3 +133,17 @@ fn table_rows_and_row_groups_report_the_union_of_their_cells() {
     near((tf.x, tf.y, tf.w, tf.h), (fr.x, fr.y, fr.w, fr.h), "tfoot = its only tr");
     assert!(tb.y > th.y, "body below head");
 }
+
+#[test]
+fn inline_after_a_block_sibling_reports_its_lines() {
+    // `<a>` follows a block sibling, so it sits in an anonymous inline root that
+    // is not a DOM descendant of its parent. The same holds for the text the
+    // parent holds after the block.
+    let html = r##"<body style="margin:0;font:16px/20px sans-serif"><div data-mv-id="d"><p style="margin:0">first</p><a data-mv-id="a" href="#">link</a> tail</div>
+<div data-mv-id="e"><p style="margin:0">first</p>loose <b data-mv-id="b">bold</b></div></body>"##;
+    let els = RenderDoc::open(html, RenderOptions { css_width: 400, scale: 1.0, ..Default::default() }, None).unwrap().inspect();
+    assert_eq!(by_id(&els, "a").line_count, Some(1), "anonymous inline");
+    assert_eq!(by_id(&els, "b").line_count, Some(1), "inline after loose text");
+    assert_eq!(by_id(&els, "d").line_count, Some(2), "block parent: its p line plus the anonymous line");
+    assert_eq!(by_id(&els, "e").line_count, Some(2));
+}

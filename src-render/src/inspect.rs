@@ -78,16 +78,16 @@ fn has_visible_text(doc: &BaseDocument, id: NodeId) -> bool {
 }
 
 /// Absolute vertical spans of the line boxes that hold a glyph run of `el`'s
-/// own or descendant text. Looks in every inline root that is `el`, lies
-/// inside it, or contains it. (Same origin maths as blitz-dom's
+/// own or descendant text. Looks in every inline root and keeps the lines
+/// whose runs belong to `el`. No ancestry prefilter on the root: an inline
+/// that follows a block sibling lives in an anonymous inline root that is not
+/// a DOM ancestor or descendant of it, and the run's brush id says which
+/// element a run belongs to anyway. (Same origin maths as blitz-dom's
 /// `inline_fragment_rects`.)
 fn line_spans(doc: &BaseDocument, el: NodeId) -> Vec<(f64, f64)> {
     let mut spans = Vec::new();
-    for (root_id, root) in doc.tree().iter() {
+    for (_, root) in doc.tree().iter() {
         let Some(inline) = root.element_data().and_then(|e| e.inline_layout_data.as_ref()) else { continue };
-        if !(is_descendant_or_self(doc, root_id, el) || is_descendant_or_self(doc, el, root_id)) {
-            continue;
-        }
         let layout = &inline.layout;
         let scale = layout.scale() as f64;
         let fl = root.final_layout();
