@@ -467,3 +467,14 @@ fn font_face_and_size_attributes_map_to_css() {
     assert_eq!(w("size5"), w("xl"), "size=5 is x-large");
     assert_eq!(w("plus1"), w("lg"), "size=+1 is 4, large");
 }
+
+/// The harness counts lines over the text nodes that have something in them and a rect with a
+/// height. A cell with `font-size: 0` (cerberus uses it to close the gaps between its inline-block
+/// columns) holds only whitespace of its own, in a font with no height; those runs are not lines
+/// (cerberus hybrid, wide: tr 5 lines in the iframe, 6 here).
+#[test]
+fn whitespace_in_a_font_size_zero_cell_adds_no_line() {
+    let els = inspect_at(&fx("line-count-font-size-zero.html"), 576);
+    let lines = |id: &str| get(&els, id).line_count;
+    assert_eq!(lines("cell"), Some(2 + lines("p").unwrap()), "two lines in the first column plus the paragraph's");
+}

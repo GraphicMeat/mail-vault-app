@@ -101,14 +101,17 @@ fn line_spans(doc: &BaseDocument, el: NodeId) -> Vec<(f64, f64)> {
         for line in layout.lines() {
             for item in line.items() {
                 if let PositionedLayoutItem::GlyphRun(run) = item {
-                    if is_descendant_or_self(doc, run.style().brush.id, el) {
+                    // The harness skips whitespace-only text nodes and rects without height
+                    // (cerberus sets `font-size: 0` on the cell holding its columns).
+                    let text = inline.text.get(run.run().text_range()).unwrap_or("");
+                    if is_descendant_or_self(doc, run.style().brush.id, el) && !text.trim().is_empty() {
                         // A text fragment's rect, as `Range.getClientRects` gives it: the
                         // rounded ascent and descent around the baseline, not the line box.
                         let m = run.run().metrics();
-                        spans.push((
-                            origin_y + (run.baseline() - m.ascent.round()) as f64 / scale,
-                            origin_y + (run.baseline() + m.descent.round()) as f64 / scale,
-                        ));
+                        let (top, bottom) = ((run.baseline() - m.ascent.round()) as f64, (run.baseline() + m.descent.round()) as f64);
+                        if bottom > top {
+                            spans.push((origin_y + top / scale, origin_y + bottom / scale));
+                        }
                     }
                 }
             }
