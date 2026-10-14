@@ -59,7 +59,7 @@ pub struct TableContext {
     pub style: taffy::Style<Atom>,
     // MailVault parity fix (plan B): the preferred (specified) width of each column, from
     // the first row, in auto layout. See `TableTreeWrapper::webkit_column_widths`.
-    pub column_prefs: Vec<Option<f32>>,
+    pub column_prefs: Vec<Option<ColumnPref>>,
     pub cells: Vec<TableCell>,
     pub rows: Vec<TableRow>,
     pub computed_grid_info: AtomicRefCell<Option<DetailedGridInfo<Atom>>>,
@@ -86,8 +86,17 @@ pub struct TableCell {
     rowspan: u16,
 }
 
+/// MailVault parity fix (plan B): what the first row's cell asks of its column in auto layout.
+#[derive(Debug, Clone, Copy)]
+pub enum ColumnPref {
+    /// A specified width, border box, in px.
+    Length(f32),
+    /// A percentage of the table's width, as a fraction.
+    Percent(f32),
+}
+
 /// A column's track sizing function and, in auto layout, its specified width.
-type ColumnDef = (TrackSizingFunction, Option<f32>);
+type ColumnDef = (TrackSizingFunction, Option<ColumnPref>);
 
 #[derive(Debug, Clone)]
 pub struct TableRow {
@@ -155,7 +164,7 @@ pub(crate) fn build_table_context(
     }
     column_sizes.resize(col as usize, (style_helpers::auto(), None));
 
-    let column_prefs: Vec<Option<f32>> = column_sizes.iter().map(|(_, pref)| *pref).collect();
+    let column_prefs: Vec<Option<ColumnPref>> = column_sizes.iter().map(|(_, pref)| *pref).collect();
     style.grid_template_columns = column_sizes.into_iter().map(|(dim, _)| dim.into()).collect();
     style.grid_template_rows = (0..row as usize)
         .map(|i| match rows.get(i) {
@@ -296,7 +305,7 @@ fn push_table_cell(
                     // shrinks towards it when the table is narrower than its columns.
                     (
                         style_helpers::minmax(style_helpers::auto(), style_helpers::length(width)),
-                        Some(width),
+                        Some(ColumnPref::Length(width)),
                     )
                 }
             }
@@ -304,7 +313,10 @@ fn push_table_cell(
                 if is_fixed {
                     (style_helpers::percent(style.size.width.value()), None)
                 } else {
-                    (style_helpers::auto(), None)
+                    // MailVault parity fix (plan B): the column's preferred width is that share
+                    // of the table (see `TableTreeWrapper::webkit_column_widths`); taffy gets
+                    // an auto track and its widths are replaced after the first pass.
+                    (style_helpers::auto(), Some(ColumnPref::Percent(style.size.width.value())))
                 }
             }
             taffy::CompactLength::AUTO_TAG => (style_helpers::auto(), None),
@@ -563,7 +575,7 @@ impl TableTreeWrapper<'_> {
         inputs: taffy::tree::LayoutInput,
     ) -> taffy::LayoutOutput {
         let output = taffy::compute_grid_layout(self, node_id, inputs);
-        let Some(widths) = self.webkit_column_widths(output.size.width) else {
+        let Some((widths, table_width)) = self.webkit_column_widths(output.size.width, &inputs) else {
             return output;
         };
         let mut style = self.ctx.style.clone();
@@ -576,7 +588,7 @@ impl TableTreeWrapper<'_> {
             .collect();
         self.style_override = Some(style);
         let mut inputs = inputs;
-        inputs.known_dimensions.width = Some(output.size.width);
+        inputs.known_dimensions.width = Some(table_width);
         let output = taffy::compute_grid_layout(self, node_id, inputs);
         self.style_override = None;
         output
@@ -607,13 +619,20 @@ impl TableTreeWrapper<'_> {
         .width
     }
 
-    /// Column widths when the columns' preferred widths do not fit `table_width`, else
-    /// None. A column prefers its specified width (at least its minimum content), or
-    /// for an auto column its maximum content. The overflow is taken from the auto
-    /// columns first, then from the specified ones (WebKit's AutoTableLayout), each cut
-    /// in proportion to the room it has above its minimum content width. Tables with
+    /// The column widths and the table's border-box width when WebKit's auto table layout
+    /// differs from taffy's, else None. A column prefers its specified width (at least its
+    /// minimum content), a percentage of the table, or for an auto column its maximum content.
+    /// When the preferred widths do not fit, the overflow is taken from the auto columns
+    /// first, then from the specified ones, the percentage ones last (WebKit's
+    /// AutoTableLayout), each cut in proportion to the room it has above its minimum content
+    /// width. A table of auto width whose columns ask for percentages is as wide as the widest
+    /// of them needs (clamped to the room it has), which taffy does not know. Tables with
     /// spanning cells are not handled.
-    fn webkit_column_widths(&mut self, table_width: f32) -> Option<Vec<f32>> {
+    fn webkit_column_widths(
+        &mut self,
+        table_width: f32,
+        inputs: &taffy::tree::LayoutInput,
+    ) -> Option<(Vec<f32>, f32)> {
         let ctx = Arc::clone(&self.ctx);
         let n = ctx.column_prefs.len();
         if ctx.is_fixed
@@ -625,15 +644,14 @@ impl TableTreeWrapper<'_> {
         {
             return None;
         }
+        let has_percent = ctx.column_prefs.iter().any(|p| matches!(p, Some(ColumnPref::Percent(_))));
+        if has_percent && inputs.available_space.width == taffy::AvailableSpace::MinContent {
+            return None;
+        }
         let padding = ctx.style.padding.resolve_or_zero(None, resolve_calc_value);
         let border = ctx.style.border.resolve_or_zero(None, resolve_calc_value);
         let gap = ctx.style.gap.width.resolve_or_zero(None, resolve_calc_value);
-        let available = table_width
-            - padding.left
-            - padding.right
-            - border.left
-            - border.right
-            - gap * (n - 1) as f32;
+        let chrome = padding.left + padding.right + border.left + border.right + gap * (n - 1) as f32;
 
         let mut min = vec![0.0f32; n];
         let mut max = vec![0.0f32; n];
@@ -642,19 +660,91 @@ impl TableTreeWrapper<'_> {
             min[col] = min[col].max(self.cell_content_width(index, taffy::AvailableSpace::MinContent));
             max[col] = max[col].max(self.cell_content_width(index, taffy::AvailableSpace::MaxContent));
         }
+        // Percentages past 100% are scaled back to 100% (WebKit's `percentScaleFactor`).
+        let percent_total: f32 = ctx
+            .column_prefs
+            .iter()
+            .map(|p| if let Some(ColumnPref::Percent(f)) = p { *f } else { 0.0 })
+            .sum();
+        let percent_scale = if percent_total > 1.0 { 1.0 / percent_total } else { 1.0 };
+        let mut table_width = table_width;
+        if has_percent
+            && ctx.style.size.width.tag() == taffy::CompactLength::AUTO_TAG
+            && inputs.known_dimensions.width.is_none()
+        {
+            // The widest the columns ask for (WebKit's computeIntrinsicLogicalWidths): every
+            // column at its preferred width, the auto and length ones also scaled up so that the
+            // percentage ones get their share, and each percentage column's maximum content
+            // at its percentage.
+            let preferred = |i: usize| match ctx.column_prefs[i] {
+                Some(ColumnPref::Length(pref)) => pref.max(min[i]),
+                _ => max[i].max(min[i]),
+            };
+            let all: f32 = (0..n).map(preferred).sum();
+            let rest: f32 = (0..n)
+                .filter(|&i| !matches!(ctx.column_prefs[i], Some(ColumnPref::Percent(_))))
+                .map(preferred)
+                .sum();
+            let mut wanted = all;
+            if percent_total < 1.0 {
+                wanted = wanted.max(rest / (1.0 - percent_total));
+            }
+            for i in 0..n {
+                if let Some(ColumnPref::Percent(f)) = ctx.column_prefs[i] {
+                    if f > 0.0 {
+                        wanted = wanted.max(preferred(i) / (f * percent_scale));
+                    }
+                }
+            }
+            let mut widest = wanted + chrome;
+            if let taffy::AvailableSpace::Definite(room) = inputs.available_space.width {
+                widest = widest.min(room);
+            }
+            let max_width = ctx.style.max_size.width.into_raw();
+            if max_width.tag() == taffy::CompactLength::LENGTH_TAG {
+                widest = widest.min(max_width.value());
+            }
+            table_width = table_width.max(widest);
+        }
+        let available = table_width - chrome;
         let mut width: Vec<f32> = (0..n)
             .map(|i| match ctx.column_prefs[i] {
-                Some(pref) => pref.max(min[i]),
+                Some(ColumnPref::Length(pref)) => pref.max(min[i]),
+                Some(ColumnPref::Percent(f)) => (f * percent_scale * available).max(min[i]),
                 None => max[i].max(min[i]),
             })
             .collect();
         let mut overflow = width.iter().sum::<f32>() - available;
         if overflow <= 0.5 {
-            return None;
+            if !has_percent {
+                return None;
+            }
+            if overflow >= -0.5 {
+                return Some((width, table_width));
+            }
+            // Room left over (percentages under 100%): auto columns take it in proportion to
+            // their maximum content, else every column in proportion to its width.
+            let auto: Vec<usize> = (0..n).filter(|&i| ctx.column_prefs[i].is_none()).collect();
+            let cols: Vec<usize> = if auto.is_empty() { (0..n).collect() } else { auto };
+            let base: f32 = cols.iter().map(|&i| if ctx.column_prefs[i].is_none() { max[i] } else { width[i] }).sum();
+            for &i in &cols {
+                let share = if base > 0.0 {
+                    (if ctx.column_prefs[i].is_none() { max[i] } else { width[i] }) / base
+                } else {
+                    1.0 / cols.len() as f32
+                };
+                width[i] -= overflow * share;
+            }
+            return Some((width, table_width));
         }
-        for specified in [false, true] {
+        // Cut auto columns first, then length ones, then percentage ones.
+        for kind in 0..3 {
             let cols: Vec<usize> = (0..n)
-                .filter(|&i| ctx.column_prefs[i].is_some() == specified)
+                .filter(|&i| match ctx.column_prefs[i] {
+                    None => kind == 0,
+                    Some(ColumnPref::Length(_)) => kind == 1,
+                    Some(ColumnPref::Percent(_)) => kind == 2,
+                })
                 .collect();
             let room: f32 = cols.iter().map(|&i| width[i] - min[i]).sum();
             if room <= 0.0 {
@@ -669,7 +759,7 @@ impl TableTreeWrapper<'_> {
                 break;
             }
         }
-        Some(width)
+        Some((width, table_width))
     }
 }
 

@@ -370,3 +370,19 @@ fn text_content_widths_are_not_rounded_up_to_whole_pixels() {
         assert!((w(id) - iframe).abs() <= 0.25, "{id}: {}, iframe {iframe}", w(id));
     }
 }
+
+/// A cell's percentage `width` in auto table layout is its column's share of the table
+/// (CSS 2 17.5.2.2; WebKit AutoTableLayout): cerberus `th width="33.33%"` / `"66.66%"`
+/// columns of a `table` with `width: auto !important` (the base sheet) in a 508px cell.
+/// Harness iframe (cerberus responsive, wide): th 169.34375 and 338.671875, Blitz 73.5 and
+/// 434.5 (the percentage was ignored and the image column squeezed). The second table is a
+/// shrink-to-fit table with a 50% column: it asks for twice that column's text, so it fills
+/// the 508px and the columns are 254 each (the algorithm's result, not measured).
+#[test]
+fn percentage_columns_take_their_share_of_the_table() {
+    let els = inspect_at(&fx("table-percent-columns.html"), 508);
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    for (id, want) in [("t", 508.0), ("a", 169.34), ("b", 338.67), ("ta", 169.34), ("u", 508.0), ("u1", 254.0), ("u2", 254.0)] {
+        assert!((w(id) - want).abs() <= 1.0, "{id}: {}, want {want}", w(id));
+    }
+}
