@@ -43,6 +43,14 @@ fn cellspacing_sets_border_spacing() {
 }
 
 #[test]
+fn valign_sets_vertical_align() {
+    let els = inspect(&fx("tables-legacy.html"));
+    let top = get(&els, "top").rect.clone().unwrap().y;
+    let bottom = get(&els, "bottom").rect.clone().unwrap().y;
+    assert!(bottom - top > 50.0, "top {top} bottom {bottom}");
+}
+
+#[test]
 fn table_align_center_centres_the_table() {
     let els = inspect(&fx("tables-legacy.html"));
     assert_eq!(get(&els, "centred").rect.clone().unwrap().x, 100.0);
@@ -85,4 +93,40 @@ fn table_bordercolor_colours_the_table_and_is_inherited_by_its_cells() {
     let els = inspect(html);
     assert_eq!(get(&els, "t").border_top_color, Some([51.0, 102.0, 153.0, 1.0]));
     assert_eq!(get(&els, "c").border_left_color, Some([51.0, 102.0, 153.0, 1.0]));
+}
+
+const TALL_ROW: &str = r#"<body style="margin:0;font:14px/20px sans-serif"><table cellspacing="0" cellpadding="0"><tr>
+<td data-mv-id="tall"><div style="width:20px;height:100px"></div></td>
+<td data-mv-id="cell" VALIGN><div data-mv-id="blk" style="width:20px;height:10px"></div></td>
+<td data-mv-id="txt" VALIGN><span data-mv-id="span">t</span></td>
+</tr></table></body>"#;
+
+fn tall_row(valign: &str) -> Vec<InspectedElement> {
+    let attr = if valign.is_empty() { String::new() } else { format!("valign=\"{valign}\"") };
+    inspect(&TALL_ROW.replace("VALIGN", &attr))
+}
+
+#[test]
+fn block_cell_content_follows_valign_inside_a_full_height_cell() {
+    for (valign, dy) in [("top", 0.0), ("", 45.0), ("middle", 45.0), ("bottom", 90.0)] {
+        let els = tall_row(valign);
+        let cell = get(&els, "cell").rect.clone().unwrap();
+        let blk = get(&els, "blk").rect.clone().unwrap();
+        assert_eq!(cell.h, 100.0, "the cell keeps the row height ({valign:?})");
+        assert!((blk.y - cell.y - dy).abs() < 0.5, "{valign:?}: block at {} in a cell at {}", blk.y, cell.y);
+    }
+}
+
+#[test]
+fn text_cell_content_follows_valign_and_the_cell_box_does_not_move() {
+    let top = tall_row("top");
+    let top_dy = get(&top, "span").rect.clone().unwrap().y - get(&top, "txt").rect.clone().unwrap().y;
+    for (valign, share) in [("", 0.5), ("middle", 0.5), ("bottom", 1.0)] {
+        let els = tall_row(valign);
+        let cell = get(&els, "txt").rect.clone().unwrap();
+        let span = get(&els, "span").rect.clone().unwrap();
+        assert_eq!((cell.y, cell.h), (0.0, 100.0), "{valign:?}");
+        let moved = span.y - cell.y - top_dy;
+        assert!((moved - 80.0 * share).abs() < 0.5, "{valign:?}: text moved {moved}");
+    }
 }

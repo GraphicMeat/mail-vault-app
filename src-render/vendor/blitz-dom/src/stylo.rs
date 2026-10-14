@@ -1200,6 +1200,19 @@ impl<'a> TElement for BlitzNode<'a> {
                 }
             }
 
+            if &**name == "valign"
+                && matches!(&**tag, "td" | "th" | "tr" | "tbody" | "thead" | "tfoot")
+            {
+                // MailVault parity fix (plan B): valign maps to vertical-align (the
+                // UA sheet makes cells inherit it from their row and row group).
+                let keyword = value.trim().to_ascii_lowercase();
+                if matches!(keyword.as_str(), "top" | "middle" | "bottom" | "baseline") {
+                    for decl in hint_declarations(&format!("vertical-align:{keyword}")) {
+                        push_style(decl);
+                    }
+                }
+            }
+
             if *name == local_name!("hidden") {
                 use style::values::specified::Display;
                 push_style(PropertyDeclaration::Display(Display::None));

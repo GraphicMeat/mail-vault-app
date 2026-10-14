@@ -335,6 +335,7 @@ impl BaseDocument {
                     let mut table_wrapper = TableTreeWrapper {
                         doc: self,
                         ctx: context,
+                        pending_inline_shift: None,
                     };
                     let mut output = compute_grid_layout(&mut table_wrapper, node_id, inputs);
 

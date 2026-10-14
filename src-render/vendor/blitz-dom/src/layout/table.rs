@@ -22,6 +22,33 @@ use super::resolve_calc_value;
 pub struct TableTreeWrapper<'doc> {
     pub(crate) doc: &'doc mut BaseDocument,
     pub(crate) ctx: Arc<TableContext>,
+    // MailVault parity fix (plan B): (cell index, px) a text-only cell's content was
+    // pushed down by vertical-align. Taffy writes the cell's final layout right
+    // after laying it out, so the shift is added to that layout's padding-top in
+    // `set_unrounded_layout` (paint and inspect start the text at padding + border).
+    pub(crate) pending_inline_shift: Option<(usize, f32)>,
+}
+
+// MailVault parity fix (plan B): how far down the spare room of a table cell its
+// content sits (CSS 2 `vertical-align` on a cell): 0 top/baseline, 0.5 middle, 1 bottom.
+// In stylo `vertical-align` is a shorthand: middle is `alignment-baseline`, top,
+// center and bottom are `baseline-shift` keywords. Baseline alignment across a row
+// is not implemented; it is laid out as top.
+fn cell_vertical_align_factor(node: &crate::node::Node) -> f32 {
+    use style::values::computed::{AlignmentBaseline, BaselineShift};
+    use style::values::generics::box_::BaselineShiftKeyword;
+    let Some(style) = node.primary_styles() else {
+        return 0.0;
+    };
+    match style.clone_baseline_shift() {
+        BaselineShift::Keyword(BaselineShiftKeyword::Bottom) => 1.0,
+        BaselineShift::Keyword(BaselineShiftKeyword::Center) => 0.5,
+        BaselineShift::Keyword(_) => 0.0,
+        BaselineShift::Length(_) => match style.clone_alignment_baseline() {
+            AlignmentBaseline::Middle => 0.5,
+            _ => 0.0,
+        },
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -405,8 +432,18 @@ impl taffy::LayoutPartialTree for TableTreeWrapper<'_> {
     }
 
     fn set_unrounded_layout(&mut self, node_id: taffy::NodeId, layout: &taffy::Layout) {
-        let node_id = crate::taffy_node_id(self.ctx.cells[usize::from(node_id)].node_id);
-        self.doc.set_unrounded_layout(node_id, layout)
+        let index = usize::from(node_id);
+        let node_id = crate::taffy_node_id(self.ctx.cells[index].node_id);
+        match self.pending_inline_shift.take() {
+            Some((cell, shift)) if cell == index => {
+                // MailVault parity fix (plan B): move the text of the cell down by
+                // vertical-align (see `pending_inline_shift`).
+                let mut layout = *layout;
+                layout.padding.top += shift;
+                self.doc.set_unrounded_layout(node_id, &layout)
+            }
+            _ => self.doc.set_unrounded_layout(node_id, layout),
+        }
     }
 
     fn compute_child_layout(
@@ -414,8 +451,60 @@ impl taffy::LayoutPartialTree for TableTreeWrapper<'_> {
         node_id: taffy::NodeId,
         inputs: taffy::tree::LayoutInput,
     ) -> taffy::LayoutOutput {
-        let cell = &self.ctx.cells[usize::from(node_id)];
-        let node_id = crate::taffy_node_id(cell.node_id);
+        let index = usize::from(node_id);
+        let cell = &self.ctx.cells[index];
+        let dom_id = cell.node_id;
+        let node_id = crate::taffy_node_id(dom_id);
+
+        // MailVault parity fix (plan B): vertical-align on a table cell. The final
+        // layout pass gives the cell its full row height; the content then moves down
+        // by a share of the room the content leaves. The cell box itself stays put,
+        // so backgrounds and borders still fill the row.
+        if inputs.run_mode == taffy::RunMode::PerformLayout {
+            if let Some(cell_height) = inputs.known_dimensions.height {
+                let factor = cell_vertical_align_factor(&self.doc.nodes[dom_id]);
+                if factor > 0.0 {
+                    let natural = self
+                        .doc
+                        .compute_child_layout(
+                            node_id,
+                            taffy::tree::LayoutInput {
+                                run_mode: taffy::RunMode::ComputeSize,
+                                sizing_mode: taffy::SizingMode::ContentSize,
+                                axis: taffy::RequestedAxis::Vertical,
+                                known_dimensions: taffy::Size {
+                                    width: inputs.known_dimensions.width,
+                                    height: None,
+                                },
+                                ..inputs
+                            },
+                        )
+                        .size
+                        .height;
+                    let shift = ((cell_height - natural) * factor).max(0.0);
+                    // Not through the layout cache: a cache hit would skip writing the
+                    // children, and their positions must start from the unshifted ones.
+                    let output = self.doc.compute_child_layout_internal(node_id, inputs, None);
+                    if shift > 0.0 {
+                        if self.doc.nodes[dom_id].flags.is_inline_root() {
+                            self.pending_inline_shift = Some((index, shift));
+                        } else {
+                            let children: Vec<NodeId> = self.doc.nodes[dom_id]
+                                .layout_children
+                                .borrow()
+                                .as_ref()
+                                .map(|children| children.iter().copied().collect())
+                                .unwrap_or_default();
+                            for child in children {
+                                self.doc.nodes[child].unrounded_layout_mut().location.y += shift;
+                            }
+                        }
+                    }
+                    return output;
+                }
+            }
+        }
+
         self.doc.compute_child_layout(node_id, inputs)
     }
 }
