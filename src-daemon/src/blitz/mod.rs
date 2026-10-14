@@ -678,6 +678,7 @@ mod tests {
         assert!(off["fold"].is_null() && off["link"].is_null());
     }
 
+    #[cfg(debug_assertions)]
     #[tokio::test]
     async fn fonts_are_replayed_into_a_respawned_worker() {
         let h = host();

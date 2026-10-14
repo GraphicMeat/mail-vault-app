@@ -35,6 +35,14 @@ pub(crate) fn validate_open(p: &Value) -> Result<Value, String> {
     Ok(json!({"html": html, "cssWidth": css_width, "scale": scale, "allowRemote": allow_remote, "theme": p["theme"].clone()}))
 }
 
+/// `render.fold` params: a string id and an explicit boolean. A missing or
+/// non-boolean `open` is refused, not read as "close".
+pub(crate) fn validate_fold(p: &Value) -> Result<(&str, bool), &'static str> {
+    let id = p["id"].as_str().ok_or("id must be a string")?;
+    let open = p["open"].as_bool().ok_or("open must be a boolean")?;
+    Ok((id, open))
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     let host = &state.blitz;
     let doc = || params["docId"].as_u64().unwrap_or(0);
@@ -50,9 +58,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "render.hit" => host.hit(doc(), params["x"].as_f64().unwrap_or(0.0) as f32, params["y"].as_f64().unwrap_or(0.0) as f32).await,
         "render.textRuns" => host.text_runs(doc(), params["index"].as_u64().unwrap_or(0) as u32).await,
         "render.serialize" => host.serialize(doc(), params["start"].clone(), params["end"].clone()).await,
-        "render.fold" => match params["id"].as_str() {
-            Some(fold_id) => host.fold(doc(), fold_id, params["open"].as_bool().unwrap_or(false)).await,
-            None => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "id must be a string")),
+        "render.fold" => match validate_fold(params) {
+            Ok((fold_id, open)) => host.fold(doc(), fold_id, open).await,
+            Err(msg) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, msg)),
         },
         "render.fonts" => super::fonts::render_fonts(state, params).await,
         "render.close" => {
@@ -102,6 +110,18 @@ mod tests {
     fn range_edges_are_accepted() {
         ok(json!({"html": "x", "cssWidth": 1, "scale": 0.5}));
         ok(json!({"html": "x", "cssWidth": 4000, "scale": 4.0, "allowRemote": true}));
+    }
+
+    #[test]
+    fn fold_needs_a_string_id_and_a_boolean_open() {
+        assert_eq!(validate_fold(&json!({"id": "q0", "open": true})), Ok(("q0", true)));
+        assert_eq!(validate_fold(&json!({"id": "q0", "open": false})), Ok(("q0", false)));
+        assert_eq!(validate_fold(&json!({"open": true})), Err("id must be a string"));
+        assert_eq!(validate_fold(&json!({"id": 5, "open": true})), Err("id must be a string"));
+        for open in [json!(null), json!("true"), json!(1)] {
+            assert_eq!(validate_fold(&json!({"id": "q0", "open": open})), Err("open must be a boolean"));
+        }
+        assert_eq!(validate_fold(&json!({"id": "q0"})), Err("open must be a boolean"), "missing open is not close");
     }
 
     #[test]
