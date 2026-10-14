@@ -478,3 +478,15 @@ fn whitespace_in_a_font_size_zero_cell_adds_no_line() {
     let lines = |id: &str| get(&els, id).line_count;
     assert_eq!(lines("cell"), Some(2 + lines("p").unwrap()), "two lines in the first column plus the paragraph's");
 }
+
+/// A box that contains its floats (a table cell, `display: flow-root`) is as tall as its lowest
+/// float plus the padding and border below it. Blitz ended it at the float (cerberus responsive,
+/// harness iframe: a cell with `padding: 10px` ending in a `float: left` button table, th 185;
+/// Blitz 175).
+#[test]
+fn a_box_holding_a_float_keeps_its_bottom_padding() {
+    let els = inspect(&fx("float-in-a-cell.html"));
+    let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
+    assert_eq!(h("cell"), 10.0 + 20.0 + 10.0 + 43.0 + 10.0, "padding, text, margin, float, padding");
+    assert_eq!(h("root"), 10.0 + 20.0 + 43.0 + 7.0 + 3.0, "padding-top, block, float, padding-bottom, border-bottom");
+}

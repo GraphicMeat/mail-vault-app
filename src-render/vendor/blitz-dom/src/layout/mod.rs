@@ -359,8 +359,11 @@ impl BaseDocument {
 
                 // The default CSS file will set
                 match node.style().display {
-                    Display::Block => compute_block_layout(self, node_id, inputs, block_ctx),
-                    Display::FlowRoot => compute_block_layout(self, node_id, inputs, None),
+                    Display::Block => match block_ctx {
+                        Some(block_ctx) => compute_block_layout(self, node_id, inputs, Some(block_ctx)),
+                        None => self.compute_block_root_layout(node_id, inputs),
+                    },
+                    Display::FlowRoot => self.compute_block_root_layout(node_id, inputs),
                     Display::Flex => compute_flexbox_layout(self, node_id, inputs),
                     Display::Grid => compute_grid_layout(self, node_id, inputs),
                     Display::None => taffy::LayoutOutput::HIDDEN,
@@ -614,5 +617,34 @@ impl Iterator for RefCellChildIter<'_> {
             self.idx += 1;
             taffy_node_id(*id)
         })
+    }
+}
+
+impl BaseDocument {
+    /// MailVault parity fix (plan B): lay out a block that is the root of its own formatting
+    /// context (a table cell, `display: flow-root`) and give it the padding and border below
+    /// its floats. Such a box is as tall as its lowest float (CSS 2 10.6.7), and the float is
+    /// measured from the top of the box's border box: taffy takes that distance as the box's
+    /// height, which leaves out `padding-bottom` and `border-bottom` (cerberus: a text column
+    /// ending in a `float: left` button table was 10px short, the cell's padding).
+    fn compute_block_root_layout(
+        &mut self,
+        node_id: NodeId,
+        inputs: taffy::tree::LayoutInput,
+    ) -> taffy::LayoutOutput {
+        let mut bfc = taffy::BlockFormattingContext::new();
+        let mut ctx = bfc.root_block_context();
+        let mut output = compute_block_layout(self, node_id, inputs, Some(&mut ctx));
+        let floats = ctx.floated_content_height_contribution();
+        if floats.is_finite()
+            && inputs.known_dimensions.height.is_none()
+            && (output.size.height - floats).abs() < 0.01
+        {
+            let style = self.nodes[dom_node_id(node_id)].style();
+            let padding = style.padding.resolve_or_zero(inputs.parent_size.width, resolve_calc_value);
+            let border = style.border.resolve_or_zero(inputs.parent_size.width, resolve_calc_value);
+            output.size.height += padding.bottom + border.bottom;
+        }
+        output
     }
 }
