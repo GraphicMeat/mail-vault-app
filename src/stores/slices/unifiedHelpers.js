@@ -532,18 +532,30 @@ export function refreshSelectedThread(state, threads, held = null) {
   return { selectedThread: fresh };
 }
 
+/** A row's time as the list sorts by it (`_ts`, newest first). */
+const listTime = e => e?._ts ?? (new Date(e?.date || e?.internalDate || 0).getTime() || 0);
+
 /**
  * The row `delta` places from the open one, clamped to the ends.
  *
- * An open message that is not in `rows` starts navigation at the top, which is
- * what the caller did before and is right: the unread filter can hide the row
- * you are reading.
+ * The open message can be missing from `rows` while it stays in the reader:
+ * the view builder adds a word with "hide view mail" on and the list drops it.
+ * Then `openEmail` is placed by date among the rows (newest first, like the
+ * list) and the step counts from that gap: j goes to the next older row, k to
+ * the next newer one. With no open email, or no date to place it by, it
+ * starts at the top.
  */
-export function stepThroughList(rows, currentId, spans, delta) {
+export function stepThroughList(rows, currentId, spans, delta, openEmail = null) {
   if (!rows?.length) return null;
+  const clamp = i => rows[Math.min(Math.max(i, 0), rows.length - 1)] ?? null;
   const idx = rows.findIndex(e => rowKey(e, spans) === currentId);
-  if (idx === -1) return rows[0];
-  return rows[Math.min(Math.max(idx + delta, 0), rows.length - 1)] ?? null;
+  if (idx !== -1) return clamp(idx + delta);
+  const at = openEmail ? listTime(openEmail) : 0;
+  if (!at) return rows[0];
+  // The gap: every row before it is as new as the open one, or newer.
+  let gap = rows.findIndex(e => listTime(e) < at);
+  if (gap === -1) gap = rows.length;
+  return clamp(delta > 0 ? gap + delta - 1 : gap + delta);
 }
 
 /**

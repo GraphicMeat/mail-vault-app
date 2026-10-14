@@ -720,11 +720,14 @@ function App() {
       return;
     }
     const state = useMailStore.getState();
-    const { sortedEmails, selectedEmailId, selectEmail, unreadOnly, unreadKeep } = state;
+    const { sortedEmails, selectedEmailId, selectedEmail, selectEmail, unreadOnly, unreadKeep } = state;
     const spans = spansMailboxes(state);
     const keyOf = (e) => rowKey(e, spans);
     const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId, keyOf, unreadKeep);
-    const target = stepThroughList(visible, selectedEmailId, spans, delta);
+    // The open email places the step when the list no longer shows it. Not
+    // matched by key: a body fetched from the server carries no _accountId.
+    const open = selectedEmail || state.selectedThread?.lastEmail || null;
+    const target = stepThroughList(visible, selectedEmailId, spans, delta, open);
     if (target) selectEmail(keyOf(target));
   };
 

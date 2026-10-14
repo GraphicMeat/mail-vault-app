@@ -62,6 +62,41 @@ describe('stepThroughList', () => {
     expect(stepThroughList(flat, 999, false, -1).uid).toBe(10);
   });
 
+  // The open message can leave the list while it stays in the reader: the
+  // view builder adds a word with "hide view mail" on. j and k then carry on
+  // from where it would sit by date, not from the newest row.
+  describe('an open message the list no longer shows', () => {
+    const dated = (uid, date) => ({ ...row(uid), date });
+    // Newest first, as the list sorts.
+    const list = [dated(30, '2026-10-03T12:00:00Z'), dated(20, '2026-10-02T12:00:00Z'), dated(10, '2026-10-01T12:00:00Z')];
+
+    it('j steps to the next older row from where it sat', () => {
+      expect(stepThroughList(list, 15, false, +1, dated(15, '2026-10-01T18:00:00Z')).uid).toBe(10);
+    });
+
+    it('k steps to the next newer row from where it sat', () => {
+      expect(stepThroughList(list, 15, false, -1, dated(15, '2026-10-01T18:00:00Z')).uid).toBe(20);
+    });
+
+    it('stays inside the list past either end', () => {
+      expect(stepThroughList(list, 5, false, +1, dated(5, '2026-09-01T00:00:00Z')).uid).toBe(10);
+      expect(stepThroughList(list, 5, false, -1, dated(5, '2026-09-01T00:00:00Z')).uid).toBe(10);
+      expect(stepThroughList(list, 50, false, +1, dated(50, '2026-11-01T00:00:00Z')).uid).toBe(30);
+      expect(stepThroughList(list, 50, false, -1, dated(50, '2026-11-01T00:00:00Z')).uid).toBe(30);
+    });
+
+    it('reads the time the list sorts by (internalDate when there is no date)', () => {
+      const open = { ...row(15), internalDate: '2026-10-01T18:00:00Z' };
+      expect(stepThroughList(list, 15, false, +1, open).uid).toBe(10);
+      expect(stepThroughList(list, 15, false, -1, open).uid).toBe(20);
+    });
+
+    it('a row the list does show steps as before, whatever the open email says', () => {
+      expect(stepThroughList(list, 20, false, +1, dated(20, '2026-10-02T12:00:00Z')).uid).toBe(10);
+      expect(stepThroughList(list, 20, false, -1, dated(20, '2026-10-02T12:00:00Z')).uid).toBe(30);
+    });
+  });
+
   it('has nothing to step to in an empty list', () => {
     expect(stepThroughList([], 1, false, +1)).toBe(null);
   });
