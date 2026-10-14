@@ -82,7 +82,7 @@ describe('BlitzTiles', () => {
 
   it('click hit-tests and hands the link to onLink', async () => {
     const onLink = vi.fn();
-    openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta() });
+    openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
     hitRender.mockResolvedValue({ link: { href: 'https://x.test/', text: 'x', alert: null, title: null }, fold: null });
     render(tiles({ onLink }));
     const t = await screen.findAllByTestId('blitz-tile');
@@ -92,7 +92,7 @@ describe('BlitzTiles', () => {
 
   describe('the hover URL chip', () => {
     const hover = async (props) => {
-      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta() });
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
       hitRender.mockResolvedValue({ link: { href: 'https://calendly.com/jane-doe?name=Jane%20Doe', text: 'book', alert: null, title: null }, fold: null });
       render(tiles(props));
       const t = await screen.findAllByTestId('blitz-tile');
@@ -178,7 +178,7 @@ describe('BlitzTiles', () => {
   it('the latest onLink and onFailure are the ones called', async () => {
     const first = vi.fn();
     const latest = vi.fn();
-    openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta() });
+    openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
     hitRender.mockResolvedValue({ link: { href: 'https://y.test/', text: 'y', alert: null, title: null }, fold: null });
     const { rerender } = render(tiles({ onLink: first }));
     await screen.findAllByTestId('blitz-tile');
@@ -241,5 +241,36 @@ describe('BlitzTiles', () => {
       expect(onFailure).toHaveBeenCalledWith('render_bad_request');
       unmount();
     }
+  });
+  it('a click that ends a drag-selection never opens a link', async () => {
+    openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
+    hitRender.mockResolvedValue({ link: { href: 'https://x.test/' }, fold: null });
+    const onLink = vi.fn();
+    render(tiles({ onLink }));
+    const span = await screen.findByText('hello');
+    const r = document.createRange(); r.setStart(span.firstChild, 0); r.setEnd(span.firstChild, 3);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    fireEvent.click(span);
+    await new Promise(res => setTimeout(res, 0));
+    expect(onLink).not.toHaveBeenCalled();
+  });
+
+  it('a selection is serialized by endpoints and copy writes both formats', async () => {
+    openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'héllo', fontPx: 16, node: 1, start: 0 }] });
+    serializeRender.mockResolvedValue({ html: '<p>h&eacute;l</p>', text: 'hél' });
+    render(tiles());
+    const span = await screen.findByText('héllo');
+    const r = document.createRange(); r.setStart(span.firstChild, 1); r.setEnd(span.firstChild, 3);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    document.dispatchEvent(new Event('selectionchange'));
+    await waitFor(() => expect(serializeRender).toHaveBeenCalledWith(5, { node: 1, offset: 1 }, { node: 1, offset: 4 }));
+    const data = {};
+    const e = new Event('copy', { cancelable: true });
+    e.clipboardData = { setData: (t, v) => { data[t] = v; } };
+    document.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    expect(data).toEqual({ 'text/html': '<p>h&eacute;l</p>', 'text/plain': 'hél' });
   });
 });

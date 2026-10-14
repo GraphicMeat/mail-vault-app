@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n/index.js';
-import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated } from './service';
+import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serializeRender } from './service';
 import TextLayer from './text/TextLayer';
+import { createCopyController } from './text/clipboard';
+import { selectionInLayer } from './text/selection';
+import { applySelectionColors, lightSelectionColor } from './text/selectionColors';
 
 // The device pixel ratio, re-read when it changes (window moved to another
 // display, browser zoom). matchMedia is absent in some test environments.
@@ -145,9 +148,35 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
   const onLeave = useCallback(() => { inside.current = false; setHover(null); }, []);
 
   const onClick = useCallback(async (e) => {
+    // A click that ended a drag-selection selects text; it never opens a link.
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && selectionInLayer(sel, textLayerRef.current?.layerEl())) return;
     const link = await hitAt(e.clientX, e.clientY, e.currentTarget);
     if (link) onLinkRef.current?.(link);
   }, [hitAt]);
+
+  // Copy: serialize ahead, write synchronously on copy (text/clipboard.js). The
+  // controller is rebuilt per rev (a fold toggle changes what a range covers),
+  // so it asks again right away for a selection that is already live.
+  useEffect(() => {
+    if (!doc) return undefined;
+    const ctl = createCopyController({
+      layerEl: () => textLayerRef.current?.layerEl(),
+      serialize: (s, e) => serializeRender(doc.docId, s, e),
+    });
+    const onSel = () => ctl.onSelectionChange();
+    const onCopy = (e) => ctl.onCopy(e);
+    document.addEventListener('selectionchange', onSel);
+    document.addEventListener('copy', onCopy);
+    ctl.onSelectionChange();
+    return () => { ctl.dispose(); document.removeEventListener('selectionchange', onSel); document.removeEventListener('copy', onCopy); };
+  }, [doc?.docId, doc?.rev]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Selection colour: the engine default in light (dark: Task 15).
+  useEffect(() => {
+    const el = textLayerRef.current?.layerEl();
+    if (el && !dark) applySelectionColors(el, lightSelectionColor());
+  }, [doc?.docId, dark]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 'content' is exactly the document's height; the other two scroll inside.
   const scrollsInside = sizing === 'fill' || (sizing && typeof sizing === 'object');
