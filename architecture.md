@@ -396,6 +396,46 @@ An accepted limit: during a search or inside a view, Explorer's conversation
 grouping draws a hit's siblings from the folder's (hidden) list, so a sibling
 a view holds that is not itself a hit drops out of the conversation there.
 
+**View builder.** The reader offers an email's distinctive words, to add to a
+view or make one from. The daemon ranks them: `views.keywords` takes the text
+the index stores for the message (subject and stripped body), keeps up to 150
+candidate words (`search_index::keywords::candidates`: 4 to 25 characters, 2
+to 8 when CJK, no numbers, ids, hashes, URL or address pieces, long blobs or
+`>` quoted lines, subject words counted 3x) and scores each
+`(1 + ln tf) * ln((N+1)/(df+1))`, sublinear so a quoted thread repeating a
+word does not win on repetition. Each `df` is one probe of the trigram
+`msg_fts` table (`msg_cjk` for a short CJK word), matched the way a search
+matches, so it is a substring count: "invoice" also counts "invoices". From 50
+indexed messages a word in more than a fifth of them is dropped, and each
+probe stops counting at that cut (`df_cap`). A word the index never saw is
+dropped only when the message's body is itself indexed. Every probe is its own
+lock hold and calls `note_foreground`, so the indexer stays parked for the
+whole loop and a click gets the lock between probes. The 15 best are kept. A
+reply is cached (64 entries, keyed with the data dir and the Message-ID, so a
+reused uid misses) only for a body-indexed message, since an earlier answer
+changes once the indexer reaches it; the readiness gate runs before the cache,
+and an index lost mid-loop answers `available: false`, never "no words".
+`views.keyword_detail` runs one search for a word across the accounts (none
+named is every account) and names the top ten senders and subjects among the
+first 2000 hits, subjects without `Re:`/`Fwd:`. Both are foreground RPCs
+(`is_foreground_method`): a person is waiting.
+
+The app only picks among them. `ViewBuilderPanel` shows the words as chips and
+`KeywordHovercard` asks `keyword_detail` once per word per panel, only once
+its card has rested on the word (hover or keyboard focus). Senders and subjects go through `Private`, and a chip
+through `PrivateWord`, which reads the lowercased word capitalised so a
+surname is masked like a name. "Add to view" appends each word as an OR group
+of its own (`appendTerms`): one more way in, never a narrowing, and the rest
+of the query keeps its meaning, an operator-free query being rewritten as the
+AND group it always was. A view that searched no words is narrowed by them,
+and the panel asks first. "New view" goes through `createView`, so the free
+cap is decided in one place, scoped to the email's account and, when asked,
+its folder. Whether the builder is open is `viewBuilderStore`, not persisted
+and shared by every reader, so it survives a change of email and the move into
+a thread, where only the focused message shows it. With `hideViewMail` on, a
+thread re-read keeps an open message a view has just come to hold, while its
+folder still has it, so the email a word came from stays in the reader.
+
 The one-time move of the pre-SQL JSON files runs on the first open of each store and retires each file to `<name>.pre-db-<stamp>` (never deletes it). `app.db`'s import runs entirely inside one `BEGIN IMMEDIATE` with a `legacy_import` marker set in the same transaction, because the app and the daemon can both reach it at the same launch and `transfer_stats` rows accumulate rather than replace.
 
 Two files deliberately stay outside both stores: `accounts.json` (the frontend owns it, and a second writer would turn a same-process race into a cross-process one) and `email_cache/<account>_<mailbox>/graph_id_map.json` (the Outlook uid ledger, which needs a cross-process file lock and must travel with the vault). Those sidecar directories therefore still exist; they just hold nothing but the ledger.
