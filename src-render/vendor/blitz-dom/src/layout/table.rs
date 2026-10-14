@@ -161,16 +161,21 @@ pub(crate) fn build_table_context(
         BorderCollapse::Collapse => first_cell_border
             .as_ref()
             .map(|border| {
-                let x = border
-                    .border_left_width
-                    .0
-                    .max(border.border_right_width.0)
-                    .to_f32_px();
-                let y = border
-                    .border_top_width
-                    .0
-                    .max(border.border_bottom_width.0)
-                    .to_f32_px();
+                // MailVault parity fix (plan B): a side with border-style none/hidden has a
+                // used width of 0 (CSS Backgrounds 3, 4.3), but its computed width is still
+                // `medium` (3px); using that put every borderless collapsed table 3px inset.
+                let used = |width: &style::values::computed::BorderSideWidth,
+                            style: style::values::specified::BorderStyle| {
+                    if style.none_or_hidden() {
+                        0.0
+                    } else {
+                        width.0.to_f32_px()
+                    }
+                };
+                let x = used(&border.border_left_width, border.border_left_style)
+                    .max(used(&border.border_right_width, border.border_right_style));
+                let y = used(&border.border_top_width, border.border_top_style)
+                    .max(used(&border.border_bottom_width, border.border_bottom_style));
                 taffy::Size {
                     width: style_helpers::length(x),
                     height: style_helpers::length(y),

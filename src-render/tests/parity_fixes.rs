@@ -167,3 +167,16 @@ fn row_groups_and_rows_inherit_the_border_colour_of_their_table() {
     }
     assert_eq!(get(&els, "td").border_top_color, Some([81.0, 84.0, 94.0, 1.0]), "a cell keeps currentcolor");
 }
+
+/// In the collapsing border model a cell with `border-style: none` has a used width of 0,
+/// but its computed `border-width` is still `medium` (3px). Blitz took the computed width,
+/// so every cerberus table (`border-collapse: collapse`, no borders) sat 3px inside its
+/// own box. The harness iframe has the table's tbody, row and cells at (0, 0).
+#[test]
+fn collapsed_borders_of_a_borderless_cell_are_zero() {
+    let els = inspect(&fx("table-collapse-no-border.html"));
+    let t = get(&els, "t").rect.clone().unwrap();
+    let c = get(&els, "c").rect.clone().unwrap();
+    assert_eq!((c.x, c.y, c.w), (0.0, 0.0, 400.0), "cell");
+    assert_eq!(t.h, c.h, "no collapsed border adds to the table height");
+}
