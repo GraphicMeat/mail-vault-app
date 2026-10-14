@@ -7,6 +7,9 @@ import { createCopyController } from './text/clipboard';
 import { selectionInLayer, selectLayer } from './text/selection';
 import { useBodyKeyboard } from './text/useBodyKeyboard';
 import { applySelectionColors, lightSelectionColor } from './text/selectionColors';
+import BodyContextMenu from './menu/BodyContextMenu';
+import { menuColorsFor } from './menu/menuColors';
+import { viewportShift } from '../../hooks/useViewportShift';
 
 // The device pixel ratio, re-read when it changes (window moved to another
 // display, browser zoom). matchMedia is absent in some test environments.
@@ -46,6 +49,8 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const failed = useRef(false);
   const hitBusy = useRef(false);
   const inside = useRef(false);
+  const [menu, setMenu] = useState(null); // { at: {x, y}, link }
+  const menuSeq = useRef(0); // a right-click answered after a newer one or a doc change opens nothing
 
   // The callbacks arrive as fresh functions on every parent render. Holding the
   // latest in refs keeps the open effect from closing and reopening the doc.
@@ -184,13 +189,51 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const onLeave = useCallback(() => { inside.current = false; setHover(null); setHoverFold(null); }, []);
 
   const onClick = useCallback(async (e) => {
+    // The iframe's menu closes on the next click and that click does nothing else.
+    if (menu) { setMenu(null); return; }
     // A click that ended a drag-selection selects text; it never opens a link or toggles a fold.
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && selectionInLayer(sel, textLayerRef.current?.layerEl())) return;
     const { link, fold, docId } = await hitAt(e.clientX, e.clientY, e.currentTarget);
     if (fold) { void toggleFold(docId, fold); return; }
     if (link) onLinkRef.current?.(link);
-  }, [hitAt, toggleFold]);
+  }, [hitAt, toggleFold, menu]);
+
+  // The menu belongs to the doc it was opened on: a message switch or re-open closes it.
+  useEffect(() => { menuSeq.current++; setMenu(null); }, [html, doc?.docId]);
+
+  const onContextMenu = useCallback(async (e) => {
+    e.preventDefault();
+    const seq = ++menuSeq.current;
+    const box = e.currentTarget.getBoundingClientRect();
+    const at = { x: e.clientX - box.left, y: e.clientY - box.top };
+    // A worker that is slow to answer must not hold the menu back: it opens without Copy Link.
+    const hit = await Promise.race([
+      hitAt(e.clientX, e.clientY, e.currentTarget),
+      new Promise(r => setTimeout(() => r({ link: null, fold: null }), 300)),
+    ]);
+    if (seq !== menuSeq.current) return;
+    // A toggle is not a link: nothing to copy there, as the click does not open it.
+    setMenu({ at, link: hit.fold ? null : hit.link });
+  }, [hitAt]);
+
+  // The iframe clamps its menu to the part of the frame inside the window; the
+  // body box plays the frame here. The menu rect is taken relative to it.
+  const clampTo = useCallback((menuEl) => {
+    const frame = boxRef.current.getBoundingClientRect();
+    const r = menuEl.getBoundingClientRect();
+    const visTop = Math.max(0, -frame.top);
+    const visLeft = Math.max(0, -frame.left);
+    const { x, y } = viewportShift(
+      { left: r.left - frame.left, top: r.top - frame.top, width: r.width, height: r.height },
+      { width: menuEl.offsetWidth, height: menuEl.offsetHeight },
+      {
+        top: visTop, left: visLeft,
+        width: Math.min(frame.width, window.innerWidth - frame.left) - visLeft,
+        height: Math.min(frame.height, window.innerHeight - frame.top) - visTop,
+      });
+    return { dx: x, dy: y };
+  }, []);
 
   // Copy: serialize ahead, write synchronously on copy (text/clipboard.js). The
   // controller is rebuilt per rev (a fold toggle changes what a range covers),
@@ -259,7 +302,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
       className={`w-full overflow-x-auto relative${scrollsInside ? ' overflow-y-auto' : ''}`} style={{ outline: 'none', ...boxStyle }}>
       {m && (
         <div role="presentation" title={foldTitle} onMouseMove={onMove} onMouseLeave={onLeave} onClick={onClick}
-          onContextMenu={e => e.preventDefault()}
+          onContextMenu={onContextMenu}
           style={{ position: 'relative', width: m.cssWidth, height: m.cssHeight, cursor: hover || hoverFold ? 'pointer' : 'default' }}>
           {Array.from({ length: m.tileCount }, (_, i) => {
             const top = i * m.tileCssHeight;
@@ -281,6 +324,17 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
             shownTiles={shown}
             hover={!!hover || !!hoverFold}
           />
+          {menu && (
+            <BodyContextMenu
+              at={menu.at}
+              link={menu.link}
+              colors={menuColorsFor(theme, null)} // dark swatch: Task 15
+              clampTo={clampTo}
+              onCopy={() => document.execCommand('copy')}
+              onSelectAll={() => { void selectAllBody(); }}
+              onClose={() => setMenu(null)}
+            />
+          )}
         </div>
       )}
       {hover && !privacy && (

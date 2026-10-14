@@ -609,3 +609,175 @@ describe('fold toggles', () => {
     expect(layer2.closest('[role=presentation]').style.cursor).toBe('default');
   });
 });
+
+describe('body context menu', () => {
+  const foldMeta = () => meta({ folds: [{ id: 'q0', kind: 'quote', open: false }] });
+  const rightClick = async (hit, props) => {
+    openRender.mockResolvedValue({ docId: 2, rev: 1, meta: foldMeta() });
+    hitRender.mockResolvedValue(hit);
+    render(tiles(props));
+    const tileEls = await screen.findAllByTestId('blitz-tile');
+    const ev = fireEvent.contextMenu(tileEls[0], { clientX: 40, clientY: 50 });
+    return { tileEls, ev };
+  };
+
+  it('right-click opens the body menu at the point with Copy Link over a link; next click closes it', async () => {
+    openRender.mockResolvedValue({ docId: 2, rev: 1, meta: meta() });
+    hitRender.mockResolvedValue({ link: { href: 'https://x.test/' }, fold: null });
+    render(tiles());
+    const tileEls = await screen.findAllByTestId('blitz-tile');
+    const ev = fireEvent.contextMenu(tileEls[0], { clientX: 40, clientY: 50 });
+    expect(ev).toBe(false); // native menu suppressed
+    const menu = await screen.findByTestId('blitz-context-menu');
+    expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toContain('Copy Link');
+    expect(menu.style.position).toBe('absolute');
+    fireEvent.click(tileEls[0]);
+    await waitFor(() => expect(screen.queryByTestId('blitz-context-menu')).toBeNull());
+  });
+
+  it('the click that closes the menu opens no link', async () => {
+    const onLink = vi.fn();
+    const { tileEls } = await rightClick({ link: { href: 'https://x.test/' }, fold: null }, { onLink });
+    await screen.findByTestId('blitz-context-menu');
+    fireEvent.click(tileEls[0]);
+    await waitFor(() => expect(screen.queryByTestId('blitz-context-menu')).toBeNull());
+    await act(async () => {});
+    expect(onLink).not.toHaveBeenCalled();
+    expect(hitRender).toHaveBeenCalledTimes(1); // only the right-click hit-tested
+  });
+
+  it('off a link there is no Copy Link; over a fold toggle there is none either, even inside a link', async () => {
+    await rightClick({ link: null, fold: null });
+    await screen.findByTestId('blitz-context-menu');
+    expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toEqual(['Copy', 'Select All']);
+    cleanup();
+    await rightClick({ link: { href: 'https://x.test/' }, fold: 'q0' });
+    await screen.findByTestId('blitz-context-menu');
+    expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toEqual(['Copy', 'Select All']);
+  });
+
+  it('a hit that never answers still opens the menu, without Copy Link', async () => {
+    vi.useFakeTimers();
+    try {
+      openRender.mockResolvedValue({ docId: 2, rev: 1, meta: foldMeta() });
+      hitRender.mockReturnValue(new Promise(() => {}));
+      render(tiles());
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const tileEls = screen.getAllByTestId('blitz-tile');
+      fireEvent.contextMenu(tileEls[0], { clientX: 40, clientY: 50 });
+      await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+      expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toEqual(['Copy', 'Select All']);
+    } finally { vi.useRealTimers(); }
+  });
+
+  describe('placement', () => {
+    // jsdom lays nothing out: the menu's rect follows its own left/top, the body box is 600x1100 at the window origin.
+    let rectSpy; let wSpy; let hSpy;
+    beforeEach(() => {
+      rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        if (this.dataset?.testid === 'blitz-context-menu') {
+          const left = parseFloat(this.style.left); const top = parseFloat(this.style.top);
+          return { left, top, right: left + 180, bottom: top + 80, width: 180, height: 80 };
+        }
+        return { left: 0, top: 0, right: 600, bottom: 1100, width: 600, height: 1100 };
+      });
+      wSpy = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(180);
+      hSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(80);
+    });
+    afterEach(() => { rectSpy.mockRestore(); wSpy.mockRestore(); hSpy.mockRestore(); });
+
+    it('opens at the pointer in body coordinates when it fits', async () => {
+      await rightClick({ link: null, fold: null });
+      const menu = await screen.findByTestId('blitz-context-menu');
+      expect([menu.style.left, menu.style.top]).toEqual(['40px', '50px']);
+    });
+
+    it('is clamped into the visible body, like the iframe menu, and a second right-click moves the one menu', async () => {
+      const { tileEls } = await rightClick({ link: null, fold: null });
+      await screen.findByTestId('blitz-context-menu');
+      fireEvent.contextMenu(tileEls[0], { clientX: 590, clientY: 760 });
+      // right edge to the box width minus the 8px margin, bottom to the window height minus 8
+      await waitFor(() => expect(screen.getByTestId('blitz-context-menu').style.left).toBe('412px'));
+      expect(screen.getByTestId('blitz-context-menu').style.top).toBe('680px');
+      expect(screen.getAllByTestId('blitz-context-menu')).toHaveLength(1);
+    });
+  });
+
+  it('Copy goes through the copy event (the controller writes rich and plain); Select all selects the body', async () => {
+    openRender.mockResolvedValue({ docId: 3, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
+    serializeRender.mockResolvedValue({ html: '<p>hello</p>', text: 'hello' });
+    hitRender.mockResolvedValue({ link: null, fold: null });
+    const exec = vi.fn((cmd) => {
+      if (cmd !== 'copy') return false;
+      const e = new Event('copy', { cancelable: true });
+      e.clipboardData = { setData: (t, v) => { exec.data[t] = v; } };
+      document.dispatchEvent(e);
+      return true;
+    });
+    exec.data = {};
+    document.execCommand = exec;
+    render(tiles());
+    const span = await screen.findByText('hello');
+    const tileEls = await screen.findAllByTestId('blitz-tile');
+    fireEvent.contextMenu(tileEls[0], { clientX: 5, clientY: 5 });
+    await screen.findByTestId('blitz-context-menu');
+    fireEvent.click(screen.getAllByTestId('blitz-ctx-item')[1]); // Select All
+    await waitFor(() => expect(window.getSelection().toString()).toContain('hello'));
+    await waitFor(() => expect(serializeRender).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId('blitz-context-menu')).toBeNull());
+    fireEvent.contextMenu(tileEls[0], { clientX: 5, clientY: 5 });
+    await screen.findByTestId('blitz-context-menu');
+    fireEvent.click(screen.getAllByTestId('blitz-ctx-item')[0]); // Copy
+    expect(exec).toHaveBeenCalledWith('copy');
+    expect(exec.data).toEqual({ 'text/html': '<p>hello</p>', 'text/plain': 'hello' });
+    expect(span).toBeTruthy();
+    window.getSelection().removeAllRanges();
+  });
+
+  it('Escape closes the menu first and keeps the selection; the next Escape clears it', async () => {
+    openRender.mockResolvedValue({ docId: 3, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
+    hitRender.mockResolvedValue({ link: null, fold: null });
+    render(tiles());
+    const span = await screen.findByText('hello');
+    const r = document.createRange(); r.selectNodeContents(span);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    const tileEls = await screen.findAllByTestId('blitz-tile');
+    fireEvent.contextMenu(tileEls[0], { clientX: 5, clientY: 5 });
+    await screen.findByTestId('blitz-context-menu');
+    const body = screen.getByTestId('blitz-email-body');
+    fireEvent.keyDown(body, { key: 'Escape' });
+    expect(screen.queryByTestId('blitz-context-menu')).toBeNull();
+    expect(window.getSelection().toString()).toBe('hello');
+    fireEvent.keyDown(body, { key: 'Escape' });
+    expect(window.getSelection().toString()).toBe('');
+  });
+
+  it('closes when the message changes, and a right-click answered after the switch opens nothing', async () => {
+    let answer;
+    openRender.mockResolvedValueOnce({ docId: 2, rev: 1, meta: foldMeta() }).mockResolvedValue({ docId: 3, rev: 1, meta: foldMeta() });
+    hitRender.mockResolvedValue({ link: null, fold: null });
+    const { rerender } = render(tiles({ html: '<p>A' }));
+    let tileEls = await screen.findAllByTestId('blitz-tile');
+    fireEvent.contextMenu(tileEls[0], { clientX: 5, clientY: 5 });
+    await screen.findByTestId('blitz-context-menu');
+    rerender(tiles({ html: '<p>B' }));
+    await waitFor(() => expect(screen.getByTestId('blitz-email-body').getAttribute('data-doc-id')).toBe('3'));
+    expect(screen.queryByTestId('blitz-context-menu')).toBeNull();
+    hitRender.mockImplementationOnce(() => new Promise(r => { answer = r; }));
+    tileEls = screen.getAllByTestId('blitz-tile');
+    fireEvent.contextMenu(tileEls[0], { clientX: 5, clientY: 5 });
+    rerender(tiles({ html: '<p>C' }));
+    await act(async () => { answer({ link: null, fold: null }); });
+    await act(async () => {});
+    expect(screen.queryByTestId('blitz-context-menu')).toBeNull();
+  });
+
+  it('never paints a URL, privacy or not (Copy Link is a label only)', async () => {
+    await rightClick({ link: { href: 'https://calendly.com/jane-doe?name=Jane%20Doe' }, fold: null }, { privacy: true });
+    await screen.findByTestId('blitz-context-menu');
+    expect(document.body.textContent).not.toContain('jane-doe');
+    expect(document.body.textContent).not.toContain('Jane');
+  });
+});
