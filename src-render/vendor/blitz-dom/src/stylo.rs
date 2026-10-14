@@ -1221,11 +1221,12 @@ impl<'a> TElement for BlitzNode<'a> {
 
         if *tag == local_name!("td") || *tag == local_name!("th") {
             // MailVault parity fix (plan B): a table with a non-zero border attribute
-            // gives each of its cells a 1px inset border (unless rules governs them).
+            // gives each of its cells a 1px inset border (unless rules governs them)
+            // that takes the table's border colour (HTML Standard, Rendering 15.3.8).
             if cell_table_attr(self, "border").is_some_and(|v| table_border_px(v) > 0)
                 && cell_table_attr(self, "rules").is_none()
             {
-                for decl in hint_declarations("border-width:1px;border-style:inset") {
+                for decl in hint_declarations("border-width:1px;border-style:inset;border-color:inherit") {
                     push_style(decl);
                 }
             }

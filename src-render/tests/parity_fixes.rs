@@ -302,3 +302,29 @@ fn rows_span_the_table_content_box_under_border_spacing() {
     assert_eq!((row.x, row.w, row.y, row.h), (t.x, t.w, c.y, c.h));
     assert_eq!((row2.x, row2.w, row2.y, row2.h), (t.x, t.w, c2.y, c2.h));
 }
+
+fn inspect_dark(html: &str) -> Vec<InspectedElement> {
+    let dark = mailvault_render::dark::DarkTheme { bg: "#0a0a12".into(), fg: "#e8e8ef".into(), brightness: 100.0, contrast: 100.0, sepia: 0.0, top_level: false };
+    RenderDoc::open(html, RenderOptions { dark: Some(dark), ..RenderOptions::new(400, 1.0) }, None).unwrap().inspect()
+}
+
+/// A table with a non-zero `border` attribute gives its cells `border-color: inherit`
+/// along with the 1px inset border (HTML Standard, Rendering 15.3.8; WebKit's shared
+/// cell style). Dark Reader sets `table { border-color }` itself, so the harness
+/// iframe's cells (td, th) carry the table's rgb(87, 92, 92) while Blitz gave them
+/// currentcolor (ours/table-border-attr, dark: 80 diffs). A table with border=0 gets
+/// no hint, so its cell keeps currentcolor.
+#[test]
+fn cells_of_a_bordered_table_inherit_the_table_border_colour() {
+    for els in [inspect(&fx("table-border-attr-cell-colour.html")), inspect_dark(&fx("table-border-attr-cell-colour.html"))] {
+        let table = get(&els, "t").border_top_color;
+        assert_ne!(table, get(&els, "a").color, "the guard: the cell's own text colour differs");
+        for id in ["a", "h"] {
+            let cell = get(&els, id);
+            for got in [cell.border_top_color, cell.border_right_color, cell.border_bottom_color, cell.border_left_color] {
+                assert_eq!(got, table, "{id} takes the table's border colour");
+            }
+        }
+        assert_eq!(get(&els, "c").border_top_color, get(&els, "c").color, "border=0 adds no hint: currentcolor");
+    }
+}
