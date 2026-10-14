@@ -23,7 +23,6 @@ use style::animation::AnimationSetKey;
 use style::animation::AnimationState;
 use style::applicable_declarations::ApplicableDeclarationBlock;
 use style::bloom::each_relevant_element_hash;
-use style::color::AbsoluteColor;
 use style::data::{ElementDataMut, ElementDataRef};
 use style::global_style_data::STYLE_THREAD_POOL;
 use style::invalidation::element::restyle_hints::RestyleHint;
@@ -832,29 +831,6 @@ impl<'a> TElement for BlitzNode<'a> {
             ));
         };
 
-        fn parse_color_attr(value: &str) -> Option<(u8, u8, u8, f32)> {
-            if !value.starts_with('#') {
-                return None;
-            }
-
-            let value = &value[1..];
-            if value.len() == 3 {
-                let r = u8::from_str_radix(&value[0..1], 16).ok()?;
-                let g = u8::from_str_radix(&value[1..2], 16).ok()?;
-                let b = u8::from_str_radix(&value[2..3], 16).ok()?;
-                return Some((r, g, b, 1.0));
-            }
-
-            if value.len() == 6 {
-                let r = u8::from_str_radix(&value[0..2], 16).ok()?;
-                let g = u8::from_str_radix(&value[2..4], 16).ok()?;
-                let b = u8::from_str_radix(&value[4..6], 16).ok()?;
-                return Some((r, g, b, 1.0));
-            }
-
-            None
-        }
-
         /// The HTML "rules for parsing dimension values" -- Stylo's
         /// implementation of them -- packaged as a specified
         /// `<length-percentage>`. `ignoring_zero` selects the spec's separate
@@ -1110,10 +1086,23 @@ impl<'a> TElement for BlitzNode<'a> {
 
             if *name == local_name!("bgcolor") {
                 use style::values::specified::Color;
-                if let Some((r, g, b, a)) = parse_color_attr(value) {
+                // MailVault parity fix (plan B): bgcolor takes the HTML legacy colour
+                // forms (names, hex without '#', #rgb), not only #rrggbb.
+                if let Ok(color) = style::servo::attr::parse_legacy_color(value) {
                     push_style(PropertyDeclaration::BackgroundColor(
-                        Color::from_absolute_color(AbsoluteColor::srgb_legacy(r, g, b, a)),
+                        Color::from_absolute_color(color),
                     ));
+                }
+            }
+
+            if *tag == local_name!("font") && *name == local_name!("color") {
+                use style::values::specified::Color;
+                use style::values::specified::color::ColorPropertyValue;
+                // MailVault parity fix (plan B): font[color] maps to color (legacy colour parse).
+                if let Ok(color) = style::servo::attr::parse_legacy_color(value) {
+                    push_style(PropertyDeclaration::Color(ColorPropertyValue(
+                        Color::from_absolute_color(color),
+                    )));
                 }
             }
 
