@@ -49,6 +49,11 @@ pub(crate) fn generic_font_family(input: stylo::GenericFontFamily) -> parley::Ge
     }
 }
 
+/// MailVault parity fix (plan B): the family of the macOS system monospaced font, as fontique
+/// lists it (the file behind `NSFont.monospacedSystemFont`).
+#[cfg(target_vendor = "apple")]
+const APPLE_SYSTEM_MONOSPACE: &str = ".SF NS Mono";
+
 pub(crate) fn query_font_family(input: &stylo::SingleFontFamily) -> parley::QueryFamily<'_> {
     match input {
         stylo::SingleFontFamily::FamilyName(name) => {
@@ -63,6 +68,13 @@ pub(crate) fn query_font_family(input: &stylo::SingleFontFamily) -> parley::Quer
                 #[cfg(target_os = "macos")]
                 if name == "BlinkMacSystemFont" {
                     break 'ret parley::QueryFamily::Generic(parley::GenericFamily::SystemUi);
+                }
+                // MailVault parity fix (plan B): `ui-monospace` is the system monospaced font
+                // (SF Mono's system cut), which stylo does not know as a generic. Unmapped it
+                // fell through to the next family (Menlo), 10% narrower.
+                #[cfg(target_vendor = "apple")]
+                if name == "ui-monospace" {
+                    break 'ret parley::QueryFamily::Named(APPLE_SYSTEM_MONOSPACE);
                 }
 
                 break 'ret parley::QueryFamily::Named(name);
@@ -370,6 +382,13 @@ pub(crate) fn style(
                         break 'ret parley::FontFamilyName::Generic(
                             parley::GenericFamily::SystemUi,
                         );
+                    }
+                    // MailVault parity fix (plan B): see `query_font_family`.
+                    #[cfg(target_vendor = "apple")]
+                    if name == "ui-monospace" {
+                        break 'ret parley::FontFamilyName::Named(Cow::Borrowed(
+                            APPLE_SYSTEM_MONOSPACE,
+                        ));
                     }
 
                     break 'ret parley::FontFamilyName::Named(Cow::Owned(name.to_string()));

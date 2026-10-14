@@ -386,3 +386,14 @@ fn percentage_columns_take_their_share_of_the_table() {
         assert!((w(id) - want).abs() <= 1.0, "{id}: {}, want {want}", w(id));
     }
 }
+
+/// WebKit resolves `ui-monospace` to the system monospaced font (SF Mono's system cut), 85.64
+/// wide at 12.59375px for "inline code" (NSFont.monospacedSystemFont; the harness iframe's
+/// 93.68 minus the 8px of padding), where Blitz fell through the list to Menlo (83.40).
+#[cfg(target_os = "macos")]
+#[test]
+fn ui_monospace_is_the_system_monospaced_font() {
+    let els = inspect(&fx("inline-padding-and-ui-monospace.html"));
+    let w = get(&els, "mono").rect.clone().unwrap().w - 8.0;
+    assert!((w - 85.64).abs() <= 0.5, "ui-monospace text: {w}, system monospaced 85.64");
+}
