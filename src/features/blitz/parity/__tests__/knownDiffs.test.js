@@ -32,6 +32,12 @@ describe('blitz corpus', () => {
     }
   });
 
+  it('no rewritten url() cuts the style attribute that holds it', () => {
+    for (const f of manifest.fixtures) {
+      expect(read(f.file).match(/\sstyle\s*=\s*"[^"]*url\(\s*"/gi) || []).toEqual([]);
+    }
+  });
+
   it('every known diff names a corpus fixture and a real field, and is approved by Rokas', () => {
     expect(known.version).toBe(1);
     const ids = new Set(manifest.fixtures.map((f) => f.id));

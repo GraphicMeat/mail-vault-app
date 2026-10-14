@@ -63,7 +63,9 @@ function deterministic(html) {
       n += 1;
       return tag.replace(src[1], solid(w, h, [204, 204, 204, 255]));
     })
-    .replace(/url\(\s*["']?https?:\/\/[^)"']+["']?\s*\)/gi, () => { n += 1; return `url("${solid(8, 8, [204, 204, 204, 255])}")`; })
+    // Unquoted: the url() may sit in a double-quoted style attribute, which a `"` would end.
+    // A base64 data: URL holds no quote, space or parenthesis, so it needs none.
+    .replace(/url\(\s*["']?https?:\/\/[^)"']+["']?\s*\)/gi, () => { n += 1; return `url(${solid(8, 8, [204, 204, 204, 255])})`; })
     .replace(/\sbackground\s*=\s*["']https?:\/\/[^"']+["']/gi, () => { n += 1; return ` background="${solid(8, 8, [204, 204, 204, 255])}"`; });
   return { html: out, replaced: n };
 }
