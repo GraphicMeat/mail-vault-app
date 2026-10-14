@@ -3,10 +3,12 @@
 # process name, so only one e2e run at a time) and unpack its report into
 # ~/Movies/_clipwork/blitz-parity/<date>/<modes>/.
 # Usage: src-render/tools/run-parity.sh light|dark|light,dark [fixture-id,...]
+# MV_PARITY_DIR=<name> unpacks into <date>/<name> instead of <date>/<modes>, so a
+# rerun does not mix into an earlier run's folder.
 set -euo pipefail
 modes=${1:?usage: run-parity.sh light|dark|light,dark [ids]}
 only=${2:-}
-dest="$HOME/Movies/_clipwork/blitz-parity/$(date +%Y-%m-%d)/${modes//,/-}"
+dest="$HOME/Movies/_clipwork/blitz-parity/$(date +%Y-%m-%d)/${MV_PARITY_DIR:-${modes//,/-}}"
 mkdir -p "$dest"
 log="$dest/job.stdout"
 status=0
