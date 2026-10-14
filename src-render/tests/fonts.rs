@@ -43,20 +43,21 @@ fn bullets_still_draw_with_our_own_context() {
 }
 
 #[test]
-fn latin_ext_subset_registered_under_the_same_family_keeps_the_latin_face() {
-    // Only one subset per weight is kept (fonts.rs): Ł is not drawn by the
-    // latin-ext file but by the next family; with none here it is the latin
-    // face's .notdef, so the run stays whole.
-    let mut lib = mono_lib();
-    lib.register("MV Mono Ext", vec![
-        FaceData { data: asset("ibm-plex-mono-latin-400.woff2"), weight: 400, style: "normal".into() },
-        FaceData { data: asset("ibm-plex-mono-latin-ext-400.woff2"), weight: 400, style: "normal".into() },
-    ]);
-    let html = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'MV Mono Ext'">aŁa</p></body>"#;
+fn latin_ext_only_glyphs_fall_back_to_the_next_family() {
+    // Pins a known limitation. fontique gives a family one font per weight, so
+    // only the latin subset is kept (fonts.rs) and a latin-ext-only glyph is
+    // drawn by the next family in the stack, in a run of its own. A fontique
+    // patch that lets one family hold several subsets will flip this: Ł then
+    // stays in the MV Mono Ext run (one run, 36px) and this test changes with it.
+    let mut lib = FontLibrary::new(false);
+    lib.register("Fallback", vec![face("inter-latin-ext.woff2", 400)]);
+    lib.register("MV Mono Ext", vec![face("ibm-plex-mono-latin-400.woff2", 400), face("ibm-plex-mono-latin-ext-400.woff2", 400)]);
+    let html = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'MV Mono Ext', 'Fallback'">aŁa</p></body>"#;
     let doc = RenderDoc::open_with(html, opts(), None, lib.context()).unwrap();
     let runs = doc.text_runs(0);
-    assert_eq!(runs.len(), 1, "{runs:?}");
-    assert!((runs[0].w - 36.0).abs() < 0.5);
+    let texts: Vec<&str> = runs.iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(texts, ["a", "Ł", "a"], "{runs:?}");
+    assert!((runs[0].w - 12.0).abs() < 0.5, "the a's stay in the mono face: {}", runs[0].w);
 }
 
 fn face(name: &str, weight: u16) -> FaceData {
@@ -93,7 +94,8 @@ fn a_latin_ext_subset_listed_first_does_not_hide_the_latin_face() {
 
 #[test]
 fn a_weight_between_registered_ones_still_lands_on_the_latin_face() {
-    // 800 is matched by the nearest lower weight (700), where two faces tie.
+    // 800 is matched by the nearest lower weight (700); only the latin face of each
+    // weight is registered, so nothing ties and no latin-ext face can answer it.
     let mut lib = lib_with_fallback();
     lib.register("MV Sub", vec![
         face("ibm-plex-mono-latin-ext-400.woff2", 400),

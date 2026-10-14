@@ -50,11 +50,21 @@ impl FontLibrary {
         // Latin is kept; the other subsets' letters go to the next family in
         // the stack.
         let mut kept: Vec<(u16, bool, Blob<u8>, Scan)> = Vec::new();
+        // The same file arrives once per weight for a variable family (Lora: two
+        // files, eight faces): decoded and scanned once, matched on the raw bytes.
+        let mut seen: Vec<(Vec<u8>, Blob<u8>, Scan)> = Vec::new();
         for face in faces {
-            // register_fonts does not decode WOFF/WOFF2 itself.
-            let blob = Blob::new(Arc::new(blitz_dom::decode_font_bytes(&face.data).into_owned()));
+            let (blob, scan) = match seen.iter().find(|(raw, ..)| *raw == face.data) {
+                Some((_, blob, scan)) => (blob.clone(), *scan),
+                None => {
+                    // register_fonts does not decode WOFF/WOFF2 itself.
+                    let blob = decode(&face.data);
+                    let scan = scan(&blob);
+                    seen.push((face.data, blob.clone(), scan));
+                    (blob, scan)
+                }
+            };
             let italic = face.style == "italic";
-            let scan = scan(&blob);
             match kept.iter().position(|(w, i, ..)| *w == face.weight && *i == italic) {
                 None => kept.push((face.weight, italic, blob, scan)),
                 Some(at) if scan.latin > kept[at].3.latin => kept[at] = (face.weight, italic, blob, scan),
@@ -92,10 +102,22 @@ impl FontLibrary {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static DECODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn decode(data: &[u8]) -> Blob<u8> {
+    #[cfg(test)]
+    DECODES.with(|c| c.set(c.get() + 1));
+    Blob::new(Arc::new(blitz_dom::decode_font_bytes(data).into_owned()))
+}
+
 #[derive(Clone, Copy)]
 struct Scan {
-    /// How many of A-Z, a-z and 0-9 the font maps: all of them in a latin
-    /// subset, few or none in a latin-ext one.
+    /// How many of U+0020..=U+00FF (Basic Latin and Latin-1) the font maps:
+    /// nearly all of them in a latin subset, few or none in a latin-ext one.
+    /// Digits, punctuation and accents count, not just the letters.
     latin: usize,
     weight_axis: bool,
 }
@@ -106,6 +128,37 @@ fn scan(blob: &Blob<u8>) -> Scan {
     let latin = info
         .charmap_index()
         .charmap(blob.as_ref())
-        .map_or(0, |map| ('A'..='Z').chain('a'..='z').chain('0'..='9').filter(|c| map.map(*c).is_some()).count());
+        .map_or(0, |map| (0x20u32..=0xFF).filter_map(char::from_u32).filter(|c| map.map(*c).is_some()).count());
     Scan { latin, weight_axis: info.has_weight_axis() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn asset(name: &str) -> Vec<u8> {
+        std::fs::read(format!("{}/../src/assets/fonts/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    }
+    fn scan_of(name: &str) -> Scan {
+        scan(&decode(&asset(name)))
+    }
+
+    #[test]
+    fn coverage_counts_punctuation_and_accents_not_just_alphanumerics() {
+        let latin = scan_of("ibm-plex-mono-latin-400.woff2").latin;
+        let ext = scan_of("ibm-plex-mono-latin-ext-400.woff2").latin;
+        assert!(latin > 62, "more than the 62 alphanumerics: {latin}");
+        assert!(latin > ext + 100, "latin {latin} vs latin-ext {ext}");
+    }
+
+    #[test]
+    fn a_variable_file_sent_once_per_weight_is_decoded_once() {
+        let faces = |name: &str| [400, 500, 600, 700].map(|w| FaceData { data: asset(name), weight: w, style: "normal".into() });
+        let mut lib = FontLibrary::new(false);
+        let before = DECODES.with(|c| c.get());
+        let mut all: Vec<FaceData> = faces("source-sans-3-latin.woff2").into();
+        all.extend(faces("source-sans-3-latin-ext.woff2"));
+        lib.register("MV Var", all);
+        assert_eq!(DECODES.with(|c| c.get()) - before, 2, "one decode per distinct file");
+    }
 }
