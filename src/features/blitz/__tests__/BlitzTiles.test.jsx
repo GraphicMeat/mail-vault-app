@@ -291,6 +291,85 @@ describe('BlitzTiles', () => {
     expect(data).toEqual({ 'text/html': '<p>h&eacute;l</p>', 'text/plain': 'hél' });
   });
 
+  describe('body keyboard', () => {
+    const run = (i) => ({ runs: [{ x: 0, y: i * 512, w: 30, h: 20, text: `t${i}`, fontPx: 16, node: 10 + i, start: 0 }] });
+
+    it('select all loads every tile first, then selects first to last span', async () => {
+      openRender.mockResolvedValue({ docId: 3, rev: 1, meta: meta({ tileCount: 3 }) });
+      textRunsRender.mockImplementation(async (_d, i) => run(i));
+      globalThis.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} }; // only tiles 0,1 shown
+      render(tiles());
+      const body = await screen.findByTestId('blitz-email-body');
+      fireEvent.keyDown(body, { key: 'a', metaKey: true, ctrlKey: true });
+      // The spans of the never-shown tile commit after loadAll resolves, so wait for the selection.
+      await waitFor(() => expect(window.getSelection().toString()).toContain('t2'));
+      expect(textRunsRender.mock.calls.map(c => c[1]).sort()).toEqual([0, 1, 2]);
+    });
+
+    it('select all stays inside the body: nothing outside the text layer is selected', async () => {
+      openRender.mockResolvedValue({ docId: 3, rev: 1, meta: meta({ tileCount: 3 }) });
+      textRunsRender.mockImplementation(async (_d, i) => run(i));
+      render(<div><p data-testid="chrome">app chrome</p>{tiles()}</div>);
+      const body = await screen.findByTestId('blitz-email-body');
+      fireEvent.keyDown(body, { key: 'a', metaKey: true, ctrlKey: true });
+      const sel = window.getSelection();
+      await waitFor(() => expect(sel.toString()).toContain('t2'));
+      expect(sel.toString()).not.toContain('app chrome');
+      expect(sel.getRangeAt(0).intersectsNode(screen.getByTestId('chrome'))).toBe(false);
+    });
+
+    it('select all is serialized ahead, so the following Cmd+C copies rich and plain from the warm cache', async () => {
+      openRender.mockResolvedValue({ docId: 3, rev: 1, meta: meta({ tileCount: 3 }) });
+      textRunsRender.mockImplementation(async (_d, i) => run(i));
+      serializeRender.mockResolvedValue({ html: '<p>t0 t1 t2</p>', text: 't0\nt1\nt2' });
+      render(tiles());
+      const body = await screen.findByTestId('blitz-email-body');
+      fireEvent.keyDown(body, { key: 'a', metaKey: true, ctrlKey: true });
+      await waitFor(() => expect(serializeRender).toHaveBeenCalledWith(3, { node: 10, offset: 0 }, { node: 12, offset: 2 }));
+      // Cmd+C: the keydown is not prevented, so the webview fires the copy event.
+      expect(fireEvent.keyDown(body, { key: 'c', metaKey: true, ctrlKey: true })).toBe(true);
+      const data = {};
+      const e = new Event('copy', { cancelable: true });
+      e.clipboardData = { setData: (t, v) => { data[t] = v; } };
+      document.dispatchEvent(e);
+      expect(e.defaultPrevented).toBe(true);
+      expect(data).toEqual({ 'text/html': '<p>t0 t1 t2</p>', 'text/plain': 't0\nt1\nt2' });
+    });
+
+    it('Escape clears the body selection and stays at the body', async () => {
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+      textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
+      render(tiles());
+      const span = await screen.findByText('hello');
+      const r = document.createRange(); r.selectNodeContents(span);
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+      const app = vi.fn();
+      window.addEventListener('keydown', app);
+      fireEvent.keyDown(screen.getByTestId('blitz-email-body'), { key: 'Escape' });
+      window.removeEventListener('keydown', app);
+      expect(window.getSelection().rangeCount === 0 || window.getSelection().isCollapsed).toBe(true);
+      expect(app).not.toHaveBeenCalled();
+    });
+
+    it('the body takes focus like the iframe, draws no ring, and app keys stop at it', async () => {
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+      render(tiles());
+      const body = await screen.findByTestId('blitz-email-body');
+      expect(body.getAttribute('tabindex')).toBe('-1');
+      expect(body.style.outline).toBe('none');
+      expect(body.getAttribute('role')).toBeNull();
+      body.focus();
+      expect(document.activeElement).toBe(body);
+      const app = vi.fn();
+      window.addEventListener('keydown', app);
+      fireEvent.keyDown(body, { key: 'j' });
+      expect(app).not.toHaveBeenCalled();
+      fireEvent.keyDown(body, { key: 'Tab' });
+      expect(app).toHaveBeenCalledTimes(1);
+      window.removeEventListener('keydown', app);
+    });
+  });
+
   it('exposes layerEl: the text layer element, null before a doc opens', async () => {
     const ref = React.createRef();
     let resolve;

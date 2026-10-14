@@ -3,7 +3,8 @@ import { useT } from '../../i18n/index.js';
 import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serializeRender } from './service';
 import TextLayer from './text/TextLayer';
 import { createCopyController } from './text/clipboard';
-import { selectionInLayer } from './text/selection';
+import { selectionInLayer, selectLayer } from './text/selection';
+import { useBodyKeyboard } from './text/useBodyKeyboard';
 import { applySelectionColors, lightSelectionColor } from './text/selectionColors';
 
 // The device pixel ratio, re-read when it changes (window moved to another
@@ -187,6 +188,20 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     };
   }, [doc?.docId, doc?.rev]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Select all: every tile's runs first (a never-shown tile has none), so the
+  // selection covers the whole message and copy serializes all of it.
+  const selectAllBody = useCallback(async () => {
+    const tl = textLayerRef.current;
+    if (!tl) return;
+    await tl.loadAll();
+    // Two frames: React commits the new spans before we pick first/last.
+    const raf = window.requestAnimationFrame?.bind(window) || ((cb) => setTimeout(cb, 16));
+    await new Promise(r => raf(() => raf(r)));
+    const layer = tl.layerEl();
+    if (layer) selectLayer(layer, tl.firstSpan(), tl.lastSpan());
+  }, []);
+  useBodyKeyboard(boxRef, { selectAll: selectAllBody, layerEl: () => textLayerRef.current?.layerEl() });
+
   // Selection colour: the engine default in light (dark: Task 15).
   useEffect(() => {
     const el = textLayerRef.current?.layerEl();
@@ -201,7 +216,9 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const m = doc?.meta;
   return (
     <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body" data-doc-id={doc?.docId}
-      className={`w-full overflow-x-auto relative${scrollsInside ? ' overflow-y-auto' : ''}`} style={boxStyle}>
+      // Focusable like the iframe's document: a click focuses it, Tab leaves it, no ring.
+      tabIndex={-1}
+      className={`w-full overflow-x-auto relative${scrollsInside ? ' overflow-y-auto' : ''}`} style={{ outline: 'none', ...boxStyle }}>
       {m && (
         <div role="presentation" onMouseMove={onMove} onMouseLeave={onLeave} onClick={onClick}
           onContextMenu={e => e.preventDefault()}
