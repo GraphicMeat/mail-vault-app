@@ -176,4 +176,16 @@ fn text_runs_answers_unknown_docs_and_malformed_requests_with_their_req() {
     assert_eq!(out[2], json!({"kind":"error","req":3,"code":"render_bad_request"}));
     assert_eq!(out[3]["req"], 4);
     assert_eq!(out[3]["ok"]["runs"][0]["text"], "x");
+    assert_eq!(out[3]["ok"]["owners"], json!([]));
+}
+
+#[test]
+fn text_runs_names_the_tiles_whose_roots_run_into_this_one() {
+    let html = r#"<body style="margin:0;font:20px/30px sans-serif"><div style="height:480px"></div><p style="margin:0;width:60px">aaaa bbbb cccc dddd</p>"#;
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":html,"cssWidth":200,"scale":1.0,"allowRemote":false}),
+        json!({"op":"textRuns","req":2,"doc":1,"index":1}),
+    ]);
+    assert_eq!(out[1]["ok"]["runs"], json!([]));
+    assert_eq!(out[1]["ok"]["owners"], json!([0]));
 }

@@ -217,7 +217,47 @@ pub fn all_runs(doc: &BaseDocument) -> Vec<TextRun> {
     out
 }
 
-/// The one tile a run belongs to: the tile holding its line's top.
+/// The tile holding a run's line top.
 pub fn tile_of(r: &TextRun) -> u32 {
     (r.y / TILE_CSS_HEIGHT as f32).floor().max(0.0) as u32
+}
+
+/// Runs of the whole document, each root assigned to ONE tile: the tile of its
+/// first line's top. A paragraph is one element in the frontend's layer (a
+/// triple-click selects it whole, a drag past a line end stays on that line),
+/// so its later lines travel with it even when they lie in the next tiles.
+pub struct TiledRuns {
+    runs: Vec<TextRun>,
+    /// Per run: the tile of its root.
+    tiles: Vec<u32>,
+}
+
+impl TiledRuns {
+    /// `runs` as `all_runs` returns them: the runs of one root are adjacent.
+    pub fn new(runs: Vec<TextRun>) -> Self {
+        let mut tiles = vec![0; runs.len()];
+        let mut i = 0;
+        while i < runs.len() {
+            let node = runs[i].node;
+            let end = runs[i..].iter().position(|r| r.node != node).map_or(runs.len(), |n| i + n);
+            let top = runs[i..end].iter().map(tile_of).min().unwrap_or(0);
+            tiles[i..end].fill(top);
+            i = end;
+        }
+        Self { runs, tiles }
+    }
+
+    pub fn runs_of(&self, index: u32) -> Vec<TextRun> {
+        self.runs.iter().zip(&self.tiles).filter(|(_, t)| **t == index).map(|(r, _)| r.clone()).collect()
+    }
+
+    pub fn owners_of(&self, index: u32) -> Vec<u32> {
+        let mut out: Vec<u32> = self.runs.iter().zip(&self.tiles)
+            .filter(|(r, t)| **t != index && tile_of(r) == index)
+            .map(|(_, t)| *t)
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
 }

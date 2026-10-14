@@ -103,8 +103,9 @@ pub struct RenderDoc {
     doc: HtmlDocument,
     opts: RenderOptions,
     net: Option<Arc<BridgeNet>>,
-    /// Text runs of the whole document, computed once per layout (see `text_runs`).
-    runs: RefCell<Option<Vec<crate::text::TextRun>>>,
+    /// Text runs of the whole document with each run's tile, computed once per
+    /// layout (see `text_runs`).
+    runs: RefCell<Option<crate::text::TiledRuns>>,
 }
 
 /// Rounds of "decide held requests, apply the answers" before the rest are
@@ -191,14 +192,24 @@ impl RenderDoc {
         self.invalidate_runs();
     }
 
-    /// The text runs whose line tops fall in tile `index`. The whole document is
-    /// walked once per layout and cached, then filtered by tile: a select-all asks
-    /// for every tile, and a layout walk each would hold the worker for hundreds
-    /// of passes.
+    /// The text runs of every inline root whose first line's top falls in tile
+    /// `index`, all of its lines included (see `text::TiledRuns`). The whole
+    /// document is walked once per layout and cached, then filtered by tile: a
+    /// select-all asks for every tile, and a layout walk each would hold the
+    /// worker for hundreds of passes.
     pub fn text_runs(&self, index: u32) -> Vec<crate::text::TextRun> {
+        self.with_runs(|t| t.runs_of(index))
+    }
+
+    /// The tiles, other than `index`, that own a root with a line in tile
+    /// `index`: a layer that shows only this tile must load them too.
+    pub fn text_owners(&self, index: u32) -> Vec<u32> {
+        self.with_runs(|t| t.owners_of(index))
+    }
+
+    fn with_runs<T>(&self, f: impl FnOnce(&crate::text::TiledRuns) -> T) -> T {
         let mut cache = self.runs.borrow_mut();
-        let all = cache.get_or_insert_with(|| crate::text::all_runs(&self.doc));
-        all.iter().filter(|r| crate::text::tile_of(r) == index).cloned().collect()
+        f(cache.get_or_insert_with(|| crate::text::TiledRuns::new(crate::text::all_runs(&self.doc))))
     }
 
     /// Rich and plain copy of the selection between two layout endpoints (see

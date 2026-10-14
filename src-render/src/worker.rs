@@ -244,8 +244,8 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             None => unknown(out, req),
         },
         In::TextRuns { req, doc, index } => match docs.get(&doc) {
-            Some(o) => match guarded(tainted, || o.doc.text_runs(index)) {
-                Some(runs) => line(out, json!({"kind":"reply","req":req,"ok":{"runs":runs}})),
+            Some(o) => match guarded(tainted, || (o.doc.text_runs(index), o.doc.text_owners(index))) {
+                Some((runs, owners)) => line(out, json!({"kind":"reply","req":req,"ok":{"runs":runs,"owners":owners}})),
                 None => {
                     discard(docs, doc, tainted);
                     unavailable(out, req)

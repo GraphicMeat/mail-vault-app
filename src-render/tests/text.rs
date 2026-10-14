@@ -61,6 +61,48 @@ fn straddling_line_belongs_to_one_tile() {
 }
 
 #[test]
+fn a_paragraph_that_straddles_a_tile_boundary_belongs_wholly_to_its_first_lines_tile() {
+    // Four 30 px lines from 480: 480 and 510 start in tile 0, 540 and 570 in tile 1.
+    // One inline root must be one element in the layer (a triple-click selects the
+    // paragraph), so every line goes to the tile of the root's first line.
+    let body = r#"<div style="height:480px"></div><p style="margin:0;width:60px">aaaa bbbb cccc dddd</p><p style="margin:0">after</p>"#;
+    let doc = open(body);
+    let t0 = doc.text_runs(0);
+    let t1 = doc.text_runs(1);
+    let para: Vec<_> = t0.iter().filter(|r| r.text.trim() != "after").collect();
+    assert_eq!(para.iter().map(|r| r.text.as_str()).collect::<String>(), "aaaa bbbb cccc dddd", "{t0:?}");
+    assert!(para.iter().any(|r| r.y >= TILE_CSS_HEIGHT as f32), "the later lines are below the boundary: {para:?}");
+    assert!(t1.iter().all(|r| r.node != para[0].node), "no line of the paragraph in tile 1: {t1:?}");
+    assert_eq!(t1.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["after"]);
+    // Tile 1 shows lines of a root owned by tile 0: a lazy layer must load tile 0 too.
+    assert_eq!(doc.text_owners(1), [0]);
+    assert!(doc.text_owners(0).is_empty());
+}
+
+#[test]
+fn every_root_of_a_tall_wrapped_doc_appears_in_exactly_one_tile_and_whole() {
+    let body: String = (0..120).map(|i| format!("<p style=\"margin:0;width:200px\">para {i} with enough words to wrap twice</p>")).collect();
+    let doc = open(&body);
+    let tiles = (doc.meta().css_height / TILE_CSS_HEIGHT as f32).ceil() as u32;
+    let mut seen: std::collections::HashMap<u64, (u32, String)> = std::collections::HashMap::new();
+    let mut straddlers = 0;
+    for i in 0..tiles {
+        let runs = doc.text_runs(i);
+        for r in &runs {
+            let e = seen.entry(r.node).or_insert((i, String::new()));
+            assert_eq!(e.0, i, "node {} in tiles {} and {i}", r.node, e.0);
+            e.1.push_str(&r.text);
+        }
+        straddlers += runs.iter().filter(|r| (r.y / TILE_CSS_HEIGHT as f32).floor() as u32 != i).count();
+    }
+    assert_eq!(seen.len(), 120);
+    for (i, (_, text)) in seen.values().enumerate() {
+        assert!(text.contains(" with enough words to wrap twice"), "{i}: {text:?}");
+    }
+    assert!(straddlers > 0, "the fixture has lines below their root's tile");
+}
+
+#[test]
 fn noselect_runs_are_dropped() {
     let runs = open(r#"<p style="margin:0">Hi <span class="mv-pii" data-mv-noselect>••••</span> there</p><div data-mv-noselect style="display:inline-block">⋯</div>"#).text_runs(0);
     let text: String = runs.iter().map(|r| r.text.as_str()).collect();
