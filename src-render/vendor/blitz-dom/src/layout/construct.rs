@@ -1239,16 +1239,20 @@ pub(crate) fn build_inline_layout_into(
     // has none. The space is added to the boxes' reserved height instead (the box
     // itself is placed at the top of it), which gives the same line box.
     text_layout.strut_below = 0.0;
-    // Only for replaced elements: their bottom edge is their baseline. An inline-block
-    // sits on its own last text baseline, so it reaches below the strut already.
+    // Only for boxes whose bottom edge is their baseline: replaced elements, and an
+    // inline-block with no line box of its own (CSS 2.1 10.8.1; a `table` made
+    // `display: inline-block` holds table boxes only). An inline-block with text sits on
+    // its own last text baseline, so it reaches below the strut already.
     let (mut any_in_flow, mut all_replaced) = (false, true);
     for b in text_layout.layout.inline_boxes() {
         if b.kind == InlineBoxKind::InFlow {
             any_in_flow = true;
-            all_replaced &= nodes[NodeId::from_u64(b.id)]
+            let node = &nodes[NodeId::from_u64(b.id)];
+            all_replaced &= node
                 .data
                 .downcast_element()
-                .is_some_and(|el| is_replaced_element(&el.name.local));
+                .is_some_and(|el| is_replaced_element(&el.name.local))
+                || inline_block_without_line_box(nodes, node);
         }
     }
     if text_layout.text.is_empty() && any_in_flow && all_replaced {
@@ -1277,6 +1281,61 @@ pub(crate) fn build_inline_layout_into(
         }
     }
     return;
+
+    // MailVault parity fix (plan B): an `inline-block` whose in-flow content has no line
+    // box, only table boxes or nothing at all, so its baseline is its bottom margin edge
+    // (CSS 2.1 10.8.1). WebKit does not take a baseline out of a table inside a block.
+    fn inline_block_without_line_box(nodes: &crate::NodeTree, node: &Node) -> bool {
+        let is_inline_block = node.display_style().is_some_and(|d| {
+            d.outside() == DisplayOutside::Inline && d.inside() == DisplayInside::FlowRoot
+        });
+        is_inline_block && !has_line_box(nodes, node)
+    }
+
+    fn has_line_box(nodes: &crate::NodeTree, node: &Node) -> bool {
+        if node.before().is_some() || node.after().is_some() {
+            return true;
+        }
+        node.children.iter().any(|&child_id| {
+            let child = &nodes[child_id];
+            match &child.data {
+                NodeData::Text(text) => !text
+                    .content
+                    .chars()
+                    .all(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')),
+                NodeData::Element(_) | NodeData::AnonymousBlock(_) => {
+                    let Some(style) = child.primary_styles() else {
+                        return true;
+                    };
+                    if style.clone_position().is_absolutely_positioned()
+                        || style.clone_float().is_floating()
+                    {
+                        return false;
+                    }
+                    let display = style.clone_display();
+                    drop(style);
+                    match (display.outside(), display.inside()) {
+                        (_, DisplayInside::Contents) => has_line_box(nodes, child),
+                        (DisplayOutside::None, _) | (_, DisplayInside::None) => false,
+                        (DisplayOutside::Block, DisplayInside::Flow | DisplayInside::FlowRoot) => {
+                            has_line_box(nodes, child)
+                        }
+                        (_, DisplayInside::Table)
+                        | (_, DisplayInside::TableRowGroup)
+                        | (_, DisplayInside::TableHeaderGroup)
+                        | (_, DisplayInside::TableFooterGroup)
+                        | (_, DisplayInside::TableRow)
+                        | (_, DisplayInside::TableCell)
+                        | (_, DisplayInside::TableColumn)
+                        | (_, DisplayInside::TableColumnGroup) => false,
+                        // Inline-level content, flex and grid: a line or unknown.
+                        _ => true,
+                    }
+                }
+                _ => false,
+            }
+        })
+    }
 
     fn build_inline_layout_recursive(
         builder: &mut TreeBuilder<TextBrush>,

@@ -527,3 +527,19 @@ fn word_break_break_word_lets_a_token_break_anywhere() {
         r#"<td style="overflow-wrap:anywhere !important">x"#
     );
 }
+
+/// CSS 2.1 10.8.1: an `inline-block` with no in-flow line box of its own has its bottom
+/// margin edge on the baseline, so the line box still has the strut below it. A `table`
+/// made `display: inline-block` by a media query holds only table boxes, no line box
+/// (cerberus button wrapper at 15px/20px sans-serif: the iframe's cell is 5px taller than
+/// the table, Blitz had 0). An inline-block with a line box of its own sits on that
+/// baseline and reaches below the strut already.
+#[test]
+fn an_inline_block_table_sits_on_the_baseline_with_the_strut_below() {
+    let els = inspect_at(&fx("inline-block-table-baseline.html"), 400);
+    let r = |id: &str| get(&els, id).rect.clone().unwrap();
+    assert_eq!(r("btn").h, 30.0);
+    assert_eq!(r("cell").h, 10.0 + 30.0 + 5.0 + 10.0, "strut below the table: {}", r("cell").h);
+    assert_eq!(r("btn").y - r("cell").y, 10.0, "the table sits at the top of the line");
+    assert_eq!(r("cell2").h, 10.0 + r("box").h + 10.0, "a box with its own text line: no strut");
+}
