@@ -1,3 +1,8 @@
+// Ported from Dark Reader v4.9.120 (https://github.com/darkreader/darkreader,
+// tag v4.9.120, commit 90c39130c7b4c79068f26aaa596071c14e3425c4):
+// src/definitions.d.ts (Theme), src/defaults.ts (DEFAULT_THEME).
+// Copyright (c) 2026 Dark Reader Ltd. MIT License; see
+// public/licenses/rust/darkreader-mit.txt.
 //! Dark Reader 4.9.120, ported to Rust for the Blitz renderer (plan B).
 //! `apply` (Task 13) reproduces in the Blitz DOM what DR writes into the
 //! iframe's DOM; the colour engine lives in the submodules.

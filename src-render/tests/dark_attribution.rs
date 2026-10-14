@@ -3,6 +3,8 @@
 const PORTED: &[&str] = &[
     "color.rs", "math_eval.rs", "matrix.rs", "modify_colors.rs", "modify_css.rs", "text.rs",
     "cssom.rs", "sheets.rs", "inline.rs", "variables.rs", "image.rs",
+    // DR's Theme fields and DEFAULT_THEME values (definitions.d.ts, defaults.ts).
+    "mod.rs",
 ];
 const HEADER: &str = "// Ported from Dark Reader v4.9.120 (https://github.com/darkreader/darkreader,\n// tag v4.9.120, commit 90c39130c7b4c79068f26aaa596071c14e3425c4):";
 
@@ -14,8 +16,18 @@ fn root() -> std::path::PathBuf {
 fn ported_files_carry_the_attribution_header() {
     for f in PORTED {
         let p = root().join("src-render/src/dark").join(f);
-        let Ok(text) = std::fs::read_to_string(&p) else { continue }; // a later task adds it
+        let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{} is listed as ported but cannot be read: {e}", p.display()));
         assert!(text.starts_with(HEADER), "{} lacks the Dark Reader attribution header", p.display());
+    }
+}
+
+#[test]
+fn every_file_of_the_port_is_listed() {
+    for entry in std::fs::read_dir(root().join("src-render/src/dark")).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        if name.ends_with(".rs") {
+            assert!(PORTED.contains(&name.as_str()), "src/dark/{name} is not in PORTED: give it the header and list it");
+        }
     }
 }
 
