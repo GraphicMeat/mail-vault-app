@@ -16,6 +16,33 @@ fn get<'a>(els: &'a [InspectedElement], id: &str) -> &'a InspectedElement {
     els.iter().find(|e| e.mv_id == id).unwrap_or_else(|| panic!("no {id}"))
 }
 
+/// The expected values below were measured in WebKit with Arial or Helvetica installed. An
+/// unknown family falls back to the document font, so a machine without the font (ubuntu CI
+/// has only DejaVu) lays the text out in another one and every width and metric differs. True
+/// when one of `families` is a real font here: its text is wider or narrower than the same
+/// text in a family that does not exist.
+fn font_present(families: &[&str]) -> bool {
+    const TEXT: &str = "Hamburgefonstiv WWW iii 0123456789";
+    families.iter().any(|family| {
+        let span = |id: &str, fam: &str| format!(r#"<span data-mv-id="{id}" style="font:20px '{fam}';display:inline-block">{TEXT}</span><br>"#);
+        let html = format!(r#"<body style="margin:0">{}{}"#, span("probe", family), span("none", "mv-no-such-font-family"));
+        let els = inspect(&html);
+        let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+        w("probe") != w("none")
+    })
+}
+
+/// Test guard: false (with a note on stderr) when none of `families` is installed, and the
+/// test returns early. Never used for what a test checks about the engine, only for numbers
+/// that belong to one font.
+fn require_font(families: &[&str]) -> bool {
+    let present = font_present(families);
+    if !present {
+        eprintln!("skipped: none of {families:?} is installed, the expected widths and metrics are that font's");
+    }
+    present
+}
+
 #[test]
 fn bgcolor_legacy_colour_forms() {
     let els = inspect(&fx("tables-legacy.html"));
@@ -213,6 +240,9 @@ fn block_children_of_a_table_row_share_one_anonymous_cell() {
 /// light, wide: pane 576, body padding 24).
 #[test]
 fn fixed_width_columns_shrink_to_a_clamped_table() {
+    if !require_font(&["Arial"]) {
+        return;
+    }
     let els = inspect_at(&fx("table-clamped-columns.html"), 576);
     let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
     // (id, iframe width). The row of a table is the union of its cells.
@@ -350,6 +380,9 @@ fn a_trailing_br_does_not_add_a_line() {
 /// is a floor for a `normal` span.
 #[test]
 fn line_height_normal_follows_the_font_metrics() {
+    if !require_font(&["Arial"]) {
+        return;
+    }
     let els = inspect(&fx("line-height-normal.html"));
     let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
     assert_eq!((h("a12"), h("a14"), h("a16")), (14.0, 16.0, 18.0));
@@ -364,6 +397,9 @@ fn line_height_normal_follows_the_font_metrics() {
 /// (ours/table-border-attr, wide): table 244.44, cells 162.39 and 74.05 at 14px Arial.
 #[test]
 fn text_content_widths_are_not_rounded_up_to_whole_pixels() {
+    if !require_font(&["Arial"]) {
+        return;
+    }
     let els = inspect_at(&fx("fractional-text-widths.html"), 576);
     let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
     for (id, iframe) in [("t", 244.44), ("c1", 162.39), ("c2", 74.05)] {
@@ -460,6 +496,9 @@ fn helvetica_has_the_webkit_ascent_adjustment() {
 /// body font. The widths are compared with the same text in the equivalent CSS.
 #[test]
 fn font_face_and_size_attributes_map_to_css() {
+    if !require_font(&["Arial"]) {
+        return;
+    }
     let els = inspect(&fx("font-face-size.html"));
     let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
     assert_eq!(w("face"), w("arial"));
@@ -499,6 +538,9 @@ fn a_box_holding_a_float_keeps_its_bottom_padding() {
 /// 123.5, 114.5 and 112.9.
 #[test]
 fn a_spanning_cell_widens_columns_in_proportion_to_their_content() {
+    if !require_font(&["Arial"]) {
+        return;
+    }
     let els = inspect_at(&fx("table-colspan-columns.html"), 576);
     let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
     for (id, iframe) in [("t", 351.25), ("a1", 125.22), ("a2", 114.31), ("a3", 111.73), ("c", 351.27)] {
@@ -579,6 +621,9 @@ fn a_nbsp_spacer_cell_adds_no_line_to_its_row() {
 /// max-content width (375.9).
 #[test]
 fn a_space_before_a_forced_break_takes_no_max_content_width() {
+    if !require_font(&["Helvetica","Arial"]) {
+        return;
+    }
     let els = inspect(&fx("trailing-space-at-line-end.html"));
     let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
     assert!((w("s") - 371.398).abs() < 0.1, "span {}", w("s"));
@@ -592,6 +637,9 @@ fn a_space_before_a_forced_break_takes_no_max_content_width() {
 /// without the collapsed space the line wrapped at (Blitz: 306.48, the glyph run's advance).
 #[test]
 fn a_wrapped_inline_box_excludes_the_space_its_line_wrapped_at() {
+    if !require_font(&["Helvetica","Arial"]) {
+        return;
+    }
     let els = inspect(&fx("trailing-space-at-line-end.html"));
     let w = get(&els, "wrapped").rect.clone().unwrap().w;
     assert!((w - 302.04).abs() < 0.1, "wrapped span, widest line without its trailing space: {w}");
