@@ -5,6 +5,7 @@
 use blitz_dom::{BaseDocument, LocalName, NodeId, Point};
 use parley::PositionedLayoutItem;
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use style::color::{AbsoluteColor, ColorSpace};
 use style::values::specified::box_::{DisplayInside, DisplayOutside};
 
@@ -75,52 +76,116 @@ fn is_descendant_or_self(doc: &BaseDocument, mut id: NodeId, ancestor: NodeId) -
     }
 }
 
-fn has_visible_text(doc: &BaseDocument, id: NodeId) -> bool {
-    let Some(n) = doc.get_node(id) else { return false };
-    if let Some(t) = n.text_data() {
-        return !t.content.trim().is_empty();
-    }
-    n.children.iter().any(|c| has_visible_text(doc, *c))
+/// The text-side facts `measure` needs for every element, gathered in one pass over the
+/// document: a mail near MAX_NODES with every element marked (the harness) must not walk
+/// all nodes and runs once per element.
+struct TextIndex {
+    /// Pre-order position range `[start, end)` of each DOM node's subtree.
+    range: HashMap<NodeId, (usize, usize)>,
+    /// One per glyph run that counts (see `collect_spans`): (pre-order position of the run's
+    /// node, top, bottom), sorted by position, so a subtree's runs are one slice.
+    spans: Vec<(usize, f64, f64)>,
+    /// Nodes with non-whitespace text in their subtree.
+    visible: HashSet<NodeId>,
 }
 
-/// Absolute vertical spans of the text fragments (glyph runs) of `el`'s own or
-/// descendant text, one per run: what the iframe side gets from
-/// `Range.getClientRects`. Looks in every inline root. No ancestry prefilter on
-/// the root: an inline that follows a block sibling lives in an anonymous inline
-/// root that is not a DOM ancestor or descendant of it, and the run's brush id
-/// says which element a run belongs to anyway. (Same origin maths as blitz-dom's
-/// `inline_fragment_rects`.)
-fn line_spans(doc: &BaseDocument, el: NodeId) -> Vec<(f64, f64)> {
-    let mut spans = Vec::new();
-    for (_, root) in doc.tree().iter() {
-        let Some(inline) = root.element_data().and_then(|e| e.inline_layout_data.as_ref()) else { continue };
-        let layout = &inline.layout;
-        let scale = layout.scale() as f64;
-        let fl = root.final_layout();
-        let origin_y = root.absolute_position(0.0, 0.0).y as f64 + (fl.padding.top + fl.border.top) as f64;
-        for line in layout.lines() {
-            for item in line.items() {
-                if let PositionedLayoutItem::GlyphRun(run) = item {
-                    // The harness skips whitespace-only text nodes and rects without height
-                    // (cerberus sets `font-size: 0` on the cell holding its columns). A no-break
-                    // space blitz-dom keeps from collapsing is wrapped in word joiners: JS `trim`
-                    // sees the bare nbsp (whitespace) in the iframe's text node.
-                    let text = inline.text.get(run.run().text_range()).unwrap_or("");
-                    let blank = text.chars().all(|c| c.is_whitespace() || c == '\u{2060}');
-                    if is_descendant_or_self(doc, run.style().brush.id, el) && !blank {
+impl TextIndex {
+    fn new(doc: &BaseDocument) -> Self {
+        let mut range = HashMap::new();
+        let mut visible = HashSet::new();
+        let mut pos = 0usize;
+        // (node, children done?): enter assigns the start, exit the end.
+        let mut stack = vec![(doc.root_node().id, false)];
+        while let Some((id, done)) = stack.pop() {
+            let Some(n) = doc.get_node(id) else { continue };
+            if done {
+                if let Some(r) = range.get_mut(&id) {
+                    let r: &mut (usize, usize) = r;
+                    r.1 = pos;
+                }
+                continue;
+            }
+            range.insert(id, (pos, pos));
+            pos += 1;
+            if n.text_data().is_some_and(|t| !t.content.trim().is_empty()) {
+                let mut cur = Some(id);
+                while let Some(c) = cur {
+                    if !visible.insert(c) {
+                        break;
+                    }
+                    cur = doc.get_node(c).and_then(|n| n.parent);
+                }
+            }
+            stack.push((id, true));
+            stack.extend(n.children.iter().rev().map(|c| (*c, false)));
+        }
+        let mut index = TextIndex { range, spans: Vec::new(), visible };
+        index.spans = index.collect_spans(doc);
+        index.spans.sort_by_key(|s| s.0);
+        index
+    }
+
+    /// The pre-order position of `id`, or of its nearest ancestor in the DOM walk (a run
+    /// can be styled by a node that is not in its parent's child list).
+    fn position(&self, doc: &BaseDocument, mut id: NodeId) -> Option<usize> {
+        loop {
+            if let Some(r) = self.range.get(&id) {
+                return Some(r.0);
+            }
+            id = doc.get_node(id)?.parent?;
+        }
+    }
+
+    /// Absolute vertical spans of every text fragment (glyph run): what the iframe side
+    /// gets from `Range.getClientRects`. Looks in every inline root: an inline that follows
+    /// a block sibling lives in an anonymous inline root that is not a DOM ancestor or
+    /// descendant of it, and the run's brush id says which element a run belongs to anyway.
+    /// (Same origin maths as blitz-dom's `inline_fragment_rects`.)
+    fn collect_spans(&self, doc: &BaseDocument) -> Vec<(usize, f64, f64)> {
+        let mut spans = Vec::new();
+        for (_, root) in doc.tree().iter() {
+            let Some(inline) = root.element_data().and_then(|e| e.inline_layout_data.as_ref()) else { continue };
+            let layout = &inline.layout;
+            let scale = layout.scale() as f64;
+            let fl = root.final_layout();
+            let origin_y = root.absolute_position(0.0, 0.0).y as f64 + (fl.padding.top + fl.border.top) as f64;
+            for line in layout.lines() {
+                for item in line.items() {
+                    if let PositionedLayoutItem::GlyphRun(run) = item {
+                        // The harness skips whitespace-only text nodes and rects without height
+                        // (cerberus sets `font-size: 0` on the cell holding its columns). A no-break
+                        // space blitz-dom keeps from collapsing is wrapped in word joiners: JS `trim`
+                        // sees the bare nbsp (whitespace) in the iframe's text node.
+                        let text = inline.text.get(run.run().text_range()).unwrap_or("");
+                        if text.chars().all(|c| c.is_whitespace() || c == '\u{2060}') {
+                            continue;
+                        }
+                        let Some(at) = self.position(doc, run.style().brush.id) else { continue };
                         // A text fragment's rect, as `Range.getClientRects` gives it: the
                         // rounded ascent and descent around the baseline, not the line box.
                         let m = run.run().metrics();
                         let (top, bottom) = ((run.baseline() - m.ascent.round()) as f64, (run.baseline() + m.descent.round()) as f64);
                         if bottom > top {
-                            spans.push((origin_y + top / scale, origin_y + bottom / scale));
+                            spans.push((at, origin_y + top / scale, origin_y + bottom / scale));
                         }
                     }
                 }
             }
         }
+        spans
     }
-    spans
+
+    fn has_visible_text(&self, id: NodeId) -> bool {
+        self.visible.contains(&id)
+    }
+
+    /// The spans of `el`'s own and descendant text.
+    fn line_spans(&self, el: NodeId) -> Vec<(f64, f64)> {
+        let Some(&(start, end)) = self.range.get(&el) else { return Vec::new() };
+        let lo = self.spans.partition_point(|s| s.0 < start);
+        let hi = self.spans.partition_point(|s| s.0 < end);
+        self.spans[lo..hi].iter().map(|s| (s.1, s.2)).collect()
+    }
 }
 
 pub fn cluster_line_count(mut spans: Vec<(f64, f64)>) -> u32 {
@@ -306,7 +371,7 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
     Some(InspectRect { x: ox + x0 / scale, y: oy + y0 / scale, w: (x1 - x0) / scale, h: (y1 - y0) / scale })
 }
 
-fn measure(doc: &BaseDocument, id: NodeId, mv_id: String) -> InspectedElement {
+fn measure(doc: &BaseDocument, text: &TextIndex, id: NodeId, mv_id: String) -> InspectedElement {
     let node = doc.get_node(id).expect("walked id");
     let tag = node.element_data().map(|e| e.name.local.to_string()).unwrap_or_default();
     let rendered = is_rendered(doc, id);
@@ -357,8 +422,8 @@ fn measure(doc: &BaseDocument, id: NodeId, mv_id: String) -> InspectedElement {
         out.font_family = Some(style_traits::ToCss::to_css_string(&font.font_family));
     }
     out.rect = element_rect(doc, id);
-    if has_visible_text(doc, id) {
-        let spans = line_spans(doc, id);
+    if text.has_visible_text(id) {
+        let spans = text.line_spans(id);
         out.line_count = (!spans.is_empty()).then(|| cluster_line_count(spans));
     }
     out
@@ -367,12 +432,13 @@ fn measure(doc: &BaseDocument, id: NodeId, mv_id: String) -> InspectedElement {
 /// Every `[data-mv-id]` element, in tree order.
 pub fn collect(doc: &BaseDocument) -> Vec<InspectedElement> {
     let attr = LocalName::from("data-mv-id");
+    let text = TextIndex::new(doc);
     let mut out = Vec::new();
     let mut stack = vec![doc.root_node().id];
     while let Some(id) = stack.pop() {
         let Some(node) = doc.get_node(id) else { continue };
         if let Some(mv) = node.attr(attr.clone()) {
-            out.push(measure(doc, id, mv.to_string()));
+            out.push(measure(doc, &text, id, mv.to_string()));
         }
         stack.extend(node.children.iter().rev().copied());
     }

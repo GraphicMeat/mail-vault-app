@@ -131,3 +131,19 @@ fn a_font_face_cannot_inject_declarations() {
     let f = els.iter().find(|e| e.mv_id == "f").unwrap();
     assert_eq!(f.color, Some([0.0, 0.0, 0.0, 1.0]));
 }
+
+#[test]
+fn inspecting_thirty_thousand_marked_paragraphs_is_linear() {
+    let html: String = (0..30_000).map(|i| format!(r#"<p data-mv-id="p{i}">w{i}</p>"#)).collect();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut doc = RenderDoc::open(&html, RenderOptions::new(600, 1.0), None).unwrap();
+        let t = Instant::now();
+        let n = doc.inspect().iter().filter(|e| e.line_count == Some(1)).count();
+        let _ = tx.send((n, t.elapsed()));
+    });
+    let (n, took) = rx.recv_timeout(Duration::from_secs(180)).expect("open + inspect did not finish in 180 s");
+    eprintln!("inspect {took:?}");
+    assert_eq!(n, 30_000);
+    assert!(took < Duration::from_secs(4), "inspect took {took:?}");
+}
