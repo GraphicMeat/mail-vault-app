@@ -180,3 +180,24 @@ fn collapsed_borders_of_a_borderless_cell_are_zero() {
     assert_eq!((c.x, c.y, c.w), (0.0, 0.0, 400.0), "cell");
     assert_eq!(t.h, c.h, "no collapsed border adds to the table height");
 }
+
+/// A `display:block` child of a table row sits in an anonymous table cell together with
+/// its consecutive non-cell siblings (CSS 2 17.2.1), so the children stack inside one
+/// cell. cerberus stacks its `<th class="stack-column-center">` columns this way under
+/// `@media (max-width: 600px)`; Blitz dropped such a child with its whole subtree (the
+/// harness iframe, responsive-inbody: table 556x292, th[1] 556x146, th[2] below it at
+/// the same x; Blitz 0x0). The second table drives the same markup from the @media rule.
+#[test]
+fn block_children_of_a_table_row_share_one_anonymous_cell() {
+    let els = inspect(&fx("table-row-block-children.html"));
+    let r = |id: &str| {
+        let r = get(&els, id).rect.clone().unwrap();
+        (r.x, r.y, r.w, r.h)
+    };
+    assert_eq!(r("a1"), (0.0, 0.0, 400.0, 30.0));
+    assert_eq!(r("a2"), (0.0, 30.0, 400.0, 40.0));
+    assert_eq!(r("ta"), (0.0, 0.0, 400.0, 70.0));
+    assert_eq!(r("b1"), (0.0, 70.0, 400.0, 30.0), "the @media rule applies at a 400px viewport");
+    assert_eq!(r("b2"), (0.0, 100.0, 400.0, 40.0));
+    assert_eq!(r("tb"), (0.0, 70.0, 400.0, 70.0));
+}

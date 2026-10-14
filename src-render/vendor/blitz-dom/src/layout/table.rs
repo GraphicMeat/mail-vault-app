@@ -84,7 +84,9 @@ pub struct TableRow {
 pub(crate) fn build_table_context(
     doc: &mut BaseDocument,
     table_root_node_id: NodeId,
-) -> (TableContext, Vec<NodeId>) {
+) -> (TableContext, Vec<NodeId>, Vec<NodeId>) {
+    // MailVault parity fix (plan B): the anonymous table cells made for non-cell row children.
+    let mut anonymous_cells: Vec<NodeId> = Vec::new();
     let mut cells: Vec<TableCell> = Vec::new();
     let mut rows: Vec<TableRow> = Vec::new();
     let mut row = 0u16;
@@ -133,6 +135,7 @@ pub(crate) fn build_table_context(
             &mut rows,
             &mut column_sizes,
             &mut first_cell_border,
+            &mut anonymous_cells,
         );
     }
     column_sizes.resize(col as usize, style_helpers::auto());
@@ -207,7 +210,117 @@ pub(crate) fn build_table_context(
             border_style: first_cell_border,
         },
         layout_children,
+        anonymous_cells,
     )
+}
+
+/// Register `node_id` as the next cell of the current row.
+#[allow(clippy::too_many_arguments)]
+fn push_table_cell(
+    doc: &mut BaseDocument,
+    node_id: NodeId,
+    is_fixed: bool,
+    border_collapse: BorderCollapse,
+    row: &mut u16,
+    col: &mut u16,
+    cells: &mut Vec<TableCell>,
+    columns: &mut Vec<TrackSizingFunction>,
+    first_cell_border: &mut Option<ServoArc<Border>>,
+) {
+    let node = &doc.nodes[node_id];
+    let stylo_style = &node.primary_styles().unwrap();
+    let colspan: u16 = node
+        .attr(local_name!("colspan"))
+        .and_then(|val| val.parse().ok())
+        .unwrap_or(1);
+    let rowspan: u16 = node
+        .attr(local_name!("rowspan"))
+        .and_then(|val| val.parse::<u16>().ok())
+        .map(|v| v.clamp(1, 65534))
+        .unwrap_or(1);
+    let mut style = stylo_taffy::to_taffy_style(stylo_style);
+
+    if first_cell_border.is_none() {
+        *first_cell_border = Some(stylo_style.clone_border());
+    }
+
+    if *row == 1 {
+        let column = match style.size.width.tag() {
+            taffy::CompactLength::LENGTH_TAG => {
+                let len = style.size.width.value();
+                let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
+                let border = style.border.resolve_or_zero(None, resolve_calc_value);
+                match style.box_sizing {
+                    taffy::BoxSizing::ContentBox => style_helpers::length(
+                        len + padding.left + padding.right + border.left + border.right,
+                    ),
+                    taffy::BoxSizing::BorderBox => style_helpers::length(len),
+                }
+            }
+            taffy::CompactLength::PERCENT_TAG => {
+                if is_fixed {
+                    style_helpers::percent(style.size.width.value())
+                } else {
+                    style_helpers::auto()
+                }
+            }
+            taffy::CompactLength::AUTO_TAG => style_helpers::auto(),
+            // Dimension values are always length, percentage, auto or calc(),
+            // so any other tag is a calc() value. Pass it through so that
+            // Taffy resolves it against the table's inner width.
+            _ => style.size.width.into(),
+        };
+        columns.push(column);
+    }
+
+    // Zero-out cell borders is BorderCollapse is Collapse
+    // Borders are handled at the table level in this mode
+    if border_collapse == BorderCollapse::Collapse {
+        style.border = taffy::Rect::ZERO.map(style_helpers::length);
+    }
+
+    // The margin properties do not apply to table-internal elements
+    style.margin = taffy::Rect::ZERO.map(style_helpers::length);
+
+    // Let Taffy auto-place the column. Combined with
+    // `grid_auto_flow: RowDense` set on the table root, each cell
+    // scans from the first track in its row for a free position,
+    // which makes cells automatically skip columns occupied by
+    // rowspan cells from earlier rows.
+    style.grid_column = taffy::Line {
+        start: style_helpers::auto(),
+        end: style_helpers::span(colspan),
+    };
+    style.grid_row = taffy::Line {
+        start: style_helpers::line(*row as i16),
+        end: style_helpers::span(rowspan),
+    };
+    style.size.width = style_helpers::auto();
+    cells.push(TableCell { node_id, style });
+
+    *col += colspan;
+}
+
+/// Whether a child of a table row belongs in the row's anonymous cell: a
+/// non-whitespace text node, or an element whose box is not a table-internal one
+/// (a `display:block` or `inline-block` `th`, say). Whitespace text only joins a
+/// cell that is already open. Captions and `display:none` stay out.
+fn is_row_content_to_wrap(doc: &BaseDocument, child_id: NodeId, cell_open: bool) -> bool {
+    let node = &doc.nodes[child_id];
+    if let Some(text) = node.text_data() {
+        return cell_open || !text.content.trim().is_empty();
+    }
+    if !node.is_element() {
+        return false;
+    }
+    let Some(display) = node.primary_styles().map(|s| s.clone_display()) else {
+        return false;
+    };
+    matches!(display.outside(), DisplayOutside::Block | DisplayOutside::Inline)
+        && matches!(
+            display.inside(),
+            DisplayInside::Flow | DisplayInside::FlowRoot | DisplayInside::Flex | DisplayInside::Grid
+        )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -222,6 +335,7 @@ pub(crate) fn collect_table_cells(
     rows: &mut Vec<TableRow>,
     columns: &mut Vec<TrackSizingFunction>,
     first_cell_border: &mut Option<ServoArc<Border>>,
+    anonymous_cells: &mut Vec<NodeId>,
 ) {
     let node = &mut doc.nodes[node_id];
 
@@ -260,6 +374,7 @@ pub(crate) fn collect_table_cells(
                     rows,
                     columns,
                     first_cell_border,
+                    anonymous_cells,
                 );
             }
             doc.nodes[node_id].children = children;
@@ -275,7 +390,33 @@ pub(crate) fn collect_table_cells(
             });
 
             let children = std::mem::take(&mut doc.nodes[node_id].children);
+            // MailVault parity fix (plan B): CSS 2 17.2.1 wraps consecutive non-cell
+            // children of a row (a `th` made `display:block` by a media query, as
+            // cerberus does to stack its columns) in ONE anonymous cell. Blitz dropped
+            // them, with their whole subtree.
+            let mut anonymous: Option<NodeId> = None;
             for child_id in children.iter().copied() {
+                if is_row_content_to_wrap(doc, child_id, anonymous.is_some()) {
+                    let anon = *anonymous.get_or_insert_with(|| {
+                        let anon = super::construct::new_anonymous_block(doc, node_id);
+                        anonymous_cells.push(anon);
+                        push_table_cell(
+                            doc,
+                            anon,
+                            is_fixed,
+                            border_collapse,
+                            row,
+                            col,
+                            cells,
+                            columns,
+                            first_cell_border,
+                        );
+                        anon
+                    });
+                    doc.nodes[anon].children.push(child_id);
+                    continue;
+                }
+                anonymous = None;
                 collect_table_cells(
                     doc,
                     child_id,
@@ -287,84 +428,22 @@ pub(crate) fn collect_table_cells(
                     rows,
                     columns,
                     first_cell_border,
+                    anonymous_cells,
                 );
             }
             doc.nodes[node_id].children = children;
         }
-        DisplayInside::TableCell => {
-            // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
-            let stylo_style = &node.primary_styles().unwrap();
-            let colspan: u16 = node
-                .attr(local_name!("colspan"))
-                .and_then(|val| val.parse().ok())
-                .unwrap_or(1);
-            let rowspan: u16 = node
-                .attr(local_name!("rowspan"))
-                .and_then(|val| val.parse::<u16>().ok())
-                .map(|v| v.clamp(1, 65534))
-                .unwrap_or(1);
-            let mut style = stylo_taffy::to_taffy_style(stylo_style);
-
-            if first_cell_border.is_none() {
-                *first_cell_border = Some(stylo_style.clone_border());
-            }
-
-            if *row == 1 {
-                let column = match style.size.width.tag() {
-                    taffy::CompactLength::LENGTH_TAG => {
-                        let len = style.size.width.value();
-                        let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
-                        let border = style.border.resolve_or_zero(None, resolve_calc_value);
-                        match style.box_sizing {
-                            taffy::BoxSizing::ContentBox => style_helpers::length(
-                                len + padding.left + padding.right + border.left + border.right,
-                            ),
-                            taffy::BoxSizing::BorderBox => style_helpers::length(len),
-                        }
-                    }
-                    taffy::CompactLength::PERCENT_TAG => {
-                        if is_fixed {
-                            style_helpers::percent(style.size.width.value())
-                        } else {
-                            style_helpers::auto()
-                        }
-                    }
-                    taffy::CompactLength::AUTO_TAG => style_helpers::auto(),
-                    // Dimension values are always length, percentage, auto or calc(),
-                    // so any other tag is a calc() value. Pass it through so that
-                    // Taffy resolves it against the table's inner width.
-                    _ => style.size.width.into(),
-                };
-                columns.push(column);
-            }
-
-            // Zero-out cell borders is BorderCollapse is Collapse
-            // Borders are handled at the table level in this mode
-            if border_collapse == BorderCollapse::Collapse {
-                style.border = taffy::Rect::ZERO.map(style_helpers::length);
-            }
-
-            // The margin properties do not apply to table-internal elements
-            style.margin = taffy::Rect::ZERO.map(style_helpers::length);
-
-            // Let Taffy auto-place the column. Combined with
-            // `grid_auto_flow: RowDense` set on the table root, each cell
-            // scans from the first track in its row for a free position,
-            // which makes cells automatically skip columns occupied by
-            // rowspan cells from earlier rows.
-            style.grid_column = taffy::Line {
-                start: style_helpers::auto(),
-                end: style_helpers::span(colspan),
-            };
-            style.grid_row = taffy::Line {
-                start: style_helpers::line(*row as i16),
-                end: style_helpers::span(rowspan),
-            };
-            style.size.width = style_helpers::auto();
-            cells.push(TableCell { node_id, style });
-
-            *col += colspan;
-        }
+        DisplayInside::TableCell => push_table_cell(
+            doc,
+            node_id,
+            is_fixed,
+            border_collapse,
+            row,
+            col,
+            cells,
+            columns,
+            first_cell_border,
+        ),
         DisplayInside::Flow
         | DisplayInside::FlowRoot
         | DisplayInside::Flex
