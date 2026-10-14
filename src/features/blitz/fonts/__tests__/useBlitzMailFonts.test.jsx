@@ -132,6 +132,57 @@ describe('Blitz mail fonts', () => {
     expect(fontsRender).not.toHaveBeenCalled();
   });
 
+  it('families that land together reach the worker in ONE render.fonts call', async () => {
+    familyForMail.mockResolvedValue(true);
+    renderHook(() => useBlitzMailFonts({ families: ['Merriweather', 'Lato', 'Oswald'], messageKey: 'k' }));
+    await waitFor(() => expect(fontsRender).toHaveBeenCalled());
+    await new Promise(r => setTimeout(r, 120));
+    expect(fontsRender).toHaveBeenCalledTimes(1);
+    expect(fontsRender).toHaveBeenCalledWith(['Merriweather', 'Lato', 'Oswald']);
+  });
+
+  it('a family that fails to download is left out of the batch, the others still go together', async () => {
+    familyForMail.mockImplementation(async (f) => f !== 'Lato');
+    renderHook(() => useBlitzMailFonts({ families: ['Merriweather', 'Lato', 'Oswald'], messageKey: 'k' }));
+    await waitFor(() => expect(fontsRender).toHaveBeenCalled());
+    await new Promise(r => setTimeout(r, 120));
+    expect(fontsRender).toHaveBeenCalledTimes(1);
+    expect(fontsRender).toHaveBeenCalledWith(['Merriweather', 'Oswald']);
+  });
+
+  it('a family that lands well after the batch window goes in its own call', async () => {
+    vi.useFakeTimers();
+    try {
+      let late;
+      familyForMail.mockImplementation((f) => (f === 'Lato' ? new Promise(r => { late = r; }) : Promise.resolve(true)));
+      renderHook(() => useBlitzMailFonts({ families: ['Merriweather', 'Lato'], messageKey: 'k' }));
+      await vi.advanceTimersByTimeAsync(60);
+      expect(fontsRender).toHaveBeenCalledTimes(1);
+      expect(fontsRender).toHaveBeenLastCalledWith(['Merriweather']);
+      late(true);
+      await vi.advanceTimersByTimeAsync(60);
+      expect(fontsRender).toHaveBeenCalledTimes(2);
+      expect(fontsRender).toHaveBeenLastCalledWith(['Lato']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('an unmount inside the batch window cancels the pending call', async () => {
+    vi.useFakeTimers();
+    try {
+      familyForMail.mockResolvedValue(true);
+      const { unmount } = renderHook(() => useBlitzMailFonts({ families: ['Merriweather', 'Lato'], messageKey: 'k' }));
+      await vi.advanceTimersByTimeAsync(10); // both have landed, the 50 ms window is open
+      expect(familyForMail).toHaveBeenCalledTimes(2);
+      unmount();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(fontsRender).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('prepare on a missing document does not throw', async () => {
     await expect(prepareMailFonts(undefined)).resolves.toEqual({ installed: [], pending: [] });
   });

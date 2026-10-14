@@ -5,6 +5,10 @@ import { isTrackerBlockingActive } from '../../../stores/settingsStore';
 import { fontSourcesOf, mailFontFamilies } from '../../../utils/mailFonts';
 
 const PREPARE_CAP_MS = 300;
+// A family that lands inside this window of the first one goes in the same
+// render.fonts call: each call rebuilds every open document that names a new
+// family on the one worker thread, so one rebuild must serve the whole batch.
+const BATCH_MS = 50;
 
 /**
  * Before render.open: the catalogue families this mail is written in, read off
@@ -38,23 +42,37 @@ export async function prepareMailFonts(doc) {
 /**
  * After open: download what is missing, the iframe's way (familyForMail:
  * tracker blocking and this session's failures say no, so a blocked mail
- * never makes a font request), and hand each family to the worker when it is
- * ready. The worker re-lays out every document that names it and emits
- * render-updated (the iframe's onFonts moment). A failure leaves the fallback.
+ * never makes a font request), and hand the families that are ready to the
+ * worker, those landing within BATCH_MS of each other in one call. The worker
+ * re-lays out every document that names a new family and emits render-updated
+ * (the iframe's onFonts moment). A failure leaves the fallback.
  */
 export function useBlitzMailFonts({ families, messageKey }) {
   const key = (families || []).join('|');
   useEffect(() => {
     if (!key) return undefined;
     let gone = false;
+    let ready = [];
+    let timer = null;
+    const flush = () => {
+      timer = null;
+      const batch = ready;
+      ready = [];
+      if (gone || !batch.length) return;
+      try { Promise.resolve(fontsRender(batch)).catch(() => {}); } catch { /* the fallback draws */ }
+    };
     // The store must know what the daemon holds before familyForMail decides (installed => no download).
     const listed = refreshFonts().catch(() => null);
     for (const family of key.split('|')) {
       listed
         .then(() => (gone ? false : familyForMail(family, () => isTrackerBlockingActive())))
-        .then(ok => (ok && !gone ? fontsRender([family]) : null))
+        .then(ok => {
+          if (!ok || gone) return;
+          ready.push(family);
+          if (timer === null) timer = setTimeout(flush, BATCH_MS);
+        })
         .catch(() => {});
     }
-    return () => { gone = true; };
+    return () => { gone = true; if (timer !== null) clearTimeout(timer); };
   }, [key, messageKey]);
 }
