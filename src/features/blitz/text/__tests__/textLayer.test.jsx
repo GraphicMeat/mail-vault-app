@@ -325,6 +325,22 @@ describe('TextLayer', () => {
     expect([...document.querySelectorAll('.mv-blitz-text span[data-node]')].map(s => s.textContent)).toEqual(['new']);
   });
 
+  it('runs of tiles past a smaller tileCount are dropped: they never resurface when the count grows again', async () => {
+    let tile2Calls = 0;
+    textRunsRender.mockImplementation((_d, i) => {
+      if (i !== 2) return Promise.resolve({ runs: [] });
+      tile2Calls++;
+      return tile2Calls === 1 ? Promise.resolve({ runs: [run({ node: 12, text: 'stale' })] }) : new Promise(() => {});
+    });
+    const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([2])} measure={measure} />);
+    await waitFor(() => expect(document.querySelector('[data-tile="2"] span[data-node="12"]')).not.toBeNull());
+    rerender(<TextLayer docId={1} rev={2} meta={{ ...meta, tileCount: 1 }} shownTiles={new Set([0])} measure={measure} />);
+    expect(document.querySelector('[data-tile="2"]')).toBeNull();
+    rerender(<TextLayer docId={1} rev={3} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    expect(document.querySelector('[data-tile="2"]')).not.toBeNull(); // the container is back, empty
+    expect(document.querySelector('[data-tile="2"] span[data-node]')).toBeNull();
+  });
+
   it('a new rev drops cached runs and refetches', async () => {
     textRunsRender.mockResolvedValue({ runs: [run({})] });
     const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);

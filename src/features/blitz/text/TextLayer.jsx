@@ -40,6 +40,22 @@ const TextLayer = forwardRef(function TextLayer({ docId, rev, meta, shownTiles, 
     setStore((s) => (s.docId === docId ? s : { docId, map: new Map() }));
   }, [key, docId]);
 
+  // A smaller tileCount (a relayout that got shorter) drops the runs and the asked-for marks of
+  // the tiles past it: with no container they are invisible, but they would be drawn again, stale,
+  // if the count grew back within this doc.
+  useEffect(() => {
+    for (const i of requested.current.keys()) if (i >= meta.tileCount) requested.current.delete(i);
+    setStore((s) => {
+      if (s.docId !== docId) return s;
+      let stale = false;
+      for (const i of s.map.keys()) if (i >= meta.tileCount) { stale = true; break; }
+      if (!stale) return s;
+      const map = new Map();
+      for (const [i, runs] of s.map) if (i < meta.tileCount) map.set(i, runs);
+      return { docId, map };
+    });
+  }, [meta.tileCount, docId]);
+
   // `fetchTile` asks for one tile's runs once per rev and resolves to the owner
   // tiles its reply names; `load` (a shown tile, select-all) also fetches those
   // owners, one step only: an owner's own owners are not chased.
@@ -54,6 +70,7 @@ const TextLayer = forwardRef(function TextLayer({ docId, rev, meta, shownTiles, 
           if (currentKey.current !== asked) return [];
           const runs = r?.runs || [];
           setStore((s) => {
+            if (i >= tileCount.current) return s; // the layout got shorter while the worker answered
             const had = s.docId === docId ? s.map.get(i) : undefined;
             // An unchanged tile keeps its array: no re-render, no refit.
             if (had && sameRuns(had, runs)) return s;
