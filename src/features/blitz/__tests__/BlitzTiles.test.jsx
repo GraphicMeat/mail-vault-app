@@ -539,4 +539,73 @@ describe('fold toggles', () => {
     await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(2));
     expect(foldRender.mock.calls.map(c => c[2])).toEqual([true, true]);
   });
+
+  it('a refusal of an earlier click does not revert a later click on the same fold', async () => {
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    let rejectFirst;
+    foldRender.mockImplementationOnce(() => new Promise((_, rej) => { rejectFirst = rej; }))
+      .mockResolvedValueOnce({ rev: 1, meta: {} });
+    const onFoldToggled = vi.fn();
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    render(tiles({ onFoldToggled }));
+    const img = (await screen.findAllByTestId('blitz-tile'))[0];
+    fireEvent.click(img);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(1));
+    fireEvent.click(img);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(2));
+    await act(async () => { rejectFirst(new Error('transient')); });
+    expect(onFoldToggled.mock.calls).toEqual([['q0', true], ['q0', true]]);
+    debug.mockRestore();
+  });
+
+  it('a refusal that lands after the doc was replaced reverts nothing', async () => {
+    openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: foldMeta(false) })
+      .mockResolvedValue({ docId: 5, rev: 1, meta: foldMeta(true) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    let rejectIt;
+    foldRender.mockImplementationOnce(() => new Promise((_, rej) => { rejectIt = rej; }));
+    const onFoldToggled = vi.fn();
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const { rerender } = render(tiles({ onFoldToggled, html: '<p>A' }));
+    fireEvent.click((await screen.findAllByTestId('blitz-tile'))[0]);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledWith(4, 'q0', true));
+    rerender(tiles({ onFoldToggled, html: '<p>B' }));
+    await waitFor(() => expect(screen.getByTestId('blitz-email-body').getAttribute('data-doc-id')).toBe('5'));
+    await act(async () => { rejectIt(new Error('render_unknown_doc')); });
+    expect(onFoldToggled.mock.calls).toEqual([['q0', true]]);
+    debug.mockRestore();
+  });
+
+  it('a click after the fold state changed (render-updated between clicks) toggles it back', async () => {
+    let push;
+    onRenderUpdated.mockImplementation(async cb => { push = cb; return () => {}; });
+    openRender.mockResolvedValue({ docId: 4, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    foldRender.mockResolvedValue({ rev: 2, meta: {} });
+    render(tiles());
+    const img = (await screen.findAllByTestId('blitz-tile'))[0];
+    fireEvent.click(img);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(1));
+    await act(async () => { push({ docId: 4, rev: 2, meta: foldMeta(true) }); });
+    fireEvent.click(img);
+    await waitFor(() => expect(foldRender).toHaveBeenCalledTimes(2));
+    expect(foldRender.mock.calls.map(c => c[2])).toEqual([true, false]);
+  });
+
+  it('a new doc starts with no hover: the old toggle id is not under the pointer any more', async () => {
+    openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: foldMeta(false) })
+      .mockResolvedValue({ docId: 5, rev: 1, meta: foldMeta(false) });
+    hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+    const { rerender } = render(tiles({ html: '<p>A' }));
+    const layer = await screen.findByTestId('blitz-text-layer');
+    fireEvent.mouseMove(layer, { clientX: 5, clientY: 5 });
+    await waitFor(() => expect(layer.closest('[title]')?.getAttribute('title')).toBe('Show quoted text'));
+    rerender(tiles({ html: '<p>B' }));
+    await waitFor(() => expect(screen.getByTestId('blitz-email-body').getAttribute('data-doc-id')).toBe('5'));
+    const layer2 = screen.getByTestId('blitz-text-layer');
+    expect(layer2.closest('[title]')).toBeNull();
+    expect(layer2.getAttribute('data-hover')).toBeNull();
+    expect(layer2.closest('[role=presentation]').style.cursor).toBe('default');
+  });
 });

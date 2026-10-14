@@ -41,6 +41,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const tileEls = useRef([]);
   const gen = useRef(0);
   const docIdRef = useRef(null);
+  const foldSeq = useRef(new Map()); // fold id -> newest toggle issued, so an older refusal cannot undo a newer click
   const docRef = useRef(null); // the latest doc, for a click handler that awaits a hit reply
   const failed = useRef(false);
   const hitBusy = useRef(false);
@@ -95,6 +96,8 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
         const prev = docIdRef.current;
         docIdRef.current = r.docId;
         setDoc(r);
+        // Toggle ids repeat across docs: what was under the pointer is not known for this one.
+        setHover(null); setHoverFold(null);
         if (prev != null && prev !== r.docId) closeRender(prev);
       })
       // Any rejection is a failure (render_bad_request, render_too_complex, a plain object, a string).
@@ -153,12 +156,16 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     const f = d && d.docId === docId ? d.meta?.folds?.find(x => x.id === id) : null;
     if (!f) return;
     const open = !f.open;
+    const seq = (foldSeq.current.get(id) ?? 0) + 1;
+    foldSeq.current.set(id, seq);
     onFoldToggledRef.current?.(id, open);
     try {
       await foldRender(docId, id, open);
     } catch (e) {
       console.debug('[blitz] fold toggle refused', id, e?.message || e);
-      onFoldToggledRef.current?.(id, !open);
+      // Undo only our own record: not after a newer click on this fold, and not after the doc
+      // was replaced (the new open carries the state the owner recorded for it).
+      if (foldSeq.current.get(id) === seq && docIdRef.current === docId) onFoldToggledRef.current?.(id, !open);
     }
   }, []);
 
