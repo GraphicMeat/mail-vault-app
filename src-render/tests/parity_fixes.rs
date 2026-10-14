@@ -266,3 +266,17 @@ fn a_line_with_only_an_image_keeps_the_strut_below_the_baseline() {
     assert_eq!(r("block").h, 90.0, "a block image has no strut");
     assert_eq!(r("block").y, r("inline").y + r("inline").h);
 }
+
+/// CSS 2 17.5.3: a row is as high as the largest of its own `height`, the `height` of
+/// each of its cells and the room their content needs, and every cell fills the row.
+/// Blitz left the `tr` height out and started a cell with a `height` of its own at the row
+/// top at that height, so a coloured cell stopped short of the row.
+#[test]
+fn rows_honour_their_height_and_cells_fill_the_row() {
+    let els = inspect(&fx("table-row-and-cell-heights.html"));
+    let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
+    assert_eq!((h("a"), h("b")), (60.0, 60.0), "row 1 takes the tr height, both cells fill it");
+    assert_eq!((h("c"), h("d")), (80.0, 80.0), "row 2 takes the tallest cell, the shorter one fills it");
+    assert_eq!(h("r1"), 60.0);
+    assert_eq!(h("r2"), 80.0);
+}

@@ -157,7 +157,20 @@ pub(crate) fn build_table_context(
 
     let column_prefs: Vec<Option<f32>> = column_sizes.iter().map(|(_, pref)| *pref).collect();
     style.grid_template_columns = column_sizes.into_iter().map(|(dim, _)| dim.into()).collect();
-    style.grid_template_rows = vec![style_helpers::auto(); row as usize];
+    style.grid_template_rows = (0..row as usize)
+        .map(|i| match rows.get(i) {
+            // MailVault parity fix (plan B): see `TableRow::height`.
+            Some(r) if r.height > 0.0 => {
+                let track: TrackSizingFunction =
+                    style_helpers::minmax(style_helpers::length(r.height), style_helpers::auto());
+                track.into()
+            }
+            _ => {
+                let track: TrackSizingFunction = style_helpers::auto();
+                track.into()
+            }
+        })
+        .collect();
 
     style.gap = match border_collapse {
         BorderCollapse::Separate => {
@@ -312,6 +325,15 @@ fn push_table_cell(
     // The margin properties do not apply to table-internal elements
     style.margin = taffy::Rect::ZERO.map(style_helpers::length);
 
+    // MailVault parity fix (plan B): a cell's `height` is a minimum (CSS 2 17.5.3): the
+    // cell fills its row. Taffy does not stretch an item with a definite height, so
+    // the grid sees it as a min-height instead. The cell's own style still has the
+    // height, which is what its content contribution to the row is measured with.
+    if style.size.height.tag() == taffy::CompactLength::LENGTH_TAG {
+        style.min_size.height = style_helpers::length(style.size.height.value());
+        style.size.height = style_helpers::auto();
+    }
+
     // Let Taffy auto-place the column. Combined with
     // `grid_auto_flow: RowDense` set on the table root, each cell
     // scans from the first track in its row for a free position,
@@ -420,9 +442,15 @@ pub(crate) fn collect_table_cells(
             *row += 1;
             *col = 0;
 
+            // MailVault parity fix (plan B): a row is at least its own `height` tall.
+            let row_height = node
+                .primary_styles()
+                .map(|s| stylo_taffy::to_taffy_style(&s).size.height)
+                .filter(|h| h.tag() == taffy::CompactLength::LENGTH_TAG)
+                .map_or(0.0, |h| h.value());
             rows.push(TableRow {
                 node_id,
-                height: 0.0,
+                height: row_height,
             });
 
             let children = std::mem::take(&mut doc.nodes[node_id].children);
