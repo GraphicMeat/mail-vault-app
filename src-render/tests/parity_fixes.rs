@@ -142,3 +142,15 @@ fn system_font_uses_the_optical_size_for_its_font_size() {
     let w = get(&els, "read").rect.clone().unwrap().w;
     assert!((w - 69.43).abs() <= 1.0, "-apple-system 14px 'Read more': {w}, iframe 69.43");
 }
+
+/// WebKit truncates a computed line-height to whole px (RenderStyle::computedLineHeight
+/// returns int), so `line-height: 1.6` is 22px at 14px, not 22.4. Blitz kept the
+/// fraction, which added up to 0.4px per line down a message. Heights from the
+/// harness iframe (basic-typography, light, wide): p 3 lines 66, h2 33, h1 44.
+#[test]
+fn line_height_is_truncated_to_whole_pixels() {
+    let els = inspect(&fx("line-height-truncation.html"));
+    let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
+    assert_eq!((h("p14"), h("h21"), h("h28")), (66.0, 33.0, 44.0));
+    assert_eq!(h("p13"), 42.0, "1.625 x 13px = 21.125 -> 21 per line");
+}

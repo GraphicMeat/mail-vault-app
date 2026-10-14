@@ -113,6 +113,11 @@ pub(crate) fn font_variations(
     out
 }
 
+/// Truncate to whole px, tolerant of f32 error just below an integer.
+fn whole_px(v: f32) -> f32 {
+    (v as f64 + 1e-3).floor() as f32
+}
+
 #[inline]
 fn feature(tag: &[u8; 4], value: u16) -> parley::FontFeature {
     parley::FontFeature {
@@ -312,8 +317,13 @@ pub(crate) fn style(
     let font_size = font_styles.font_size.used_size.0.px();
     let line_height = match font_styles.line_height {
         stylo::LineHeight::Normal => parley::LineHeight::FontSizeRelative(1.2),
-        stylo::LineHeight::Number(num) => parley::LineHeight::FontSizeRelative(num.0),
-        stylo::LineHeight::Length(value) => parley::LineHeight::Absolute(value.0.px()),
+        // MailVault parity fix (plan B): WebKit truncates a computed line-height to whole px
+        // (RenderStyle::computedLineHeight returns int), so 1.6 x 14px lays out at 22, not
+        // 22.4. The epsilon keeps products like 1.3 x 10 (12.999999 in f32) at 13.
+        stylo::LineHeight::Number(num) => {
+            parley::LineHeight::Absolute(whole_px(num.0 * font_size))
+        }
+        stylo::LineHeight::Length(value) => parley::LineHeight::Absolute(whole_px(value.0.px())),
     };
 
     let letter_spacing = itext_styles
