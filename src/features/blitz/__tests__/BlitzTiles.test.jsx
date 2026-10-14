@@ -6,8 +6,11 @@ vi.mock('../service', () => ({
   openRender: vi.fn(), hitRender: vi.fn(), closeRender: vi.fn(),
   tileUrl: (d, r, i) => `mvrender://localhost/${d}%2F${r}%2F${i}`,
   onRenderUpdated: vi.fn(async () => () => {}),
+  textRunsRender: vi.fn(async () => ({ runs: [] })),
+  serializeRender: vi.fn(async () => ({ html: '', text: '' })),
+  foldRender: vi.fn(async () => ({ rev: 1, meta: {} })),
 }));
-import { openRender, hitRender, closeRender, onRenderUpdated } from '../service';
+import { openRender, hitRender, closeRender, onRenderUpdated, textRunsRender, serializeRender, foldRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
 
 let paneWidth = 600;
@@ -25,6 +28,13 @@ beforeEach(() => {
 });
 
 describe('BlitzTiles', () => {
+  it('mounts the text layer over the tiles', async () => {
+    openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta() });
+    textRunsRender.mockResolvedValue({ runs: [] });
+    render(tiles());
+    expect(await screen.findByTestId('blitz-text-layer')).toBeTruthy();
+  });
+
   it('opens at container width and DPR and lays out one img per tile', async () => {
     openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta() });
     render(tiles());

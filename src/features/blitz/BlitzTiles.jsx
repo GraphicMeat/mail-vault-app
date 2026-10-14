@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n/index.js';
 import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated } from './service';
+import TextLayer from './text/TextLayer';
 
 // The device pixel ratio, re-read when it changes (window moved to another
 // display, browser zoom). matchMedia is absent in some test environments.
@@ -27,6 +28,8 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
   const dpr = useDevicePixelRatio();
   const [doc, setDoc] = useState(null); // { docId, rev, meta }
   const [hover, setHover] = useState(null);
+  const [hoverFold, setHoverFold] = useState(null); // set by fold-toggle hover (fold clicks)
+  const textLayerRef = useRef(null);
   const [shown, setShown] = useState(() => new Set([0, 1]));
   const tileEls = useRef([]);
   const gen = useRef(0);
@@ -153,7 +156,7 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
 
   const m = doc?.meta;
   return (
-    <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body"
+    <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body" data-doc-id={doc?.docId}
       className={`w-full overflow-x-auto relative${scrollsInside ? ' overflow-y-auto' : ''}`} style={boxStyle}>
       {m && (
         <div role="presentation" onMouseMove={onMove} onMouseLeave={onLeave} onClick={onClick}
@@ -171,6 +174,14 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
                 style={{ position: 'absolute', left: 0, top, width: m.cssWidth, height: Math.min(m.tileCssHeight, m.cssHeight - top) }} />
             );
           })}
+          <TextLayer
+            ref={textLayerRef}
+            docId={doc.docId}
+            rev={doc.rev}
+            meta={m}
+            shownTiles={shown}
+            hover={!!hover || !!hoverFold}
+          />
         </div>
       )}
       {hover && !privacy && (

@@ -11,6 +11,7 @@ vi.mock('../service', () => ({
   openRender: vi.fn(), hitRender: vi.fn(), closeRender: vi.fn(),
   tileUrl: (d, r, i) => `mvrender://localhost/${d}%2F${r}%2F${i}`,
   onRenderUpdated: vi.fn(async () => () => {}),
+  textRunsRender: vi.fn(async () => ({ runs: [] })),
 }));
 const redact = vi.hoisted(() => ({ throws: false }));
 vi.mock('../../../utils/iframePrivacyRedact', async (importOriginal) => {

@@ -4,6 +4,7 @@ import { registerBodyRenderer } from '../../components/email/bodyRendererRegistr
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import BlitzBody from './BlitzBody';
 import SettingsRow from './SettingsRow';
+import './blitz.css';
 
 // The Mac App Store shell is built without the render feature (no mvrender
 // scheme, so no tile could load) and the sandboxed worker spawn is unproven:

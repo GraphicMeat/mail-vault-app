@@ -1,0 +1,22 @@
+/* Blitz reader text layer: transparent, fitted DOM text over the tiles. */
+.mv-blitz-text {
+  --mv-blitz-text-font: sans-serif; /* keep in step with LAYER_FONT in text/TextLayer.jsx */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: default;
+}
+.mv-blitz-text span {
+  color: transparent;
+  font-family: var(--mv-blitz-text-font);
+  vertical-align: top;
+  white-space: pre;
+  cursor: text;
+}
+.mv-blitz-text[data-hover="true"] span { cursor: pointer; }
+/* The app paints every selection in its accent (styles/index.css ::selection).
+   The iframe never sees that rule; this one restores the iframe's colours
+   (selectionColors.js writes the variables per theme). */
+.mv-blitz-text span::selection {
+  background-color: var(--mv-blitz-sel-bg, rgba(128, 188, 255, 0.6));
+  color: transparent;
+}
