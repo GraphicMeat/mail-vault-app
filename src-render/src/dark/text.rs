@@ -13,13 +13,17 @@ pub struct TextRange {
 
 /// `getMatches(regex, input, group)`: every match's `group`, in order.
 /// (DR's loop needs a global regex; `captures_iter` walks the same matches.)
-pub fn get_matches(re: &Regex, input: &str, group: usize) -> Vec<String> {
+/// None when the regex gives up (fancy-regex's backtrack limit, which JS regexes do not
+/// have): its iterator does not advance past an error, so retrying would loop forever, and a
+/// partial list would rewrite only part of the value. The caller leaves the value alone.
+pub fn get_matches(re: &Regex, input: &str, group: usize) -> Option<Vec<String>> {
     let mut out = Vec::new();
-    for caps in re.captures_iter(input).flatten() {
+    for caps in re.captures_iter(input) {
+        let caps = caps.ok()?;
         // A group that did not take part is `undefined` in JS and ends up as a hole.
         out.push(caps.get(group).map_or(String::new(), |m| m.as_str().to_string()));
     }
-    out
+    Some(out)
 }
 
 pub fn get_parentheses_range(input: &str, search_start: usize) -> Option<TextRange> {

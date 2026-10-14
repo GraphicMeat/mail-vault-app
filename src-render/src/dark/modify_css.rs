@@ -126,7 +126,7 @@ pub struct ShadowResult {
 pub fn shadow_modifier(value: &str, cx: &mut DarkCx) -> Option<ShadowResult> {
     static RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)(^|\s)(?!calc)([a-z]+\(.+?\)|#[0-9a-f]+|[a-z]+)(.*?(inset|outset)?($|,))").unwrap());
-    let found = get_matches(&RE, value, 2);
+    let found = get_matches(&RE, value, 2)?;
     let mut index = 0;
     let mut out = String::new();
     let mut unparsable = 0;
@@ -176,12 +176,13 @@ fn js_substring(s: &str, a: usize, b: usize) -> &str {
     if a <= b { s.get(a..b).unwrap_or("") } else { s.get(b..a).unwrap_or("") }
 }
 
-fn gradient_value(g: &ParsedGradient, cx: &mut DarkCx) -> String {
+/// None when the parts regex gives up (see `get_matches`).
+fn gradient_value(g: &ParsedGradient, cx: &mut DarkCx) -> Option<String> {
     static PARTS: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"([^\(\),]+(\([^\(\)]*(\([^\(\)]*\)*[^\(\)]*)?\))?([^\(\), ]|( (?!calc)))*),?").unwrap()
     });
     static STOP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(from|color-stop|to)\(([^\(\)]*?,\s*)?(.*?)\)$").unwrap());
-    let parts: Vec<String> = get_matches(&PARTS, &g.matched, 1)
+    let parts: Vec<String> = get_matches(&PARTS, &g.matched, 1)?
         .into_iter()
         .map(|part| {
             let part = part.trim();
@@ -202,13 +203,13 @@ fn gradient_value(g: &ParsedGradient, cx: &mut DarkCx) -> String {
             part.to_string()
         })
         .collect();
-    format!("{}({}){}", g.type_gradient, parts.join(", "), if g.has_comma { ", " } else { "" })
+    Some(format!("{}({}){}", g.type_gradient, parts.join(", "), if g.has_comma { ", " } else { "" }))
 }
 
 /// `getBgImageModifier`, evaluated at once (MailVault has no ignore-selectors).
 pub fn bg_image_modifier(value: &str, rule: &dyn RuleStyle, cx: &mut DarkCx) -> Option<String> {
     let gradients = parse_gradient(value);
-    let urls = get_matches(&CSS_URL_RE, value, 0);
+    let urls = get_matches(&CSS_URL_RE, value, 0)?;
     if urls.is_empty() && gradients.is_empty() {
         return Some(value.to_string());
     }
@@ -254,7 +255,7 @@ pub fn bg_image_modifier(value: &str, rule: &dyn RuleStyle, cx: &mut DarkCx) -> 
         prev_has_comma = m.has_comma;
         parts.push(match &m.kind {
             Kind::Url => url_value(&m.matched, rule, cx),
-            Kind::Gradient(g) => gradient_value(g, cx),
+            Kind::Gradient(g) => gradient_value(g, cx)?,
         });
         if i == last {
             parts.push(js_substring(value, match_end, value.len()).to_string());
