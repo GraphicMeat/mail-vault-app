@@ -1154,16 +1154,19 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
   it('3b. triple-click a paragraph that straddles y=512 (paragraph selection by Selection.modify)', async function () {
     await section('geometry.triple', async (ck) => {
       await openFixture('blitz');
+      // A straddler is a paragraph with lines on both sides of the first tile boundary, judged by
+      // where its lines are drawn: the layer may keep it in one tile container (or in two).
       const info = await browser.execute(() => {
         const layer = document.querySelector('[data-testid="blitz-text-layer"]');
+        const top = layer.getBoundingClientRect().top;
         const byNode = new Map();
-        for (const tile of layer.querySelectorAll('[data-tile]')) {
-          for (const s of tile.querySelectorAll('span[data-node]')) {
-            const e = byNode.get(s.dataset.node) || { tiles: new Set(), text: '' };
-            e.tiles.add(tile.dataset.tile); e.text += s.textContent; byNode.set(s.dataset.node, e);
-          }
+        for (const s of layer.querySelectorAll('span[data-node]')) {
+          const e = byNode.get(s.dataset.node) || { tiles: new Set(), containers: new Set(), text: '' };
+          e.tiles.add(Math.floor((s.getBoundingClientRect().top - top) / 512));
+          e.containers.add(s.closest('[data-tile]').dataset.tile);
+          e.text += s.textContent; byNode.set(s.dataset.node, e);
         }
-        return [...byNode.entries()].filter(([, v]) => v.tiles.size > 1).map(([node, v]) => ({ node, tiles: [...v.tiles], text: v.text.slice(0, 80), len: v.text.length }));
+        return [...byNode.entries()].filter(([, v]) => v.tiles.has(0) && v.tiles.has(1)).map(([node, v]) => ({ node, tiles: [...v.tiles], containers: [...v.containers], text: v.text.slice(0, 80), len: v.text.length }));
       });
       log('geometry.straddlers', info);
       ck(info.length > 0, 'no paragraph straddles the first tile boundary in this layout (fixture cannot test it)');
