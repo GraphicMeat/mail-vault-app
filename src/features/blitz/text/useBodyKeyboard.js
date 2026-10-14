@@ -21,15 +21,19 @@ export function useBodyKeyboard(rootRef, { selectAll, layerEl, isMac = isMacPlat
     if (!root) return undefined;
     const onKeyDown = (e) => {
       const { selectAll: all, layerEl: layer, isMac: mac } = latest.current;
-      const mod = mac ? e.metaKey : e.ctrlKey;
+      // Plain Cmd/Ctrl only: Cmd+Shift+A, Alt variants (and Ctrl on a Mac) are other shortcuts.
+      const plain = (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey) && !e.shiftKey && !e.altKey;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (mod && key === 'a') {
+      // The physical key stands in on a layout whose letters are not Latin (Cyrillic and the
+      // like); a Latin letter is trusted as typed (on AZERTY the A position types q).
+      const is = (letter) => key === letter || (e.code === `Key${letter.toUpperCase()}` && !/^[a-z]$/i.test(e.key));
+      if (plain && is('a')) {
         e.preventDefault();
         e.stopPropagation();
         void all();
         return;
       }
-      if (mod && key === 'c') { e.stopPropagation(); return; } // native copy -> copy event
+      if (plain && is('c')) { e.stopPropagation(); return; } // native copy -> copy event
       if (key === 'Escape') {
         const sel = window.getSelection();
         if (selectionInLayer(sel, layer())) { sel.removeAllRanges(); e.preventDefault(); }
