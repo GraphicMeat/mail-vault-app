@@ -7,7 +7,6 @@ import { createCopyController } from './text/clipboard';
 import { selectionInLayer, selectLayer } from './text/selection';
 import { useBodyKeyboard } from './text/useBodyKeyboard';
 import { applySelectionColors, inactiveSelectionColor, lightSelectionColor } from './text/selectionColors';
-import { darkUiColors } from './theme/darkSwatch';
 import BodyContextMenu from './menu/BodyContextMenu';
 import { menuColorsFor } from './menu/menuColors';
 import { viewportShift } from '../../hooks/useViewportShift';
@@ -273,40 +272,24 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }, []);
   useBodyKeyboard(boxRef, { selectAll: selectAllBody, layerEl: () => textLayerRef.current?.layerEl() });
 
-  // Dark Reader's menu and selection colours for this palette (theme/darkSwatch.js). Kept while
-  // the next palette's arrive (a flip between dark palettes never flashes the light colours), and
-  // dropped on leaving dark. The menu and the selection read the same value: one swatch per body.
-  const [darkUi, setDarkUi] = useState(null);
-  useEffect(() => {
-    let gone = false;
-    if (!dark) { setDarkUi(null); return undefined; }
-    darkUiColors({ dark, palette }).then(c => { if (!gone) setDarkUi(c); }, () => { if (!gone) setDarkUi(null); });
-    return () => { gone = true; };
-  }, [dark, palette]);
-
-  // Selection colour. Dark: Dark Reader's, as the iframe shows it, in the active and the inactive
-  // window alike (its author rule has no inactive variant). Light: the engine's highlight, grey
-  // while the window is inactive.
-  const paintLightSelection = useCallback(() => {
+  // Selection colour: the engine's highlight (grey while the window is inactive), because the
+  // tiles are painted on a light paper whatever the theme (the worker ignores it until plan B).
+  // Dark Reader's colours for the menu and the selection come with plan B's render.inspect
+  // (theme/darkSwatch.js); until then both stay light.
+  const paintSelection = useCallback(() => {
     const el = textLayerRef.current?.layerEl();
     if (!el) return;
     const active = lightSelectionColor();
     applySelectionColors(el, active, inactiveSelectionColor(active));
   }, []);
-  useEffect(() => {
-    const el = textLayerRef.current?.layerEl();
-    if (!el) return;
-    if (dark && darkUi) applySelectionColors(el, darkUi.selection);
-    else paintLightSelection();
-  }, [doc?.docId, dark, darkUi, paintLightSelection]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { paintSelection(); }, [doc?.docId, paintSelection]);
 
   // The OS accent colour changes while the app is in the background (System Settings), so the
-  // highlight is read again when the window comes back. The light highlight is the OS's; dark's is not.
+  // highlight is read again when the window comes back.
   useEffect(() => {
-    if (dark && darkUi) return undefined;
-    window.addEventListener('focus', paintLightSelection);
-    return () => window.removeEventListener('focus', paintLightSelection);
-  }, [dark, darkUi, paintLightSelection]);
+    window.addEventListener('focus', paintSelection);
+    return () => window.removeEventListener('focus', paintSelection);
+  }, [paintSelection]);
 
   // 'content' is exactly the document's height; the other two scroll inside.
   const scrollsInside = sizing === 'fill' || (sizing && typeof sizing === 'object');
@@ -351,7 +334,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
             <BodyContextMenu
               at={menu.at}
               link={menu.link}
-              colors={menuColorsFor(theme, darkUi?.menu)}
+              colors={menuColorsFor(theme, null)} // dark colours: plan B (theme/darkSwatch.js)
               clampTo={clampTo}
               inBody={inBody}
               onCopy={() => document.execCommand('copy')}

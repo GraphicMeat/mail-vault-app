@@ -1,23 +1,26 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-vi.mock('../../../../utils/darkReaderInject', () => ({ getDarkReaderInlineScripts: vi.fn(() => '<!--dr-->') }));
-import { getDarkReaderInlineScripts } from '../../../../utils/darkReaderInject';
-import { darkUiColors, mapSwatch, domProbe, SWATCH_HTML, _resetDarkSwatchForTest } from '../darkSwatch';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { darkUiColors, mapSwatch, SWATCH_HTML, _resetDarkSwatchForTest } from '../darkSwatch';
 
 // What the probe frame reads back: computed colour strings of the four swatches,
 // after Dark Reader re-themed them.
 const raw = (over = {}) => ({
   menu: { backgroundColor: 'rgb(24, 26, 27)', color: 'rgb(200, 195, 188)', borderTopColor: 'rgb(60, 65, 68)' },
   hover: { backgroundColor: 'rgb(30, 33, 34)' },
-  sel: { backgroundColor: 'rgb(0, 77, 170)' },
+  sel: { backgroundColor: 'rgb(60, 80, 140)' },
   shadow: { backgroundColor: 'rgba(0, 0, 0, 0.15)' },
   ...over,
 });
 
 beforeEach(() => { vi.clearAllMocks(); _resetDarkSwatchForTest(); });
-afterEach(() => { document.querySelectorAll('iframe').forEach(f => f.remove()); vi.useRealTimers(); });
 
 describe('darkUiColors', () => {
+  it('without a probe (plan B not landed) there are no dark colours: the light ones stand', async () => {
+    expect(await darkUiColors({ dark: true, palette: 'graphite' })).toBeNull();
+  });
+
   it('swatch carries the light menu colours and the DR selection seed', () => {
     expect(SWATCH_HTML).toContain('data-mv-id="menu"');
     expect(SWATCH_HTML).toContain('background-color:#ffffff;color:#333333;border:1px solid #d1d5db');
@@ -36,7 +39,8 @@ describe('darkUiColors', () => {
     expect(a.paper).toEqual({ r: 24, g: 26, b: 27 });
     const o = a.selection;
     const over = (c, p) => Math.round(o.a * c + (1 - o.a) * p);
-    expect([over(o.r, 24), over(o.g, 26), over(o.b, 27)]).toEqual([0, 77, 170]);
+    expect([over(o.r, 24), over(o.g, 26), over(o.b, 27)]).toEqual([60, 80, 140]);
+    expect(o.a).toBeLessThan(1); // translucent: the text layer is transparent over the tile
   });
 
   it('another palette is probed on its own', async () => {
@@ -70,6 +74,10 @@ describe('mapSwatch', () => {
     expect(mapSwatch(raw({ menu: { backgroundColor: 'color(display-p3 0 0 0)', color: 'rgb(1, 1, 1)', borderTopColor: 'rgb(1, 1, 1)' } }))).toBeNull();
     expect(mapSwatch(null)).toBeNull();
   });
+  it('an opaque selection overlay is rejected: Dark Reader\'s real blue over a near-black paper would hide the glyphs', () => {
+    // overlayFor can only return a = 1 here; plan B must not hand the text layer an opaque highlight.
+    expect(mapSwatch(raw({ sel: { backgroundColor: 'rgb(0, 77, 170)' } }))).toBeNull();
+  });
   it('a translucent selection swatch is not trusted', () => {
     expect(mapSwatch(raw({ sel: { backgroundColor: 'rgba(0, 77, 170, 0.5)' } }))).toBeNull();
   });
@@ -78,63 +86,22 @@ describe('mapSwatch', () => {
   });
 });
 
-describe('domProbe', () => {
-  // jsdom does not load srcdoc: the swatch markup goes into the frame's document by hand.
-  const frameOf = async () => {
-    let f;
-    await vi.waitFor(() => { f = document.querySelector('iframe'); expect(f?.contentDocument?.body).toBeTruthy(); });
-    f.contentDocument.body.innerHTML = SWATCH_HTML;
-    return f;
-  };
-  // Stand-in for Dark Reader (scripts do not run in jsdom): re-theme the swatches the way it does.
-  const rethemed = (f) => {
-    const d = f.contentDocument;
-    const set = (id, css) => { const el = d.querySelector(`[data-mv-id="${id}"]`); el.setAttribute('style', css); el.setAttribute('data-darkreader-inline-bgcolor', ''); };
-    set('menu', 'background-color:rgb(24, 26, 27);color:rgb(200, 195, 188);border:1px solid rgb(60, 65, 68)');
-    set('hover', 'background-color:rgb(30, 33, 34)');
-    set('sel', 'background-color:rgb(0, 77, 170);color:rgb(232, 230, 227)');
-    set('shadow', 'background-color:rgba(0, 0, 0, 0.15)');
-  };
-
-  it('builds the reader frame with the reader Dark Reader scripts, offscreen, and removes it', async () => {
-    const p = domProbe('teal');
-    const f = await frameOf();
-    expect(getDarkReaderInlineScripts).toHaveBeenCalledWith(expect.objectContaining({ palette: 'teal' }));
-    expect(f.getAttribute('sandbox')).toBe('allow-same-origin allow-popups allow-scripts');
-    const srcdoc = f.getAttribute('srcdoc');
-    expect(srcdoc).toContain('<!--dr-->');
-    expect(srcdoc).toContain('data-mv-id="menu"');
-    expect(srcdoc).toContain('Content-Security-Policy');
-    expect(f.style.position).toBe('fixed');
-    expect(f.style.display).not.toBe('none'); // computed styles of a display:none frame are not reliable
-    rethemed(f);
-    const out = await p;
-    expect(out.menu.backgroundColor).toBe('rgb(24, 26, 27)');
-    expect(out.menu.color).toBe('rgb(200, 195, 188)');
-    expect(out.menu.borderTopColor).toBe('rgb(60, 65, 68)');
-    expect(out.hover.backgroundColor).toBe('rgb(30, 33, 34)');
-    expect(out.sel.backgroundColor).toBe('rgb(0, 77, 170)');
-    expect(out.shadow.backgroundColor).toBe('rgba(0, 0, 0, 0.15)');
-    expect(document.querySelector('iframe')).toBeNull();
-  });
-
-  it('does not read before Dark Reader has marked every swatch', async () => {
-    const p = domProbe('graphite');
-    const f = await frameOf();
-    // Dark values on all but one swatch: the light one has no Dark Reader attribute yet.
-    rethemed(f);
-    f.contentDocument.querySelector('[data-mv-id="hover"]').removeAttribute('data-darkreader-inline-bgcolor');
-    await new Promise(r => setTimeout(r, 120));
-    expect(document.querySelector('iframe')).toBeTruthy(); // still waiting
-    f.contentDocument.querySelector('[data-mv-id="hover"]').setAttribute('data-darkreader-inline-bgcolor', '');
-    expect((await p).hover.backgroundColor).toBe('rgb(30, 33, 34)');
-  });
-
-  it('gives up with null when Dark Reader never runs, and removes the frame', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-    const p = domProbe('graphite');
-    await vi.advanceTimersByTimeAsync(2500);
-    expect(await p).toBeNull();
-    expect(document.querySelector('iframe')).toBeNull();
+describe('no probe frame', () => {
+  it('nothing under src/features/blitz creates an iframe or injects Dark Reader', () => {
+    const root = resolve(process.cwd(), 'src/features/blitz');
+    const files = [];
+    const walk = (dir) => {
+      for (const name of readdirSync(dir)) {
+        const f = join(dir, name);
+        if (name === '__tests__') continue;
+        if (statSync(f).isDirectory()) walk(f); else if (/\.(jsx?|css)$/.test(name)) files.push(f);
+      }
+    };
+    walk(root);
+    expect(files.length).toBeGreaterThan(10);
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      expect(src, f).not.toMatch(/<iframe|createElement\(\s*['"]iframe|getDarkReaderInlineScripts|darkReaderInject/);
+    }
   });
 });
