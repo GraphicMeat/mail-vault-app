@@ -59,7 +59,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const failed = useRef(false);
   const hitBusy = useRef(false);
   const inside = useRef(false);
-  const [menu, setMenu] = useState(null); // { at: {x, y}, link }
+  const [menu, setMenu] = useState(null); // { at: {x, y}, link, seq }
   const menuSeq = useRef(0); // a right-click answered after a newer one or a doc change opens nothing
 
   // The callbacks arrive as fresh functions on every parent render. Holding the
@@ -214,18 +214,28 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   // palette flip closes it too: its inline colours are those of the theme it opened in.
   useEffect(() => { menuSeq.current++; setMenu(null); }, [html, doc?.docId, dark, palette]);
 
-  const onContextMenu = useCallback(async (e) => {
+  const onContextMenu = useCallback((e) => {
     e.preventDefault();
     const seq = ++menuSeq.current;
     const at = { x: e.clientX, y: e.clientY }; // window coordinates: the menu is fixed
-    // A worker that is slow to answer must not hold the menu back: it opens without Copy Link.
-    const hit = await Promise.race([
-      hitAt(e.clientX, e.clientY, e.currentTarget),
-      new Promise(r => setTimeout(() => r({ link: null, fold: null }), 300)),
-    ]);
-    if (seq !== menuSeq.current) return;
+    let opened = false;
     // A toggle is not a link: nothing to copy there, as the click does not open it.
-    setMenu({ at, link: hit.fold ? null : hit.link });
+    const linkOf = (hit) => (hit.fold ? null : hit.link);
+    // A worker that is slow to answer must not hold the menu back: it opens after 300 ms without
+    // Copy Link, and the hit adds the item in place when it lands. An answer for a newer
+    // right-click, a doc change or a closed menu is dropped.
+    const timer = setTimeout(() => {
+      if (opened || seq !== menuSeq.current) return;
+      opened = true;
+      setMenu({ at, link: null, seq });
+    }, 300);
+    void hitAt(e.clientX, e.clientY, e.currentTarget).then((hit) => {
+      clearTimeout(timer);
+      if (seq !== menuSeq.current) return;
+      const link = linkOf(hit);
+      if (!opened) { opened = true; setMenu({ at, link, seq }); return; }
+      if (link) setMenu(m => (m && m.seq === seq && !m.link ? { ...m, link } : m));
+    });
   }, [hitAt]);
 
   // The menu is fixed in the window, outside the body box (which scrolls, clips and can be

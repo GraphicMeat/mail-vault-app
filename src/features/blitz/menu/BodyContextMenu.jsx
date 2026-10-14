@@ -26,6 +26,14 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
   }, [at.x, at.y, clampTo, link]);
   // A second right-click reuses this menu: the highlight starts over.
   useEffect(() => { setActive(-1); }, [at.x, at.y]);
+  // Copy Link can arrive after the menu opened (the worker answered late): it slots in
+  // before Select All, and a highlight on Select All follows it.
+  const hadLink = useRef(!!link);
+  useLayoutEffect(() => {
+    if (!!link === hadLink.current) return;
+    hadLink.current = !!link;
+    setActive(a => (a < 1 ? a : a + (link ? 1 : -1)));
+  }, [link]);
 
   const items = [
     { label: t('viewer.copy'), action: onCopy },

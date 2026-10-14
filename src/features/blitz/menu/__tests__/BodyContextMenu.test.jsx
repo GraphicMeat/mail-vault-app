@@ -22,6 +22,20 @@ describe('BodyContextMenu', () => {
     expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toEqual(['Copy', 'Copy Link', 'Select All']);
   });
 
+  it('Copy Link arriving late keeps the highlight on the same item', () => {
+    const props = { at: { x: 0, y: 0 }, colors, onCopy: vi.fn(), onSelectAll: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<BodyContextMenu {...props} link={null} />);
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowDown' }); // Select All
+    rerender(<BodyContextMenu {...props} link={{ href: 'https://x.test/a' }} />);
+    const items = screen.getAllByTestId('blitz-ctx-item');
+    expect(items[2].textContent).toBe('Select All');
+    expect(items[2].style.background).toContain('rgb(243, 244, 246)');
+    expect(items[1].style.background).toBe('none');
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(props.onSelectAll).toHaveBeenCalledTimes(1);
+  });
+
   it('inline styles match the iframe menu', () => {
     render(<BodyContextMenu at={{ x: 10, y: 20 }} link={null} colors={colors} onCopy={vi.fn()} onSelectAll={vi.fn()} onClose={vi.fn()} />);
     const menu = screen.getByTestId('blitz-context-menu');

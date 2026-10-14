@@ -719,6 +719,65 @@ describe('body context menu', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  describe('a hit that answers after the menu opened', () => {
+    const linkHit = { link: { href: 'https://x.test/' }, fold: null };
+    const labels = () => screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent);
+    const setupLate = async () => {
+      vi.useFakeTimers();
+      openRender.mockResolvedValue({ docId: 2, rev: 1, meta: foldMeta() });
+      const pending = [];
+      hitRender.mockImplementation(() => new Promise(r => { pending.push(r); }));
+      render(tiles());
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      return { tileEls: screen.getAllByTestId('blitz-tile'), pending };
+    };
+
+    it('adds Copy Link in place when the hit lands while the menu is still open', async () => {
+      try {
+        const { tileEls, pending } = await setupLate();
+        fireEvent.contextMenu(tileEls[0], { clientX: 40, clientY: 50 });
+        await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+        expect(labels()).toEqual(['Copy', 'Select All']);
+        const menu = screen.getByTestId('blitz-context-menu');
+        await act(async () => { pending[0](linkHit); await vi.advanceTimersByTimeAsync(0); });
+        expect(labels()).toEqual(['Copy', 'Copy Link', 'Select All']);
+        expect(screen.getByTestId('blitz-context-menu')).toBe(menu); // the same menu, not a reopened one
+      } finally { vi.useRealTimers(); }
+    });
+
+    it('a late fold hit adds nothing', async () => {
+      try {
+        const { tileEls, pending } = await setupLate();
+        fireEvent.contextMenu(tileEls[0], { clientX: 40, clientY: 50 });
+        await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+        await act(async () => { pending[0]({ link: { href: 'https://x.test/' }, fold: 'q0' }); await vi.advanceTimersByTimeAsync(0); });
+        expect(labels()).toEqual(['Copy', 'Select All']);
+      } finally { vi.useRealTimers(); }
+    });
+
+    it('a late hit after the menu closed, or for an older right-click, is ignored', async () => {
+      try {
+        const { tileEls, pending } = await setupLate();
+        fireEvent.contextMenu(tileEls[0], { clientX: 40, clientY: 50 });
+        await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+        fireEvent.click(tileEls[0]); // closes the menu
+        expect(screen.queryByTestId('blitz-context-menu')).toBeNull();
+        await act(async () => { pending[0](linkHit); await vi.advanceTimersByTimeAsync(0); });
+        expect(screen.queryByTestId('blitz-context-menu')).toBeNull();
+
+        fireEvent.contextMenu(tileEls[0], { clientX: 40, clientY: 50 }); // pending[1]
+        await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+        fireEvent.contextMenu(tileEls[0], { clientX: 90, clientY: 95 }); // pending[2], supersedes it
+        await act(async () => { pending[1](linkHit); await vi.advanceTimersByTimeAsync(0); });
+        expect(labels()).toEqual(['Copy', 'Select All']); // the first menu is still up, untouched
+        await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+        expect(labels()).toEqual(['Copy', 'Select All']);
+        await act(async () => { pending[2](linkHit); await vi.advanceTimersByTimeAsync(0); });
+        expect(labels()).toEqual(['Copy', 'Copy Link', 'Select All']);
+      } finally { vi.useRealTimers(); }
+    });
+  });
+
   it('moving the pointer over the menu does not hit-test the body behind it', async () => {
     await rightClick({ link: null, fold: null });
     const menu = await screen.findByTestId('blitz-context-menu');
