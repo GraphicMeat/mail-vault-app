@@ -27,6 +27,9 @@ pub struct TableTreeWrapper<'doc> {
     // after laying it out, so the shift is added to that layout's padding-top in
     // `set_unrounded_layout` (paint and inspect start the text at padding + border).
     pub(crate) pending_inline_shift: Option<(usize, f32)>,
+    // MailVault parity fix (plan B): the table style with the column widths
+    // `webkit_column_widths` chose, used for the second layout pass.
+    pub(crate) style_override: Option<taffy::Style<Atom>>,
 }
 
 // MailVault parity fix (plan B): how far down the spare room of a table cell its
@@ -54,11 +57,16 @@ fn cell_vertical_align_factor(node: &crate::node::Node) -> f32 {
 #[derive(Debug, Clone)]
 pub struct TableContext {
     pub style: taffy::Style<Atom>,
+    // MailVault parity fix (plan B): the preferred (specified) width of each column, from
+    // the first row, in auto layout. See `TableTreeWrapper::webkit_column_widths`.
+    pub column_prefs: Vec<Option<f32>>,
     pub cells: Vec<TableCell>,
     pub rows: Vec<TableRow>,
     pub computed_grid_info: AtomicRefCell<Option<DetailedGridInfo<Atom>>>,
     pub border_style: Option<ServoArc<Border>>,
     pub border_collapse: BorderCollapse,
+    // MailVault parity fix (plan B): `table-layout: fixed`.
+    pub is_fixed: bool,
 }
 
 // #[derive(Debug, Clone, Eq, PartialEq)]
@@ -72,7 +80,14 @@ pub struct TableCell {
     // kind: TableItemKind,
     node_id: NodeId,
     style: taffy::Style<Atom>,
+    // MailVault parity fix (plan B): the column the cell starts in and its spans.
+    col: u16,
+    colspan: u16,
+    rowspan: u16,
 }
+
+/// A column's track sizing function and, in auto layout, its specified width.
+type ColumnDef = (TrackSizingFunction, Option<f32>);
 
 #[derive(Debug, Clone)]
 pub struct TableRow {
@@ -121,7 +136,7 @@ pub(crate) fn build_table_context(
 
     drop(stylo_styles);
 
-    let mut column_sizes: Vec<taffy::TrackSizingFunction> = Vec::new();
+    let mut column_sizes: Vec<ColumnDef> = Vec::new();
     let mut first_cell_border: Option<ServoArc<Border>> = None;
     for child_id in children.iter().copied() {
         collect_table_cells(
@@ -138,9 +153,10 @@ pub(crate) fn build_table_context(
             &mut anonymous_cells,
         );
     }
-    column_sizes.resize(col as usize, style_helpers::auto());
+    column_sizes.resize(col as usize, (style_helpers::auto(), None));
 
-    style.grid_template_columns = column_sizes.into_iter().map(|dim| dim.into()).collect();
+    let column_prefs: Vec<Option<f32>> = column_sizes.iter().map(|(_, pref)| *pref).collect();
+    style.grid_template_columns = column_sizes.into_iter().map(|(dim, _)| dim.into()).collect();
     style.grid_template_rows = vec![style_helpers::auto(); row as usize];
 
     style.gap = match border_collapse {
@@ -203,11 +219,13 @@ pub(crate) fn build_table_context(
     (
         TableContext {
             style,
+            column_prefs,
             cells,
             rows,
             computed_grid_info: AtomicRefCell::new(None),
             border_collapse,
             border_style: first_cell_border,
+            is_fixed,
         },
         layout_children,
         anonymous_cells,
@@ -224,7 +242,7 @@ fn push_table_cell(
     row: &mut u16,
     col: &mut u16,
     cells: &mut Vec<TableCell>,
-    columns: &mut Vec<TrackSizingFunction>,
+    columns: &mut Vec<ColumnDef>,
     first_cell_border: &mut Option<ServoArc<Border>>,
 ) {
     let node = &doc.nodes[node_id];
@@ -250,25 +268,37 @@ fn push_table_cell(
                 let len = style.size.width.value();
                 let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
                 let border = style.border.resolve_or_zero(None, resolve_calc_value);
-                match style.box_sizing {
-                    taffy::BoxSizing::ContentBox => style_helpers::length(
-                        len + padding.left + padding.right + border.left + border.right,
-                    ),
-                    taffy::BoxSizing::BorderBox => style_helpers::length(len),
+                let width = match style.box_sizing {
+                    taffy::BoxSizing::ContentBox => {
+                        len + padding.left + padding.right + border.left + border.right
+                    }
+                    taffy::BoxSizing::BorderBox => len,
+                };
+                if is_fixed {
+                    (style_helpers::length(width), None)
+                } else {
+                    // MailVault parity fix (plan B): in auto table layout a specified
+                    // width is the column's preferred width, not a fixed one (CSS 2
+                    // 17.5.2.2): the column is at least its content's minimum and
+                    // shrinks towards it when the table is narrower than its columns.
+                    (
+                        style_helpers::minmax(style_helpers::auto(), style_helpers::length(width)),
+                        Some(width),
+                    )
                 }
             }
             taffy::CompactLength::PERCENT_TAG => {
                 if is_fixed {
-                    style_helpers::percent(style.size.width.value())
+                    (style_helpers::percent(style.size.width.value()), None)
                 } else {
-                    style_helpers::auto()
+                    (style_helpers::auto(), None)
                 }
             }
-            taffy::CompactLength::AUTO_TAG => style_helpers::auto(),
+            taffy::CompactLength::AUTO_TAG => (style_helpers::auto(), None),
             // Dimension values are always length, percentage, auto or calc(),
             // so any other tag is a calc() value. Pass it through so that
             // Taffy resolves it against the table's inner width.
-            _ => style.size.width.into(),
+            _ => (style.size.width.into(), None),
         };
         columns.push(column);
     }
@@ -296,7 +326,13 @@ fn push_table_cell(
         end: style_helpers::span(rowspan),
     };
     style.size.width = style_helpers::auto();
-    cells.push(TableCell { node_id, style });
+    cells.push(TableCell {
+        node_id,
+        style,
+        col: *col,
+        colspan,
+        rowspan,
+    });
 
     *col += colspan;
 }
@@ -333,7 +369,7 @@ pub(crate) fn collect_table_cells(
     col: &mut u16,
     cells: &mut Vec<TableCell>,
     rows: &mut Vec<TableRow>,
-    columns: &mut Vec<TrackSizingFunction>,
+    columns: &mut Vec<ColumnDef>,
     first_cell_border: &mut Option<ServoArc<Border>>,
     anonymous_cells: &mut Vec<NodeId>,
 ) {
@@ -476,6 +512,129 @@ impl Iterator for RangeIter {
     }
 }
 
+impl TableTreeWrapper<'_> {
+    /// MailVault parity fix (plan B): lay the table out, then redo the columns the way
+    /// WebKit's auto table layout shares out a table narrower than its columns.
+    /// Taffy's grid algorithm grows every column by the same amount up to its limit;
+    /// WebKit cuts columns back from their preferred width in proportion to the room
+    /// each has above its minimum, so the widths (and with them the text wrapping)
+    /// differ. A table that fits is left to taffy.
+    pub(crate) fn layout_table(
+        &mut self,
+        node_id: taffy::NodeId,
+        inputs: taffy::tree::LayoutInput,
+    ) -> taffy::LayoutOutput {
+        let output = taffy::compute_grid_layout(self, node_id, inputs);
+        let Some(widths) = self.webkit_column_widths(output.size.width) else {
+            return output;
+        };
+        let mut style = self.ctx.style.clone();
+        style.grid_template_columns = widths
+            .into_iter()
+            .map(|width| {
+                let track: TrackSizingFunction = style_helpers::length(width);
+                track.into()
+            })
+            .collect();
+        self.style_override = Some(style);
+        let mut inputs = inputs;
+        inputs.known_dimensions.width = Some(output.size.width);
+        let output = taffy::compute_grid_layout(self, node_id, inputs);
+        self.style_override = None;
+        output
+    }
+
+    /// The border-box width of a cell under a min- or max-content constraint.
+    fn cell_content_width(&mut self, cell: usize, space: taffy::AvailableSpace) -> f32 {
+        self.compute_child_layout(
+            taffy::NodeId::from(cell),
+            taffy::tree::LayoutInput {
+                run_mode: taffy::RunMode::ComputeSize,
+                sizing_mode: taffy::SizingMode::ContentSize,
+                axis: taffy::RequestedAxis::Horizontal,
+                known_dimensions: taffy::Size::NONE,
+                known_dimensions_are_definite: taffy::Size {
+                    width: false,
+                    height: false,
+                },
+                parent_size: taffy::Size::NONE,
+                available_space: taffy::Size {
+                    width: space,
+                    height: taffy::AvailableSpace::MaxContent,
+                },
+                vertical_margins_are_collapsible: taffy::Line::FALSE,
+            },
+        )
+        .size
+        .width
+    }
+
+    /// Column widths when the columns' preferred widths do not fit `table_width`, else
+    /// None. A column prefers its specified width (at least its minimum content), or
+    /// for an auto column its maximum content. The overflow is taken from the auto
+    /// columns first, then from the specified ones (WebKit's AutoTableLayout), each cut
+    /// in proportion to the room it has above its minimum content width. Tables with
+    /// spanning cells are not handled.
+    fn webkit_column_widths(&mut self, table_width: f32) -> Option<Vec<f32>> {
+        let ctx = Arc::clone(&self.ctx);
+        let n = ctx.column_prefs.len();
+        if ctx.is_fixed
+            || n < 2
+            || ctx
+                .cells
+                .iter()
+                .any(|c| c.colspan != 1 || c.rowspan != 1 || c.col as usize >= n)
+        {
+            return None;
+        }
+        let padding = ctx.style.padding.resolve_or_zero(None, resolve_calc_value);
+        let border = ctx.style.border.resolve_or_zero(None, resolve_calc_value);
+        let gap = ctx.style.gap.width.resolve_or_zero(None, resolve_calc_value);
+        let available = table_width
+            - padding.left
+            - padding.right
+            - border.left
+            - border.right
+            - gap * (n - 1) as f32;
+
+        let mut min = vec![0.0f32; n];
+        let mut max = vec![0.0f32; n];
+        for (index, cell) in ctx.cells.iter().enumerate() {
+            let col = cell.col as usize;
+            min[col] = min[col].max(self.cell_content_width(index, taffy::AvailableSpace::MinContent));
+            max[col] = max[col].max(self.cell_content_width(index, taffy::AvailableSpace::MaxContent));
+        }
+        let mut width: Vec<f32> = (0..n)
+            .map(|i| match ctx.column_prefs[i] {
+                Some(pref) => pref.max(min[i]),
+                None => max[i].max(min[i]),
+            })
+            .collect();
+        let mut overflow = width.iter().sum::<f32>() - available;
+        if overflow <= 0.5 {
+            return None;
+        }
+        for specified in [false, true] {
+            let cols: Vec<usize> = (0..n)
+                .filter(|&i| ctx.column_prefs[i].is_some() == specified)
+                .collect();
+            let room: f32 = cols.iter().map(|&i| width[i] - min[i]).sum();
+            if room <= 0.0 {
+                continue;
+            }
+            let cut = overflow.min(room);
+            for &i in &cols {
+                width[i] -= cut * (width[i] - min[i]) / room;
+            }
+            overflow -= cut;
+            if overflow <= 0.0 {
+                break;
+            }
+        }
+        Some(width)
+    }
+}
+
 impl taffy::TraversePartialTree for TableTreeWrapper<'_> {
     type ChildIter<'a>
         = RangeIter
@@ -508,7 +667,7 @@ impl taffy::LayoutPartialTree for TableTreeWrapper<'_> {
     type CustomIdent = Atom;
 
     fn get_core_container_style(&self, _node_id: taffy::NodeId) -> &taffy::Style<Atom> {
-        &self.ctx.style
+        self.style_override.as_ref().unwrap_or(&self.ctx.style)
     }
 
     fn resolve_calc_value(&self, calc_ptr: *const (), parent_size: f32) -> f32 {
@@ -539,6 +698,17 @@ impl taffy::LayoutPartialTree for TableTreeWrapper<'_> {
         let cell = &self.ctx.cells[index];
         let dom_id = cell.node_id;
         let node_id = crate::taffy_node_id(dom_id);
+
+        // MailVault parity fix (plan B): in auto table layout a cell's `width` is only a
+        // hint for its column's preferred width (the track's max, see `push_table_cell`).
+        // Laid out as the box's own width it would also be the cell's min-content
+        // contribution, and the column could never shrink below it.
+        if !self.ctx.is_fixed {
+            let style = self.doc.nodes[dom_id].style_mut();
+            if style.size.width.tag() == taffy::CompactLength::LENGTH_TAG {
+                style.size.width = style_helpers::auto();
+            }
+        }
 
         // MailVault parity fix (plan B): vertical-align on a table cell. The final
         // layout pass gives the cell its full row height; the content then moves down

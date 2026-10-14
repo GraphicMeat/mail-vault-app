@@ -336,8 +336,9 @@ impl BaseDocument {
                         doc: self,
                         ctx: context,
                         pending_inline_shift: None,
+                        style_override: None,
                     };
-                    let mut output = compute_grid_layout(&mut table_wrapper, node_id, inputs);
+                    let mut output = table_wrapper.layout_table(node_id, inputs);
 
                     // HACK: Cap scrollable overflow at node size to prevent scrolling
                     output.scrollable_overflow_rect.left = 0.0;

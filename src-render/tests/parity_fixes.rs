@@ -9,6 +9,9 @@ fn fx(name: &str) -> String {
 fn inspect(html: &str) -> Vec<InspectedElement> {
     RenderDoc::open(html, RenderOptions { css_width: 400, scale: 1.0, ..Default::default() }, None).unwrap().inspect()
 }
+fn inspect_at(html: &str, css_width: u32) -> Vec<InspectedElement> {
+    RenderDoc::open(html, RenderOptions { css_width, scale: 1.0, ..Default::default() }, None).unwrap().inspect()
+}
 fn get<'a>(els: &'a [InspectedElement], id: &str) -> &'a InspectedElement {
     els.iter().find(|e| e.mv_id == id).unwrap_or_else(|| panic!("no {id}"))
 }
@@ -200,6 +203,38 @@ fn block_children_of_a_table_row_share_one_anonymous_cell() {
     assert_eq!(r("b1"), (0.0, 70.0, 400.0, 30.0), "the @media rule applies at a 400px viewport");
     assert_eq!(r("b2"), (0.0, 100.0, 400.0, 40.0));
     assert_eq!(r("tb"), (0.0, 70.0, 400.0, 70.0));
+}
+
+/// A table clamped to its pane (the base sheet's `table { max-width: 100%; width: auto }`)
+/// shrinks its fixed-width columns: an auto-layout column is at least its content's
+/// minimum and at most its specified width, and the table's width is shared out between
+/// them. Blitz kept every `width="200"` column at 200 and let the row overflow the table
+/// (tbody and tr 600 in a 528 table). Widths from the harness iframe (ours/table-600-narrow,
+/// light, wide: pane 576, body padding 24).
+#[test]
+fn fixed_width_columns_shrink_to_a_clamped_table() {
+    let els = inspect_at(&fx("table-clamped-columns.html"), 576);
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    // (id, iframe width). The row of a table is the union of its cells.
+    let want = [
+        ("t1", 528.0),
+        ("r1", 528.0),
+        ("c1", 176.95),
+        ("c2", 175.53),
+        ("c3", 175.53),
+        // One fixed 600px cell between two cells holding a nbsp.
+        ("t2", 528.0),
+        ("r2", 528.0),
+        ("d1", 3.89),
+        ("d2", 520.22),
+        ("d3", 3.89),
+    ];
+    let off: Vec<String> = want
+        .iter()
+        .filter(|(id, iframe)| (w(id) - iframe).abs() > 1.0)
+        .map(|(id, iframe)| format!("{id}: {:.2}, iframe {iframe}", w(id)))
+        .collect();
+    assert!(off.is_empty(), "widths off by more than 1px: {off:?}");
 }
 
 /// parley trims a span's text with Unicode White_Space (a no-break space goes) and takes a
