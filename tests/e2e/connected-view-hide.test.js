@@ -7,9 +7,10 @@
  * (`views.hidden_members`) and the app only filters by the key set it hands
  * back, so this is the one place the whole chain runs end to end.
  *
- * The starter views are deleted first: `hidden_members` is the union of every
- * saved view, and Needs reply or Attachments can hold other INBOX mail, which
- * would move the count by more than the one message this view finds.
+ * The starter views are deleted: `hidden_members` is the union of every saved
+ * view, and Needs reply or Attachments can hold other INBOX mail, which would
+ * move the count by more than the one message this view finds. The view is
+ * saved before they go, so no list the window loads in between holds none.
  */
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 
@@ -79,17 +80,34 @@ describe('Hide view mail', function () {
     // The first list seeds the starters, and a deleted starter stays deleted.
     const listedViews = await rpc('views.list', {});
     expect(listedViews.ok).toBe(true);
-    for (const view of listedViews.value || []) {
-      expect((await rpc('views.delete', { id: view.id })).ok).toBe(true);
-    }
+    // Saved before the starters go: a `loadViews` landing between a delete and
+    // the save would leave the window with no view, and no toggle on offer.
     // One phrase alone carries a trailing `||`, or it is read as AND words.
     const saved = await rpc('views.save', { view: {
       id: VIEW_ID, name: 'E2E hide', icon: 'mail', position: 0, builtin: null,
       def: { accounts: [lukeId], mailboxes: ['INBOX'], query: `${subject} ||` },
     } });
     expect(saved.ok).toBe(true);
+    for (const view of listedViews.value || []) {
+      if (view.id === VIEW_ID) continue;
+      expect((await rpc('views.delete', { id: view.id })).ok).toBe(true);
+    }
     const after = await rpc('views.list', {});
     expect((after.value || []).map((v) => v.id)).toEqual([VIEW_ID]);
+
+    // The header's "-1" below means something only if the view finds exactly
+    // this one message: a subject that is also part of another would hide two.
+    // Asked until the index has the message: a ready index can still be on
+    // its way to it. Every 2s, a foreground RPC parks the indexer ~400ms.
+    let evaluated = null;
+    await browser.waitUntil(async () => {
+      evaluated = await rpc('views.evaluate', { viewId: VIEW_ID, accounts: [{ accountId: lukeId, address: LUKE }] });
+      return evaluated.ok && evaluated.value?.available === true && evaluated.value.total >= 1;
+    }, { timeout: 120_000, interval: 2000 }).catch(() => {
+      throw new Error(`the hide view never found "${subject}": ${JSON.stringify(evaluated)}`);
+    });
+    expect(evaluated.value.total).toBe(1);
+    expect((evaluated.value.rows || []).map((row) => row.subject)).toEqual([subject]);
   });
 
   after(async function () {
