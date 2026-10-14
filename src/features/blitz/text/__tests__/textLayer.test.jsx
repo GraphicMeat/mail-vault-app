@@ -119,6 +119,26 @@ describe('segments and line boxes', () => {
     expect(flow).toBe(Math.round(60 * 18.4));
   });
 
+  // Parley's shape: it advances the line top by the unrounded line height but
+  // rounds each top and each box (in device px, then divides by the scale), so
+  // a box is round(LH) tall on an LH pitch and every other box overlaps the
+  // next line when LH has a fraction >= .5 in device px.
+  for (const [name, lh, dpr] of [['22.5 px at dpr 1', 22.5, 1], ['19.5 px at dpr 1', 19.5, 1], ['18.4 px at dpr 2', 18.4, 2], ['20.7 px at dpr 1.5', 20.7, 1.5]]) {
+    it(`stackLines: parley-shaped overlapping boxes (${name}) never drift down 87 lines`, () => {
+      const dev = lh * dpr;
+      const lines = Array.from({ length: 87 }, (_, k) => ({ y: 40 + Math.round(k * dev) / dpr, h: Math.round(dev) / dpr }));
+      const boxes = stackLines(lines, 40);
+      let flow = 0;
+      boxes.forEach((b, k) => {
+        const at = lines[k].y - 40;
+        expect(Math.abs(flow - Math.round(at))).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(b.shift)).toBeLessThanOrEqual(0.5);
+        expect(Number.isInteger(b.height) && Number.isInteger(b.gap) && b.height >= 0 && b.gap >= 0).toBe(true);
+        flow += b.height + b.gap;
+      });
+    });
+  }
+
   it('stackLines: a dropped line is a whole-px gap and the next box still lands on its line', () => {
     const boxes = stackLines([{ y: 0, h: 18.4 }, { y: 36.8, h: 18.4 }], 0);
     expect(boxes[0]).toEqual({ shift: 0, height: 18, gap: 19 });

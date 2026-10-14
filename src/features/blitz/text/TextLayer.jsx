@@ -143,17 +143,21 @@ export function groupSegments(runs) {
  * Line boxes in whole px: line k's box starts at round(y_k - top) and the
  * heights telescope, so nothing accumulates down a tall block whatever an
  * engine does with a fractional line-height (Blink keeps 1/64 px, WebKit may
- * keep less). `shift` (|shift| <= 0.5) moves the drawn text back to its exact
- * y; `gap` is the height of dropped lines before the next line.
+ * keep less). A box ends where the next line starts if it would reach past
+ * it: parley rounds each top and each box height but steps by the unrounded
+ * line height, so a box of round(LH) on an LH pitch overlaps the next line
+ * whenever LH has a fraction of .5 or more in device px. `shift`
+ * (|shift| <= 0.5) moves the drawn text back to its exact y; `gap` is the
+ * height of dropped lines before the next line.
  */
 export function stackLines(lines, top) {
   let flow = 0;
   return lines.map((line, i) => {
     const at = line.y - top;
-    const end = at + line.h;
-    const next = i + 1 < lines.length ? lines[i + 1].y - top : end;
-    const height = Math.max(0, Math.round(end) - Math.round(at));
-    const gap = Math.max(0, Math.round(next) - Math.round(end));
+    const next = i + 1 < lines.length ? lines[i + 1].y - top : Infinity;
+    const stop = Math.max(at, Math.min(at + line.h, next));
+    const height = Math.round(stop) - Math.round(at);
+    const gap = next === Infinity ? 0 : Math.max(0, Math.round(next) - Math.round(stop));
     const box = { shift: at - flow, height, gap };
     flow += height + gap;
     return box;
