@@ -5,7 +5,7 @@ import React, { createRef } from 'react';
 import { readFileSync } from 'node:fs';
 vi.mock('../../service', () => ({ textRunsRender: vi.fn() }));
 import { textRunsRender } from '../../service';
-import TextLayer from '../TextLayer';
+import TextLayer, { groupSegments, stackLines } from '../TextLayer';
 import { utf8Length, utf16ToUtf8, graphemeCount, fitRun, createMeasure } from '../textMetrics';
 
 const meta = { cssWidth: 600, cssHeight: 1100, tileCssHeight: 512, tileCount: 3, links: [], folds: [] };
@@ -86,6 +86,43 @@ describe('blitz.css', () => {
   it('pins the properties the flow math assumes', () => {
     const layer = css.match(/\.mv-blitz-text\s*\{([^}]*)\}/)[1];
     for (const d of ['direction: ltr', 'text-align: left', 'text-indent: 0', 'word-spacing: normal', 'text-transform: none', 'font-weight: normal', 'font-style: normal']) expect(layer).toContain(d);
+  });
+});
+
+describe('segments and line boxes', () => {
+  it('groupSegments takes the box of a root with more runs than an engine allows call arguments', () => {
+    for (const n of [70_000, 1_000_000]) {
+      const runs = Array.from({ length: n }, (_, i) => ({ x: i % 7, y: i * 2, w: 5, h: 2, text: 'a', fontPx: 10, node: 1, start: i }));
+      let groups;
+      expect(() => { groups = groupSegments(runs); }).not.toThrow();
+      expect(groups).toHaveLength(1);
+      expect([groups[0].left, groups[0].top, groups[0].right, groups[0].bottom]).toEqual([0, 0, 11, n * 2]);
+    }
+  });
+
+  it('groupSegments splits one root at its segments, in order', () => {
+    const groups = groupSegments([run({ start: 0, seg: 0 }), run({ start: 4, seg: 4, y: 30 }), run({ start: 9, seg: 4, y: 60 }), run({ node: 6, start: 0, seg: 0, y: 90 })]);
+    expect(groups.map(g => [g.node, g.seg, g.runs.length])).toEqual([[5, 0, 1], [5, 4, 2], [6, 0, 1]]);
+  });
+
+  it('stackLines: whole-px line boxes whose tops never drift down a tall block, the shift keeps the exact y', () => {
+    const lines = Array.from({ length: 60 }, (_, i) => ({ y: 100 + i * 18.4, h: 18.4 }));
+    const boxes = stackLines(lines, 100);
+    let flow = 0;
+    boxes.forEach((b, i) => {
+      expect(Number.isInteger(b.height)).toBe(true);
+      expect(Math.abs(flow - i * 18.4)).toBeLessThanOrEqual(0.5);
+      expect(flow + b.shift).toBeCloseTo(i * 18.4, 6);
+      expect(b.gap).toBe(0);
+      flow += b.height + b.gap;
+    });
+    expect(flow).toBe(Math.round(60 * 18.4));
+  });
+
+  it('stackLines: a dropped line is a whole-px gap and the next box still lands on its line', () => {
+    const boxes = stackLines([{ y: 0, h: 18.4 }, { y: 36.8, h: 18.4 }], 0);
+    expect(boxes[0]).toEqual({ shift: 0, height: 18, gap: 19 });
+    expect(boxes[1].shift).toBeCloseTo(36.8 - 37, 6);
   });
 });
 
@@ -204,6 +241,41 @@ describe('TextLayer', () => {
     await waitFor(() => expect(document.querySelector('[data-tile="2"] span[data-node="9"]')).not.toBeNull());
     await waitFor(() => expect(textRunsRender.mock.calls.filter(c => c[1] === 1)).toHaveLength(2));
     await waitFor(() => expect(document.querySelectorAll('span[data-node="9"]')).toHaveLength(1));
+  });
+
+  it('each hard-broken segment of a root is its own block; offsets and node stay the root\'s', async () => {
+    textRunsRender.mockResolvedValue({ runs: [
+      run({ text: 'one\n', w: 30, start: 0, seg: 0 }),
+      run({ text: 'two\n', w: 30, y: 30, start: 4, seg: 4 }),
+      run({ text: 'three', w: 50, y: 60, start: 8, seg: 8 }),
+    ] });
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('.mv-blitz-root')).toHaveLength(3));
+    const roots = [...document.querySelectorAll('.mv-blitz-root')];
+    expect(roots.map(r => r.style.top)).toEqual(['0px', '30px', '60px']);
+    expect(roots.map(r => r.querySelectorAll('.mv-blitz-line').length)).toEqual([1, 1, 1]);
+    const spans = [...document.querySelectorAll('span[data-node]')];
+    expect(spans.map(x => [x.dataset.node, x.dataset.start])).toEqual([['5', '0'], ['5', '4'], ['5', '8']]);
+  });
+
+  it('owners are followed one step from a shown tile, not chained through owner tiles', async () => {
+    textRunsRender.mockImplementation(async (_d, i) => (i === 2 ? { runs: [], owners: [1] } : i === 1 ? { runs: [run({ text: 'mid' })], owners: [0] } : { runs: [] }));
+    render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([2])} measure={measure} />);
+    await waitFor(() => expect(document.querySelectorAll('span[data-node]')).toHaveLength(1));
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(textRunsRender.mock.calls.map(c => c[1])).toEqual([2, 1]);
+  });
+
+  it('a refetch that brings the same runs keeps the tile as it is: no refit', async () => {
+    textRunsRender.mockImplementation(async () => ({ runs: [run({ text: 'same', w: 40 })] }));
+    const m = vi.fn(measure);
+    const { rerender } = render(<TextLayer docId={1} rev={1} meta={meta} shownTiles={new Set([0])} measure={m} />);
+    await waitFor(() => expect(document.querySelectorAll('span[data-node]')).toHaveLength(1));
+    const calls = m.mock.calls.length;
+    rerender(<TextLayer docId={1} rev={2} meta={meta} shownTiles={new Set([0])} measure={m} />);
+    await waitFor(() => expect(textRunsRender).toHaveBeenCalledTimes(2));
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(m.mock.calls.length).toBe(calls);
   });
 
   it('a late reply for an older rev is dropped', async () => {

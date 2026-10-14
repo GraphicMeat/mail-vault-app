@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { textRunsRender } from '../service';
 import { createMeasure, fitRun } from './textMetrics';
 
@@ -40,43 +40,51 @@ const TextLayer = forwardRef(function TextLayer({ docId, rev, meta, shownTiles, 
     setStore((s) => (s.docId === docId ? s : { docId, map: new Map() }));
   }, [key, docId]);
 
-  const load = useCallback((index) => {
-    const go = (i) => {
+  // `fetchTile` asks for one tile's runs once per rev and resolves to the owner
+  // tiles its reply names; `load` (a shown tile, select-all) also fetches those
+  // owners, one step only: an owner's own owners are not chased.
+  const { fetchTile, load } = useMemo(() => {
+    const fetch1 = (i) => {
       if (requested.current.has(i)) return requested.current.get(i);
       const asked = `${docId}:${rev}`;
       const p = textRunsRender(docId, i)
         .then((r) => {
           // A reply for an older rev (a fold toggled meanwhile) would put old
           // layout spans over moved content: drop it.
-          if (currentKey.current !== asked) return;
+          if (currentKey.current !== asked) return [];
           const runs = r?.runs || [];
           setStore((s) => {
+            const had = s.docId === docId ? s.map.get(i) : undefined;
+            // An unchanged tile keeps its array: no re-render, no refit.
+            if (had && sameRuns(had, runs)) return s;
             const map = new Map(s.docId === docId ? s.map : undefined);
             map.set(i, runs);
             return { docId, map };
           });
           onLoadedRef.current?.(i, runs);
-          // A paragraph lives in the tile of its first line: one that starts in
-          // an earlier tile and runs on into this one is only there once its
-          // owner tile is loaded too.
-          for (const j of r?.owners || []) if (Number.isInteger(j) && j >= 0 && j < tileCount.current) go(j);
+          return (r?.owners || []).filter((j) => Number.isInteger(j) && j >= 0 && j < tileCount.current);
         })
         // The tile keeps what it had; a later rev (or the next shown set) asks again.
-        .catch(() => { if (requested.current.get(i) === p) requested.current.delete(i); });
+        .catch(() => { if (requested.current.get(i) === p) requested.current.delete(i); return []; });
       requested.current.set(i, p);
       return p;
     };
-    return go(index);
+    // A segment lives in the tile of its first line: one that starts in an
+    // earlier tile and runs on into this one is only there once its owner
+    // tile is loaded too.
+    const load1 = (i) => fetch1(i).then((owners) => { for (const j of owners) fetch1(j); });
+    return { fetchTile: fetch1, load: load1 };
   }, [docId, rev]);
 
-  // A new rev asks again for every tile that holds runs, not only the shown
-  // ones: a tile loaded as an owner (or by select-all) would otherwise keep a
-  // root at its old place, and draw it twice once it moved to a shown tile.
+  // Shown tiles first. A new rev then asks again for every other tile that
+  // holds runs: a tile loaded as an owner (or by select-all) would otherwise
+  // keep a segment at its old place, and draw it twice once it moved to a
+  // shown tile.
   useEffect(() => {
     if (docId == null) return;
     for (const i of shownTiles) if (i < meta.tileCount) load(i);
-    for (const i of held.current?.keys() ?? []) if (i < meta.tileCount) load(i);
-  }, [key, shownTiles, meta.tileCount, load, docId]);
+    for (const i of held.current?.keys() ?? []) if (i < meta.tileCount) fetchTile(i);
+  }, [key, shownTiles, meta.tileCount, load, fetchTile, docId]);
 
   useImperativeHandle(ref, () => ({
     // Resolves when the replies are in state, which is before React commits
@@ -104,21 +112,52 @@ const TextLayer = forwardRef(function TextLayer({ docId, rev, meta, shownTiles, 
   );
 });
 
-// The runs of one inline root, with its box: left/top of its first glyph run
-// and the right/bottom of its widest/last.
-function groupByRoot(runs) {
+const sameRun = (a, b) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h && a.text === b.text
+  && a.fontPx === b.fontPx && a.node === b.node && a.start === b.start && a.seg === b.seg;
+const sameRuns = (a, b) => a.length === b.length && a.every((r, i) => sameRun(r, b[i]));
+
+/**
+ * The runs of each segment (a stretch of one inline root between hard
+ * newlines, `seg` from the worker), with its box: one pass, no argument
+ * spreading (a root of 65k+ runs would overflow JavaScriptCore's argument limit).
+ */
+export function groupSegments(runs) {
   const groups = [];
+  let g = null;
   for (const r of runs) {
-    const last = groups[groups.length - 1];
-    if (last && last.node === r.node) last.runs.push(r); else groups.push({ node: r.node, runs: [r] });
-  }
-  for (const g of groups) {
-    g.left = Math.min(...g.runs.map(r => r.x));
-    g.top = Math.min(...g.runs.map(r => r.y));
-    g.right = Math.max(...g.runs.map(r => r.x + r.w));
-    g.bottom = Math.max(...g.runs.map(r => r.y + r.h));
+    const seg = r.seg ?? 0;
+    if (!g || g.node !== r.node || g.seg !== seg) {
+      g = { node: r.node, seg, runs: [], left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+      groups.push(g);
+    }
+    g.runs.push(r);
+    if (r.x < g.left) g.left = r.x;
+    if (r.y < g.top) g.top = r.y;
+    if (r.x + r.w > g.right) g.right = r.x + r.w;
+    if (r.y + r.h > g.bottom) g.bottom = r.y + r.h;
   }
   return groups;
+}
+
+/**
+ * Line boxes in whole px: line k's box starts at round(y_k - top) and the
+ * heights telescope, so nothing accumulates down a tall block whatever an
+ * engine does with a fractional line-height (Blink keeps 1/64 px, WebKit may
+ * keep less). `shift` (|shift| <= 0.5) moves the drawn text back to its exact
+ * y; `gap` is the height of dropped lines before the next line.
+ */
+export function stackLines(lines, top) {
+  let flow = 0;
+  return lines.map((line, i) => {
+    const at = line.y - top;
+    const end = at + line.h;
+    const next = i + 1 < lines.length ? lines[i + 1].y - top : end;
+    const height = Math.max(0, Math.round(end) - Math.round(at));
+    const gap = Math.max(0, Math.round(next) - Math.round(end));
+    const box = { shift: at - flow, height, gap };
+    flow += height + gap;
+    return box;
+  });
 }
 
 // How far right a root's box reaches: to the layer's edge, or to the next root
@@ -139,26 +178,27 @@ function reach(groups, width) {
 // measure, so a hover, a shown-set change or another tile's reply never
 // refits the spans of a loaded tile.
 const Tile = React.memo(function Tile({ index, runs, width, measure }) {
-  const groups = useMemo(() => groupByRoot(runs), [runs]);
+  const groups = useMemo(() => groupSegments(runs), [runs]);
   const rights = useMemo(() => reach(groups, width), [groups, width]);
   return (
     <div data-tile={index}>
       {groups.map((group, g) => (
-        <Root key={`${group.node}@${index}`} group={group} right={rights[g]} measure={measure} />
+        <Root key={`${group.node}:${group.seg}@${index}`} group={group} right={rights[g]} measure={measure} />
       ))}
     </div>
   );
 });
 
-// One inline root (a paragraph, a cell) is one block with its lines as real
-// line boxes, so the engine's hit test and paragraph selection work as in the
-// iframe: a point right of a line's end resolves to that line, and a
-// triple-click selects the whole paragraph. The block is 0 px wide (its hit
-// area is padding out to `right`), so each line wrapper, `white-space: pre`
-// inside, sits on a line of its own at the <wbr> after it: soft wraps, not
-// <br>s, which would end an editing paragraph and add a newline to the
-// selection's text. A line the worker dropped (all of it unselectable) is a
-// gap box of its height, so every line box sits at its drawn top.
+// One segment of an inline root (a paragraph, a cell, one hard-broken line of
+// a <pre>) is one block with its lines as real line boxes, so the engine's hit
+// test and paragraph selection work as in the iframe: a point right of a
+// line's end resolves to that line, and a triple-click selects the segment,
+// which is what the iframe's paragraph between two <br>s is. The block is 0 px
+// wide (its hit area is padding out to `right`), so each line wrapper,
+// `white-space: pre` inside, sits on a line of its own at the <wbr> after it:
+// soft wraps, not <br>s, which would add a newline to the selection's text.
+// A line the worker dropped (all of it unselectable) is a gap box of its
+// height, so every line box sits at its drawn top (see stackLines).
 function Root({ group, right, measure }) {
   const { runs, left, top } = group;
   const out = useMemo(() => {
@@ -168,22 +208,11 @@ function Root({ group, right, measure }) {
       // Runs come in logical order and a line's runs share its top.
       if (last && last.y === r.y) { last.runs.push(r); last.h = Math.max(last.h, r.h); } else lines.push({ y: r.y, h: r.h, runs: [r] });
     }
+    const boxes = stackLines(lines, top);
     const nodes = [];
-    let flowTop = 0;
     lines.forEach((line, li) => {
       const first = line.runs[0].start;
-      if (li > 0) {
-        const prev = lines[li - 1];
-        nodes.push(<wbr key={`w${first}`} />);
-        const gap = line.y - (prev.y + prev.h);
-        if (gap > 0.5) {
-          nodes.push(<span key={`g${first}`} className="mv-blitz-gap" aria-hidden="true" style={{ height: gap }} />, <wbr key={`v${first}`} />);
-          flowTop += gap;
-        }
-      }
-      // 0 unless lines overlap: the line box is where the line is drawn.
-      const shift = line.y - top - flowTop;
-      flowTop += line.h;
+      const { shift, height } = boxes[li];
       let flow = 0;
       const spans = line.runs.map((r) => {
         const { letterSpacing, width } = fitRun(r, measure);
@@ -191,7 +220,7 @@ function Root({ group, right, measure }) {
           marginLeft: r.x - left - flow,
           top: shift,
           fontSize: r.fontPx,
-          lineHeight: `${line.h}px`,
+          lineHeight: `${height}px`,
           letterSpacing,
         };
         flow = r.x - left + width;
@@ -202,6 +231,13 @@ function Root({ group, right, measure }) {
         return <span key={r.start} dir="auto" data-node={r.node} data-start={r.start} style={style}>{r.text.replace(/[\n\r\t]/g, ' ')}</span>;
       });
       nodes.push(<span key={`l${first}`} className="mv-blitz-line">{spans}</span>);
+      if (li + 1 < lines.length) {
+        const next = lines[li + 1].runs[0].start;
+        nodes.push(<wbr key={`w${next}`} />);
+        if (boxes[li].gap > 0) {
+          nodes.push(<span key={`g${next}`} className="mv-blitz-gap" aria-hidden="true" style={{ height: boxes[li].gap }} />, <wbr key={`v${next}`} />);
+        }
+      }
     });
     return nodes;
   }, [runs, measure, left, top]);
