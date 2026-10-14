@@ -130,6 +130,21 @@ describe('BlitzTiles', () => {
     expect(closeRender).toHaveBeenCalledWith(1);
   });
 
+  it('a shown tile past the first two keeps its src across a re-open (no blank flash)', async () => {
+    let fire;
+    globalThis.IntersectionObserver = class { constructor(cb) { fire = cb; } observe() {} unobserve() {} disconnect() {} };
+    openRender.mockResolvedValueOnce({ docId: 1, rev: 1, meta: meta({ tileCount: 5, cssHeight: 2500 }) });
+    const { rerender } = render(tiles({ html: '<p>A' }));
+    await screen.findAllByTestId('blitz-tile');
+    await act(async () => { fire([{ isIntersecting: true, target: screen.getAllByTestId('blitz-tile')[3] }]); });
+    expect(screen.getAllByTestId('blitz-tile')[3].hasAttribute('src')).toBe(true);
+    openRender.mockResolvedValueOnce({ docId: 2, rev: 1, meta: meta({ tileCount: 5, cssHeight: 2500 }) });
+    rerender(tiles({ html: '<p>A<mark>' }));
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('2%2F1%2F0'));
+    expect(screen.getAllByTestId('blitz-tile')[3].getAttribute('src')).toContain('2%2F1%2F3');
+    expect(screen.getAllByTestId('blitz-tile')[4].hasAttribute('src')).toBe(false);
+  });
+
   it('closes its doc on unmount', async () => {
     openRender.mockResolvedValue({ docId: 8, rev: 1, meta: meta() });
     const { unmount } = render(tiles());

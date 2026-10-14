@@ -66,9 +66,11 @@ export default function BlitzBody(props) {
   // Held with its message key so a new message starts folded in its first pre-pass.
   const folds = useRef({ key, open: new Set() });
   if (folds.current.key !== key) folds.current = { key, open: new Set() };
+  // Bound to its message: a late toggle from the message just left must not open a fold on this one.
   const onFoldToggled = useCallback((id, open) => {
+    if (folds.current.key !== key) return;
     if (open) folds.current.open.add(id); else folds.current.open.delete(id);
-  }, []);
+  }, [key]);
 
   const priv = usePrivacyDict({ message, messageKey: key });
   // Derived in render, so no frame is ever painted from HTML built for another

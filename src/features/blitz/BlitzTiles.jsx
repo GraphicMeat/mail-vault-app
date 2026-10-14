@@ -98,7 +98,9 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
   useEffect(() => {
     const m = doc?.meta;
     if (!m) return undefined;
-    setShown(new Set([0, 1]));
+    // A re-open of the same message keeps the tiles already near the viewport: a reset would
+    // blank everything past the second tile until the observer re-adds it.
+    setShown(s => new Set([0, 1, ...[...s].filter(i => i < m.tileCount)]));
     const io = new IntersectionObserver((entries) => {
       const seen = entries.filter(e => e.isIntersecting).map(e => Number(e.target.dataset.index));
       if (seen.length) setShown(s => { const n = new Set(s); seen.forEach(i => n.add(i)); return n; });

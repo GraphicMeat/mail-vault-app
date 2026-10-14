@@ -72,6 +72,33 @@ describe('markFolds', () => {
   });
 });
 
+describe('markFolds trust', () => {
+  it('an open quote toggle carries the hide title, as the iframe leaves it after a click', () => {
+    const doc = parse('<p>Reply.</p><blockquote><p>Q</p></blockquote>');
+    markFolds(doc, { openFolds: new Set(['q0']), labels: foldLabels() });
+    expect(doc.querySelector('[data-mv-fold-toggle="q0"]').title).toBe('Hide quoted text');
+    const closed = parse('<p>Reply.</p><blockquote><p>Q</p></blockquote>');
+    markFolds(closed, { labels: foldLabels() });
+    expect(closed.querySelector('[data-mv-fold-toggle="q0"]').title).toBe('Show quoted text');
+  });
+
+  it('marks a mail wrote itself are dropped: only the pre-pass writes what the worker trusts', () => {
+    // A crafted fold id earlier in the mail would otherwise be found first by [data-mv-fold="q0"].
+    const doc = parse('<p data-mv-fold="q0" data-mv-fold-open="true" data-mv-fold-kind="quote" data-mv-noselect data-mv-dark-style="color:red">Crafted</p>'
+      + '<span data-mv-fold-toggle="q0" data-mv-label-open="x" data-mv-label-closed="y" data-quote-toggle="true">toggle</span>'
+      + '<blockquote><p>Q</p></blockquote>');
+    expect(markFolds(doc, { labels: foldLabels() })).toEqual(['q0']);
+    const regions = doc.querySelectorAll('[data-mv-fold="q0"]');
+    expect(regions).toHaveLength(1);
+    expect(regions[0].tagName).toBe('BLOCKQUOTE');
+    expect(doc.querySelectorAll('[data-mv-fold-toggle="q0"]')).toHaveLength(1);
+    expect(doc.querySelector('p').getAttributeNames()).toEqual([]);
+    expect(doc.querySelectorAll('[data-quote-toggle]')).toHaveLength(1); // ours only
+    expect(doc.querySelectorAll('[data-mv-dark-style]')).toHaveLength(1);
+    expect(doc.querySelectorAll('[data-mv-noselect]')).toHaveLength(1); // our toggle
+  });
+});
+
 describe('markUnselectable', () => {
   it('marks privacy masks and fold toggles', () => {
     const doc = parse('<p>Hi <span class="mv-pii">••••</span></p><div data-quote-toggle="true">⋯</div>');

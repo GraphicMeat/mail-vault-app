@@ -19,6 +19,10 @@ export function foldLabels() {
 
 const DARK_STYLE = `background:${QUOTE_TOGGLE_DARK.background};color:${QUOTE_TOGGLE_DARK.color};border-color:${QUOTE_TOGGLE_DARK.borderColor}`;
 
+const MARK_ATTRS = new Set(['data-mv-fold', 'data-mv-fold-kind', 'data-mv-fold-open', 'data-mv-fold-toggle',
+  'data-mv-label-open', 'data-mv-label-closed', 'data-mv-dark-style', 'data-mv-noselect', 'data-quote-toggle']);
+const FOREIGN_MARKS = [...MARK_ATTRS].map(a => `[${a}]`).join(',');
+
 function mark(region, toggle, { id, kind, open, closedLabel, openLabel }) {
   region.dataset.mvFold = id;
   region.dataset.mvFoldKind = kind;
@@ -38,6 +42,13 @@ function mark(region, toggle, { id, kind, open, closedLabel, openLabel }) {
  * unknown) folded under a toggle. Returns the toggleable fold ids in order.
  */
 export function markFolds(doc, { foldQuotes = true, signatureDisplay = 'smart', openFolds = new Set(), labels = foldLabels() } = {}) {
+  // The worker trusts these handles, so only this function writes them: a mail that carries its
+  // own (a crafted data-mv-fold="q0" ahead of the real quote) would hijack a toggle.
+  for (const el of doc.querySelectorAll(FOREIGN_MARKS)) {
+    for (const name of el.getAttributeNames()) {
+      if (MARK_ATTRS.has(name)) el.removeAttribute(name);
+    }
+  }
   const ids = [];
   if (foldQuotes) {
     quoteFoldTargets(doc).forEach((el, i) => {
@@ -45,7 +56,7 @@ export function markFolds(doc, { foldQuotes = true, signatureDisplay = 'smart', 
       el.dataset.quoteFolded = 'true';
       const toggle = doc.createElement('div');
       toggle.dataset.quoteToggle = 'true';
-      toggle.title = labels.quoteShowTitle;
+      toggle.title = openFolds.has(id) ? labels.quoteHideTitle : labels.quoteShowTitle;
       // Light baseline; the worker applies data-mv-dark-style when the body
       // it computes is dark (the iframe's getComputedStyle test).
       styleQuoteToggle(toggle, false);

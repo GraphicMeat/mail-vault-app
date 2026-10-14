@@ -122,4 +122,35 @@ describe('BlitzBody', () => {
     expect(tilesProps.last.html).toContain('data-mv-fold-open="false"');
     vi.useRealTimers();
   });
+
+  it('a late fold toggle from the previous message does not open the new message\'s fold', async () => {
+    vi.useFakeTimers();
+    const body = '<p>Reply</p><blockquote><p>Q</p></blockquote>';
+    const { rerender } = render(<BlitzBody {...props({ messageKey: 'k-late-a', bodyHtml: body })} />);
+    await vi.runAllTimersAsync();
+    const stale = tilesProps.last.onFoldToggled;
+    rerender(<BlitzBody {...props({ messageKey: 'k-late-b', bodyHtml: body })} />);
+    await vi.runAllTimersAsync();
+    act(() => stale('q0', true));
+    rerender(<BlitzBody {...props({ messageKey: 'k-late-b', bodyHtml: body, searchQuery: 'reply' })} />);
+    await vi.advanceTimersByTimeAsync(150);
+    await vi.runAllTimersAsync();
+    expect(tilesProps.last.html).toContain('data-mv-fold-open="false"');
+    expect(tilesProps.last.html).not.toContain('data-mv-fold-open="true"');
+    vi.useRealTimers();
+  });
+
+  it('an opened fold stays open across a privacy toggle', async () => {
+    vi.useFakeTimers();
+    const body = '<p>Reply</p><blockquote><p>Q</p></blockquote>';
+    const { rerender } = render(<BlitzBody {...props({ messageKey: 'k-fold-priv', bodyHtml: body })} />);
+    await vi.runAllTimersAsync();
+    act(() => tilesProps.last.onFoldToggled('q0', true));
+    privacy.active = true;
+    rerender(<BlitzBody {...props({ messageKey: 'k-fold-priv', bodyHtml: body })} />);
+    await vi.runAllTimersAsync();
+    expect(tilesProps.last.privacy).toBe(true);
+    expect(tilesProps.last.html).toContain('data-mv-fold-open="true"');
+    vi.useRealTimers();
+  });
 });
