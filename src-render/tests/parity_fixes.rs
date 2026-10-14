@@ -504,3 +504,25 @@ fn a_spanning_cell_widens_columns_in_proportion_to_their_content() {
         assert!((w(id) - iframe).abs() <= 0.6, "{id}: {}, iframe {iframe}", w(id));
     }
 }
+
+/// `word-break: break-word` means `overflow-wrap: anywhere` (CSS Text 3), which lets a token break
+/// at any letter when the column's minimum width is worked out. stylo's servo build does not know
+/// the value and dropped the declaration, so a cell of Postmark's (it has the declaration on every
+/// cell) was as wide as its longest token; the harness iframe's 20% invoice column is 47.8px, the
+/// token's own width is ~75. Declarations in `style` attributes and `<style>` elements change;
+/// the same words in the text of the mail do not.
+#[test]
+fn word_break_break_word_lets_a_token_break_anywhere() {
+    let html = fx("word-break-break-word.html");
+    let els = inspect_at(&html, 400);
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    assert!(w("a") <= 100.0, "style attribute: {}", w("a"));
+    assert!(w("c") <= 100.0, "style element: {}", w("c"));
+    assert!(w("b") > 100.0, "the guard: without it the token is {} wide", w("b"));
+    let text = RenderDoc::open(&html, RenderOptions { css_width: 400, scale: 1.0, ..Default::default() }, None).unwrap().meta().plain_text;
+    assert!(text.contains("word-break: break-word is only text here"), "{text}");
+    assert_eq!(
+        mailvault_render::compat::word_break_break_word(r#"<td style="WORD-BREAK :  Break-Word !important">x"#),
+        r#"<td style="overflow-wrap:anywhere !important">x"#
+    );
+}

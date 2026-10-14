@@ -1,6 +1,7 @@
 //! MailVault's Blitz email renderer. Runs only inside the daemon's render
 //! worker process (`mailvault-daemon --render-worker`), never in the daemon
 //! itself: a panic here must cost one worker, not the daemon.
+pub mod compat;
 pub mod dark;
 mod doc;
 pub mod dommap;

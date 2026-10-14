@@ -176,7 +176,8 @@ impl RenderDoc {
             subdocument_depth: NO_SUBDOCUMENTS,
             ..Default::default()
         };
-        let mut doc = HtmlDocument::from_html(html, config);
+        let html = crate::compat::word_break_break_word(html);
+        let mut doc = HtmlDocument::from_html(&html, config);
         if doc.tree().len() > MAX_NODES || exceeds_depth(&doc) {
             return Err(OpenError::TooComplex);
         }
