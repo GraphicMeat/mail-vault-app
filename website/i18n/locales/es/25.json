@@ -10,5 +10,7 @@
   "52d22ac60775": "<strong class=\"mv-clip-title\">Cápsula del tiempo</strong><span class=\"mv-clip-text\">Al pulsar Tomar una instantánea se añade una tarjeta nueva a tus instantáneas. Abre una anterior y aparece la lista de su bandeja de entrada.</span>",
   "5e35a9b65afe": "<strong class=\"mv-clip-title\">Deshacer envío</strong><span class=\"mv-clip-text\">Envía una respuesta y espera 15 segundos con un botón Deshacer. Haz clic en Deshacer y tu borrador vuelve.</span>",
   "cacbc05bcd14": "<strong class=\"mv-clip-title\">Bandeja unificada</strong><span class=\"mv-clip-text\">Haz clic en Todas las bandejas y el correo de tres cuentas comparte una lista, con cada fila marcada con el color de su cuenta.</span>",
-  "44d838ae82aa": "<strong class=\"mv-clip-title\">Vista de chat</strong><span class=\"mv-clip-text\">Abre una conversación en la vista de chat y el ida y vuelta se lee como burbujas de chat, agrupadas por persona y tema.</span>"
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">Vista de chat</strong><span class=\"mv-clip-text\">Abre una conversación en la vista de chat y el ida y vuelta se lee como burbujas de chat, agrupadas por persona y tema.</span>",
+  "4af48cf4c4b8": "«He probado Evolution, Mailspring, Thunderbird y otros. <strong>Ninguno se sentía como un sustituto de Outlook</strong>, por una razón u otra.»",
+  "72d033e3e49a": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>Sobre los clientes de correo de Linux que probó antes de MailVault</span><span>Usuario de Linux · Reseña en Product Hunt, 5 de 5</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">Lee la reseña en Product Hunt ↗</a>"
 }

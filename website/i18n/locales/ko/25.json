@@ -10,5 +10,7 @@
   "52d22ac60775": "<strong class=\"mv-clip-title\">타임캡슐</strong><span class=\"mv-clip-text\">스냅숏 만들기를 누르면 스냅숏에 새 카드가 추가됩니다. 이전 스냅숏을 열면 그 시점의 받은편지함 목록이 나타납니다.</span>",
   "5e35a9b65afe": "<strong class=\"mv-clip-title\">발송 취소</strong><span class=\"mv-clip-text\">답장을 보내면 실행 취소 버튼과 함께 15초 동안 대기합니다. 실행 취소를 클릭하면 초안이 돌아옵니다.</span>",
   "cacbc05bcd14": "<strong class=\"mv-clip-title\">통합 받은편지함</strong><span class=\"mv-clip-text\">모든 받은편지함을 클릭하면 계정 세 개의 메일이 하나의 목록에 모이고, 각 행에 계정 색이 표시됩니다.</span>",
-  "44d838ae82aa": "<strong class=\"mv-clip-title\">채팅 보기</strong><span class=\"mv-clip-text\">대화를 채팅 보기로 열면 오가는 메시지가 사람과 주제별로 묶인 채팅 말풍선으로 보입니다.</span>"
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">채팅 보기</strong><span class=\"mv-clip-text\">대화를 채팅 보기로 열면 오가는 메시지가 사람과 주제별로 묶인 채팅 말풍선으로 보입니다.</span>",
+  "4af48cf4c4b8": "“Evolution, Mailspring, Thunderbird 등 여러 가지를 써 봤지만, 이런저런 이유로 <strong>어느 것도 Outlook을 대신할 만하다고 느껴지지 않았습니다.</strong>”",
+  "72d033e3e49a": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>MailVault 이전에 써 본 Linux 메일 클라이언트에 대해</span><span>Linux 사용자 · Product Hunt 리뷰, 5점 만점에 5점</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">Product Hunt에서 리뷰 보기 ↗</a>"
 }

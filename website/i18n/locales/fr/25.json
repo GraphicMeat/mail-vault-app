@@ -10,5 +10,7 @@
   "52d22ac60775": "<strong class=\"mv-clip-title\">Capsule temporelle</strong><span class=\"mv-clip-text\">« Prendre un instantané » ajoute une nouvelle carte à vos instantanés. Ouvrez-en un plus ancien et sa liste de boîte de réception apparaît.</span>",
   "5e35a9b65afe": "<strong class=\"mv-clip-title\">Annuler l’envoi</strong><span class=\"mv-clip-text\">Envoyez une réponse : elle attend 15 secondes avec un bouton « Annuler ». Cliquez sur « Annuler » et votre brouillon revient.</span>",
   "cacbc05bcd14": "<strong class=\"mv-clip-title\">Boîte de réception unifiée</strong><span class=\"mv-clip-text\">Cliquez sur « Toutes les boîtes » et le courrier de trois comptes partage une seule liste, chaque ligne marquée de la couleur de son compte.</span>",
-  "44d838ae82aa": "<strong class=\"mv-clip-title\">Vue Chat</strong><span class=\"mv-clip-text\">Ouvrez une conversation en vue Chat et les échanges s’affichent en bulles, regroupés par personne et par sujet.</span>"
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">Vue Chat</strong><span class=\"mv-clip-text\">Ouvrez une conversation en vue Chat et les échanges s’affichent en bulles, regroupés par personne et par sujet.</span>",
+  "4af48cf4c4b8": "« J'ai essayé Evolution, Mailspring, Thunderbird et d'autres. <strong>Aucun ne ressemblait à un remplaçant d'Outlook</strong>, pour une raison ou une autre. »",
+  "72d033e3e49a": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>À propos des clients mail Linux essayés avant MailVault</span><span>Utilisateur Linux · Avis Product Hunt, 5 sur 5</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">Lire l'avis sur Product Hunt ↗</a>"
 }

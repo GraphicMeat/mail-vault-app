@@ -10,5 +10,7 @@
   "52d22ac60775": "<strong class=\"mv-clip-title\">タイムカプセル</strong><span class=\"mv-clip-text\">「スナップショットを撮る」を押すと、スナップショットの一覧に新しいカードが加わります。古いものを開くと、その時点の受信トレイの一覧が表示されます。</span>",
   "5e35a9b65afe": "<strong class=\"mv-clip-title\">送信の取り消し</strong><span class=\"mv-clip-text\">返信を送信すると、「取り消す」ボタンが付いたまま 15 秒間待機します。「取り消す」をクリックすると、下書きに戻ります。</span>",
   "cacbc05bcd14": "<strong class=\"mv-clip-title\">統合受信トレイ</strong><span class=\"mv-clip-text\">「すべての受信トレイ」をクリックすると、3 つのアカウントのメールが 1 つの一覧にまとまり、各行にアカウントの色が付きます。</span>",
-  "44d838ae82aa": "<strong class=\"mv-clip-title\">チャット表示</strong><span class=\"mv-clip-text\">会話をチャット表示で開くと、やり取りが人と話題ごとにまとまったチャットの吹き出しとして表示されます。</span>"
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">チャット表示</strong><span class=\"mv-clip-text\">会話をチャット表示で開くと、やり取りが人と話題ごとにまとまったチャットの吹き出しとして表示されます。</span>",
+  "4af48cf4c4b8": "「Evolution、Mailspring、Thunderbirdなどを試してきましたが、どれも何かしらの理由で<strong>Outlookの代わりになるとは感じられませんでした。</strong>」",
+  "72d033e3e49a": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>MailVault以前に試したLinuxのメールクライアントについて</span><span>Linux ユーザー · Product Huntレビュー、5点中5点</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">Product Huntでレビューを読む ↗</a>"
 }

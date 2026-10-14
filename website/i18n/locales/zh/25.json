@@ -10,5 +10,7 @@
   "52d22ac60775": "<strong class=\"mv-clip-title\">时间胶囊</strong><span class=\"mv-clip-text\">“创建快照”会在你的快照中添加一张新卡片。打开较早的一张，就会显示它的收件箱列表。</span>",
   "5e35a9b65afe": "<strong class=\"mv-clip-title\">撤销发送</strong><span class=\"mv-clip-text\">发送一封回复，它会等待 15 秒，并带有“撤销”按钮。点击“撤销”，草稿就回来了。</span>",
   "cacbc05bcd14": "<strong class=\"mv-clip-title\">统一收件箱</strong><span class=\"mv-clip-text\">点击“所有收件箱”，三个账户的邮件共用一个列表，每一行都标着所属账户的颜色。</span>",
-  "44d838ae82aa": "<strong class=\"mv-clip-title\">聊天视图</strong><span class=\"mv-clip-text\">以聊天视图打开一段对话，来回的邮件就显示为聊天气泡，按人物和话题分组。</span>"
+  "44d838ae82aa": "<strong class=\"mv-clip-title\">聊天视图</strong><span class=\"mv-clip-text\">以聊天视图打开一段对话，来回的邮件就显示为聊天气泡，按人物和话题分组。</span>",
+  "4af48cf4c4b8": "“我试过 Evolution、Mailspring、Thunderbird 等等。由于这样那样的原因，<strong>没有一个让我觉得能替代 Outlook</strong>。”",
+  "72d033e3e49a": "<span class=\"mv-person-mark\" aria-hidden=\"true\">C</span><strong>Chris Boyle</strong><span>关于在 MailVault 之前试过的 Linux 邮件客户端</span><span>Linux 用户 · Product Hunt 评价，5 分（满分 5 分）</span><a href=\"https://www.producthunt.com/products/mailvault/reviews\" target=\"_blank\" rel=\"noopener\">在 Product Hunt 上查看评价 ↗</a>"
 }
