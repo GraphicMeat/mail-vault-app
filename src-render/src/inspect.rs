@@ -83,12 +83,12 @@ fn has_visible_text(doc: &BaseDocument, id: NodeId) -> bool {
     n.children.iter().any(|c| has_visible_text(doc, *c))
 }
 
-/// Absolute vertical spans of the line boxes that hold a glyph run of `el`'s
-/// own or descendant text. Looks in every inline root and keeps the lines
-/// whose runs belong to `el`. No ancestry prefilter on the root: an inline
-/// that follows a block sibling lives in an anonymous inline root that is not
-/// a DOM ancestor or descendant of it, and the run's brush id says which
-/// element a run belongs to anyway. (Same origin maths as blitz-dom's
+/// Absolute vertical spans of the text fragments (glyph runs) of `el`'s own or
+/// descendant text, one per run: what the iframe side gets from
+/// `Range.getClientRects`. Looks in every inline root. No ancestry prefilter on
+/// the root: an inline that follows a block sibling lives in an anonymous inline
+/// root that is not a DOM ancestor or descendant of it, and the run's brush id
+/// says which element a run belongs to anyway. (Same origin maths as blitz-dom's
 /// `inline_fragment_rects`.)
 fn line_spans(doc: &BaseDocument, el: NodeId) -> Vec<(f64, f64)> {
     let mut spans = Vec::new();
@@ -99,13 +99,18 @@ fn line_spans(doc: &BaseDocument, el: NodeId) -> Vec<(f64, f64)> {
         let fl = root.final_layout();
         let origin_y = root.absolute_position(0.0, 0.0).y as f64 + (fl.padding.top + fl.border.top) as f64;
         for line in layout.lines() {
-            let hit = line.items().any(|item| match item {
-                PositionedLayoutItem::GlyphRun(run) => is_descendant_or_self(doc, run.style().brush.id, el),
-                PositionedLayoutItem::InlineBox(_) => false,
-            });
-            if hit {
-                let m = line.metrics();
-                spans.push((origin_y + m.block_min_coord as f64 / scale, origin_y + m.block_max_coord as f64 / scale));
+            for item in line.items() {
+                if let PositionedLayoutItem::GlyphRun(run) = item {
+                    if is_descendant_or_self(doc, run.style().brush.id, el) {
+                        // A text fragment's rect, as `Range.getClientRects` gives it: the
+                        // rounded ascent and descent around the baseline, not the line box.
+                        let m = run.run().metrics();
+                        spans.push((
+                            origin_y + (run.baseline() - m.ascent.round()) as f64 / scale,
+                            origin_y + (run.baseline() + m.descent.round()) as f64 / scale,
+                        ));
+                    }
+                }
             }
         }
     }

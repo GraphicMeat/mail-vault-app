@@ -409,3 +409,14 @@ fn an_inline_rect_includes_its_padding() {
     let (plain, padded) = (r("plain"), r("padded"));
     assert_eq!((padded.w - plain.w, padded.h - plain.h), (8.0, 2.0), "1px 4px of padding");
 }
+
+/// The harness counts lines the way `Range.getClientRects` sees them: one rect per text
+/// fragment, as high as the font's content area, merged when a fragment's middle lies inside
+/// the rect before it. Two columns of one line each, top-aligned, with line-heights 40 and
+/// 20: the text sits at 12.5-27.5 and 2.5-17.5, the second one's middle (20) outside the
+/// first's, so two lines. Their line boxes (0-40, 0-20) would merge into one.
+#[test]
+fn line_count_follows_text_fragments_not_line_boxes() {
+    let els = inspect(&fx("inline-padding-and-ui-monospace.html"));
+    assert_eq!(get(&els, "cols").line_count, Some(2));
+}
