@@ -14,7 +14,7 @@
 //! order (`Nesting`): a nested root's text is spliced in at its box, as the
 //! iframe copies it.
 use crate::dommap::{align, collapses, dom_end_point, dom_point, pseudo_owner, DomPoint, Slot};
-use crate::text::{inline_roots, is_unselectable, NOSELECT_ATTR};
+use crate::text::{inline_roots, is_unselectable, is_visibility_hidden, NOSELECT_ATTR};
 use blitz_dom::{BaseDocument, LocalName, Node, NodeData, NodeId};
 use parley::InlineBoxKind;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,7 @@ pub struct Serialized {
 
 const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];
 const STRUCTURAL: &[&str] = &["table", "thead", "tbody", "tfoot", "tr", "ul", "ol"];
+const URL_ATTRS: &[&str] = &["href", "src", "action", "formaction", "poster", "background", "data"];
 const INLINE: &[&str] = &["a", "b", "strong", "i", "em", "u", "s", "span", "font", "code", "sup", "sub", "small", "big", "mark"];
 
 pub fn serialize(doc: &BaseDocument, a: Endpoint, b: Endpoint) -> Serialized {
@@ -61,7 +62,8 @@ pub fn serialize(doc: &BaseDocument, a: Endpoint, b: Endpoint) -> Serialized {
         None => (nest.key(doc, b), nest.end_point(doc, b)),
     };
     let text = plain(doc, &nest, &roots, &nest.key(doc, a), &hi, &|r| align(doc, r));
-    Serialized { html: markup(doc, nest.start_point(doc, a), end), text }
+    let html = markup(doc, nest.start_point(doc, a), end);
+    Serialized { html, text }
 }
 
 /// `offset` clamped to the root's text and moved to a char boundary (down for
@@ -381,7 +383,7 @@ fn plain(doc: &BaseDocument, nest: &Nesting, roots: &[NodeId], lo: &[Step], hi: 
 }
 
 /// `text[s..e]` of `root`, less generated content and every char that comes
-/// from an unselectable DOM node.
+/// from an unselectable or visibility-hidden DOM node.
 fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize, slots: &[Slot]) -> String {
     let Some(tl) = doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()) else { return String::new() };
     let e = e.min(tl.text.len());
@@ -402,7 +404,7 @@ fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize, slots:
             match cut {
                 Some((n, hidden)) if n == node => !hidden,
                 _ => {
-                    let hidden = is_unselectable(doc, node);
+                    let hidden = is_unselectable(doc, node) || hidden_text(doc, node);
                     cut = Some((node, hidden));
                     !hidden
                 }
@@ -433,6 +435,9 @@ fn dom_plain(doc: &BaseDocument, root: NodeId, nested: &HashMap<NodeId, Hosted>)
                 continue;
             }
             if let Some(t) = cn.text_data() {
+                if hidden_text(doc, c) {
+                    continue;
+                }
                 for ch in t.content.chars() {
                     let ws = w.collapse && ch.is_ascii_whitespace();
                     if !(ws && w.prev_ws) {
@@ -441,6 +446,9 @@ fn dom_plain(doc: &BaseDocument, root: NodeId, nested: &HashMap<NodeId, Hosted>)
                     w.prev_ws = ws;
                 }
             } else if tag(cn) == Some("br") {
+                if is_visibility_hidden(cn) {
+                    continue;
+                }
                 // A break is a break: later spaces fold into it, nothing folds it away.
                 w.out.push('\n');
                 w.prev_ws = true;
@@ -606,6 +614,17 @@ fn skipped(n: &Node) -> bool {
     n.primary_styles().is_some_and(|s| s.clone_display().is_none())
 }
 
+/// A text node, or a DOM node a slot points at, whose computed `visibility` is
+/// hidden or collapse: a mail preheader is often `visibility:hidden;opacity:0`.
+/// Text has no style of its own, so it takes its parent's; `visibility`
+/// inherits, so a `visibility:visible` child of a hidden parent is not hidden.
+/// The layer leaves such text out (text.rs), and so does a copy.
+fn hidden_text(doc: &BaseDocument, id: NodeId) -> bool {
+    let Some(n) = doc.get_node(id) else { return false };
+    let styled = if n.is_text_node() { n.parent.and_then(|p| doc.get_node(p)) } else { Some(n) };
+    styled.is_some_and(is_visibility_hidden)
+}
+
 /// Range.cloneContents() of the range within `node`, serialized.
 fn clone_range(doc: &BaseDocument, r: &Range, node: NodeId, out: &mut String) {
     let Some(n) = doc.get_node(node) else { return };
@@ -613,6 +632,9 @@ fn clone_range(doc: &BaseDocument, r: &Range, node: NodeId, out: &mut String) {
         return;
     }
     if let Some(t) = n.text_data() {
+        if hidden_text(doc, node) {
+            return;
+        }
         let s = if r.start.0 == node { r.start.1 } else { 0 };
         let e = if r.end.0 == node { r.end.1 } else { t.content.len() };
         if let Some(slice) = t.content.get(s..e.min(t.content.len())) {
@@ -648,7 +670,9 @@ fn clone_range(doc: &BaseDocument, r: &Range, node: NodeId, out: &mut String) {
             clone_range(doc, r, child, out);
         } else if let Some(t) = tag(c) {
             if VOID.contains(&t) {
-                out.push_str(&open_tag(c));
+                if !is_visibility_hidden(c) {
+                    out.push_str(&open_tag(c));
+                }
                 continue;
             }
             // A partially contained ancestor that contributes nothing (the
@@ -673,18 +697,31 @@ fn write_node(doc: &BaseDocument, n: &Node, out: &mut String) {
         return;
     }
     if let Some(t) = n.text_data() {
-        escape_text(&t.content, out);
+        if !hidden_text(doc, n.id) {
+            escape_text(&t.content, out);
+        }
         return;
     }
     let Some(t) = tag(n) else { return };
-    out.push_str(&open_tag(n));
+    let hidden = is_visibility_hidden(n);
     if VOID.contains(&t) {
+        if !hidden {
+            out.push_str(&open_tag(n));
+        }
         return;
     }
+    let before = out.len();
+    out.push_str(&open_tag(n));
+    let opened = out.len();
     for c in n.children.iter().copied() {
         if let Some(cn) = doc.get_node(c) {
             write_node(doc, cn, out);
         }
+    }
+    // A hidden element keeps its wrapper only for a visible descendant.
+    if hidden && out.len() == opened {
+        out.truncate(before);
+        return;
     }
     out.push_str("</");
     out.push_str(t);
@@ -700,6 +737,11 @@ fn open_tag(n: &Node) -> String {
         if name.starts_with("data-mv-") || name.starts_with("on") {
             continue;
         }
+        // A link or an image that runs script when pasted somewhere that
+        // does not sanitise (stricter than the iframe's own copy, which keeps them).
+        if URL_ATTRS.contains(&name) && scripted_url(&attr.value) {
+            continue;
+        }
         s.push(' ');
         s.push_str(name);
         s.push_str("=\"");
@@ -708,6 +750,17 @@ fn open_tag(n: &Node) -> String {
     }
     s.push('>');
     s
+}
+
+/// A URL that runs or renders script when followed or loaded: `javascript:`,
+/// `vbscript:` or `data:text/html`, after the whitespace and control
+/// characters a browser strips before it reads the scheme (a tab or newline
+/// inside the scheme is dropped too), compared without case. `data:image/*`,
+/// http(s), mailto, tel and cid stay.
+fn scripted_url(value: &str) -> bool {
+    let lead = value.trim_start_matches(|c: char| c.is_whitespace() || c.is_control());
+    let folded: String = lead.chars().filter(|c| !matches!(c, '\t' | '\n' | '\r')).take(16).flat_map(char::to_lowercase).collect();
+    folded.starts_with("javascript:") || folded.starts_with("vbscript:") || folded.starts_with("data:text/html")
 }
 
 fn escape_text(t: &str, out: &mut String) {

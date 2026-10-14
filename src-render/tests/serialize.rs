@@ -537,3 +537,56 @@ fn a_select_all_over_3000_paragraphs_with_nested_buttons_serializes_in_budget() 
     let tail = &out.text[out.text.len() - 40..];
     assert!(tail.contains("para 2999 btn 2999") && tail.ends_with("end"), "{tail}");
 }
+
+#[test]
+fn visibility_hidden_text_is_left_out_of_plain_and_html() {
+    // A mail preheader is often visibility:hidden;opacity:0: laid out, never seen,
+    // and the layer leaves it out, so a copy must too.
+    let d = open(
+        r#"<p>Hello <span style="visibility:hidden;opacity:0">PREHEADER</span>world</p><div style="visibility:hidden">HIDDENBLOCK</div><p>Tail <span style="visibility:collapse">COLLAPSED</span><b>end</b></p>"#,
+    );
+    let out = d.serialize(at(&d, "Hello", false), at(&d, "end", true));
+    for gone in ["PREHEADER", "HIDDENBLOCK", "COLLAPSED"] {
+        assert!(!out.text.contains(gone) && !out.html.contains(gone), "{gone} copied: {out:?}");
+    }
+    assert!(!out.html.contains("opacity"), "an emptied hidden wrapper is dropped too: {}", out.html);
+    assert!(out.text.contains("Hello world"), "the visible siblings are unaffected: {}", out.text);
+    assert!(out.text.ends_with("Tail end"), "{}", out.text);
+    assert!(out.html.contains("<b>end</b>"), "{}", out.html);
+}
+
+#[test]
+fn a_visible_child_of_a_hidden_parent_is_copied_as_css_says() {
+    let d = open(r#"<p>A <span style="visibility:hidden">gone <b style="visibility:visible">shown</b> gone2</span> B</p>"#);
+    let out = d.serialize(at(&d, "A", false), at(&d, "B", true));
+    assert_eq!(out.text, "A shown B", "{out:?}");
+    assert!(out.html.contains("<b style=\"visibility:visible\">shown</b>"), "{}", out.html);
+    assert!(!out.html.contains("gone"), "{}", out.html);
+}
+
+#[test]
+fn a_selection_wholly_in_hidden_text_copies_nothing_extra() {
+    // The preheader sits first in its own block: a select-all must not start with it.
+    let d = open(r#"<div style="visibility:hidden">PREHEADER</div><p>Body one</p><p>Body two</p>"#);
+    let n = mailvault_render::text::inline_roots(d.base()).len();
+    let out = d.serialize(root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
+    assert!(!out.text.contains("PREHEADER") && !out.html.contains("PREHEADER"), "{out:?}");
+    assert!(out.text.starts_with("Body one"), "no stray separator where the hidden block was: {:?}", out.text);
+}
+
+#[test]
+fn script_urls_are_dropped_from_the_markup_and_safe_ones_stay() {
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    let body = format!(
+        r##"<p><a href="javascript:alert(1)">ja</a> <a href=" JaVa&#9;Script:x">jb</a> <a href="vbscript:x">vb</a> <a href="data:text/html;base64,AAAA">dh</a> <a href="https://x.test/?a=1">ok</a> <a href="mailto:a@b.test">mt</a> <a href="tel:+1">tl</a> <img src="data:image/png;base64,{png}" width="4" height="4"> <img src="cid:logo" width="4" height="4"> <img src="javascript:x" width="4" height="4"> end</p>"##
+    );
+    let d = open(&body);
+    let out = d.serialize(at(&d, "ja", false), at(&d, "end", true));
+    for bad in ["javascript", "JaVa", "vbscript", "data:text/html"] {
+        assert!(!out.html.contains(bad), "{bad} kept: {}", out.html);
+    }
+    assert!(out.html.contains("<a>ja</a>") && out.html.contains("<a>dh</a>"), "the link text stays: {}", out.html);
+    for good in [r#"href="https://x.test/?a=1""#, r#"href="mailto:a@b.test""#, r#"href="tel:+1""#, r#"src="data:image/png;base64,"#, r#"src="cid:logo""#] {
+        assert!(out.html.contains(good), "{good} lost: {}", out.html);
+    }
+}

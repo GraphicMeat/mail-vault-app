@@ -68,7 +68,7 @@ pub fn is_unselectable(doc: &BaseDocument, id: NodeId) -> bool {
     false
 }
 
-fn is_visibility_hidden(node: &Node) -> bool {
+pub(crate) fn is_visibility_hidden(node: &Node) -> bool {
     node.primary_styles().is_some_and(|s| {
         s.clone_visibility() != style::computed_values::visibility::T::Visible
     })
