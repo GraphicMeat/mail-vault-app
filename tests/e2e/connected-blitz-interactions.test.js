@@ -51,7 +51,8 @@ const SUBJECT_B = 'Blitz C Google font fixture';
 const SUBJECT_C = 'Blitz C Merriweather fixture';
 const SUBJECT_D = 'Blitz C big fixture';
 const SUBJECT_E = 'Blitz C short fixture';
-const MSGIDS = ['blitzc-a', 'blitzc-b', 'blitzc-c', 'blitzc-d', 'blitzc-e'].map((x) => `${x}@mock.test`);
+const SUBJECT_F = 'Blitz C tall fixture';
+const MSGIDS = ['blitzc-a', 'blitzc-b', 'blitzc-c', 'blitzc-d', 'blitzc-e', 'blitzc-f'].map((x) => `${x}@mock.test`);
 
 const PROBE = 'Sphinx of black quartz, judge my vow 0123456789';
 const PROBE_STYLE = 'font-size: 24px; white-space: nowrap; display: inline-block';
@@ -120,6 +121,8 @@ const HTML_C = `${googleLink('Merriweather')}`
   + `<p><span id="mv-c-merri-probe" style="font-family: 'Merriweather', Georgia, serif; ${PROBE_STYLE}">${PROBE}</span></p>`;
 const HTML_D = Array.from({ length: BIG_N }, (_, i) => `<p style="margin:0">Paragraph ${i} of the big fixture${i === BIG_N - 1 ? ' ZZBIGLASTZZ' : ''}.</p>`).join('');
 const HTML_E = '<p id="mv-c-short" style="margin:0">Short <a id="mv-c-short-link" href="https://example.com/short">link</a></p>';
+// One unbroken paragraph of about 75 lines at a fractional line-height: line boxes stacked in flow must not drift.
+const HTML_F = `<p id="mv-c-tall" style="margin:0;width:240px;font:15px/18.4px sans-serif">Talltext ${Array.from({ length: 450 }, (_, i) => `tw${i}`).join(' ')} ZZTALLENDZZ</p>`;
 
 const MAILS = [
   { subject: SUBJECT_A, id: 0, from: 'Blitz A <a@blitzc.test>', day: 'Thu, 02', html: HTML_A },
@@ -127,6 +130,7 @@ const MAILS = [
   { subject: SUBJECT_C, id: 2, from: 'Blitz C <c@blitzc.test>', day: 'Sat, 04', html: HTML_C },
   { subject: SUBJECT_D, id: 3, from: 'Blitz D <d@blitzc.test>', day: 'Sun, 05', html: HTML_D },
   { subject: SUBJECT_E, id: 4, from: 'Blitz E <e@blitzc.test>', day: 'Mon, 06', html: HTML_E },
+  { subject: SUBJECT_F, id: 5, from: 'Blitz F <f@blitzc.test>', day: 'Tue, 07', html: HTML_F },
 ];
 
 async function withMailbox(path, fn) {
@@ -183,7 +187,7 @@ const sentinel = () => `MV-SENTINEL-${Date.now()}-${Math.random().toString(36).s
 
 /* eslint-disable */
 function installKit(title) {
-  const K = { v: 9, title };
+  const K = { v: 10, title };
   window.__mvc = K;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   K.sleep = sleep;
@@ -532,6 +536,43 @@ function installKit(title) {
     }
     return { k, lines: out };
   };
+  K.tallDrift = async (needle) => {
+    // Every line of one tall paragraph: its span top against its run's y, relative to the first line
+    // (a span's rect sits half a leading below its line top). `visual` is where the text is drawn,
+    // `flow` the line box the engine stacked (the hit test uses it): the span's relative top removed.
+    const b = K.blitz();
+    if (!b.docId) return { error: 'no doc' };
+    const c = K.ctx('blitz');
+    const hit = K.find(c, needle);
+    if (!hit) return { error: 'no needle' };
+    const node = hit[0].parentElement.dataset.node;
+    const lr = c.layer.getBoundingClientRect();
+    const spans = [...c.layer.querySelectorAll(`span[data-node="${node}"]`)];
+    const tile = Number(spans[0].closest('[data-tile]').dataset.tile);
+    const runs = await K.textRuns(b.docId, tile);
+    const byStart = new Map(runs.filter((r) => String(r.node) === node).map((r) => [r.start, r]));
+    const rows = [];
+    for (const sp of spans) {
+      const r = byStart.get(Number(sp.dataset.start));
+      if (!r) continue;
+      const top = sp.getBoundingClientRect().top - lr.top;
+      const shift = parseFloat(sp.style.top) || 0;
+      rows.push({ start: r.start, y: r.y, visual: top - r.y, flow: top - shift - r.y, lineHeight: sp.style.lineHeight });
+    }
+    if (!rows.length) return { error: 'no runs matched', tile, spans: spans.length };
+    const v0 = rows[0].visual; const f0 = rows[0].flow;
+    const r2 = (x) => Math.round(x * 100) / 100;
+    const last = spans[spans.length - 1]; const q = last.getBoundingClientRect();
+    const caret = K.caret('blitz', q.right + 20, (q.top + q.bottom) / 2);
+    const line = last.closest('.mv-blitz-line');
+    return {
+      lines: rows.length, tile, cssHeight: b.cssHeight,
+      driftVisual: r2(Math.max(...rows.map((x) => Math.abs(x.visual - v0)))),
+      driftFlow: r2(Math.max(...rows.map((x) => Math.abs(x.flow - f0)))),
+      last: { y: rows[rows.length - 1].y, visual: r2(rows[rows.length - 1].visual - v0), flow: r2(rows[rows.length - 1].flow - f0), lineHeight: rows[rows.length - 1].lineHeight },
+      hitLast: !!caret && !!line && line.contains(caret.node), hitCtx: caret && caret.ctx,
+    };
+  };
   K.hitScan = async (docId, x, y0, y1, step) => {
     // A 2-D scan: the toggle is a small box, so sweep x too (first column is the caller's).
     for (let y = y0; y <= y1; y += step) {
@@ -620,7 +661,7 @@ function installKit(title) {
 
 let kitReady = false;
 async function ensureKit() {
-  const ok = await browser.execute(() => !!window.__mvc && window.__mvc.v === 9);
+  const ok = await browser.execute(() => !!window.__mvc && window.__mvc.v === 10);
   if (!ok) await browser.execute(installKit, TITLE);
   kitReady = true;
 }
@@ -699,7 +740,7 @@ async function openRow(subject) {
   }, subject), { timeout: 60_000, interval: 400, timeoutMsg: `no row for "${subject}" in ${YODA}'s INBOX` });
 }
 
-const READY = { [SUBJECT_A]: 'Reply', [SUBJECT_B]: 'Lora.', [SUBJECT_C]: 'Merriweather.', [SUBJECT_D]: 'Paragraph 0', [SUBJECT_E]: 'Short' };
+const READY = { [SUBJECT_A]: 'Reply', [SUBJECT_B]: 'Lora.', [SUBJECT_C]: 'Merriweather.', [SUBJECT_D]: 'Paragraph 0', [SUBJECT_E]: 'Short', [SUBJECT_F]: 'Talltext' };
 
 async function waitReady(mode, subject, timeout = 60_000) {
   let last = null;
@@ -1172,6 +1213,7 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
       ck(info.length > 0, 'no paragraph straddles the first tile boundary in this layout (fixture cannot test it)');
       if (!info.length) return;
       const target = info[0];
+      ck(target.containers.length === 1, `the straddling paragraph is split over tile containers ${JSON.stringify(target.containers)}`);
       const wi = /W(\d+)/.exec(target.text);
       const needle = wi ? `Wraptext W${wi[1]} ` : target.text.slice(0, 20);
       const expectFull = flat(`Wraptext W${wi ? wi[1] : '?'} alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron.`);
@@ -1200,6 +1242,26 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
     });
   });
 
+  it('3b2. triple-click one <br> line selects only that line, as in the iframe', async function () {
+    await section('geometry.tripleBr', async (ck) => {
+      const out = {};
+      for (const mode of ['web', 'blitz']) {
+        await openFixture(mode);
+        const r = await kit('rect', mode, 'Brline two');
+        if (!r) { out[mode] = { error: 'no line' }; continue; }
+        const p = await kit('paragraphAt', mode, (r.left + r.right) / 2, (r.top + r.bottom) / 2);
+        out[mode] = !p ? { error: 'no caret' } : (p.unsupported ? { unsupported: true } : { text: p.text, at: p.at });
+      }
+      log('geometry.tripleBr', out);
+      for (const mode of ['web', 'blitz']) {
+        const o = out[mode];
+        if (!o || o.error) { ck(false, `${mode}: ${o && o.error}`); continue; }
+        if (o.unsupported) continue;
+        ck(flat(o.text) === 'Brline two', `${mode}: a triple-click on a <br> line selected "${cut(o.text, 80)}"`);
+      }
+    });
+  });
+
   it('3c. highlight edge vs glyph edge at wrapped line ends (pixel drift)', async function () {
     await section('geometry.drift', async (ck) => {
       await openFixture('blitz');
@@ -1218,6 +1280,21 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
       }
       log('geometry.wrap', { web: wrap.web, blitz: wrap.blitz, lineCount: { web: wrap.web && wrap.web.length, blitz: wrap.blitz && wrap.blitz.length } });
       ck(!!stats, 'no line could be measured');
+    });
+  });
+
+  it('3d. a tall paragraph at a fractional line-height: line boxes do not drift down it', async function () {
+    await section('geometry.tallDrift', async (ck) => {
+      await openFixture('blitz', SUBJECT_F);
+      await kit('rect', 'blitz', 'ZZTALLENDZZ'); // scroll its last line into view
+      await browser.pause(500);
+      const d = await kitAsync('tallDrift', 'Talltext');
+      log('geometry.tallDrift', d);
+      if (d.error) { ck(false, d.error); return; }
+      ck(d.lines >= 60, `only ${d.lines} lines (fixture)`);
+      ck(d.driftVisual <= 1, `drawn text drifts ${d.driftVisual} px down the paragraph`);
+      ck(d.driftFlow <= 1, `line boxes drift ${d.driftFlow} px down the paragraph`);
+      ck(d.hitLast, `a point right of the last line resolves elsewhere: ${d.hitCtx}`);
     });
   });
 
