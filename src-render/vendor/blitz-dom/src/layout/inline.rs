@@ -645,6 +645,19 @@ impl BaseDocument {
         //         }
         //     }
         // }
+        // MailVault parity fix (plan B): that check never fires, parley gives the empty last
+        // line a placeholder item. Its text range is empty, which is the reliable mark.
+        // `text<br>` is one line (CSS 2 9.4.2; WebKit), not two.
+        if inline_layout.text.ends_with('\n') {
+            let lines = inline_layout.layout.len();
+            if lines >= 2 {
+                if let Some(last_line) = inline_layout.layout.get(lines - 1) {
+                    if last_line.text_range().is_empty() {
+                        height = (height - last_line.metrics().line_height).max(0.0);
+                    }
+                }
+            }
+        }
 
         #[cfg(feature = "floats")]
         {

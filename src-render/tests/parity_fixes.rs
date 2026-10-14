@@ -328,3 +328,16 @@ fn cells_of_a_bordered_table_inherit_the_table_border_colour() {
         assert_eq!(get(&els, "c").border_top_color, get(&els, "c").color, "border=0 adds no hint: currentcolor");
     }
 }
+
+/// A `<br>` ends its line but does not start another: `text<br>` is one line, `<br>` alone
+/// is one empty line and `a<br><br>` two (CSS 2 9.4.2; the harness iframe, ours/table-border-attr:
+/// `</table><br><table>` is exactly one 22px line between the tables, Blitz 44). parley
+/// treats a trailing newline like a text editor and adds an empty last line.
+#[test]
+fn a_trailing_br_does_not_add_a_line() {
+    let els = inspect(&fx("br-ends-the-line.html"));
+    let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
+    assert_eq!((h("trail"), h("lone"), h("two"), h("mid")), (22.0, 22.0, 44.0, 44.0));
+    let (t1, t2) = (get(&els, "t1").rect.clone().unwrap(), get(&els, "t2").rect.clone().unwrap());
+    assert_eq!(t2.y - (t1.y + t1.h), 22.0, "one line holds the br between two tables");
+}
