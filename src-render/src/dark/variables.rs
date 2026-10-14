@@ -21,6 +21,7 @@ use super::text::get_parentheses_range;
 use super::DarkCx;
 use blitz_dom::{BaseDocument, LocalName};
 use fancy_regex::Regex;
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::LazyLock;
 use style::shared_lock::SharedRwLockReadGuard;
@@ -41,6 +42,10 @@ const MAX_NESTING: usize = 64;
 /// `rgb(var(--a), var(--a), var(--a))` chains grow as 3^depth.
 const MAX_INSERT_CALLS: usize = 2048;
 const MAX_INSERT_LEN: usize = 64 * 1024;
+/// Names `findVarRef` / `iterateVarRefs` may visit in one match pass. A chain of
+/// thousands of variables used by thousands of rules is otherwise walked once per
+/// rule; past the budget a variable's type is simply not inferred from its refs.
+const MAX_REF_VISITS: usize = 1 << 20;
 
 /// DR's `shouldSetDefaultColor`: false only on ebay hostnames. The reader's
 /// srcdoc iframe is never one.
@@ -56,16 +61,24 @@ struct StrSet {
 }
 
 impl StrSet {
-    fn insert(&mut self, s: &str) {
-        if !self.index.contains_key(s) {
-            self.index.insert(s.to_string(), self.seq);
-            self.order.insert(self.seq, s.to_string());
-            self.seq += 1;
+    /// True when `s` was not there yet.
+    fn insert(&mut self, s: &str) -> bool {
+        if self.index.contains_key(s) {
+            return false;
         }
+        self.index.insert(s.to_string(), self.seq);
+        self.order.insert(self.seq, s.to_string());
+        self.seq += 1;
+        true
     }
-    fn remove(&mut self, s: &str) {
-        if let Some(n) = self.index.remove(s) {
-            self.order.remove(&n);
+    /// True when `s` was there.
+    fn remove(&mut self, s: &str) -> bool {
+        match self.index.remove(s) {
+            Some(n) => {
+                self.order.remove(&n);
+                true
+            }
+            None => false,
         }
     }
     fn contains(&self, s: &str) -> bool {
@@ -94,6 +107,14 @@ pub struct VariablesStore {
     inline_queued: bool,
     /// `document.documentElement.style`, kept only when the attribute holds `--`.
     root_decls: Option<Vec<(String, String)>>,
+    /// Bumped whenever something `findVarRef` / `iterateVarRefs` read changes (refs,
+    /// types, the unknown sets' removals and colour additions). The background
+    /// inference for a var at an unchanged generation would do exactly what it did
+    /// last time, so `bg_inferred` lets it be skipped.
+    generation: u64,
+    bg_inferred: HashMap<String, u64>,
+    /// What is left of `MAX_REF_VISITS` in this match pass.
+    ref_visits_left: Cell<usize>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -156,6 +177,7 @@ impl VariablesStore {
             return;
         }
         let process_root = self.rules_queued;
+        self.ref_visits_left.set(MAX_REF_VISITS);
         if process_root {
             for (p, v) in self.root_decls.clone().unwrap_or_default() {
                 if is_variable(&p) {
@@ -199,9 +221,10 @@ impl VariablesStore {
             if self.unknown_bg_vars.contains(&v) {
                 self.unknown_color_vars.remove(&v);
                 self.unknown_bg_vars.remove(&v);
+                self.generation += 1;
                 self.resolve_variable_type(&v, VAR_TYPE_BG_COLOR);
-            } else if self.is_var_type(&v, ANY_COLOR) {
-                self.unknown_color_vars.remove(&v);
+            } else if self.is_var_type(&v, ANY_COLOR) && self.unknown_color_vars.remove(&v) {
+                self.generation += 1;
             }
             // else: `undefinedVars.add(v)`; v stays in unknownColorVars.
         }
@@ -210,13 +233,14 @@ impl VariablesStore {
             if !self.unknown_bg_vars.contains(&v) {
                 continue;
             }
-            let has_color = self.find_var_ref(&v, |s, r| s.unknown_color_vars.contains(r) || s.is_var_type(r, ANY_COLOR)).is_some();
-            if has_color {
-                for r in self.walk_var_refs(&v) {
+            let Some(found) = self.find_var_ref(&v, |s, r| s.unknown_color_vars.contains(r) || s.is_var_type(r, ANY_COLOR)) else { continue };
+            if found.is_some() {
+                let Some(refs) = self.walk_var_refs(&v) else { continue };
+                for r in refs {
                     self.resolve_variable_type(&r, VAR_TYPE_BG_COLOR);
                 }
-            } else if self.is_var_type(&v, VAR_TYPE_BG_COLOR | VAR_TYPE_BG_IMG) {
-                self.unknown_bg_vars.remove(&v);
+            } else if self.is_var_type(&v, VAR_TYPE_BG_COLOR | VAR_TYPE_BG_IMG) && self.unknown_bg_vars.remove(&v) {
+                self.generation += 1;
             }
         }
     }
@@ -224,7 +248,9 @@ impl VariablesStore {
     fn inspect_variable(&mut self, var_name: &str, value: &str) {
         self.unstable_var_values.insert(var_name.to_string(), value.to_string());
         if is_var_dependant(value) && is_constructed_color_var(value) {
-            self.unknown_color_vars.insert(var_name);
+            if self.unknown_color_vars.insert(var_name) {
+                self.generation += 1;
+            }
             self.defined_vars.insert(var_name.to_string());
         }
         if self.defined_vars.contains(var_name) {
@@ -234,17 +260,26 @@ impl VariablesStore {
         // Either a raw value (`0, 102, 204`) or something a colour parser reads.
         let is_color = get_rgb_values(value).is_some() || parse_color(value).is_some();
         if is_color {
-            self.unknown_color_vars.insert(var_name);
+            if self.unknown_color_vars.insert(var_name) {
+                self.generation += 1;
+            }
         } else if value.contains("url(") || value.contains("linear-gradient(") || value.contains("radial-gradient(") {
             self.resolve_variable_type(var_name, VAR_TYPE_BG_IMG);
         }
     }
 
     fn resolve_variable_type(&mut self, var_name: &str, type_num: u8) {
-        let t = self.var_types.get(var_name).copied().unwrap_or(0) | type_num;
-        self.var_types.insert(var_name.to_string(), t);
-        self.unknown_color_vars.remove(var_name);
-        self.unknown_bg_vars.remove(var_name);
+        let old = self.var_types.get(var_name).copied();
+        let t = old.unwrap_or(0) | type_num;
+        let mut changed = old != Some(t);
+        if changed {
+            self.var_types.insert(var_name.to_string(), t);
+        }
+        changed |= self.unknown_color_vars.remove(var_name);
+        changed |= self.unknown_bg_vars.remove(var_name);
+        if changed {
+            self.generation += 1;
+        }
     }
 
     fn inspect_var_dependant(&mut self, property: &str, value: &str) {
@@ -253,7 +288,9 @@ impl VariablesStore {
                 if !self.var_refs.contains_key(property) {
                     self.var_refs_order.push(property.to_string());
                 }
-                self.var_refs.entry(property.to_string()).or_default().insert(&r);
+                if self.var_refs.entry(property.to_string()).or_default().insert(&r) {
+                    self.generation += 1;
+                }
             }
         } else if property == "background-color" || property == "box-shadow" {
             for v in var_deps(value) {
@@ -272,14 +309,20 @@ impl VariablesStore {
                 if self.is_var_type(&v, VAR_TYPE_BG_COLOR | VAR_TYPE_BG_IMG) {
                     continue;
                 }
-                let is_bg_color = self.find_var_ref(&v, |s, r| s.unknown_color_vars.contains(r) || s.is_var_type(r, ANY_COLOR)).is_some();
-                for r in self.walk_var_refs(&v) {
-                    if is_bg_color {
+                // Same inputs as the last time this var was inferred: same outcome, already applied.
+                if self.bg_inferred.get(&v) == Some(&self.generation) {
+                    continue;
+                }
+                let Some(found) = self.find_var_ref(&v, |s, r| s.unknown_color_vars.contains(r) || s.is_var_type(r, ANY_COLOR)) else { continue };
+                let Some(refs) = self.walk_var_refs(&v) else { continue };
+                for r in refs {
+                    if found.is_some() {
                         self.resolve_variable_type(&r, VAR_TYPE_BG_COLOR);
                     } else {
                         self.unknown_bg_vars.insert(&r);
                     }
                 }
+                self.bg_inferred.insert(v, self.generation);
             }
         }
     }
@@ -290,27 +333,39 @@ impl VariablesStore {
         self.match_variables();
     }
 
+    /// Take one visit from the pass's budget; false when it is spent.
+    fn visit(&self) -> bool {
+        let left = self.ref_visits_left.get();
+        self.ref_visits_left.set(left.saturating_sub(1));
+        left > 0
+    }
+
     /// `findVarRef`: depth first, each name visited once, first hit wins.
-    /// Iterative: a mail can chain thousands of variables.
-    fn find_var_ref(&self, var_name: &str, found: impl Fn(&Self, &str) -> bool) -> Option<String> {
+    /// Iterative: a mail can chain thousands of variables. The outer None means the
+    /// pass's visit budget ran out before an answer.
+    fn find_var_ref(&self, var_name: &str, found: impl Fn(&Self, &str) -> bool) -> Option<Option<String>> {
         let mut seen: HashSet<String> = HashSet::new();
         let mut todo = vec![var_name.to_string()];
         while let Some(name) = todo.pop() {
             if !seen.insert(name.clone()) {
                 continue;
             }
+            if !self.visit() {
+                return None;
+            }
             if found(self, &name) {
-                return Some(name);
+                return Some(Some(name));
             }
             if let Some(refs) = self.var_refs.get(&name) {
                 todo.extend(refs.order.values().rev().cloned());
             }
         }
-        None
+        Some(None)
     }
 
-    /// `iterateVarRefs`: the names `findVarRef` visits when nothing matches.
-    fn walk_var_refs(&self, var_name: &str) -> Vec<String> {
+    /// `iterateVarRefs`: the names `findVarRef` visits when nothing matches. None when
+    /// the pass's visit budget ran out.
+    fn walk_var_refs(&self, var_name: &str) -> Option<Vec<String>> {
         let mut order = Vec::new();
         let mut seen: HashSet<String> = HashSet::new();
         let mut todo = vec![var_name.to_string()];
@@ -318,12 +373,15 @@ impl VariablesStore {
             if !seen.insert(name.clone()) {
                 continue;
             }
+            if !self.visit() {
+                return None;
+            }
             if let Some(refs) = self.var_refs.get(&name) {
                 todo.extend(refs.order.values().rev().cloned());
             }
             order.push(name);
         }
-        order
+        Some(order)
     }
 
     /// `getModifierForVariable(...)(theme).declarations`, settled.
@@ -440,9 +498,14 @@ impl VariablesStore {
     /// `putRootVars`: the `:root` rule that carries `<html>`'s own variables.
     pub fn root_vars_style(&self, cx: &mut DarkCx) -> String {
         let mut declarations: Vec<(String, String)> = Vec::new();
-        let set = |declarations: &mut Vec<(String, String)>, k: String, v: String| match declarations.iter_mut().find(|(p, _)| *p == k) {
-            Some(slot) => slot.1 = v,
-            None => declarations.push((k, v)),
+        // A JS object's insertion order, with an index: `<html style>` can hold thousands.
+        let mut at: HashMap<String, usize> = HashMap::new();
+        let mut set = |declarations: &mut Vec<(String, String)>, k: String, v: String| match at.get(&k) {
+            Some(&i) => declarations[i].1 = v,
+            None => {
+                at.insert(k.clone(), declarations.len());
+                declarations.push((k, v));
+            }
         };
         for (property, value) in self.root_decls.as_deref().unwrap_or_default() {
             if !is_variable(property) {
@@ -467,7 +530,7 @@ pub fn collect_rules(store: &mut VariablesStore, rules: &[CssRule], g: &SharedRw
         match rule {
             CssRule::Style(lock) => {
                 let r = lock.read_with(g);
-                store.queue_rules(&StyleBlock { block: r.block.read_with(g), selector: String::new() }, is_safari);
+                store.queue_rules(&StyleBlock::new(r.block.read_with(g), String::new()), is_safari);
                 if let Some(nested) = &r.rules {
                     collect_rules(store, &nested.read_with(g).0, g, is_safari);
                 }
@@ -503,7 +566,7 @@ pub fn collect_inline(store: &mut VariablesStore, doc: &BaseDocument, mode: u8, 
             continue;
         }
         let Some(block) = el.style_attribute.as_ref() else { continue };
-        store.queue_inline(&StyleBlock { block: block.read_with(&guard), selector: String::new() }, is_safari);
+        store.queue_inline(&StyleBlock::new(block.read_with(&guard), String::new()), is_safari);
     }
 }
 
@@ -516,7 +579,7 @@ pub fn collect_root(store: &mut VariablesStore, doc: &BaseDocument, is_safari: b
     }
     let guard = doc.guard().read();
     if let Some(block) = el.style_attribute.as_ref() {
-        store.set_root_style(&StyleBlock { block: block.read_with(&guard), selector: String::new() }, is_safari);
+        store.set_root_style(&StyleBlock::new(block.read_with(&guard), String::new()), is_safari);
     }
 }
 
@@ -737,7 +800,12 @@ fn insert_values(source: &str, values: &HashMap<String, String>, full_stack: &mu
         return None;
     }
     let mut contains_unresolved = false;
+    // The output is capped as a whole: each piece is, but 2000 pieces of 64 KiB are not.
+    let mut total = 0usize;
     let replaced = replace_variables_matches(source, |m, count| {
+        if contains_unresolved {
+            return None;
+        }
         let (name, fallback) = variable_name_and_fallback(m);
         // With several matches each one gets its own copy of the stack.
         let mut own;
@@ -757,15 +825,18 @@ fn insert_values(source: &str, values: &HashMap<String, String>, full_stack: &mu
         if !var_value.is_empty() {
             inserted = if is_var_dependant(&var_value) { insert_values(&var_value, values, stack, depth + 1, calls) } else { Some(var_value) };
         }
-        match inserted.filter(|i| !i.is_empty() && i.len() <= MAX_INSERT_LEN) {
-            Some(i) => Some(i),
+        match inserted.filter(|i| !i.is_empty() && i.len() <= MAX_INSERT_LEN - total.min(MAX_INSERT_LEN)) {
+            Some(i) => {
+                total += i.len();
+                Some(i)
+            }
             None => {
                 contains_unresolved = true;
                 None
             }
         }
     });
-    if contains_unresolved {
+    if contains_unresolved || replaced.len() > MAX_INSERT_LEN {
         None
     } else {
         Some(replaced)
@@ -822,6 +893,16 @@ mod tests {
         chain.insert("--c500".into(), "7".into());
         assert_eq!(insert_var_values("var(--c0)", &chain), None);
         assert_eq!(insert_var_values("var(--c480)", &chain).as_deref(), Some("7"));
+    }
+
+    #[test]
+    fn var_value_output_is_capped_in_total_not_per_piece() {
+        // Each inserted piece is under the per-piece cap; 2000 of them are 120 MiB.
+        let vals: HashMap<String, String> = [("--a".to_string(), "1,".repeat(30 * 1024))].into_iter().collect();
+        let source = format!("rgb({})", vec!["var(--a)"; 2000].join(", "));
+        assert_eq!(insert_var_values(&source, &vals).map(|v| v.len()), None);
+        // A short one still resolves.
+        assert_eq!(insert_var_values("rgb(var(--a))", &vals).map(|v| v.len()), Some(5 + 60 * 1024));
     }
 
     #[test]

@@ -346,7 +346,7 @@ pub fn override_inline(doc: &BaseDocument, id: NodeId, cx: &mut DarkCx) -> Inlin
     let guard = doc.guard().read();
     let empty = PropertyDeclarationBlock::new();
     let block = el.style_attribute.as_ref().map_or(&empty, |b| b.read_with(&guard));
-    let style = StyleBlock { block, selector: String::new() };
+    let style = StyleBlock::new(block, String::new());
     let tag = el.name.local.as_ref();
     let is_svg = el.name.ns == ns!(svg);
     let attr = |n: &str| el.attr(LocalName::from(n)).map(str::to_string);

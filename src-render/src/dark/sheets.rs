@@ -41,7 +41,7 @@ fn write_rules(rules: &[CssRule], g: &SharedRwLockReadGuard, cx: &mut DarkCx, ou
             CssRule::Style(lock) => {
                 let r = lock.read_with(g);
                 let selector = cssparser::ToCss::to_css_string(&r.selectors);
-                let style = StyleBlock { block: r.block.read_with(g), selector: selector.clone() };
+                let style = StyleBlock::new(r.block.read_with(g), selector.clone());
                 if let Some(text) = rule_text(&style, cx) {
                     out.push_str(&text);
                     out.push('\n');
