@@ -7,6 +7,7 @@ pub mod color;
 pub mod math_eval;
 pub mod matrix;
 pub mod modify_colors;
+pub mod modify_css;
 pub mod text;
 
 /// DR's `Theme`, limited to the fields the dynamic engine reads (definitions.d.ts).
@@ -45,6 +46,19 @@ impl Theme {
             scrollbar_color: String::new(),
             style_system_controls: false,
         }
+    }
+}
+
+/// Per-document Dark Reader state: one theme, one profile, one colour registry.
+pub struct DarkCx {
+    pub theme: Theme,
+    pub profile: Profile,
+    pub palette: modify_colors::Palette,
+}
+
+impl DarkCx {
+    pub fn new(theme: Theme, profile: Profile) -> Self {
+        DarkCx { theme, profile, palette: modify_colors::Palette::default() }
     }
 }
 
