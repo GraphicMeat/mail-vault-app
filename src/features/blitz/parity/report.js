@@ -21,10 +21,21 @@ export function failedCase({ fixture, mode, width }, error) {
   return { fixture, mode, width, compared: 0, passed: false, failing: 0, known: 0, error: text };
 }
 
-/** Totals for report.json. `complete` is the gate: at least one case was expected, and every expected case ran and passed. */
+/** Totals for report.json. `complete` says every planned case was measured: at least
+ * one was planned, each ran (a missing case is one that never reported), none threw,
+ * none waited out its web fonts, and each compared at least one element. It does not say
+ * the cases matched; the gate is `reportGate`. */
 export function reportTotals(cases, expected) {
   const passed = cases.filter((c) => c.passed).length;
-  return { cases: cases.length, expected, passed, complete: expected > 0 && cases.length === expected && passed === expected };
+  const measured = cases.every((c) => !c.error && c.fonts !== 'timeout' && c.compared > 0);
+  return { cases: cases.length, expected, passed, complete: expected > 0 && cases.length === expected && measured };
+}
+
+/** The harness gate: every planned case was measured and every one matched. A report with
+ * no totals (a run that wrote none) never passes. */
+export function reportGate(report) {
+  const t = report && report.totals;
+  return !!t && t.complete === true && t.passed === t.cases;
 }
 
 /** Ids asked for in MV_PARITY_ONLY that the manifest does not have (a typo runs nothing). */
