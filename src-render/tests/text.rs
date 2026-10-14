@@ -103,6 +103,60 @@ fn every_root_of_a_tall_wrapped_doc_appears_in_exactly_one_tile_and_whole() {
 }
 
 #[test]
+fn hard_breaks_split_a_root_into_segments_and_offsets_stay_root_relative() {
+    let runs = open(r#"<p style="margin:0">one<br>two<br>three</p>"#).text_runs(0);
+    assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<String>(), "one\ntwo\nthree", "{runs:?}");
+    assert!(runs.iter().all(|r| r.node == runs[0].node), "one root");
+    let segs: Vec<usize> = runs.iter().map(|r| r.seg).collect();
+    let mut distinct = segs.clone();
+    distinct.dedup();
+    assert_eq!(distinct, [0, 4, 8], "a segment starts after each newline: {runs:?}");
+    for r in &runs {
+        assert!(r.start >= r.seg, "{r:?}");
+    }
+}
+
+#[test]
+fn a_source_newline_in_normal_text_is_not_a_hard_break() {
+    let runs = open("<p style=\"margin:0\">one\ntwo</p>").text_runs(0);
+    assert!(runs.iter().all(|r| r.seg == 0), "{runs:?}");
+}
+
+#[test]
+fn a_pre_over_several_tiles_puts_each_hard_line_in_the_tile_of_its_top() {
+    // 60 lines of 30 px: 1800 px, tiles 0..=3. One root, 60 segments.
+    let text: String = (0..60).map(|i| format!("line {i}\n")).collect();
+    let doc = open(&format!("<pre style=\"margin:0;font:inherit\">{text}</pre>"));
+    let tiles = (doc.meta().css_height / TILE_CSS_HEIGHT as f32).ceil() as u32;
+    assert!(tiles >= 4, "{tiles}");
+    let mut all = Vec::new();
+    for i in 0..tiles {
+        let runs = doc.text_runs(i);
+        for r in &runs {
+            assert_eq!((r.y / TILE_CSS_HEIGHT as f32).floor() as u32, i, "a one-line segment lives in its own line's tile: {r:?}");
+        }
+        assert!(doc.text_owners(i).is_empty(), "tile {i}: {:?}", doc.text_owners(i));
+        all.extend(runs);
+    }
+    all.sort_by_key(|r| r.start);
+    assert_eq!(all.iter().map(|r| r.text.trim_end_matches('\n')).collect::<Vec<_>>().join("\n") + "\n", text, "every run exactly once");
+    assert!(all.iter().all(|r| r.node == all[0].node));
+}
+
+#[test]
+fn a_segment_over_three_tiles_is_owned_by_its_first_tile_alone() {
+    // One unbroken paragraph of about 50 lines of 30 px: 1500 px over tiles 0..=2.
+    let words: String = (0..50).map(|i| format!("w{i:03} ")).collect();
+    let doc = open(&format!("<p style=\"margin:0;width:60px\">{words}</p>"));
+    assert!(doc.meta().css_height > 2.0 * TILE_CSS_HEIGHT as f32, "{}", doc.meta().css_height);
+    assert_eq!(doc.text_runs(0).len(), 50);
+    for i in 1..3 {
+        assert!(doc.text_runs(i).is_empty(), "tile {i}");
+        assert_eq!(doc.text_owners(i), [0], "tile {i}");
+    }
+}
+
+#[test]
 fn noselect_runs_are_dropped() {
     let runs = open(r#"<p style="margin:0">Hi <span class="mv-pii" data-mv-noselect>••••</span> there</p><div data-mv-noselect style="display:inline-block">⋯</div>"#).text_runs(0);
     let text: String = runs.iter().map(|r| r.text.as_str()).collect();

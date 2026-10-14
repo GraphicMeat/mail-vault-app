@@ -192,7 +192,7 @@ impl RenderDoc {
         self.invalidate_runs();
     }
 
-    /// The text runs of every inline root whose first line's top falls in tile
+    /// The text runs of every root segment whose first line's top falls in tile
     /// `index`, all of its lines included (see `text::TiledRuns`). The whole
     /// document is walked once per layout and cached, then filtered by tile: a
     /// select-all asks for every tile, and a layout walk each would hold the
@@ -201,7 +201,7 @@ impl RenderDoc {
         self.with_runs(|t| t.runs_of(index))
     }
 
-    /// The tiles, other than `index`, that own a root with a line in tile
+    /// The tiles, other than `index`, that own a segment with a line in tile
     /// `index`: a layer that shows only this tile must load them too.
     pub fn text_owners(&self, index: u32) -> Vec<u32> {
         self.with_runs(|t| t.owners_of(index))

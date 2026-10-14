@@ -25,6 +25,9 @@ pub struct TextRun {
     pub font_px: f32,
     pub node: u64,
     pub start: usize,
+    /// UTF-8 offset of the first run of this run's segment: the stretch of
+    /// its root between two hard newlines (`<br>`, a newline in `pre`).
+    pub seg: usize,
 }
 
 /// Every visible inline root with a laid-out text layout, in layout tree
@@ -175,6 +178,7 @@ fn root_runs(doc: &BaseDocument, root: &Node, out: &mut Vec<TextRun>) {
                 font_px: gr.run().font_size() / scale,
                 node: root.id.as_u64(),
                 start: range.start,
+                seg: 0,
             };
             let keep = run.w > 0.01
                 && run.font_px >= 0.5
@@ -204,6 +208,18 @@ fn root_runs(doc: &BaseDocument, root: &Node, out: &mut Vec<TextRun>) {
         }
         kept.push(run);
     }
+    // Segments: a hard newline anywhere since the previous kept run's start (in
+    // its text, its gap or a dropped run) starts a new one. The layer draws each
+    // as its own block, as a <br> ends a paragraph in the iframe.
+    let mut seg = kept.first().map_or(0, |r| r.start);
+    let mut prev: Option<usize> = None;
+    for r in &mut kept {
+        if prev.is_some_and(|p| tl.text[p..r.start].contains('\n')) {
+            seg = r.start;
+        }
+        r.seg = seg;
+        prev = Some(r.start);
+    }
     out.extend(kept);
 }
 
@@ -222,24 +238,26 @@ pub fn tile_of(r: &TextRun) -> u32 {
     (r.y / TILE_CSS_HEIGHT as f32).floor().max(0.0) as u32
 }
 
-/// Runs of the whole document, each root assigned to ONE tile: the tile of its
-/// first line's top. A paragraph is one element in the frontend's layer (a
-/// triple-click selects it whole, a drag past a line end stays on that line),
-/// so its later lines travel with it even when they lie in the next tiles.
+/// Runs of the whole document, each segment of a root (see `TextRun::seg`)
+/// assigned to ONE tile: the tile of its first line's top. A segment is one
+/// element in the frontend's layer (a triple-click selects it whole, a drag
+/// past a line end stays on that line), so its later lines travel with it even
+/// when they lie in the next tiles. A hard-broken root (a long `pre`, a div of
+/// `<br>` lines) is spread over the tiles of its segments.
 pub struct TiledRuns {
     runs: Vec<TextRun>,
-    /// Per run: the tile of its root.
+    /// Per run: the tile of its segment.
     tiles: Vec<u32>,
 }
 
 impl TiledRuns {
-    /// `runs` as `all_runs` returns them: the runs of one root are adjacent.
+    /// `runs` as `all_runs` returns them: the runs of one segment are adjacent.
     pub fn new(runs: Vec<TextRun>) -> Self {
         let mut tiles = vec![0; runs.len()];
         let mut i = 0;
         while i < runs.len() {
-            let node = runs[i].node;
-            let end = runs[i..].iter().position(|r| r.node != node).map_or(runs.len(), |n| i + n);
+            let (node, seg) = (runs[i].node, runs[i].seg);
+            let end = runs[i..].iter().position(|r| r.node != node || r.seg != seg).map_or(runs.len(), |n| i + n);
             let top = runs[i..end].iter().map(tile_of).min().unwrap_or(0);
             tiles[i..end].fill(top);
             i = end;
