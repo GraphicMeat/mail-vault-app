@@ -280,3 +280,21 @@ fn rows_honour_their_height_and_cells_fill_the_row() {
     assert_eq!(h("r1"), 60.0);
     assert_eq!(h("r2"), 80.0);
 }
+
+/// WebKit reports a row (and a row group) of a table with the default `border-spacing: 2px`
+/// across the table's whole content box, spacing included, and a row group also covers the
+/// spacing above its first and below its last row. Harness iframe (postmark password-reset,
+/// `table` with border-top 1px and padding-top 25px at (69, 577.7) 438 wide): tbody
+/// (69, 603.7, 438, 105.06), tr (69, 605.7, 438, 101.06), td (71, 605.7, 434, 101.06).
+#[test]
+fn rows_span_the_table_content_box_under_border_spacing() {
+    let els = inspect(&fx("table-border-spacing-rows.html"));
+    let r = |id: &str| get(&els, id).rect.clone().unwrap();
+    let (t, b, row, row2, c, c2) = (r("t"), r("b"), r("r"), r("r2"), r("c"), r("c2"));
+    assert_eq!((c.x, c.y), (2.0, t.y + 1.0 + 25.0 + 2.0), "the cell sits in the spacing");
+    assert_eq!((b.x, b.w), (t.x, t.w), "tbody spans the content box");
+    assert_eq!(b.y, t.y + 26.0, "tbody starts at the content edge");
+    assert_eq!(b.h, 2.0 + c.h + 2.0 + c2.h + 2.0, "spacing above, between and below the rows");
+    assert_eq!((row.x, row.w, row.y, row.h), (t.x, t.w, c.y, c.h));
+    assert_eq!((row2.x, row2.w, row2.y, row2.h), (t.x, t.w, c2.y, c2.h));
+}

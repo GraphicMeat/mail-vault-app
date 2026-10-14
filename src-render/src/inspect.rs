@@ -157,6 +157,46 @@ fn children_union(doc: &BaseDocument, node: &blitz_dom::Node) -> Option<InspectR
     acc.map(|(x0, y0, x1, y1)| InspectRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
 }
 
+/// In the separated borders model WebKit's box for a row spans the table's whole content
+/// box, border-spacing included (a default table, `border-spacing: 2px`: `tr` and `tbody`
+/// start at the content edge, the cells 2px in), and a row group also takes the spacing above
+/// its first and below its last row. `rect` is the union of the cells (rows) or rows (groups).
+fn over_border_spacing(doc: &BaseDocument, node: &blitz_dom::Node, rect: InspectRect) -> InspectRect {
+    use style::computed_values::border_collapse::T as BorderCollapse;
+    use style::values::computed::CSSPixelLength;
+    let mut cur = node.parent;
+    while let Some(table) = cur.and_then(|id| doc.get_node(id)) {
+        if let Some(s) = table.primary_styles() {
+            if s.clone_display().inside() == DisplayInside::Table {
+                if s.clone_border_collapse() == BorderCollapse::Collapse {
+                    return rect;
+                }
+                let spacing = s.clone_border_spacing().0;
+                let (sx, sy) = (spacing.width.px() as f64, spacing.height.px() as f64);
+                if sx == 0.0 && sy == 0.0 {
+                    return rect;
+                }
+                let Some(outer) = element_rect(doc, table.id) else { return rect };
+                let border = s.get_border();
+                let used = |w: &style::values::computed::BorderSideWidth, st: style::values::computed::BorderStyle| {
+                    if st.none_or_hidden() { 0.0 } else { w.0.to_f64_px() }
+                };
+                let pad = s.get_padding();
+                let basis = CSSPixelLength::new(outer.w as f32);
+                let left = used(&border.border_left_width, border.border_left_style) + pad.padding_left.0.resolve(basis).px() as f64;
+                let right = used(&border.border_right_width, border.border_right_style) + pad.padding_right.0.resolve(basis).px() as f64;
+                return if node.primary_styles().map_or(false, |n| n.clone_display().inside() == DisplayInside::TableRow) {
+                    InspectRect { x: outer.x + left, w: outer.w - left - right, ..rect }
+                } else {
+                    InspectRect { y: rect.y - sy, h: rect.h + 2.0 * sy, ..rect }
+                };
+            }
+        }
+        cur = table.parent;
+    }
+    rect
+}
+
 /// The rect WebKit's `getBoundingClientRect` reports. A non-atomic inline has
 /// no box of its own. WebKit unions its fragments' content areas (font
 /// ascent + descent, which line-height does not change); blitz-dom's
@@ -176,7 +216,10 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
     if !is_inline {
         let own = doc.get_client_bounding_rect(id).map(|r| InspectRect { x: r.x, y: r.y, w: r.width, h: r.height });
         if own.as_ref().map_or(true, |r| r.w == 0.0 && r.h == 0.0) && is_table_row_box(node) {
-            return children_union(doc, node).or(own);
+            return match children_union(doc, node) {
+                Some(rect) => Some(over_border_spacing(doc, node, rect)),
+                None => own,
+            };
         }
         return own;
     }
