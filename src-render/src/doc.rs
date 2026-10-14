@@ -180,11 +180,21 @@ impl RenderDoc {
         if doc.tree().len() > MAX_NODES || exceeds_depth(&doc) {
             return Err(OpenError::TooComplex);
         }
+        // Before anything can lay the document out (Dark Reader measures SVG boxes).
+        strip_svg_references(&mut doc);
         match &opts.dark {
-            Some(theme) => crate::dark::apply(&mut doc, theme),
+            Some(theme) => crate::dark::apply(&mut doc, theme, &mut |d| {
+                // Same layout window as `apply`: CSS images found now are queued, not denied.
+                if let Some(n) = &net {
+                    n.begin_layout();
+                }
+                d.resolve(0.0);
+                if let Some(n) = &net {
+                    n.end_layout();
+                }
+            }),
             None => crate::styles::rewrite(&mut doc, |_, _| crate::styles::Rewrite::default()),
         }
-        strip_svg_references(&mut doc);
         // Everything blitz asked for while parsing is decided here: images are
         // queued, stylesheets, fonts, @import and frames are answered empty.
         apply(&mut doc, net.as_ref());

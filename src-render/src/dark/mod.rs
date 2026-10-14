@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 pub mod color;
 pub mod cssom;
+pub mod inline;
 pub mod math_eval;
 pub mod matrix;
 pub mod modify_colors;
@@ -132,7 +133,11 @@ impl DarkTheme {
 /// next to the others. The static sheets are prepended to the text of the
 /// first `<style>` (DR inserts its own before the document's first) and each
 /// sheet's sync rules are appended to that sheet's own text.
-pub fn apply(doc: &mut BaseDocument, dark: &DarkTheme) {
+///
+/// `layout` runs a layout pass; it is called only for a document with an
+/// SVG fill, whose box DR measures (`inline::needs_layout`). The caller owns
+/// it so that the pass runs inside the net provider's layout window.
+pub fn apply(doc: &mut BaseDocument, dark: &DarkTheme, layout: &mut dyn FnMut(&mut BaseDocument)) {
     let mut cx = DarkCx::new(dark.theme(), dark.profile());
     if crate::styles::style_nodes(doc).is_empty() {
         ensure_style_node(doc);
@@ -149,6 +154,10 @@ pub fn apply(doc: &mut BaseDocument, dark: &DarkTheme) {
             suffix.insert(s.id, format!("\n{css}"));
         }
     }
+    if inline::needs_layout(doc) {
+        layout(doc);
+    }
+    inline::apply_all(doc, &mut cx);
     let prefix = modify_css::static_sheets(&mut cx);
     crate::styles::rewrite(doc, |i, id| crate::styles::Rewrite {
         prefix: if i == 0 { format!("{prefix}\n") } else { String::new() },
