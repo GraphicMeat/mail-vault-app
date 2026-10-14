@@ -154,3 +154,16 @@ fn line_height_is_truncated_to_whole_pixels() {
     assert_eq!((h("p14"), h("h21"), h("h28")), (66.0, 33.0, 44.0));
     assert_eq!(h("p13"), 42.0, "1.625 x 13px = 21.125 -> 21 per line");
 }
+
+/// The HTML rendering UA sheet gives thead, tbody, tfoot and tr `border-color: inherit`,
+/// so a row group carries its table's colour (the harness iframe: postmark invoice,
+/// table `border: 1px solid #EAEAEC` -> tbody and tr rgb(234,234,236)). A cell keeps
+/// currentcolor.
+#[test]
+fn row_groups_and_rows_inherit_the_border_colour_of_their_table() {
+    let els = inspect(&fx("table-border-colour-inherit.html"));
+    for id in ["t", "th", "thr", "tb", "tr", "tf"] {
+        assert_eq!(get(&els, id).border_top_color, Some([234.0, 234.0, 236.0, 1.0]), "{id}");
+    }
+    assert_eq!(get(&els, "td").border_top_color, Some([81.0, 84.0, 94.0, 1.0]), "a cell keeps currentcolor");
+}

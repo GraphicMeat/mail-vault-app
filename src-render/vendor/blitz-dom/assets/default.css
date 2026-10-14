@@ -616,6 +616,15 @@ table[bordercolor]>*>tr>th {
     border-color: inherit;
 }
 
+/* MailVault parity fix (plan B): HTML Standard Rendering, 15.3.8 Tables: row groups and rows
+   take their table's border colour (the harness iframe does; cells keep currentcolor). */
+thead,
+tbody,
+tfoot,
+tr {
+    border-color: inherit;
+}
+
 /* inlines */
 
 q:before {
