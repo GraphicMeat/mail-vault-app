@@ -17,3 +17,4 @@ resolver = "2"
 # the connection (async-imap closes the stream on any decoder error).
 [patch.crates-io]
 imap-proto = { path = "vendor/imap-proto" }
+blitz-dom = { path = "src-render/vendor/blitz-dom" } # blitz-render

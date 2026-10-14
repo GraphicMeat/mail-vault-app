@@ -1,0 +1,100 @@
+[package]
+name = "blitz-dom"
+description = "Blitz DOM implementation"
+documentation = "https://docs.rs/blitz-dom"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = [
+    "svg",
+    "woff",
+    "accessibility",
+    "system-fonts",
+    "file-input",
+    "custom-widget"
+]
+custom-widget = ["dep:anyrender", "accessibility"]
+tracing = ["dep:tracing"]
+svg = ["dep:usvg", "dep:svgtypes"]
+# WOFF decoding (using the "wuff" crate which is pure Rust)
+woff = ["dep:wuff"]
+accessibility = ["accesskit"]
+system-fonts = ["parley/system"]
+# complex-scripts: enable dictionary-based line-breaking
+complex-scripts = ["parley/complex-scripts"]
+autofocus = []
+floats = ["taffy/float_layout", "stylo_taffy/floats"]
+file-input = []
+# Overlay-scrollbar thumb interaction (drag + hover tracking). Normally
+# enabled through `blitz-paint/scrollbars`, which paints the thumbs.
+scrollbars = []
+parallel-construct = []
+log-phase-times = ["debug_timer/enable"]
+
+[dependencies]
+# Blitz dependencies
+blitz-traits = { workspace = true }
+stylo_taffy = { workspace = true, features = ["default"] }
+debug_timer = { workspace = true }
+
+# Servo dependencies
+style = { workspace = true }
+selectors = { workspace = true }
+cssparser = { workspace = true }
+style_config = { workspace = true }
+style_traits = { workspace = true }
+style_dom = { workspace = true }
+app_units = { workspace = true }
+euclid = { workspace = true }
+atomic_refcell = { workspace = true }
+markup5ever = { workspace = true }
+smallvec = { workspace = true }
+thin-vec = { workspace = true }
+
+# DioxusLabs dependencies
+taffy = { workspace = true }
+anyrender = { workspace = true, optional = true }
+
+# Linebender/Fontations dependencies
+accesskit = { workspace = true, optional = true }
+parley = { workspace = true }
+skrifa = { workspace = true }
+linebender_resource_handle = { workspace = true }
+color = { workspace = true }
+kurbo = { workspace = true }
+
+# Other dependencies
+slotmap = { workspace = true }
+bitflags = { workspace = true }
+tracing = { workspace = true, optional = true }
+rayon = { workspace = true }
+
+# Media & Decoding
+image = { workspace = true }
+usvg = { workspace = true, optional = true }
+svgtypes = { workspace = true, optional = true }
+wuff = { workspace = true, optional = true }
+html-escape = { workspace = true }
+percent-encoding = { workspace = true }
+
+# IO & Networking
+url = { workspace = true }
+
+# Input
+keyboard-types = { workspace = true }
+cursor-icon = { workspace = true }
+thread_local = { workspace = true }
+
+# WASM
+web-time = { workspace = true }
+
+# HACK: Blitz doesn't need to depend on objc2 directly. But this feature flag is necessary
+# to prevent debug builds from panicking.
+[target.'cfg(any(target_vendor = "apple"))'.dependencies]
+objc2 = { version = "0.6", features = ["disable-encoding-assertions"] }

@@ -692,8 +692,6 @@ dependencies = [
 [[package]]
 name = "blitz-dom"
 version = "0.3.0-beta.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71df97b78e3dbfd863358644e55b7b694902c187048fa0952e5e14788fdc1add"
 dependencies = [
  "accesskit",
  "anyrender",
