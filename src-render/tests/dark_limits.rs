@@ -7,14 +7,21 @@ use mailvault_render::{RenderDoc, RenderOptions};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+const WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
+
 /// Run `f` on its own thread; fail instead of hanging when it takes longer than `limit`.
 fn within<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'static) -> (T, Duration) {
     let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let t = Instant::now();
-        let out = f();
-        let _ = tx.send((out, t.elapsed()));
-    });
+    // The render worker runs on a 256 MiB stack; libtest's default is 2 MiB (8 MiB with the
+    // repo's RUST_MIN_STACK), and a 5000-link variable chain overflows that in a Linux debug build.
+    std::thread::Builder::new()
+        .stack_size(WORKER_STACK_BYTES)
+        .spawn(move || {
+            let t = Instant::now();
+            let out = f();
+            let _ = tx.send((out, t.elapsed()));
+        })
+        .unwrap();
     rx.recv_timeout(limit).unwrap_or_else(|_| panic!("did not finish within {limit:?}"))
 }
 
