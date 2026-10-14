@@ -675,10 +675,11 @@ impl TableTreeWrapper<'_> {
             || ctx
                 .cells
                 .iter()
-                .any(|c| c.colspan != 1 || c.rowspan != 1 || c.col as usize >= n)
+                .any(|c| c.rowspan != 1 || c.col as usize + c.colspan as usize > n)
         {
             return None;
         }
+        let has_span = ctx.cells.iter().any(|c| c.colspan != 1);
         let has_percent = ctx.column_prefs.iter().any(|p| matches!(p, Some(ColumnPref::Percent(_))));
         if has_percent && inputs.available_space.width == taffy::AvailableSpace::MinContent {
             return None;
@@ -691,9 +692,35 @@ impl TableTreeWrapper<'_> {
         let mut min = vec![0.0f32; n];
         let mut max = vec![0.0f32; n];
         for (index, cell) in ctx.cells.iter().enumerate() {
+            if cell.colspan != 1 {
+                continue;
+            }
             let col = cell.col as usize;
             min[col] = min[col].max(self.cell_content_width(index, taffy::AvailableSpace::MinContent));
             max[col] = max[col].max(self.cell_content_width(index, taffy::AvailableSpace::MaxContent));
+        }
+        // MailVault parity fix (plan B): a cell spanning columns widens them only by what they do
+        // not already have, shared out in proportion to their maximum content (WebKit's
+        // calcEffectiveLogicalWidth); taffy's grid shares it equally.
+        for (index, cell) in ctx.cells.iter().enumerate() {
+            if cell.colspan == 1 {
+                continue;
+            }
+            let cols = cell.col as usize..cell.col as usize + cell.colspan as usize;
+            let spacing = gap * (cell.colspan - 1) as f32;
+            let cell_min = self.cell_content_width(index, taffy::AvailableSpace::MinContent) - spacing;
+            let cell_max = self.cell_content_width(index, taffy::AvailableSpace::MaxContent) - spacing;
+            let weights: Vec<f32> = cols.clone().map(|c| max[c]).collect();
+            let weight_sum: f32 = weights.iter().sum();
+            for (cell_width, widths) in [(cell_min, &mut min), (cell_max, &mut max)] {
+                let have: f32 = widths[cols.clone()].iter().sum();
+                if cell_width > have {
+                    for (i, c) in cols.clone().enumerate() {
+                        let share = if weight_sum > 0.0 { weights[i] / weight_sum } else { 1.0 / cell.colspan as f32 };
+                        widths[c] += (cell_width - have) * share;
+                    }
+                }
+            }
         }
         // Percentages past 100% are scaled back to 100% (WebKit's `percentScaleFactor`).
         let percent_total: f32 = ctx
@@ -751,7 +778,7 @@ impl TableTreeWrapper<'_> {
             .collect();
         let mut overflow = width.iter().sum::<f32>() - available;
         if overflow <= 0.5 {
-            if !has_percent {
+            if !has_percent && !has_span {
                 return None;
             }
             if overflow >= -0.5 {

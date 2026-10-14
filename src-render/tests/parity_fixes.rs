@@ -490,3 +490,17 @@ fn a_box_holding_a_float_keeps_its_bottom_padding() {
     assert_eq!(h("cell"), 10.0 + 20.0 + 10.0 + 43.0 + 10.0, "padding, text, margin, float, padding");
     assert_eq!(h("root"), 10.0 + 20.0 + 43.0 + 7.0 + 3.0, "padding-top, block, float, padding-bottom, border-bottom");
 }
+
+/// A cell spanning columns only widens them by what they lack, in proportion to their own
+/// maximum content (WebKit AutoTableLayout, spanning cells), not equally as taffy's grid does.
+/// ours/table-cell-edges: three auto columns over a `colspan="3"` cell holding a table 333.27
+/// wide. Harness iframe (wide): table 351.25, columns 125.22, 114.31 and 111.73; Blitz
+/// 123.5, 114.5 and 112.9.
+#[test]
+fn a_spanning_cell_widens_columns_in_proportion_to_their_content() {
+    let els = inspect_at(&fx("table-colspan-columns.html"), 576);
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    for (id, iframe) in [("t", 351.25), ("a1", 125.22), ("a2", 114.31), ("a3", 111.73), ("c", 351.27)] {
+        assert!((w(id) - iframe).abs() <= 0.6, "{id}: {}, iframe {iframe}", w(id));
+    }
+}
