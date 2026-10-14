@@ -100,6 +100,8 @@ describe('known diffs', () => {
   it('an entry needs a parity id path (or *) as mvId', () => {
     expect(isValidKnownDiff(entry)).toBe(true);
     expect(isValidKnownDiff({ ...entry, mvId: 'table[1]/tr[2]/td[1]' })).toBe(true);
+    // localName keeps the HTML parser's SVG case (linearGradient, clipPath, foreignObject).
+    expect(isValidKnownDiff({ ...entry, mvId: 'svg[1]/defs[1]/linearGradient[1]' })).toBe(true);
     for (const mvId of [undefined, '', 'p1', 'p[1]/', ' p[1]', 'p[0]']) expect(isValidKnownDiff({ ...entry, mvId })).toBe(false);
   });
 });

@@ -123,8 +123,9 @@ export function isApproved(entry) {
 }
 
 // A parity id path (parityIds.js): `tag[n]` segments joined by '/', n from 1. A tag is
-// an element's localName, which in mail includes Office prefixes such as `o:p`.
-const SEGMENT = '[a-z][a-z0-9:._-]*\\[[1-9]\\d*\\]';
+// an element's localName: in mail that includes Office prefixes (`o:p`) and SVG's
+// camel-cased names (`linearGradient`, `clipPath`).
+const SEGMENT = '[A-Za-z][A-Za-z0-9:._-]*\\[[1-9]\\d*\\]';
 const PARITY_ID = new RegExp(`^${SEGMENT}(/${SEGMENT})*$`);
 
 /** An entry names one element (or `*`) and one field (or `*`), never both as `*`:
