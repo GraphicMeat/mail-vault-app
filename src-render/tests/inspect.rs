@@ -147,3 +147,31 @@ fn inline_after_a_block_sibling_reports_its_lines() {
     assert_eq!(by_id(&els, "d").line_count, Some(2), "block parent: its p line plus the anonymous line");
     assert_eq!(by_id(&els, "e").line_count, Some(2));
 }
+
+#[test]
+fn border_widths_are_used_px_per_side() {
+    let html = r#"<body style="margin:0"><div data-mv-id="b" style="border:2px solid #0f0;border-left-width:5px;border-bottom:0 none"></div>
+<div data-mv-id="none" style="border:3px none #000"></div><div data-mv-id="plain"></div></body>"#;
+    let els = RenderDoc::open(html, RenderOptions { css_width: 300, scale: 1.0, ..Default::default() }, None).unwrap().inspect();
+    let b = by_id(&els, "b");
+    assert_eq!((b.border_top_width, b.border_right_width, b.border_bottom_width, b.border_left_width), (Some(2.0), Some(2.0), Some(0.0), Some(5.0)));
+    let none = by_id(&els, "none");
+    assert_eq!((none.border_top_width, none.border_left_width), (Some(0.0), Some(0.0)), "border-style none computes to 0");
+    assert_eq!(by_id(&els, "plain").border_top_width, Some(0.0));
+    let json = serde_json::to_value(b).unwrap();
+    assert_eq!(json["borderTopWidth"], 2.0);
+    assert_eq!(json["borderLeftWidth"], 5.0);
+}
+
+// Engine gap (blitz-dom applies no `border` presentational hint on tables, so a
+// <table border=3> reports and draws no border). Un-ignore when the engine fix
+// lands; the parity fixture ours/table-border-attr shows the same diff.
+#[test]
+#[ignore = "engine: blitz-dom ignores the table border attribute"]
+fn table_border_attribute_gives_the_table_a_border() {
+    // HTML rendering section: table[border=N] draws an N px table border.
+    let html = r#"<body style="margin:0"><table data-mv-id="t" border="3"><tr><td data-mv-id="c">x</td></tr></table></body>"#;
+    let els = RenderDoc::open(html, RenderOptions { css_width: 300, scale: 1.0, ..Default::default() }, None).unwrap().inspect();
+    let t = by_id(&els, "t");
+    assert_eq!((t.border_top_width, t.border_left_width), (Some(3.0), Some(3.0)), "table border attribute");
+}

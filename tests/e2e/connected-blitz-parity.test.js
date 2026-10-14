@@ -175,6 +175,8 @@ function collectFrame(assign, cluster) {
       color: cs.color, backgroundColor: cs.backgroundColor,
       borderTopColor: cs.borderTopColor, borderRightColor: cs.borderRightColor,
       borderBottomColor: cs.borderBottomColor, borderLeftColor: cs.borderLeftColor,
+      borderTopWidth: cs.borderTopWidth, borderRightWidth: cs.borderRightWidth,
+      borderBottomWidth: cs.borderBottomWidth, borderLeftWidth: cs.borderLeftWidth,
       fontSize: cs.fontSize, fontWeight: cs.fontWeight, fontFamily: cs.fontFamily,
       lineCount: spans.length ? cluster(spans) : null,
     };

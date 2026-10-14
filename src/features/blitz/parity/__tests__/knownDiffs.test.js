@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
-import { isApproved, COLOR_FIELDS } from '../compare';
+import { isApproved, COLOR_FIELDS, BORDER_WIDTH_FIELDS } from '../compare';
 
 const CORPUS = new URL('../../../../../tests/fixtures/blitz-corpus/', import.meta.url);
 const read = (p) => readFileSync(new URL(p, CORPUS), 'utf8');
 const manifest = JSON.parse(read('manifest.json'));
 const known = JSON.parse(read('known-diffs.json'));
-const FIELDS = new Set(['*', 'presence', 'rendered', ...COLOR_FIELDS, 'fontSize', 'fontWeight', 'x', 'y', 'w', 'h', 'lineCount']);
+const FIELDS = new Set(['*', 'presence', 'rendered', ...COLOR_FIELDS, ...BORDER_WIDTH_FIELDS, 'fontSize', 'fontWeight', 'x', 'y', 'w', 'h', 'lineCount']);
 
 describe('blitz corpus', () => {
   it('every fixture exists, ids are unique, and every source ships its licence', () => {

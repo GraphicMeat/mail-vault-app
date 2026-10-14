@@ -29,6 +29,12 @@ pub struct InspectedElement {
     pub border_right_color: Option<[f64; 4]>,
     pub border_bottom_color: Option<[f64; 4]>,
     pub border_left_color: Option<[f64; 4]>,
+    /// Used border widths in CSS px (0 under `border-style: none`), as
+    /// `getComputedStyle(el).borderTopWidth` reports them.
+    pub border_top_width: Option<f64>,
+    pub border_right_width: Option<f64>,
+    pub border_bottom_width: Option<f64>,
+    pub border_left_width: Option<f64>,
     pub font_size: Option<f64>,
     pub font_weight: Option<f64>,
     pub font_family: Option<String>,
@@ -222,6 +228,10 @@ fn measure(doc: &BaseDocument, id: NodeId, mv_id: String) -> InspectedElement {
         border_right_color: None,
         border_bottom_color: None,
         border_left_color: None,
+        border_top_width: None,
+        border_right_width: None,
+        border_bottom_width: None,
+        border_left_width: None,
         font_size: None,
         font_weight: None,
         font_family: None,
@@ -238,6 +248,16 @@ fn measure(doc: &BaseDocument, id: NodeId, mv_id: String) -> InspectedElement {
         out.border_right_color = Some(rgba(&s.clone_border_right_color().resolve_to_absolute(&current)));
         out.border_bottom_color = Some(rgba(&s.clone_border_bottom_color().resolve_to_absolute(&current)));
         out.border_left_color = Some(rgba(&s.clone_border_left_color().resolve_to_absolute(&current)));
+        let border = s.get_border();
+        // Computed width stays set under `border-style: none`; the used width
+        // (what layout and getComputedStyle see) is 0 there.
+        let used = |w: &style::values::computed::BorderSideWidth, st: style::values::computed::BorderStyle| {
+            Some(if st.none_or_hidden() { 0.0 } else { w.0.to_f64_px() })
+        };
+        out.border_top_width = used(&border.border_top_width, border.border_top_style);
+        out.border_right_width = used(&border.border_right_width, border.border_right_style);
+        out.border_bottom_width = used(&border.border_bottom_width, border.border_bottom_style);
+        out.border_left_width = used(&border.border_left_width, border.border_left_style);
         let font = s.get_font();
         out.font_size = Some(font.font_size.used_size.0.px() as f64);
         out.font_weight = Some(font.font_weight.value() as f64);

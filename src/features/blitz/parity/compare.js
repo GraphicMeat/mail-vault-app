@@ -3,8 +3,13 @@
 // render.inspect numbers. Both are normalised first, then compared under the
 // overview's tolerances. No imports: the e2e runner (node) uses this file too.
 
-export const TOLERANCE = { channel: 1, alpha: 0.01, x: 1, w: 1, y: 2, h: 2, fontSize: 0.01 };
+export const TOLERANCE = { channel: 1, alpha: 0.01, x: 1, w: 1, y: 2, h: 2, fontSize: 0.01, borderWidth: 0.5 };
 export const COLOR_FIELDS = ['color', 'backgroundColor', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'];
+// Computed border widths in px (getComputedStyle on the iframe side, the
+// style system's used width on the Blitz side). Compared within 0.5 px, so a
+// fractional device-pixel snap does not count and a missing 1 px edge does.
+// An element carrying none of them on either side (older case data) is skipped.
+export const BORDER_WIDTH_FIELDS = ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'];
 
 export function parseCssColor(value) {
   if (value == null) return null;
@@ -63,6 +68,7 @@ export function normalizeElement(raw) {
     lineCount: raw.lineCount ?? null,
   };
   for (const f of COLOR_FIELDS) out[f] = parseCssColor(raw[f]);
+  for (const f of BORDER_WIDTH_FIELDS) out[f] = parsePx(raw[f]);
   return out;
 }
 
@@ -91,6 +97,9 @@ export function compareElements(iframeEls, blitzEls) {
     // is nothing to compare.
     if (!a.rendered) continue;
     for (const f of COLOR_FIELDS) if (!colorsEqual(a[f], b[f])) push(a, f, a[f], b[f]);
+    for (const f of BORDER_WIDTH_FIELDS) {
+      if ((a[f] != null || b[f] != null) && !within(a[f], b[f], TOLERANCE.borderWidth)) push(a, f, a[f], b[f]);
+    }
     if (!within(a.fontSize, b.fontSize, TOLERANCE.fontSize)) push(a, 'fontSize', a.fontSize, b.fontSize);
     if (a.fontWeight !== b.fontWeight) push(a, 'fontWeight', a.fontWeight, b.fontWeight);
     // An inline with no text: WebKit reports a zero-width rect, Blitz none.

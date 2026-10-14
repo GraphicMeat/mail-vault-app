@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCssColor, parsePx, parseWeight, clusterLineCount, compareElements, compareFixture, isApproved } from '../compare';
+import { BORDER_WIDTH_FIELDS, parseCssColor, parsePx, parseWeight, clusterLineCount, compareElements, compareFixture, isApproved } from '../compare';
 
 const el = (over = {}) => ({
   mvId: 'p[1]', tag: 'p', rendered: true, rect: { x: 0, y: 0, w: 100, h: 20 },
@@ -44,6 +44,18 @@ describe('compareElements', () => {
   it('allows ±1 on x and w, ±2 on y and h', () => {
     expect(compareElements([el()], [blitz({ rect: { x: 1, y: 2, w: 101, h: 22 } })]).diffs).toEqual([]);
     expect(compareElements([el()], [blitz({ rect: { x: 2, y: 3, w: 100, h: 20 } })]).diffs.map((d) => d.field)).toEqual(['x', 'y']);
+  });
+  it('compares the four border widths within half a pixel', () => {
+    const widths = (v) => Object.fromEntries(BORDER_WIDTH_FIELDS.map((f) => [f, v]));
+    const iframeSide = el(widths('1px'));
+    expect(compareElements([iframeSide], [blitz(widths(1))]).diffs).toEqual([]);
+    expect(compareElements([iframeSide], [blitz(widths(1.4))]).diffs).toEqual([]);
+    expect(compareElements([iframeSide], [blitz({ ...widths(1), borderLeftWidth: 0 })]).diffs.map((d) => [d.field, d.iframe, d.blitz])).toEqual([['borderLeftWidth', 1, 0]]);
+    expect(compareElements([iframeSide], [blitz(widths(1.6))]).diffs.map((d) => d.field)).toEqual(BORDER_WIDTH_FIELDS);
+  });
+  it('flags a border width one side lacks, but skips elements that carry none', () => {
+    expect(compareElements([el({ borderTopWidth: '2px' })], [blitz()]).diffs.map((d) => d.field)).toEqual(['borderTopWidth']);
+    expect(compareElements([el()], [blitz()]).diffs).toEqual([]);
   });
   it('requires equal font size, weight and line count', () => {
     const d = compareElements([el()], [blitz({ fontSize: 15, fontWeight: 700, lineCount: 2 })]).diffs.map((x) => x.field);
