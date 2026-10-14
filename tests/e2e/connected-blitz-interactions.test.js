@@ -121,8 +121,15 @@ const HTML_C = `${googleLink('Merriweather')}`
   + `<p><span id="mv-c-merri-probe" style="font-family: 'Merriweather', Georgia, serif; ${PROBE_STYLE}">${PROBE}</span></p>`;
 const HTML_D = Array.from({ length: BIG_N }, (_, i) => `<p style="margin:0">Paragraph ${i} of the big fixture${i === BIG_N - 1 ? ' ZZBIGLASTZZ' : ''}.</p>`).join('');
 const HTML_E = '<p id="mv-c-short" style="margin:0">Short <a id="mv-c-short-link" href="https://example.com/short">link</a></p>';
-// One unbroken paragraph of about 75 lines at a fractional line-height: line boxes stacked in flow must not drift.
-const HTML_F = `<p id="mv-c-tall" style="margin:0;width:240px;font:15px/18.4px sans-serif">Talltext ${Array.from({ length: 450 }, (_, i) => `tw${i}`).join(' ')} ZZTALLENDZZ</p>`;
+// Unbroken paragraphs of 80+ lines at fractional line-heights: line boxes stacked in flow must not drift.
+// Parley rounds each line top and box but steps by the unrounded height, so at a .5 fraction (22.5, 19.5)
+// every other box overlaps the next line even at dpr 1.
+const TALL = [
+  { needle: 'Talltext', end: 'ZZTALLENDZZ', font: '15px/18.4px', words: 450 },
+  { needle: 'Halftext', end: 'ZZHALFENDZZ', font: '15px/22.5px', words: 450 },
+  { needle: 'Ninetext', end: 'ZZNINEENDZZ', font: '13px/19.5px', words: 560 },
+];
+const HTML_F = TALL.map((t) => `<p style="margin:0 0 20px;width:240px;font:${t.font} sans-serif">${t.needle} ${Array.from({ length: t.words }, (_, i) => `tw${i}`).join(' ')} ${t.end}</p>`).join('');
 
 const MAILS = [
   { subject: SUBJECT_A, id: 0, from: 'Blitz A <a@blitzc.test>', day: 'Thu, 02', html: HTML_A },
@@ -1283,18 +1290,57 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
     });
   });
 
-  it('3d. a tall paragraph at a fractional line-height: line boxes do not drift down it', async function () {
+  it('3d. tall paragraphs at fractional line-heights: line boxes do not drift down them', async function () {
     await section('geometry.tallDrift', async (ck) => {
+      const measure = async (label) => {
+        const out = {};
+        for (const t of TALL) {
+          await kit('rect', 'blitz', t.end); // scroll its last line into view: its tiles (and owner tile) load
+          await browser.pause(700);
+          const d = await kitAsync('tallDrift', t.needle);
+          out[t.font] = d;
+          log(`geometry.tallDrift.${label}`, { font: t.font, ...d });
+        }
+        return out;
+      };
+      const check = (label, got) => {
+        for (const [font, d] of Object.entries(got)) {
+          if (d.error) { ck(false, `${label} ${font}: ${d.error}`); continue; }
+          ck(d.lines >= 60, `${label} ${font}: only ${d.lines} lines (fixture)`);
+          ck(d.driftVisual <= 1, `${label} ${font}: drawn text drifts ${d.driftVisual} px down the paragraph`);
+          ck(d.driftFlow <= 1, `${label} ${font}: line boxes drift ${d.driftFlow} px down the paragraph`);
+          ck(d.hitLast, `${label} ${font}: a point right of the last line resolves elsewhere: ${d.hitCtx}`);
+        }
+      };
       await openFixture('blitz', SUBJECT_F);
-      await kit('rect', 'blitz', 'ZZTALLENDZZ'); // scroll its last line into view
-      await browser.pause(500);
-      const d = await kitAsync('tallDrift', 'Talltext');
-      log('geometry.tallDrift', d);
-      if (d.error) { ck(false, d.error); return; }
-      ck(d.lines >= 60, `only ${d.lines} lines (fixture)`);
-      ck(d.driftVisual <= 1, `drawn text drifts ${d.driftVisual} px down the paragraph`);
-      ck(d.driftFlow <= 1, `line boxes drift ${d.driftFlow} px down the paragraph`);
-      ck(d.hitLast, `a point right of the last line resolves elsewhere: ${d.hitCtx}`);
+      check('dpr1', await measure('dpr1'));
+      // The worker lays out at the page's devicePixelRatio (BlitzTiles opens with scale = dpr), so a page
+      // that reports 2 gets parley's dpr-2 rounding: the layer's geometry is then what a Retina Mac sees.
+      const faked = await browser.execute(() => {
+        try {
+          window.__mvDprDesc = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio') || null;
+          Object.defineProperty(window, 'devicePixelRatio', { get: () => 2, configurable: true });
+          return window.devicePixelRatio === 2;
+        } catch (e) { return String(e && e.message); }
+      });
+      log('geometry.tallDrift.fakeDpr', { faked });
+      try {
+        await setRenderer('web'); // a fresh Blitz body reads the ratio when it mounts
+        await openFixture('blitz', SUBJECT_F);
+        const scale = await browser.execute(() => {
+          const t = [...document.querySelectorAll('[data-testid="blitz-tile"]')].find((x) => x.complete && x.naturalWidth > 0);
+          return t ? Math.round((t.naturalWidth / t.getBoundingClientRect().width) * 100) / 100 : null;
+        });
+        log('geometry.tallDrift.scale', { scale });
+        if (scale === 2) check('dpr2', await measure('dpr2'));
+        else log('geometry.tallDrift.dpr2', { measured: false, scale });
+      } finally {
+        await browser.execute(() => {
+          try { if (window.__mvDprDesc) Object.defineProperty(window, 'devicePixelRatio', window.__mvDprDesc); else delete window.devicePixelRatio; } catch { /* left as is */ }
+          return window.devicePixelRatio;
+        });
+        await setRenderer('web'); // the next Blitz body mounts at the real ratio
+      }
     });
   });
 
