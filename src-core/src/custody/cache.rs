@@ -192,6 +192,46 @@ pub fn load_by_uids(conn: &Connection, account: &str, mailbox: &str, uids: &[u32
     Ok(rows.into_iter().filter_map(|(_, _, s)| serde_json::from_str(&s).ok()).collect())
 }
 
+/// `(uid, flags)` of each cached uid in `uids`, ascending by uid: the lean
+/// read for a caller that needs no more of a header than whether it is
+/// listed and its flags. Only the `flags` member is pulled out of each row
+/// (no whole-header parse); a row whose JSON does not parse is not listed,
+/// as `load_by_uids` drops it, and a header without flags has none. Chunked
+/// like `load_by_uids`.
+pub fn flags_by_uids(conn: &Connection, account: &str, mailbox: &str, uids: &[u32]) -> Result<Vec<(u32, Vec<String>)>, String> {
+    let mut wanted = uids.to_vec();
+    wanted.sort_unstable();
+    wanted.dedup();
+    let mut rows: Vec<(u32, Vec<String>)> = Vec::with_capacity(wanted.len());
+    for chunk in wanted.chunks(UID_CHUNK) {
+        let marks = std::iter::repeat_n("?", chunk.len()).collect::<Vec<_>>().join(",");
+        // `json_valid` in the WHERE, so the select list never sees a
+        // malformed row: `json_extract` on one fails the whole statement.
+        let sql = format!(
+            "SELECT uid, CASE WHEN json_type(header_json, '$.flags') = 'array' THEN json_extract(header_json, '$.flags') END \
+             FROM header_cache WHERE account_id=? AND mailbox_path=? AND uid IN ({marks}) AND json_valid(header_json)"
+        );
+        let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into(), mailbox.to_string().into()];
+        args.extend(chunk.iter().map(|u| i64::from(*u).into()));
+        let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
+        let found = stmt
+            .query_map(params_from_iter(args), |r| Ok((r.get::<_, u32>(0)?, r.get::<_, Option<String>>(1)?)))
+            .map_err(err)?;
+        for row in found {
+            let (uid, flags) = row.map_err(err)?;
+            let flags: Vec<String> = flags
+                .and_then(|text| serde_json::from_str::<Vec<Value>>(&text).ok())
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|flag| flag.as_str().map(str::to_owned))
+                .collect();
+            rows.push((uid, flags));
+        }
+    }
+    rows.sort_unstable_by_key(|(uid, _)| *uid);
+    Ok(rows)
+}
+
 pub fn list_uids(conn: &Connection, account: &str, mailbox: &str, since_ms: Option<f64>) -> Result<Value, String> {
     let mut stmt = conn.prepare("SELECT uid,updated_ms FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 ORDER BY uid").map_err(err)?;
     let rows = stmt.query_map(params![account, mailbox], |r| Ok((r.get::<_, u32>(0)?, r.get::<_, i64>(1)?))).map_err(err)?
@@ -1033,6 +1073,50 @@ mod tests {
         let mut expected: Vec<u32> = (1..=40_000).collect();
         expected.sort_by(|a, b| (b % 1000).cmp(&(a % 1000)).then(b.cmp(a)));
         assert_eq!(got.len(), 40_000);
+        assert_eq!(got, expected);
+    }
+
+    /// Just the uid and the flags, without parsing the rest of each header:
+    /// every cached uid asked for once, by uid, across chunk boundaries; a
+    /// row with no flags has none, an unparseable row is not listed (as
+    /// `load_by_uids` drops it), another mailbox never leaks in.
+    #[test]
+    fn flags_by_uids_reads_each_listed_uids_flags_and_nothing_else() {
+        let (_t, mut c) = store();
+        let total = UID_CHUNK as u32 + 10;
+        let tx = c.transaction().unwrap();
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES ('a','INBOX',?1,?2,0,?3)"
+            ).unwrap();
+            for uid in 1..=total {
+                let header = match uid {
+                    3 => json!({"uid": uid, "subject": "no flags"}).to_string(),
+                    4 => "{not json".to_string(),
+                    _ if uid % 2 == 0 => json!({"uid": uid, "flags": ["\\Seen", "\\Flagged"]}).to_string(),
+                    _ => json!({"uid": uid, "flags": []}).to_string(),
+                };
+                stmt.execute(params![uid, i64::from(total - uid), header]).unwrap();
+            }
+        }
+        tx.commit().unwrap();
+        c.execute(
+            "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES ('a','Archive',2,0,0,?1)",
+            params![json!({"uid": 2, "flags": ["\\Draft"]}).to_string()],
+        ).unwrap();
+
+        let mut wanted: Vec<u32> = (1..=total).rev().collect();
+        wanted.push(2); // a duplicate
+        wanted.push(50_000); // not cached
+        let got = flags_by_uids(&c, "a", "INBOX", &wanted).unwrap();
+
+        let expected: Vec<(u32, Vec<String>)> = (1..=total)
+            .filter(|uid| *uid != 4)
+            .map(|uid| {
+                let flags = if uid != 3 && uid % 2 == 0 { vec!["\\Seen".to_string(), "\\Flagged".to_string()] } else { Vec::new() };
+                (uid, flags)
+            })
+            .collect();
         assert_eq!(got, expected);
     }
 
