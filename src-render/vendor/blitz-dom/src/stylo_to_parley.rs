@@ -316,7 +316,10 @@ pub(crate) fn style(
     // Convert font size and line height
     let font_size = font_styles.font_size.used_size.0.px();
     let line_height = match font_styles.line_height {
-        stylo::LineHeight::Normal => parley::LineHeight::FontSizeRelative(1.2),
+        // MailVault parity fix (plan B): `normal` is the font's own line spacing (CSS Inline 3:
+        // ascent + descent + line gap; WebKit rounds each part), not a fixed 1.2 em: Arial at
+        // 14px is 16px high, 1.2 em gave 16.8.
+        stylo::LineHeight::Normal => parley::LineHeight::MetricsRelative(1.0),
         // MailVault parity fix (plan B): WebKit truncates a computed line-height to whole px
         // (RenderStyle::computedLineHeight returns int), so 1.6 x 14px lays out at 22, not
         // 22.4. The epsilon keeps products like 1.3 x 10 (12.999999 in f32) at 13.

@@ -341,3 +341,19 @@ fn a_trailing_br_does_not_add_a_line() {
     let (t1, t2) = (get(&els, "t1").rect.clone().unwrap(), get(&els, "t2").rect.clone().unwrap());
     assert_eq!(t2.y - (t1.y + t1.h), 22.0, "one line holds the br between two tables");
 }
+
+/// `line-height: normal` is the font's own line spacing, ascent + descent + line gap with each
+/// part rounded (CSS Inline 3; WebKit's `fontMetrics().lineSpacing()`), not 1.2 em. Arial is
+/// 14px high at 12px, 16 at 14px and 18 at 16px; the harness iframe has every 14px Arial cell of
+/// ours/table-border-attr and table-cell-edges 16px of text (Blitz 16.8, 0.8px a line). A line
+/// holding only a smaller span still has the block's strut, and a fixed line-height of the block
+/// is a floor for a `normal` span.
+#[test]
+fn line_height_normal_follows_the_font_metrics() {
+    let els = inspect(&fx("line-height-normal.html"));
+    let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
+    assert_eq!((h("a12"), h("a14"), h("a16")), (14.0, 16.0, 18.0));
+    assert_eq!(h("mixed"), 16.0, "a smaller span on a line with the block's own text");
+    assert_eq!(h("small"), 18.0, "the strut of the 16px block holds a line with only an 11px span");
+    assert_eq!(h("fixed"), 22.0, "the block's 22px line-height floors the span");
+}

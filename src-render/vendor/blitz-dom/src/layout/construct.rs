@@ -296,6 +296,54 @@ fn push_non_whitespace_children_and_pseudos(layout_children: &mut ThinVec<NodeId
     }
 }
 
+/// MailVault parity fix (plan B): the line-height of the inline formatting context's own block, in
+/// CSS px, and its text style. `normal` is set when the block's line-height is `normal`, which
+/// has no px value until a line of its font has been laid out (`normal_line_height`).
+struct RootLineHeight {
+    px: f32,
+    normal: bool,
+    style: parley::TextStyle<'static, 'static, TextBrush>,
+}
+
+impl RootLineHeight {
+    /// Whether a span's text is in the block's font, so one `normal` line is as high as the other.
+    fn same_font(&self, span: &parley::TextStyle<'static, 'static, TextBrush>) -> bool {
+        let root = &self.style;
+        span.font_family == root.font_family
+            && span.font_size == root.font_size
+            && span.font_width == root.font_width
+            && span.font_style == root.font_style
+            && span.font_weight == root.font_weight
+            && span.font_variations == root.font_variations
+    }
+}
+
+/// MailVault parity fix (plan B): the height of one line of `style`'s font at `line-height:
+/// normal`, in CSS px. Parley quantises ascent, descent and line gap separately, like WebKit.
+fn normal_line_height(
+    layout_ctx: &mut LayoutContext<TextBrush>,
+    font_ctx: &mut FontContext,
+    scale: f32,
+    style: &parley::TextStyle<'static, 'static, TextBrush>,
+) -> f32 {
+    let mut probe = parley::layout::Layout::<TextBrush>::new();
+    let mut builder = layout_ctx.tree_builder(font_ctx, scale, true, style);
+    builder.push_text("x");
+    builder.build_into(&mut probe);
+    probe.break_all_lines(None);
+    // ascent + descent + line gap, each rounded (WebKit `FontMetrics::lineSpacing`). Parley's
+    // own quantised line has an extra pixel when the rounded ascent and descent overshoot the
+    // font's unrounded line height (Arial at 12px: 15, WebKit 14).
+    probe
+        .lines()
+        .next()
+        .and_then(|line| line.runs().next().map(|run| {
+            let m = run.metrics();
+            (m.ascent.round() + m.descent.round() + m.leading.round()) / scale
+        }))
+        .unwrap_or(style.font_size * 1.2)
+}
+
 /// Convert a relative line height to an absolute one
 fn resolve_line_height(line_height: parley::LineHeight, font_size: f32) -> f32 {
     match line_height {
@@ -1064,7 +1112,24 @@ pub(crate) fn build_inline_layout_into(
         .map(|s| stylo_to_parley::style(inline_context_root_node_id, s))
         .unwrap_or_default();
 
-    let root_line_height = resolve_line_height(parley_style.line_height, parley_style.font_size);
+    // MailVault parity fix (plan B): `line-height: normal` is the font's metrics, which only a
+    // laid-out line knows (see `normal_line_height`). A block with it gets the rounded height as
+    // a fixed one, so lines stack on whole pixels like WebKit's.
+    let root_normal = matches!(parley_style.line_height, parley::LineHeight::MetricsRelative(_));
+    let root_px = if root_normal {
+        normal_line_height(layout_ctx, font_ctx, scale, &parley_style)
+    } else {
+        resolve_line_height(parley_style.line_height, parley_style.font_size)
+    };
+    let mut parley_style = parley_style;
+    if root_normal {
+        parley_style.line_height = parley::LineHeight::Absolute(root_px);
+    }
+    let root_line_height = RootLineHeight {
+        px: root_px,
+        normal: root_normal,
+        style: parley_style.clone(),
+    };
 
     // Create a parley tree builder
     let mut builder = layout_ctx.tree_builder(font_ctx, scale, true, &parley_style);
@@ -1114,7 +1179,7 @@ pub(crate) fn build_inline_layout_into(
             before_id,
             collapse_mode,
             text_transform,
-            root_line_height,
+            &root_line_height,
         );
     }
     for child_id in root_node.children.iter().copied() {
@@ -1125,7 +1190,7 @@ pub(crate) fn build_inline_layout_into(
             child_id,
             collapse_mode,
             text_transform,
-            root_line_height,
+            &root_line_height,
         );
     }
     if let Some(after_id) = root_node.after() {
@@ -1136,7 +1201,7 @@ pub(crate) fn build_inline_layout_into(
             after_id,
             collapse_mode,
             text_transform,
-            root_line_height,
+            &root_line_height,
         );
     }
 
@@ -1182,7 +1247,7 @@ pub(crate) fn build_inline_layout_into(
         node_id: NodeId,
         collapse_mode: WhiteSpaceCollapse,
         parent_text_transform: TextTransform,
-        root_line_height: f32,
+        root_line_height: &RootLineHeight,
     ) {
         let node = &nodes[node_id];
 
@@ -1281,10 +1346,29 @@ pub(crate) fn build_inline_layout_into(
 
                             // Floor the line-height of the span by the line-height of the inline context
                             // See https://www.w3.org/TR/CSS21/visudet.html#line-height
-                            style.line_height = parley::LineHeight::Absolute(
-                                resolve_line_height(style.line_height, font_size)
-                                    .max(root_line_height),
-                            );
+                            // MailVault parity fix (plan B): a span with `line-height: normal` in a
+                            // `normal` block has the block's line height when its font is the block's,
+                            // and the font's own metrics when it is a larger one; a smaller one gets
+                            // the block's strut (same family assumed). Under a fixed line-height it
+                            // is floored like any other span.
+                            style.line_height = match style.line_height {
+                                parley::LineHeight::MetricsRelative(_) if root_line_height.normal => {
+                                    if root_line_height.same_font(&style)
+                                        || font_size < root_line_height.style.font_size
+                                    {
+                                        parley::LineHeight::Absolute(root_line_height.px)
+                                    } else {
+                                        style.line_height
+                                    }
+                                }
+                                lh => parley::LineHeight::Absolute(
+                                    match lh {
+                                        parley::LineHeight::MetricsRelative(_) => font_size * 1.2,
+                                        lh => resolve_line_height(lh, font_size),
+                                    }
+                                    .max(root_line_height.px),
+                                ),
+                            };
 
                             // dbg!(node_id);
                             // dbg!(&style);
