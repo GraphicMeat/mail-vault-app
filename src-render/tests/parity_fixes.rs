@@ -377,12 +377,26 @@ fn text_content_widths_are_not_rounded_up_to_whole_pixels() {
 /// Harness iframe (cerberus responsive, wide): th 169.34375 and 338.671875, Blitz 73.5 and
 /// 434.5 (the percentage was ignored and the image column squeezed). The second table is a
 /// shrink-to-fit table with a 50% column: it asks for twice that column's text, so it fills
-/// the 508px and the columns are 254 each (the algorithm's result, not measured).
+/// the 508px and the columns are 254 each (the algorithm's result, not measured). The third
+/// has the percentages on its second row, as postmark's invoice does.
 #[test]
 fn percentage_columns_take_their_share_of_the_table() {
     let els = inspect_at(&fx("table-percent-columns.html"), 508);
     let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
-    for (id, want) in [("t", 508.0), ("a", 169.34), ("b", 338.67), ("ta", 169.34), ("u", 508.0), ("u1", 254.0), ("u2", 254.0)] {
+    for (id, want) in [
+        ("t", 508.0),
+        ("a", 169.34),
+        ("b", 338.67),
+        ("ta", 169.34),
+        ("u", 508.0),
+        ("u1", 254.0),
+        ("u2", 254.0),
+        // postmark invoice: the percentages are on the second row's cells (iframe: table
+        // 238.95 in a 239 cell, cells 191.17 and 47.80 at 80% / 20%).
+        ("v", 508.0),
+        ("v1", 406.4),
+        ("v2", 101.6),
+    ] {
         assert!((w(id) - want).abs() <= 1.0, "{id}: {}, want {want}", w(id));
     }
 }

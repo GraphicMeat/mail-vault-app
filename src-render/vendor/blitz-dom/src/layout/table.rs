@@ -328,6 +328,41 @@ fn push_table_cell(
         columns.push(column);
     }
 
+    // MailVault parity fix (plan B): any row's cell can say what its column prefers, not just
+    // the first row's (WebKit's AutoTableLayout::recalcColumn): the largest percentage wins,
+    // and over a length; between lengths the larger wins. postmark's purchase table puts
+    // its `width="80%"` on the cells of the second row.
+    if *row > 1 && !is_fixed && colspan == 1 {
+        let pref = match style.size.width.tag() {
+            taffy::CompactLength::LENGTH_TAG => {
+                let len = style.size.width.value();
+                let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
+                let border = style.border.resolve_or_zero(None, resolve_calc_value);
+                Some(ColumnPref::Length(match style.box_sizing {
+                    taffy::BoxSizing::ContentBox => {
+                        len + padding.left + padding.right + border.left + border.right
+                    }
+                    taffy::BoxSizing::BorderBox => len,
+                }))
+            }
+            taffy::CompactLength::PERCENT_TAG => Some(ColumnPref::Percent(style.size.width.value())),
+            _ => None,
+        };
+        if let (Some(pref), Some(column)) = (pref, columns.get_mut(*col as usize)) {
+            column.1 = match (column.1, pref) {
+                (Some(ColumnPref::Percent(have)), ColumnPref::Percent(new)) => {
+                    Some(ColumnPref::Percent(have.max(new)))
+                }
+                (Some(ColumnPref::Percent(have)), ColumnPref::Length(_)) => Some(ColumnPref::Percent(have)),
+                (_, ColumnPref::Percent(new)) => Some(ColumnPref::Percent(new)),
+                (Some(ColumnPref::Length(have)), ColumnPref::Length(new)) => {
+                    Some(ColumnPref::Length(have.max(new)))
+                }
+                (None, length) => Some(length),
+            };
+        }
+    }
+
     // Zero-out cell borders is BorderCollapse is Collapse
     // Borders are handled at the table level in this mode
     if border_collapse == BorderCollapse::Collapse {
