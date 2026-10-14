@@ -831,6 +831,43 @@ impl<'a> TElement for BlitzNode<'a> {
             ));
         };
 
+        // MailVault parity fix (plan B): presentational hints written as CSS
+        // text, parsed the way a style attribute is, then pushed one by one.
+        fn hint_declarations(css: &str) -> Vec<PropertyDeclaration> {
+            let url_data = style::stylesheets::UrlExtraData(Arc::new(
+                url::Url::parse("about:blank").unwrap(),
+            ));
+            style::properties::parse_style_attribute(
+                css,
+                &url_data,
+                None,
+                QuirksMode::NoQuirks,
+                style::stylesheets::CssRuleType::Style,
+            )
+            .declarations()
+            .to_vec()
+        }
+
+        // MailVault parity fix (plan B): an attribute of the table a td/th belongs
+        // to (td -> tr -> [tbody|thead|tfoot] -> table), for its cellpadding.
+        fn cell_table_attr<'n>(cell: &'n Node, name: &str) -> Option<&'n str> {
+            let mut cur = cell.parent.map(|id| cell.with(id));
+            for _ in 0..3 {
+                let node = cur?;
+                if let Some(el) = node.data.downcast_element() {
+                    if el.name.local == local_name!("table") {
+                        return el
+                            .attrs()
+                            .iter()
+                            .find(|attr| &*attr.name.local == name)
+                            .map(|attr| attr.value.as_str());
+                    }
+                }
+                cur = node.parent.map(|id| node.with(id));
+            }
+            None
+        }
+
         /// The HTML "rules for parsing dimension values" -- Stylo's
         /// implementation of them -- packaged as a specified
         /// `<length-percentage>`. `ignoring_zero` selects the spec's separate
@@ -1106,9 +1143,29 @@ impl<'a> TElement for BlitzNode<'a> {
                 }
             }
 
+            if *tag == local_name!("table") && &**name == "cellspacing" {
+                // MailVault parity fix (plan B): table[cellspacing] maps to border-spacing.
+                if let Ok(px) = style::servo::attr::parse_unsigned_integer(value.chars()) {
+                    for decl in hint_declarations(&format!("border-spacing:{px}px")) {
+                        push_style(decl);
+                    }
+                }
+            }
+
             if *name == local_name!("hidden") {
                 use style::values::specified::Display;
                 push_style(PropertyDeclaration::Display(Display::None));
+            }
+        }
+
+        if *tag == local_name!("td") || *tag == local_name!("th") {
+            // MailVault parity fix (plan B): table[cellpadding] pads each of its cells.
+            if let Some(px) = cell_table_attr(self, "cellpadding")
+                .and_then(|v| style::servo::attr::parse_unsigned_integer(v.chars()).ok())
+            {
+                for decl in hint_declarations(&format!("padding:{px}px")) {
+                    push_style(decl);
+                }
             }
         }
     }
