@@ -133,16 +133,20 @@ pub fn is_foreground(method: &str) -> bool {
 /// A family that panics the worker while it registers it, or that killed a
 /// worker, is refused: dropped from what is kept and never sent again, so one
 /// bad family cannot crash every worker until the daemon restarts. The worker
-/// acknowledges each family it has dealt with (`ack`); a worker that dies with
-/// families still unacknowledged died on the first of them (`died`), because
-/// it takes them in the order they were sent.
+/// acknowledges each family it has dealt with (`ack`). A worker that dies with
+/// replayed families still unacknowledged died on the first of them (`died`):
+/// the replay is the first thing a new worker reads and it takes the families
+/// in the order sent. A family sent to a live worker is not blamed for its
+/// death (that frame may have waited behind other work, and the worker may have
+/// died of something else): it is refused on an `ok:false` ack, or blamed on
+/// the next spawn's replay if it really kills.
 #[derive(Default)]
 struct FontFrames {
     kept: Vec<Value>,
     refused: Vec<String>,
     /// The worker spawn `unacked` belongs to.
     epoch: u64,
-    /// Sent to that worker and not acknowledged yet, in the order sent.
+    /// The replay frame of that spawn, minus what the worker has acknowledged, in the order sent.
     unacked: Vec<String>,
 }
 
@@ -169,19 +173,11 @@ impl FontFrames {
         (!self.kept.is_empty()).then(|| json!({"op": "fonts", "families": self.kept}))
     }
 
-    /// A worker (spawn `epoch`) is about to be sent every kept family.
+    /// A worker (spawn `epoch`) is about to be sent every kept family: the
+    /// replay, which is what a death is blamed on.
     fn begin(&mut self, epoch: u64) {
         self.epoch = epoch;
         self.unacked = self.kept.iter().map(|k| k["family"].as_str().unwrap_or_default().to_string()).collect();
-    }
-
-    /// Families written to the live worker of spawn `epoch`.
-    fn sent(&mut self, epoch: u64, families: &[Value]) {
-        if epoch != self.epoch {
-            self.begin(epoch);
-            return;
-        }
-        self.unacked.extend(families.iter().map(|f| f["family"].as_str().unwrap_or_default().to_string()));
     }
 
     /// The worker of spawn `epoch` is done with `family`; `ok` false means its registration panicked.
@@ -353,7 +349,6 @@ impl RenderHost {
         // No worker: the families are only kept, and replayed at the next spawn.
         let guard = self.worker.lock().await;
         if let Some(w) = guard.as_ref() {
-            self.font_frames.lock().unwrap().sent(w.epoch, &fresh);
             let _ = w.stdin.lock().await.write_all(format!("{}\n", json!({"op": "fonts", "families": fresh})).as_bytes()).await;
         }
     }
@@ -819,6 +814,25 @@ mod tests {
         assert_eq!(kept.replay().unwrap()["families"], json!([family("A", 1)]));
     }
 
+    #[test]
+    fn a_death_is_blamed_on_the_replay_never_on_a_family_sent_to_the_live_worker() {
+        let mut kept = FontFrames::default();
+        kept.claim(vec![family("A", 1)]);
+        kept.begin(1);
+        kept.ack(1, "A", true);
+        // B goes to the live worker, which dies of something else before it reads B.
+        assert_eq!(kept.claim(vec![family("B", 1)]).len(), 1);
+        kept.died(1);
+        assert_eq!(kept.replay().unwrap()["families"], json!([family("A", 1), family("B", 1)]), "B is replayed to the next worker");
+        assert!(!kept.refused.iter().any(|r| r == "B"));
+        // A live family whose registration panics is refused by its own ack.
+        kept.begin(2);
+        kept.ack(2, "A", true);
+        kept.ack(2, "B", false);
+        assert_eq!(kept.replay().unwrap()["families"], json!([family("A", 1)]));
+        assert!(kept.has("B"));
+    }
+
     #[cfg(debug_assertions)]
     fn mono_face() -> Value {
         let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../src/assets/fonts/ibm-plex-mono-latin-400.woff2")).unwrap();
@@ -873,7 +887,6 @@ mod tests {
         .await;
         assert!(h.tile(doc, 0).await.is_ok(), "the worker and its doc are untouched");
         assert_eq!(h.spawned(), 1);
-        assert!(h.font_frames.lock().unwrap().unacked.is_empty(), "both were acknowledged");
     }
 
     #[cfg(unix)]
