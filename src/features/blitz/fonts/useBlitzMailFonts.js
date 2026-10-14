@@ -10,25 +10,29 @@ const PREPARE_CAP_MS = 300;
  * Before render.open: the catalogue families this mail is written in, read off
  * the pre-pass document exactly as the iframe reads its own (fontSourcesOf).
  * Installed ones go to the worker now, so the first layout already uses them.
- * Never throws and never holds the open for more than PREPARE_CAP_MS.
+ * Never throws, and the whole read-and-send is held to PREPARE_CAP_MS: past it
+ * the body opens with every family still pending (the hook asks again) and
+ * the work carries on, registering what is installed whenever it finishes,
+ * which makes the worker rebuild the open doc.
  */
 export async function prepareMailFonts(doc) {
-  try {
-    const families = mailFontFamilies(...fontSourcesOf(doc));
-    if (!families.length) return { installed: [], pending: [] };
-    await refreshFonts();
+  const none = { installed: [], pending: [] };
+  let families;
+  try { families = mailFontFamilies(...fontSourcesOf(doc)); } catch { return none; }
+  if (!families.length) return none;
+  const work = (async () => {
+    // The store follows download events; ask the daemon only when it may not know a family yet.
+    if (!families.every(f => useFontStore.getState().installed.includes(f))) await refreshFonts();
     const have = useFontStore.getState().installed;
     const installed = families.filter(f => have.includes(f));
     const pending = families.filter(f => !have.includes(f));
-    if (installed.length) {
-      let timer;
-      const cap = new Promise(r => { timer = setTimeout(r, PREPARE_CAP_MS); });
-      try { await Promise.race([fontsRender(installed), cap]); } finally { clearTimeout(timer); }
-    }
+    if (installed.length) await fontsRender(installed);
     return { installed, pending };
-  } catch {
-    return { installed: [], pending: [] };
-  }
+  })();
+  work.catch(() => {});
+  let timer;
+  const cap = new Promise(r => { timer = setTimeout(() => r({ installed: [], pending: families }), PREPARE_CAP_MS); });
+  try { return await Promise.race([work, cap]); } catch { return none; } finally { clearTimeout(timer); }
 }
 
 /**
@@ -43,8 +47,11 @@ export function useBlitzMailFonts({ families, messageKey }) {
   useEffect(() => {
     if (!key) return undefined;
     let gone = false;
+    // The store must know what the daemon holds before familyForMail decides (installed => no download).
+    const listed = refreshFonts().catch(() => null);
     for (const family of key.split('|')) {
-      familyForMail(family, () => isTrackerBlockingActive())
+      listed
+        .then(() => (gone ? false : familyForMail(family, () => isTrackerBlockingActive())))
         .then(ok => (ok && !gone ? fontsRender([family]) : null))
         .catch(() => {});
     }

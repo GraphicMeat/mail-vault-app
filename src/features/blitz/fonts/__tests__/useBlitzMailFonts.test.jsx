@@ -9,7 +9,7 @@ vi.mock('../../../../services/fontService', () => ({
 }));
 vi.mock('../../../../stores/settingsStore', () => ({ isTrackerBlockingActive: vi.fn(() => false) }));
 import { fontsRender } from '../../service';
-import { familyForMail } from '../../../../services/fontService';
+import { familyForMail, refreshFonts } from '../../../../services/fontService';
 import { isTrackerBlockingActive } from '../../../../stores/settingsStore';
 import { prepareMailFonts, useBlitzMailFonts } from '../useBlitzMailFonts';
 
@@ -78,6 +78,58 @@ describe('Blitz mail fonts', () => {
     const t0 = Date.now();
     await prepareMailFonts(parse('<p style="font-family: Lora">a</p>'));
     expect(Date.now() - t0).toBeLessThan(1000);
+  });
+
+  it('a hanging fonts.list does not hold prepare past the cap, and installed families still go out when it answers', async () => {
+    vi.useFakeTimers();
+    try {
+      let answer;
+      refreshFonts.mockImplementationOnce(() => new Promise(r => { answer = r; }));
+      let done = false;
+      const p = prepareMailFonts(parse('<p style="font-family: Lora">a</p><p style="font-family: Merriweather">b</p>')).then(r => { done = true; return r; });
+      await vi.advanceTimersByTimeAsync(299);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(done).toBe(true);
+      const r = await p;
+      expect(r.installed).toEqual([]);
+      expect(r.pending).toEqual(['Lora', 'Merriweather']);
+      expect(fontsRender).not.toHaveBeenCalled();
+      // the list arrives late: what is installed is registered then, so the worker rebuilds the doc
+      answer({});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fontsRender).toHaveBeenCalledWith(['Lora']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the hook reads the list itself, so a family installed after the cap is still sent', async () => {
+    let answer;
+    refreshFonts.mockImplementationOnce(() => new Promise(r => { answer = r; }));
+    familyForMail.mockResolvedValue(true);
+    renderHook(() => useBlitzMailFonts({ families: ['Lora'], messageKey: 'k' }));
+    await new Promise(r => setTimeout(r, 20));
+    expect(fontsRender).not.toHaveBeenCalled();
+    answer({});
+    await waitFor(() => expect(fontsRender).toHaveBeenCalledWith(['Lora']));
+  });
+
+  it('a download that finishes after unmount or a message switch is not sent', async () => {
+    let finish;
+    familyForMail.mockImplementation(() => new Promise(r => { finish = r; }));
+    const { unmount, rerender } = renderHook((p) => useBlitzMailFonts(p), { initialProps: { families: ['Merriweather'], messageKey: 'a' } });
+    await waitFor(() => expect(familyForMail).toHaveBeenCalledTimes(1));
+    const first = finish;
+    rerender({ families: ['Merriweather'], messageKey: 'b' });
+    await waitFor(() => expect(familyForMail).toHaveBeenCalledTimes(2));
+    first(true);
+    await new Promise(r => setTimeout(r, 20));
+    expect(fontsRender).not.toHaveBeenCalled();
+    unmount();
+    finish(true);
+    await new Promise(r => setTimeout(r, 20));
+    expect(fontsRender).not.toHaveBeenCalled();
   });
 
   it('prepare on a missing document does not throw', async () => {

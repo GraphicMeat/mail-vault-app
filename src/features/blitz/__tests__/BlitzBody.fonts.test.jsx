@@ -14,7 +14,7 @@ vi.mock('../../../services/fontService', () => ({
   refreshFonts: vi.fn().mockResolvedValue({}),
   useFontStore: { getState: () => ({ installed: ['Lora'] }) },
 }));
-import { familyForMail } from '../../../services/fontService';
+import { familyForMail, refreshFonts } from '../../../services/fontService';
 import BlitzBody from '../BlitzBody';
 
 beforeEach(() => { order.length = 0; vi.clearAllMocks(); });
@@ -29,5 +29,13 @@ describe('BlitzBody mail fonts', () => {
     expect(order.indexOf('fonts:Lora')).toBeLessThan(order.indexOf('tiles'));
     expect(order.indexOf('tiles')).toBeLessThan(order.indexOf('fonts:Merriweather'));
     expect(familyForMail).toHaveBeenCalledTimes(1);
+  });
+
+  it('a hanging fonts.list does not hold the body back', async () => {
+    refreshFonts.mockImplementation(() => new Promise(() => {}));
+    render(<BlitzBody surface="reader" messageKey="k-fonts-hang" theme={{ dark: false, palette: 'graphite' }} onLink={vi.fn()} sizing="content"
+      bodyHtml={'<p style="font-family: Lora">a</p>'} plainText="a" />);
+    await screen.findByTestId('tiles-stub', {}, { timeout: 1500 });
+    refreshFonts.mockResolvedValue({});
   });
 });
