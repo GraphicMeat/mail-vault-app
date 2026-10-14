@@ -60,6 +60,7 @@ import {
   flatten,
   waitForOutboxError,
   settingsCall,
+  composeOverflow,
 } from './composeHelpers.js';
 
 const HINT = 'compose-inline-dropzone-hint';
@@ -352,6 +353,18 @@ describe('Connected Compose Drop Zones', function () {
     await waitForAttachments(['header.pdf'], 'dropping a PDF on the modal header');
     expect(await editorImages()).toEqual([]);
     await waitForNoZones('the header drop landed');
+  });
+
+  it('keeps an attachment with a long name inside the compose window', async function () {
+    await openComposeFresh();
+    const name = `${'9f2c1e7a-ad06-ad9ab29c911d_INBOX_47158_1_'.repeat(4)}Project report.pdf`;
+
+    await dropFiles(HEADER, [pdfFile(name)]);
+    await waitForAttachments([name], 'dropping a long-named PDF on the modal header');
+
+    const box = await composeOverflow();
+    expect(box.sideways).toEqual([]);
+    expect(box.chipPastModal).toBeLessThanOrEqual(0);
   });
 
   // ── paste ────────────────────────────────────────────────────────────────

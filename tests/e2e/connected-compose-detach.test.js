@@ -3,6 +3,7 @@ import { waitForApp, waitForEmails } from './helpers.js';
 import {
   openComposeFresh, setField, fieldValue, testidPresent, clickBubble, closeComposeHard, mailStoreSet, modalOpen, settingsCall,
   waitForNativeCompose, openComposeFreshNative, inlineComposeShown, closeNativeCompose,
+  dropFiles, pdfFile, attachments, composeOverflow, MODAL,
 } from './composeHelpers.js';
 
 // A native window's field is present before its state has arrived: a second WebView2 hydrates slower
@@ -107,6 +108,28 @@ describe('Connected Compose Detach', function () {
     await settingsCall('setComposeOpenMode', 'app');
     await clickBubble();
     expect(await fieldValue('compose-subject')).toBe('Typed in detached window');
+  });
+
+  it('keeps an attachment with a long name inside a pop-out compose window', async () => {
+    await openComposeFresh();
+    await browser.$('[data-testid="compose-detach"]').click();
+    const detached = await waitForNativeCompose(mainHandle, 'Compose did not open a second native window');
+    await browser.switchToWindow(detached);
+    await browser.waitUntil(() => testidPresent('compose-subject'), {
+      timeout: 15_000, timeoutMsg: 'Detached compose did not finish initialization',
+    });
+    const size = await setNativeSize(900, 700);
+    if (size.error) throw new Error(size.error);
+
+    const name = `${'9f2c1e7a-ad06-ad9ab29c911d_INBOX_47158_1_'.repeat(4)}Project report.pdf`;
+    await dropFiles(`${MODAL} h2`, [pdfFile(name)]);
+    await browser.waitUntil(async () => (await attachments()).includes(name), {
+      timeout: 10_000, timeoutMsg: 'the long-named PDF was never attached',
+    });
+
+    const box = await composeOverflow();
+    expect(box.sideways).toEqual([]);
+    expect(box.chipPastModal).toBeLessThanOrEqual(0);
   });
 
   it('keeps reply reading context beside the complete composer and reachable after a native resize', async () => {

@@ -6,6 +6,10 @@
 - **View builder.** See an email's distinctive words, who else writes about them, and turn them into a view. Click Make a view from this email (the wand beside Sender insights) in the reading pane, pick words, then add them to a saved view or make a new view for that account, or for that folder only. Point at a word to see its top senders and subjects.
 - **Hide view mail.** A list toggle keeps mail your views already hold out of your folders.
 
+### Fixed
+- **Dragged attachments keep their own name.** Dragging an attachment out of an email, into another email or to Finder, gave the file an internal name (account, folder and message numbers before the real name). It now carries the sender's file name. Attachments already sent with such a name keep it.
+- **Long attachment names stay inside the compose window.** An attachment with a long name no longer pushes the compose window wider than its frame; the name is cut short with an ellipsis instead.
+
 ## [2.20.0] - 2026-10-13
 
 ### Added

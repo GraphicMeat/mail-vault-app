@@ -339,6 +339,26 @@ export async function attachViaInput(files) {
   return ok;
 }
 
+/**
+ * What sticks out of the compose window: the attachment chip's right edge
+ * against the modal's, and every element inside the modal that scrolls (or
+ * would show) sideways. An unbounded chip widens its strip and everything up
+ * to the nearest scroller, so the strip alone never shows it.
+ */
+export const composeOverflow = () => browser.execute((sel) => {
+  const modal = document.querySelector(sel);
+  const chip = modal?.querySelector('[data-testid="compose-attachment"]');
+  if (!chip) return { found: false };
+  const sideways = [...modal.querySelectorAll('*'), modal]
+    .filter((el) => el.scrollWidth > el.clientWidth + 1 && ['auto', 'scroll'].includes(getComputedStyle(el).overflowX))
+    .map((el) => `${el.tagName.toLowerCase()}.${String(el.className).split(' ').slice(0, 3).join('.')} ${el.scrollWidth}>${el.clientWidth}`);
+  return {
+    found: true,
+    chipPastModal: Math.round(chip.getBoundingClientRect().right - Math.min(modal.getBoundingClientRect().right, window.innerWidth)),
+    sideways,
+  };
+}, MODAL);
+
 export const modalCount = () => browser.execute((sel) => document.querySelectorAll(sel).length, MODAL);
 export const modalOpen = () => browser.execute((sel) => {
   const m = document.querySelector(sel);

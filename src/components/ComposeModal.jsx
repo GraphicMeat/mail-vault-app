@@ -89,12 +89,14 @@ function AttachmentPreview({ attachment, onRemove }) {
     <div
       data-testid="compose-attachment"
       data-filename={pa(attachment.filename, 'filename')}
-      className="flex items-center gap-2 px-3 py-2 bg-mail-surface-hover rounded-lg"
+      // A wrapped flex item is as wide as its content: without the cap a long
+      // file name pushes the chip past the window's edge.
+      className="flex items-center gap-2 px-3 py-2 bg-mail-surface-hover rounded-lg max-w-full min-w-0"
     >
-      <FileText size={16} className="text-mail-accent-text" />
-      <span className="text-sm text-mail-text truncate flex-1"><Private kind="filename">{attachment.filename}</Private></span>
-      <span className="text-xs text-mail-text-muted">{formatSize(attachment.size)}</span>
-      <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
+      <FileText size={16} className="text-mail-accent-text shrink-0" />
+      <span className="text-sm text-mail-text truncate flex-1 min-w-0"><Private kind="filename">{attachment.filename}</Private></span>
+      <span className="text-xs text-mail-text-muted shrink-0">{formatSize(attachment.size)}</span>
+      <Button variant="ghost" icon size="xs" className="hover:bg-mail-border shrink-0"
         onClick={onRemove}
         title={t('compose.removeAttachment')}
       >
