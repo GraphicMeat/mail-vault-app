@@ -147,3 +147,12 @@ fn inspecting_thirty_thousand_marked_paragraphs_is_linear() {
     assert_eq!(n, 30_000);
     assert!(took < Duration::from_secs(4), "inspect took {took:?}");
 }
+
+#[test]
+fn a_row_of_many_wide_spans_does_not_overflow_the_column_counter() {
+    // 66 cells of colspan 1000 add up to 66000, past what a u16 column counter holds.
+    let cells = r#"<td colspan="1000">x</td>"#.repeat(66);
+    let html = format!("<table><tr>{cells}</tr></table>");
+    let mut doc = RenderDoc::open(&html, RenderOptions::new(600, 1.0), None).unwrap();
+    doc.tile_png(0).unwrap();
+}

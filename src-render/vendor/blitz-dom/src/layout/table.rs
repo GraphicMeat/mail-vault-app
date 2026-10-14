@@ -254,6 +254,9 @@ pub(crate) fn build_table_context(
     )
 }
 
+/// The HTML limit on a table's width in columns.
+const MAX_TABLE_COLUMNS: u16 = 1000;
+
 /// Register `node_id` as the next cell of the current row.
 #[allow(clippy::too_many_arguments)]
 fn push_table_cell(
@@ -394,7 +397,7 @@ fn push_table_cell(
         end: style_helpers::span(colspan),
     };
     style.grid_row = taffy::Line {
-        start: style_helpers::line(*row as i16),
+        start: style_helpers::line((*row).min(i16::MAX as u16) as i16),
         end: style_helpers::span(rowspan),
     };
     style.size.width = style_helpers::auto();
@@ -406,7 +409,9 @@ fn push_table_cell(
         rowspan,
     });
 
-    *col += colspan;
+    // MailVault parity fix (plan B): the table is at most 1000 columns wide (the HTML limit),
+    // so 66 cells of colspan 1000 cannot wrap the u16 counter.
+    *col = col.saturating_add(colspan).min(MAX_TABLE_COLUMNS);
 }
 
 /// MailVault parity fix (plan B): the HTML "rules for parsing non-negative integers" (leading
@@ -502,7 +507,7 @@ pub(crate) fn collect_table_cells(
         }
         DisplayInside::TableRow => {
             node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
-            *row += 1;
+            *row = row.saturating_add(1);
             *col = 0;
 
             // MailVault parity fix (plan B): a row is at least its own `height` tall.
