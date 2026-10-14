@@ -37,6 +37,7 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120, isW
   let trailing = null; // { key, ep, promise, resolve, reject }
   let pointer = false; // a drag that started in the layer is still going
   let copyGen = 0;
+  let disposed = false;
 
   const current = () => {
     const el = layerEl();
@@ -46,7 +47,7 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120, isW
 
   const start = (ep, key) => {
     const promise = serialize(ep.start, ep.end).then((result) => {
-      if (current().key === key) cache = { key, result };
+      if (!disposed && current().key === key) cache = { key, result };
       return result;
     });
     running = { key, promise };
@@ -76,6 +77,7 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120, isW
 
   const refresh = () => {
     clearTimeout(timer);
+    if (disposed) return;
     try {
       const { ep, key } = current();
       if (ep) request(ep, key).catch((err) => note('serialize failed', err));
@@ -145,6 +147,14 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120, isW
         return ep && cache.key === key && cache.result ? cache.result.text : null;
       } catch { return null; }
     },
-    dispose() { clearTimeout(timer); },
+    // The controller is rebuilt per rev: the old one asks the worker for nothing more. A
+    // serialize already in flight is left to finish (its reply is dropped), a queued one never starts.
+    dispose() {
+      disposed = true;
+      clearTimeout(timer);
+      trailing?.reject(new Error('disposed'));
+      trailing = null;
+      running = null;
+    },
   };
 }

@@ -283,3 +283,34 @@ describe('createCopyController: Windows line endings', () => {
     expect(await (await item.items['text/html']).text()).toBe(quote.html);
   });
 });
+
+describe('createCopyController: dispose', () => {
+  it('drops the queued trailing request: no serialize fires after dispose', async () => {
+    const first = deferred();
+    const serialize = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue({ html: 'B', text: 'B' });
+    const { el, ctl } = setup(serialize);
+    selectAcross(el); ctl.onKeyUp();
+    selectHello(el); ctl.onKeyUp(); // queued behind the first
+    await vi.advanceTimersByTimeAsync(0);
+    expect(serialize).toHaveBeenCalledTimes(1);
+    ctl.dispose();
+    first.resolve({ html: 'A', text: 'A' });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(serialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pending pause timer does not fire, and a late reply is not cached', async () => {
+    const d = deferred();
+    const serialize = vi.fn(() => d.promise);
+    const { el, ctl } = setup(serialize);
+    selectAcross(el); ctl.onKeyUp();
+    ctl.dispose();
+    d.resolve({ html: 'A', text: 'A' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ctl.cachedText()).toBeNull();
+    selectHello(el); ctl.onSelectionChange();
+    ctl.dispose();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(serialize).toHaveBeenCalledTimes(1);
+  });
+});
