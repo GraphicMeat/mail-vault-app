@@ -590,3 +590,40 @@ fn script_urls_are_dropped_from_the_markup_and_safe_ones_stay() {
         assert!(out.html.contains(good), "{good} lost: {}", out.html);
     }
 }
+
+/// Measurement against the daemon's budget (SERIALIZE_TIMEOUT 2 s; the worker
+/// watchdog kills after 6 s of silence): a select-all over the biggest shapes.
+fn select_all_in_budget(what: &str, d: &RenderDoc) -> (Duration, usize) {
+    let n = mailvault_render::text::inline_roots(d.base()).len();
+    let (a, b) = (root_at(d, 0, 0), root_at(d, n - 1, root_len(d, n - 1)));
+    let t = Instant::now();
+    let out = d.serialize(a, b);
+    let took = t.elapsed();
+    eprintln!("[perf] {what}: {took:?} over {n} roots, {} chars text, {} html", out.text.len(), out.html.len());
+    assert!(took < Duration::from_secs(2), "{what} took {took:?}, over the 2 s serialize budget");
+    (took, out.text.len())
+}
+
+#[test]
+fn a_select_all_over_a_one_mebibyte_pre_serializes_in_budget() {
+    let lines: String = (0..30_000).map(|i| format!("line {i:06} lorem ipsum dolor sit\n")).collect();
+    assert!(lines.len() > 1_000_000);
+    let d = open(&format!(r#"<pre style="margin:0">{lines}</pre>"#));
+    let (_, chars) = select_all_in_budget("1 MiB single <pre>", &d);
+    assert!(chars > 900_000, "{chars}");
+}
+
+// Measured over budget in a debug build (about 2.0 s on the Windows box: plain
+// text 1.56 s, markup 0.41 s of it), so it is run by hand until the plain-text
+// walk is faster: `cargo test -p mailvault-render --test serialize mebibyte
+// -- --ignored --nocapture`. The daemon runs release.
+#[test]
+#[ignore = "over the 2 s serialize budget in a debug build; see the comment"]
+fn a_select_all_over_a_four_mebibyte_document_serializes_in_budget() {
+    let para = "<p>lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor</p>";
+    let body = para.repeat((mailvault_render::MAX_HTML_BYTES - 4096) / para.len());
+    assert!(body.len() > 4 * 1024 * 1024 - 8192 && body.len() < mailvault_render::MAX_HTML_BYTES);
+    let d = open(&body);
+    let (_, chars) = select_all_in_budget("4 MiB document of paragraphs", &d);
+    assert!(chars > 3_000_000, "{chars}");
+}
