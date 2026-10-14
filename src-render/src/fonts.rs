@@ -4,7 +4,9 @@
 //! (`BaseDocument.font_ctx` is pub(crate)), so a family that arrives later is
 //! applied by rebuilding the documents that name it (worker.rs).
 use blitz_dom::FontContext;
-use parley::fontique::{Blob, Collection, CollectionOptions, FontInfoOverride, FontStyle, FontWeight, SourceCache};
+use parley::fontique::{
+    Blob, Collection, CollectionOptions, FontInfo, FontInfoOverride, FontStyle, FontWeight, SourceCache, SourceId, SourceInfo, SourceKind,
+};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -41,16 +43,31 @@ impl FontLibrary {
         if !new {
             return false;
         }
+        // fontique gives a family one font per weight and style: the first one
+        // registered for an exact weight, the last of a tie for a near one. A
+        // css2 family comes as several subset files per weight (latin-ext is
+        // listed before latin), so only the subset that draws the most Basic
+        // Latin is kept; the other subsets' letters go to the next family in
+        // the stack.
+        let mut kept: Vec<(u16, bool, Blob<u8>, usize)> = Vec::new();
         for face in faces {
             // register_fonts does not decode WOFF/WOFF2 itself.
-            let bytes = blitz_dom::decode_font_bytes(&face.data).into_owned();
-            let style = if face.style == "italic" { Some(FontStyle::Italic) } else { Some(FontStyle::Normal) };
+            let blob = Blob::new(Arc::new(blitz_dom::decode_font_bytes(&face.data).into_owned()));
+            let italic = face.style == "italic";
+            let latin = basic_latin_coverage(&blob);
+            match kept.iter().position(|(w, i, ..)| *w == face.weight && *i == italic) {
+                None => kept.push((face.weight, italic, blob, latin)),
+                Some(at) if latin > kept[at].3 => kept[at] = (face.weight, italic, blob, latin),
+                Some(_) => {}
+            }
+        }
+        for (weight, italic, blob, _) in kept {
             self.ctx.collection.register_fonts(
-                Blob::new(Arc::new(bytes)),
+                blob,
                 Some(FontInfoOverride {
                     family_name: Some(family),
-                    weight: Some(FontWeight::new(face.weight as f32)),
-                    style,
+                    weight: Some(FontWeight::new(weight as f32)),
+                    style: Some(if italic { FontStyle::Italic } else { FontStyle::Normal }),
                     ..Default::default()
                 }),
             );
@@ -62,4 +79,13 @@ impl FontLibrary {
     pub fn context(&self) -> FontContext {
         self.ctx.clone()
     }
+}
+
+/// How many of A-Z, a-z and 0-9 the font maps: all of them in a latin subset,
+/// few or none in a latin-ext one.
+fn basic_latin_coverage(blob: &Blob<u8>) -> usize {
+    let source = SourceInfo::new(SourceId::new(), SourceKind::Memory(blob.clone()));
+    let Some(info) = FontInfo::from_source(source, 0) else { return 0 };
+    let Some(map) = info.charmap_index().charmap(blob.as_ref()) else { return 0 };
+    ('A'..='Z').chain('a'..='z').chain('0'..='9').filter(|c| map.map(*c).is_some()).count()
 }

@@ -441,6 +441,61 @@ mod tests {
         assert_eq!(outcome_code(&FontError::Invalid("html".into()), false), "E_FONT_INVALID");
     }
 
+    /// Lora as the app installs it (both files, the manifest's eight faces, in
+    /// css2 order), sent to the Blitz worker as `render.fonts` sends it, with
+    /// IBM Plex Mono after it in the stack. Returns the `textRuns` answers of a
+    /// probe paragraph at each of `weights`, then of Plex Mono alone.
+    #[cfg(feature = "blitz-render")]
+    fn real_lora_probe_runs(weights: &[u16]) -> Vec<Value> {
+        let dir = std::env::temp_dir().join(format!("mv-fonts-lora-{}", uuid::Uuid::new_v4()));
+        let root = gf::fonts_root(&dir);
+        let entry = gf::find("Lora").unwrap();
+        let manifest = gf::install(&root, entry, &NetFetch::new().unwrap(), &InstallOptions { retry_delays: &gf::RETRY_DELAYS }, &mut |_, _| {}, &mut || {}).unwrap();
+        println!("[F1] manifest {:?}", manifest.files.iter().map(|f| (f.file.as_str(), f.weight, f.subset.as_str())).collect::<Vec<_>>());
+        let (mut frames, _) = crate::blitz::fonts::frames_for(&root, &["Lora".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+        let mono = std::fs::read(format!("{}/../src/assets/fonts/ibm-plex-mono-latin-400.woff2", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        frames.push(json!({"family": "Plex", "faces": [{"data": base64::engine::general_purpose::STANDARD.encode(mono), "weight": 400, "style": "normal"}]}));
+        let probe = "Sphinx of black quartz, judge my vow 0123456789";
+        let mut lines = vec![json!({"op": "fonts", "families": frames})];
+        let stacks: Vec<String> = weights.iter().map(|w| format!("{w} 24px/36px 'Lora', 'Plex'")).chain(["400 24px/36px 'Plex'".to_string()]).collect();
+        for (i, stack) in stacks.iter().enumerate() {
+            let html = format!(r#"<body style="margin:0"><p style="margin:0;white-space:nowrap;font:{stack}">{probe}</p></body>"#);
+            lines.push(json!({"op": "open", "req": 100 + i, "doc": 1 + i, "html": html, "cssWidth": 900, "scale": 1.0, "allowRemote": false}));
+            lines.push(json!({"op": "textRuns", "req": 200 + i, "doc": 1 + i, "index": 0}));
+        }
+        let input: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        let mut out = Vec::new();
+        mailvault_render::worker::run_with_fonts(std::io::Cursor::new(input.into_bytes()), &mut out, |_| {}, mailvault_render::fonts::FontLibrary::new(false)).unwrap();
+        let answers: Vec<Value> = String::from_utf8(out).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        (0..stacks.len())
+            .map(|i| {
+                let runs = answers.iter().find(|v| v["req"] == 200 + i).unwrap()["ok"]["runs"].clone();
+                let w: f64 = runs.as_array().unwrap().iter().map(|r| r["w"].as_f64().unwrap()).sum();
+                let texts: Vec<&str> = runs.as_array().unwrap().iter().map(|r| r["text"].as_str().unwrap()).collect();
+                println!("[F1] {}: {} runs, width {w:.2}, {texts:?}", stacks[i], texts.len());
+                runs
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "blitz-render")]
+    fn width(runs: &Value) -> f64 {
+        runs.as_array().unwrap().iter().map(|r| r["w"].as_f64().unwrap()).sum()
+    }
+
+    /// F1, by hand only (`--ignored --nocapture`): the real Lora files draw the
+    /// probe's Latin letters in Lora, in one run, not in the next family.
+    #[test]
+    #[cfg(feature = "blitz-render")]
+    #[ignore = "reaches fonts.googleapis.com"]
+    fn real_lora_draws_latin_text_in_lora_in_blitz() {
+        let runs = real_lora_probe_runs(&[400]);
+        let (lora, plex) = (&runs[0], &runs[1]);
+        assert_eq!(lora.as_array().unwrap().len(), 1, "one font for the whole probe: {lora}");
+        assert!((width(lora) - width(plex)).abs() > 20.0, "Lora probe {} is Plex Mono's width {}", width(lora), width(plex));
+    }
+
     #[tokio::test]
     async fn leaves_every_other_method_to_the_next_router() {
         let (dir, state) = scratch("other");

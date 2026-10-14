@@ -43,7 +43,10 @@ fn bullets_still_draw_with_our_own_context() {
 }
 
 #[test]
-fn latin_ext_subset_registered_under_the_same_family_is_used_for_l_stroke() {
+fn latin_ext_subset_registered_under_the_same_family_keeps_the_latin_face() {
+    // Only one subset per weight is kept (fonts.rs): Ł is not drawn by the
+    // latin-ext file but by the next family; with none here it is the latin
+    // face's .notdef, so the run stays whole.
     let mut lib = mono_lib();
     lib.register("MV Mono Ext", vec![
         FaceData { data: asset("ibm-plex-mono-latin-400.woff2"), weight: 400, style: "normal".into() },
@@ -52,9 +55,56 @@ fn latin_ext_subset_registered_under_the_same_family_is_used_for_l_stroke() {
     let html = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'MV Mono Ext'">aŁa</p></body>"#;
     let doc = RenderDoc::open_with(html, opts(), None, lib.context()).unwrap();
     let runs = doc.text_runs(0);
-    // One font for all three: one run, monospace width. A fallback font for Ł splits the run.
     assert_eq!(runs.len(), 1, "{runs:?}");
     assert!((runs[0].w - 36.0).abs() < 0.5);
+}
+
+fn face(name: &str, weight: u16) -> FaceData {
+    FaceData { data: asset(name), weight, style: "normal".into() }
+}
+
+/// A proportional family after the one under test, so a glyph the tested
+/// family does not draw lands in a font of a different width (with no
+/// fallback, a missing glyph is the same font's .notdef and nothing shows).
+fn lib_with_fallback() -> FontLibrary {
+    let mut lib = FontLibrary::new(false);
+    lib.register("Fallback", vec![face("inter-latin.woff2", 400)]);
+    lib
+}
+
+fn mono_width(lib: &FontLibrary, css: &str, text: &str) -> (usize, f32) {
+    let html = format!(r#"<body style="margin:0"><p style="margin:0;font:{css}">{text}</p></body>"#);
+    let doc = RenderDoc::open_with(&html, opts(), None, lib.context()).unwrap();
+    let runs = doc.text_runs(0);
+    (runs.len(), runs.iter().map(|r| r.w).sum())
+}
+
+#[test]
+fn a_latin_ext_subset_listed_first_does_not_hide_the_latin_face() {
+    // css2 lists each weight's latin-ext block before its latin one, and the
+    // daemon sends the faces in that order.
+    let mut lib = lib_with_fallback();
+    lib.register("MV Sub", vec![face("ibm-plex-mono-latin-ext-400.woff2", 400), face("ibm-plex-mono-latin-400.woff2", 400)]);
+    let (n, w) = mono_width(&lib, "20px/30px 'Fallback'", "abcdefghij");
+    assert!((w - 120.0).abs() > 2.0, "control: the fallback is not monospace ({w})");
+    let (n2, w2) = mono_width(&lib, "20px/30px 'MV Sub', 'Fallback'", "abcdefghij");
+    assert_eq!((n2, (w2 * 10.0).round() / 10.0), (1, 120.0), "latin letters in the latin face, one run (fallback alone: {n} runs, {w})");
+}
+
+#[test]
+fn a_weight_between_registered_ones_still_lands_on_the_latin_face() {
+    // 800 is matched by the nearest lower weight (700), where two faces tie.
+    let mut lib = lib_with_fallback();
+    lib.register("MV Sub", vec![
+        face("ibm-plex-mono-latin-ext-400.woff2", 400),
+        face("ibm-plex-mono-latin-400.woff2", 400),
+        face("ibm-plex-mono-latin-ext-700.woff2", 700),
+        face("ibm-plex-mono-latin-700.woff2", 700),
+    ]);
+    for weight in [400, 500, 700, 800] {
+        let (n, w) = mono_width(&lib, &format!("{weight} 20px/30px 'MV Sub', 'Fallback'"), "abcdefghij");
+        assert_eq!((n, (w * 10.0).round() / 10.0), (1, 120.0), "weight {weight}");
+    }
 }
 
 fn run_worker(lines: &[Value]) -> Vec<Value> {
