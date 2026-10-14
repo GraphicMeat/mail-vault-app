@@ -839,7 +839,7 @@ mod tests {
         json!({"data": base64::engine::general_purpose::STANDARD.encode(bytes), "weight": 400, "style": "normal"})
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(any(debug_assertions, unix))]
     async fn wait_until(what: &str, mut ok: impl FnMut() -> bool) {
         for _ in 0..200 {
             if ok() {
@@ -889,54 +889,120 @@ mod tests {
         assert_eq!(h.spawned(), 1);
     }
 
+    /// A shell stand-in for the render worker, on the real wire protocol: it logs
+    /// every line it reads, answers each request with an empty ok, and, like the
+    /// real worker, acknowledges each family of a `fonts` frame in the order given
+    /// (`{"kind":"font","family","ok":true}`). `dies_on` names a family it exits on
+    /// when it reaches it, before acknowledging it. Returns the host and the log.
+    #[cfg(unix)]
+    fn fake_worker(dir: &std::path::Path, dies_on: &str) -> (RenderHost, std::path::PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let log = dir.join("frames.log");
+        let script = dir.join("fake-worker.sh");
+        std::fs::write(&script, format!(
+            "#!/bin/sh\n\
+             while IFS= read -r l; do\n\
+             printf '%s\\n' \"$l\" >> '{log}'\n\
+             case \"$l\" in\n\
+             *'\"op\":\"fonts\"'*)\n\
+             for f in $(printf '%s\\n' \"$l\" | grep -o '\"family\":\"[^\"]*\"' | sed 's/\"family\"://'); do\n\
+             [ \"$f\" = '\"{dies_on}\"' ] && exit 0\n\
+             printf '{{\"kind\":\"font\",\"family\":%s,\"ok\":true}}\\n' \"$f\"\n\
+             done;;\n\
+             *'\"req\":'*) r=${{l#*'\"req\":'}}; r=${{r%%[,\\}}]*}}; printf '{{\"kind\":\"reply\",\"req\":%s,\"ok\":{{}}}}\\n' \"$r\";;\n\
+             esac\n\
+             done\n",
+            log = log.display(),
+        )).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(&script)), log)
+    }
+
+    /// The frames the fake worker has read so far.
+    #[cfg(unix)]
+    fn frames_read(log: &std::path::Path) -> Vec<Value> {
+        std::fs::read_to_string(log).unwrap_or_default().lines().filter_map(|l| serde_json::from_str(l).ok()).collect()
+    }
+
+    #[cfg(unix)]
+    async fn wait_for_frames(log: &std::path::Path, n: usize) {
+        for _ in 0..200 {
+            if frames_read(log).len() >= n {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        panic!("only {} of {n} frames: {:?}", frames_read(log).len(), frames_read(log));
+    }
+
+    /// A worker is a process: on a loaded box (the whole daemon suite runs beside
+    /// this) its start can take seconds, and a call's own deadline (4 s for a
+    /// fold) would then fail it with `render_unavailable` before the worker has
+    /// read a line. These tests are about the frames, not the deadlines, so
+    /// their calls wait as long as the box needs.
+    #[cfg(unix)]
+    async fn call_patiently(h: &RenderHost, frame: Value) -> Result<Value, String> {
+        h.call(frame, Duration::from_secs(120)).await
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn font_frames_reach_the_wire_whole_and_replay_after_a_respawn() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let log = dir.path().join("frames.log");
-        let script = dir.path().join("fake-worker.sh");
-        // A worker that logs every line it reads and answers each request with an empty ok.
-        std::fs::write(&script, format!(
-            "#!/bin/sh\nwhile IFS= read -r l; do\n printf '%s\\n' \"$l\" >> '{}'\n case \"$l\" in *'\"req\":'*) r=${{l#*'\"req\":'}}; r=${{r%%[,\\}}]*}}; printf '{{\"kind\":\"reply\",\"req\":%s,\"ok\":{{}}}}\\n' \"$r\";; esac\ndone\n",
-            log.display()
-        )).unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let h = RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(&script));
-        let frames = || -> Vec<Value> {
-            std::fs::read_to_string(&log).unwrap_or_default().lines().filter_map(|l| serde_json::from_str(l).ok()).collect()
-        };
-        let wait_for = |n: usize| async move {
-            for _ in 0..200 {
-                if frames().len() >= n { return; }
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            panic!("only {} of {n} frames: {:?}", frames().len(), frames());
-        };
+        let (h, log) = fake_worker(dir.path(), "");
+        let fold = |open: bool| call_patiently(&h, json!({"op": "fold", "doc": 7, "id": "q0", "open": open}));
 
         // No worker yet: nothing is written, the families are only kept.
         h.register_fonts(vec![family("A", 3), family("B", 2)]).await;
-        assert!(frames().is_empty());
+        assert!(frames_read(&log).is_empty());
         // The first call spawns the worker, which reads the replay before the call's own frame.
-        h.fold(7, "q0", true).await.unwrap();
-        wait_for(2).await;
-        let f = frames();
+        fold(true).await.unwrap();
+        wait_for_frames(&log, 2).await;
+        let f = frames_read(&log);
         assert_eq!(f[0]["op"], "fonts");
         assert_eq!(f[0]["families"], json!([family("A", 3), family("B", 2)]), "complete families in one frame");
         assert_eq!(f[1]["op"], "fold");
 
         // A later call overlapping B only sends the family that is new.
         h.register_fonts(vec![family("B", 1), family("C", 4)]).await;
-        wait_for(3).await;
-        assert_eq!(frames()[2]["families"], json!([family("C", 4)]));
+        wait_for_frames(&log, 3).await;
+        assert_eq!(frames_read(&log)[2]["families"], json!([family("C", 4)]));
 
-        // Respawn: the fresh worker gets all three, whole, before its first request.
+        // The worker acknowledged every family it was given, so nobody is to blame
+        // when it goes: the respawned one is sent all three, whole, before its first request.
+        wait_until("the live worker acknowledged the replay", || h.font_frames.lock().unwrap().unacked.is_empty()).await;
         h.kill_epoch(h.spawned()).await;
-        h.fold(7, "q0", false).await.unwrap();
-        wait_for(5).await;
-        let f = frames();
+        fold(false).await.unwrap();
+        wait_for_frames(&log, 5).await;
+        let f = frames_read(&log);
         assert_eq!(f[3]["families"], json!([family("A", 3), family("B", 2), family("C", 4)]));
         assert_eq!(f[4]["op"], "fold");
         assert_eq!(h.spawned(), 2);
+        assert!(h.font_frames.lock().unwrap().refused.is_empty(), "no family was refused");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_worker_that_dies_before_acknowledging_a_replayed_family_is_blamed_for_that_family() {
+        let dir = tempfile::tempdir().unwrap();
+        let (h, log) = fake_worker(dir.path(), "BAD");
+        h.register_fonts(vec![family("A", 1), family("BAD", 1), family("C", 1)]).await;
+
+        // The worker acknowledges A, then exits on BAD without acknowledging it.
+        let err = call_patiently(&h, json!({"op": "fold", "doc": 7, "id": "q0", "open": true})).await.unwrap_err();
+        assert_eq!(err, "render_unavailable");
+        // The death is blamed when the host reads the worker's EOF; a call that fails
+        // on the closed pipe can come first, so wait for the verdict before the next spawn.
+        wait_until("BAD is refused", || h.font_frames.lock().unwrap().refused == ["BAD"]).await;
+
+        // The next worker is replayed what is left and lives; BAD is never sent again.
+        call_patiently(&h, json!({"op": "fold", "doc": 7, "id": "q0", "open": false})).await.unwrap();
+        wait_for_frames(&log, 3).await;
+        let f = frames_read(&log);
+        assert_eq!(f[0]["families"], json!([family("A", 1), family("BAD", 1), family("C", 1)]), "the first worker got all three");
+        assert_eq!(f[1]["families"], json!([family("A", 1), family("C", 1)]), "the second only what is not refused");
+        assert_eq!(f[2]["op"], "fold");
+        assert_eq!(h.spawned(), 2, "one death, not one per spawn");
+        assert!(h.has_font("BAD") && h.font_frames.lock().unwrap().claim(vec![family("BAD", 1)]).is_empty(), "and it is not asked for again");
     }
 }
