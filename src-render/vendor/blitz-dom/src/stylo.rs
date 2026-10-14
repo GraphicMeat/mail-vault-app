@@ -1159,6 +1159,43 @@ impl<'a> TElement for BlitzNode<'a> {
                 }
             }
 
+            if *tag == local_name!("font") && &**name == "face" {
+                // MailVault parity fix (plan B): font[face] maps to font-family (HTML
+                // Standard, Rendering, "The font element"): the value is a
+                // comma-separated list of family names.
+                let families: Vec<String> = value
+                    .split(',')
+                    .map(|f| f.trim().chars().filter(|c| !matches!(c, '"' | '\\' | '\n' | '\r')).collect::<String>())
+                    .filter(|f| !f.is_empty())
+                    .map(|f| format!("\"{f}\""))
+                    .collect();
+                if !families.is_empty() {
+                    for decl in hint_declarations(&format!("font-family:{}", families.join(","))) {
+                        push_style(decl);
+                    }
+                }
+            }
+
+            if *tag == local_name!("font") && &**name == "size" {
+                // MailVault parity fix (plan B): font[size] maps to a font-size keyword
+                // (the "rules for parsing a legacy font size": 1-7, or +n / -n from 3).
+                let trimmed = value.trim();
+                let digits = trimmed.trim_start_matches(['+', '-']);
+                if let Ok(n) = digits.parse::<i32>() {
+                    let level = match trimmed.chars().next() {
+                        Some('+') => 3 + n,
+                        Some('-') => 3 - n,
+                        _ => n,
+                    }
+                    .clamp(1, 7);
+                    let keyword = ["x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large"]
+                        [(level - 1) as usize];
+                    for decl in hint_declarations(&format!("font-size:{keyword}")) {
+                        push_style(decl);
+                    }
+                }
+            }
+
             if *tag == local_name!("table") && *name == local_name!("border") {
                 // MailVault parity fix (plan B): table[border] gives the table an N px
                 // border (outset when non-zero). With frame or rules present the UA

@@ -452,3 +452,18 @@ fn helvetica_has_the_webkit_ascent_adjustment() {
     assert_eq!(h("img"), 56.0, "50px image + 6px strut under Helvetica 14px/22px");
     assert_eq!(h("img-arial"), 56.0, "Arial: 13 + 3, leading 6, the same 6");
 }
+
+/// `<font face>` is a font-family list and `<font size>` a font-size keyword (HTML Standard,
+/// Rendering, "The font element"). Blitz ignored both: the harness iframe sets
+/// `<font face="Arial">Red font tag</font>` 76.28 wide (ours/tables-legacy), Blitz 79.24 in the
+/// body font. The widths are compared with the same text in the equivalent CSS.
+#[test]
+fn font_face_and_size_attributes_map_to_css() {
+    let els = inspect(&fx("font-face-size.html"));
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    assert_eq!(w("face"), w("arial"));
+    assert_ne!(w("face"), w("times"), "the guard: the body font is another one");
+    assert_eq!(w("list"), w("arial"), "the first family that exists is used");
+    assert_eq!(w("size5"), w("xl"), "size=5 is x-large");
+    assert_eq!(w("plus1"), w("lg"), "size=+1 is 4, large");
+}
