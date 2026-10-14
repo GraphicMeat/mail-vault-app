@@ -153,11 +153,51 @@ pub fn walk_tree(indent: usize, node: &Node) {
     }
 }
 
+/// MailVault parity fix (plan B): the pixel cap for one raster an SVG embeds, and the
+/// total an SVG may embed. Same figure as `MAX_IMAGE_PIXELS` in src-render/src/net.rs
+/// (this crate cannot depend on mailvault-render).
+#[cfg(feature = "svg")]
+const MAX_SVG_IMAGE_PIXELS: u64 = 16_000_000;
+
+/// MailVault parity fix (plan B): an href resolver that can never read a file or fetch a url.
+/// usvg's default `resolve_string` opens any non-`data:` href as a local file path (a UNC
+/// share on Windows), so a mail could read the machine's files through `<image href>`.
+/// Here `resolve_string` is always `None`, and `resolve_data` accepts only a PNG, JPEG, GIF
+/// or WebP whose header declares at most `MAX_SVG_IMAGE_PIXELS` pixels (read with
+/// `imagesize`, before anything decodes it) and, summed over this document, no more than
+/// that either. Nested SVG is refused (no recursion), whatever the declared type.
+#[cfg(feature = "svg")]
+fn safe_image_href_resolver() -> usvg::ImageHrefResolver<'static> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let budget = AtomicU64::new(MAX_SVG_IMAGE_PIXELS);
+    usvg::ImageHrefResolver {
+        resolve_data: Box::new(move |_mime, data, _opts| {
+            // Trust the bytes, not the declared mime type.
+            let kind = match imagesize::image_type(&data).ok()? {
+                imagesize::ImageType::Png => usvg::ImageKind::PNG(Arc::clone(&data)),
+                imagesize::ImageType::Jpeg => usvg::ImageKind::JPEG(Arc::clone(&data)),
+                imagesize::ImageType::Gif => usvg::ImageKind::GIF(Arc::clone(&data)),
+                imagesize::ImageType::Webp => usvg::ImageKind::WEBP(Arc::clone(&data)),
+                _ => return None,
+            };
+            let size = imagesize::blob_size(&data).ok()?;
+            let pixels = (size.width as u64).saturating_mul(size.height as u64);
+            budget
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |left| left.checked_sub(pixels))
+                .ok()?;
+            Some(kind)
+        }),
+        resolve_string: Box::new(|_href, _opts| None),
+    }
+}
+
 /// Parse an SVG image.
 #[cfg(feature = "svg")]
 pub(crate) fn parse_svg_image(source: &[u8]) -> Result<crate::node::SvgImageData, usvg::Error> {
     let options = usvg::Options {
         fontdb: Arc::clone(&*FONT_DB),
+        // MailVault parity fix (plan B): no file or url access from inside an SVG.
+        image_href_resolver: safe_image_href_resolver(),
         ..Default::default()
     };
     crate::node::SvgImageData::from_data(source, &options)

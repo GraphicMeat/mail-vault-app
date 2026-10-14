@@ -54,6 +54,7 @@ log-phase-times = ["debug_timer/enable"]
 parallel-construct = []
 scrollbars = []
 svg = [
+    "dep:imagesize",
     "dep:usvg",
     "dep:svgtypes",
 ]
@@ -107,6 +108,11 @@ version = "0.2.13"
 [dependencies.image]
 version = "0.25.6"
 default-features = false
+
+# MailVault parity fix (plan B): pixel caps for rasters embedded in an SVG (util.rs).
+[dependencies.imagesize]
+version = "0.15"
+optional = true
 
 [dependencies.keyboard-types]
 version = "0.7"

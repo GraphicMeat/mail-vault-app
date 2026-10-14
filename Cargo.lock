@@ -706,6 +706,7 @@ dependencies = [
  "euclid 0.22.14",
  "html-escape",
  "image",
+ "imagesize",
  "keyboard-types",
  "kurbo",
  "linebender_resource_handle",
