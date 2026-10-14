@@ -7,9 +7,16 @@
 //! `Vec::contains`, quadratic in the root count; a test proves ours returns the
 //! same ranges. The rich markup is our own `Range.cloneContents()`: blitz's
 //! `outer_html` writes unescaped text and `<x />`.
-use crate::dommap::{align, collapses, dom_end_point, dom_point, pseudo_owner, DomPoint};
+//!
+//! An inline-block, an inline table or a `<button>` is an inline root of its
+//! own: blitz leaves an inline box in its host's text and lists it after the
+//! host. Both ends are therefore ordered, and the plain text walked, in reading
+//! order (`Nesting`): a nested root's text is spliced in at its box, as the
+//! iframe copies it.
+use crate::dommap::{align, collapses, dom_end_point, dom_point, pseudo_owner, DomPoint, Slot};
 use crate::text::{inline_roots, is_unselectable, NOSELECT_ATTR};
 use blitz_dom::{BaseDocument, LocalName, Node, NodeData, NodeId};
+use parley::InlineBoxKind;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -34,19 +41,27 @@ const INLINE: &[&str] = &["a", "b", "strong", "i", "em", "u", "s", "span", "font
 pub fn serialize(doc: &BaseDocument, a: Endpoint, b: Endpoint) -> Serialized {
     let empty = || Serialized { html: String::new(), text: String::new() };
     let roots = inline_roots(doc);
-    let order: HashMap<NodeId, usize> = roots.iter().enumerate().map(|(i, r)| (*r, i)).collect();
+    let nest = Nesting::new(doc, &roots);
     // An endpoint that is not a visible inline root (stale id, folded away) copies nothing.
-    let at = |e: Endpoint| order.get(&NodeId::from_u64(e.node)).map(|i| (*i, NodeId::from_u64(e.node), e.offset));
+    let at = |e: Endpoint| {
+        let id = NodeId::from_u64(e.node);
+        nest.order.contains_key(&id).then(|| (id, e.offset.min(layout_len(doc, id))))
+    };
     let (Some(mut a), Some(mut b)) = (at(a), at(b)) else { return empty() };
-    if (a.0, a.2) > (b.0, b.2) {
+    if nest.key(doc, a) > nest.key(doc, b) {
         std::mem::swap(&mut a, &mut b);
     }
-    // Offsets come from the page: clamp them and never split a code point.
-    let (a, b) = ((a.0, a.1, snap(doc, a.1, a.2, false)), (b.0, b.1, snap(doc, b.1, b.2, true)));
+    // Offsets come from the page: never split a code point.
+    let (a, b) = ((a.0, snap(doc, a.0, a.1, false)), (b.0, snap(doc, b.0, b.1, true)));
     if a == b {
         return empty();
     }
-    Serialized { html: markup(doc, (a.1, a.2), (b.1, b.2)), text: plain(doc, &roots, (a.0, a.2), (b.0, b.2)) }
+    let (hi, end) = match nest.runs_to_the_end(doc, &roots, b) {
+        Some(top) => (vec![(roots.len(), 0)], nest.end_of(doc, top)),
+        None => (nest.key(doc, b), nest.end_point(doc, b)),
+    };
+    let text = plain(doc, &nest, &roots, &nest.key(doc, a), &hi, &|r| align(doc, r));
+    Serialized { html: markup(doc, nest.start_point(doc, a), end), text }
 }
 
 /// `offset` clamped to the root's text and moved to a char boundary (down for
@@ -64,45 +79,283 @@ fn snap(doc: &BaseDocument, root: NodeId, offset: usize, up: bool) -> usize {
     o
 }
 
-// ── plain text ──
-
-/// The ranges blitz's `get_text_selection_ranges` would return for a selection
-/// from `a` to `b` (root index, byte offset; `a` not after `b`), in order.
-fn ranges(doc: &BaseDocument, roots: &[NodeId], a: (usize, usize), b: (usize, usize)) -> Vec<(NodeId, usize, usize)> {
-    let mut out = Vec::new();
-    for (i, root) in roots.iter().enumerate().take(b.0 + 1).skip(a.0) {
-        let len = layout_len(doc, *root);
-        let (s, e) = match (i == a.0, i == b.0) {
-            (true, true) => (a.1, b.1),
-            (true, false) => (a.1, len),
-            (false, true) => (0, b.1),
-            (false, false) => (0, len),
-        };
-        if s < e && e <= len {
-            out.push((*root, s, e));
-        }
-    }
-    out
-}
-
 fn layout_len(doc: &BaseDocument, root: NodeId) -> usize {
     doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()).map_or(0, |t| t.text.len())
 }
 
-fn plain(doc: &BaseDocument, roots: &[NodeId], a: (usize, usize), b: (usize, usize)) -> String {
+// ── reading order ──
+
+/// One step of a reading-order key (see `Nesting::key`).
+type Step = (usize, usize);
+
+/// A nested root's place: the host whose text holds its box, the box's step
+/// and element.
+#[derive(Clone, Copy)]
+struct Hosted {
+    host: NodeId,
+    at: Step,
+    node: NodeId,
+}
+
+/// A box in a host's text and the roots it holds, in root order.
+struct InBox {
+    at: Step,
+    node: NodeId,
+    roots: Vec<NodeId>,
+}
+
+/// Where the nested inline roots sit in their hosts' text.
+struct Nesting {
+    order: HashMap<NodeId, usize>,
+    host: HashMap<NodeId, Hosted>,
+    /// Per host, its boxes that hold roots, in text order.
+    boxes: HashMap<NodeId, Vec<InBox>>,
+}
+
+impl Nesting {
+    fn new(doc: &BaseDocument, roots: &[NodeId]) -> Self {
+        let order: HashMap<NodeId, usize> = roots.iter().enumerate().map(|(i, r)| (*r, i)).collect();
+        // In-flow boxes only. An out-of-flow one (a float, an absolute box) is
+        // pushed before its host's pending text, so its offset is not where it
+        // stands: those roots stay pieces of their own.
+        let mut by_box: HashMap<NodeId, (NodeId, Step)> = HashMap::new();
+        for r in roots {
+            let Some(tl) = doc.get_node(*r).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()) else { continue };
+            for (k, b) in tl.layout.inline_boxes().iter().enumerate() {
+                if b.kind == InlineBoxKind::InFlow {
+                    by_box.insert(NodeId::from_u64(b.id), (*r, (b.index, k + 1)));
+                }
+            }
+        }
+        let mut host = HashMap::new();
+        let mut boxes: HashMap<NodeId, Vec<InBox>> = HashMap::new();
+        if by_box.is_empty() {
+            return Self { order, host, boxes };
+        }
+        for r in roots {
+            // The nearest box at or above the root, unless another root comes first.
+            let mut cur = Some(*r);
+            while let Some(id) = cur {
+                if id != *r && order.contains_key(&id) {
+                    break;
+                }
+                if let Some((h, at)) = by_box.get(&id) {
+                    if h != r {
+                        host.insert(*r, Hosted { host: *h, at: *at, node: id });
+                        let list = boxes.entry(*h).or_default();
+                        match list.iter_mut().find(|x| x.node == id) {
+                            Some(x) => x.roots.push(*r),
+                            None => list.push(InBox { at: *at, node: id, roots: vec![*r] }),
+                        }
+                    }
+                    break;
+                }
+                cur = doc.get_node(id).and_then(|n| n.parent);
+            }
+        }
+        for list in boxes.values_mut() {
+            list.sort_by_key(|x| x.at);
+        }
+        Self { order, host, boxes }
+    }
+
+    /// `root` and the hosts above it, nearest first.
+    fn chain(&self, root: NodeId) -> Vec<NodeId> {
+        let mut v = vec![root];
+        while let Some(h) = self.host.get(v.last().unwrap()) {
+            v.push(h.host);
+        }
+        v
+    }
+
+    /// The reading-order key of a point: from its top-level root down through
+    /// the boxes that hold it, `(root index, 0)` then `(offset, slot)` per
+    /// level. A box is `(its offset, 1 + its place in the host's boxes)`; the
+    /// point's own offset has slot 0, or `usize::MAX` at the end of its root's
+    /// text. So a host offset at a box is before the box (a start there takes
+    /// it in, an end there leaves it out), and the end of a host's text is
+    /// after every box there.
+    fn key(&self, doc: &BaseDocument, (root, offset): (NodeId, usize)) -> Vec<Step> {
+        let mut k = vec![(offset, if offset >= layout_len(doc, root) { usize::MAX } else { 0 })];
+        let mut cur = root;
+        loop {
+            k.push((self.order.get(&cur).copied().unwrap_or(usize::MAX), 0));
+            let Some(h) = self.host.get(&cur) else { break };
+            k.push(h.at);
+            cur = h.host;
+        }
+        k.reverse();
+        k
+    }
+
+    /// The pieces `(root, start, end)` from key `lo` to key `hi` (not before
+    /// it), in reading order: a host's text is cut at each box in range and the
+    /// box's roots go in between.
+    fn pieces(&self, doc: &BaseDocument, roots: &[NodeId], lo: &[Step], hi: &[Step]) -> Vec<(NodeId, usize, usize)> {
+        let mut out = Vec::new();
+        let top = roots.iter().copied().filter(|r| !self.host.contains_key(r));
+        self.walk_roots(doc, top, Some(lo), Some(hi), &mut out);
+        out
+    }
+
+    /// Roots side by side (top-level, or in one box); `lo`/`hi` start at their
+    /// root step, `None` is unbounded.
+    fn walk_roots(&self, doc: &BaseDocument, list: impl Iterator<Item = NodeId>, lo: Option<&[Step]>, hi: Option<&[Step]>, out: &mut Vec<(NodeId, usize, usize)>) {
+        let (lo0, hi0) = (lo.map(|l| l[0].0), hi.map(|h| h[0].0));
+        for r in list {
+            let i = self.order[&r];
+            if lo0.is_some_and(|x| i < x) {
+                continue;
+            }
+            if hi0.is_some_and(|x| i > x) {
+                break;
+            }
+            let sub_lo = if lo0 == Some(i) { lo.map(|l| &l[1..]) } else { None };
+            let sub_hi = if hi0 == Some(i) { hi.map(|h| &h[1..]) } else { None };
+            self.walk_root(doc, r, sub_lo, sub_hi, out);
+        }
+    }
+
+    /// One root; `lo`/`hi` start at its offset step.
+    fn walk_root(&self, doc: &BaseDocument, r: NodeId, lo: Option<&[Step]>, hi: Option<&[Step]>, out: &mut Vec<(NodeId, usize, usize)>) {
+        let len = layout_len(doc, r);
+        let lo0 = lo.map_or((0, 0), |l| l[0]);
+        let hi0 = hi.map_or((len, usize::MAX), |h| h[0]);
+        let mut cur = lo0.0.min(len);
+        for b in self.boxes.get(&r).map_or(&[][..], |v| &v[..]) {
+            if b.at < lo0 {
+                continue;
+            }
+            if b.at > hi0 {
+                break;
+            }
+            let at = b.at.0.min(len);
+            if at > cur {
+                out.push((r, cur, at));
+                cur = at;
+            }
+            let sub_lo = if b.at == lo0 { lo.map(|l| &l[1..]) } else { None };
+            let sub_hi = if b.at == hi0 { hi.map(|h| &h[1..]) } else { None };
+            self.walk_roots(doc, b.roots.iter().copied(), sub_lo, sub_hi, out);
+        }
+        let end = hi0.0.min(len);
+        if end > cur {
+            out.push((r, cur, end));
+        }
+    }
+
+    /// What goes between two copied pieces: nothing within one host's line (a
+    /// nested root and its host, the roots of two boxes of one host), the block
+    /// separator between roots side by side (two top-level roots, two blocks in
+    /// one inline-block).
+    fn join(&self, doc: &BaseDocument, prev: NodeId, next: NodeId) -> &'static str {
+        if prev == next {
+            return "";
+        }
+        let (p, n) = (self.chain(prev), self.chain(next));
+        for (ni, x) in n.iter().enumerate() {
+            if let Some(pi) = p.iter().position(|y| y == x) {
+                if pi == 0 || ni == 0 {
+                    return "";
+                }
+                let (l, r) = (p[pi - 1], n[ni - 1]);
+                return if self.host[&l].node == self.host[&r].node { separator(doc, l, r) } else { "" };
+            }
+        }
+        separator(doc, *p.last().unwrap(), *n.last().unwrap())
+    }
+
+    /// The top-level root a selection that ends at `b` runs to the end of:
+    /// `b` ends a nested root that nothing selectable follows. The layer lists
+    /// nested roots after their host, so a select-all ends in the last one,
+    /// and the host's text after its box is still part of it.
+    fn runs_to_the_end(&self, doc: &BaseDocument, roots: &[NodeId], (root, offset): (NodeId, usize)) -> Option<NodeId> {
+        if !self.host.contains_key(&root) || offset < layout_len(doc, root) {
+            return None;
+        }
+        let rest = &roots[self.order[&root] + 1..];
+        let empty = |r: NodeId| {
+            is_unselectable(doc, r)
+                || layout_len(doc, r) == 0
+                || match align(doc, r) {
+                    Some(slots) => selectable_slice(doc, r, 0, layout_len(doc, r), &slots).is_empty(),
+                    None => dom_plain(doc, r, &self.host).is_empty(),
+                }
+        };
+        rest.iter().all(|r| empty(*r)).then(|| *self.chain(root).last().unwrap())
+    }
+
+    /// The DOM point a copy from `(root, offset)` starts at: before the box
+    /// there when the plain text takes it in.
+    fn start_point(&self, doc: &BaseDocument, (root, offset): (NodeId, usize)) -> DomPoint {
+        if offset >= layout_len(doc, root) {
+            return self.end_of(doc, root);
+        }
+        self.boxes
+            .get(&root)
+            .and_then(|v| v.iter().find(|b| b.at.0 == offset))
+            .and_then(|b| child_point(doc, b.node, false))
+            .unwrap_or_else(|| dom_point(doc, root, offset))
+    }
+
+    /// The DOM point a copy up to `(root, offset)` ends at.
+    fn end_point(&self, doc: &BaseDocument, (root, offset): (NodeId, usize)) -> DomPoint {
+        if offset >= layout_len(doc, root) {
+            return self.end_of(doc, root);
+        }
+        dom_end_point(doc, root, offset)
+    }
+
+    /// The end of a root's text, after the boxes that end it.
+    fn end_of(&self, doc: &BaseDocument, root: NodeId) -> DomPoint {
+        let len = layout_len(doc, root);
+        self.boxes
+            .get(&root)
+            .and_then(|v| v.iter().rev().find(|b| b.at.0 >= len))
+            .and_then(|b| child_point(doc, b.node, true))
+            .unwrap_or_else(|| dom_end_point(doc, root, len))
+    }
+}
+
+/// Before or after `node` in its parent's child list (`None` when it is not in
+/// one: a pseudo-element, an anonymous block).
+fn child_point(doc: &BaseDocument, node: NodeId, after: bool) -> Option<DomPoint> {
+    let parent = doc.get_node(node)?.parent?;
+    doc.get_node(parent)?.children.contains(&node).then_some(if after { DomPoint::After { node } } else { DomPoint::Before { node } })
+}
+
+// ── plain text ──
+
+/// The plain text from key `lo` to key `hi`; `align` maps a root's layout text
+/// to its DOM (a test hook stands in a failing one).
+fn plain(doc: &BaseDocument, nest: &Nesting, roots: &[NodeId], lo: &[Step], hi: &[Step], align: &dyn Fn(NodeId) -> Option<Vec<Slot>>) -> String {
+    let pieces: Vec<_> = nest.pieces(doc, roots, lo, hi).into_iter().filter(|(r, _, _)| !is_unselectable(doc, *r)).collect();
+    let mut slots: HashMap<NodeId, Option<Vec<Slot>>> = HashMap::new();
+    for (r, _, _) in &pieces {
+        slots.entry(*r).or_insert_with(|| align(*r));
+    }
+    // A root whose DOM map fails copies its whole DOM text once (`dom_plain`),
+    // its nested roots' text included: their own pieces go.
+    let degraded: HashSet<NodeId> = slots.iter().filter(|(_, s)| s.is_none()).map(|(r, _)| *r).collect();
+    let mut done = HashSet::new();
     let mut out = String::new();
     let mut prev: Option<NodeId> = None;
-    for (root, s, e) in ranges(doc, roots, a, b) {
-        if is_unselectable(doc, root) {
+    for (root, s, e) in pieces {
+        if !degraded.is_empty() && nest.chain(root)[1..].iter().any(|h| degraded.contains(h)) {
             continue;
         }
+        let piece = match &slots[&root] {
+            Some(sl) => selectable_slice(doc, root, s, e, sl),
+            None if done.insert(root) => dom_plain(doc, root, &nest.host),
+            None => continue,
+        };
         // WebKit and Chrome put a plain space on the plain-text clipboard for nbsp.
-        let piece = selectable_slice(doc, root, s, e).replace('\u{a0}', " ");
+        let piece = piece.replace('\u{a0}', " ");
         if piece.is_empty() {
             continue;
         }
         if let Some(p) = prev {
-            out.push_str(separator(doc, p, root));
+            out.push_str(nest.join(doc, p, root));
         }
         out.push_str(&piece);
         prev = Some(root);
@@ -111,16 +364,14 @@ fn plain(doc: &BaseDocument, roots: &[NodeId], a: (usize, usize), b: (usize, usi
 }
 
 /// `text[s..e]` of `root`, less generated content and every char that comes
-/// from an unselectable DOM node. When the DOM map fails, the DOM text of the
-/// whole root (see `dom_plain`), like the markup.
-fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize) -> String {
+/// from an unselectable DOM node.
+fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize, slots: &[Slot]) -> String {
     let Some(tl) = doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()) else { return String::new() };
     let e = e.min(tl.text.len());
     let (s, e) = (floor(&tl.text, s), floor(&tl.text, e));
     if s >= e {
         return String::new();
     }
-    let Some(slots) = align(doc, root) else { return dom_plain(doc, root) };
     let mut cut: Option<(NodeId, bool)> = None; // one-entry cache: runs of chars share a node
     let from = slots.partition_point(|x| x.byte < s);
     slots[from..]
@@ -145,22 +396,23 @@ fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize) -> Str
 }
 
 /// The degraded copy of a root: its DOM text, skipping everything `skipped`
-/// skips (so it agrees with the element-granular markup) and nested inline
-/// roots (inline-blocks, floats: `ranges` returns those as roots of their own),
-/// `<br>` as a newline, whitespace collapsed unless the root preserves it.
-/// Generated content has no DOM text, and a root that is itself generated
-/// copies nothing.
-fn dom_plain(doc: &BaseDocument, root: NodeId) -> String {
-    struct Walk {
+/// skips (so it agrees with the element-granular markup) and the inline roots
+/// that are pieces of their own (floats, absolute boxes); a nested root's text
+/// is part of it where it stands. `<br>` is a newline, whitespace collapsed
+/// unless the root preserves it. Generated content has no DOM text, and a root
+/// that is itself generated copies nothing.
+fn dom_plain(doc: &BaseDocument, root: NodeId, nested: &HashMap<NodeId, Hosted>) -> String {
+    struct Walk<'a> {
         out: String,
         collapse: bool,
         prev_ws: bool,
+        nested: &'a HashMap<NodeId, Hosted>,
     }
     fn walk(doc: &BaseDocument, id: NodeId, w: &mut Walk) {
         let Some(n) = doc.get_node(id) else { return };
         for c in n.children.iter().copied() {
             let Some(cn) = doc.get_node(c) else { continue };
-            if skipped(cn) || is_inline_root(cn) {
+            if skipped(cn) || (is_inline_root(cn) && !w.nested.contains_key(&c)) {
                 continue;
             }
             if let Some(t) = cn.text_data() {
@@ -187,7 +439,7 @@ fn dom_plain(doc: &BaseDocument, root: NodeId) -> String {
         return String::new();
     }
     let collapse = doc.get_node(root).and_then(|n| n.primary_styles()).map_or(true, |s| collapses(&s));
-    let mut w = Walk { out: String::new(), collapse, prev_ws: false };
+    let mut w = Walk { out: String::new(), collapse, prev_ws: false, nested };
     walk(doc, root, &mut w);
     if collapse {
         w.out.trim_matches(' ').to_string()
@@ -255,9 +507,8 @@ struct Range {
     last: HashSet<NodeId>,
 }
 
-fn markup(doc: &BaseDocument, a: (NodeId, usize), b: (NodeId, usize)) -> String {
-    let start = boundary(doc, dom_point(doc, a.0, a.1));
-    let end = boundary(doc, dom_end_point(doc, b.0, b.1));
+fn markup(doc: &BaseDocument, a: DomPoint, b: DomPoint) -> String {
+    let (start, end) = (boundary(doc, a), boundary(doc, b));
     let first: HashSet<NodeId> = ancestors(doc, start.0).into_iter().collect();
     let last: HashSet<NodeId> = ancestors(doc, end.0).into_iter().collect();
     let common = ancestors(doc, end.0).into_iter().find(|n| first.contains(n)).unwrap_or(start.0);
@@ -483,7 +734,7 @@ mod tests {
         d
     }
 
-    /// Our linear ranges equal blitz's own for every ordered pair of endpoints
+    /// Our reading-order pieces equal blitz's own ranges for every ordered pair of endpoints
     /// (roots, and the offsets 0, 1, middle, end of each), on shapes with
     /// tables, lists, breaks and a folded region. Anonymous blocks are left out on
     /// purpose: blitz's range walk follows DOM children, so it misses an anonymous
@@ -491,6 +742,7 @@ mod tests {
     /// index (a start at a div and an end at offset 0 of a later anonymous block
     /// yields that block and the next paragraph). Ours treats them like any root;
     /// `anonymous_blocks_inside_and_at_the_ends_of_a_selection_are_copied` pins it.
+    /// Nothing here is nested: nested roots have their own tests.
     #[test]
     fn linear_ranges_equal_blitzs_for_every_endpoint_pair() {
         let corpus = [
@@ -506,6 +758,8 @@ mod tests {
             let mut d = doc(html);
             let roots = inline_roots(&d);
             let order: HashMap<NodeId, usize> = roots.iter().enumerate().map(|(i, r)| (*r, i)).collect();
+            let nest = Nesting::new(&d, &roots);
+            assert!(nest.host.is_empty(), "{html:?}");
             let points: Vec<(usize, usize)> = roots
                 .iter()
                 .enumerate()
@@ -522,11 +776,52 @@ mod tests {
                     d.set_text_selection(roots[a.0], a.1, roots[b.0], b.1);
                     let theirs: Vec<_> = d.get_text_selection_ranges().into_iter().filter(|(r, _, _)| order.contains_key(r)).collect();
                     d.clear_text_selection();
-                    assert_eq!(ranges(&d, &roots, *a, *b), theirs, "{html:?} {a:?}..{b:?}");
+                    let key = |(i, o): (usize, usize)| nest.key(&d, (roots[i], o));
+                    assert_eq!(nest.pieces(&d, &roots, &key(*a), &key(*b)), theirs, "{html:?} {a:?}..{b:?}");
                     pairs += 1;
                 }
             }
         }
         assert!(pairs > 300, "{pairs}");
+    }
+
+    /// The degraded copy of a host (its DOM text) carries the text of its
+    /// nested inline roots where they stand.
+    #[test]
+    fn the_degraded_copy_of_a_host_splices_its_nested_roots() {
+        let d = doc(&format!(r#"{CTA}<p>x <span style="float:right">fl</span> y</p>"#));
+        let roots = inline_roots(&d);
+        let nested = Nesting::new(&d, &roots).host;
+        let host = |t: &str| *roots.iter().find(|r| d.get_node(**r).and_then(|n| tag(n).map(str::to_string)).as_deref() == Some(t)).unwrap();
+        assert_eq!(dom_plain(&d, host("p"), &nested), "Ctabefore Ctabutton text ctamiddle Btnlabel btnafter.");
+        // A float stays a piece of its own: its host's DOM text leaves it out.
+        let second = roots[roots.iter().position(|r| *r == host("p")).unwrap() + 1..]
+            .iter()
+            .copied()
+            .find(|r| d.get_node(*r).and_then(tag) == Some("p"))
+            .unwrap();
+        assert_eq!(dom_plain(&d, second, &nested), "x y");
+    }
+
+    const CTA: &str = r#"<p>Ctabefore <a href="https://example.com/cta" style="display:inline-block">Ctabutton text</a> ctamiddle <button type="button" style="display:inline-block">Btnlabel</button> btnafter.</p>"#;
+
+    /// A host whose DOM map fails copies its DOM text once, nested text in
+    /// place, and its nested roots are not copied a second time.
+    #[test]
+    fn a_degraded_host_copies_its_dom_text_once_with_its_nested_roots() {
+        let d = doc(&format!("{CTA}<p>next</p>"));
+        let roots = inline_roots(&d);
+        let nest = Nesting::new(&d, &roots);
+        assert_eq!(nest.host.len(), 2, "the link and the button are nested");
+        let last = *roots.last().unwrap();
+        let (lo, hi) = (nest.key(&d, (roots[0], 0)), nest.key(&d, (last, layout_len(&d, last))));
+        let want = "Ctabefore Ctabutton text ctamiddle Btnlabel btnafter.\n\nnext";
+        let host = roots[0];
+        assert_eq!(plain(&d, &nest, &roots, &lo, &hi, &|r| if r == host { None } else { align(&d, r) }), want);
+        assert_eq!(plain(&d, &nest, &roots, &lo, &hi, &|_| None), want, "every root degraded");
+        // A selection inside a nested root of a degraded host copies its own slice.
+        let link = roots[1];
+        let (lo, hi) = (nest.key(&d, (link, 1)), nest.key(&d, (link, 6)));
+        assert_eq!(plain(&d, &nest, &roots, &lo, &hi, &|r| if r == host { None } else { align(&d, r) }), "tabut");
     }
 }

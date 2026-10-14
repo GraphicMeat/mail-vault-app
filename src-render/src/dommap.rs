@@ -509,7 +509,9 @@ mod tests {
         corrupt(&mut d, roots[0]);
         let len = d.get_node(roots[1]).unwrap().element_data().unwrap().inline_layout_data.as_ref().unwrap().text.len();
         let out = serialize(&mut d, Endpoint { node: roots[0].as_u64(), offset: 1 }, Endpoint { node: roots[1].as_u64(), offset: len });
-        assert_eq!(out.text, "a z\n\nbox", "{out:?}");
+        // The degraded copy of the p holds the box's text where it stands (a
+        // select-all ends in the nested root, the last one): once, in place.
+        assert_eq!(out.text, "a box z", "{out:?}");
     }
 
     #[test]

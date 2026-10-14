@@ -333,6 +333,181 @@ fn a_selection_over_a_ltr_rtl_boundary_copies_in_logical_order() {
     }
 }
 
+// ── nested inline roots (an inline-block, a button: blitz lays each out as an
+// inline root of its own and leaves an inline box in its host's text) ──
+
+const CTA: &str = r#"<p style="margin:0 0 20px">Ctabefore <a href="https://example.com/cta" style="display:inline-block;padding:4px 10px">Ctabutton text</a> ctamiddle <button type="button" style="display:inline-block">Btnlabel</button> btnafter.</p>"#;
+const CTA_PLAIN: &str = "Ctabefore Ctabutton text ctamiddle Btnlabel btnafter.";
+
+fn root_id(doc: &RenderDoc, n: usize) -> u64 {
+    mailvault_render::text::inline_roots(doc.base())[n].as_u64()
+}
+/// Byte offsets of the inline boxes in root `n`'s layout text.
+fn box_offsets(doc: &RenderDoc, n: usize) -> Vec<usize> {
+    let id = mailvault_render::text::inline_roots(doc.base())[n];
+    let tl = doc.base().get_node(id).unwrap().element_data().unwrap().inline_layout_data.as_ref().unwrap();
+    tl.layout.inline_boxes().iter().map(|b| b.index).collect()
+}
+fn shift(e: Endpoint, by: usize) -> Endpoint {
+    Endpoint { offset: e.offset + by, ..e }
+}
+
+#[test]
+fn a_host_holds_each_inline_box_at_a_byte_offset_of_its_text() {
+    let d = open(CTA);
+    let id = mailvault_render::text::inline_roots(d.base())[0];
+    let text = &d.base().get_node(id).unwrap().element_data().unwrap().inline_layout_data.as_ref().unwrap().text;
+    let at = box_offsets(&d, 0);
+    assert_eq!(at.len(), 2, "{text:?} {at:?}");
+    assert!(text[..at[0]].ends_with("Ctabefore "), "{text:?} {at:?}");
+    assert!(text[..at[1]].ends_with(" ctamiddle "), "{text:?} {at:?}");
+}
+
+#[test]
+fn nested_inline_roots_are_copied_in_place_in_the_plain_text() {
+    let mut d = open(CTA);
+    let out = d.serialize(at(&d, "Ctabefore", false), at(&d, "btnafter.", true));
+    assert_eq!(out.text, CTA_PLAIN);
+    assert_eq!(
+        out.html,
+        r#"Ctabefore <a href="https://example.com/cta" style="display:inline-block;padding:4px 10px">Ctabutton text</a> ctamiddle <button type="button" style="display:inline-block">Btnlabel</button> btnafter."#,
+        "the markup kept the order already"
+    );
+}
+
+#[test]
+fn a_selection_over_a_host_and_the_next_paragraph_splices_each_nested_root_once() {
+    let mut d = open(&format!("{CTA}<p>Next para</p>"));
+    let n = mailvault_render::text::inline_roots(d.base()).len();
+    let out = d.serialize(root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
+    assert_eq!(out.text, format!("{CTA_PLAIN}\n\nNext para"));
+}
+
+/// The layer lists a host's nested roots after it, so a select-all over a
+/// mail that ends in such a paragraph ends in the last nested root: the
+/// host's text after the box is still part of the copy.
+#[test]
+fn a_select_all_that_ends_in_the_last_nested_root_keeps_the_host_tail() {
+    let mut d = open(r#"<p style="margin:0 0 20px">Lead</p><p style="margin:0">x <span style="display:inline-block">Box</span> tail</p>"#);
+    let n = mailvault_render::text::inline_roots(d.base()).len();
+    assert_eq!(n, 3);
+    let out = d.serialize(root_at(&d, 0, 0), root_at(&d, 2, root_len(&d, 2)));
+    assert_eq!(out.text, "Lead\n\nx Box tail");
+    assert!(out.html.ends_with(r#"<span style="display:inline-block">Box</span> tail</p>"#), "{}", out.html);
+}
+
+#[test]
+fn selections_into_and_out_of_nested_roots_follow_reading_order_either_way() {
+    let mut d = open(CTA);
+    let (cta, btn, after) = (at(&d, "Ctabutton", false), at(&d, "Btnlabel", false), at(&d, "btnafter.", true));
+    let cases = [
+        (shift(cta, 4), after, "utton text ctamiddle Btnlabel btnafter."),
+        (at(&d, "Ctabefore", false), shift(btn, 4), "Ctabefore Ctabutton text ctamiddle Btnl"),
+        (shift(cta, 4), shift(btn, 4), "utton text ctamiddle Btnl"),
+        (shift(btn, 4), after, "abel btnafter."),
+        (shift(cta, 1), shift(cta, 6), "tabut"),
+    ];
+    for (a, b, want) in cases {
+        let fwd = d.serialize(a, b);
+        assert_eq!(fwd.text, want, "{a:?}..{b:?}");
+        assert_eq!(d.serialize(b, a), fwd, "reversed {a:?}..{b:?}");
+    }
+    let out = d.serialize(shift(btn, 4), after);
+    assert_eq!(out.html, r#"<button type="button" style="display:inline-block">abel</button> btnafter."#);
+}
+
+/// A host offset that is a box's offset is the point before the box: a start
+/// there takes the box in, an end there leaves it out. The end of the host's
+/// text is after every box there.
+#[test]
+fn a_host_offset_at_a_box_is_before_it_and_the_hosts_end_is_after_it() {
+    let mut d = open(CTA);
+    let p = root_id(&d, 0);
+    let i = box_offsets(&d, 0)[0];
+    let out = d.serialize(Endpoint { node: p, offset: i }, at(&d, "ctamiddle", true));
+    assert_eq!(out.text, "Ctabutton text ctamiddle");
+    assert!(out.html.starts_with("<a href="), "{}", out.html);
+    let out = d.serialize(root_at(&d, 0, 0), Endpoint { node: p, offset: i });
+    assert_eq!(out.text, "Ctabefore ");
+
+    let mut d = open(r#"<p style="margin:0">Click here: <a href="https://x.test/" style="display:inline-block">Button</a></p>"#);
+    let len = root_len(&d, 0);
+    assert_eq!(box_offsets(&d, 0), [len], "the box sits at the end of the host text");
+    let out = d.serialize(root_at(&d, 0, 0), root_at(&d, 0, len));
+    assert_eq!(out.text, "Click here: Button");
+    assert!(out.html.ends_with(r#">Button</a>"#), "{}", out.html);
+}
+
+#[test]
+fn an_inline_block_inside_an_inline_block_is_spliced_at_both_levels() {
+    let mut d = open(r#"<p style="margin:0">out <span style="display:inline-block">in1 <span style="display:inline-block">deep</span> in2</span> end</p>"#);
+    let out = d.serialize(at(&d, "out", false), at(&d, "end", true));
+    assert_eq!(out.text, "out in1 deep in2 end");
+    let out = d.serialize(at(&d, "deep", false), at(&d, "end", true));
+    assert_eq!(out.text, "deep in2 end");
+    let out = d.serialize(at(&d, "end", true), at(&d, "deep", false));
+    assert_eq!(out.text, "deep in2 end", "reversed");
+}
+
+/// Shapes whose WebKit output was not measured: each text once, in DOM order.
+#[test]
+fn block_children_of_an_inline_block_and_floats_copy_once_in_dom_order() {
+    let cases: [(&str, &[&str]); 2] = [
+        (r#"<div style="margin:0">wa <span style="display:inline-block"><div>wx1</div><div>wx2</div></span> wb</div><p>wc</p>"#, &["wa", "wx1", "wx2", "wb", "wc"]),
+        (r#"<p style="margin:0">fa <span style="display:inline-block">fqbox</span> fb</p><p>fc</p>"#, &["fa", "fqbox", "fb", "fc"]),
+    ];
+    for (html, words) in cases {
+        let mut d = open(html);
+        let n = mailvault_render::text::inline_roots(d.base()).len();
+        let out = d.serialize(root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
+        let pos: Vec<usize> = words.iter().map(|w| {
+            assert_eq!(out.text.matches(w).count(), 1, "{w:?} once in {:?}", out.text);
+            out.text.find(w).unwrap()
+        }).collect();
+        assert!(pos.windows(2).all(|p| p[0] < p[1]), "DOM order: {:?} in {:?}", words, out.text);
+    }
+    // Floats stay pieces of their own (their box offset in the host is not
+    // reliable): each text once.
+    let mut d = open(r#"<p style="margin:0">ga <span style="float:right">gfl</span> gb</p><p>gc</p>"#);
+    let n = mailvault_render::text::inline_roots(d.base()).len();
+    let out = d.serialize(root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
+    for w in ["ga", "gfl", "gb", "gc"] {
+        assert_eq!(out.text.matches(w).count(), 1, "{w:?} once in {:?}", out.text);
+    }
+}
+
+/// Every endpoint pair over shapes with nested roots: a reversed pair copies
+/// the same, and nothing panics.
+#[test]
+fn every_endpoint_pair_over_nested_roots_copies_the_same_reversed() {
+    let corpus = [
+        CTA,
+        r#"<p style="margin:0">out <span style="display:inline-block">in1 <span style="display:inline-block">deep</span> in2</span> end</p><p>next</p>"#,
+        r#"<div>a <span style="display:inline-block"><div>x1</div><div>x2</div></span> b</div>"#,
+        r#"<table><tr><td>c1 <button>b1</button></td><td><a style="display:inline-block">b2</a> c2</td></tr></table>"#,
+        r#"<p><span style="display:inline-block">lead</span><span style="display:inline-block">pair</span> x <img src="a.png" width="4" height="4"> y</p>"#,
+    ];
+    let mut pairs = 0;
+    for html in corpus {
+        let mut d = open(html);
+        let roots = mailvault_render::text::inline_roots(d.base());
+        let points: Vec<Endpoint> = (0..roots.len())
+            .flat_map(|i| {
+                let len = root_len(&d, i);
+                [0, 1, len / 2, len].into_iter().map(move |o| (i, o.min(len)))
+            })
+            .map(|(i, o)| root_at(&d, i, o))
+            .collect();
+        for (x, a) in points.iter().enumerate() {
+            for b in &points[x + 1..] {
+                assert_eq!(d.serialize(*a, *b), d.serialize(*b, *a), "{html:?} {a:?} {b:?}");
+                pairs += 1;
+            }
+        }
+    }
+    assert!(pairs > 200, "{pairs}");
+}
+
 #[test]
 fn anonymous_blocks_inside_and_at_the_ends_of_a_selection_are_copied() {
     let mut d = open("lead <b>bold</b><div>block</div>mid<p>para</p>tail");
