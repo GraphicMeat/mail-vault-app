@@ -4961,6 +4961,7 @@ dependencies = [
  "cssparser 0.37.0",
  "data-url",
  "fancy-regex",
+ "image",
  "imagesize",
  "parley",
  "png 0.17.16",

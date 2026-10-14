@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 pub mod color;
 pub mod cssom;
+pub mod image;
 pub mod inline;
 pub mod math_eval;
 pub mod matrix;
@@ -64,11 +65,13 @@ pub struct DarkCx {
     pub vars: variables::VariablesStore,
     /// `darkreader--root-vars`: `<html>`'s own variables, once `apply` has typed them.
     pub root_vars_css: String,
+    /// Analysed `data:` background images (see `image`).
+    pub images: image::ImageCache,
 }
 
 impl DarkCx {
     pub fn new(theme: Theme, profile: Profile) -> Self {
-        DarkCx { theme, profile, palette: modify_colors::Palette::default(), vars: variables::VariablesStore::default(), root_vars_css: String::new() }
+        DarkCx { theme, profile, palette: modify_colors::Palette::default(), vars: variables::VariablesStore::default(), root_vars_css: String::new(), images: image::ImageCache::default() }
     }
 }
 

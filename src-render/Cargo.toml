@@ -17,6 +17,9 @@ data-url = "0.3"
 # Image header sizes, read before any decoder runs. Already in the lock via usvg (MIT).
 imagesize = "0.15"
 base64 = "0.22"
+# Decodes `data:` background images for the dark pass (Dark Reader analyzeImage). Same formats and
+# version blitz-dom already links; SVG is not decoded here.
+image = { version = "0.25.6", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The same stylo blitz-dom declares, so one copy resolves; fontique is reached through parley.

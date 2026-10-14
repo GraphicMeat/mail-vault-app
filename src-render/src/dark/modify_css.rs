@@ -270,11 +270,16 @@ pub fn bg_image_modifier(value: &str, rule: &dyn RuleStyle, cx: &mut DarkCx) -> 
 
 /// The url() branch. Remote and relative URLs: DR's cross-origin fetch fails
 /// (MailVault never calls setFetchMethod), so the URL is kept. `data:` URLs
-/// are analysed in Task 16.
-fn url_value(css_url: &str, _rule: &dyn RuleStyle, _cx: &mut DarkCx) -> String {
+/// are analysed (`image::bg_image_value`); None keeps the URL as written.
+fn url_value(css_url: &str, _rule: &dyn RuleStyle, cx: &mut DarkCx) -> String {
     let url = get_css_url_value(css_url);
     if url.is_empty() {
         return "url('')".into();
+    }
+    if url.starts_with("data:") {
+        if let Some(v) = super::image::bg_image_value(&url, cx) {
+            return v;
+        }
     }
     format!("url(\"{url}\")")
 }
