@@ -123,6 +123,34 @@ pub fn cluster_line_count(mut spans: Vec<(f64, f64)>) -> u32 {
     count
 }
 
+/// A table row or row group (tr, tbody, thead, tfoot; by display, as mail
+/// restyles tags). Blitz lays the cells out but gives these boxes no layout of
+/// their own: their rect stays 0x0 at the origin.
+fn is_table_row_box(node: &blitz_dom::Node) -> bool {
+    node.primary_styles().map_or(false, |s| {
+        matches!(
+            s.clone_display().inside(),
+            DisplayInside::TableRow | DisplayInside::TableRowGroup | DisplayInside::TableHeaderGroup | DisplayInside::TableFooterGroup
+        )
+    })
+}
+
+/// The union of the rects of an element's rendered children: what WebKit
+/// reports for a row (its cells) or a row group (its rows).
+fn children_union(doc: &BaseDocument, node: &blitz_dom::Node) -> Option<InspectRect> {
+    let mut acc: Option<(f64, f64, f64, f64)> = None;
+    for child in node.children.iter().filter(|c| doc.get_node(**c).map_or(false, |n| n.is_element())).filter_map(|c| element_rect(doc, *c)) {
+        if child.w == 0.0 && child.h == 0.0 {
+            continue;
+        }
+        acc = Some(match acc {
+            Some((x0, y0, x1, y1)) => (x0.min(child.x), y0.min(child.y), x1.max(child.x + child.w), y1.max(child.y + child.h)),
+            None => (child.x, child.y, child.x + child.w, child.y + child.h),
+        });
+    }
+    acc.map(|(x0, y0, x1, y1)| InspectRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
+}
+
 /// The rect WebKit's `getBoundingClientRect` reports. A non-atomic inline has
 /// no box of its own. WebKit unions its fragments' content areas (font
 /// ascent + descent, which line-height does not change); blitz-dom's
@@ -140,7 +168,11 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
             d.outside() == DisplayOutside::Inline && d.inside() == DisplayInside::Flow
         });
     if !is_inline {
-        return doc.get_client_bounding_rect(id).map(|r| InspectRect { x: r.x, y: r.y, w: r.width, h: r.height });
+        let own = doc.get_client_bounding_rect(id).map(|r| InspectRect { x: r.x, y: r.y, w: r.width, h: r.height });
+        if own.as_ref().map_or(true, |r| r.w == 0.0 && r.h == 0.0) && is_table_row_box(node) {
+            return children_union(doc, node).or(own);
+        }
+        return own;
     }
     let root = node.inline_root_ancestor()?;
     let layout = &root.element_data()?.inline_layout_data.as_ref()?.layout;

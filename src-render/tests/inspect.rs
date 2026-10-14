@@ -92,3 +92,44 @@ fn inline_rect_is_the_font_content_area_not_the_line_box() {
     let empty = by_id(&els, "empty");
     assert!(empty.rect.as_ref().map_or(true, |r| r.w == 0.0), "{:?}", empty.rect);
 }
+
+fn union(rs: &[mailvault_render::inspect::InspectRect]) -> (f64, f64, f64, f64) {
+    let x0 = rs.iter().map(|r| r.x).fold(f64::MAX, f64::min);
+    let y0 = rs.iter().map(|r| r.y).fold(f64::MAX, f64::min);
+    let x1 = rs.iter().map(|r| r.x + r.w).fold(f64::MIN, f64::max);
+    let y1 = rs.iter().map(|r| r.y + r.h).fold(f64::MIN, f64::max);
+    (x0, y0, x1 - x0, y1 - y0)
+}
+
+#[test]
+fn table_rows_and_row_groups_report_the_union_of_their_cells() {
+    // Blitz gives a row or row group no box of its own (0x0 at the origin);
+    // WebKit's getBoundingClientRect reports the cells' extent.
+    let html = r#"<body style="margin:0;font:16px/20px sans-serif"><table data-mv-id="t" style="width:300px;border-collapse:separate;border-spacing:0">
+<thead data-mv-id="thead"><tr data-mv-id="hr"><th data-mv-id="h1">head</th></tr></thead>
+<tbody data-mv-id="tb"><tr data-mv-id="r1"><td data-mv-id="a" style="width:100px;padding:4px">a</td><td data-mv-id="b" style="padding:4px">b<br>b</td></tr>
+<tr data-mv-id="r2"><td data-mv-id="c" style="padding:4px">c</td><td data-mv-id="d" style="padding:4px">d</td></tr></tbody>
+<tfoot data-mv-id="tf"><tr data-mv-id="fr"><td data-mv-id="f1">foot</td></tr></tfoot></table></body>"#;
+    let els = RenderDoc::open(html, RenderOptions { css_width: 600, scale: 1.0, ..Default::default() }, None).unwrap().inspect();
+    let rect = |id: &str| by_id(&els, id).rect.clone().unwrap_or_else(|| panic!("{id} has no rect"));
+    let near = |a: (f64, f64, f64, f64), b: (f64, f64, f64, f64), what: &str| {
+        assert!((a.0 - b.0).abs() < 0.01 && (a.1 - b.1).abs() < 0.01 && (a.2 - b.2).abs() < 0.01 && (a.3 - b.3).abs() < 0.01, "{what}: {a:?} vs {b:?}");
+    };
+    let r1 = union(&[rect("a"), rect("b")]);
+    assert!(r1.2 > 0.0 && r1.3 > 0.0, "cells have a size: {r1:?}");
+    let r1_got = rect("r1");
+    near((r1_got.x, r1_got.y, r1_got.w, r1_got.h), r1, "tr = union of its tds");
+    let r2 = union(&[rect("c"), rect("d")]);
+    let r2_got = rect("r2");
+    near((r2_got.x, r2_got.y, r2_got.w, r2_got.h), r2, "second tr");
+    let rows = union(&[rect("r1"), rect("r2")]);
+    let tb = rect("tb");
+    near((tb.x, tb.y, tb.w, tb.h), rows, "tbody = union of its trs");
+    let th = rect("thead");
+    let hr = rect("hr");
+    near((th.x, th.y, th.w, th.h), (hr.x, hr.y, hr.w, hr.h), "thead = its only tr");
+    let tf = rect("tf");
+    let fr = rect("fr");
+    near((tf.x, tf.y, tf.w, tf.h), (fr.x, fr.y, fr.w, fr.h), "tfoot = its only tr");
+    assert!(tb.y > th.y, "body below head");
+}
