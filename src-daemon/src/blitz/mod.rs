@@ -17,8 +17,8 @@
 //! document closes, so the next call gets a clean process.
 //!
 //! The worker has no network. Its `fetch` lines are fetched here through
-//! `blitz::fetch::fetch_render_image` (SSRF guard, https, image/* but never
-//! SVG, capped, Network Activity "email images"), at most FETCH_PARALLEL at once.
+//! `blitz::fetch::fetch_render_image` (SSRF guard, https, image/* incl. SVG, capped,
+//! Network Activity "email images"), at most FETCH_PARALLEL at once.
 pub mod fetch;
 pub mod fonts;
 pub mod routes;
