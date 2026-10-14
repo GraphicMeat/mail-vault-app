@@ -20,6 +20,11 @@ if [ ! -s "$OUT/report.json" ]; then
   echo "parity-job: no report.json was written" >&2
   [ "$status" -ne 0 ] || status=3
 fi
+# An incomplete run (a planned case never ran, threw, or timed out on its fonts) is a
+# failure even when wdio itself exited 0; the gate is complete and every case passed.
+if [ -s "$OUT/report.json" ] && ! node src-render/tools/parity-gate.mjs "$OUT/report.json" >&2; then
+  [ "$status" -ne 0 ] || status=5
+fi
 echo "===MV-PARITY-TAR-BEGIN==="
 tar -C "$OUT" -czf - . | base64
 echo "===MV-PARITY-TAR-END==="

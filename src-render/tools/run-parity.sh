@@ -21,5 +21,9 @@ else
   echo "parity: the job printed no report (see $log)" >&2
   [ "$status" -ne 0 ] || status=4
 fi
+# The job's own gate can be bypassed by a truncated log; check the unpacked report too.
+if [ -s "$dest/report.json" ]; then
+  node "$(dirname "$0")/parity-gate.mjs" "$dest/report.json" || [ "$status" -ne 0 ] || status=5
+fi
 echo "parity report: $dest/report.json (job exit $status)"
 exit "$status"

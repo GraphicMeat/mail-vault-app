@@ -181,46 +181,51 @@ async function forceDarkReaderPass() {
 }
 
 /**
- * Wait for the frame showing the fixture just opened (not the previous case's
- * document, which carries the measured mark, and not the snippet stand-in),
- * then for the mail fonts the reader registers after load: every family in
- * `families` has a loaded face, and nothing is still loading. Gives up after
- * 20 s and says so (the case records it). Blitz loads no mail web fonts yet
- * (plan C), so there is nothing to wait for on that side.
+ * Wait for the frame to show a finished document of the fixture just opened (its
+ * subject is checked by assertOpened; a frame still loading is not it), then for the
+ * mail fonts the reader registers after load: every family in `families` has a loaded
+ * face, and nothing is still loading. The wait is retried once with a longer budget; if
+ * the fonts still are not in, the result is 'timeout' and the case must fail: the frame
+ * would be measured in a fallback font that Blitz, which loads no mail web fonts yet
+ * (plan C), always agrees with. `document.fonts.ready` has its own timeout too.
  */
 async function settleFrame(families) {
   await browser.waitUntil(() => browser.execute(() => {
     const d = document.querySelector('iframe[sandbox]')?.contentDocument;
-    return !!d?.body && !d.__mvParityMeasured && !document.querySelector('[data-testid="email-body-loading"]');
+    return !!d?.body && !document.querySelector('[data-testid="email-body-loading"]');
   }), { timeout: 20_000, interval: 250, timeoutMsg: 'the frame never showed a new document' });
   let fonts = 'none';
   if (families.length) {
-    try {
-      await browser.waitUntil(() => browser.execute((want) => {
-        const d = document.querySelector('iframe[sandbox]')?.contentDocument;
-        if (!d?.fonts) return false;
-        const faces = [...d.fonts];
-        const norm = (f) => f.replace(/^["']|["']$/g, '');
-        return faces.every((f) => f.status !== 'loading')
-          && want.every((w) => faces.some((f) => norm(f.family) === w && f.status === 'loaded'));
-      }, families), { timeout: 20_000, interval: 250 });
-      fonts = 'loaded';
-    } catch {
-      fonts = 'timeout';
-    }
+    const loaded = (timeout) => browser.waitUntil(() => browser.execute((want) => {
+      const d = document.querySelector('iframe[sandbox]')?.contentDocument;
+      if (!d?.fonts) return false;
+      const faces = [...d.fonts];
+      const norm = (f) => f.replace(/^["']|["']$/g, '');
+      return faces.every((f) => f.status !== 'loading')
+        && want.every((w) => faces.some((f) => norm(f.family) === w && f.status === 'loaded'));
+    }, families), { timeout, interval: 250 }).then(() => true, () => false);
+    fonts = (await loaded(20_000)) || (await loaded(60_000)) ? 'loaded' : 'timeout';
   }
-  await browser.executeAsync((done) => {
+  const ready = await browser.executeAsync((done) => {
     const d = document.querySelector('iframe[sandbox]')?.contentDocument;
-    (d?.fonts?.ready || Promise.resolve()).then(() => requestAnimationFrame(() => requestAnimationFrame(() => done(true))));
+    const timeout = new Promise((r) => setTimeout(() => r(false), 10_000));
+    Promise.race([(d?.fonts?.ready || Promise.resolve()).then(() => true), timeout])
+      .then((ok) => requestAnimationFrame(() => requestAnimationFrame(() => done(ok))));
   });
-  return fonts;
+  return ready ? fonts : 'timeout';
 }
 
-/** Mark the measured document, so the next case cannot measure it again. */
-const markMeasured = () => browser.execute(() => {
-  const d = document.querySelector('iframe[sandbox]')?.contentDocument;
-  if (d) d.__mvParityMeasured = true;
-});
+/** The reader names the message it shows in its header, which both renderers share: a
+ * measurement of anything but the fixture just opened (the previous case's message, which
+ * the iframe remounts on when the renderer flips) must fail, not compare. */
+async function assertOpened(id) {
+  const want = subjectOf(id);
+  let shown = '';
+  await browser.waitUntil(async () => {
+    shown = await browser.execute(() => document.querySelector('.email-reader h1')?.textContent || '');
+    return shown.includes(want);
+  }, { timeout: 15_000, interval: 250, timeoutMsg: `the reader never showed "${want}" (it shows "${shown}")` });
+}
 
 function collectFrame(assign, cluster) {
   const iframe = document.querySelector('iframe[sandbox]');
@@ -420,15 +425,19 @@ describe('Blitz parity', function () {
           const which = { fixture: f.id, mode, width };
           let recorded = false;
           try {
+            // Select the message before the iframe exists, so it never mounts on the previous case's.
+            await openFixture(f.id);
+            await assertOpened(f.id);
             await setRenderer('web');
             await setNarrow(width === 375);
-            await openFixture(f.id);
+            await assertOpened(f.id);
             await setEmailTheme(mode);
             if (mode === 'dark') await forceDarkReaderPass();
             const fonts = await settleFrame(mailFontsOf(readFileSync(join(CORPUS, f.file), 'utf8')));
+            expecting(`${f.id}: the mail's web fonts did not load (${fonts}); the frame would be measured in a fallback font`, () => expect(fonts).not.toBe('timeout'));
+            await assertOpened(f.id);
             const frame = await browser.execute(FRAME_SCRIPT);
             expect(frame).not.toBeNull();
-            await markMeasured();
             expecting(`${f.id}: the frame must have elements to compare`, () => expect(frame.elements.length).toBeGreaterThan(0));
             ua = frame.ua;
             expecting(`${f.id}: the corpus must not fold quotes (plan C owns folding)`, () => expect(frame.folds).toBe(0));
@@ -442,6 +451,7 @@ describe('Blitz parity', function () {
             const iframeShot = SHOTS ? await captureElement('iframe[sandbox]', join(TMP, 'shot-web')) : null;
 
             await setRenderer('blitz');
+            await assertOpened(f.id);
             let root = null;
             await browser.waitUntil(async () => {
               root = await blitzRoot();
