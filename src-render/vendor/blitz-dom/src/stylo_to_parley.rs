@@ -90,15 +90,27 @@ pub(crate) fn font_style(input: stylo::FontStyle) -> parley::FontStyle {
     }
 }
 
-pub(crate) fn font_variations(input: &stylo::FontVariationSettings) -> Vec<parley::FontVariation> {
-    input
+pub(crate) fn font_variations(
+    input: &stylo::FontVariationSettings,
+    font_size: f32,
+) -> Vec<parley::FontVariation> {
+    let opsz = parley::Tag::from_bytes(*b"opsz");
+    let mut out: Vec<parley::FontVariation> = input
         .0
         .iter()
         .map(|v| parley::FontVariation {
             tag: parley::Tag::from_bytes(v.tag.0.to_be_bytes()),
             value: v.value,
         })
-        .collect()
+        .collect();
+    // MailVault parity fix (plan B): font-optical-sizing:auto sets opsz to the CSS font size
+    // (CSS Fonts 4 s.6.2). Without it the variable system font (SFNS.ttf) stays on its opsz 28
+    // default, the display cut, which is ~11% narrower than WebKit's text cut at body sizes.
+    // Fonts without an opsz axis ignore it; an explicit opsz wins.
+    if !out.iter().any(|v| v.tag == opsz) {
+        out.push(parley::FontVariation { tag: opsz, value: font_size });
+    }
+    out
 }
 
 #[inline]
@@ -319,7 +331,7 @@ pub(crate) fn style(
     let font_weight = self::font_weight(font_styles.font_weight);
     let font_style = self::font_style(font_styles.font_style);
     let font_width = self::font_width(font_styles.font_stretch);
-    let font_variations = self::font_variations(&font_styles.font_variation_settings);
+    let font_variations = self::font_variations(&font_styles.font_variation_settings, font_size);
     let font_features = self::font_features(font_styles);
 
     // Convert font family

@@ -130,3 +130,15 @@ fn text_cell_content_follows_valign_and_the_cell_box_does_not_move() {
         assert!((moved - 80.0 * share).abs() < 0.5, "{valign:?}: text moved {moved}");
     }
 }
+
+/// WebKit sets the optical-size axis of the macOS system font to the CSS font
+/// size (`font-optical-sizing: auto`, clamped to the axis, 17 at 14px). The
+/// variable SFNS.ttf defaults to opsz 28, the display cut, which is ~11%
+/// narrower at body sizes. Widths from the harness iframe (WebKit, light, wide).
+#[cfg(target_os = "macos")]
+#[test]
+fn system_font_uses_the_optical_size_for_its_font_size() {
+    let els = inspect(&fx("system-font-optical-size.html"));
+    let w = get(&els, "read").rect.clone().unwrap().w;
+    assert!((w - 69.43).abs() <= 1.0, "-apple-system 14px 'Read more': {w}, iframe 69.43");
+}
