@@ -13,8 +13,13 @@
 //! by NodeId, so a new node would sort after every parsed sheet.
 use blitz_dom::node::SpecialElementData;
 use blitz_dom::{BaseDocument, LocalName, NodeId};
+use std::borrow::Cow;
+use style::context::QuirksMode;
+use style::media_queries::MediaList;
+use style::parser::ParserContext;
 use style::shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};
-use style::stylesheets::{CssRule, StylesheetInDocument};
+use style::stylesheets::{CssRule, CssRuleType, Namespaces, Origin, StylesheetInDocument};
+use style_traits::{ParsingMode, ToCss};
 
 pub struct StyleNode {
     pub id: NodeId,
@@ -70,6 +75,32 @@ pub fn serialize_rules(rules: &[CssRule], guard: &SharedRwLockReadGuard) -> Stri
     out
 }
 
+/// The `media` attribute of `style`, read the way a browser reads it: a media query list
+/// (an invalid query is `not all`), serialised back. Pasting the raw attribute into
+/// `@media ... { }` let a `/*`, `{` or `}` in it swallow or break out of the wrapper. None
+/// for an empty list (the sheet applies everywhere).
+fn media_list_text(doc: &BaseDocument, style: NodeId, attr: &str) -> Option<String> {
+    let el = doc.get_node(style)?.element_data()?;
+    let SpecialElementData::Stylesheet(sheet) = &el.special_data else { return None };
+    let guard = doc.guard().read();
+    let url_data = sheet.contents(&guard).url_data.clone();
+    let mut context = ParserContext::new(
+        Origin::Author,
+        &url_data,
+        Some(CssRuleType::Media),
+        ParsingMode::DEFAULT,
+        QuirksMode::NoQuirks,
+        Cow::Owned(Namespaces::default()),
+        None,
+        None,
+        Default::default(),
+    );
+    let mut input = cssparser::ParserInput::new(attr);
+    let list = MediaList::parse(&mut context, &mut cssparser::Parser::new(&mut input));
+    let text = list.to_css_string();
+    (!text.is_empty()).then_some(text)
+}
+
 #[derive(Default)]
 pub struct Rewrite {
     pub prefix: String,
@@ -85,7 +116,7 @@ pub fn rewrite(doc: &mut BaseDocument, mut extra: impl FnMut(usize, NodeId) -> R
     let mut edits = Vec::new();
     for (i, s) in nodes.iter().enumerate() {
         let x = extra(i, s.id);
-        let media = s.media.as_deref().map(str::trim).filter(|m| !m.is_empty());
+        let media = s.media.as_deref().map(str::trim).filter(|m| !m.is_empty()).and_then(|m| media_list_text(doc, s.id, m));
         if media.is_none() && x.prefix.is_empty() && x.suffix.is_empty() {
             continue;
         }
@@ -98,6 +129,10 @@ pub fn rewrite(doc: &mut BaseDocument, mut extra: impl FnMut(usize, NodeId) -> R
     }
     let mut m = doc.mutate();
     for (style, text, extra_text, css) in edits {
+        // blitz-dom decodes HTML entities in `<style>` text whenever it parses a sheet. The
+        // text set here is CSS already decoded once; escaping `&` makes that second decode
+        // give back exactly this text (`&amp;lt;` in the mail stays `&lt;`, not `<`).
+        let css = css.replace('&', "&amp;");
         for t in extra_text {
             m.remove_and_drop_node(t);
         }
