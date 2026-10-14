@@ -73,8 +73,6 @@ const firstDiff = (a, b) => {
 const cut = (s, n = 1200) => (String(s ?? '').length > n ? `${String(s).slice(0, n)}...(${String(s).length})` : String(s ?? ''));
 // The iframe copies its own fold-toggle labels; Blitz marks them unselectable. Compared without them.
 const noToggle = (s) => String(s || '').replace(/^(⋯|▸ Show signature|▾ Hide signature|▾ Hide quoted text)$/gm, '').replace(/\n{2,}/g, '\n');
-// The nested inline-block paragraph has its own section (it is a known divergence): left out of the others.
-const noCta = (s) => String(s || '').replace(/Ctabefore[^\n]*\n?/g, '').replace(/^Ctabutton text$/gm, '').replace(/^Btnlabel$/gm, '').replace(/\n{2,}/g, '\n');
 const rgb = (s) => (Array.isArray(s) ? s.slice(0, 3) : (String(s || '').match(/[\d.]+/g) || []).slice(0, 3).map(Number));
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -678,17 +676,18 @@ async function kit(name, ...args) {
   if (out && out.missing) { await ensureKit(); return (await browser.execute((n, a) => ({ v: window.__mvc[n](...a) }), name, args)).v; }
   return out.v;
 }
-// The quotes of the compose windows the app keeps in its session (settings
-// file, `mailvault-compose-session`): what a reply really carries.
-async function sessionQuotes() {
+// The compose windows the app keeps in its session (settings file,
+// `mailvault-compose-session`), as { id, quote }: what a reply really carries.
+async function sessionWindows() {
   const raw = await browser.executeAsync((done) => {
     window.__TAURI__.core.invoke('read_settings_json').then(done, () => done('{}'));
   });
   let windows;
   try { windows = JSON.parse(raw || '{}')['mailvault-compose-session']; } catch { windows = null; }
   if (typeof windows === 'string') { try { windows = JSON.parse(windows); } catch { windows = null; } }
-  return (Array.isArray(windows) ? windows : []).map((w) => w && w.initialData && w.initialData._quotedHtml).filter((q) => typeof q === 'string');
+  return (Array.isArray(windows) ? windows : []).filter(Boolean).map((w) => ({ id: w.id, quote: w.initialData && typeof w.initialData._quotedHtml === 'string' ? w.initialData._quotedHtml : null }));
 }
+const brlineWindows = async () => (await sessionWindows()).filter((w) => w.quote != null && w.quote.includes('Brline'));
 
 async function kitAsync(name, ...args) {
   if (!kitReady) await ensureKit();
@@ -1175,7 +1174,7 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
         order: { web: ['Ctabefore', 'Ctabutton', 'ctamiddle', 'Btnlabel', 'btnafter'].map((w) => got.web.plain.indexOf(w)), blitz: ['Ctabefore', 'Ctabutton', 'ctamiddle', 'Btnlabel', 'btnafter'].map((w) => got.blitz.plain.indexOf(w)) },
       });
       ck(got.web.changed && got.blitz.changed, 'a copy did not reach the OS clipboard');
-      // Report-only: the exact diff above is the finding if they differ.
+      ck(norm(got.blitz.plain) === norm(got.web.plain), `nested inline plain differs: iframe ${JSON.stringify(got.web.plain)} vs blitz ${JSON.stringify(got.blitz.plain)}`);
     });
   });
 
@@ -1422,8 +1421,8 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
       log('copy.selectAll.diff', { plain: firstDiff(norm(out.web.sel.plain), norm(out.blitz.sel.plain)), flat: firstDiff(flat(out.web.sel.plain), flat(out.blitz.sel.plain)), htmlTextEqual: visible(out.web.sel.html) === visible(out.blitz.sel.html) });
       ck(out.blitz.hasLast, 'Blitz select-all copy lacks the last paragraph');
       ck(out.web.hasLast, 'iframe select-all copy lacks the last paragraph');
-      const cmp = (x) => flat(noCta(noToggle(x)));
-      ck(cmp(out.blitz.sel.plain) === cmp(out.web.sel.plain), `select-all plain differs (toggle glyphs and the nested-inline paragraph aside): ${JSON.stringify(firstDiff(cmp(out.web.sel.plain), cmp(out.blitz.sel.plain)))}`);
+      const cmp = (x) => flat(noToggle(x));
+      ck(cmp(out.blitz.sel.plain) === cmp(out.web.sel.plain), `select-all plain differs (toggle glyphs aside): ${JSON.stringify(firstDiff(cmp(out.web.sel.plain), cmp(out.blitz.sel.plain)))}`);
     });
   });
 
@@ -1530,20 +1529,29 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
         // replySelection's escape of Selection.toString: what the reply quoted before Blitz handed
         // out its own selection text. Logged for comparison with earlier runs, not asserted.
         const quote = await kit('replyQuote', mode);
-        // A previous reply's session must be gone, so the one read below is this reply's.
-        await browser.waitUntil(async () => !(await sessionQuotes()).some((q) => q.includes('Brline')), { timeout: 8_000, interval: 250 }).catch(() => {});
+        // No earlier reply's session (a crashed run, a failed Discard, a session restored at start)
+        // may be what is read below: none with this quote may be left, and only a window that is
+        // new after `r` counts.
+        const stale = await browser.waitUntil(async () => (await brlineWindows()).length === 0, { timeout: 8_000, interval: 250 }).then(() => false, () => true);
+        ck(!stale, `${mode}: a previous Brline compose session is still present: ${JSON.stringify(await brlineWindows())}`);
+        const before = new Set((await sessionWindows()).map((w) => w.id));
         await browser.execute(() => document.activeElement && document.activeElement.blur && document.activeElement.blur());
         await browser.keys('r'); // the app's reply shortcut: it reads the live selection like the Reply button
         await browser.waitUntil(modalOpen, { timeout: 15_000, interval: 200, timeoutMsg: `${mode}: compose did not open on r` }).catch(() => {});
         // What the compose really got: its quote after the header paragraph (replyQuote.js buildQuoteBlocks).
-        let composed = null;
+        let fresh = [];
         await browser.waitUntil(async () => {
-          const q = (await sessionQuotes()).find((x) => x.includes('Brline'));
-          composed = q == null ? null : q.slice(q.indexOf('</p>') + 4);
-          return composed != null;
+          fresh = (await brlineWindows()).filter((w) => !before.has(w.id));
+          return fresh.length > 0;
         }, { timeout: 10_000, interval: 250 }).catch(() => {});
+        ck(fresh.length === 1, `${mode}: expected exactly one new Brline compose session after r, got ${fresh.length}`);
+        const composed = fresh.length === 1 ? fresh[0].quote.slice(fresh[0].quote.indexOf('</p>') + 4) : null;
         got[mode] = { selText, quote, composed, composeOpened: await modalOpen() };
         await closeComposeHard();
+        // The cleanup takes the session it created with it.
+        const ids = new Set(fresh.map((w) => w.id));
+        const kept = await browser.waitUntil(async () => !(await sessionWindows()).some((w) => ids.has(w.id)), { timeout: 8_000, interval: 250 }).then(() => false, () => true);
+        ck(!kept, `${mode}: the reply's compose session is still saved after closing it`);
       }
       log('reply.quote', got);
       const brs = (s) => (String(s || '').match(/<br>/g) || []).length;
