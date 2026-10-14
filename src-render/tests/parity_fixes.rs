@@ -263,6 +263,7 @@ fn a_line_with_only_an_image_keeps_the_strut_below_the_baseline() {
     let r = |id: &str| get(&els, id).rect.clone().unwrap();
     assert!((r("inline").h - 96.0).abs() <= 1.0, "cell with an inline image: {}, iframe 96", r("inline").h);
     assert_eq!(r("logo").y - r("inline").y, 20.0, "the image sits at the top of the line");
+    assert_eq!(r("logo").h, 50.0, "the strut is not part of the image's box");
     assert_eq!(r("block").h, 90.0, "a block image has no strut");
     assert_eq!(r("block").y, r("inline").y + r("inline").h);
     // An inline-block button is not on the strut's baseline: it already reaches below it

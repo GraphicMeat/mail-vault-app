@@ -224,7 +224,11 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
         return own;
     }
     let root = node.inline_root_ancestor()?;
-    let layout = &root.element_data()?.inline_layout_data.as_ref()?.layout;
+    let inline = root.element_data()?.inline_layout_data.as_ref()?;
+    let layout = &inline.layout;
+    // The strut blitz-dom adds to the height an image reserves in its line is not part of
+    // the image's box.
+    let strut = inline.strut_below as f64;
     let scale = layout.scale() as f64;
     let fl = root.final_layout();
     let pos = root.absolute_position(0.0, 0.0);
@@ -246,7 +250,7 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
                     add(x0, (run.baseline() - m.ascent) as f64, x0 + run.advance() as f64, (run.baseline() + m.descent) as f64);
                 }
                 PositionedLayoutItem::InlineBox(b) if is_descendant_or_self(doc, NodeId::from_u64(b.id), id) => {
-                    add(b.x as f64, b.y as f64, (b.x + b.width) as f64, (b.y + b.height) as f64);
+                    add(b.x as f64, b.y as f64, (b.x + b.width) as f64, (b.y + b.height) as f64 - strut);
                 }
                 _ => {}
             }
