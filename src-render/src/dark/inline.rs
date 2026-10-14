@@ -365,7 +365,15 @@ pub fn override_inline(doc: &BaseDocument, id: NodeId, cx: &mut DarkCx) -> Inlin
     }
     if is_root_or_body {
         if let Some(bg) = attr("background") {
-            set_custom_prop("background-image", "background-image", &format!("url(\"{bg}\")"), &style, cx, None, &mut out);
+            let value = format!("url(\"{bg}\")");
+            let got = set_custom_prop("background-image", "background-image", &value, &style, cx, None, &mut out);
+            if got.as_deref() == Some(value.as_str()) {
+                // setAsyncValue, as on the style path below: html/body keep no image the
+                // modifier hands back unchanged.
+                if let Some((_, v)) = out.props.iter_mut().rev().find(|(k, _)| k == "--darkreader-inline-bgimage") {
+                    *v = "none".into();
+                }
+            }
         }
     }
     if let Some(mut v) = attr("color") {

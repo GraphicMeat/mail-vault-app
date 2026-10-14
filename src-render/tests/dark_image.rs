@@ -240,3 +240,22 @@ fn a_body_background_attribute_data_image_is_analysed_too() {
     let bg = edits.props.iter().find(|(k, _)| k == "--darkreader-inline-bgimage").expect("bgimage override").1.clone();
     assert!(bg.starts_with("url(\"data:image/png;base64,") && !bg.contains(&url), "the background attribute kept its original image");
 }
+
+/// The `--darkreader-inline-bgimage` that `override_inline` writes on `<body background>`.
+fn body_background_override(bg: &str) -> String {
+    use blitz_dom::local_name;
+    let html = format!("<!doctype html><html><body background=\"{bg}\">x</body></html>");
+    let doc = blitz_html::HtmlDocument::from_html(&html, blitz_dom::DocumentConfig::default());
+    let body = doc.tree().iter().find(|(_, n)| n.attr(local_name!("background")).is_some()).map(|(id, _)| id).expect("body");
+    let edits = mailvault_render::dark::inline::override_inline(&doc, body, &mut cx());
+    edits.props.iter().find(|(k, _)| k == "--darkreader-inline-bgimage").expect("bgimage override").1.clone()
+}
+
+#[test]
+fn a_body_background_attribute_kept_as_it_is_becomes_none() {
+    // DR's setAsyncValue: on html/body an image the modifier hands back unchanged (a remote
+    // one DR cannot fetch, or a mid-tone one it keeps) is dropped, as on the style path.
+    assert_eq!(body_background_override("https://x.test/paper.jpg"), "none");
+    let mid = data_url(&RgbaImage::from_pixel(50, 50, Rgba([128, 128, 128, 255])));
+    assert_eq!(body_background_override(&mid), "none");
+}
