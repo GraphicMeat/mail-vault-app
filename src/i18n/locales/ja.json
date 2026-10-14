@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "フォント",
   "netActivity.purposes.emailImages": "メール画像",
   "netActivity.notShown.title": "この一覧に表示されないもの",
-  "netActivity.notShown.webContent": "標準レンダラーがメール内で読み込むウェブコンテンツ(画像、フォント、スタイルなど)。Rust レンダラーのリモート画像は上で数えており、それ以外は読み込みません。",
+  "netActivity.notShown.webContent": "標準レンダラーがメール内で読み込むウェブコンテンツ。リモート画像は上で数えていますが、一覧には表示されません。別ウィンドウで開いたメールでは、リンクされたフォントやスタイルも読み込みます。Rust レンダラーはリモート画像を自分で取得し、「メール画像」として一覧に表示します。それ以外は読み込みません。",
   "netActivity.notShown.appWindow": "アプリのウィンドウ自体が行うリクエスト (購入確認など)。",
   "netActivity.notShown.updates": "アプリのアップデートのダウンロード。macOS ではアップデート確認も含みます。",
   "netActivity.notShown.innerDns": "ウェブリクエストやメール送信の内部で行われる DNS 検索。",

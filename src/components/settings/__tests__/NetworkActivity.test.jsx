@@ -279,7 +279,8 @@ describe('Network Activity', () => {
     const { container } = await mount([]);
     const text = container.textContent;
     expect(text).toContain('Connections made by MailVault and its background helper');
-    expect(text).toMatch(/Remote images and other web content inside emails/);
+    expect(text).toMatch(/Web content the standard renderer loads inside emails: remote images, counted above but not listed/);
+    expect(text).toMatch(/The Rust renderer fetches remote images itself and lists them as Email images; it loads nothing else/);
     expect(text).toMatch(/App update downloads, and on macOS the update check too/);
     expect(text).not.toMatch(/all requests|every request|all connections|every connection/i);
     expect(text).not.toContain('—');

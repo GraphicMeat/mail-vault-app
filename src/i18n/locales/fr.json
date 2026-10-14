@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "Polices",
   "netActivity.purposes.emailImages": "Images des e-mails",
   "netActivity.notShown.title": "Ce que cette liste ne montre pas",
-  "netActivity.notShown.webContent": "Les contenus web que le moteur de rendu standard charge dans les e-mails, comme les images, les polices et les styles. Les images distantes du moteur de rendu Rust sont comptées plus haut ; il ne charge rien d'autre.",
+  "netActivity.notShown.webContent": "Les contenus web que le moteur de rendu standard charge dans les e-mails : les images distantes, comptées plus haut mais pas listées, et, dans un e-mail ouvert dans sa propre fenêtre, les polices et les styles qu'il lie. Le moteur de rendu Rust télécharge lui-même les images distantes et les liste comme Images des e-mails ; il ne charge rien d'autre.",
   "netActivity.notShown.appWindow": "Les requêtes que la fenêtre de l'app fait elle-même, comme les vérifications d'achat.",
   "netActivity.notShown.updates": "Les téléchargements des mises à jour de l'app et, sur macOS, la recherche de mises à jour aussi.",
   "netActivity.notShown.innerDns": "Les requêtes DNS faites au sein des requêtes web et de l'envoi d'e-mails.",
