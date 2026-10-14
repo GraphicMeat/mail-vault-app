@@ -178,6 +178,7 @@ impl RenderDoc {
         if doc.tree().len() > MAX_NODES || exceeds_depth(&doc) {
             return Err(OpenError::TooComplex);
         }
+        crate::styles::rewrite(&mut doc, |_, _| crate::styles::Rewrite::default());
         strip_svg_references(&mut doc);
         // Everything blitz asked for while parsing is decided here: images are
         // queued, stylesheets, fonts, @import and frames are answered empty.
