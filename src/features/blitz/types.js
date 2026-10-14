@@ -31,6 +31,15 @@
  */
 
 /**
+ * What an alternative Body exposes through its ref. A Body that receives a ref must be a
+ * forwardRef exposing { selectionRoot(), selectionText() }: Reply quotes the selection through them.
+ *
+ * @typedef {Object} AltBodyHandle
+ * @property {() => HTMLElement | null} selectionRoot The element whose selection Reply may quote.
+ * @property {() => string} selectionText The selection's copy text, or '' when there is none.
+ */
+
+/**
  * A link found in a rendered document.
  *
  * @typedef {Object} LinkInfo

@@ -19,7 +19,8 @@ describe('blitz module registration', () => {
     expect(register).toHaveBeenCalledTimes(1);
     const [name, impl] = register.mock.calls[0];
     expect(name).toBe('blitz');
-    expect(impl.Body).toBeTruthy(); // a forwardRef component (the reply selection handle), an object
+    // A forwardRef component: the reply selection handle is read through its ref.
+    expect(impl.Body.$$typeof).toBe(Symbol.for('react.forward_ref'));
     expect(typeof impl.SettingsRow).toBe('function');
   });
 

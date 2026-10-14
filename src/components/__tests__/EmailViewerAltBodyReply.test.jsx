@@ -104,7 +104,7 @@ describe('Reply quotes a selection in an alternative body', () => {
     expect(quote).not.toMatch(/<span|left:|top:|letter-spacing|transparent|mv-blitz|style=|class=/);
   });
 
-  it('pressing the Reply button keeps the selection that is then quoted', async () => {
+  it('no handler clears the selection on a Reply mousedown, and it is then quoted', async () => {
     const onComposeReply = vi.fn();
     const { getByTestId } = show(onComposeReply);
     const layer = getByTestId('stub-layer');
@@ -112,7 +112,8 @@ describe('Reply quotes a selection in an alternative body', () => {
     const expected = replySelection(layer, document.getSelection());
     const reply = screen.getAllByRole('button').find(b => /^reply$/i.test(b.getAttribute('aria-label') || b.textContent || ''));
     expect(reply).toBeTruthy();
-    // A button does not take a selection with it on mousedown: nothing may clear it.
+    // jsdom has no native mousedown selection behaviour (that is the engine's, a button keeps
+    // the selection there); this only proves no app handler prevents the event or clears it.
     expect(fireEvent.mouseDown(reply)).toBe(true);
     expect(document.getSelection().isCollapsed).toBe(false);
     await act(async () => { fireEvent.click(reply); });

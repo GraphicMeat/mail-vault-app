@@ -10,7 +10,11 @@ const renderers = new Map(); // name -> { Body, SettingsRow }
 export function registerBodyRenderer(name, impl) { renderers.set(name, impl); }
 export function _resetBodyRenderersForTest() { renderers.clear(); }
 
-/** The component a surface draws instead of its iframe, or null. */
+/**
+ * The component a surface draws instead of its iframe, or null.
+ * A Body that receives a ref must be a forwardRef exposing { selectionRoot(), selectionText() }
+ * (the Reply quote reads the selection through them; see features/blitz/types.js AltBodyHandle).
+ */
 // eslint-disable-next-line no-unused-vars
 export function useAltBodyRenderer(surface) {
   const mode = useSettingsStore(s => s.emailRenderer);
