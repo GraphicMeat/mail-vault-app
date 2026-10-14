@@ -67,6 +67,21 @@
       "source": "ours"
     },
     {
+      "id": "ours/table-600-narrow",
+      "file": "ours/table-600-narrow.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/table-border-attr",
+      "file": "ours/table-border-attr.html",
+      "source": "ours"
+    },
+    {
+      "id": "ours/table-cell-edges",
+      "file": "ours/table-cell-edges.html",
+      "source": "ours"
+    },
+    {
       "id": "cerberus/hybrid",
       "file": "cerberus/cerberus-hybrid.html",
       "source": "cerberus",
