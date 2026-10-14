@@ -407,6 +407,10 @@ export const config = {
     // Measurement, not a test: 45 minutes of deliberate idling, asserts
     // nothing. wdio.ram.conf.js selects it by name.
     './tests/e2e/ram-*.test.js',
+    // Measures the iframe and Blitz side by side: a fold-paint gate a debug
+    // build always misses, and a Google Fonts download (sections 8a-8c).
+    // wdio.blitz.conf.js selects it by name.
+    './tests/e2e/connected-blitz-interactions.test.js',
   ],
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state

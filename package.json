@@ -35,7 +35,8 @@
     "test:e2e:ui": "wdio run wdio.conf.js --suite ui-headless",
     "test:e2e:connected": "wdio run wdio.conf.js --suite connected-ci",
     "test:e2e:local": "wdio run wdio.conf.js --suite local-manual",
-    "test:e2e:jmap": "npm run build:e2e && wdio run wdio.jmap.conf.js"
+    "test:e2e:jmap": "npm run build:e2e && wdio run wdio.jmap.conf.js",
+    "test:e2e:blitz": "npm run build:e2e && wdio run wdio.blitz.conf.js"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.18",
