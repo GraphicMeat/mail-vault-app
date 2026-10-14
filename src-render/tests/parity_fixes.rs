@@ -571,3 +571,18 @@ fn a_nbsp_spacer_cell_adds_no_line_to_its_row() {
     assert_eq!(get(&els, "word").line_count, Some(1));
     assert_eq!(get(&els, "row").line_count, Some(1));
 }
+
+/// CSS Text 3 4.1.3: a collapsible space at the end of a line is removed, before a forced
+/// break and before a soft wrap alike. Harness iframe (leemunroe footer, 16px Helvetica):
+/// the cell holding `<span>Company Inc, 7-11 Commercial Ct, Belfast BT1 2NB</span>\n<br>` is
+/// 371.4 wide, the span's own box 371.398. Blitz counted the space before the `br` in the
+/// max-content width (375.9).
+#[test]
+fn a_space_before_a_forced_break_takes_no_max_content_width() {
+    let els = inspect(&fx("trailing-space-at-line-end.html"));
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    assert!((w("s") - 371.398).abs() < 0.1, "span {}", w("s"));
+    assert!((w("box") - 371.406).abs() < 0.1, "float shrink-to-fit around a line ending in a space and a br: {}", w("box"));
+    let h = get(&els, "box").rect.clone().unwrap().h;
+    assert_eq!(h, 36.0, "two lines: the box is exactly as wide as the first, whose space hangs");
+}

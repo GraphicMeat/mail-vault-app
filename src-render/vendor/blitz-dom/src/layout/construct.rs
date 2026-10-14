@@ -1103,6 +1103,51 @@ pub(crate) fn find_inline_layout_embedded_boxes(
 /// indent and a `<td>&nbsp;</td>` spacer is ~4px wide in WebKit, 0 here. A word joiner
 /// (U+2060: zero width, forbids a break, not White_Space) on the outer side of a leading
 /// or trailing nbsp stands in the way of both.
+/// The spaces CSS collapses: not the no-break space.
+fn is_collapsible_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')
+}
+
+/// MailVault parity fix (plan B): whether the next thing on the line after this text node is a
+/// `<br>`, looking past whitespace-only text and out of the inline elements the node ends.
+fn precedes_forced_break(nodes: &crate::NodeTree, node_id: NodeId) -> bool {
+    let mut id = node_id;
+    loop {
+        let Some(parent_id) = nodes[id].parent else {
+            return false;
+        };
+        let parent = &nodes[parent_id];
+        let Some(index) = parent.children.iter().position(|&child| child == id) else {
+            return false;
+        };
+        let next = parent.children[index + 1..].iter().copied().find(|&sibling| {
+            nodes[sibling]
+                .text_data()
+                .map_or(true, |text| !text.content.chars().all(is_collapsible_space))
+        });
+        match next {
+            Some(sibling) => {
+                return nodes[sibling]
+                    .data
+                    .downcast_element()
+                    .is_some_and(|el| el.name.local == local_name!("br"));
+            }
+            None => {
+                // Last in its parent: climb only out of a plain inline element with nothing
+                // generated after its content.
+                let plain_inline = parent.after().is_none()
+                    && parent.display_style().is_some_and(|d| {
+                        d.outside() == DisplayOutside::Inline && d.inside() == DisplayInside::Flow
+                    });
+                if !plain_inline {
+                    return false;
+                }
+                id = parent_id;
+            }
+        }
+    }
+}
+
 fn push_text_keeping_nbsp(builder: &mut TreeBuilder<TextBrush>, text: &str) {
     const NBSP: char = '\u{a0}';
     const WORD_JOINER: &str = "\u{2060}";
@@ -1528,16 +1573,28 @@ pub(crate) fn build_inline_layout_into(
                 // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
                 // dbg!(&data.content);
 
+                // MailVault parity fix (plan B): collapsible spaces at the end of a line are
+                // removed (CSS Text 3 4.1.3), `text <br>` included. parley keeps the space and,
+                // when the line is exactly as wide as the text, hangs it and breaks again
+                // before the `\n` (an empty extra line), and counts it in max-content.
+                let content = if matches!(collapse_mode, WhiteSpaceCollapse::Collapse)
+                    && precedes_forced_break(nodes, node_id)
+                {
+                    data.content.trim_end_matches(is_collapsible_space)
+                } else {
+                    data.content.as_str()
+                };
+
                 // TODO: optimize case transforms to be non-allocating
                 match parent_text_transform {
                     TextTransform::UPPERCASE => {
-                        push_text_keeping_nbsp(builder, &data.content.to_uppercase());
+                        push_text_keeping_nbsp(builder, &content.to_uppercase());
                     }
                     TextTransform::LOWERCASE => {
-                        push_text_keeping_nbsp(builder, &data.content.to_lowercase());
+                        push_text_keeping_nbsp(builder, &content.to_lowercase());
                     }
                     _ => {
-                        push_text_keeping_nbsp(builder, &data.content);
+                        push_text_keeping_nbsp(builder, content);
                     }
                 }
             }
