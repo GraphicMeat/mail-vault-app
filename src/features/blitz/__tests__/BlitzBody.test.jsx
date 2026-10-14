@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 
 const tilesProps = vi.hoisted(() => ({ last: null }));
@@ -81,5 +81,45 @@ describe('BlitzBody', () => {
     render(<BlitzBody {...props({ messageKey: 'k-html-only', plainText: '' })} />);
     fireEvent.click(await screen.findByText('fail'));
     expect(screen.getByText(/Hello/)).toBeTruthy();
+  });
+
+  it('a search query change reaches the tiles after a 150 ms debounce, with marks', async () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<BlitzBody {...props({ messageKey: 'k-search', bodyHtml: '<p>invoice here</p>', searchQuery: '' })} />);
+    await vi.runAllTimersAsync();
+    const before = tilesProps.last.html;
+    rerender(<BlitzBody {...props({ messageKey: 'k-search', bodyHtml: '<p>invoice here</p>', searchQuery: 'inv' })} />);
+    rerender(<BlitzBody {...props({ messageKey: 'k-search', bodyHtml: '<p>invoice here</p>', searchQuery: 'invoice' })} />);
+    await vi.advanceTimersByTimeAsync(149);
+    expect(tilesProps.last.html).toBe(before);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.runAllTimersAsync();
+    expect(tilesProps.last.html).toContain('mv-search-hit');
+    vi.useRealTimers();
+  });
+
+  it('an opened fold stays open across a re-open (search change)', async () => {
+    vi.useFakeTimers();
+    const body = '<p>Reply</p><blockquote><p>Q</p></blockquote>';
+    const { rerender } = render(<BlitzBody {...props({ messageKey: 'k-fold', bodyHtml: body, searchQuery: '' })} />);
+    await vi.runAllTimersAsync();
+    act(() => tilesProps.last.onFoldToggled('q0', true));
+    rerender(<BlitzBody {...props({ messageKey: 'k-fold', bodyHtml: body, searchQuery: 'reply' })} />);
+    await vi.advanceTimersByTimeAsync(150);
+    await vi.runAllTimersAsync();
+    expect(tilesProps.last.html).toMatch(/data-mv-fold="q0"[^>]*data-mv-fold-open="true"|data-mv-fold-open="true"[^>]*data-mv-fold="q0"/);
+    vi.useRealTimers();
+  });
+
+  it('folds a new message again: open folds are per message', async () => {
+    vi.useFakeTimers();
+    const body = '<p>Reply</p><blockquote><p>Q</p></blockquote>';
+    const { rerender } = render(<BlitzBody {...props({ messageKey: 'k-fold-a', bodyHtml: body })} />);
+    await vi.runAllTimersAsync();
+    act(() => tilesProps.last.onFoldToggled('q0', true));
+    rerender(<BlitzBody {...props({ messageKey: 'k-fold-b', bodyHtml: body })} />);
+    await vi.runAllTimersAsync();
+    expect(tilesProps.last.html).toContain('data-mv-fold-open="false"');
+    vi.useRealTimers();
   });
 });

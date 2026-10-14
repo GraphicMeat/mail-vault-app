@@ -116,6 +116,20 @@ describe('BlitzTiles', () => {
     expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('6%2F2%2F0');
   });
 
+  it('an html change keeps the old tiles until the new doc is ready, then closes the old doc', async () => {
+    openRender.mockResolvedValueOnce({ docId: 1, rev: 1, meta: meta() });
+    const { rerender } = render(tiles({ html: '<p>A' }));
+    await screen.findAllByTestId('blitz-tile');
+    let resolveSecond;
+    openRender.mockImplementationOnce(() => new Promise(r => { resolveSecond = r; }));
+    rerender(tiles({ html: '<p>A<mark>' }));
+    expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('1%2F1%2F0');
+    expect(closeRender).not.toHaveBeenCalled();
+    await act(async () => resolveSecond({ docId: 2, rev: 1, meta: meta() }));
+    expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('2%2F1%2F0');
+    expect(closeRender).toHaveBeenCalledWith(1);
+  });
+
   it('closes its doc on unmount', async () => {
     openRender.mockResolvedValue({ docId: 8, rev: 1, meta: meta() });
     const { unmount } = render(tiles());

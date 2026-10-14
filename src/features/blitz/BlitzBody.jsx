@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useT } from '../../i18n/index.js';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -52,6 +52,24 @@ export default function BlitzBody(props) {
   // Leaving a message forgets its failure, so coming back to it tries Blitz again.
   useEffect(() => () => { setFailure(null); setBubble(null); }, [key]);
 
+  // The open search re-renders the body (the iframe repaints its live DOM;
+  // Blitz has none to repaint). Debounced: typing must not re-open per key.
+  const liveQuery = props.searchQuery || '';
+  const [query, setQuery] = useState(liveQuery);
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(liveQuery), 150);
+    return () => clearTimeout(id);
+  }, [liveQuery]);
+
+  // Folds the user opened, by id, for this message: a re-open (search, fonts)
+  // must not fold them again; the iframe keeps them open across a highlight.
+  // Held with its message key so a new message starts folded in its first pre-pass.
+  const folds = useRef({ key, open: new Set() });
+  if (folds.current.key !== key) folds.current = { key, open: new Set() };
+  const onFoldToggled = useCallback((id, open) => {
+    if (open) folds.current.open.add(id); else folds.current.open.delete(id);
+  }, []);
+
   const priv = usePrivacyDict({ message, messageKey: key });
   // Derived in render, so no frame is ever painted from HTML built for another
   // privacy state: HTML pre-passed unmasked is never served once masking is on
@@ -65,7 +83,7 @@ export default function BlitzBody(props) {
     if (priv.hold) { setPrepassed(null); return undefined; }
     let live = true;
     const masked = priv.active;
-    runPrepass(props, { privacy: priv })
+    runPrepass({ ...props, searchQuery: query }, { privacy: priv, openFolds: folds.current.open })
       .then(r => {
         // Same HTML again keeps the old state object, so an identical re-run renders nothing.
         // `masked` is part of the match: a body with nothing to mask gives the same HTML
@@ -74,7 +92,7 @@ export default function BlitzBody(props) {
       })
       .catch(err => { console.error('[blitz] pre-pass failed; the body stays hidden', err); if (live) setPrepassed(null); });
     return () => { live = false; };
-  }, [key, bodyHtml, documentHtml, indicatorCss, theme?.tableMode, theme?.dark, theme?.palette, priv.active, priv.dict, priv.hold]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, bodyHtml, documentHtml, indicatorCss, theme?.tableMode, theme?.dark, theme?.palette, props.signatureDisplay, props.foldQuotes, query, priv.active, priv.dict, priv.hold]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onFailure = (code) => {
     console.warn('[blitz] could not draw', key, code);
@@ -117,7 +135,7 @@ export default function BlitzBody(props) {
       {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
           so nothing built for the other state stays on screen while the new doc opens.
           A dictionary update while masking stays on does not change the key. */}
-      <BlitzTiles key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} privacy={priv.active} />
+      <BlitzTiles key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} privacy={priv.active} onFoldToggled={onFoldToggled} />
     </div>
   );
 }

@@ -1,11 +1,14 @@
 import { buildEmailIframeHtml } from '../../../utils/emailIframeTemplate';
 import { applyPrivacyRedaction } from '../../../utils/iframePrivacyRedact';
+import { markFolds } from './folds';
+import { markUnselectable } from './unselectable';
+import { markSearch } from './search';
 
 // Everything the iframe does with script happens here, on an inert DOMParser
 // document (its scripts never run), before the HTML leaves the webview.
 // Plans B, C and D extend this function IN PLACE at their numbered step; the
 // order is binding (overview, contract amendments).
-export async function runPrepass(props, { privacy = { active: false, dict: null }, openFolds } = {}) { // eslint-disable-line no-unused-vars
+export async function runPrepass(props, { privacy = { active: false, dict: null }, openFolds = new Set() } = {}) {
   const { documentHtml, bodyHtml, indicatorCss, theme } = props;
   // 1. Build: the exact document the surface's iframe would get, minus viewer scripts.
   //    buildEmailIframeHtml emits no <script> of its own (only a CSP <meta>); scripts
@@ -28,10 +31,15 @@ export async function runPrepass(props, { privacy = { active: false, dict: null 
   // script, the mail's) and every inline on* handler, so nothing script-shaped
   // reaches the worker whatever the build step produced.
   stripScripts(doc);
-  // 3. Folds (plan C).
+  // 3. Folds, on the built document, as the iframe's fold scripts run on theirs
+  //    while it parses (before privacy's load-time pass).
+  markFolds(doc, { foldQuotes: props.foldQuotes !== false, signatureDisplay: props.signatureDisplay, openFolds });
   // 4. Privacy: the iframe's own redaction. A throw rejects; callers draw nothing.
   if (privacy.active) applyPrivacyRedaction(doc, privacy.dict);
-  // 5. Unselectable marks and search highlight (plan C).
+  // 5. What the iframe makes unselectable with CSS, then the open search's marks:
+  //    AFTER privacy, so a mark never splits a name before the redaction pass sees it.
+  markUnselectable(doc);
+  if (props.searchQuery) markSearch(doc, props.searchQuery);
   // 6. Parity ids (plan B).
   // 7. Serialize.
   return { html: `<!doctype html>\n${doc.documentElement.outerHTML}`, doc };

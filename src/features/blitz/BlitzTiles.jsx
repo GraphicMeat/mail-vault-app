@@ -20,7 +20,7 @@ function useDevicePixelRatio() {
 // the viewport, links found by hit-testing in the worker. While `privacy` is
 // on, the hover URL chip is not drawn at all: a URL can carry a name that the
 // pre-pass does not know to mask (a calendar slug, a ?name= query).
-export default function BlitzTiles({ html, theme, onLink, onFailure, sizing = 'content', privacy = false }) {
+export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false }) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -39,8 +39,10 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, sizing = 'c
   // latest in refs keeps the open effect from closing and reopening the doc.
   const onLinkRef = useRef(onLink);
   const onFailureRef = useRef(onFailure);
+  const onFoldToggledRef = useRef(onFoldToggled);
   onLinkRef.current = onLink;
   onFailureRef.current = onFailure;
+  onFoldToggledRef.current = onFoldToggled; // called with (id, open) when a fold toggle is clicked
 
   const fail = useCallback((code) => {
     if (failed.current) return;
@@ -77,16 +79,21 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, sizing = 'c
     openRender({ html, cssWidth, scale, allowRemote: true, theme: { mode: dark ? 'dark' : 'light' } })
       .then((r) => {
         if (my !== gen.current) { closeRender(r.docId); return; }
+        // The old doc keeps its tiles on screen until this one replaces it; only then is it closed.
+        const prev = docIdRef.current;
         docIdRef.current = r.docId;
         setDoc(r);
+        if (prev != null && prev !== r.docId) closeRender(prev);
       })
       // Any rejection is a failure (render_bad_request, render_too_complex, a plain object, a string).
       .catch((e) => { if (my === gen.current) fail(e?.message || e?.code || String(e)); });
-    return () => {
-      gen.current++;
-      if (docIdRef.current != null) { closeRender(docIdRef.current); docIdRef.current = null; }
-    };
+    return () => { gen.current++; };
   }, [html, width, dpr, dark, fail]);
+
+  // The current doc closes with the component, not with each re-open.
+  useEffect(() => () => {
+    if (docIdRef.current != null) { closeRender(docIdRef.current); docIdRef.current = null; }
+  }, []);
 
   useEffect(() => {
     const m = doc?.meta;
