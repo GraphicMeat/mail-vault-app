@@ -318,6 +318,29 @@ impl RootLineHeight {
     }
 }
 
+/// MailVault parity fix (plan B): WebKit on macOS raises the ascent of the Times, Helvetica and
+/// Courier families (the default serif, sans-serif and monospace) by 15% of ascent + descent,
+/// rounded, to match the vertical metrics of their Microsoft counterparts (FontCocoa
+/// `platformInit`). Parley takes the ascent from the font file, so the extra is added where
+/// line heights are worked out here. In the run's device px; 0 for any other font.
+fn webkit_ascent_bonus(run: &parley::layout::Run<'_, TextBrush>) -> f32 {
+    use skrifa::MetadataProvider as _;
+    let font = run.font();
+    let Ok(font_ref) = skrifa::FontRef::from_index(font.data.as_ref(), font.index) else {
+        return 0.0;
+    };
+    let family: String = font_ref
+        .localized_strings(skrifa::string::StringId::FAMILY_NAME)
+        .english_or_first()
+        .map(|name| name.chars().collect())
+        .unwrap_or_default();
+    if !matches!(family.as_str(), "Times" | "Helvetica" | "Courier") {
+        return 0.0;
+    }
+    let m = run.metrics();
+    ((m.ascent + m.descent) * 0.15 + 0.5).floor()
+}
+
 /// MailVault parity fix (plan B): the height of one line of `style`'s font at `line-height:
 /// normal`, in CSS px. Parley quantises ascent, descent and line gap separately, like WebKit.
 fn normal_line_height(
@@ -339,7 +362,8 @@ fn normal_line_height(
         .next()
         .and_then(|line| line.runs().next().map(|run| {
             let m = run.metrics();
-            (m.ascent.round() + m.descent.round() + m.leading.round()) / scale
+            ((m.ascent + webkit_ascent_bonus(&run)).round() + m.descent.round() + m.leading.round())
+                / scale
         }))
         .unwrap_or(style.font_size * 1.2)
 }
@@ -1236,6 +1260,20 @@ pub(crate) fn build_inline_layout_into(
         if let Some(line) = probe.lines().next() {
             let metrics = line.metrics();
             text_layout.strut_below = (metrics.block_max_coord - metrics.baseline).max(0.0);
+            // Helvetica and the like: WebKit's taller ascent leaves less of the line-height
+            // below the baseline (split like parley does, the smaller half above).
+            if let (Some(run), parley::LineHeight::Absolute(line_height)) =
+                (line.runs().next(), parley_style.line_height)
+            {
+                let bonus = webkit_ascent_bonus(&run);
+                if bonus > 0.0 {
+                    let m = run.metrics();
+                    let (ascent, descent) = ((m.ascent + bonus).round(), m.descent.round());
+                    let leading = line_height * scale - (ascent + descent);
+                    let above = (leading * 0.5).floor();
+                    text_layout.strut_below = descent + (leading - above).max(0.0);
+                }
+            }
         }
     }
     return;

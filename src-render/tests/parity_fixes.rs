@@ -420,3 +420,21 @@ fn line_count_follows_text_fragments_not_line_boxes() {
     let els = inspect(&fx("inline-padding-and-ui-monospace.html"));
     assert_eq!(get(&els, "cols").line_count, Some(2));
 }
+
+/// WebKit on macOS raises the ascent of Times, Helvetica and Courier (the default serif,
+/// sans-serif and monospace) by 15% of ascent + descent, rounded, "to closely match the vertical
+/// metrics of their Microsoft counterparts" (FontCocoa `platformInit`). Helvetica at 14px is
+/// ascent 13 + descent 3: `line-height: normal` is 16, not 14, and under `line-height: 22px` the
+/// strut below the baseline is 6, not 7 (harness iframe, cerberus: a cell holding an image
+/// 39.375 high is 45 high and one holding a 50px image is 56; Blitz 46.4 and 57). Arial has no
+/// such adjustment: 16 and 6 from its own metrics.
+#[cfg(target_os = "macos")]
+#[test]
+fn helvetica_has_the_webkit_ascent_adjustment() {
+    let els = inspect(&fx("webkit-helvetica-metrics.html"));
+    let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
+    assert_eq!((h("n12"), h("n14"), h("n16")), (14.0, 16.0, 18.0), "line-height: normal");
+    assert_eq!(h("arial"), 16.0, "Arial is not adjusted");
+    assert_eq!(h("img"), 56.0, "50px image + 6px strut under Helvetica 14px/22px");
+    assert_eq!(h("img-arial"), 56.0, "Arial: 13 + 3, leading 6, the same 6");
+}
