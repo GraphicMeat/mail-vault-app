@@ -6,7 +6,7 @@ import { t } from '../../../i18n/index.js';
 // app element: same items, labels, order, look and behaviour. It is fixed at
 // the pointer (`at` in window coordinates) in a portal on <body>: the body box
 // scrolls and clips, and a one-line message is shorter than the menu. Above the
-// tiles and below the app's modals (z-40 and up). A scroll closes it.
+// tiles and below the app's modals (z-40 and up). A scroll or a window resize closes it.
 // `clampTo(menuEl, at) -> { dx, dy }` keeps it inside the window.
 // `inBody(target)` is true for a press in the body: that press is left to the
 // body's click handler, which closes the menu and swallows the click.
@@ -79,11 +79,13 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
     document.addEventListener('mousedown', onDown, true);
     window.addEventListener('scroll', dismiss, true);
     window.addEventListener('blur', dismiss);
+    window.addEventListener('resize', dismiss);
     return () => {
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousedown', onDown, true);
       window.removeEventListener('scroll', dismiss, true);
       window.removeEventListener('blur', dismiss);
+      window.removeEventListener('resize', dismiss);
     };
   }, []);
 

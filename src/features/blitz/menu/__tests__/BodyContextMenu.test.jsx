@@ -105,7 +105,7 @@ describe('BodyContextMenu', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('closes on a press outside the body, a scroll and a window blur; not on a press inside the body or on the menu', () => {
+    it('closes on a press outside the body, a scroll, a window blur and a window resize; not on a press inside the body or on the menu', () => {
       const { onClose } = open({ inBody: t => !!t.closest?.('[data-testid="body"]') });
       fireEvent.mouseDown(screen.getByTestId('blitz-context-menu'));
       expect(onClose).not.toHaveBeenCalled();
@@ -117,6 +117,8 @@ describe('BodyContextMenu', () => {
       expect(onClose).toHaveBeenCalledTimes(2);
       fireEvent.blur(window);
       expect(onClose).toHaveBeenCalledTimes(3);
+      fireEvent(window, new Event('resize')); // fixed at a point of the old window
+      expect(onClose).toHaveBeenCalledTimes(4);
     });
 
     it('a second right-click moves the menu: the highlight starts over', () => {
