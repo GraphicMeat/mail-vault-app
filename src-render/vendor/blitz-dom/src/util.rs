@@ -157,7 +157,7 @@ pub fn walk_tree(indent: usize, node: &Node) {
 /// total an SVG may embed. Same figure as `MAX_IMAGE_PIXELS` in src-render/src/net.rs
 /// (this crate cannot depend on mailvault-render).
 #[cfg(feature = "svg")]
-const MAX_SVG_IMAGE_PIXELS: u64 = 16_000_000;
+pub(crate) const MAX_SVG_IMAGE_PIXELS: u64 = 16_000_000;
 
 /// MailVault parity fix (plan B): an href resolver that can never read a file or fetch a url.
 /// usvg's default `resolve_string` opens any non-`data:` href as a local file path (a UNC
@@ -165,11 +165,11 @@ const MAX_SVG_IMAGE_PIXELS: u64 = 16_000_000;
 /// Here `resolve_string` is always `None`, and `resolve_data` accepts only a PNG, JPEG, GIF
 /// or WebP whose header declares at most `MAX_SVG_IMAGE_PIXELS` pixels (read with
 /// `imagesize`, before anything decodes it) and, summed over this document, no more than
-/// that either. Nested SVG is refused (no recursion), whatever the declared type.
+/// that either (`budget` counts down). Nested SVG is refused (no recursion), whatever the
+/// declared type.
 #[cfg(feature = "svg")]
-fn safe_image_href_resolver() -> usvg::ImageHrefResolver<'static> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    let budget = AtomicU64::new(MAX_SVG_IMAGE_PIXELS);
+fn safe_image_href_resolver(budget: Arc<std::sync::atomic::AtomicU64>) -> usvg::ImageHrefResolver<'static> {
+    use std::sync::atomic::Ordering;
     usvg::ImageHrefResolver {
         resolve_data: Box::new(move |_mime, data, _opts| {
             // Trust the bytes, not the declared mime type.
@@ -194,13 +194,19 @@ fn safe_image_href_resolver() -> usvg::ImageHrefResolver<'static> {
 /// Parse an SVG image.
 #[cfg(feature = "svg")]
 pub(crate) fn parse_svg_image(source: &[u8]) -> Result<crate::node::SvgImageData, usvg::Error> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let budget = Arc::new(AtomicU64::new(MAX_SVG_IMAGE_PIXELS));
     let options = usvg::Options {
         fontdb: Arc::clone(&*FONT_DB),
         // MailVault parity fix (plan B): no file or url access from inside an SVG.
-        image_href_resolver: safe_image_href_resolver(),
+        image_href_resolver: safe_image_href_resolver(Arc::clone(&budget)),
         ..Default::default()
     };
-    crate::node::SvgImageData::from_data(source, &options)
+    let mut svg = crate::node::SvgImageData::from_data(source, &options)?;
+    // MailVault parity fix (plan B): what the resolver let through, for the document's
+    // per-use budget (`BaseDocument::admit_image_use`).
+    svg.nested_pixels = MAX_SVG_IMAGE_PIXELS - budget.load(Ordering::Acquire);
+    Ok(svg)
 }
 
 pub trait ToColorColor {

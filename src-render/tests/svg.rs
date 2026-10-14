@@ -321,3 +321,85 @@ fn a_real_png_fetch_still_draws() {
     doc.apply_resources();
     assert_eq!(rgb_at(&doc.tile_png(0).unwrap(), 50, 50), RED);
 }
+
+// ---- XML entities: no DTD expansion in any SVG ----
+
+/// An SVG whose red rectangle exists only through an internal-subset entity.
+fn entity_svg() -> String {
+    r##"<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY r '<rect width="100" height="100" fill="#f00"/>'>]><svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">&r;</svg>"##.to_string()
+}
+
+#[test]
+fn an_svg_entity_is_never_expanded_from_any_source() {
+    let data = format!("data:image/svg+xml;base64,{}", b64(entity_svg().as_bytes()));
+    let css = format!(r#"<div style="width:100px;height:100px;background-image:url('{data}')"></div>"#);
+    assert_eq!(probe(&body(&format!(r#"<img src="{data}" width="100" height="100">"#))), WHITE, "img: the entity was expanded");
+    assert_eq!(probe(&body(&css)), WHITE, "css: the entity was expanded");
+    assert_eq!(probe_fetched(entity_svg().into_bytes()), WHITE, "fetched: the entity was expanded");
+}
+
+#[test]
+fn an_entity_bomb_is_refused_quickly() {
+    // 2000 references to a 50 KB entity: 100 MB once expanded (a mail can ask for gigabytes).
+    let svg = format!(
+        r#"<!DOCTYPE svg [<!ENTITY a "{}">]><svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><desc>{}</desc></svg>"#,
+        "x".repeat(50_000),
+        "&a;".repeat(2000)
+    );
+    let t = std::time::Instant::now();
+    assert_eq!(probe_fetched(svg.into_bytes()), WHITE);
+    assert!(t.elapsed() < std::time::Duration::from_secs(5), "took {:?}", t.elapsed());
+}
+
+#[test]
+fn an_svg_with_a_public_doctype_still_paints() {
+    let svg = format!(r#"<?xml version="1.0"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">{RED_RECT_SVG}"#);
+    assert_eq!(probe_fetched(svg.clone().into_bytes()), RED);
+    let data = format!("data:image/svg+xml;base64,{}", b64(svg.as_bytes()));
+    assert_eq!(probe(&body(&format!(r#"<img src="{data}" width="100" height="100">"#))), RED);
+}
+
+#[test]
+fn escaped_markup_in_an_inline_svg_cannot_read_a_file() {
+    // blitz-dom writes text nodes unescaped when it serialises an inline <svg> for usvg, so
+    // this text reaches usvg as a real <image>. The resolver is the line that holds.
+    let secret = SecretFile::new("escaped");
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g>&lt;image href="{}" width="100" height="100"/&gt;</g></svg>"#,
+        secret.href()
+    );
+    let (px, requests) = probe_pts(&body(&svg), &[(50, 50)]);
+    assert_eq!(requests, 0);
+    assert_eq!(px[0], WHITE, "the file was drawn into the mail");
+}
+
+// ---- nested rasters are charged per use, against one document budget ----
+
+#[test]
+fn one_data_svg_used_many_times_cannot_pass_the_document_budget() {
+    // One SVG holding a 4 Mpx raster, used by five elements. usvg's renderer decodes the
+    // raster again for every element that draws it, so each use is charged: four fit the
+    // 16 Mpx a document's nested rasters may take, the fifth is not drawn.
+    let png = format!("data:image/png;base64,{}", b64(&red_png_4_megapixels()));
+    let svg = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="100"><image href="{png}" x="0" y="0" width="40" height="100"/></svg>"#);
+    let url = format!("data:image/svg+xml;base64,{}", b64(svg.as_bytes()));
+    let divs: String = (0..5).map(|_| format!(r#"<div style="float:left;width:40px;height:100px;background-image:url('{url}')"></div>"#)).collect();
+    let (px, _) = probe_pts(&body(&divs), &[(20, 50), (60, 50), (100, 50), (140, 50), (180, 50)]);
+    assert_eq!(px.iter().filter(|p| **p == RED).count(), 4, "{px:?}");
+}
+
+#[test]
+fn inline_svgs_share_the_document_budget_for_nested_rasters() {
+    let png = format!("data:image/png;base64,{}", b64(&red_png_4_megapixels()));
+    let svg = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="100" style="float:left"><image href="{png}" x="0" y="0" width="40" height="100"/></svg>"#);
+    let (px, _) = probe_pts(&body(&svg.repeat(5)), &[(20, 50), (60, 50), (100, 50), (140, 50), (180, 50)]);
+    assert_eq!(px.iter().filter(|p| **p == RED).count(), 4, "{px:?}");
+}
+
+#[test]
+fn an_svg_without_nested_rasters_is_drawn_any_number_of_times() {
+    let url = format!("data:image/svg+xml;base64,{}", b64(r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="100"><rect width="20" height="100" fill="#f00"/></svg>"##.as_bytes()));
+    let divs: String = (0..10).map(|_| format!(r#"<div style="float:left;width:20px;height:100px;background-image:url('{url}')"></div>"#)).collect();
+    let (px, _) = probe_pts(&body(&divs), &(0..10).map(|i| (i * 20 + 10, 50)).collect::<Vec<_>>());
+    assert!(px.iter().all(|p| *p == RED), "{px:?}");
+}

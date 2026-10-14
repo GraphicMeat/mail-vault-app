@@ -322,6 +322,13 @@ pub struct BaseDocument {
     /// elements without re-fetching from the network.
     pub(crate) image_cache: HashMap<String, ImageData>,
 
+    /// MailVault parity fix (plan B): nested-raster pixels this document may still draw.
+    /// An SVG's embedded rasters are decoded again by usvg's renderer for every element that
+    /// draws its (shared) tree, so each use is charged here (`admit_image_use`); an SVG use
+    /// past the budget is not drawn. Bounds the decode work of one paint.
+    #[cfg(feature = "svg")]
+    pub(crate) svg_nested_pixels_left: u64,
+
     /// Tracks in-flight image requests. When an image is being fetched, additional
     /// requests for the same URL are queued here instead of starting new fetches.
     /// Value is a list of (node_id, image_type) pairs waiting for the image.
@@ -497,6 +504,8 @@ impl BaseDocument {
             changed_nodes: HashSet::new(),
             deferred_construction_nodes: Vec::new(),
             image_cache: HashMap::new(),
+            #[cfg(feature = "svg")]
+            svg_nested_pixels_left: crate::util::MAX_SVG_IMAGE_PIXELS,
             pending_images: HashMap::new(),
             pending_style_image_nodes: Vec::new(),
             pending_critical_resources: HashSet::new(),
@@ -1366,6 +1375,37 @@ impl BaseDocument {
         }
     }
 
+    /// MailVault parity fix (plan B): charge one more use of `image` against the document's
+    /// nested-raster budget. False when an SVG's embedded rasters no longer fit: the caller
+    /// then leaves that element (or layer) without the image. Rasters and SVGs without
+    /// embedded rasters always pass.
+    pub(crate) fn admit_image_use(&mut self, image: &ImageData) -> bool {
+        #[cfg(feature = "svg")]
+        if let ImageData::Svg(svg) = image {
+            if svg.nested_pixels > 0 {
+                match self.svg_nested_pixels_left.checked_sub(svg.nested_pixels) {
+                    Some(left) => self.svg_nested_pixels_left = left,
+                    None => return false,
+                }
+            }
+        }
+        let _ = image;
+        true
+    }
+
+    /// MailVault parity fix (plan B): give back the budget of an image use that is being
+    /// replaced or dropped, so a re-styled or re-built element is not charged twice.
+    pub(crate) fn release_image_use(&mut self, image: &ImageData) {
+        #[cfg(feature = "svg")]
+        if let ImageData::Svg(svg) = image {
+            self.svg_nested_pixels_left = self
+                .svg_nested_pixels_left
+                .saturating_add(svg.nested_pixels)
+                .min(crate::util::MAX_SVG_IMAGE_PIXELS);
+        }
+        let _ = image;
+    }
+
     /// Cache a loaded image and apply it to all nodes waiting on it
     /// (`<img>` elements, `background-image` layers and `mask-image` layers).
     fn apply_loaded_image(&mut self, url: &str, image: ImageData) {
@@ -1383,14 +1423,24 @@ impl BaseDocument {
 
         // Apply to all waiting nodes
         for (node_id, image_type) in waiting_nodes {
+            // MailVault parity fix (plan B): each use is charged (see `admit_image_use`).
+            if self.get_node(node_id).is_none() || !self.admit_image_use(&image) {
+                continue;
+            }
             let Some(node) = self.get_node_mut(node_id) else {
                 continue;
             };
 
             match image_type {
                 ImageType::Image => {
-                    node.element_data_mut().unwrap().special_data =
-                        SpecialElementData::Image(Box::new(image.clone()));
+                    let old = std::mem::replace(
+                        &mut node.element_data_mut().unwrap().special_data,
+                        SpecialElementData::Image(Box::new(image.clone())),
+                    );
+                    if let SpecialElementData::Image(old) = old {
+                        self.release_image_use(&old);
+                    }
+                    let node = self.get_node_mut(node_id).unwrap();
 
                     // Clear layout cache
                     node.cache_mut().clear();
@@ -1407,7 +1457,8 @@ impl BaseDocument {
                     });
                     if let Some(Some(layer_image)) = layer_image {
                         layer_image.status = Status::Ok;
-                        layer_image.image = image.clone();
+                        let old = std::mem::replace(&mut layer_image.image, image.clone());
+                        self.release_image_use(&old);
                     }
                 }
             }

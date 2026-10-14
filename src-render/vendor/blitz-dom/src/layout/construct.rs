@@ -560,12 +560,24 @@ fn collect_layout_children_with_wrap(
 
             match crate::util::parse_svg_image(outer_html.as_bytes()) {
                 Ok(svg) => {
-                    doc.get_node_mut(container_node_id)
-                        .unwrap()
-                        .element_data_mut()
-                        .unwrap()
-                        .special_data =
-                        SpecialElementData::Image(Box::new(crate::node::ImageData::Svg(svg)));
+                    // MailVault parity fix (plan B): inline SVGs share the document's
+                    // nested-raster budget (`admit_image_use`); the tree this build replaces
+                    // gives its share back first, and one past the budget is not drawn.
+                    let old = std::mem::replace(
+                        &mut doc.get_node_mut(container_node_id).unwrap().element_data_mut().unwrap().special_data,
+                        SpecialElementData::None,
+                    );
+                    if let SpecialElementData::Image(old) = old {
+                        doc.release_image_use(&old);
+                    }
+                    let image = crate::node::ImageData::Svg(svg);
+                    if doc.admit_image_use(&image) {
+                        doc.get_node_mut(container_node_id)
+                            .unwrap()
+                            .element_data_mut()
+                            .unwrap()
+                            .special_data = SpecialElementData::Image(Box::new(image));
+                    }
                 }
                 Err(err) => {
                     #[cfg(feature = "tracing")]

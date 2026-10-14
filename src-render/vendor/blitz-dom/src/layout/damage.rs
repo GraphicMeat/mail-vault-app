@@ -481,12 +481,36 @@ impl BaseDocument {
                     if old_image_url.is_some_and(|old_url| **new_url == **old_url) {
                         continue;
                     }
+                    // MailVault parity fix (plan B): the replaced layer gives its share of the
+                    // nested-raster budget back (see `BaseDocument::release_image_use`).
+                    #[cfg(feature = "svg")]
+                    if let Some(crate::node::ImageData::Svg(svg)) = old_image.map(|d| &d.image) {
+                        self.svg_nested_pixels_left = self
+                            .svg_nested_pixels_left
+                            .saturating_add(svg.nested_pixels)
+                            .min(crate::util::MAX_SVG_IMAGE_PIXELS);
+                    }
 
                     // Check cache first
                     let url_str = new_url.as_str();
                     if let Some(cached_image) = self.image_cache.get(url_str) {
                         #[cfg(feature = "tracing")]
                         tracing::info!("Loading image {url_str} from cache");
+                        // MailVault parity fix (plan B): each use is charged against the
+                        // document's nested-raster budget (`admit_image_use`; written out
+                        // here because the node is borrowed). Past it the layer stays empty.
+                        #[cfg(feature = "svg")]
+                        if let crate::node::ImageData::Svg(svg) = cached_image {
+                            if svg.nested_pixels > 0 {
+                                match self.svg_nested_pixels_left.checked_sub(svg.nested_pixels) {
+                                    Some(left) => self.svg_nested_pixels_left = left,
+                                    None => {
+                                        elem_images[idx] = None;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
                         Some(ImageResourceData {
                             url: new_url.clone(),
                             status: Status::Ok,

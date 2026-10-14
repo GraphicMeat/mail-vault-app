@@ -72,6 +72,10 @@ pub struct SvgImageData {
     pub tree: Arc<usvg::Tree>,
     /// The dimensions declared on the root `<svg>` element.
     pub intrinsic_dimensions: SvgIntrinsicDimensions,
+    /// MailVault parity fix (plan B): pixels of the rasters this SVG embeds (`data:` PNG,
+    /// JPEG, GIF, WebP), as their headers declare them. usvg's renderer decodes them again
+    /// every time an element draws the tree, so the document charges this figure per use.
+    pub nested_pixels: u64,
 }
 
 impl SvgImageData {
@@ -92,6 +96,16 @@ impl SvgImageData {
         };
 
         let text = std::str::from_utf8(data).map_err(|_| usvg::Error::NotAnUtf8Str)?;
+        // MailVault parity fix (plan B): no entity declarations. roxmltree expands internal
+        // entities with no limit on the total size (only nesting depth and references per
+        // root reference are capped), so a few KB of `<!ENTITY>` and `&a;` ask for gigabytes.
+        // A DTD is still allowed, so an exported SVG's public DOCTYPE parses; `<!ENTITY` (case
+        // sensitive in XML) is the only way to declare one, so any SVG holding it is refused.
+        if text.contains("<!ENTITY") {
+            return Err(usvg::Error::ParsingFailed(roxmltree::Error::EntityReferenceLoop(
+                roxmltree::TextPos::new(1, 1),
+            )));
+        }
         let xml_options = roxmltree::ParsingOptions {
             allow_dtd: true,
             ..Default::default()
@@ -102,6 +116,7 @@ impl SvgImageData {
         Ok(Self {
             tree: Arc::new(tree),
             intrinsic_dimensions: SvgIntrinsicDimensions::from_xmltree(&doc),
+            nested_pixels: 0,
         })
     }
 
