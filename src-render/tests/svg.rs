@@ -340,14 +340,15 @@ fn an_svg_entity_is_never_expanded_from_any_source() {
 
 #[test]
 fn an_entity_bomb_is_refused_quickly() {
-    // 2000 references to a 50 KB entity: 100 MB once expanded (a mail can ask for gigabytes).
+    // 2000 references to a 50 KB entity that draws a red rectangle: 100 MB once expanded (a
+    // mail can ask for gigabytes). Expanded it paints red, so only a refusal is white.
     let svg = format!(
-        r#"<!DOCTYPE svg [<!ENTITY a "{}">]><svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><desc>{}</desc></svg>"#,
+        r##"<!DOCTYPE svg [<!ENTITY a '<rect width="100" height="100" fill="#f00"/><!--{}-->'>]><svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">{}</svg>"##,
         "x".repeat(50_000),
         "&a;".repeat(2000)
     );
     let t = std::time::Instant::now();
-    assert_eq!(probe_fetched(svg.into_bytes()), WHITE);
+    assert_eq!(probe_fetched(svg.into_bytes()), WHITE, "the entity bomb was expanded");
     assert!(t.elapsed() < std::time::Duration::from_secs(5), "took {:?}", t.elapsed());
 }
 
