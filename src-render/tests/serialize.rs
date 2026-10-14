@@ -37,7 +37,7 @@ fn root_len(doc: &RenderDoc, n: usize) -> usize {
 
 #[test]
 fn within_one_paragraph_keeps_inline_markup_and_escapes() {
-    let mut d = open(r#"<p>Hi <b>bold &amp; <a href="https://x.test/?a=1&amp;b=2">link</a></b> end</p>"#);
+    let d = open(r#"<p>Hi <b>bold &amp; <a href="https://x.test/?a=1&amp;b=2">link</a></b> end</p>"#);
     let (s, e) = (at(&d, "bold", false), at(&d, "lin", true));
     let out = d.serialize(s, e);
     assert_eq!(out.text, "bold & lin");
@@ -46,14 +46,14 @@ fn within_one_paragraph_keeps_inline_markup_and_escapes() {
 
 #[test]
 fn partial_link_keeps_its_href_through_the_inline_ancestor_chain() {
-    let mut d = open(r#"<p><a href="https://x.test/">inlinelink</a></p>"#);
+    let d = open(r#"<p><a href="https://x.test/">inlinelink</a></p>"#);
     let out = d.serialize(at(&d, "line", false), at(&d, "lin", true));
     assert_eq!(out.html, r#"<a href="https://x.test/">lin</a>"#);
 }
 
 #[test]
 fn across_blocks_newlines_and_paragraph_double_newline() {
-    let mut d = open(r#"<p style="margin:0 0 20px">Hello world</p><div>Second line</div>"#);
+    let d = open(r#"<p style="margin:0 0 20px">Hello world</p><div>Second line</div>"#);
     let out = d.serialize(at(&d, "world", false), at(&d, "Sec", true));
     assert_eq!(out.text, "world\n\nSec");
     assert_eq!(out.html, r#"<p style="margin:0 0 20px">world</p><div>Sec</div>"#);
@@ -61,7 +61,7 @@ fn across_blocks_newlines_and_paragraph_double_newline() {
 
 #[test]
 fn table_cells_join_with_tab_rows_with_newline() {
-    let mut d = open(r#"<table><tr><td>a1</td><td>b1</td></tr><tr><td>a2</td><td>b2</td></tr></table>"#);
+    let d = open(r#"<table><tr><td>a1</td><td>b1</td></tr><tr><td>a2</td><td>b2</td></tr></table>"#);
     let out = d.serialize(at(&d, "a1", false), at(&d, "b2", true));
     assert_eq!(out.text, "a1\tb1\na2\tb2");
     assert_eq!(
@@ -73,7 +73,7 @@ fn table_cells_join_with_tab_rows_with_newline() {
 
 #[test]
 fn list_items_keep_their_list_and_one_cell_keeps_none() {
-    let mut d = open("<ul><li>one</li><li>two</li></ul><table><tr><td>cell <b>x</b></td></tr></table>");
+    let d = open("<ul><li>one</li><li>two</li></ul><table><tr><td>cell <b>x</b></td></tr></table>");
     let out = d.serialize(at(&d, "one", false), at(&d, "two", true));
     assert_eq!(out.html, "<ul><li>one</li><li>two</li></ul>");
     let out = d.serialize(at(&d, "cell", false), at(&d, "x", true));
@@ -82,7 +82,7 @@ fn list_items_keep_their_list_and_one_cell_keeps_none() {
 
 #[test]
 fn collapsed_whitespace_text_transform_br_and_list_marker_map_back() {
-    let mut d = open("<p>a   lot\n of   space</p><p style=\"text-transform:uppercase\">straße</p><p>x<br>y</p><ul style=\"list-style-position:inside\"><li>item</li></ul>");
+    let d = open("<p>a   lot\n of   space</p><p style=\"text-transform:uppercase\">straße</p><p>x<br>y</p><ul style=\"list-style-position:inside\"><li>item</li></ul>");
     let out = d.serialize(at(&d, "lot", false), at(&d, "spa", true));
     assert_eq!(out.text, "lot of spa");
     assert_eq!(out.html, "lot\n of   spa", "DOM text, not the collapsed layout text; a partial single paragraph is not wrapped in its block (WebKit)");
@@ -98,7 +98,7 @@ fn collapsed_whitespace_text_transform_br_and_list_marker_map_back() {
 
 #[test]
 fn serialize_skips_folded_region() {
-    let mut d = open(r#"<p>Reply text.</p><div data-mv-fold-toggle="q0" data-mv-noselect style="display:inline-block">⋯</div><blockquote data-mv-fold="q0" style="display:none"><p>Quoted.</p></blockquote><p>After.</p>"#);
+    let d = open(r#"<p>Reply text.</p><div data-mv-fold-toggle="q0" data-mv-noselect style="display:inline-block">⋯</div><blockquote data-mv-fold="q0" style="display:none"><p>Quoted.</p></blockquote><p>After.</p>"#);
     let out = d.serialize(at(&d, "Reply", false), at(&d, "After.", true));
     assert!(!out.text.contains("Quoted") && !out.html.contains("Quoted"), "{out:?}");
     assert!(!out.text.contains('⋯') && !out.html.contains('⋯'));
@@ -107,7 +107,7 @@ fn serialize_skips_folded_region() {
 
 #[test]
 fn serialize_skips_noselect() {
-    let mut d = open(r#"<p>Hi <span class="mv-pii" data-mv-noselect>•••• ••••</span> there</p>"#);
+    let d = open(r#"<p>Hi <span class="mv-pii" data-mv-noselect>•••• ••••</span> there</p>"#);
     let out = d.serialize(at(&d, "Hi", false), at(&d, "there", true));
     assert!(!out.text.contains('•') && !out.html.contains('•'), "{out:?}");
     assert_eq!(out.text, "Hi  there");
@@ -177,7 +177,7 @@ fn dommap_aligns_every_inline_shape() {
 
 #[test]
 fn bare_text_in_an_anonymous_block_copies_across_into_the_next_block() {
-    let mut d = open("lead <b>bold</b><div>block</div>");
+    let d = open("lead <b>bold</b><div>block</div>");
     let out = d.serialize(at(&d, "lead", false), at(&d, "block", true));
     assert_eq!(out.text, "lead bold\nblock");
     assert_eq!(out.html, "lead <b>bold</b><div>block</div>");
@@ -188,7 +188,7 @@ fn bare_text_in_an_anonymous_block_copies_across_into_the_next_block() {
 
 #[test]
 fn generated_content_is_not_copied() {
-    let mut d = open(r#"<style>p.q::before{content:"> "}</style><p class="q">quoted <b>text</b></p>"#);
+    let d = open(r#"<style>p.q::before{content:"> "}</style><p class="q">quoted <b>text</b></p>"#);
     let len = root_len(&d, 0);
     let out = d.serialize(root_at(&d, 0, 0), root_at(&d, 0, len));
     assert_eq!(out.text, "quoted text");
@@ -197,7 +197,7 @@ fn generated_content_is_not_copied() {
 
 #[test]
 fn comments_scripts_handlers_and_markers_stay_out_of_the_markup() {
-    let mut d = open(r#"<p>a<!--c--><span onclick="x()" data-mv-x="1" title="t">b</span><img src="x.png" alt="i">c</p>"#);
+    let d = open(r#"<p>a<!--c--><span onclick="x()" data-mv-x="1" title="t">b</span><img src="x.png" alt="i">c</p>"#);
     let out = d.serialize(at(&d, "a", false), at(&d, "c", true));
     assert_eq!(out.html, r#"a<span title="t">b</span><img src="x.png" alt="i">c"#);
     assert_eq!(out.text, "abc", "{out:?}");
@@ -205,7 +205,7 @@ fn comments_scripts_handlers_and_markers_stay_out_of_the_markup() {
 
 #[test]
 fn offsets_inside_a_code_point_select_the_whole_code_point() {
-    let mut d = open("<p>a\u{1f600}b</p><p>e\u{301}x</p><p>\u{5e9}\u{5dc}\u{5d5}\u{5dd}</p>");
+    let d = open("<p>a\u{1f600}b</p><p>e\u{301}x</p><p>\u{5e9}\u{5dc}\u{5d5}\u{5dd}</p>");
     // 'a' is byte 0, the emoji bytes 1..5, 'b' byte 5.
     let out = d.serialize(root_at(&d, 0, 2), root_at(&d, 0, 4));
     assert_eq!((out.text.as_str(), out.html.as_str()), ("\u{1f600}", "\u{1f600}"));
@@ -222,7 +222,7 @@ fn offsets_inside_a_code_point_select_the_whole_code_point() {
 
 #[test]
 fn stale_or_out_of_range_endpoints_copy_nothing_and_never_panic() {
-    let mut d = open("<p>hello</p>");
+    let d = open("<p>hello</p>");
     let ok = root_at(&d, 0, 0);
     let empty = d.serialize(Endpoint { node: 987_654, offset: 0 }, ok);
     assert_eq!((empty.html.as_str(), empty.text.as_str()), ("", ""));
@@ -237,7 +237,7 @@ fn stale_or_out_of_range_endpoints_copy_nothing_and_never_panic() {
 #[test]
 fn a_selection_across_many_roots_and_tiles_keeps_order_and_separators() {
     let body: String = (0..60).map(|i| format!("<p>para {i:02} end</p>")).collect();
-    let mut d = open(&body);
+    let d = open(&body);
     assert!(d.meta().tile_count >= 3, "tall enough to span tiles");
     // `at` only looks at the first tiles; roots are addressed by index (one per paragraph).
     let out = d.serialize(root_at(&d, 3, 0), root_at(&d, 57, 9));
@@ -271,7 +271,7 @@ fn serialize_op_replies_with_html_and_text() {
 
 #[test]
 fn a_selection_inside_a_noselect_span_copies_nothing_in_html_either() {
-    let mut d = open(r#"<p>Hi <span class="mv-pii" data-mv-noselect>•••• ••••</span> there</p>"#);
+    let d = open(r#"<p>Hi <span class="mv-pii" data-mv-noselect>•••• ••••</span> there</p>"#);
     // "Hi " is bytes 0..3, the mask 3..28 (nine 3-byte bullets and a space... 8 bullets + space).
     let mask = "•••• ••••".len();
     let out = d.serialize(root_at(&d, 0, 3), root_at(&d, 0, 3 + mask));
@@ -282,7 +282,7 @@ fn a_selection_inside_a_noselect_span_copies_nothing_in_html_either() {
 
 #[test]
 fn plain_text_turns_nbsp_into_a_space_but_markup_keeps_it() {
-    let mut d = open("<p>a&nbsp;b</p>");
+    let d = open("<p>a&nbsp;b</p>");
     let out = d.serialize(at(&d, "a", false), at(&d, "b", true));
     assert_eq!(out.text, "a b");
     assert_eq!(out.html, "a&nbsp;b");
@@ -290,7 +290,7 @@ fn plain_text_turns_nbsp_into_a_space_but_markup_keeps_it() {
 
 #[test]
 fn partial_ancestors_that_end_up_empty_are_not_cloned() {
-    let mut d = open("<p>abc</p><p>def</p>");
+    let d = open("<p>abc</p><p>def</p>");
     // Start at the very end of the first paragraph.
     let out = d.serialize(root_at(&d, 0, 3), root_at(&d, 1, 2));
     assert_eq!((out.text.as_str(), out.html.as_str()), ("de", "<p>de</p>"));
@@ -302,7 +302,7 @@ fn partial_ancestors_that_end_up_empty_are_not_cloned() {
 #[test]
 fn mixed_width_scripts_and_zwj_sequences_copy_exact_slices() {
     let s = "na\u{ef}ve \u{1f600} \u{6771}\u{4eac} \u{1f469}\u{200d}\u{1f469}\u{200d}\u{1f467}";
-    let mut d = open(&format!("<p>{s}</p>"));
+    let d = open(&format!("<p>{s}</p>"));
     let ix = |n: &str| s.find(n).unwrap();
     let cases: [(usize, usize, &str); 6] = [
         (ix("\u{ef}"), ix("\u{1f600}") + 4, "\u{ef}ve \u{1f600}"),
@@ -321,7 +321,7 @@ fn mixed_width_scripts_and_zwj_sequences_copy_exact_slices() {
 #[test]
 fn a_selection_over_a_ltr_rtl_boundary_copies_in_logical_order() {
     let s = "abc \u{5e9}\u{5dc}\u{5d5}\u{5dd} def";
-    let mut d = open(&format!("<p>{s}</p>"));
+    let d = open(&format!("<p>{s}</p>"));
     let ix = |n: &str| s.find(n).unwrap();
     let cases: [(usize, usize, &str); 3] = [
         (ix("c"), ix("\u{5dc}") + 2, "c \u{5e9}\u{5dc}"),
@@ -366,7 +366,7 @@ fn a_host_holds_each_inline_box_at_a_byte_offset_of_its_text() {
 
 #[test]
 fn nested_inline_roots_are_copied_in_place_in_the_plain_text() {
-    let mut d = open(CTA);
+    let d = open(CTA);
     let out = d.serialize(at(&d, "Ctabefore", false), at(&d, "btnafter.", true));
     assert_eq!(out.text, CTA_PLAIN);
     assert_eq!(
@@ -378,7 +378,7 @@ fn nested_inline_roots_are_copied_in_place_in_the_plain_text() {
 
 #[test]
 fn a_selection_over_a_host_and_the_next_paragraph_splices_each_nested_root_once() {
-    let mut d = open(&format!("{CTA}<p>Next para</p>"));
+    let d = open(&format!("{CTA}<p>Next para</p>"));
     let n = mailvault_render::text::inline_roots(d.base()).len();
     let out = d.serialize(root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
     assert_eq!(out.text, format!("{CTA_PLAIN}\n\nNext para"));
@@ -389,7 +389,7 @@ fn a_selection_over_a_host_and_the_next_paragraph_splices_each_nested_root_once(
 /// host's text after the box is still part of the copy.
 #[test]
 fn a_select_all_that_ends_in_the_last_nested_root_keeps_the_host_tail() {
-    let mut d = open(r#"<p style="margin:0 0 20px">Lead</p><p style="margin:0">x <span style="display:inline-block">Box</span> tail</p>"#);
+    let d = open(r#"<p style="margin:0 0 20px">Lead</p><p style="margin:0">x <span style="display:inline-block">Box</span> tail</p>"#);
     let n = mailvault_render::text::inline_roots(d.base()).len();
     assert_eq!(n, 3);
     let out = d.serialize(root_at(&d, 0, 0), root_at(&d, 2, root_len(&d, 2)));
@@ -399,7 +399,7 @@ fn a_select_all_that_ends_in_the_last_nested_root_keeps_the_host_tail() {
 
 #[test]
 fn selections_into_and_out_of_nested_roots_follow_reading_order_either_way() {
-    let mut d = open(CTA);
+    let d = open(CTA);
     let (cta, btn, after) = (at(&d, "Ctabutton", false), at(&d, "Btnlabel", false), at(&d, "btnafter.", true));
     let cases = [
         (shift(cta, 4), after, "utton text ctamiddle Btnlabel btnafter."),
@@ -422,7 +422,7 @@ fn selections_into_and_out_of_nested_roots_follow_reading_order_either_way() {
 /// text is after every box there.
 #[test]
 fn a_host_offset_at_a_box_is_before_it_and_the_hosts_end_is_after_it() {
-    let mut d = open(CTA);
+    let d = open(CTA);
     let p = root_id(&d, 0);
     let i = box_offsets(&d, 0)[0];
     let out = d.serialize(Endpoint { node: p, offset: i }, at(&d, "ctamiddle", true));
@@ -431,7 +431,7 @@ fn a_host_offset_at_a_box_is_before_it_and_the_hosts_end_is_after_it() {
     let out = d.serialize(root_at(&d, 0, 0), Endpoint { node: p, offset: i });
     assert_eq!(out.text, "Ctabefore ");
 
-    let mut d = open(r#"<p style="margin:0">Click here: <a href="https://x.test/" style="display:inline-block">Button</a></p>"#);
+    let d = open(r#"<p style="margin:0">Click here: <a href="https://x.test/" style="display:inline-block">Button</a></p>"#);
     let len = root_len(&d, 0);
     assert_eq!(box_offsets(&d, 0), [len], "the box sits at the end of the host text");
     let out = d.serialize(root_at(&d, 0, 0), root_at(&d, 0, len));
@@ -441,7 +441,7 @@ fn a_host_offset_at_a_box_is_before_it_and_the_hosts_end_is_after_it() {
 
 #[test]
 fn an_inline_block_inside_an_inline_block_is_spliced_at_both_levels() {
-    let mut d = open(r#"<p style="margin:0">out <span style="display:inline-block">in1 <span style="display:inline-block">deep</span> in2</span> end</p>"#);
+    let d = open(r#"<p style="margin:0">out <span style="display:inline-block">in1 <span style="display:inline-block">deep</span> in2</span> end</p>"#);
     let out = d.serialize(at(&d, "out", false), at(&d, "end", true));
     assert_eq!(out.text, "out in1 deep in2 end");
     let out = d.serialize(at(&d, "deep", false), at(&d, "end", true));
@@ -458,7 +458,7 @@ fn block_children_of_an_inline_block_and_floats_copy_once_in_dom_order() {
         (r#"<p style="margin:0">fa <span style="display:inline-block">fqbox</span> fb</p><p>fc</p>"#, &["fa", "fqbox", "fb", "fc"]),
     ];
     for (html, words) in cases {
-        let mut d = open(html);
+        let d = open(html);
         let n = mailvault_render::text::inline_roots(d.base()).len();
         let out = d.serialize(root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
         let pos: Vec<usize> = words.iter().map(|w| {
@@ -469,7 +469,7 @@ fn block_children_of_an_inline_block_and_floats_copy_once_in_dom_order() {
     }
     // Floats stay pieces of their own (their box offset in the host is not
     // reliable): each text once.
-    let mut d = open(r#"<p style="margin:0">ga <span style="float:right">gfl</span> gb</p><p>gc</p>"#);
+    let d = open(r#"<p style="margin:0">ga <span style="float:right">gfl</span> gb</p><p>gc</p>"#);
     let n = mailvault_render::text::inline_roots(d.base()).len();
     let out = d.serialize(root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
     for w in ["ga", "gfl", "gb", "gc"] {
@@ -490,7 +490,7 @@ fn every_endpoint_pair_over_nested_roots_copies_the_same_reversed() {
     ];
     let mut pairs = 0;
     for html in corpus {
-        let mut d = open(html);
+        let d = open(html);
         let roots = mailvault_render::text::inline_roots(d.base());
         let points: Vec<Endpoint> = (0..roots.len())
             .flat_map(|i| {
@@ -511,7 +511,7 @@ fn every_endpoint_pair_over_nested_roots_copies_the_same_reversed() {
 
 #[test]
 fn anonymous_blocks_inside_and_at_the_ends_of_a_selection_are_copied() {
-    let mut d = open("lead <b>bold</b><div>block</div>mid<p>para</p>tail");
+    let d = open("lead <b>bold</b><div>block</div>mid<p>para</p>tail");
     let out = d.serialize(at(&d, "lead", false), at(&d, "para", true));
     assert_eq!(out.text, "lead bold\nblock\nmid\npara", "the anonymous block between the div and the p is not lost");
     let out = d.serialize(at(&d, "block", false), at(&d, "tail", true));
@@ -523,7 +523,7 @@ fn anonymous_blocks_inside_and_at_the_ends_of_a_selection_are_copied() {
 #[test]
 fn a_select_all_over_3000_paragraphs_with_nested_buttons_serializes_in_budget() {
     let body: String = (0..3000).map(|i| format!(r#"<p>para {i} <button style="display:inline-block">btn {i}</button> <img src="a.png" width="4" height="4"> end</p>"#)).collect();
-    let mut d = open(&body);
+    let d = open(&body);
     let n = mailvault_render::text::inline_roots(d.base()).len();
     assert_eq!(n, 6000, "a host and a button per paragraph");
     let (a, b) = (root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));

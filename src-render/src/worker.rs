@@ -253,7 +253,7 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             },
             None => unknown(out, req),
         },
-        In::Serialize { req, doc, start, end } => match docs.get_mut(&doc) {
+        In::Serialize { req, doc, start, end } => match docs.get(&doc) {
             Some(o) => match guarded(tainted, || o.doc.serialize(start, end)) {
                 Some(copy) => line(out, json!({"kind":"reply","req":req,"ok":copy})),
                 None => {

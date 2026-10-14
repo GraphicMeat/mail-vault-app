@@ -213,10 +213,10 @@ impl RenderDoc {
     }
 
     /// Rich and plain copy of the selection between two layout endpoints (see
-    /// `serialize`). Reversed endpoints are swapped; blitz's own highlight is
-    /// cleared again before this returns, so no tile ever paints it.
-    pub fn serialize(&mut self, a: crate::serialize::Endpoint, b: crate::serialize::Endpoint) -> crate::serialize::Serialized {
-        crate::serialize::serialize(&mut self.doc, a, b)
+    /// `serialize`). Reversed endpoints are swapped. Read-only: it never
+    /// touches blitz's selection, so no tile ever paints a highlight.
+    pub fn serialize(&self, a: crate::serialize::Endpoint, b: crate::serialize::Endpoint) -> crate::serialize::Serialized {
+        crate::serialize::serialize(&self.doc, a, b)
     }
 
     /// For tests: the underlying blitz document.
