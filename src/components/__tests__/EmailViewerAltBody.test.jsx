@@ -25,14 +25,15 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
 });
 
 const last = { props: null };
-const StubBody = (p) => {
+// The reader hands the body a ref (the reply selection handle), so a body is a forwardRef.
+const StubBody = React.forwardRef(function StubBody(p, _ref) {
   last.props = p;
   return (
     <div data-testid="alt-body">
       <button onClick={() => p.onLink({ href: 'https://evil.test/', alert: 'red', title: 'Mismatch', text: 'bank.com' })}>alt-link</button>
     </div>
   );
-};
+});
 
 const mail = (uid) => ({
   uid, _accountId: 'acct-1', _mailbox: 'INBOX', subject: `S${uid}`,

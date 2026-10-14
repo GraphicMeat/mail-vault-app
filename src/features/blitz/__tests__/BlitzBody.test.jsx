@@ -6,7 +6,8 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 
 const tilesProps = vi.hoisted(() => ({ last: null }));
 vi.mock('../BlitzTiles', () => ({
-  default: (p) => { tilesProps.last = p; return <div data-testid="tiles-stub"><button onClick={() => p.onFailure('render_unavailable')}>fail</button></div>; },
+  // BlitzBody hands its tiles a ref (the selection root), so the real one is a forwardRef; so is the stub.
+  default: React.forwardRef((p, _ref) => { tilesProps.last = p; return <div data-testid="tiles-stub"><button onClick={() => p.onFailure('render_unavailable')}>fail</button></div>; }),
 }));
 const privacy = vi.hoisted(() => ({ hold: false, active: false }));
 vi.mock('../prepass/privacyDict', () => ({ usePrivacyDict: () => ({ active: privacy.active, dict: null, hold: privacy.hold }) }));

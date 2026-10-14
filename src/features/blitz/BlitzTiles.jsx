@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useT } from '../../i18n/index.js';
 import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serializeRender } from './service';
 import TextLayer from './text/TextLayer';
@@ -24,7 +24,7 @@ function useDevicePixelRatio() {
 // the viewport, links found by hit-testing in the worker. While `privacy` is
 // on, the hover URL chip is not drawn at all: a URL can carry a name that the
 // pre-pass does not know to mask (a calendar slug, a ?name= query).
-export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false }) {
+const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false }, ref) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -33,6 +33,8 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
   const [hover, setHover] = useState(null);
   const [hoverFold, setHoverFold] = useState(null); // set by fold-toggle hover (fold clicks)
   const textLayerRef = useRef(null);
+  // The owner (BlitzBody) reaches the selectable text through this: reply quotes the selection under it.
+  useImperativeHandle(ref, () => ({ layerEl: () => textLayerRef.current?.layerEl() ?? null }), []);
   const [shown, setShown] = useState(() => new Set([0, 1]));
   const tileEls = useRef([]);
   const gen = useRef(0);
@@ -240,4 +242,6 @@ export default function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggl
       )}
     </div>
   );
-}
+});
+
+export default BlitzTiles;

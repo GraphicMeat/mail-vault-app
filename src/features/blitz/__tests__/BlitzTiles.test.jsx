@@ -12,6 +12,7 @@ vi.mock('../service', () => ({
 }));
 import { openRender, hitRender, closeRender, onRenderUpdated, textRunsRender, serializeRender, foldRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
+import { replySelection } from '../../../utils/replySelection';
 
 let paneWidth = 600;
 const meta = (over = {}) => ({ cssWidth: 600, cssHeight: 1100, tileCssHeight: 512, tileCount: 3, links: [], plainText: '', folds: [], ...over });
@@ -288,5 +289,59 @@ describe('BlitzTiles', () => {
     document.dispatchEvent(e);
     expect(e.defaultPrevented).toBe(true);
     expect(data).toEqual({ 'text/html': '<p>h&eacute;l</p>', 'text/plain': 'hél' });
+  });
+
+  it('exposes layerEl: the text layer element, null before a doc opens', async () => {
+    const ref = React.createRef();
+    let resolve;
+    openRender.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    render(tiles({ ref }));
+    expect(ref.current.layerEl()).toBeNull();
+    await act(async () => resolve({ docId: 1, rev: 1, meta: meta() }));
+    const layer = await screen.findByTestId('blitz-text-layer');
+    expect(ref.current.layerEl()).toBe(layer);
+  });
+
+  describe('reply quote from the text layer', () => {
+    const runs = (over = {}) => [
+      { x: 0, y: 0, w: 50, h: 20, text: 'Hello ', fontPx: 16, node: 1, start: 0, ...over },
+      { x: 50, y: 0, w: 50, h: 20, text: 'world', fontPx: 16, node: 1, start: 6, ...over },
+    ];
+    const select = (a, aOff, b, bOff) => {
+      const r = document.createRange(); r.setStart(a.firstChild, aOff); r.setEnd(b.firstChild, bOff);
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    };
+    afterEach(() => window.getSelection().removeAllRanges());
+
+    it('is the selected text only: none of the layer markup, positions or classes reach the quote', async () => {
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+      textRunsRender.mockResolvedValue({ runs: runs() });
+      const ref = React.createRef();
+      render(tiles({ ref }));
+      const first = await screen.findByText('Hello');
+      select(first, 3, screen.getByText('world'), 3);
+      const quote = replySelection(ref.current.layerEl(), document.getSelection());
+      expect(quote).toBe('lo wor');
+      // The layer's own markup is real, so the check below can fail.
+      expect(ref.current.layerEl().innerHTML).toMatch(/letter-spacing|left:|mv-blitz/);
+      expect(quote).not.toMatch(/<span|left:|top:|letter-spacing|transparent|mv-blitz|style=|class=|data-/);
+    });
+
+    it('still quotes the same selection after a relayout (rev bump keeps the runs)', async () => {
+      let push;
+      onRenderUpdated.mockImplementation(async cb => { push = cb; return () => {}; });
+      openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+      textRunsRender.mockResolvedValue({ runs: runs() });
+      const ref = React.createRef();
+      render(tiles({ ref }));
+      select(await screen.findByText('Hello'), 3, screen.getByText('world'), 3);
+      let resolve2;
+      textRunsRender.mockImplementationOnce(() => new Promise(r => { resolve2 = r; }));
+      await act(async () => { push({ docId: 5, rev: 2, meta: meta({ tileCount: 1, cssHeight: 100 }) }); });
+      // Reply while the new layout is in flight: the old spans are still there.
+      expect(replySelection(ref.current.layerEl(), document.getSelection())).toBe('lo wor');
+      await act(async () => { resolve2({ runs: runs({ y: 4 }) }); });
+      expect(replySelection(ref.current.layerEl(), document.getSelection())).toBe('lo wor');
+    });
   });
 });

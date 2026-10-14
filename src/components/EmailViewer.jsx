@@ -162,11 +162,12 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const confirmationReturnRef = useRef(null);
   const iframeRef = useRef(null);
   const plainBodyRef = useRef(null);
+  const altBodyRef = useRef(null);
   const selectedReplyHtml = () => {
     const frame = iframeRef.current;
     return frame?.contentDocument
       ? replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.())
-      : replySelection(plainBodyRef.current);
+      : replySelection(altBodyRef.current?.selectionRoot?.() ?? plainBodyRef.current, document.getSelection());
   };
   // While the index snippet stands in for the body (`_bodyLoading`), a reply
   // or forward resolves the real body first (replyTarget), the way the row
@@ -879,7 +880,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             >
               {AltBody ? (
                 <AltBody
-                  surface="reader" messageKey={scopeKey} bodyHtml={altBodyHtml} indicatorCss={indicatorCss}
+                  ref={altBodyRef} surface="reader" messageKey={scopeKey} bodyHtml={altBodyHtml} indicatorCss={indicatorCss}
                   plainText={selectedEmail.text} theme={{ dark: emailDarkMode, palette }} signatureDisplay={signatureDisplay}
                   foldQuotes privacy={privacyOn} searchQuery={searchQueryForHighlight} accountId={selectedEmail._accountId}
                   message={selectedEmail} onLink={onAltLink} sizing="content"

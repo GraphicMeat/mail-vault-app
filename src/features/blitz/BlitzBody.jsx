@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useT } from '../../i18n/index.js';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -29,10 +29,15 @@ const textOf = (html) => {
   } catch { return ''; }
 };
 
-/** @param {import('./types').AltBodyProps} props */
-export default function BlitzBody(props) {
+/** @type {React.ForwardRefExoticComponent<import('./types').AltBodyProps & React.RefAttributes<{ selectionRoot(): HTMLElement | null }>>} */
+const BlitzBody = forwardRef(function BlitzBody(props, ref) {
   const { bodyHtml, documentHtml, indicatorCss, plainText, theme, message, onLink, sizing, className, style } = props;
   const t = useT();
+  const tilesRef = useRef(null);
+  // Reply quotes what the user selected: the text layer is real DOM, so the
+  // reader's replySelection works on it as on the iframe's body. Null while
+  // held for privacy or after a failure (the plain fallback is not the root).
+  useImperativeHandle(ref, () => ({ selectionRoot: () => tilesRef.current?.layerEl?.() ?? null }), []);
   // emailScopeKey is null for a message whose location cannot be resolved. All such
   // messages must not share one failure, bubble and pre-pass state, so they get a key
   // from the message's own identity and content.
@@ -137,7 +142,9 @@ export default function BlitzBody(props) {
       {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
           so nothing built for the other state stays on screen while the new doc opens.
           A dictionary update while masking stays on does not change the key. */}
-      <BlitzTiles key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} privacy={priv.active} onFoldToggled={onFoldToggled} />
+      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} privacy={priv.active} onFoldToggled={onFoldToggled} />
     </div>
   );
-}
+});
+
+export default BlitzBody;

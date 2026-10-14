@@ -19,7 +19,7 @@ describe('blitz module registration', () => {
     expect(register).toHaveBeenCalledTimes(1);
     const [name, impl] = register.mock.calls[0];
     expect(name).toBe('blitz');
-    expect(typeof impl.Body).toBe('function');
+    expect(impl.Body).toBeTruthy(); // a forwardRef component (the reply selection handle), an object
     expect(typeof impl.SettingsRow).toBe('function');
   });
 
