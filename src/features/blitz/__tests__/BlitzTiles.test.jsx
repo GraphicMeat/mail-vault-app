@@ -630,7 +630,7 @@ describe('body context menu', () => {
     expect(ev).toBe(false); // native menu suppressed
     const menu = await screen.findByTestId('blitz-context-menu');
     expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toContain('Copy Link');
-    expect(menu.style.position).toBe('absolute');
+    expect(menu.style.position).toBe('fixed'); // out of the body's clipping box
     fireEvent.click(tileEls[0]);
     await waitFor(() => expect(screen.queryByTestId('blitz-context-menu')).toBeNull());
   });
@@ -670,36 +670,60 @@ describe('body context menu', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('moving the pointer over the menu does not hit-test the body behind it', async () => {
+    await rightClick({ link: null, fold: null });
+    const menu = await screen.findByTestId('blitz-context-menu');
+    hitRender.mockClear();
+    fireEvent.mouseMove(menu, { clientX: 50, clientY: 60 });
+    await act(async () => {});
+    expect(hitRender).not.toHaveBeenCalled();
+  });
+
   describe('placement', () => {
-    // jsdom lays nothing out: the menu's rect follows its own left/top, the body box is 600x1100 at the window origin.
-    let rectSpy; let wSpy; let hSpy;
+    // jsdom lays nothing out: the menu's rect follows its own left/top (180x110), the body box is `box` at the window origin.
+    let rectSpy; let wSpy; let hSpy; let box;
     beforeEach(() => {
+      box = { left: 0, top: 0, right: 600, bottom: 1100, width: 600, height: 1100 };
       rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () {
         if (this.dataset?.testid === 'blitz-context-menu') {
           const left = parseFloat(this.style.left); const top = parseFloat(this.style.top);
-          return { left, top, right: left + 180, bottom: top + 80, width: 180, height: 80 };
+          return { left, top, right: left + 180, bottom: top + 110, width: 180, height: 110 };
         }
-        return { left: 0, top: 0, right: 600, bottom: 1100, width: 600, height: 1100 };
+        return box;
       });
       wSpy = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(180);
-      hSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(80);
+      hSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(110);
     });
     afterEach(() => { rectSpy.mockRestore(); wSpy.mockRestore(); hSpy.mockRestore(); });
 
-    it('opens at the pointer in body coordinates when it fits', async () => {
+    it('opens at the pointer when it fits', async () => {
       await rightClick({ link: null, fold: null });
       const menu = await screen.findByTestId('blitz-context-menu');
       expect([menu.style.left, menu.style.top]).toEqual(['40px', '50px']);
     });
 
-    it('is clamped into the visible body, like the iframe menu, and a second right-click moves the one menu', async () => {
+    it('is clamped into the window, like the iframe menu, and a second right-click moves the one menu', async () => {
       const { tileEls } = await rightClick({ link: null, fold: null });
       await screen.findByTestId('blitz-context-menu');
       fireEvent.contextMenu(tileEls[0], { clientX: 590, clientY: 760 });
-      // right edge to the box width minus the 8px margin, bottom to the window height minus 8
-      await waitFor(() => expect(screen.getByTestId('blitz-context-menu').style.left).toBe('412px'));
-      expect(screen.getByTestId('blitz-context-menu').style.top).toBe('680px');
+      // window is 1024x768: bottom to the window height minus the 8px margin; the right edge still fits
+      await waitFor(() => expect(screen.getByTestId('blitz-context-menu').style.top).toBe('650px'));
+      expect(screen.getByTestId('blitz-context-menu').style.left).toBe('590px');
+      fireEvent.contextMenu(tileEls[0], { clientX: 1000, clientY: 20 });
+      await waitFor(() => expect(screen.getByTestId('blitz-context-menu').style.left).toBe('836px'));
       expect(screen.getAllByTestId('blitz-context-menu')).toHaveLength(1);
+    });
+
+    it('over a body shorter than the menu it is not squeezed into the body and not clipped by it', async () => {
+      box = { left: 0, top: 0, right: 600, bottom: 40, width: 600, height: 40 };
+      await rightClick({ link: { href: 'https://x.test/' }, fold: null });
+      const menu = await screen.findByTestId('blitz-context-menu');
+      // all three items, at the pointer (not pinned to the 40px box's top margin)
+      expect(screen.getAllByTestId('blitz-ctx-item')).toHaveLength(3);
+      expect([menu.style.left, menu.style.top]).toEqual(['40px', '50px']);
+      // The body box is overflow-x/y auto and would clip it: the menu lives outside it.
+      expect(menu.closest('[data-renderer="blitz"]')).toBeNull();
+      for (let el = menu.parentElement; el; el = el.parentElement) expect(el.className).not.toMatch(/overflow-/);
     });
   });
 

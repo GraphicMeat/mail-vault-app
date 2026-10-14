@@ -91,8 +91,10 @@ describe('BodyContextMenu', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('closes on a press outside the body, a scroll and a window blur; not on a press inside the body', () => {
-      const { onClose } = open();
+    it('closes on a press outside the body, a scroll and a window blur; not on a press inside the body or on the menu', () => {
+      const { onClose } = open({ inBody: t => !!t.closest?.('[data-testid="body"]') });
+      fireEvent.mouseDown(screen.getByTestId('blitz-context-menu'));
+      expect(onClose).not.toHaveBeenCalled();
       fireEvent.mouseDown(screen.getByTestId('body'));
       expect(onClose).not.toHaveBeenCalled(); // the next click inside is the body's to swallow
       fireEvent.mouseDown(document.body);
@@ -101,6 +103,18 @@ describe('BodyContextMenu', () => {
       expect(onClose).toHaveBeenCalledTimes(2);
       fireEvent.blur(window);
       expect(onClose).toHaveBeenCalledTimes(3);
+    });
+
+    it('a second right-click moves the menu: the highlight starts over', () => {
+      const props = { link: null, colors, onCopy: vi.fn(), onSelectAll: vi.fn(), onClose: vi.fn() };
+      const { rerender } = render(<BodyContextMenu at={{ x: 0, y: 0 }} {...props} />);
+      const items = screen.getAllByTestId('blitz-ctx-item');
+      fireEvent.mouseOver(items[1]);
+      expect(items[1].style.background).toContain('rgb(243, 244, 246)');
+      rerender(<BodyContextMenu at={{ x: 30, y: 40 }} {...props} />);
+      expect(items[1].style.background).toBe('none');
+      fireEvent.keyDown(document, { key: 'Enter' }); // nothing highlighted: nothing runs
+      expect(props.onSelectAll).not.toHaveBeenCalled();
     });
 
     it('a right-click on the menu itself is swallowed, not reopened elsewhere', () => {

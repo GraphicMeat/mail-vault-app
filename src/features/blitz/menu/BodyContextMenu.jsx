@@ -1,12 +1,16 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { t } from '../../../i18n/index.js';
 
 // The iframe's right-click menu (EmailViewer.jsx handleContextMenu), as an
-// app element: same items, labels, order, look and behaviour. It sits inside
-// the body box in content coordinates, so it scrolls with the message; above
-// the tiles and below the app's modals (z-40 and up).
-// `clampTo(menuEl, at) -> { dx, dy }` keeps it inside the visible part of the body.
-export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll, onClose, clampTo }) {
+// app element: same items, labels, order, look and behaviour. It is fixed at
+// the pointer (`at` in window coordinates) in a portal on <body>: the body box
+// scrolls and clips, and a one-line message is shorter than the menu. Above the
+// tiles and below the app's modals (z-40 and up). A scroll closes it.
+// `clampTo(menuEl, at) -> { dx, dy }` keeps it inside the window.
+// `inBody(target)` is true for a press in the body: that press is left to the
+// body's click handler, which closes the menu and swallows the click.
+export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll, onClose, clampTo, inBody }) {
   const ref = useRef(null);
   const [active, setActive] = useState(-1); // the keyboard / hover highlight
 
@@ -20,6 +24,8 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
     el.style.left = `${at.x + dx}px`;
     el.style.top = `${at.y + dy}px`;
   }, [at.x, at.y, clampTo, link]);
+  // A second right-click reuses this menu: the highlight starts over.
+  useEffect(() => { setActive(-1); }, [at.x, at.y]);
 
   const items = [
     { label: t('viewer.copy'), action: onCopy },
@@ -37,7 +43,7 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
 
   // The document-level listeners read the latest of these.
   const latest = useRef({});
-  latest.current = { items, active, onClose };
+  latest.current = { items, active, onClose, inBody };
 
   useEffect(() => {
     const el = ref.current;
@@ -57,7 +63,8 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
     // A press inside the body is left to the body's click handler, which closes
     // the menu and swallows that click (the iframe's menu does the same).
     const onDown = (e) => {
-      if (!el?.parentElement?.contains(e.target)) latest.current.onClose();
+      if (el?.contains(e.target) || latest.current.inBody?.(e.target)) return;
+      latest.current.onClose();
     };
     const dismiss = () => latest.current.onClose();
     document.addEventListener('keydown', onKey, true);
@@ -73,7 +80,7 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
   }, []);
 
   const { menuBg, menuBorder, menuShadow, itemColor, itemHoverBg } = colors;
-  return (
+  return createPortal(
     <div
       ref={ref}
       role="menu"
@@ -81,10 +88,12 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
       // preventDefault, not just stopPropagation: a mousedown on the menu's
       // text would otherwise collapse the body selection before Copy runs.
       onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+      // React events cross a portal to the body's handlers: none of these are the body's.
       onClick={e => e.stopPropagation()}
+      onMouseMove={e => e.stopPropagation()}
       onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
       style={{
-        position: 'absolute', zIndex: 30, left: at.x, top: at.y, userSelect: 'none', outline: 'none',
+        position: 'fixed', zIndex: 30, left: at.x, top: at.y, userSelect: 'none', outline: 'none',
         background: menuBg, border: `1px solid ${menuBorder}`, borderRadius: '6px', padding: '4px 0',
         minWidth: '180px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', fontSize: '13px', boxShadow: menuShadow,
       }}
@@ -100,6 +109,7 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
           onClick={() => { action(); onClose(); }}
         >{label}</div>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }

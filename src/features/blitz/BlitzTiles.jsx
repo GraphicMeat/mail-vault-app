@@ -205,8 +205,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const onContextMenu = useCallback(async (e) => {
     e.preventDefault();
     const seq = ++menuSeq.current;
-    const box = e.currentTarget.getBoundingClientRect();
-    const at = { x: e.clientX - box.left, y: e.clientY - box.top };
+    const at = { x: e.clientX, y: e.clientY }; // window coordinates: the menu is fixed
     // A worker that is slow to answer must not hold the menu back: it opens without Copy Link.
     const hit = await Promise.race([
       hitAt(e.clientX, e.clientY, e.currentTarget),
@@ -217,23 +216,15 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     setMenu({ at, link: hit.fold ? null : hit.link });
   }, [hitAt]);
 
-  // The iframe clamps its menu to the part of the frame inside the window; the
-  // body box plays the frame here. The menu rect is taken relative to it.
+  // The menu is fixed in the window, outside the body box (which scrolls, clips and can be
+  // shorter than the menu): clamp it into the window.
   const clampTo = useCallback((menuEl) => {
-    const frame = boxRef.current.getBoundingClientRect();
     const r = menuEl.getBoundingClientRect();
-    const visTop = Math.max(0, -frame.top);
-    const visLeft = Math.max(0, -frame.left);
-    const { x, y } = viewportShift(
-      { left: r.left - frame.left, top: r.top - frame.top, width: r.width, height: r.height },
-      { width: menuEl.offsetWidth, height: menuEl.offsetHeight },
-      {
-        top: visTop, left: visLeft,
-        width: Math.min(frame.width, window.innerWidth - frame.left) - visLeft,
-        height: Math.min(frame.height, window.innerHeight - frame.top) - visTop,
-      });
+    const { x, y } = viewportShift(r, { width: menuEl.offsetWidth, height: menuEl.offsetHeight },
+      { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight });
     return { dx: x, dy: y };
   }, []);
+  const inBody = useCallback((target) => !!boxRef.current?.contains(target), []);
 
   // Copy: serialize ahead, write synchronously on copy (text/clipboard.js). The
   // controller is rebuilt per rev (a fold toggle changes what a range covers),
@@ -330,6 +321,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
               link={menu.link}
               colors={menuColorsFor(theme, null)} // dark swatch: Task 15
               clampTo={clampTo}
+              inBody={inBody}
               onCopy={() => document.execCommand('copy')}
               onSelectAll={() => { void selectAllBody(); }}
               onClose={() => setMenu(null)}
