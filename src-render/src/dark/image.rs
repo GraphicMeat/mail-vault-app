@@ -45,6 +45,9 @@ pub struct ImageCache {
     entries: HashMap<String, Entry>,
     /// Pixels handed to a decoder so far; bounded by `MAX_DOC_IMAGE_PIXELS`.
     pub decoded_pixels: u64,
+    /// Bytes of filtered-image `url()` values written into the document's CSS so far;
+    /// bounded by `MAX_DOC_OUTPUT_BYTES`.
+    pub emitted_bytes: usize,
 }
 
 impl ImageCache {
@@ -58,6 +61,9 @@ const MAX_ANALYSIS_PIXELS: f64 = 32.0 * 32.0;
 const LARGE_IMAGE_PIXELS: u64 = 512 * 512;
 /// A re-encoded image larger than this is not worth carrying in the stylesheet.
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+/// All the filtered images of one document together. Each one is base64 in a sheet that
+/// Stylo parses again and Blitz decodes again; past this the image keeps its URL.
+const MAX_DOC_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 /// An RGBA decode of `MAX_IMAGE_PIXELS` is 64 MB; the decoder may not allocate more than that and a little.
 const MAX_DECODE_ALLOC: u64 = 4 * MAX_IMAGE_PIXELS + (1 << 20);
 
@@ -184,6 +190,14 @@ pub fn bg_image_value(url: &str, cx: &mut DarkCx) -> Option<String> {
     let img = decode_within(url, &mut cx.images.decoded_pixels);
     let details = img.as_ref().map(analyze);
     let value = img.zip(details.clone()).and_then(|(img, d)| value_for(&img, &d, &cx.theme));
+    let value = value.filter(|v| {
+        // "none" costs nothing; a filtered image is charged to the document.
+        let fits = v.len() <= MAX_DOC_OUTPUT_BYTES - cx.images.emitted_bytes.min(MAX_DOC_OUTPUT_BYTES);
+        if fits && v != "none" {
+            cx.images.emitted_bytes += v.len();
+        }
+        fits || v == "none"
+    });
     cx.images.entries.insert(url.to_string(), Entry { details, value: value.clone() });
     value
 }

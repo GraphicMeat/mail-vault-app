@@ -259,3 +259,31 @@ fn a_body_background_attribute_kept_as_it_is_becomes_none() {
     let mid = data_url(&RgbaImage::from_pixel(50, 50, Rgba([128, 128, 128, 255])));
     assert_eq!(body_background_override(&mid), "none");
 }
+
+/// A light, noisy (barely compressible) 500 x 500 image: DR dims it through a filtered PNG.
+fn noisy_light(seed: u32) -> RgbaImage {
+    let mut s = seed.wrapping_mul(2_654_435_761).wrapping_add(1);
+    RgbaImage::from_fn(500, 500, |_, _| {
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        let b = s.to_le_bytes();
+        Rgba([200 + b[0] % 56, 200 + b[1] % 56, 200 + b[2] % 56, 255])
+    })
+}
+
+#[test]
+fn a_document_cannot_emit_more_than_its_budget_of_filtered_images() {
+    let mut c = cx();
+    let mut emitted = 0usize;
+    let mut kept = 0;
+    for i in 0..20 {
+        match bg_image_value(&data_url(&noisy_light(i)), &mut c) {
+            Some(v) => emitted += v.len(),
+            None => kept += 1,
+        }
+    }
+    eprintln!("emitted {emitted} bytes, kept {kept} urls");
+    assert!(emitted <= 16 * 1024 * 1024, "emitted {emitted} bytes of filtered images");
+    assert!(kept > 0, "past the budget an image keeps its url");
+}
