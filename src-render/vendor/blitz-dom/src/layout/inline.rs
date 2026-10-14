@@ -18,6 +18,37 @@ use super::resolve_calc_value;
 use crate::BaseDocument;
 
 impl BaseDocument {
+    /// MailVault parity fix (plan B): the layout input of an atomic inline. A block container
+    /// or table is given the room left by its own margins (CSS 2.1 10.3.9, shrink-to-fit:
+    /// min(max(min-content, available), max-content) with the available width net of the
+    /// margins; a negative margin gives room), as block layout does for its children. An
+    /// inline root takes its own margins off in `compute_inline_layout`.
+    fn inline_box_inputs(
+        &self,
+        id: u64,
+        child_inputs: LayoutInput,
+        parent_size: Size<Option<f32>>,
+    ) -> LayoutInput {
+        let node = &self.nodes[NodeId::from_u64(id)];
+        if node.flags.is_inline_root() {
+            return child_inputs;
+        }
+        let margin = node
+            .style()
+            .margin
+            .resolve_or_zero(parent_size, resolve_calc_value);
+        LayoutInput {
+            available_space: Size {
+                width: child_inputs
+                    .available_space
+                    .width
+                    .maybe_sub(margin.horizontal_axis_sum()),
+                height: child_inputs.available_space.height,
+            },
+            ..child_inputs
+        }
+    }
+
     pub(crate) fn compute_inline_layout(
         &mut self,
         node_id: NodeId,
@@ -307,7 +338,10 @@ impl BaseDocument {
                 ibox.width = 0.0;
                 ibox.height = 0.0;
             } else {
-                let output = self.compute_child_layout(taffy::NodeId::from(ibox.id), child_inputs);
+                let output = self.compute_child_layout(
+                    taffy::NodeId::from(ibox.id),
+                    self.inline_box_inputs(ibox.id, child_inputs, inputs.parent_size),
+                );
                 ibox.width = (margin.left + margin.right + output.size.width) * scale;
                 // Vertical margins adjust the space the box reserves in the line, but the
                 // reserved space cannot be negative.
@@ -772,7 +806,10 @@ impl BaseDocument {
                         // cache). The size cannot be recovered from `ibox` dimensions as the
                         // space reserved in the line is clamped to be non-negative.
                         let size = self
-                            .compute_child_layout(taffy::NodeId::from(ibox.id), child_inputs)
+                            .compute_child_layout(
+                                taffy::NodeId::from(ibox.id),
+                                self.inline_box_inputs(ibox.id, child_inputs, inputs.parent_size),
+                            )
                             .size;
                         let node = &mut self.nodes[NodeId::from_u64(ibox.id)];
 

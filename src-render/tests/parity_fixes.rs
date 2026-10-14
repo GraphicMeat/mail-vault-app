@@ -543,3 +543,19 @@ fn an_inline_block_table_sits_on_the_baseline_with_the_strut_below() {
     assert_eq!(r("btn").y - r("cell").y, 10.0, "the table sits at the top of the line");
     assert_eq!(r("cell2").h, 10.0 + r("box").h + 10.0, "a box with its own text line: no strut");
 }
+
+/// CSS 2.1 10.3.9: the shrink-to-fit width of an inline-block is min(max(preferred minimum,
+/// available), preferred), where the available width is the line's minus the box's margins,
+/// so a negative margin gives room (cerberus hybrid `margin: 0 -1px` columns at 375: the
+/// iframe's column is 325 wide in a 323 cell, Blitz filled only the cell).
+#[test]
+fn an_inline_block_with_negative_margins_fits_in_the_room_they_give() {
+    let els = inspect_at(&fx("inline-block-negative-margin.html"), 400);
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    let near = |a: f64, b: f64| (a - b).abs() < 0.05;
+    assert!(near(w("a"), 302.0), "300 + 2 for the -1px margins: {}", w("a"));
+    assert!(near(w("b"), 298.0), "300 - 2 for the 1px margins: {}", w("b"));
+    assert!(w("c") < 101.0, "short text stays at min-width: {}", w("c"));
+    assert!(near(w("cell"), 300.0), "cell {}", w("cell"));
+    assert!(near(w("d"), 282.0), "cell content 280 + 2: {}", w("d"));
+}
