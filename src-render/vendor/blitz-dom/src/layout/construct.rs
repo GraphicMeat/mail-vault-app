@@ -318,10 +318,11 @@ impl RootLineHeight {
     }
 }
 
-/// MailVault parity fix (plan B): WebKit on macOS raises the ascent of the Times, Helvetica and
-/// Courier families (the default serif, sans-serif and monospace) by 15% of ascent + descent,
-/// rounded, to match the vertical metrics of their Microsoft counterparts (FontCocoa
-/// `platformInit`). Parley takes the ascent from the font file, so the extra is added where
+/// MailVault parity fix (plan B): in the harness iframe (WKWebView on macOS) the Times,
+/// Helvetica and Courier families (the default serif, sans-serif and monospace) have an ascent
+/// 15% of ascent + descent, rounded, above the font file's (measured: Helvetica 14px lines are
+/// 16 high, not 14; a 50px image cell's strut is 6, not 7). Parley takes the ascent from the
+/// font file, so the extra is added where
 /// line heights are worked out here. In the run's device px; 0 for any other font.
 fn webkit_ascent_bonus(run: &parley::layout::Run<'_, TextBrush>) -> f32 {
     use skrifa::MetadataProvider as _;
@@ -354,7 +355,7 @@ fn normal_line_height(
     builder.push_text("x");
     builder.build_into(&mut probe);
     probe.break_all_lines(None);
-    // ascent + descent + line gap, each rounded (WebKit `FontMetrics::lineSpacing`). Parley's
+    // ascent + descent + line gap, each rounded (measured in the harness iframe). Parley's
     // own quantised line has an extra pixel when the rounded ascent and descent overshoot the
     // font's unrounded line height (Arial at 12px: 15, WebKit 14).
     probe

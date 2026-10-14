@@ -146,8 +146,8 @@ fn system_font_uses_the_optical_size_for_its_font_size() {
     assert!((w - 69.43).abs() <= 1.0, "-apple-system 14px 'Read more': {w}, iframe 69.43");
 }
 
-/// WebKit truncates a computed line-height to whole px (RenderStyle::computedLineHeight
-/// returns int), so `line-height: 1.6` is 22px at 14px, not 22.4. Blitz kept the
+/// The harness iframe lays a computed line-height out at whole px, truncated, so
+/// `line-height: 1.6` is 22px at 14px, not 22.4. Blitz kept the
 /// fraction, which added up to 0.4px per line down a message. Heights from the
 /// harness iframe (basic-typography, light, wide): p 3 lines 66, h2 33, h1 44.
 #[test]
@@ -343,7 +343,7 @@ fn a_trailing_br_does_not_add_a_line() {
 }
 
 /// `line-height: normal` is the font's own line spacing, ascent + descent + line gap with each
-/// part rounded (CSS Inline 3; WebKit's `fontMetrics().lineSpacing()`), not 1.2 em. Arial is
+/// part rounded (CSS Inline 3; the rounding as measured in the harness iframe), not 1.2 em. Arial is
 /// 14px high at 12px, 16 at 14px and 18 at 16px; the harness iframe has every 14px Arial cell of
 /// ours/table-border-attr and table-cell-edges 16px of text (Blitz 16.8, 0.8px a line). A line
 /// holding only a smaller span still has the block's strut, and a fixed line-height of the block
@@ -358,7 +358,7 @@ fn line_height_normal_follows_the_font_metrics() {
     assert_eq!(h("fixed"), 22.0, "the block's 22px line-height floors the span");
 }
 
-/// Text widths are fractional: WebKit lays a run out at its advance to 1/64 px (LayoutUnit),
+/// Text widths are fractional: the harness iframe lays a run out at its advance to 1/64 px,
 /// blitz-dom rounded every content width up to a whole px, which added up across a row
 /// (leemunroe: a cell 4.45 wide came out 5, the button table 4.6 wider). Harness iframe
 /// (ours/table-border-attr, wide): table 244.44, cells 162.39 and 74.05 at 14px Arial.
@@ -372,7 +372,7 @@ fn text_content_widths_are_not_rounded_up_to_whole_pixels() {
 }
 
 /// A cell's percentage `width` in auto table layout is its column's share of the table
-/// (CSS 2 17.5.2.2; WebKit AutoTableLayout): cerberus `th width="33.33%"` / `"66.66%"`
+/// (CSS 2 17.5.2.2; measured in the harness iframe): cerberus `th width="33.33%"` / `"66.66%"`
 /// columns of a `table` with `width: auto !important` (the base sheet) in a 508px cell.
 /// Harness iframe (cerberus responsive, wide): th 169.34375 and 338.671875, Blitz 73.5 and
 /// 434.5 (the percentage was ignored and the image column squeezed). The second table has the
@@ -436,9 +436,9 @@ fn line_count_follows_text_fragments_not_line_boxes() {
     assert_eq!(get(&els, "cols").line_count, Some(2));
 }
 
-/// WebKit on macOS raises the ascent of Times, Helvetica and Courier (the default serif,
-/// sans-serif and monospace) by 15% of ascent + descent, rounded, "to closely match the vertical
-/// metrics of their Microsoft counterparts" (FontCocoa `platformInit`). Helvetica at 14px is
+/// In the harness iframe (WKWebView on macOS) Times, Helvetica and Courier (the default serif,
+/// sans-serif and monospace) have an ascent 15% of ascent + descent, rounded, above the font
+/// file's. Helvetica at 14px is
 /// ascent 13 + descent 3: `line-height: normal` is 16, not 14, and under `line-height: 22px` the
 /// strut below the baseline is 6, not 7 (harness iframe, cerberus: a cell holding an image
 /// 39.375 high is 45 high and one holding a 50px image is 56; Blitz 46.4 and 57). Arial has no
@@ -493,7 +493,7 @@ fn a_box_holding_a_float_keeps_its_bottom_padding() {
 }
 
 /// A cell spanning columns only widens them by what they lack, in proportion to their own
-/// maximum content (WebKit AutoTableLayout, spanning cells), not equally as taffy's grid does.
+/// maximum content (measured in the harness iframe), not equally as taffy's grid does.
 /// ours/table-cell-edges: three auto columns over a `colspan="3"` cell holding a table 333.27
 /// wide. Harness iframe (wide): table 351.25, columns 125.22, 114.31 and 111.73; Blitz
 /// 123.5, 114.5 and 112.9.

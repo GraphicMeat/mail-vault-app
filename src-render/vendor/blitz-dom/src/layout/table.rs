@@ -332,7 +332,7 @@ fn push_table_cell(
     }
 
     // MailVault parity fix (plan B): any row's cell can say what its column prefers, not just
-    // the first row's (WebKit's AutoTableLayout::recalcColumn): the largest percentage wins,
+    // the first row's (measured in the harness iframe): the largest percentage wins,
     // and over a length; between lengths the larger wins. postmark's purchase table puts
     // its `width="80%"` on the cells of the second row.
     if *row > 1 && !is_fixed && colspan == 1 {
@@ -670,13 +670,14 @@ impl TableTreeWrapper<'_> {
         .width
     }
 
-    /// The column widths and the table's border-box width when WebKit's auto table layout
-    /// differs from taffy's, else None. A column prefers its specified width (at least its
-    /// minimum content), a percentage of the table, or for an auto column its maximum content.
-    /// When the preferred widths do not fit, the overflow is taken from the auto columns
-    /// first, then from the specified ones, the percentage ones last (WebKit's
-    /// AutoTableLayout), each cut in proportion to the room it has above its minimum content
-    /// width. An auto-width table whose columns ask for percentages is, laid out in a known
+    /// The column widths and the table's border-box width when auto table layout (CSS 2
+    /// 17.5.2.2, which leaves the algorithm to the user agent; the shares below are the ones
+    /// measured in the harness iframe) differs from taffy's, else None. A column prefers its
+    /// specified width (at least its minimum content), a percentage of the table, or for an
+    /// auto column its maximum content. When the preferred widths do not fit, the overflow is
+    /// taken from the auto columns first, then from the specified ones, the percentage ones
+    /// last, each cut in proportion to the room it has above its minimum content width. An
+    /// auto-width table whose columns ask for percentages is, laid out in a known
     /// room, as wide as the widest of them needs (clamped to the room), which taffy does not
     /// know; its reported min/max-content size is left as taffy's. Tables with rowspans are
     /// not handled.
@@ -717,8 +718,8 @@ impl TableTreeWrapper<'_> {
             max[col] = max[col].max(self.cell_content_width(index, taffy::AvailableSpace::MaxContent));
         }
         // MailVault parity fix (plan B): a cell spanning columns widens them only by what they do
-        // not already have, shared out in proportion to their maximum content (WebKit's
-        // calcEffectiveLogicalWidth); taffy's grid shares it equally.
+        // not already have, shared out in proportion to their maximum content (measured in the
+        // harness iframe, ours/table-cell-edges); taffy's grid shares it equally.
         for (index, cell) in ctx.cells.iter().enumerate() {
             if cell.colspan == 1 {
                 continue;
@@ -739,7 +740,7 @@ impl TableTreeWrapper<'_> {
                 }
             }
         }
-        // Percentages past 100% are scaled back to 100% (WebKit's `percentScaleFactor`).
+        // Percentages past 100% are scaled back to 100% in proportion.
         let percent_total: f32 = ctx
             .column_prefs
             .iter()
@@ -753,11 +754,11 @@ impl TableTreeWrapper<'_> {
         {
             if let taffy::AvailableSpace::Definite(room) = inputs.available_space.width {
                 // The table's own width (not the width it reports as its intrinsic size to a
-                // parent: WebKit keeps the two apart, which is why a percentage table in a
-                // spanning cell does not widen the table around it): as wide as the columns
-                // ask for, every one at its preferred width, the auto and length ones scaled
-                // up so that the percentage ones get their share (WebKit's
-                // scaledWidthFromPercentColumns), clamped to the room the table has.
+                // parent: the harness iframe keeps the two apart, which is why a percentage
+                // table in a spanning cell does not widen the table around it): as wide as
+                // the columns ask for, every one at its preferred width, the auto and length
+                // ones scaled up so that the percentage ones get their share, clamped to the
+                // room the table has.
                 let preferred = |i: usize| match ctx.column_prefs[i] {
                     Some(ColumnPref::Length(pref)) => pref.max(min[i]),
                     _ => max[i].max(min[i]),

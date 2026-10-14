@@ -462,8 +462,9 @@ impl BaseDocument {
                         .min(max_content_width + float_width)
                         .max(min_content_width),
                 };
-                // MailVault parity fix (plan B): round up to 1/64 px, WebKit's LayoutUnit, not to
-                // a whole px (the sum of a row's cells was off by up to a px per cell).
+                // MailVault parity fix (plan B): round up to 1/64 px (the grid the harness
+                // iframe's widths sit on), not to a whole px (the sum of a row's cells was off
+                // by up to a px per cell).
                 let computed_width = ceil_to_layout_unit(computed_width);
 
                 let style_width = node_size.width.map(|w| w * scale);
@@ -1229,7 +1230,8 @@ fn layout_abspos_child(
     );
 }
 
-/// MailVault parity fix (plan B): round up to 1/64 px (WebKit's `LayoutUnit::fromFloatCeil`). The
+/// MailVault parity fix (plan B): round up to 1/64 px (measured: the harness iframe's text widths
+/// are multiples of 1/64 px, rounded up). The
 /// slack of a hair keeps a width that is exactly on the grid from falling short of the
 /// advance the lines are broken at.
 fn ceil_to_layout_unit(width: f32) -> f32 {
