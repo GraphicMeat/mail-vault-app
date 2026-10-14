@@ -586,3 +586,13 @@ fn a_space_before_a_forced_break_takes_no_max_content_width() {
     let h = get(&els, "box").rect.clone().unwrap().h;
     assert_eq!(h, 36.0, "two lines: the box is exactly as wide as the first, whose space hangs");
 }
+
+/// The same rule at a soft wrap: the first line of the leemunroe footer span is "... Belfast"
+/// and the iframe's `getBoundingClientRect` of the span is 302.04 wide, the width of the text
+/// without the collapsed space the line wrapped at (Blitz: 306.48, the glyph run's advance).
+#[test]
+fn a_wrapped_inline_box_excludes_the_space_its_line_wrapped_at() {
+    let els = inspect(&fx("trailing-space-at-line-end.html"));
+    let w = get(&els, "wrapped").rect.clone().unwrap().w;
+    assert!((w - 302.04).abs() < 0.1, "wrapped span, widest line without its trailing space: {w}");
+}

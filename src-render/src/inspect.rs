@@ -255,13 +255,18 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
                 None => (x0, y0, x1, y1),
             });
         };
-        for item in line.items() {
+        let items: Vec<_> = line.items().collect();
+        let last = items.len().wrapping_sub(1);
+        for (i, item) in items.into_iter().enumerate() {
             match item {
                 PositionedLayoutItem::GlyphRun(run) if is_descendant_or_self(doc, run.style().brush.id, id) => {
                     // WebKit's content area is the rounded ascent plus the rounded descent.
                     let m = run.run().metrics();
                     let x0 = run.offset() as f64;
-                    add(x0, (run.baseline() - m.ascent.round()) as f64, x0 + run.advance() as f64, (run.baseline() + m.descent.round()) as f64);
+                    // The collapsible space a line wraps at hangs past its end and is no part of
+                    // the text fragment's rect (the run's advance includes it).
+                    let hang = if i == last { line.metrics().trailing_whitespace as f64 } else { 0.0 };
+                    add(x0, (run.baseline() - m.ascent.round()) as f64, x0 + run.advance() as f64 - hang, (run.baseline() + m.descent.round()) as f64);
                 }
                 PositionedLayoutItem::InlineBox(b) if is_descendant_or_self(doc, NodeId::from_u64(b.id), id) => {
                     add(b.x as f64, b.y as f64, (b.x + b.width) as f64, (b.y + b.height) as f64 - strut);
