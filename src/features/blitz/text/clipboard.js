@@ -6,6 +6,13 @@ const keyOf = (ep) => (ep ? `${ep.start.node}:${ep.start.offset}-${ep.end.node}:
 // text that already went out stands.
 const UPGRADE_MS = 800;
 
+// The iframe's native copy puts CRLF in the plain flavour on Windows (the clipboard's own
+// convention); setData writes exactly what it is given, so the Blitz copy adds them there.
+// Same detection as the rest of the app (stores/slices/unifiedHelpers.js isWindowsPlatform),
+// not imported from it: that module pulls the stores in.
+const isWindowsPlatform = () => typeof navigator !== 'undefined'
+  && (navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows'));
+
 const note = (what, err) => console.debug(`[blitz] copy: ${what}`, err); // eslint-disable-line no-console
 
 /**
@@ -21,7 +28,9 @@ const note = (what, err) => console.debug(`[blitz] copy: ${what}`, err); // esli
  * Serialize runs at most once at a time with one trailing request, and a reply
  * is cached only while its selection is still the current one.
  */
-export function createCopyController({ layerEl, serialize, debounceMs = 120 }) {
+export function createCopyController({ layerEl, serialize, debounceMs = 120, isWindows = isWindowsPlatform() }) {
+  // Only what goes to the OS clipboard: cachedText (a reply's quote) stays LF.
+  const osPlain = (text) => (isWindows ? text.replace(/\r?\n/g, '\r\n') : text);
   let timer = null;
   let cache = { key: '', result: null };
   let running = null; // { key, promise }
@@ -97,7 +106,7 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120 }) {
       const hit = cache.key === key ? cache.result : null;
       if (hit?.text) {
         e.clipboardData.setData('text/html', hit.html);
-        e.clipboardData.setData('text/plain', hit.text);
+        e.clipboardData.setData('text/plain', osPlain(hit.text));
         e.preventDefault();
         return;
       }
@@ -105,7 +114,7 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120 }) {
       // is the floor. With none of that either, the webview keeps the event.
       const plain = layerPlainText(window.getSelection(), el);
       if (!plain) return;
-      e.clipboardData.setData('text/plain', plain);
+      e.clipboardData.setData('text/plain', osPlain(plain));
       e.preventDefault();
       if (hit) return; // serialize already said the range holds no rich text
       try {
@@ -117,7 +126,7 @@ export function createCopyController({ layerEl, serialize, debounceMs = 120 }) {
               clearTimeout(t);
               // A newer copy owns the clipboard: never write over it.
               if (gen !== copyGen) reject(new Error('superseded by a later copy'));
-              else resolve(new Blob([r[field]], { type }));
+              else resolve(new Blob([field === 'text' ? osPlain(r.text) : r[field]], { type }));
             }, (err) => { clearTimeout(t); reject(err); });
           });
           b.catch(() => {}); // the item rejects on its own; the plain text stands

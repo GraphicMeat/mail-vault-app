@@ -2,10 +2,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createCopyController } from '../clipboard';
 
-function setup(serialize) {
+function setup(serialize, opts = {}) {
   document.body.innerHTML = `<div class="mv-blitz-text"><div data-tile="0"><div class="mv-blitz-root"><span data-node="1" data-start="0">hello world</span></div></div><div data-tile="1"></div><div data-tile="2"><div class="mv-blitz-root"><span data-node="7" data-start="0">far away</span></div></div></div>`;
   const el = document.querySelector('.mv-blitz-text');
-  const ctl = createCopyController({ layerEl: () => el, serialize, debounceMs: 120 });
+  const ctl = createCopyController({ layerEl: () => el, serialize, debounceMs: 120, isWindows: false, ...opts });
   return { el, ctl };
 }
 function selectAcross(el) {
@@ -235,5 +235,51 @@ describe('createCopyController: nothing to write', () => {
     ctl.onCopy(e);
     expect(e.preventDefault).not.toHaveBeenCalled();
     expect(data).toEqual({});
+  });
+});
+
+describe('createCopyController: Windows line endings', () => {
+  const quote = { html: '<p>wrote:</p><p>After</p>', text: 'wrote:\n\nAfter' };
+  const warm = async (ctl, el) => { selectAcross(el); ctl.onSelectionChange(); await vi.advanceTimersByTimeAsync(120); };
+
+  it('the plain flavour is CRLF on Windows, the html flavour and cachedText stay as they are', async () => {
+    const { el, ctl } = setup(vi.fn().mockResolvedValue(quote), { isWindows: true });
+    await warm(ctl, el);
+    const { e, data } = copyEvent();
+    ctl.onCopy(e);
+    expect(data['text/plain']).toBe('wrote:\r\n\r\nAfter'); // what the iframe's native copy puts on Windows
+    expect(data['text/html']).toBe(quote.html);
+    expect(ctl.cachedText()).toBe('wrote:\n\nAfter'); // a reply quote is not the OS clipboard
+  });
+
+  it('a CRLF already there is not doubled', async () => {
+    const { el, ctl } = setup(vi.fn().mockResolvedValue({ html: 'x', text: 'a\r\nb\nc' }), { isWindows: true });
+    await warm(ctl, el);
+    const { e, data } = copyEvent();
+    ctl.onCopy(e);
+    expect(data['text/plain']).toBe('a\r\nb\r\nc');
+  });
+
+  it('off Windows the plain flavour stays LF', async () => {
+    const { el, ctl } = setup(vi.fn().mockResolvedValue(quote), { isWindows: false });
+    await warm(ctl, el);
+    const { e, data } = copyEvent();
+    ctl.onCopy(e);
+    expect(data['text/plain']).toBe('wrote:\n\nAfter');
+  });
+
+  it('the cold floor and the promise item agree with it', async () => {
+    let resolve;
+    globalThis.ClipboardItem = class { constructor(items) { this.items = items; } };
+    Object.defineProperty(navigator, 'clipboard', { value: { write: vi.fn().mockResolvedValue() }, configurable: true });
+    const { el, ctl } = setup(vi.fn(() => new Promise(r => { resolve = r; })), { isWindows: true });
+    selectAcross(el);
+    const { e, data } = copyEvent();
+    ctl.onCopy(e);
+    expect(data['text/plain']).toBe('world\r\nfar');
+    const item = navigator.clipboard.write.mock.calls[0][0][0];
+    resolve(quote);
+    expect(await (await item.items['text/plain']).text()).toBe('wrote:\r\n\r\nAfter');
+    expect(await (await item.items['text/html']).text()).toBe(quote.html);
   });
 });
