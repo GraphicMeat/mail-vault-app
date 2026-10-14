@@ -496,6 +496,15 @@ mod tests {
         assert!((width(lora) - width(plex)).abs() > 20.0, "Lora probe {} is Plex Mono's width {}", width(lora), width(plex));
     }
 
+    /// By hand only: Lora is one variable file per subset; its 700 face draws bold.
+    #[test]
+    #[cfg(feature = "blitz-render")]
+    #[ignore = "reaches fonts.googleapis.com"]
+    fn real_lora_bold_is_wider_than_regular_in_blitz() {
+        let runs = real_lora_probe_runs(&[400, 700]);
+        assert!(width(&runs[1]) > width(&runs[0]) + 5.0, "700 {} vs 400 {}", width(&runs[1]), width(&runs[0]));
+    }
+
     #[tokio::test]
     async fn leaves_every_other_method_to_the_next_router() {
         let (dir, state) = scratch("other");

@@ -107,6 +107,17 @@ fn a_weight_between_registered_ones_still_lands_on_the_latin_face() {
     }
 }
 
+#[test]
+fn a_variable_font_sent_once_per_weight_draws_each_weight() {
+    // A variable css2 family: one file, listed once per weight.
+    let mut lib = lib_with_fallback();
+    lib.register("MV Var", [400, 500, 600, 700].map(|w| face("source-sans-3-latin.woff2", w)).into());
+    let (n4, w4) = mono_width(&lib, "400 20px/30px 'MV Var', 'Fallback'", "abcdefghij");
+    let (n7, w7) = mono_width(&lib, "700 20px/30px 'MV Var', 'Fallback'", "abcdefghij");
+    assert_eq!((n4, n7), (1, 1));
+    assert!(w7 > w4 + 2.0, "700 draws bold: {w7} vs 400 {w4}");
+}
+
 fn run_worker(lines: &[Value]) -> Vec<Value> {
     let input: String = lines.iter().map(|l| format!("{l}\n")).collect();
     let mut out = Vec::new();
