@@ -15,6 +15,11 @@ status=0
 TESTQ_TIMEOUT=7200 ~/.claude/bin/testq --lane mini-e2e ~/.claude/bin/minijob \
   env MV_PARITY_MODES="$modes" MV_PARITY_ONLY="$only" MV_PARITY_SHOTS=1 \
   bash src-render/tools/parity-job.sh > "$log" || status=$?
-sed -n '/^===MV-PARITY-TAR-BEGIN===$/,/^===MV-PARITY-TAR-END===$/p' "$log" | sed '1d;$d' | base64 -d | tar -C "$dest" -xzf -
+if grep -q '^===MV-PARITY-TAR-BEGIN===$' "$log"; then
+  sed -n '/^===MV-PARITY-TAR-BEGIN===$/,/^===MV-PARITY-TAR-END===$/p' "$log" | sed '1d;$d' | base64 -d | tar -C "$dest" -xzf - || { [ "$status" -ne 0 ] || status=4; }
+else
+  echo "parity: the job printed no report (see $log)" >&2
+  [ "$status" -ne 0 ] || status=4
+fi
 echo "parity report: $dest/report.json (job exit $status)"
 exit "$status"

@@ -28,10 +28,14 @@ import { waitForApp, waitForEmails, switchToFolder, reloadApp, expecting } from 
 import { MOCK_PASSWORD } from './mockImap.js';
 import { windowId } from '../../scripts/screenshots/capture.js';
 import { raiseWindow } from '../../scripts/screenshots/window.js';
-// Loaded in before() (see there): src/features/blitz/parity/{parityIds,compare}.js
+// Loaded in before() (see there): src/features/blitz/parity/{parityIds,compare,report}.js
 let assignParityIds;
 let clusterLineCount;
 let compareFixture;
+let caseSummary;
+let failedCase;
+let reportTotals;
+let unknownFixtureIds;
 let FRAME_SCRIPT;
 
 const REPO = resolve(import.meta.dirname, '../..');
@@ -48,6 +52,35 @@ const WIDTHS = list(process.env.MV_PARITY_WIDTHS, 'wide,375').map((w) => (w === 
 const ONLY = list(process.env.MV_PARITY_ONLY, '');
 const FIXTURES = MANIFEST.fixtures.filter((f) => !ONLY.length || ONLY.includes(f.id));
 const SHOTS = process.env.MV_PARITY_SHOTS === '1';
+const EXPECTED_CASES = MODES.length * WIDTHS.length * FIXTURES.length;
+
+// The catalogue families a fixture is drawn in, as the reader picks them
+// (utils/mailFonts.js mailFontFamilies: the first family of each font-family /
+// font declaration and <font face>, catalogue spelling, at most 4). The app
+// registers them in the frame after load (fontService attachMailFonts), so the
+// frame is measured only once they are in. Read from the raw fixture: that
+// module imports JSON, which the node runner cannot load.
+const CATALOGUE = new Map(JSON.parse(readFileSync(join(REPO, 'src/data/googleFonts.json'), 'utf8')).families.map((f) => [f.family.toLowerCase(), f.family]));
+function mailFontsOf(html) {
+  const found = [];
+  const first = (list) => {
+    const v = list.replace(/\s*!\s*important\s*$/i, '').trim();
+    const q = v.match(/^(["'])(.*?)\1/);
+    return (q ? q[2] : v.split(',')[0]).trim().replace(/\s+/g, ' ');
+  };
+  const names = [
+    // A double-quoted first family, or the list up to the end of the declaration
+    // (or of the style attribute that holds it).
+    ...[...html.matchAll(/(?:^|[^-\w])font-family\s*:\s*(?:"([^"]*)"|([^;{}"]*))/gi)].map((m) => (m[1] !== undefined ? m[1].trim() : first(m[2]))),
+    ...[...html.matchAll(/<font\b[^>]*\sface\s*=\s*["']([^"']*)/gi)].map((m) => first(m[1])),
+  ];
+  for (const n of names) {
+    const family = CATALOGUE.get(n.toLowerCase());
+    if (family && !found.includes(family)) found.push(family);
+    if (found.length >= 4) break;
+  }
+  return found;
+}
 const NARROW_CSS = 'div:has(> iframe[sandbox]), div:has(> [data-mv-parity-doc]) { width: 375px !important; max-width: 375px !important; flex: none !important; }';
 
 const rpc = (method, params) => browser.executeAsync((m, p, done) => {
@@ -147,9 +180,46 @@ async function forceDarkReaderPass() {
   await browser.pause(500); // DR's async image analysis of data: backgrounds
 }
 
-const settleFrame = () => browser.executeAsync((done) => {
+/**
+ * Wait for the frame showing the fixture just opened (not the previous case's
+ * document, which carries the measured mark, and not the snippet stand-in),
+ * then for the mail fonts the reader registers after load: every family in
+ * `families` has a loaded face, and nothing is still loading. Gives up after
+ * 20 s and says so (the case records it). Blitz loads no mail web fonts yet
+ * (plan C), so there is nothing to wait for on that side.
+ */
+async function settleFrame(families) {
+  await browser.waitUntil(() => browser.execute(() => {
+    const d = document.querySelector('iframe[sandbox]')?.contentDocument;
+    return !!d?.body && !d.__mvParityMeasured && !document.querySelector('[data-testid="email-body-loading"]');
+  }), { timeout: 20_000, interval: 250, timeoutMsg: 'the frame never showed a new document' });
+  let fonts = 'none';
+  if (families.length) {
+    try {
+      await browser.waitUntil(() => browser.execute((want) => {
+        const d = document.querySelector('iframe[sandbox]')?.contentDocument;
+        if (!d?.fonts) return false;
+        const faces = [...d.fonts];
+        const norm = (f) => f.replace(/^["']|["']$/g, '');
+        return faces.every((f) => f.status !== 'loading')
+          && want.every((w) => faces.some((f) => norm(f.family) === w && f.status === 'loaded'));
+      }, families), { timeout: 20_000, interval: 250 });
+      fonts = 'loaded';
+    } catch {
+      fonts = 'timeout';
+    }
+  }
+  await browser.executeAsync((done) => {
+    const d = document.querySelector('iframe[sandbox]')?.contentDocument;
+    (d?.fonts?.ready || Promise.resolve()).then(() => requestAnimationFrame(() => requestAnimationFrame(() => done(true))));
+  });
+  return fonts;
+}
+
+/** Mark the measured document, so the next case cannot measure it again. */
+const markMeasured = () => browser.execute(() => {
   const d = document.querySelector('iframe[sandbox]')?.contentDocument;
-  (d?.fonts?.ready || Promise.resolve()).then(() => requestAnimationFrame(() => requestAnimationFrame(() => done(true))));
+  if (d) d.__mvParityMeasured = true;
 });
 
 function collectFrame(assign, cluster) {
@@ -280,16 +350,22 @@ describe('Blitz parity', function () {
     // parity run would turn every mini battery red until the gate is green.
     // parity-job.sh sets MV_PARITY=1.
     if (process.env.MV_PARITY !== '1') this.skip();
+    // Asked for explicitly: from here on, anything that would run nothing fails.
     await waitForApp();
     await waitForEmails();
     const hasSetter = await browser.execute(() => typeof window.__SETTINGS_STORE__?.getState?.().setEmailRenderer === 'function');
     const probe = await rpc('render.inspect', { docId: 2 ** 31 });
-    if (!hasSetter || !(String(probe?.__error || '').includes('render_unknown_doc') || Array.isArray(probe?.elements))) this.skip();
+    if (!hasSetter || !(String(probe?.__error || '').includes('render_unknown_doc') || Array.isArray(probe?.elements))) {
+      throw new Error(`MV_PARITY=1 but this build has no Blitz module (setter ${hasSetter}, probe ${JSON.stringify(probe)})`);
+    }
 
     // Dynamic, after the skip: with the Blitz module deleted these files are
     // gone, and a static import would fail the whole e2e run at load.
     ({ assignParityIds } = await import('../../src/features/blitz/parity/parityIds.js'));
     ({ clusterLineCount, compareFixture } = await import('../../src/features/blitz/parity/compare.js'));
+    ({ caseSummary, failedCase, reportTotals, unknownFixtureIds } = await import('../../src/features/blitz/parity/report.js'));
+    const unknown = unknownFixtureIds(ONLY, MANIFEST);
+    if (unknown.length || !EXPECTED_CASES) throw new Error(`MV_PARITY_ONLY names no fixture: ${unknown.join(', ') || '(none run)'}`);
     FRAME_SCRIPT = `return (${collectFrame.toString()})(${assignParityIds.toString()}, ${clusterLineCount.toString()});`;
 
     OUT = process.env.MV_PARITY_OUT || join(browser.testDataDir, 'blitz-parity');
@@ -322,7 +398,9 @@ describe('Blitz parity', function () {
       writeFileSync(join(OUT, 'report.json'), `${JSON.stringify({
         date: new Date().toISOString(), ua, modes: MODES, widths: WIDTHS,
         cases: summary,
-        totals: { cases: summary.length, passed: summary.filter((c) => c.passed).length },
+        // `complete` is the gate: every expected case ran (a case that threw is
+        // in `cases` as failed, with its error) and passed.
+        totals: reportTotals(summary, EXPECTED_CASES),
       }, null, 2)}\n`);
     }
     if (!seeded) return; // skipped: nothing was touched
@@ -339,54 +417,69 @@ describe('Blitz parity', function () {
     for (const width of WIDTHS) {
       for (const f of FIXTURES) {
         it(`${f.id} ${mode} ${width}`, async function () {
-          await setRenderer('web');
-          await setNarrow(width === 375);
-          await openFixture(f.id);
-          await setEmailTheme(mode);
-          if (mode === 'dark') await forceDarkReaderPass();
-          await settleFrame();
-          const frame = await browser.execute(FRAME_SCRIPT);
-          expect(frame).not.toBeNull();
-          ua = frame.ua;
-          expecting(`${f.id}: the corpus must not fold quotes (plan C owns folding)`, () => expect(frame.folds).toBe(0));
-          expecting(`${f.id}: Dark Reader still on its fallback sheet`, () => expect(frame.drFallbackActive).toBe(false));
-          expecting('WKWebView UA carries "Safari"; regenerate the vectors with the safari profile (Task 10)', () => expect(/safari/i.test(frame.ua)).toBe(false));
+          const which = { fixture: f.id, mode, width };
+          let recorded = false;
+          try {
+            await setRenderer('web');
+            await setNarrow(width === 375);
+            await openFixture(f.id);
+            await setEmailTheme(mode);
+            if (mode === 'dark') await forceDarkReaderPass();
+            const fonts = await settleFrame(mailFontsOf(readFileSync(join(CORPUS, f.file), 'utf8')));
+            const frame = await browser.execute(FRAME_SCRIPT);
+            expect(frame).not.toBeNull();
+            await markMeasured();
+            expecting(`${f.id}: the frame must have elements to compare`, () => expect(frame.elements.length).toBeGreaterThan(0));
+            ua = frame.ua;
+            expecting(`${f.id}: the corpus must not fold quotes (plan C owns folding)`, () => expect(frame.folds).toBe(0));
+            expecting(`${f.id}: Dark Reader still on its fallback sheet`, () => expect(frame.drFallbackActive).toBe(false));
+            expecting('WKWebView UA carries "Safari"; regenerate the vectors with the safari profile (Task 10)', () => expect(/safari/i.test(frame.ua)).toBe(false));
 
-          const shotFile = join(OUT, 'shots', `${mode}-${width}`, `${f.id.replace(/\//g, '__')}.png`);
-          const iframeShot = SHOTS ? await captureElement('iframe[sandbox]', join(browser.testDataDir, 'shot-web')) : null;
+            const shotFile = join(OUT, 'shots', `${mode}-${width}`, `${f.id.replace(/\//g, '__')}.png`);
+            // Temp captures live in the job's output dir, which the job's clone takes away.
+            const TMP = join(OUT, '.tmp');
+            mkdirSync(TMP, { recursive: true });
+            const iframeShot = SHOTS ? await captureElement('iframe[sandbox]', join(TMP, 'shot-web')) : null;
 
-          await setRenderer('blitz');
-          let root = null;
-          await browser.waitUntil(async () => {
-            root = await blitzRoot();
-            return !!root && root.theme === mode && root.width === frame.width;
-          }, { timeout: 20_000, interval: 250, timeoutMsg: `Blitz root never matched (theme ${mode}, width ${frame.width}): ${JSON.stringify(root)}` });
-          // Let data: image updates settle: the rev must hold still for 750 ms.
-          let rev = root.rev;
-          await browser.waitUntil(async () => {
-            await browser.pause(750);
-            const now = (await blitzRoot())?.rev;
-            const stable = now === rev;
-            rev = now;
-            return stable;
-          }, { timeout: 15_000, interval: 10, timeoutMsg: 'Blitz rev never settled' });
-          const reply = await rpc('render.inspect', { docId: root.docId });
-          expecting(`render.inspect for ${f.id}`, () => expect(reply?.__error).toBeUndefined());
+            await setRenderer('blitz');
+            let root = null;
+            await browser.waitUntil(async () => {
+              root = await blitzRoot();
+              return !!root && root.theme === mode && root.width === frame.width;
+            }, { timeout: 20_000, interval: 250, timeoutMsg: `Blitz root never matched (theme ${mode}, width ${frame.width}): ${JSON.stringify(root)}` });
+            // Let data: image updates settle: the rev must hold still for 750 ms.
+            let rev = root.rev;
+            await browser.waitUntil(async () => {
+              await browser.pause(750);
+              const now = (await blitzRoot())?.rev;
+              const stable = now === rev;
+              rev = now;
+              return stable;
+            }, { timeout: 15_000, interval: 10, timeoutMsg: 'Blitz rev never settled' });
+            const reply = await rpc('render.inspect', { docId: root.docId });
+            expecting(`render.inspect for ${f.id}`, () => expect(reply?.__error).toBeUndefined());
 
-          const result = compareFixture({ fixture: f.id, mode, width, iframe: frame.elements, blitz: reply.elements, knownDiffs: KNOWN });
-          const caseFile = join(OUT, 'cases', `${f.id.replace(/\//g, '__')}__${mode}__${width}.json`);
-          writeFileSync(caseFile, `${JSON.stringify({ ...result, meta: { frameWidth: frame.width, iframeWidth: frame.iframeWidth, dpr: frame.dpr, blitzRoot: root }, iframe: frame.elements, blitz: reply.elements }, null, 2)}\n`);
-          summary.push({ fixture: f.id, mode, width, compared: result.compared, passed: result.passed, failing: result.failing.length, known: result.known.length });
+            const result = compareFixture({ fixture: f.id, mode, width, iframe: frame.elements, blitz: reply.elements, knownDiffs: KNOWN });
+            const caseFile = join(OUT, 'cases', `${f.id.replace(/\//g, '__')}__${mode}__${width}.json`);
+            writeFileSync(caseFile, `${JSON.stringify({ ...result, meta: { frameWidth: frame.width, iframeWidth: frame.iframeWidth, dpr: frame.dpr, blitzRoot: root, fonts }, iframe: frame.elements, blitz: reply.elements }, null, 2)}\n`);
+            expecting(`${f.id}: every iframe element was compared`, () => expect(result.compared).toBe(frame.elements.length));
+            summary.push({ ...caseSummary(which, result), fonts });
+            recorded = true;
 
-          if (SHOTS) {
-            const blitzShot = await captureElement('[data-mv-parity-doc]', join(browser.testDataDir, 'shot-blitz'));
-            if (iframeShot && blitzShot) {
-              mkdirSync(join(OUT, 'shots', `${mode}-${width}`), { recursive: true });
-              writeFileSync(shotFile, sideBySide(iframeShot, blitzShot));
+            if (SHOTS) {
+              const blitzShot = await captureElement('[data-mv-parity-doc]', join(TMP, 'shot-blitz'));
+              if (iframeShot && blitzShot) {
+                mkdirSync(join(OUT, 'shots', `${mode}-${width}`), { recursive: true });
+                writeFileSync(shotFile, sideBySide(iframeShot, blitzShot));
+              }
             }
+            expecting(`${f.id} ${mode} ${width}: ${result.failing.length} failing of ${result.compared}; first: ${JSON.stringify(result.failing.slice(0, 12))}`,
+              () => expect(result.passed).toBe(true));
+          } catch (e) {
+            // A case that could not be measured is a failed case in the report, never a missing one.
+            if (!recorded) summary.push(failedCase(which, e));
+            throw e;
           }
-          expecting(`${f.id} ${mode} ${width}: ${result.failing.length} failing of ${result.compared}; first: ${JSON.stringify(result.failing.slice(0, 12))}`,
-            () => expect(result.passed).toBe(true));
         });
       }
     }
