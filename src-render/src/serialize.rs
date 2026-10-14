@@ -88,6 +88,10 @@ fn layout_len(doc: &BaseDocument, root: NodeId) -> usize {
 /// One step of a reading-order key (see `Nesting::key`).
 type Step = (usize, usize);
 
+/// How many hosts a walk up the host map follows: a real layout nests far
+/// less deep, and a map that loops (it cannot from a real layout) still ends.
+const MAX_DEPTH: usize = 64;
+
 /// A nested root's place: the host whose text holds its box, the box's step
 /// and element.
 #[derive(Clone, Copy)]
@@ -123,7 +127,8 @@ impl Nesting {
             let Some(tl) = doc.get_node(*r).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()) else { continue };
             for (k, b) in tl.layout.inline_boxes().iter().enumerate() {
                 if b.kind == InlineBoxKind::InFlow {
-                    by_box.insert(NodeId::from_u64(b.id), (*r, (b.index, k + 1)));
+                    // A stale offset past the text puts the box at the end: never dropped.
+                    by_box.insert(NodeId::from_u64(b.id), (*r, (b.index.min(tl.text.len()), k + 1)));
                 }
             }
         }
@@ -159,10 +164,13 @@ impl Nesting {
         Self { order, host, boxes }
     }
 
-    /// `root` and the hosts above it, nearest first.
+    /// `root` and the hosts above it, nearest first (at most `MAX_DEPTH` hosts).
     fn chain(&self, root: NodeId) -> Vec<NodeId> {
         let mut v = vec![root];
         while let Some(h) = self.host.get(v.last().unwrap()) {
+            if v.len() > MAX_DEPTH {
+                break;
+            }
             v.push(h.host);
         }
         v
@@ -177,12 +185,14 @@ impl Nesting {
     /// after every box there.
     fn key(&self, doc: &BaseDocument, (root, offset): (NodeId, usize)) -> Vec<Step> {
         let mut k = vec![(offset, if offset >= layout_len(doc, root) { usize::MAX } else { 0 })];
-        let mut cur = root;
-        loop {
-            k.push((self.order.get(&cur).copied().unwrap_or(usize::MAX), 0));
-            let Some(h) = self.host.get(&cur) else { break };
-            k.push(h.at);
-            cur = h.host;
+        let chain = self.chain(root);
+        for (i, cur) in chain.iter().enumerate() {
+            k.push((self.order.get(cur).copied().unwrap_or(usize::MAX), 0));
+            // The last host of a capped chain is treated as top-level.
+            match self.host.get(cur) {
+                Some(h) if i + 1 < chain.len() => k.push(h.at),
+                _ => break,
+            }
         }
         k.reverse();
         k
@@ -269,6 +279,13 @@ impl Nesting {
     /// `b` ends a nested root that nothing selectable follows. The layer lists
     /// nested roots after their host, so a select-all ends in the last one,
     /// and the host's text after its box is still part of it.
+    ///
+    /// Known gaps of that DOM order (the layer, not this walk): a drag from the
+    /// host into a nested root highlights the host's text after the box, which
+    /// is not copied; and the converse, a selection with both ends in the host
+    /// text that spans a box copies the box's text (a button label) while the
+    /// layer does not highlight it, and the cold reply floor (`layerPlainText`,
+    /// before serialize lands) misses that text too.
     fn runs_to_the_end(&self, doc: &BaseDocument, roots: &[NodeId], (root, offset): (NodeId, usize)) -> Option<NodeId> {
         if !self.host.contains_key(&root) || offset < layout_len(doc, root) {
             return None;
@@ -823,5 +840,39 @@ mod tests {
         let link = roots[1];
         let (lo, hi) = (nest.key(&d, (link, 1)), nest.key(&d, (link, 6)));
         assert_eq!(plain(&d, &nest, &roots, &lo, &hi, &|r| if r == host { None } else { align(&d, r) }), "tabut");
+    }
+
+    /// A box offset past the host's text (a stale layout) puts the nested text
+    /// at the end of the host instead of dropping it.
+    #[test]
+    fn a_box_offset_past_the_host_text_puts_the_nested_text_at_its_end() {
+        let mut d = doc(&format!("{CTA}<p>next</p>"));
+        let host = inline_roots(&d)[0];
+        let tl = d.get_node_mut(host).unwrap().element_data_mut().unwrap().inline_layout_data.as_deref_mut().unwrap();
+        tl.layout.inline_boxes_mut()[1].index = 10_000;
+        let roots = inline_roots(&d);
+        let nest = Nesting::new(&d, &roots);
+        let last = *roots.last().unwrap();
+        let (lo, hi) = (nest.key(&d, (roots[0], 0)), nest.key(&d, (last, layout_len(&d, last))));
+        let text = plain(&d, &nest, &roots, &lo, &hi, &|r| align(&d, r));
+        assert_eq!(text, "Ctabefore Ctabutton text ctamiddle  btnafter.Btnlabel\n\nnext");
+    }
+
+    /// A host map that loops (it cannot from a real layout) still ends.
+    #[test]
+    fn a_looping_host_map_still_ends() {
+        let (a, b) = (NodeId::from_u64(1), NodeId::from_u64(2));
+        let hosted = |host| Hosted { host, at: (0, 1), node: host };
+        let nest = Nesting {
+            order: [(a, 0), (b, 1)].into_iter().collect(),
+            host: [(a, hosted(b)), (b, hosted(a))].into_iter().collect(),
+            boxes: HashMap::new(),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(nest.chain(a).len());
+        });
+        let n = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("chain() did not end");
+        assert!(n <= MAX_DEPTH + 1, "{n}");
     }
 }

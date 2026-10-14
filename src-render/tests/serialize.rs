@@ -2,6 +2,7 @@ use mailvault_render::fonts::{FaceData, FontLibrary};
 use mailvault_render::serialize::Endpoint;
 use mailvault_render::{RenderDoc, RenderOptions};
 use serde_json::{json, Value};
+use std::time::{Duration, Instant};
 use std::io::{BufRead, BufReader};
 
 fn asset(n: &str) -> Vec<u8> { std::fs::read(format!("{}/../src/assets/fonts/{n}", env!("CARGO_MANIFEST_DIR"))).unwrap() }
@@ -515,4 +516,24 @@ fn anonymous_blocks_inside_and_at_the_ends_of_a_selection_are_copied() {
     assert_eq!(out.text, "lead bold\nblock\nmid\npara", "the anonymous block between the div and the p is not lost");
     let out = d.serialize(at(&d, "block", false), at(&d, "tail", true));
     assert_eq!(out.text, "block\nmid\npara\n\ntail");
+}
+
+/// A long mail where every paragraph holds a nested root and a replaced box:
+/// a select-all copy stays well inside the budget (debug build).
+#[test]
+fn a_select_all_over_3000_paragraphs_with_nested_buttons_serializes_in_budget() {
+    let body: String = (0..3000).map(|i| format!(r#"<p>para {i} <button style="display:inline-block">btn {i}</button> <img src="a.png" width="4" height="4"> end</p>"#)).collect();
+    let mut d = open(&body);
+    let n = mailvault_render::text::inline_roots(d.base()).len();
+    assert_eq!(n, 6000, "a host and a button per paragraph");
+    let (a, b) = (root_at(&d, 0, 0), root_at(&d, n - 1, root_len(&d, n - 1)));
+    let t = Instant::now();
+    let out = d.serialize(a, b);
+    let took = t.elapsed();
+    eprintln!("[perf] select-all serialize over 3000 nested paragraphs: {took:?}, {} chars text, {} html", out.text.len(), out.html.len());
+    assert!(took < Duration::from_secs(4), "took {took:?}");
+    assert!(out.text.starts_with("para 0 btn 0"), "{}", &out.text[..60]);
+    assert_eq!(out.text.matches("btn ").count(), 3000);
+    let tail = &out.text[out.text.len() - 40..];
+    assert!(tail.contains("para 2999 btn 2999") && tail.ends_with("end"), "{tail}");
 }
