@@ -1024,6 +1024,25 @@ pub(crate) fn find_inline_layout_embedded_boxes(
     }
 }
 
+/// MailVault parity fix (plan B): parley trims a span's text with `str::trim_start` and
+/// `trim_end` (Unicode White_Space, so a no-break space goes), and takes the advance of
+/// a trailing space or nbsp off the content widths as a hanging space. Only collapsible
+/// space is meant to do either (CSS Text 3, 4.1.3 and 4.1.1): `&nbsp;&nbsp;Hi` keeps its
+/// indent and a `<td>&nbsp;</td>` spacer is ~4px wide in WebKit, 0 here. A word joiner
+/// (U+2060: zero width, forbids a break, not White_Space) on the outer side of a leading
+/// or trailing nbsp stands in the way of both.
+fn push_text_keeping_nbsp(builder: &mut TreeBuilder<TextBrush>, text: &str) {
+    const NBSP: char = '\u{a0}';
+    const WORD_JOINER: &str = "\u{2060}";
+    if text.starts_with(NBSP) {
+        builder.push_text(WORD_JOINER);
+    }
+    builder.push_text(text);
+    if text.ends_with(NBSP) {
+        builder.push_text(WORD_JOINER);
+    }
+}
+
 pub(crate) fn build_inline_layout_into(
     nodes: &crate::NodeTree,
     layout_ctx: &mut LayoutContext<TextBrush>,
@@ -1299,13 +1318,13 @@ pub(crate) fn build_inline_layout_into(
                 // TODO: optimize case transforms to be non-allocating
                 match parent_text_transform {
                     TextTransform::UPPERCASE => {
-                        builder.push_text(&data.content.to_uppercase());
+                        push_text_keeping_nbsp(builder, &data.content.to_uppercase());
                     }
                     TextTransform::LOWERCASE => {
-                        builder.push_text(&data.content.to_lowercase());
+                        push_text_keeping_nbsp(builder, &data.content.to_lowercase());
                     }
                     _ => {
-                        builder.push_text(&data.content);
+                        push_text_keeping_nbsp(builder, &data.content);
                     }
                 }
             }

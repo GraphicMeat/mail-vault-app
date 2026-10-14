@@ -201,3 +201,18 @@ fn block_children_of_a_table_row_share_one_anonymous_cell() {
     assert_eq!(r("b2"), (0.0, 100.0, 400.0, 40.0));
     assert_eq!(r("tb"), (0.0, 70.0, 400.0, 70.0));
 }
+
+/// parley trims a span's text with Unicode White_Space (a no-break space goes) and takes a
+/// trailing nbsp's advance off the content widths. Only collapsible space does either, so a
+/// `<td>&nbsp;</td>` spacer is a space wide: 3.89 px at 14px Arial in the harness iframe
+/// (ours/table-600-narrow, leemunroe spacer cells), 0 in Blitz. A leading or trailing nbsp
+/// keeps its advance in running text too.
+#[test]
+fn a_no_break_space_at_the_edge_of_a_text_run_keeps_its_width() {
+    let els = inspect(&fx("nbsp-at-text-edges.html"));
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    assert!((w("spacer") - 3.89).abs() <= 1.0, "spacer cell: {}, iframe 3.89", w("spacer"));
+    let nbsp = w("spacer");
+    assert!((w("indented") - w("plain") - 2.0 * nbsp).abs() <= 1.0, "two leading nbsp: {} vs {}", w("indented"), w("plain"));
+    assert!((w("trailing") - w("plain") - nbsp).abs() <= 1.0, "trailing nbsp: {} vs {}", w("trailing"), w("plain"));
+}
