@@ -272,16 +272,36 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         In::Fonts { families } => {
             let mut fresh: Vec<String> = Vec::new();
             for f in families {
-                let faces = f
-                    .faces
-                    .into_iter()
-                    .filter_map(|face| {
-                        let data = base64::engine::general_purpose::STANDARD.decode(face.data).ok()?;
-                        Some(FaceData { data, weight: face.weight, style: face.style.unwrap_or_else(|| "normal".into()) })
-                    })
-                    .collect();
-                if fonts.register(&f.family, faces) {
-                    fresh.push(f.family.to_lowercase());
+                // Decode and registration of one family. A panic here (hostile
+                // woff2 bytes, a fontique bug) skips that family and keeps the
+                // worker: it touches only the master library, no document, so
+                // it does not taint (a taint with no document open would end
+                // the worker, and the host would replay the same family into
+                // the next one). The host reads the ack: a family it never saw
+                // acknowledged is the one that killed a worker.
+                let name = f.family.clone();
+                let registered = catch_unwind(AssertUnwindSafe(|| {
+                    let faces = f
+                        .faces
+                        .into_iter()
+                        .filter_map(|face| {
+                            let data = base64::engine::general_purpose::STANDARD.decode(face.data).ok()?;
+                            Some(FaceData { data, weight: face.weight, style: face.style.unwrap_or_else(|| "normal".into()) })
+                        })
+                        .collect();
+                    fonts.register(&f.family, faces)
+                }));
+                match registered {
+                    Ok(new) => {
+                        if new {
+                            fresh.push(name.to_lowercase());
+                        }
+                        line(out, json!({"kind":"font","family":name,"ok":true}))?;
+                    }
+                    Err(_) => {
+                        fonts.forget(&name);
+                        line(out, json!({"kind":"font","family":name,"ok":false}))?;
+                    }
                 }
             }
             rebuild_for_fonts(&fresh, docs, out, tainted, fonts)

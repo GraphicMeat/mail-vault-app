@@ -204,3 +204,28 @@ fn a_net_built_from_the_old_cache_serves_the_image_without_a_fetch() {
     let tile = base64::engine::general_purpose::STANDARD.encode(doc.tile_png(0).unwrap());
     assert!(has_red(&tile), "the cached image is painted");
 }
+
+#[cfg(debug_assertions)]
+#[test]
+fn a_panic_registering_a_family_skips_it_and_keeps_the_worker() {
+    use mailvault_render::fonts::PANIC_FAMILY;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(asset("ibm-plex-mono-latin-400.woff2"));
+    let fam = |name: &str| json!({"family":name,"faces":[{"data":b64,"weight":400,"style":"normal"}]});
+    let html = r#"<body style="margin:0"><p style="margin:0;font:20px/30px 'Good Two', serif">abc</p></body>"#;
+    // No document is open when the families arrive: a taint here would end the
+    // worker at once and the open below would never be answered.
+    let out = run_worker(&[
+        json!({"op":"fonts","families":[fam("Good One"), fam(PANIC_FAMILY), fam("Good Two")]}),
+        json!({"op":"fonts","families":[fam(PANIC_FAMILY)]}),
+        json!({"op":"open","req":1,"doc":1,"html":html,"cssWidth":300,"scale":1.0,"allowRemote":false}),
+        json!({"op":"textRuns","req":2,"doc":1,"index":0}),
+    ]);
+    let acks: Vec<(String, bool)> = out.iter().filter(|v| v["kind"] == "font").map(|v| (v["family"].as_str().unwrap().to_string(), v["ok"].as_bool().unwrap())).collect();
+    assert_eq!(
+        acks,
+        [("Good One".to_string(), true), (PANIC_FAMILY.to_string(), false), ("Good Two".to_string(), true), (PANIC_FAMILY.to_string(), false)],
+        "the bad family is skipped, its neighbours register, and it is not left half-known"
+    );
+    let runs = out.iter().find(|v| v["req"] == 2).expect("the worker is still serving");
+    assert!((runs["ok"]["runs"][0]["w"].as_f64().unwrap() - 36.0).abs() < 0.5, "a family after the bad one is in use");
+}

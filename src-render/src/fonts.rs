@@ -10,6 +10,14 @@ use parley::fontique::{
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+/// Debug-only test hooks: registering a family with one of these names panics
+/// or aborts the process, so the worker's and the host's recovery paths are
+/// testable. A release build has no such names.
+#[cfg(debug_assertions)]
+pub const PANIC_FAMILY: &str = "mailvault-render-test-panic";
+#[cfg(debug_assertions)]
+pub const ABORT_FAMILY: &str = "mailvault-render-test-abort";
+
 pub struct FaceData {
     pub data: Vec<u8>,
     pub weight: u16,
@@ -37,11 +45,23 @@ impl FontLibrary {
         self.families.contains(&family.to_lowercase())
     }
 
+    /// Takes a family back out of the known set, for one whose registration
+    /// panicked (worker.rs): it is skipped, not half-known.
+    pub fn forget(&mut self, family: &str) {
+        self.families.remove(&family.to_lowercase());
+    }
+
     /// Registers `faces` as `family`. True when the family was not known yet.
     pub fn register(&mut self, family: &str, faces: Vec<FaceData>) -> bool {
         let new = self.families.insert(family.to_lowercase());
         if !new {
             return false;
+        }
+        #[cfg(debug_assertions)]
+        match family {
+            PANIC_FAMILY => panic!("test panic in font registration"),
+            ABORT_FAMILY => std::process::abort(),
+            _ => {}
         }
         // fontique gives a family one font per weight and style: the first one
         // registered for an exact weight, the last of a tie for a near one. A

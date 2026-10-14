@@ -129,29 +129,89 @@ pub fn is_foreground(method: &str) -> bool {
 /// worker gets them again. The worker marks a family known on first sight and
 /// ignores later faces of it, so a family must only ever travel complete (all
 /// its installed faces in one frame) and at most once per worker.
+///
+/// A family that panics the worker while it registers it, or that killed a
+/// worker, is refused: dropped from what is kept and never sent again, so one
+/// bad family cannot crash every worker until the daemon restarts. The worker
+/// acknowledges each family it has dealt with (`ack`); a worker that dies with
+/// families still unacknowledged died on the first of them (`died`), because
+/// it takes them in the order they were sent.
 #[derive(Default)]
-struct FontFrames(Vec<Value>);
+struct FontFrames {
+    kept: Vec<Value>,
+    refused: Vec<String>,
+    /// The worker spawn `unacked` belongs to.
+    epoch: u64,
+    /// Sent to that worker and not acknowledged yet, in the order sent.
+    unacked: Vec<String>,
+}
 
 impl FontFrames {
-    /// Keeps the families not kept yet and returns exactly those, as first given.
+    /// Keeps the families not kept (or refused) yet and returns exactly those, as first given.
     fn claim(&mut self, families: Vec<Value>) -> Vec<Value> {
         let mut fresh = Vec::new();
         for f in families {
             if !self.has(f["family"].as_str().unwrap_or_default()) {
-                self.0.push(f.clone());
+                self.kept.push(f.clone());
                 fresh.push(f);
             }
         }
         fresh
     }
 
+    /// Kept, or refused: either way nothing more is to be sent for it.
     fn has(&self, family: &str) -> bool {
-        self.0.iter().any(|k| k["family"] == family)
+        self.kept.iter().any(|k| k["family"] == family) || self.refused.iter().any(|r| r == family)
     }
 
     /// One frame with every kept family, or none when nothing is kept.
     fn replay(&self) -> Option<Value> {
-        (!self.0.is_empty()).then(|| json!({"op": "fonts", "families": self.0}))
+        (!self.kept.is_empty()).then(|| json!({"op": "fonts", "families": self.kept}))
+    }
+
+    /// A worker (spawn `epoch`) is about to be sent every kept family.
+    fn begin(&mut self, epoch: u64) {
+        self.epoch = epoch;
+        self.unacked = self.kept.iter().map(|k| k["family"].as_str().unwrap_or_default().to_string()).collect();
+    }
+
+    /// Families written to the live worker of spawn `epoch`.
+    fn sent(&mut self, epoch: u64, families: &[Value]) {
+        if epoch != self.epoch {
+            self.begin(epoch);
+            return;
+        }
+        self.unacked.extend(families.iter().map(|f| f["family"].as_str().unwrap_or_default().to_string()));
+    }
+
+    /// The worker of spawn `epoch` is done with `family`; `ok` false means its registration panicked.
+    fn ack(&mut self, epoch: u64, family: &str, ok: bool) {
+        if epoch != self.epoch {
+            return; // a worker that is already replaced
+        }
+        if let Some(at) = self.unacked.iter().position(|u| u == family) {
+            self.unacked.remove(at);
+        }
+        if !ok {
+            self.refuse(family);
+        }
+    }
+
+    /// The worker of spawn `epoch` is gone. If it still owed acks, it died on the first.
+    fn died(&mut self, epoch: u64) {
+        if epoch != self.epoch || self.unacked.is_empty() {
+            return;
+        }
+        let offender = self.unacked.remove(0);
+        self.unacked.clear();
+        self.refuse(&offender);
+    }
+
+    fn refuse(&mut self, family: &str) {
+        self.kept.retain(|k| k["family"] != family);
+        if !self.refused.iter().any(|r| r == family) {
+            self.refused.push(family.to_string());
+        }
     }
 }
 
@@ -214,7 +274,7 @@ pub struct RenderHost {
     open_docs: StdMutex<HashSet<u64>>,
     last_used: StdMutex<Instant>,
     fetch_slots: Arc<Semaphore>,
-    font_frames: StdMutex<FontFrames>,
+    font_frames: Arc<StdMutex<FontFrames>>,
 }
 
 impl RenderHost {
@@ -229,7 +289,7 @@ impl RenderHost {
             open_docs: StdMutex::default(),
             last_used: StdMutex::new(Instant::now()),
             fetch_slots: Arc::new(Semaphore::new(FETCH_PARALLEL)),
-            font_frames: StdMutex::default(),
+            font_frames: Arc::default(),
         }
     }
 
@@ -290,7 +350,12 @@ impl RenderHost {
         if fresh.is_empty() {
             return;
         }
-        let _ = self.send(json!({"op": "fonts", "families": fresh})).await;
+        // No worker: the families are only kept, and replayed at the next spawn.
+        let guard = self.worker.lock().await;
+        if let Some(w) = guard.as_ref() {
+            self.font_frames.lock().unwrap().sent(w.epoch, &fresh);
+            let _ = w.stdin.lock().await.write_all(format!("{}\n", json!({"op": "fonts", "families": fresh})).as_bytes()).await;
+        }
     }
 
     pub fn has_font(&self, family: &str) -> bool {
@@ -344,7 +409,11 @@ impl RenderHost {
                 let w = self.spawn().map_err(|_| UNAVAILABLE.to_string())?;
                 // Written here, before the caller's own frame (same stdin, same
                 // guard), so the first request already sees every font.
-                let replay = self.font_frames.lock().unwrap().replay();
+                let replay = {
+                    let mut frames = self.font_frames.lock().unwrap();
+                    frames.begin(w.epoch);
+                    frames.replay()
+                };
                 if let Some(frame) = replay {
                     let _ = w.stdin.lock().await.write_all(format!("{frame}\n").as_bytes()).await;
                 }
@@ -423,6 +492,7 @@ impl RenderHost {
         let heard = silence.clone();
         let dead = Arc::new(AtomicBool::new(false));
         let dead_on_eof = dead.clone();
+        let frames = self.font_frames.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
@@ -460,13 +530,21 @@ impl RenderHost {
                             let _ = stdin.lock().await.write_all(format!("{frame}\n").as_bytes()).await;
                         });
                     }
+                    Some("font") => {
+                        if let Some(family) = v["family"].as_str() {
+                            frames.lock().unwrap().ack(epoch, family, v["ok"].as_bool().unwrap_or(false));
+                        }
+                    }
                     Some("updated") => {
                         events.emit(RENDER_UPDATED, json!({"docId": v["doc"], "rev": v["rev"], "meta": v["meta"]}));
                     }
                     _ => {}
                 }
             }
-            // EOF: the worker died. Mark it, then fail whoever still waits.
+            // EOF: the worker died. Mark it, then fail whoever still waits. A
+            // family it owed an ack for is blamed first, so the next spawn (the
+            // very next call) no longer replays it.
+            frames.lock().unwrap().died(epoch);
             dead_on_eof.store(true, Ordering::Relaxed);
             for (_, tx) in w2.lock().unwrap().drain() {
                 let _ = tx.send(Err(UNAVAILABLE.into()));
@@ -710,6 +788,92 @@ mod tests {
         assert_eq!(replay["op"], "fonts");
         assert_eq!(replay["families"], json!([family("A", 3), family("B", 2), family("C", 4)]));
         assert!(FontFrames::default().replay().is_none());
+    }
+
+    #[test]
+    fn a_family_the_worker_died_on_or_panicked_on_is_dropped_and_never_sent_again() {
+        let mut kept = FontFrames::default();
+        kept.claim(vec![family("A", 1), family("BAD", 1), family("C", 1)]);
+        kept.begin(1);
+        kept.ack(1, "A", true);
+        // The worker died before it acknowledged BAD: it took them in order, so BAD is the one.
+        kept.died(1);
+        assert_eq!(kept.replay().unwrap()["families"], json!([family("A", 1), family("C", 1)]), "only the first owed ack is blamed");
+        assert!(kept.has("BAD"), "refused counts as handled: nothing re-sends it");
+        assert!(kept.claim(vec![family("BAD", 1)]).is_empty());
+
+        // A caught panic is reported by its ack, and blames only that family.
+        let mut kept = FontFrames::default();
+        kept.claim(vec![family("A", 1), family("P", 1)]);
+        kept.begin(3);
+        kept.ack(3, "A", true);
+        kept.ack(3, "P", false);
+        assert_eq!(kept.replay().unwrap()["families"], json!([family("A", 1)]));
+        kept.died(3);
+        assert_eq!(kept.replay().unwrap()["families"], json!([family("A", 1)]), "everything was acknowledged, so a later death blames nobody");
+
+        // A worker that is already replaced neither acknowledges nor dies for the new one.
+        kept.begin(4);
+        kept.ack(3, "A", false);
+        kept.died(3);
+        assert_eq!(kept.replay().unwrap()["families"], json!([family("A", 1)]));
+    }
+
+    #[cfg(debug_assertions)]
+    fn mono_face() -> Value {
+        let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../src/assets/fonts/ibm-plex-mono-latin-400.woff2")).unwrap();
+        json!({"data": base64::engine::general_purpose::STANDARD.encode(bytes), "weight": 400, "style": "normal"})
+    }
+
+    #[cfg(debug_assertions)]
+    async fn wait_until(what: &str, mut ok: impl FnMut() -> bool) {
+        for _ in 0..200 {
+            if ok() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        panic!("never: {what}");
+    }
+
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn a_family_that_kills_the_worker_during_replay_is_not_replayed_into_the_next_one() {
+        use mailvault_render::fonts::ABORT_FAMILY;
+        let h = host();
+        let fam = |name: &str| json!({"family": name, "faces": [mono_face()]});
+        h.register_fonts(vec![fam("MV Mono"), fam(ABORT_FAMILY), fam("MV Other")]).await;
+        // The first worker aborts while it registers the bad family from the replay.
+        let err = h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap_err();
+        assert_eq!(err, "render_unavailable");
+        // The next one is replayed what is left, and lives.
+        let ok = h.open(json!({"html": "<body style=\"margin:0\"><p style=\"margin:0;font:20px/30px 'MV Mono'\">abcdefghij</p>", "cssWidth": 300, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        assert_eq!(h.spawned(), 2, "one crash, not a crash per spawn");
+        let runs = h.text_runs(ok["docId"].as_u64().unwrap(), 0).await.unwrap();
+        assert!((runs["runs"][0]["w"].as_f64().unwrap() - 120.0).abs() < 0.5, "the family before the bad one is in use");
+        let kept = h.font_frames.lock().unwrap().replay().unwrap();
+        let names: Vec<&str> = kept["families"].as_array().unwrap().iter().filter_map(|f| f["family"].as_str()).collect();
+        assert_eq!(names, ["MV Mono", "MV Other"], "only the bad family is dropped");
+        assert!(h.has_font(ABORT_FAMILY), "and it is not asked for again");
+    }
+
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn a_family_that_panics_the_live_worker_is_skipped_and_dropped_without_a_respawn() {
+        use mailvault_render::fonts::PANIC_FAMILY;
+        let h = host();
+        let opened = h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        let fam = |name: &str| json!({"family": name, "faces": [mono_face()]});
+        h.register_fonts(vec![fam(PANIC_FAMILY), fam("MV Mono")]).await;
+        wait_until("the bad family is dropped", || {
+            let kept = h.font_frames.lock().unwrap().replay().unwrap();
+            kept["families"].as_array().unwrap().len() == 1
+        })
+        .await;
+        assert!(h.tile(doc, 0).await.is_ok(), "the worker and its doc are untouched");
+        assert_eq!(h.spawned(), 1);
+        assert!(h.font_frames.lock().unwrap().unacked.is_empty(), "both were acknowledged");
     }
 
     #[cfg(unix)]
