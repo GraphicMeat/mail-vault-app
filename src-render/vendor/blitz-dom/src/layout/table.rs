@@ -480,7 +480,17 @@ pub(crate) fn collect_table_cells(
                     doc.nodes[anon].children.push(child_id);
                     continue;
                 }
-                anonymous = None;
+                // A comment or a `display:none` element between the blocks (cerberus
+                // puts `<!-- Column : BEGIN -->` there) does not end the run.
+                let invisible = {
+                    let n = &doc.nodes[child_id];
+                    !n.is_element() && n.text_data().is_none()
+                        || n.primary_styles()
+                            .is_some_and(|s| s.clone_display().outside() == DisplayOutside::None)
+                };
+                if !invisible {
+                    anonymous = None;
+                }
                 collect_table_cells(
                     doc,
                     child_id,
