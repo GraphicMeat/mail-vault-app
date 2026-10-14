@@ -1150,13 +1150,19 @@ pub(crate) fn build_inline_layout_into(
     // has none. The space is added to the boxes' reserved height instead (the box
     // itself is placed at the top of it), which gives the same line box.
     text_layout.strut_below = 0.0;
-    if text_layout.text.is_empty()
-        && text_layout
-            .layout
-            .inline_boxes()
-            .iter()
-            .any(|b| b.kind == InlineBoxKind::InFlow)
-    {
+    // Only for replaced elements: their bottom edge is their baseline. An inline-block
+    // sits on its own last text baseline, so it reaches below the strut already.
+    let (mut any_in_flow, mut all_replaced) = (false, true);
+    for b in text_layout.layout.inline_boxes() {
+        if b.kind == InlineBoxKind::InFlow {
+            any_in_flow = true;
+            all_replaced &= nodes[NodeId::from_u64(b.id)]
+                .data
+                .downcast_element()
+                .is_some_and(|el| is_replaced_element(&el.name.local));
+        }
+    }
+    if text_layout.text.is_empty() && any_in_flow && all_replaced {
         let mut probe = parley::layout::Layout::<TextBrush>::new();
         let mut probe_builder = layout_ctx.tree_builder(font_ctx, scale, true, &parley_style);
         probe_builder.push_text("x");

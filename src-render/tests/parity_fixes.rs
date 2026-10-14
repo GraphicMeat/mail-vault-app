@@ -265,6 +265,9 @@ fn a_line_with_only_an_image_keeps_the_strut_below_the_baseline() {
     assert_eq!(r("logo").y - r("inline").y, 20.0, "the image sits at the top of the line");
     assert_eq!(r("block").h, 90.0, "a block image has no strut");
     assert_eq!(r("block").y, r("inline").y + r("inline").h);
+    // An inline-block button is not on the strut's baseline: it already reaches below it
+    // (gradients-shadows: padding 24 + button 42 + 24 = 90 in the iframe).
+    assert_eq!(r("button").h, 20.0 + 22.0 + 20.0 + 20.0, "no strut under an inline-block");
 }
 
 /// CSS 2 17.5.3: a row is as high as the largest of its own `height`, the `height` of
