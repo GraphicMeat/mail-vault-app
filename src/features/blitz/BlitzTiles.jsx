@@ -2,6 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import { useT } from '../../i18n/index.js';
 import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serializeRender, foldRender } from './service';
 import { foldLabels } from './prepass/folds';
+import { blitzThemeFor } from './parity/themeInputs';
 import TextLayer from './text/TextLayer';
 import { createCopyController } from './text/clipboard';
 import { layerPlainText, selectionInLayer, selectLayer } from './text/selection';
@@ -95,7 +96,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }, []);
 
   const dark = !!theme?.dark;
-  const palette = theme?.palette; // not sent yet, but a palette change must reopen the doc
+  const palette = theme?.palette; // the dark poles come from it: a palette change must reopen the doc
   useEffect(() => {
     if (!width) return undefined;
     const my = ++gen.current;
@@ -105,7 +106,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     // below uses the width the daemon answers with (meta.cssWidth), not this request.
     const cssWidth = Math.min(4000, Math.max(1, Math.round(width)));
     const scale = Math.min(4, Math.max(0.5, dpr));
-    openRender({ html, cssWidth, scale, allowRemote: true, theme: { mode: dark ? 'dark' : 'light' } })
+    openRender({ html, cssWidth, scale, allowRemote: true, theme: blitzThemeFor({ dark, palette }) })
       .then((r) => {
         if (my !== gen.current) { closeRender(r.docId); return; }
         // The old doc keeps its tiles on screen until this one replaces it; only then is it closed.

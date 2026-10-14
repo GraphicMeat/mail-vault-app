@@ -14,6 +14,7 @@ import { lightSelectionColor } from '../text/selectionColors';
 import { openRender, hitRender, closeRender, onRenderUpdated, textRunsRender, serializeRender, foldRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
 import { replySelection } from '../../../utils/replySelection';
+import { getEmailColors } from '../../../utils/mailChrome';
 
 let paneWidth = 600;
 const meta = (over = {}) => ({ cssWidth: 600, cssHeight: 1100, tileCssHeight: 512, tileCount: 3, links: [], plainText: '', folds: [], ...over });
@@ -298,6 +299,16 @@ describe('BlitzTiles', () => {
       await act(async () => { push({ docId: 6, rev: 2, meta: meta() }); });
       expect(root().getAttribute('data-mv-parity-rev')).toBe('2');
       expect(root().getAttribute('data-mv-parity-theme')).toBe('light');
+    });
+    it('sends the palette\'s Dark Reader theme to render.open, and light as {mode:light}', async () => {
+      openRender.mockResolvedValue({ docId: 1, rev: 1, meta: meta() });
+      const { rerender } = render(tiles({ theme: { dark: true, palette: 'teal' } }));
+      await waitFor(() => expect(openRender).toHaveBeenCalledTimes(1));
+      const teal = getEmailColors('dark', 'teal');
+      expect(openRender.mock.calls[0][0].theme).toEqual({ mode: 'dark', bg: teal.background, fg: teal.text, brightness: 100, contrast: 100, sepia: 0 });
+      rerender(tiles({ theme: { dark: false, palette: 'teal' } }));
+      await waitFor(() => expect(openRender).toHaveBeenCalledTimes(2));
+      expect(openRender.mock.calls[1][0].theme).toEqual({ mode: 'light' });
     });
     it('a palette change reopens the doc', async () => {
       openRender.mockResolvedValue({ docId: 1, rev: 1, meta: meta() });
