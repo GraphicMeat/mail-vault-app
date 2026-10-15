@@ -12,6 +12,7 @@ vi.mock('../BlitzTiles', () => ({
 const privacy = vi.hoisted(() => ({ hold: false, active: false }));
 vi.mock('../prepass/privacyDict', () => ({ usePrivacyDict: () => ({ active: privacy.active, dict: null, hold: privacy.hold }) }));
 import BlitzBody from '../BlitzBody';
+import { _resetDocRegistryForTest } from '../surfaces/docRegistry';
 
 const props = (over = {}) => ({
   surface: 'reader', messageKey: 'acc:INBOX:1', bodyHtml: '<p>Hello</p><script>x()</script>', plainText: 'Hello plain',
@@ -19,7 +20,7 @@ const props = (over = {}) => ({
 });
 
 beforeEach(() => { tilesProps.last = null; privacy.hold = false; privacy.active = false; useSettingsStore.setState({ emailRenderer: 'blitz' }); });
-afterEach(cleanup);
+afterEach(() => { cleanup(); _resetDocRegistryForTest(); });
 
 describe('BlitzBody', () => {
   it('hands BlitzTiles the pre-passed HTML with the body and no viewer scripts', async () => {

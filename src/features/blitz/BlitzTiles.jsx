@@ -1,6 +1,8 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useT } from '../../i18n/index.js';
-import { openRender, tileUrl, hitRender, closeRender, onRenderUpdated, serializeRender, foldRender } from './service';
+import { tileUrl, hitRender, serializeRender, foldRender } from './service';
+import { useSurfaceDoc } from './surfaces/useSurfaceDoc';
+import { boxStyle, scrollsInside, MIN_OPEN_WIDTH, LAZY_SURFACES } from './surfaces/sizing';
 import { foldLabels } from './prepass/folds';
 import { blitzThemeFor } from './parity/themeInputs';
 import TextLayer from './text/TextLayer';
@@ -29,13 +31,17 @@ function useDevicePixelRatio() {
 // A body drawn by the daemon's Blitz worker: PNG tiles fetched as they near
 // the viewport, links found by hit-testing in the worker. While `privacy` is
 // on, the hover URL chip is not drawn at all: a URL can carry a name that the
-// pre-pass does not know to mask (a calendar slug, a ?name= query).
-const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false }, ref) {
+// pre-pass does not know to mask (a calendar slug, a ?name= query), and the
+// root says it is masked (data-blitz-masked) for a capture to read.
+// The doc itself comes from the shared registry (surfaces/useSurfaceDoc).
+// `surface` names the AltBodyProps surface (root attribute; only the lazy
+// surfaces keep their doc for reuse on unmount); `transparent` draws on no
+// canvas (chat bubbles); `style` joins the sizing box.
+const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface, transparent = false }, ref) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
   const dpr = useDevicePixelRatio();
-  const [doc, setDoc] = useState(null); // { docId, rev, meta, sentWidth }
   const [hover, setHover] = useState(null);
   const [hoverFold, setHoverFold] = useState(null); // id of the fold toggle under the pointer
   const textLayerRef = useRef(null);
@@ -53,7 +59,6 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }), []);
   const [shown, setShown] = useState(() => new Set([0, 1]));
   const tileEls = useRef([]);
-  const gen = useRef(0);
   const docIdRef = useRef(null);
   const foldSeq = useRef(new Map()); // fold id -> newest toggle issued, so an older refusal cannot undo a newer click
   const docRef = useRef(null); // the latest doc, for a click handler that awaits a hit reply
@@ -71,7 +76,6 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   onLinkRef.current = onLink;
   onFailureRef.current = onFailure;
   onFoldToggledRef.current = onFoldToggled; // called with (id, open) when a fold toggle is clicked
-  docRef.current = doc;
 
   const fail = useCallback((code) => {
     if (failed.current) return;
@@ -97,35 +101,43 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
 
   const dark = !!theme?.dark;
   const palette = theme?.palette; // the dark poles come from it: a palette change must reopen the doc
-  useEffect(() => {
-    if (!width) return undefined;
-    const my = ++gen.current;
-    failed.current = false;
-    // The daemon rejects a width outside 1..4000 css px or a scale outside 0.5..4, which
-    // would show the failure view on an ultrawide pane or a zoomed display. The layout
-    // below uses the width the daemon answers with (meta.cssWidth), not this request.
-    const cssWidth = Math.min(4000, Math.max(1, Math.round(width)));
-    const scale = Math.min(4, Math.max(0.5, dpr));
-    openRender({ html, cssWidth, scale, allowRemote: true, theme: blitzThemeFor({ dark, palette }) })
-      .then((r) => {
-        if (my !== gen.current) { closeRender(r.docId); return; }
-        // The old doc keeps its tiles on screen until this one replaces it; only then is it closed.
-        const prev = docIdRef.current;
-        docIdRef.current = r.docId;
-        setDoc({ ...r, sentWidth: cssWidth });
-        // Toggle ids repeat across docs: what was under the pointer is not known for this one.
-        setHover(null); setHoverFold(null);
-        if (prev != null && prev !== r.docId) closeRender(prev);
-      })
-      // Any rejection is a failure (render_bad_request, render_too_complex, a plain object, a string).
-      .catch((e) => { if (my === gen.current) fail(e?.message || e?.code || String(e)); });
-    return () => { gen.current++; };
-  }, [html, width, dpr, dark, palette, fail]);
+  const workerTheme = useMemo(() => {
+    const t = blitzThemeFor({ dark, palette });
+    return transparent ? { ...t, bg: null } : t;
+  }, [dark, palette, transparent]);
+  // The daemon rejects a width outside 1..4000 css px or a scale outside 0.5..4, which
+  // would show the failure view on an ultrawide pane or a zoomed display. The layout
+  // below uses the width the daemon answers with (meta.cssWidth), not this request.
+  // Under MIN_OPEN_WIDTH there is no real width yet (null params: no doc is opened).
+  const cssWidth = width >= MIN_OPEN_WIDTH ? Math.min(4000, Math.max(1, Math.round(width))) : null;
+  const scale = Math.min(4, Math.max(0.5, dpr));
+  const params = cssWidth ? { html, cssWidth, scale, allowRemote: true, theme: workerTheme } : null;
+  const { key: docKeyNow, doc, sentWidth, error, busy, retry } = useSurfaceDoc(params, { deferOnUnmount: LAZY_SURFACES.has(surface) });
+  docRef.current = doc;
+  docIdRef.current = doc?.docId ?? null;
 
-  // The current doc closes with the component, not with each re-open.
-  useEffect(() => () => {
-    if (docIdRef.current != null) { closeRender(docIdRef.current); docIdRef.current = null; }
-  }, []);
+  // A new key starts with a clean failure latch; a new doc has no hover (toggle ids repeat across docs).
+  useEffect(() => { failed.current = false; }, [docKeyNow]);
+  useEffect(() => { setHover(null); setHoverFold(null); }, [doc?.docId]);
+
+  // One quiet retry per key: the first tile error (or an open that finds its doc gone) discards the doc
+  // and opens it again, which hides a worker restart or an eviction. The second failure is the user's.
+  const retriedKey = useRef(null);
+  const failOrRetry = useCallback((code) => {
+    if (failed.current) return;
+    if (retriedKey.current !== docKeyNow) {
+      retriedKey.current = docKeyNow;
+      // Off the live list now: a sibling tile of the discarded doc that errors before the re-render is not a second failure.
+      docIdRef.current = null;
+      retry();
+      return;
+    }
+    fail(code);
+  }, [docKeyNow, retry, fail]);
+  useEffect(() => {
+    if (!error) return;
+    if (error === 'render_unknown_doc') failOrRetry(error); else fail(error);
+  }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const m = doc?.meta;
@@ -140,16 +152,6 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     tileEls.current.slice(0, m.tileCount).forEach(el => el && io.observe(el));
     return () => io.disconnect();
   }, [doc?.docId, doc?.meta?.tileCount]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    let unlisten = null;
-    let gone = false;
-    onRenderUpdated((p) => {
-      if (p?.docId === docIdRef.current) setDoc(d => (d && d.docId === p.docId ? { ...d, rev: p.rev, meta: p.meta ?? d.meta } : d));
-    }).then((u) => { if (gone) u?.(); else unlisten = u; })
-      .catch(() => { /* no event bus: the tiles just never update */ });
-    return () => { gone = true; unlisten?.(); };
-  }, []);
 
   // The reply carries both: a toggle inside a link hits the link and the fold.
   const hitAt = useCallback(async (clientX, clientY, target) => {
@@ -193,8 +195,9 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     const { link, fold } = await hitAt(e.clientX, e.clientY, e.currentTarget);
     hitBusy.current = false;
     if (!inside.current) return;
-    // A toggle inside a link is a toggle: no URL chip for what a click will not open.
-    setHover(fold ? null : link);
+    // A toggle inside a link is a toggle: no URL chip for what a click will not open. A surface
+    // with no onLink has inert links: no pointer and no chip either (folds still work).
+    setHover(fold || !onLinkRef.current ? null : link);
     setHoverFold(fold);
   }, [hitAt]);
 
@@ -314,11 +317,6 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     return () => window.removeEventListener('focus', paintSelection);
   }, [paintSelection]);
 
-  // 'content' is exactly the document's height; the other two scroll inside.
-  const scrollsInside = sizing === 'fill' || (sizing && typeof sizing === 'object');
-  const boxStyle = sizing === 'fill' ? { height: '100%' }
-    : (sizing && typeof sizing === 'object' ? { maxHeight: sizing.collapsedMax } : undefined);
-
   const m = doc?.meta;
   const labels = useMemo(() => foldLabels(), [t]);
   const hoverFoldInfo = m?.folds?.find(f => f.id === hoverFold);
@@ -327,17 +325,19 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   // The parity harness (e2e) reads these to pair this surface with the iframe's.
   const parityAttrs = globalThis.__MV_PARITY__ && doc ? {
     'data-mv-parity-doc': String(doc.docId),
-    'data-mv-parity-width': String(doc.sentWidth),
+    'data-mv-parity-width': String(sentWidth),
     'data-mv-parity-rev': String(doc.rev),
     'data-mv-parity-theme': dark ? 'dark' : 'light',
   } : null;
   return (
     <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body" data-doc-id={doc?.docId} {...parityAttrs}
+      data-blitz-surface={surface} aria-busy={busy ? 'true' : 'false'} data-blitz-doc={!busy && doc ? doc.docId : undefined}
+      data-blitz-masked={String(privacy)}
       // Focusable like the iframe's document: a click focuses it, Tab leaves it, no ring.
       tabIndex={-1}
-      className={`w-full overflow-x-auto relative${scrollsInside ? ' overflow-y-auto' : ''}`} style={{ outline: 'none', ...boxStyle }}>
+      className={`w-full overflow-x-auto relative${scrollsInside(sizing) ? ' overflow-y-auto' : ''}`} style={{ outline: 'none', ...boxStyle(sizing, doc?.meta ?? null, style) }}>
       {m && (
-        <div role="presentation" title={foldTitle} onMouseMove={onMove} onMouseLeave={onLeave} onClick={onClick}
+        <div role="presentation" data-blitz-tiles data-capture-exclude title={foldTitle} onMouseMove={onMove} onMouseLeave={onLeave} onClick={onClick}
           onContextMenu={onContextMenu}
           style={{ position: 'relative', width: m.cssWidth, height: m.cssHeight, cursor: hover || hoverFold ? 'pointer' : 'default' }}>
           {Array.from({ length: m.tileCount }, (_, i) => {
@@ -348,7 +348,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
                 src={shown.has(i) ? tileUrl(doc.docId, doc.rev, i) : undefined}
                 alt="" draggable={false} decoding="async"
                 // A tile of a doc that was just closed fails by design; only the live doc's tiles count.
-                onError={() => { if (tileDoc === docIdRef.current) fail('render_tile_failed'); }}
+                onError={() => { if (tileDoc === docIdRef.current) failOrRetry('render_tile_failed'); }}
                 style={{ position: 'absolute', left: 0, top, width: m.cssWidth, height: Math.min(m.tileCssHeight, m.cssHeight - top) }} />
             );
           })}

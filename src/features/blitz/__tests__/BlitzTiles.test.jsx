@@ -13,6 +13,7 @@ vi.mock('../service', () => ({
 import { lightSelectionColor } from '../text/selectionColors';
 import { openRender, hitRender, closeRender, onRenderUpdated, textRunsRender, serializeRender, foldRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
+import { _resetDocRegistryForTest } from '../surfaces/docRegistry';
 import { replySelection } from '../../../utils/replySelection';
 import { getEmailColors } from '../../../utils/mailChrome';
 
@@ -20,7 +21,7 @@ let paneWidth = 600;
 const meta = (over = {}) => ({ cssWidth: 600, cssHeight: 1100, tileCssHeight: 512, tileCount: 3, links: [], plainText: '', folds: [], ...over });
 const tiles = (p = {}) => <BlitzTiles html="<p>x" theme={{ dark: false }} onLink={vi.fn()} onFailure={vi.fn()} sizing="content" {...p} />;
 
-afterEach(cleanup); // vitest globals are off, so RTL does not unmount between tests
+afterEach(() => { cleanup(); _resetDocRegistryForTest(); }); // vitest globals are off, so RTL does not unmount between tests; the shared doc registry starts clean
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -78,7 +79,13 @@ describe('BlitzTiles', () => {
     openRender.mockResolvedValueOnce({ docId: 3, rev: 1, meta: meta() });
     render(tiles({ html: '<p>y', onFailure: onFailure2 }));
     const t = await screen.findAllByTestId('blitz-tile');
+    // The first tile error reopens the doc quietly (and a sibling's error is not a second failure).
+    openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: meta() });
     fireEvent.error(t[0]); fireEvent.error(t[1]);
+    expect(onFailure2).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('4%2F1%2F0'));
+    const t2 = screen.getAllByTestId('blitz-tile');
+    fireEvent.error(t2[0]); fireEvent.error(t2[1]);
     expect(onFailure2).toHaveBeenCalledTimes(1);
     expect(onFailure2).toHaveBeenCalledWith('render_tile_failed');
   });

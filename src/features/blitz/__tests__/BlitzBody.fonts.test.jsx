@@ -16,9 +16,10 @@ vi.mock('../../../services/fontService', () => ({
 }));
 import { familyForMail, refreshFonts } from '../../../services/fontService';
 import BlitzBody from '../BlitzBody';
+import { _resetDocRegistryForTest } from '../surfaces/docRegistry';
 
 beforeEach(() => { order.length = 0; vi.clearAllMocks(); });
-afterEach(cleanup);
+afterEach(() => { cleanup(); _resetDocRegistryForTest(); });
 
 describe('BlitzBody mail fonts', () => {
   it('sends installed families before the tiles get the body, downloads the rest after', async () => {

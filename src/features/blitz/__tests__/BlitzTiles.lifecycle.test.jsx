@@ -12,6 +12,7 @@ vi.mock('../service', () => ({
 }));
 import { openRender, hitRender, textRunsRender, serializeRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
+import { _resetDocRegistryForTest } from '../surfaces/docRegistry';
 
 const meta = (over = {}) => ({ cssWidth: 600, cssHeight: 100, tileCssHeight: 512, tileCount: 1, links: [], plainText: '', folds: [], ...over });
 const tiles = (p = {}) => <BlitzTiles html="<p>x" theme={{ dark: false }} onLink={vi.fn()} onFailure={vi.fn()} sizing="content" {...p} />;
@@ -53,7 +54,7 @@ const select = (span, from, to) => {
   window.getSelection().addRange(r);
 };
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); _resetDocRegistryForTest(); });
 
 // React puts its own one-time selectionchange listener on the document at the first root.
 beforeAll(() => { render(<div />).unmount(); });

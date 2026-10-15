@@ -26,6 +26,7 @@ vi.mock('../../../utils/iframePrivacyRedact', async (importOriginal) => {
 });
 import { openRender, closeRender } from '../service';
 import BlitzBody from '../BlitzBody';
+import { _resetDocRegistryForTest } from '../surfaces/docRegistry';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { setPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
@@ -58,6 +59,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  _resetDocRegistryForTest();
   usePrivacyStore.setState({ enabled: false, peek: false, captureMask: false, captureReveal: null });
   setPrivacyDictionary(EMPTY_DICTIONARY, { ready: true });
 });
