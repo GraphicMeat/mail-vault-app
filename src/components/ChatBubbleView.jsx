@@ -567,6 +567,9 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const handleDoubleClick = (e) => {
     // Don't trigger on text selection
     if (window.getSelection()?.toString()) return;
+    // The iframe swallowed a double-click inside the mail body; a Blitz body is part of this DOM and would
+    // let it bubble up here (on an image or blank space), so it is ignored the same way.
+    if (e?.target?.closest?.('[data-renderer="blitz"]')) return;
     onOpenFullView?.();
   };
 

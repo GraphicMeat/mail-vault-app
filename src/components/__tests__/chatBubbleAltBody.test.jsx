@@ -11,6 +11,7 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
   return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: new Map() }, registerListener: () => () => {} }) };
 });
 vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: () => null }));
+vi.mock('../email/FullViewEmailModal', () => ({ FullViewEmailModal: () => <div data-testid="full-view" /> }));
 const { ChatBubbleView, buildChatBubbleDocument, BUBBLE_FRAME_WIDTH } = await import('../ChatBubbleView');
 const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../email/bodyRendererRegistry');
 const { useSettingsStore } = await import('../../stores/settingsStore');
@@ -18,7 +19,7 @@ const { useThemeStore } = await import('../../stores/themeStore');
 const { usePrivacyStore } = await import('../../stores/privacyStore');
 
 const seen = [];
-const Stub = (props) => { seen.push(props); return <div data-testid="alt-bubble"><button onClick={() => props.onLink({ href: 'https://evil.test/', text: 'bank', alert: 'red', title: 'Mismatch' })}>alt-phish</button></div>; };
+const Stub = (props) => { seen.push(props); return <div data-testid="alt-bubble" data-renderer="blitz"><button onClick={() => props.onLink({ href: 'https://evil.test/', text: 'bank', alert: 'red', title: 'Mismatch' })}>alt-phish</button></div>; };
 const email = { uid: 7, _accountId: 'demo', _mailbox: 'INBOX', date: '2026-09-01', from: { name: 'Nell', address: 'nell@example.com' }, to: [], subject: 'Studio plans', html: '<p>Shall we meet at two?</p><script>x()</script>', text: 'Shall we meet at two?', flags: [] };
 const show = () => render(<ChatBubbleView correspondent={{ name: 'Nell', email: 'nell@example.com' }}
   threadId="studio" threadsMap={new Map([['studio', { subject: 'Studio plans', emails: [email] }]])}
@@ -103,5 +104,15 @@ describe('chat bubble on the body seam', () => {
     expect(out).toContain("script-src 'nonce-abc'");
     expect(out).toContain('background-color: transparent !important');
     expect(out).toContain('color: #ffffff');
+  });
+
+  it('a double-click inside the Blitz body does not open the full view; one on the bubble around it does', () => {
+    registerBodyRenderer('blitz', { Body: Stub });
+    useSettingsStore.setState({ emailRenderer: 'blitz' });
+    show();
+    fireEvent.doubleClick(screen.getByTestId('alt-bubble'));
+    expect(screen.queryByTestId('full-view')).toBeNull();
+    fireEvent.doubleClick(screen.getByRole('group', { name: /./ }));
+    expect(screen.getByTestId('full-view')).toBeTruthy();
   });
 });
