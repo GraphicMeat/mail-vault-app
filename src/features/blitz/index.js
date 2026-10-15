@@ -19,6 +19,9 @@ import './blitz.css';
 if (!IS_APPSTORE_BUILD) {
   registerBodyRenderer('blitz', { Body: BlitzBody, SettingsRow, openWindow: openBlitzWindow, rasterize: rasterizeWithBlitz, compositeBodies: compositeBlitzBodies });
   installDebugHook(); // e2e builds only
+  // e2e builds only, and loaded lazily: the surface builders it imports (ChatBubbleView, through it EmailViewer)
+  // must not join the entry chunk of every window.
+  if (import.meta.env.VITE_E2E === '1') import('./surfaces/surfaceDocs').then((m) => m.installSurfaceDocsHook()).catch(() => {});
 
   try {
     const win = getCurrentWebviewWindow();

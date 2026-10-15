@@ -185,7 +185,7 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
       {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
           so nothing built for the other state stays on screen while the new doc opens.
           A dictionary update while masking stays on does not change the key. */}
-      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} style={style} surface={surface} transparent={surface === 'bubble'} privacy={priv.active} onFoldToggled={onFoldToggled} />
+      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} style={style} surface={surface} privacy={priv.active} onFoldToggled={onFoldToggled} />
     </div>
   );
 });

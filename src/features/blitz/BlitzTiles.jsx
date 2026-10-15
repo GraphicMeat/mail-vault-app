@@ -3,9 +3,8 @@ import { useT } from '../../i18n/index.js';
 import { tileUrl, hitRender, serializeRender, foldRender } from './service';
 import { useSurfaceDoc } from './surfaces/useSurfaceDoc';
 import { onDocGone } from './surfaces/docGone';
-import { boxStyle, scrollsInside, MIN_OPEN_WIDTH, LAZY_SURFACES } from './surfaces/sizing';
+import { boxStyle, scrollsInside, surfaceWorkerTheme, MIN_OPEN_WIDTH, LAZY_SURFACES } from './surfaces/sizing';
 import { foldLabels } from './prepass/folds';
-import { blitzThemeFor } from './parity/themeInputs';
 import TextLayer from './text/TextLayer';
 import { createCopyController } from './text/clipboard';
 import { layerPlainText, selectionInLayer, selectLayer } from './text/selection';
@@ -36,9 +35,9 @@ function useDevicePixelRatio() {
 // root says it is masked (data-blitz-masked) for a capture to read.
 // The doc itself comes from the shared registry (surfaces/useSurfaceDoc).
 // `surface` names the AltBodyProps surface (root attribute; only the lazy
-// surfaces keep their doc for reuse on unmount); `transparent` draws on no
-// canvas (chat bubbles); `style` joins the sizing box.
-const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface, transparent = false }, ref) {
+// surfaces keep their doc for reuse on unmount, and the bubble draws on no
+// canvas: surfaceWorkerTheme); `style` joins the sizing box.
+const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface }, ref) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -102,10 +101,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
 
   const dark = !!theme?.dark;
   const palette = theme?.palette; // the dark poles come from it: a palette change must reopen the doc
-  const workerTheme = useMemo(() => {
-    const t = blitzThemeFor({ dark, palette });
-    return transparent ? { ...t, bg: null } : t;
-  }, [dark, palette, transparent]);
+  const workerTheme = useMemo(() => surfaceWorkerTheme({ dark, palette }, surface), [dark, palette, surface]);
   // The daemon rejects a width outside 1..4000 css px or a scale outside 0.5..4, which
   // would show the failure view on an ultrawide pane or a zoomed display. The layout
   // below uses the width the daemon answers with (meta.cssWidth), not this request.

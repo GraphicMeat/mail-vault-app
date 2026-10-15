@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boxStyle, scrollsInside, MIN_OPEN_WIDTH, LAZY_SURFACES } from '../surfaces/sizing';
+import { boxStyle, scrollsInside, surfaceWorkerTheme, MIN_OPEN_WIDTH, LAZY_SURFACES } from '../surfaces/sizing';
 
 const meta = (h) => ({ cssWidth: 600, cssHeight: h, tileCssHeight: 512, tileCount: Math.ceil(h / 512), links: [], plainText: '', folds: [] });
 
@@ -36,5 +36,25 @@ describe('scrollsInside', () => {
     expect(scrollsInside('content')).toBe(false);
     expect(scrollsInside(undefined)).toBe(false);
     expect(scrollsInside({})).toBe(false);
+  });
+});
+
+describe('surfaceWorkerTheme', () => {
+  it('the bubble draws on no canvas colour, light or dark', () => {
+    expect(surfaceWorkerTheme({ dark: false, palette: 'graphite' }, 'bubble')).toEqual({ mode: 'light', bg: null });
+    const dark = surfaceWorkerTheme({ dark: true, palette: 'graphite' }, 'bubble');
+    expect(dark.bg).toBeNull();
+    expect(dark.mode).toBe('dark');
+    expect(dark.fg).toMatch(/^#/);
+  });
+  it('every other surface keeps the plain theme', () => {
+    for (const surface of ['reader', 'thread', 'fullView', 'original', 'popout', 'preview', 'exportBody']) {
+      expect(surfaceWorkerTheme({ dark: false, palette: 'graphite' }, surface)).toEqual({ mode: 'light' });
+      const dark = surfaceWorkerTheme({ dark: true, palette: 'graphite' }, surface);
+      expect(dark.bg).toMatch(/^#/);
+    }
+  });
+  it('reads a missing theme as light', () => {
+    expect(surfaceWorkerTheme(undefined, 'thread')).toEqual({ mode: 'light' });
   });
 });

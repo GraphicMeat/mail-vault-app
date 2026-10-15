@@ -18,6 +18,13 @@
  * it), so the connected-ci battery is unaffected. It also skips when the
  * build has no Blitz module, and loads the module's files only after that
  * check.
+ *
+ * Two matrices share the report. 'surfaces matrix' (plan D Task 13) runs first: for
+ * each fixture and each body surface it mounts the surface's own srcdoc in a probe
+ * iframe at the surface's natural width and compares it, per element, with the real
+ * pre-pass output of what that surface hands Blitz (render.open + render.inspect).
+ * 'reader matrix' is plan B's, through the real reader. MV_PARITY_MATRIX=reader|surfaces
+ * runs one of them (the default is both); report.json counts both.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -37,6 +44,7 @@ let failedCase;
 let reportTotals;
 let unknownFixtureIds;
 let FRAME_SCRIPT;
+let PROBE_SCRIPT;
 
 const REPO = resolve(import.meta.dirname, '../..');
 const CORPUS = join(REPO, 'tests/fixtures/blitz-corpus');
@@ -52,7 +60,20 @@ const WIDTHS = list(process.env.MV_PARITY_WIDTHS, 'wide,375').map((w) => (w === 
 const ONLY = list(process.env.MV_PARITY_ONLY, '');
 const FIXTURES = MANIFEST.fixtures.filter((f) => !ONLY.length || ONLY.includes(f.id));
 const SHOTS = process.env.MV_PARITY_SHOTS === '1';
-const EXPECTED_CASES = MODES.length * WIDTHS.length * FIXTURES.length;
+const MATRIX = process.env.MV_PARITY_MATRIX || 'both';
+// The surfaces matrix: one case per fixture, mode and body surface (label = surface[-variant]-width). Preview is
+// light-only (its frame never runs Dark Reader) and so is the whole export card; the bubble's dark is CSS only.
+const SURFACE_PLAN = {
+  light: ['thread-680', 'fullView-1200', 'original-640', 'popout-800', 'exportBody-820', 'exportHead-820', 'exportCard-820', 'preview-600', 'bubble-received-300', 'bubble-sent-300'],
+  dark: ['thread-680', 'fullView-1200', 'original-640', 'popout-800', 'exportBody-820', 'exportHead-820', 'bubble-received-300', 'bubble-sent-300'],
+};
+// The surfaces whose iframe runs Dark Reader in dark.
+const DR_SURFACES = new Set(['thread', 'fullView', 'original', 'popout', 'exportBody']);
+const PROBE = '#mv-parity-probe iframe';
+const SHOT_MAX_CSS_HEIGHT = Number(process.env.MV_PARITY_SHOT_H) || 840;
+const READER_CASES = MATRIX === 'surfaces' ? 0 : MODES.length * WIDTHS.length * FIXTURES.length;
+const SURFACE_CASES = MATRIX === 'reader' ? 0 : FIXTURES.length * MODES.reduce((n, m) => n + (SURFACE_PLAN[m] || []).length, 0);
+const EXPECTED_CASES = READER_CASES + SURFACE_CASES;
 
 // The catalogue families a fixture is drawn in, as the reader picks them
 // (utils/mailFonts.js mailFontFamilies: the first family of each font-family /
@@ -164,19 +185,19 @@ async function setEmailTheme(want) {
 }
 
 /** Copied from connected-html-render: make DR leave its fallback sheet. */
-async function forceDarkReaderPass() {
-  await browser.execute(() => {
-    const win = document.querySelector('iframe[sandbox]')?.contentWindow;
+async function forceDarkReaderPass(sel = 'iframe[sandbox]') {
+  await browser.execute((sel) => {
+    const win = document.querySelector(sel)?.contentWindow;
     if (!win) return;
     const doc = win.document;
     Object.defineProperty(doc, 'hidden', { get: () => false, configurable: true });
     Object.defineProperty(doc, 'visibilityState', { get: () => 'visible', configurable: true });
     doc.dispatchEvent(new win.Event('visibilitychange'));
-  });
-  await browser.waitUntil(() => browser.execute(() => {
-    const fb = document.querySelector('iframe[sandbox]')?.contentDocument?.querySelector('.darkreader--fallback');
+  }, sel);
+  await browser.waitUntil(() => browser.execute((sel) => {
+    const fb = document.querySelector(sel)?.contentDocument?.querySelector('.darkreader--fallback');
     return !!fb && fb.textContent.length === 0;
-  }), { timeout: 20_000, interval: 250, timeoutMsg: 'Dark Reader never got past its fallback sheet' });
+  }, sel), { timeout: 20_000, interval: 250, timeoutMsg: 'Dark Reader never got past its fallback sheet' });
   await browser.pause(500); // DR's async image analysis of data: backgrounds
 }
 
@@ -215,6 +236,30 @@ async function settleFrame(families) {
   return ready ? fonts : 'timeout';
 }
 
+/**
+ * The probe frame (surfaces matrix) is finished: loaded, no web font still loading (a face the document itself
+ * asks for; the probe registers none of the app's catalogue fonts), then two frames. A font wait is retried once
+ * with a longer budget; if a face is still loading the result is 'timeout' and the case must fail.
+ */
+async function settleProbe(sel) {
+  await browser.waitUntil(() => browser.execute((sel) => {
+    const d = document.querySelector(sel)?.contentDocument;
+    return !!d?.body && d.readyState === 'complete';
+  }, sel), { timeout: 20_000, interval: 100, timeoutMsg: 'the probe frame never finished loading' });
+  const idle = (timeout) => browser.waitUntil(() => browser.execute((sel) => {
+    const d = document.querySelector(sel)?.contentDocument;
+    return !d?.fonts || [...d.fonts].every((f) => f.status !== 'loading');
+  }, sel), { timeout, interval: 250 }).then(() => true, () => false);
+  const fonts = (await idle(20_000)) || (await idle(60_000)) ? 'loaded' : 'timeout';
+  const ready = await browser.executeAsync((sel, done) => {
+    const d = document.querySelector(sel)?.contentDocument;
+    const timeout = new Promise((r) => setTimeout(() => r(false), 10_000));
+    Promise.race([(d?.fonts?.ready || Promise.resolve()).then(() => true), timeout])
+      .then((ok) => { const t = setTimeout(() => done(ok), 200); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(t); done(ok); })); });
+  }, sel);
+  return ready ? fonts : 'timeout';
+}
+
 /** The reader names the message it shows in its header, which both renderers share: a
  * measurement of anything but the fixture just opened (the previous case's message, which
  * the iframe remounts on when the renderer flips) must fail, not compare. */
@@ -227,8 +272,8 @@ async function assertOpened(id) {
   }, { timeout: 15_000, interval: 250, timeoutMsg: `the reader never showed "${want}" (it shows "${shown}")` });
 }
 
-function collectFrame(assign, cluster) {
-  const iframe = document.querySelector('iframe[sandbox]');
+function collectFrame(assign, cluster, sel = 'iframe[sandbox]') {
+  const iframe = document.querySelector(sel);
   const doc = iframe && iframe.contentDocument;
   if (!doc || !doc.body) return null;
   const win = doc.defaultView;
@@ -372,6 +417,7 @@ describe('Blitz parity', function () {
     const unknown = unknownFixtureIds(ONLY, MANIFEST);
     if (unknown.length || !EXPECTED_CASES) throw new Error(`MV_PARITY_ONLY names no fixture: ${unknown.join(', ') || '(none run)'}`);
     FRAME_SCRIPT = `return (${collectFrame.toString()})(${assignParityIds.toString()}, ${clusterLineCount.toString()});`;
+    PROBE_SCRIPT = `return (${collectFrame.toString()})(${assignParityIds.toString()}, ${clusterLineCount.toString()}, ${JSON.stringify(PROBE)});`;
 
     OUT = process.env.MV_PARITY_OUT || join(browser.testDataDir, 'blitz-parity');
     mkdirSync(join(OUT, 'cases'), { recursive: true });
@@ -418,80 +464,229 @@ describe('Blitz parity', function () {
     try { await reloadApp(); await waitForEmails(); } catch { /* best effort */ }
   });
 
-  for (const mode of MODES) {
-    for (const width of WIDTHS) {
+  // Plan D Task 13: every body surface's own document, in a probe iframe and through the real pre-pass into Blitz.
+  // Runs before the reader matrix: the Blitz worker keeps the mail fonts the reader registers, which the probe
+  // iframe would not have.
+  describe('surfaces matrix', function () {
+    this.timeout(30 * 60_000);
+    if (MATRIX === 'reader') return;
+    const labelOf = (c) => `${c.surface}${c.variant ? `-${c.variant}` : ''}-${c.width}`;
+
+    before(async function () {
+      if (process.env.MV_PARITY !== '1') this.skip(); // the outer before has already skipped without it
+      await browser.waitUntil(() => browser.execute(() => typeof window.__MV_SURFACE_DOCS__?.docs === 'function'), {
+        timeout: 20_000, interval: 250, timeoutMsg: 'MV_PARITY=1 but this build has no window.__MV_SURFACE_DOCS__ (surfaces/surfaceDocs.js)',
+      });
+    });
+    after(async () => {
+      try { await browser.execute(() => { document.getElementById('mv-parity-probe')?.remove(); delete window.__mvParityDocs; }); } catch { /* app gone */ }
+    });
+
+    // The probe frame: the surface's srcdoc at its natural width, in a box that scrolls (the screenshot walker needs a scroller).
+    const mountProbe = (i) => browser.executeAsync((i, done) => {
+      const d = window.__mvParityDocs[i];
+      let box = document.getElementById('mv-parity-probe');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'mv-parity-probe';
+        box.style.cssText = 'position:fixed;inset:0;overflow:auto;z-index:2147483647;background:#fff';
+        document.body.appendChild(box);
+      }
+      box.innerHTML = '';
+      const fr = document.createElement('iframe');
+      fr.setAttribute('sandbox', 'allow-same-origin allow-scripts');
+      fr.style.cssText = `width:${d.width}px;height:4000px;border:0;display:block`;
+      const timer = setTimeout(() => done('timeout'), 15_000);
+      fr.addEventListener('load', () => { clearTimeout(timer); done('ok'); }, { once: true });
+      fr.srcdoc = d.iframeHtml;
+      box.appendChild(fr);
+    }, i);
+
+    for (const mode of MODES) {
       for (const f of FIXTURES) {
-        it(`${f.id} ${mode} ${width}`, async function () {
-          const which = { fixture: f.id, mode, width };
-          let recorded = false;
-          try {
-            // Select the message before the iframe exists, so it never mounts on the previous case's.
-            await openFixture(f.id);
-            await assertOpened(f.id);
-            await setRenderer('web');
-            await setNarrow(width === 375);
-            await assertOpened(f.id);
-            await setEmailTheme(mode);
-            if (mode === 'dark') await forceDarkReaderPass();
-            const fonts = await settleFrame(mailFontsOf(readFileSync(join(CORPUS, f.file), 'utf8')));
-            expecting(`${f.id}: the mail's web fonts did not load (${fonts}); the frame would be measured in a fallback font`, () => expect(fonts).not.toBe('timeout'));
-            await assertOpened(f.id);
-            const frame = await browser.execute(FRAME_SCRIPT);
-            expect(frame).not.toBeNull();
-            expecting(`${f.id}: the frame must have elements to compare`, () => expect(frame.elements.length).toBeGreaterThan(0));
-            ua = frame.ua;
-            expecting(`${f.id}: the corpus must not fold quotes (plan C owns folding)`, () => expect(frame.folds).toBe(0));
-            expecting(`${f.id}: Dark Reader still on its fallback sheet`, () => expect(frame.drFallbackActive).toBe(false));
-            expecting('WKWebView UA carries "Safari"; regenerate the vectors with the safari profile (Task 10)', () => expect(/safari/i.test(frame.ua)).toBe(false));
+        it(`${f.id} ${mode}: every surface within tolerance`, async function () {
+          const raw = readFileSync(join(CORPUS, f.file), 'utf8');
+          const dark = mode === 'dark';
+          const cases = await browser.execute((raw, dark) => {
+            window.__mvParityDocs = window.__MV_SURFACE_DOCS__.docs(raw, { dark, palette: 'graphite' });
+            return window.__mvParityDocs.map((d, i) => ({ i, surface: d.surface, variant: d.variant || '', width: d.width }));
+          }, raw, dark);
+          expecting(`${f.id} ${mode}: the surfaces the hook builds`, () => expect(cases.map(labelOf)).toEqual(SURFACE_PLAN[mode]));
+          const dpr = await browser.execute(() => window.devicePixelRatio);
+          const scale = Math.min(4, Math.max(0.5, dpr));
+          const failing = [];
+          for (const c of cases) {
+            const label = labelOf(c);
+            const which = { fixture: f.id, mode, width: label };
+            let recorded = false;
+            let docId = null;
+            try {
+              // Iframe side.
+              const mounted = await mountProbe(c.i);
+              expecting(`${label}: the probe frame loaded`, () => expect(mounted).toBe('ok'));
+              const runsDarkReader = dark && DR_SURFACES.has(c.surface);
+              if (runsDarkReader) await forceDarkReaderPass(PROBE);
+              const fonts = await settleProbe(PROBE);
+              expecting(`${label}: a web font is still loading in the probe frame (${fonts})`, () => expect(fonts).not.toBe('timeout'));
+              const frame = await browser.execute(PROBE_SCRIPT);
+              expect(frame).not.toBeNull();
+              expecting(`${label}: the frame must have elements to compare`, () => expect(frame.elements.length).toBeGreaterThan(0));
+              ua = frame.ua;
+              if (runsDarkReader) expecting(`${label}: Dark Reader still on its fallback sheet`, () => expect(frame.drFallbackActive).toBe(false));
+              expecting('WKWebView UA carries "Safari"; regenerate the vectors with the safari profile (Task 10)', () => expect(/safari/i.test(frame.ua)).toBe(false));
+              expecting(`${label}: probe frame width`, () => expect(frame.iframeWidth).toBe(c.width));
 
-            const shotFile = join(OUT, 'shots', `${mode}-${width}`, `${f.id.replace(/\//g, '__')}.png`);
-            // Temp captures live in the job's output dir, which the job's clone takes away.
-            const TMP = join(OUT, '.tmp');
-            mkdirSync(TMP, { recursive: true });
-            const iframeShot = SHOTS ? await captureElement('iframe[sandbox]', join(TMP, 'shot-web')) : null;
+              // Blitz side: the real pre-pass, render.open at the same width and the app's scale, render.inspect.
+              const opened = await browser.executeAsync((i, scale, done) => {
+                (async () => {
+                  const D = window.__MV_SURFACE_DOCS__;
+                  const d = window.__mvParityDocs[i];
+                  const html = await D.blitzHtml(d.blitz);
+                  done(await window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'render.open', params: { html, cssWidth: d.width, scale, allowRemote: true, theme: D.workerTheme(d.blitz) } }));
+                })().catch((e) => done({ __error: String((e && e.message) || e) }));
+              }, c.i, scale);
+              expecting(`${label}: render.open`, () => expect(opened.__error).toBeUndefined());
+              docId = opened.docId;
+              const settled = await rpc('render.image', { docId, settleOnly: true }); // remote images land, the layout settles
+              expecting(`${label}: render.image settle`, () => expect(settled?.__error).toBeUndefined());
+              const inspected = await rpc('render.inspect', { docId });
+              expecting(`${label}: render.inspect`, () => expect(inspected?.__error).toBeUndefined());
 
-            await setRenderer('blitz');
-            await assertOpened(f.id);
-            let root = null;
-            await browser.waitUntil(async () => {
-              root = await blitzRoot();
-              return !!root && root.theme === mode && root.width === frame.width;
-            }, { timeout: 20_000, interval: 250, timeoutMsg: `Blitz root never matched (theme ${mode}, width ${frame.width}): ${JSON.stringify(root)}` });
-            // Let data: image updates settle: the rev must hold still for 750 ms.
-            let rev = root.rev;
-            await browser.waitUntil(async () => {
-              await browser.pause(750);
-              const now = (await blitzRoot())?.rev;
-              const stable = now === rev;
-              rev = now;
-              return stable;
-            }, { timeout: 15_000, interval: 10, timeoutMsg: 'Blitz rev never settled' });
-            const reply = await rpc('render.inspect', { docId: root.docId });
-            expecting(`render.inspect for ${f.id}`, () => expect(reply?.__error).toBeUndefined());
-
-            const result = compareFixture({ fixture: f.id, mode, width, iframe: frame.elements, blitz: reply.elements, knownDiffs: KNOWN });
-            const caseFile = join(OUT, 'cases', `${f.id.replace(/\//g, '__')}__${mode}__${width}.json`);
-            writeFileSync(caseFile, `${JSON.stringify({ ...result, meta: { frameWidth: frame.width, iframeWidth: frame.iframeWidth, dpr: frame.dpr, blitzRoot: root, fonts }, iframe: frame.elements, blitz: reply.elements }, null, 2)}\n`);
-            expecting(`${f.id}: every iframe element was compared`, () => expect(result.compared).toBe(frame.elements.length));
-            summary.push({ ...caseSummary(which, result), fonts });
-            recorded = true;
-
-            if (SHOTS) {
-              const blitzShot = await captureElement('[data-mv-parity-doc]', join(TMP, 'shot-blitz'));
-              if (iframeShot && blitzShot) {
-                mkdirSync(join(OUT, 'shots', `${mode}-${width}`), { recursive: true });
-                writeFileSync(shotFile, sideBySide(iframeShot, blitzShot));
+              const result = compareFixture({ fixture: f.id, mode, width: label, iframe: frame.elements, blitz: inspected.elements, knownDiffs: KNOWN });
+              console.log(`[blitzparity] ${f.id} ${mode} ${label} compared=${result.compared} failing=${result.failing.length} known=${result.known.length}`);
+              expecting(`${label}: every iframe element was compared`, () => expect(result.compared).toBe(frame.elements.length));
+              const line = { ...caseSummary(which, result), fonts };
+              // A failing case keeps its elements for diagnosis; so does every export document (suspect checks:
+              // table borders, the body margin, font families), which the comparator does not all measure.
+              if (result.failing.length) line.top = result.failing.slice(0, 8);
+              if (result.failing.length || c.surface.startsWith('export')) {
+                mkdirSync(join(OUT, 'cases'), { recursive: true });
+                writeFileSync(join(OUT, 'cases', `surf__${f.id.replace(/\//g, '__')}__${mode}__${label}.json`), `${JSON.stringify({ ...result, meta: { frameWidth: frame.width, iframeWidth: frame.iframeWidth, dpr: frame.dpr, fonts }, iframe: frame.elements, blitz: inspected.elements }, null, 2)}\n`);
               }
+              summary.push(line);
+              recorded = true;
+
+              if (SHOTS) {
+                // A viewport-high strip of each side (the probe box scrolls; a tall doc is cut at the strip).
+                const stripCss = await browser.execute((max, sel) => {
+                  const fr = document.querySelector(sel);
+                  const doc = fr.contentDocument;
+                  const full = Math.ceil(Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight));
+                  // The iframe is 4000 high while measured; its content ends where the last element does.
+                  let bottom = 0;
+                  for (const el of doc.body.querySelectorAll('*')) { const r = el.getBoundingClientRect(); if (r.height > 0) bottom = Math.max(bottom, r.bottom); }
+                  const h = Math.min(max, Math.max(40, Math.ceil(bottom || full)));
+                  fr.style.height = `${h}px`;
+                  return h;
+                }, SHOT_MAX_CSS_HEIGHT, PROBE);
+                await browser.pause(150);
+                const TMP = join(OUT, '.tmp');
+                mkdirSync(TMP, { recursive: true });
+                const iframeShot = await captureElement(PROBE, join(TMP, 'shot-surf'));
+                const img = await rpc('render.image', { docId });
+                if (iframeShot && img?.png) {
+                  const blitzShot = PNG.sync.read(Buffer.from(img.png, 'base64'));
+                  const rows = Math.min(blitzShot.height, Math.round(stripCss * dpr));
+                  const strip = new PNG({ width: blitzShot.width, height: rows });
+                  PNG.bitblt(blitzShot, strip, 0, 0, blitzShot.width, rows, 0, 0);
+                  const dir = join(OUT, 'shots', `${mode}-${label}`);
+                  mkdirSync(dir, { recursive: true });
+                  writeFileSync(join(dir, `${f.id.replace(/\//g, '__')}.png`), sideBySide(iframeShot, strip));
+                }
+              }
+              if (!result.passed) failing.push({ width: label, failing: result.failing.slice(0, 12) });
+            } catch (e) {
+              if (!recorded) summary.push(failedCase(which, e));
+              failing.push({ width: label, error: String((e && e.message) || e).split('\n')[0] });
+            } finally {
+              if (docId != null) { try { await rpc('render.close', { docId }); } catch { /* worker gone */ } }
             }
-            expecting(`${f.id} ${mode} ${width}: ${result.failing.length} failing of ${result.compared}; first: ${JSON.stringify(result.failing.slice(0, 12))}`,
-              () => expect(result.passed).toBe(true));
-          } catch (e) {
-            // A case that could not be measured is a failed case in the report, never a missing one.
-            if (!recorded) summary.push(failedCase(which, e));
-            throw e;
           }
+          expecting(`${f.id} ${mode}: surfaces that differ from the iframe`, () => expect(failing).toEqual([]));
         });
       }
     }
-  }
+  });
+
+  // Plan B's matrix: the real reader, twice per case (iframe, then Blitz).
+  describe('reader matrix', function () {
+    this.timeout(30 * 60_000);
+    if (MATRIX === 'surfaces') return;
+    for (const mode of MODES) {
+      for (const width of WIDTHS) {
+        for (const f of FIXTURES) {
+          it(`${f.id} ${mode} ${width}`, async function () {
+            const which = { fixture: f.id, mode, width };
+            let recorded = false;
+            try {
+              // Select the message before the iframe exists, so it never mounts on the previous case's.
+              await openFixture(f.id);
+              await assertOpened(f.id);
+              await setRenderer('web');
+              await setNarrow(width === 375);
+              await assertOpened(f.id);
+              await setEmailTheme(mode);
+              if (mode === 'dark') await forceDarkReaderPass();
+              const fonts = await settleFrame(mailFontsOf(readFileSync(join(CORPUS, f.file), 'utf8')));
+              expecting(`${f.id}: the mail's web fonts did not load (${fonts}); the frame would be measured in a fallback font`, () => expect(fonts).not.toBe('timeout'));
+              await assertOpened(f.id);
+              const frame = await browser.execute(FRAME_SCRIPT);
+              expect(frame).not.toBeNull();
+              expecting(`${f.id}: the frame must have elements to compare`, () => expect(frame.elements.length).toBeGreaterThan(0));
+              ua = frame.ua;
+              expecting(`${f.id}: the corpus must not fold quotes (plan C owns folding)`, () => expect(frame.folds).toBe(0));
+              expecting(`${f.id}: Dark Reader still on its fallback sheet`, () => expect(frame.drFallbackActive).toBe(false));
+              expecting('WKWebView UA carries "Safari"; regenerate the vectors with the safari profile (Task 10)', () => expect(/safari/i.test(frame.ua)).toBe(false));
+
+              const shotFile = join(OUT, 'shots', `${mode}-${width}`, `${f.id.replace(/\//g, '__')}.png`);
+              // Temp captures live in the job's output dir, which the job's clone takes away.
+              const TMP = join(OUT, '.tmp');
+              mkdirSync(TMP, { recursive: true });
+              const iframeShot = SHOTS ? await captureElement('iframe[sandbox]', join(TMP, 'shot-web')) : null;
+
+              await setRenderer('blitz');
+              await assertOpened(f.id);
+              let root = null;
+              await browser.waitUntil(async () => {
+                root = await blitzRoot();
+                return !!root && root.theme === mode && root.width === frame.width;
+              }, { timeout: 20_000, interval: 250, timeoutMsg: `Blitz root never matched (theme ${mode}, width ${frame.width}): ${JSON.stringify(root)}` });
+              // Let data: image updates settle: the rev must hold still for 750 ms.
+              let rev = root.rev;
+              await browser.waitUntil(async () => {
+                await browser.pause(750);
+                const now = (await blitzRoot())?.rev;
+                const stable = now === rev;
+                rev = now;
+                return stable;
+              }, { timeout: 15_000, interval: 10, timeoutMsg: 'Blitz rev never settled' });
+              const reply = await rpc('render.inspect', { docId: root.docId });
+              expecting(`render.inspect for ${f.id}`, () => expect(reply?.__error).toBeUndefined());
+
+              const result = compareFixture({ fixture: f.id, mode, width, iframe: frame.elements, blitz: reply.elements, knownDiffs: KNOWN });
+              const caseFile = join(OUT, 'cases', `${f.id.replace(/\//g, '__')}__${mode}__${width}.json`);
+              writeFileSync(caseFile, `${JSON.stringify({ ...result, meta: { frameWidth: frame.width, iframeWidth: frame.iframeWidth, dpr: frame.dpr, blitzRoot: root, fonts }, iframe: frame.elements, blitz: reply.elements }, null, 2)}\n`);
+              expecting(`${f.id}: every iframe element was compared`, () => expect(result.compared).toBe(frame.elements.length));
+              summary.push({ ...caseSummary(which, result), fonts });
+              recorded = true;
+
+              if (SHOTS) {
+                const blitzShot = await captureElement('[data-mv-parity-doc]', join(TMP, 'shot-blitz'));
+                if (iframeShot && blitzShot) {
+                  mkdirSync(join(OUT, 'shots', `${mode}-${width}`), { recursive: true });
+                  writeFileSync(shotFile, sideBySide(iframeShot, blitzShot));
+                }
+              }
+              expecting(`${f.id} ${mode} ${width}: ${result.failing.length} failing of ${result.compared}; first: ${JSON.stringify(result.failing.slice(0, 12))}`,
+                () => expect(result.passed).toBe(true));
+            } catch (e) {
+              // A case that could not be measured is a failed case in the report, never a missing one.
+              if (!recorded) summary.push(failedCase(which, e));
+              throw e;
+            }
+          });
+        }
+      }
+    }
+  });
 });

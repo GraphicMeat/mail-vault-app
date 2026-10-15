@@ -1,3 +1,5 @@
+import { blitzThemeFor } from '../parity/themeInputs';
+
 // Below this a surface has no real width yet (a hidden pane, a bubble mid-layout):
 // opening at it would render a doc nobody sees and that must be thrown away.
 export const MIN_OPEN_WIDTH = 40;
@@ -31,4 +33,15 @@ export function boxStyle(sizing, meta, style = {}) {
 /** Whether the box scrolls inside (fill, collapsedMax): the root then carries overflow-y-auto, which the tile observer's root lookup finds. */
 export function scrollsInside(sizing) {
   return sizing === 'fill' || (!!sizing && typeof sizing === 'object' && Number.isFinite(sizing.collapsedMax));
+}
+
+/**
+ * The theme render.open carries for a surface's document, written once: BlitzTiles sends it and the
+ * parity harness's surfaces matrix (tests/e2e/connected-blitz-parity.test.js) opens docs with it.
+ * The chat bubble draws on no canvas colour (bg null), so the bubble's own tint shows through
+ * (the iframe's body is transparent there); every other surface gets the plain theme.
+ */
+export function surfaceWorkerTheme(theme, surface) {
+  const t = blitzThemeFor({ dark: !!theme?.dark, palette: theme?.palette });
+  return surface === 'bubble' ? { ...t, bg: null } : t;
 }
