@@ -17,7 +17,7 @@ function IframeBody({ doc }) {
   React.useEffect(() => attachEmailIframeAutoSize(ref.current, { minHeight: 100 }), []);
   return (
     <iframe
-      ref={ref} data-perf-body srcDoc={doc} title="perf" sandbox="allow-same-origin allow-popups allow-scripts"
+      ref={ref} data-perf-body srcDoc={doc} title={'perf'} sandbox="allow-same-origin allow-popups allow-scripts"
       onLoad={(e) => { e.currentTarget.dataset.perfLoaded = '1'; }}
       style={{ width: '100%', minHeight: 100, border: 0, display: 'block' }}
     />

@@ -39,10 +39,13 @@ export function OriginalThemeToggle({ dark, onToggle, testid = 'compose-original
 // privacy is inactive). `padding` null means no override: the template's own
 // 24px applies (the pop-out window).
 export function buildOriginalFrameHtml({ html, dark, palette, padding, trackerBlocking, privacy, nonce = emailScriptNonce() }) {
+  // Kept out of the extraHead template: the i18n audit cannot see a template
+  // literal nested inside another one and would report "body" as JSX text.
+  const paddingCss = padding ? `<style>body { padding: ${padding}; }</style>` : '';
   return buildEmailIframeHtml({
     bodyHtml: frameBody(html, null, trackerBlocking).body,
     themeTag: dark ? 'dark' : 'light',
-    extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${padding ? `<style>body { padding: ${padding}; }</style>` : ''}`,
+    extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${paddingCss}`,
     nonce,
     privacy,
   });
