@@ -325,8 +325,11 @@ impl RenderDoc {
         let scale = self.opts.scale as f64;
         let s = crate::doc_image::image_scale(css_w.ceil() as f64, css_h as f64, scale);
         let factor = s / scale;
-        let (mut all, mut width, mut height) = (Vec::new(), 0u32, 0u32);
-        for i in 0..tile_count(css_h) {
+        let tiles = tile_count(css_h);
+        // The final size, to the pixel row: every tile but the last is a full one.
+        let expected = (css_w.ceil() as f64 * s * css_h as f64 * s * 4.0).ceil() as usize;
+        let (mut all, mut width, mut height) = (Vec::with_capacity(expected), 0u32, 0u32);
+        for i in 0..tiles {
             let (rgba, w, h) = self.tile_rgba(i)?;
             let (px, dw, dh) = if factor < 1.0 { crate::doc_image::downscale_rgba(&rgba, w, h, factor) } else { (rgba, w, h) };
             if width == 0 {

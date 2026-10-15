@@ -175,17 +175,8 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
             }
         }
         for id in dirty {
-            let Some(o) = docs.get_mut(&id) else { continue };
-            match guarded(&tainted, || {
-                o.doc.apply_resources();
-                o.doc.meta()
-            }) {
-                Some(meta) => {
-                    o.rev += 1;
-                    line(&mut output, json!({"kind":"updated","doc":id,"rev":o.rev,"meta":meta}))?;
-                }
-                None => discard(&mut docs, id, &tainted), // no req to answer: the next tile says render_unknown_doc
-            }
+            // No req to answer on a discard: the next tile says render_unknown_doc.
+            refresh(&mut docs, id, &mut output, &tainted)?;
         }
         if tainted.get() && docs.is_empty() {
             output.flush()?;
@@ -247,22 +238,9 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             // `fetched` and `image` can share a stdin batch (the host asks right
             // after its last answer is written): apply what arrived first, the way
             // the end of the batch would, so the picture is not missing images.
-            if dirty.remove(&doc) {
-                if let Some(o) = docs.get_mut(&doc) {
-                    match guarded(tainted, || {
-                        o.doc.apply_resources();
-                        o.doc.meta()
-                    }) {
-                        Some(meta) => {
-                            o.rev += 1;
-                            line(out, json!({"kind":"updated","doc":doc,"rev":o.rev,"meta":meta}))?;
-                        }
-                        None => {
-                            discard(docs, doc, tainted);
-                            return unavailable(out, req);
-                        }
-                    }
-                }
+            // Fetches the relayout finds go out in `run_loop`'s flush after this message.
+            if dirty.remove(&doc) && !refresh(docs, doc, out, tainted)? {
+                return unavailable(out, req);
             }
             match docs.get_mut(&doc) {
                 Some(o) => match guarded(tainted, || o.doc.image_png()) {
@@ -400,6 +378,27 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
                 }
             }
             Ok(())
+        }
+    }
+}
+
+/// Apply what the net provider delivered to document `id`, relayout, bump `rev`
+/// and emit `updated`. False when the relayout panicked and the doc was
+/// discarded; true otherwise, including for a doc that is not open.
+fn refresh(docs: &mut HashMap<u64, Open>, id: u64, out: &mut impl Write, tainted: &Cell<bool>) -> std::io::Result<bool> {
+    let Some(o) = docs.get_mut(&id) else { return Ok(true) };
+    match guarded(tainted, || {
+        o.doc.apply_resources();
+        o.doc.meta()
+    }) {
+        Some(meta) => {
+            o.rev += 1;
+            line(out, json!({"kind":"updated","doc":id,"rev":o.rev,"meta":meta}))?;
+            Ok(true)
+        }
+        None => {
+            discard(docs, id, tainted);
+            Ok(false)
         }
     }
 }
