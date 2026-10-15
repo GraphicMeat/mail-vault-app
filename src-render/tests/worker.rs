@@ -244,3 +244,87 @@ fn open_without_theme_and_with_null_bg_both_reply_ok() {
         assert_eq!(frame["kind"], "reply", "open {} failed: {frame}", i + 1);
     }
 }
+
+#[test]
+fn image_op_and_transparent_open() {
+    let html = r#"<html><body style="margin:0;background:transparent"><div style="height:100px"></div></body></html>"#;
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":7,"html":html,"cssWidth":100,"scale":1.0,"allowRemote":false,"theme":{"mode":"light","bg":null}}),
+        json!({"op":"image","req":2,"doc":7}),
+        json!({"op":"image","req":3,"doc":99}),
+    ]);
+    assert_eq!(out[0]["kind"], "reply");
+    let png = base64::engine::general_purpose::STANDARD.decode(out[1]["ok"]["png"].as_str().unwrap()).unwrap();
+    assert_eq!(&png[1..4], b"PNG");
+    assert_eq!(png[25], 6, "colour type 6 (RGBA): bg null opened a transparent doc");
+    assert_eq!(out[2], json!({"kind":"error","req":3,"code":"render_unknown_doc"}));
+}
+
+/// Only a theme that is present with `"bg": null` is transparent. A missing
+/// theme, a theme with no `bg` key, and a colour `bg` all stay opaque RGB over
+/// white. Every open still parses: B's `WireTheme` must not reject `null`.
+#[test]
+fn only_bg_null_is_transparent() {
+    let html = r#"<html><body style="margin:0"><div style="height:50px"></div></body></html>"#;
+    let open = |req: u64, doc: u64, theme: Option<serde_json::Value>| {
+        let mut o = json!({"op":"open","req":req,"doc":doc,"html":html,"cssWidth":50,"scale":1.0,"allowRemote":false});
+        if let Some(t) = theme {
+            o["theme"] = t;
+        }
+        o
+    };
+    let out = run(&[
+        open(1, 1, Some(json!({"mode":"light","bg":null}))),
+        open(2, 2, None),
+        open(3, 3, Some(json!({"mode":"light"}))),
+        open(4, 4, Some(json!({"mode":"light","bg":"#ffffff"}))),
+        json!({"op":"tile","req":5,"doc":1,"index":0}),
+        json!({"op":"tile","req":6,"doc":2,"index":0}),
+        json!({"op":"tile","req":7,"doc":3,"index":0}),
+        json!({"op":"tile","req":8,"doc":4,"index":0}),
+    ]);
+    for i in 0..4 {
+        assert_eq!(out[i]["kind"], "reply", "open {} parsed and succeeded: {}", i + 1, out[i]);
+    }
+    let colour = |i: usize| base64::engine::general_purpose::STANDARD.decode(out[i]["ok"]["png"].as_str().unwrap()).unwrap()[25];
+    assert_eq!(colour(4), 6, "bg null -> RGBA");
+    assert_eq!(colour(5), 2, "no theme -> RGB");
+    assert_eq!(colour(6), 2, "theme without bg -> RGB");
+    assert_eq!(colour(7), 2, "colour bg -> RGB");
+}
+
+#[test]
+fn a_malformed_image_op_is_answered_not_dropped() {
+    let out = run(&[json!({"op":"image","req":1,"doc":"one"})]);
+    assert_eq!(out, vec![json!({"kind":"error","req":1,"code":"render_bad_request"})]);
+}
+
+fn red_square_png() -> String {
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, 10, 10);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header().unwrap().write_image_data(&[255, 0, 0].repeat(100)).unwrap();
+    base64::engine::general_purpose::STANDARD.encode(out)
+}
+
+/// `fetched` and `image` can share one stdin batch (the daemon's `settled()`
+/// resolves right after it writes the answer). The image must still show what
+/// the answer delivered, and the `updated` frame must come before the reply.
+#[test]
+fn an_image_op_paints_the_resources_that_arrived_just_before_it() {
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":"<body style=\"margin:0\"><img src=\"https://i.test/a.png\" width=10 height=10></body>","cssWidth":20,"scale":1.0,"allowRemote":true}),
+        json!({"op":"fetched","doc":1,"fetch":1,"bytes":red_square_png()}),
+        json!({"op":"image","req":2,"doc":1}),
+    ]);
+    let updated = out.iter().position(|f| f["kind"] == "updated").expect("an updated frame");
+    let reply = out.iter().position(|f| f["req"] == 2).expect("the image reply");
+    assert!(updated < reply, "updated before the image reply: {out:?}");
+    let bytes = base64::engine::general_purpose::STANDARD.decode(out[reply]["ok"]["png"].as_str().unwrap()).unwrap();
+    let mut r = png::Decoder::new(&bytes[..]).read_info().unwrap();
+    let mut buf = vec![0; r.output_buffer_size()];
+    let info = r.next_frame(&mut buf).unwrap();
+    let px = (5 * info.width as usize + 5) * 3;
+    assert_eq!(&buf[px..px + 3], &[255, 0, 0], "the fetched image is in the picture");
+}

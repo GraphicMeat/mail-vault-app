@@ -4,6 +4,7 @@
 pub mod compat;
 pub mod dark;
 mod doc;
+pub mod doc_image;
 pub mod dommap;
 pub mod fold;
 pub mod fonts;

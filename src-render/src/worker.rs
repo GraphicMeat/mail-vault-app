@@ -30,6 +30,8 @@ enum In {
         theme: Option<serde_json::Value>,
     },
     Tile { req: u64, doc: u64, index: u32 },
+    /// The whole document as one PNG (plan D's export and social shot).
+    Image { req: u64, doc: u64 },
     Hit { req: u64, doc: u64, x: f32, y: f32 },
     Fold { req: u64, doc: u64, id: String, open: bool },
     TextRuns { req: u64, doc: u64, index: u32 },
@@ -59,14 +61,14 @@ struct FamilyIn {
 /// What the stdin reader hands the document thread.
 enum Msg {
     Op(In),
-    /// A line that is JSON for an open, tile, hit, fold, textRuns, serialize or inspect with a `req`, but not a valid
+    /// A line that is JSON for an open, tile, image, hit, fold, textRuns, serialize or inspect with a `req`, but not a valid
     /// one. Only this thread writes to stdout, so the reader asks it to answer.
     Bad { req: u64 },
 }
 
 fn bad_request(line: &str) -> Option<u64> {
     let v: Value = serde_json::from_str(line).ok()?;
-    matches!(v["op"].as_str()?, "open" | "tile" | "hit" | "textRuns" | "serialize" | "fold" | "inspect").then_some(())?;
+    matches!(v["op"].as_str()?, "open" | "tile" | "image" | "hit" | "textRuns" | "serialize" | "fold" | "inspect").then_some(())?;
     v["req"].as_u64()
 }
 
@@ -200,8 +202,11 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
     match msg {
         In::Open { req, doc, html, css_width, scale, allow_remote, theme } => {
             let net = BridgeNet::new(allow_remote);
+            // Only a theme that is present with `"bg": null` asks for a clear canvas.
+            let transparent = theme.as_ref().and_then(|t| t.get("bg")).is_some_and(Value::is_null);
             let opts = RenderOptions {
                 dark: dark_from_wire(theme.as_ref()),
+                transparent,
                 ..RenderOptions::new(css_width.clamp(1, MAX_CSS_WIDTH as u32), scale.clamp(MIN_SCALE, MAX_SCALE))
             };
             let net_for_doc = net.clone();
@@ -238,6 +243,42 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             },
             None => unknown(out, req),
         },
+        In::Image { req, doc } => {
+            // `fetched` and `image` can share a stdin batch (the host asks right
+            // after its last answer is written): apply what arrived first, the way
+            // the end of the batch would, so the picture is not missing images.
+            if dirty.remove(&doc) {
+                if let Some(o) = docs.get_mut(&doc) {
+                    match guarded(tainted, || {
+                        o.doc.apply_resources();
+                        o.doc.meta()
+                    }) {
+                        Some(meta) => {
+                            o.rev += 1;
+                            line(out, json!({"kind":"updated","doc":doc,"rev":o.rev,"meta":meta}))?;
+                        }
+                        None => {
+                            discard(docs, doc, tainted);
+                            return unavailable(out, req);
+                        }
+                    }
+                }
+            }
+            match docs.get_mut(&doc) {
+                Some(o) => match guarded(tainted, || o.doc.image_png()) {
+                    Some(Ok(png)) => {
+                        let png = base64::engine::general_purpose::STANDARD.encode(png);
+                        line(out, json!({"kind":"reply","req":req,"ok":{"png":png}}))
+                    }
+                    Some(Err(e)) => line(out, json!({"kind":"error","req":req,"code":e.code()})),
+                    None => {
+                        discard(docs, doc, tainted);
+                        unavailable(out, req)
+                    }
+                },
+                None => unknown(out, req),
+            }
+        }
         In::Hit { req, doc, x, y } => match docs.get(&doc) {
             Some(o) => match guarded(tainted, || o.doc.hit(x, y)) {
                 Some((link, fold)) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link,"fold":fold}})),

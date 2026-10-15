@@ -39,6 +39,9 @@ pub struct RenderOptions {
     pub scale: f32,
     /// Dark Reader settings; None renders light (plan B).
     pub dark: Option<crate::dark::DarkTheme>,
+    /// Paint on a clear canvas and encode RGBA, not RGB over white: the
+    /// surfaces that composite the mail themselves (plan D). Default false.
+    pub transparent: bool,
 }
 
 impl RenderOptions {
@@ -292,9 +295,9 @@ impl RenderDoc {
         }
     }
 
-    /// Paint tile `index` (TILE_CSS_HEIGHT CSS px tall; the last one is shorter)
-    /// as an opaque RGB PNG composited over white.
-    pub fn tile_png(&mut self, index: u32) -> Result<Vec<u8>, TileError> {
+    /// Tile `index` (TILE_CSS_HEIGHT CSS px tall; the last one is shorter) as
+    /// premultiplied RGBA at the doc's scale: (pixels, width, height).
+    fn tile_rgba(&mut self, index: u32) -> Result<(Vec<u8>, u32, u32), TileError> {
         let (css_w, meta_h) = self.size();
         let (px_w, px_h) = tile_dims(css_w, meta_h, index, self.opts.scale)?;
         let top = index as f64 * TILE_CSS_HEIGHT as f64;
@@ -303,7 +306,50 @@ impl RenderDoc {
         let mut rgba = vec![0u8; px_w as usize * px_h as usize * 4];
         let scale = self.opts.scale as f64;
         painter.render(|scene| blitz_paint::paint_scene(scene, &mut self.doc, scale, px_w, px_h, 0, 0), &mut rgba);
-        Ok(encode_rgb_over_white(&rgba, px_w, px_h))
+        Ok((rgba, px_w, px_h))
+    }
+
+    /// Paint tile `index` as a PNG: opaque RGB composited over white, or RGBA
+    /// with straight alpha when the doc was opened `transparent`.
+    pub fn tile_png(&mut self, index: u32) -> Result<Vec<u8>, TileError> {
+        let (rgba, w, h) = self.tile_rgba(index)?;
+        Ok(self.encode(&rgba, w, h))
+    }
+
+    /// The whole document as one PNG, at `doc_image::image_scale` of the doc
+    /// scale: the tiles painted as for `tile_png`, box-downscaled when the area
+    /// cap demands it, stacked. A document clamped at MAX_CSS_HEIGHT is the
+    /// clamped height; the caller decides what to do about that.
+    pub fn image_png(&mut self) -> Result<Vec<u8>, TileError> {
+        let (css_w, css_h) = self.size();
+        let scale = self.opts.scale as f64;
+        let s = crate::doc_image::image_scale(css_w.ceil() as f64, css_h as f64, scale);
+        let factor = s / scale;
+        let (mut all, mut width, mut height) = (Vec::new(), 0u32, 0u32);
+        for i in 0..tile_count(css_h) {
+            let (rgba, w, h) = self.tile_rgba(i)?;
+            let (px, dw, dh) = if factor < 1.0 { crate::doc_image::downscale_rgba(&rgba, w, h, factor) } else { (rgba, w, h) };
+            if width == 0 {
+                width = dw;
+            }
+            // Every tile has the same width; the pad is only a guard against a stride mismatch.
+            let used = dw.min(width);
+            for row in 0..dh {
+                let start = row as usize * dw as usize * 4;
+                all.extend_from_slice(&px[start..start + used as usize * 4]);
+                all.resize(all.len() + (width - used) as usize * 4, 0);
+            }
+            height += dh;
+        }
+        Ok(self.encode(&all, width, height))
+    }
+
+    fn encode(&self, rgba: &[u8], w: u32, h: u32) -> Vec<u8> {
+        if self.opts.transparent {
+            encode_rgba_straight(rgba, w, h)
+        } else {
+            encode_rgb_over_white(rgba, w, h)
+        }
     }
 
     /// Parity measurements for every `[data-mv-id]` element (see inspect.rs).
@@ -516,5 +562,26 @@ fn encode_rgb_over_white(rgba: &[u8], w: u32, h: u32) -> Vec<u8> {
     enc.set_depth(png::BitDepth::Eight);
     enc.set_compression(png::Compression::Fast);
     enc.write_header().expect("png header").write_image_data(&rgb).expect("png data");
+    out
+}
+
+/// vello_cpu writes premultiplied RGBA; PNG wants straight alpha.
+fn encode_rgba_straight(rgba: &[u8], w: u32, h: u32) -> Vec<u8> {
+    let mut px = Vec::with_capacity(rgba.len());
+    for p in rgba.chunks_exact(4) {
+        let a = p[3] as u32;
+        if a == 0 {
+            px.extend_from_slice(&[0, 0, 0, 0]);
+            continue;
+        }
+        let un = |c: u8| ((c as u32 * 255 + a / 2) / a).min(255) as u8;
+        px.extend_from_slice(&[un(p[0]), un(p[1]), un(p[2]), p[3]]);
+    }
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, w, h);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.set_compression(png::Compression::Fast);
+    enc.write_header().expect("png header").write_image_data(&px).expect("png data");
     out
 }
