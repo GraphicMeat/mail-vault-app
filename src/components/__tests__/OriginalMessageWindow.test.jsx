@@ -8,13 +8,13 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 
-const { handlers, emit } = vi.hoisted(() => ({ handlers: [], emit: vi.fn() }));
+const { handlers, emit, setTitle } = vi.hoisted(() => ({ handlers: [], emit: vi.fn(), setTitle: vi.fn(async () => {}) }));
 vi.mock('@tauri-apps/api/event', () => ({
   // The privacy-mode sync listener is not the window's payload handler.
   listen: vi.fn(async (name, handler) => { if (name !== 'privacy-mode-changed') handlers.push(handler); return () => {}; }),
   emit,
 }));
-vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'original-1' }) }));
+vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'original-1', setTitle }) }));
 
 vi.mock('../../stores/safeStorage', () => {
   const store = {};
@@ -104,5 +104,50 @@ describe('the original message window', () => {
     await screen.findByTestId('privacy-source-blocked');
     expect(document.querySelector('iframe')).toBeNull();
     expect(screen.queryByTestId('original-window-theme')).toBeNull();
+  });
+
+  it('a pop-out payload shows the subject and draws surface popout with no padding override', async () => {
+    const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../email/bodyRendererRegistry');
+    const seen = [];
+    registerBodyRenderer('blitz', { Body: (p) => { seen.push(p); return <div data-testid="alt-pop" />; } });
+    useSettingsStore.setState({ emailRenderer: 'blitz' });
+    try {
+      render(<OriginalMessageWindow />);
+      await waitFor(() => expect(emit).toHaveBeenCalledWith('original-message-ready', { token: 'tok', label: 'original-1' }));
+      act(() => handlers.at(-1)({ payload: { token: 'tok', html: '<p>Popped</p>', dark: false, title: 'Subject line', surface: 'popout' } }));
+      expect(await screen.findByRole('heading', { name: 'Subject line' })).toBeTruthy();
+      await waitFor(() => expect(setTitle).toHaveBeenCalledWith('Subject line')); // A9: the native title is the subject
+      expect(document.querySelector('iframe')).toBeNull();
+      expect(seen.at(-1)).toMatchObject({ surface: 'popout', sizing: 'fill' });
+      expect(seen.at(-1).documentHtml).toContain('Popped');
+      expect(seen.at(-1).documentHtml).not.toContain('<style>body { padding:'); // the template's own 480px rule also says "body { padding: 16px; }"
+    } finally {
+      _resetBodyRenderersForTest();
+      useSettingsStore.setState({ emailRenderer: 'web' });
+    }
+  });
+
+  it('a pop-out does not put a masked subject in the native title while privacy mode is on', async () => {
+    const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../email/bodyRendererRegistry');
+    registerBodyRenderer('blitz', { Body: () => <div /> });
+    useSettingsStore.setState({ emailRenderer: 'blitz' });
+    usePrivacyStore.setState({ enabled: true });
+    try {
+      render(<OriginalMessageWindow />);
+      await waitFor(() => expect(handlers.length).toBeGreaterThan(0));
+      act(() => handlers.at(-1)({ payload: { token: 'tok', html: '<p>Popped</p>', title: 'Secret subject', surface: 'popout' } }));
+      await screen.findByTestId('privacy-source-blocked');
+      expect(setTitle).not.toHaveBeenCalled();
+    } finally {
+      _resetBodyRenderersForTest();
+      useSettingsStore.setState({ emailRenderer: 'web' });
+    }
+  });
+
+  it('a compose original payload keeps its padding and no heading, and leaves the title alone', async () => {
+    await deliver({ dark: false });
+    expect(setTitle).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(document.querySelector('iframe').getAttribute('srcdoc')).toContain('body { padding: 20px 24px; }');
   });
 });

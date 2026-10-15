@@ -55,7 +55,7 @@ import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useSearchStore } from '../stores/searchStore';
-import { useAltBodyRenderer } from './email/bodyRendererRegistry';
+import { useAltBodyRenderer, useActiveBodyRenderer } from './email/bodyRendererRegistry';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
@@ -123,6 +123,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // An alternative body renderer (the Blitz module) replaces the iframe when one
   // is registered and chosen; null keeps the iframe path exactly as before.
   const AltBody = useAltBodyRenderer('reader');
+  const altRenderer = useActiveBodyRenderer();
   const searchQueryForHighlight = useSearchStore(s => (s.searchActive ? s.searchQuery : ''));
   const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
@@ -647,6 +648,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     // The popup is a second renderer of the same mail: a beacon
     // stripped in the pane but left in the window still fires.
     const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
+    // The renderer owns the window under it (no iframe page, no Dark Reader).
+    if (altRenderer?.openWindow) { void altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: selectedEmail.subject || 'Email' }); return; }
     // The popup loads from file:// and inherits no CSP, so its meta
     // (script-src 'nonce-…') is the ONLY policy: Dark Reader has to
     // carry the same nonce to run there.
