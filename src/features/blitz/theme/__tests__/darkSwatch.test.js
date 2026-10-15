@@ -90,13 +90,14 @@ describe('no probe frame', () => {
   it('nothing under src/features/blitz creates an iframe or injects Dark Reader', () => {
     const root = resolve(process.cwd(), 'src/features/blitz');
     const files = [];
-    // The one e2e-only file: the parity harness builds each surface's iframe document (and its Dark Reader
-    // scripts) to compare with Blitz. Loaded only under VITE_E2E, never by the product (surfaces/surfaceDocs.js).
-    const E2E_ONLY = join(root, 'surfaces', 'surfaceDocs.js');
+    // The e2e-only files: the parity harness builds each surface's iframe document (and its Dark Reader
+    // scripts) to compare with Blitz (surfaces/surfaceDocs.js), and the perf gate mounts the iframe next to
+    // Blitz (surfaces/perfProbe.jsx). Both are loaded only under VITE_E2E, never by the product.
+    const E2E_ONLY = new Set([join(root, 'surfaces', 'surfaceDocs.js'), join(root, 'surfaces', 'perfProbe.jsx')]);
     const walk = (dir) => {
       for (const name of readdirSync(dir)) {
         const f = join(dir, name);
-        if (name === '__tests__' || f === E2E_ONLY) continue;
+        if (name === '__tests__' || E2E_ONLY.has(f)) continue;
         if (statSync(f).isDirectory()) walk(f); else if (/\.(jsx?|css)$/.test(name)) files.push(f);
       }
     };
