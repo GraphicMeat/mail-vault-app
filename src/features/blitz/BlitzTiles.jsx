@@ -386,7 +386,9 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
             ? l.text && (
               <span key={i} role="link" tabIndex={0}
                 onClick={() => onLinkRef.current?.(l)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onLinkRef.current?.(l); } }}>{l.text}</span>
+                // Capture phase: useBodyKeyboard stops every keydown at the body box, before
+                // React's bubble-phase handlers (delegated to the app root) would see it.
+                onKeyDownCapture={(e) => { if (e.key === 'Enter') { e.preventDefault(); onLinkRef.current?.(l); } }}>{l.text}</span>
             )
             : <a key={i} href={l.href} onClick={(e) => { e.preventDefault(); onLinkRef.current?.(l); }}>{l.text || l.href}</a>
           ))}
