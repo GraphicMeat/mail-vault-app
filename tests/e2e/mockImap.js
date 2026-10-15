@@ -718,7 +718,7 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', searchMailbox = null, extraMailbox = null, nestedMailboxes = null, backupDeleteMailbox = null, abdMailboxes = null } = {}) {
+export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', searchMailbox = null, extraMailbox = null, nestedMailboxes = null, backupDeleteMailbox = null, abdMailboxes = null, blitzMailbox: blitz = null } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, withAttachments, uidStart: inboxUidStart });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message', sentByOwner: true });
 
@@ -943,10 +943,82 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
     }));
   }
 
+  // Blitz surfaces fixture (connected-blitz-surfaces, connected-blitz-preview).
+  // Last for the same reason as the folders above: only luke carries it, and no
+  // skipFolders spec counts through luke. Its uids (9801 to 9905) are clear of
+  // every other folder's range.
+  if (blitz) mailboxes.push(blitzMailbox({ owner, uidStart: blitz.uidStart }));
+
   // Every account's SMTP listener refuses the same one address, so a spec asks
   // for a failing send by typing it — see SEND_REFUSED_TO.
   return { state: { mailboxes }, faults, smtp: { refuse_recipient: `@${SMTP_REFUSED_DOMAIN}` } };
 }
+// ── Blitz surfaces fixture ──────────────────────────────────────────────────
+// One folder on luke: a three-message thread, a 100-message chat (one
+// correspondent, one topic) whose newest message carries a long attachment
+// name, and a tall plain mail. Every body is HTML, so every surface has
+// something to draw.
+export const BLITZ_FOLDER = 'Blitz';
+export const BLITZ_UID_START = 9801;
+export const BLITZ_THREAD_SUBJECT = 'Blitz thread check';
+export const BLITZ_CHAT_SUBJECT = 'Blitz chat check';
+export const BLITZ_CHAT_NAME = 'Blitz Chat';
+export const BLITZ_CHAT_COUNT = 100;
+export const BLITZ_TALL_SUBJECT = 'Blitz tall check';
+export const BLITZ_LONG_ATTACHMENT_NAME = 'quarterly-board-review-final-version-with-all-the-appendices-and-the-signed-addendum-v12-FINAL-reviewed.txt';
+
+// A phishing-shaped block link first (link safety must fire on click), a
+// fixed 600 px table, an inline data: PNG and enough text for two tiles.
+function blitzHtmlBody(n) {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  return `<a href="${PHISH_LINK_HREF}" style="display:block;height:40px;line-height:40px">${PHISH_LINK_TEXT}</a>`
+    + `<h2 style="color:#e6375a">Blitz message ${n}</h2>`
+    + `<table width="600" style="width:600px;border:1px solid #ccc"><tr><td style="padding:8px">Cell ${n}</td><td><img src="data:image/png;base64,${png}" width="40" height="40" alt=""></td></tr></table>`
+    + Array.from({ length: 18 }, (_, i) => `<p>Paragraph ${i + 1} of message ${n}, long enough to wrap at a narrow width in a chat bubble.</p>`).join('');
+}
+
+function blitzRaw({ uid, from, to, subject, refs, body, attachName = null }) {
+  // The day offset is the uid's place in the folder: stamp(uid) would date every message in 2052.
+  const { header } = stamp(uid - BLITZ_UID_START);
+  const head = [
+    `From: ${from}`, `To: ${to}`, `Subject: ${subject}`, `Date: ${header}`,
+    `Message-ID: <blitz-${uid}@mock.test>`,
+    // The last ten ids, as clients truncate: a 100-id header is one 2 000-character line.
+    ...(refs.length ? [`In-Reply-To: ${refs.at(-1)}`, `References: ${refs.slice(-10).join(' ')}`] : []),
+    'MIME-Version: 1.0',
+  ];
+  if (!attachName) return [...head, 'Content-Type: text/html; charset=UTF-8', '', body, ''].join('\n');
+  const b = 'mvblitzmixed';
+  return [
+    ...head, `Content-Type: multipart/mixed; boundary="${b}"`, '',
+    `--${b}`, 'Content-Type: text/html; charset=UTF-8', '', body, '',
+    `--${b}`, `Content-Type: text/plain; name="${attachName}"`, `Content-Disposition: attachment; filename="${attachName}"`,
+    'Content-Transfer-Encoding: base64', '', Buffer.from('Blitz attachment body').toString('base64'), '',
+    `--${b}--`, '',
+  ].join('\n');
+}
+
+export function blitzMailbox({ owner, uidStart = BLITZ_UID_START }) {
+  const messages = [];
+  const push = (uid, raw) => { const { internalDate } = stamp(uid - BLITZ_UID_START); messages.push({ uid, flags: ['\\Seen'], internal_date: internalDate, modseq: uid, raw }); };
+  let uid = uidStart;
+  const threadRefs = [];
+  for (let i = 0; i < 3; i++, uid++) {
+    push(uid, blitzRaw({ uid, from: `Thread Sender <thread${i}@example.com>`, to: owner, subject: i ? `Re: ${BLITZ_THREAD_SUBJECT}` : BLITZ_THREAD_SUBJECT, refs: [...threadRefs], body: blitzHtmlBody(uid) }));
+    threadRefs.push(`<blitz-${uid}@mock.test>`);
+  }
+  const chatRefs = [];
+  for (let i = 0; i < BLITZ_CHAT_COUNT; i++, uid++) {
+    const last = i === BLITZ_CHAT_COUNT - 1;
+    push(uid, blitzRaw({ uid, from: `${BLITZ_CHAT_NAME} <blitz-chat@mock.test>`, to: owner, subject: i ? `Re: ${BLITZ_CHAT_SUBJECT}` : BLITZ_CHAT_SUBJECT, refs: [...chatRefs], body: blitzHtmlBody(uid), attachName: last ? BLITZ_LONG_ATTACHMENT_NAME : null }));
+    chatRefs.push(`<blitz-${uid}@mock.test>`);
+  }
+  // About 20 000 CSS px: taller than the export area wall at scale 2 (820 x 2 wide).
+  push(uid, blitzRaw({ uid, from: 'Tall Sender <tall@example.com>', to: owner, subject: BLITZ_TALL_SUBJECT, refs: [], body: Array.from({ length: 1000 }, (_, i) => `<p>Tall line ${i}</p>`).join('') }));
+  const maxUid = uid;
+  return { name: BLITZ_FOLDER, attrs: ['\\HasNoChildren'], uid_validity: 1, uid_next: maxUid + 1, highest_modseq: maxUid + 1, messages };
+}
+
 /**
  * Stall every occurrence of one IMAP command by `ms`.
  *

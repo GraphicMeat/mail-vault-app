@@ -170,6 +170,13 @@ let MOCK_ACCOUNTS = [
       { name: 'AbdBackup', count: 3, subjectPrefix: 'ABD job backup', uidStart: 9701 },
       { name: 'AbdArchive', count: 2, subjectPrefix: 'ABD job archive', uidStart: 9751 },
     ],
+    // connected-blitz-surfaces and connected-blitz-preview read this folder:
+    // uids 9801 to 9905, nothing else uses the range. Only wdio.blitz.conf.js
+    // (MV_BLITZ_FIXTURE=1) loads it, so connected-ci runs against the mock it
+    // always had: connected-storage-matrix's unified-inbox reload case is
+    // timing-sensitive (a pruned row must be gone within 30 s) and failed 2 of 2
+    // runs with this 100-message chat on luke, against 1 of 4 without it.
+    blitzMailbox: { uidStart: 9801 },
     faults: [
       ...bodyFetchDropsAlways(9301),
       ...slowBodyFetch(9702, 8000),
@@ -411,6 +418,11 @@ export const config = {
     // build always misses, and a Google Fonts download (sections 8a-8c).
     // wdio.blitz.conf.js selects it by name.
     './tests/e2e/connected-blitz-interactions.test.js',
+    // Every Blitz surface (a 100-message chat, a 240 s idle-out wait) and the
+    // Cleanup preview: slow, and the Blitz-only specs, so they stay out of the
+    // battery. wdio.blitz.conf.js selects them by name.
+    './tests/e2e/connected-blitz-surfaces.test.js',
+    './tests/e2e/connected-blitz-preview.test.js',
   ],
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state
@@ -520,6 +532,7 @@ export const config = {
         nestedMailboxes: a.nestedMailboxes,
         backupDeleteMailbox: a.backupDeleteMailbox,
         abdMailboxes: a.abdMailboxes,
+        blitzMailbox: process.env.MV_BLITZ_FIXTURE === '1' ? a.blitzMailbox : undefined,
       }))),
     );
     // A Graph entry ({ graph: true, account }) carries its whole seeded account:

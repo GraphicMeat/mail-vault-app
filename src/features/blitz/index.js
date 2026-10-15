@@ -31,9 +31,11 @@ if (!IS_APPSTORE_BUILD) {
   } catch { /* no Tauri (vitest) */ }
 
   // Leaving Blitz closes the docs nobody holds, so the worker can idle out.
+  // A tick later: this subscriber fires before React unmounts the bodies, and a
+  // body that unmounts after the sweep defers its close (thread, bubble).
   let lastMode = useSettingsStore.getState().emailRenderer;
   useSettingsStore.subscribe((s) => {
-    if (lastMode === 'blitz' && s.emailRenderer !== 'blitz') getDocRegistry().closeDeferred();
+    if (lastMode === 'blitz' && s.emailRenderer !== 'blitz') setTimeout(() => getDocRegistry().closeDeferred(), 0);
     lastMode = s.emailRenderer;
   });
 }
