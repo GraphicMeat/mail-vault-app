@@ -4,6 +4,11 @@ export const MIN_OPEN_WIDTH = 40;
 // The worker clamps a document's height here and never errors for it (src-render MAX_CSS_HEIGHT).
 // A doc whose meta.cssHeight reaches it was truncated, so an export refuses to draw it (F12).
 export const MAX_CSS_HEIGHT = 200000;
+// The worker's `image` op paints at doc scale up to this device-pixel area and shrinks the PNG past it
+// (src-render/src/doc_image.rs MAX_IMAGE_AREA_PX, the canvas wall of imagePacker.js).
+export const MAX_IMAGE_AREA_PX = 16_700_000;
+// The tile height the worker cuts documents into (src-render/src/doc.rs TILE_CSS_HEIGHT); meta.tileCssHeight wins when present.
+export const TILE_CSS_HEIGHT = 512;
 // Surfaces that mount bodies far outside the viewport (virtualizer overscan).
 // Only these defer a doc's close on unmount (churn reuse); every other surface
 // releases it at once.

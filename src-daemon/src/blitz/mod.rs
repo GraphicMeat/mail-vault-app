@@ -455,6 +455,18 @@ impl RenderHost {
         self.doc_call(doc, json!({"op": "image", "doc": doc}), IMAGE_TIMEOUT).await
     }
 
+    /// `render.image` with `settleOnly`: waits for the doc's fetches as `image` does (5 s cap) and
+    /// paints nothing. The export of a document past the image area cap draws its tiles at full
+    /// scale instead of a shrunk PNG, and this is how those tiles know the images have landed.
+    pub async fn settle(&self, doc: u64) -> Result<Value, String> {
+        match self.open_docs.lock().unwrap().get_mut(&doc) {
+            Some(t) => *t = Instant::now(),
+            None => return Err("render_unknown_doc".to_string()),
+        }
+        let settled = self.inflight.settled(doc, IMAGE_SETTLE).await;
+        Ok(json!({"settled": settled}))
+    }
+
     /// Per-element measurements for the parity harness. Not foreground traffic.
     pub async fn inspect(&self, doc: u64) -> Result<Value, String> {
         self.doc_call(doc, json!({"op": "inspect", "doc": doc}), INSPECT_TIMEOUT).await
@@ -1232,6 +1244,24 @@ mod tests {
         assert!(h.image(doc).await.is_ok());
         assert!(t0.elapsed() >= Duration::from_millis(280), "waited for the fetch: {:?}", t0.elapsed());
         assert!(t0.elapsed() < IMAGE_SETTLE, "but not for doc {}'s fetch or the cap: {:?}", doc + 1000, t0.elapsed());
+    }
+
+    #[tokio::test]
+    async fn settle_waits_for_the_docs_fetches_and_paints_nothing() {
+        let h = host();
+        let opened = h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        h.inflight.begin(doc);
+        let (inflight, t0) = (h.inflight.clone(), Instant::now());
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            inflight.end(doc);
+        });
+        let got = h.settle(doc).await.unwrap();
+        assert_eq!(got, json!({"settled": true}));
+        assert!(t0.elapsed() >= Duration::from_millis(280), "waited for the fetch: {:?}", t0.elapsed());
+        h.close(doc).await;
+        assert_eq!(h.settle(doc).await.unwrap_err(), "render_unknown_doc");
     }
 
     #[tokio::test]

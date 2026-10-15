@@ -4,7 +4,7 @@ vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: (p, proto) => `${proto}
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 import { send } from '../../../services/transport';
 import { onDocGone } from '../surfaces/docGone';
-import { openRender, tileUrl, hitRender, closeRender, textRunsRender, serializeRender, foldRender, fontsRender, imageRender } from '../service';
+import { openRender, tileUrl, hitRender, closeRender, textRunsRender, serializeRender, foldRender, fontsRender, imageRender, settleRender, tileRender } from '../service';
 
 beforeEach(() => { send.mockReset(); });
 
@@ -60,6 +60,21 @@ describe('blitz service', () => {
     send.mockRejectedValue(new Error('render_unknown_doc'));
     await expect(imageRender(9)).rejects.toThrow('render_unknown_doc');
     expect(gone).toHaveBeenCalledWith(9);
+    off();
+  });
+  it('settleRender is render.image without the paint; tileRender is one tile over the RPC; both report a doc that is gone', async () => {
+    send.mockResolvedValue({ settled: true });
+    await expect(settleRender(4)).resolves.toEqual({ settled: true });
+    expect(send).toHaveBeenLastCalledWith('render.image', { docId: 4, settleOnly: true });
+    send.mockResolvedValue({ png: 'AAAA' });
+    await expect(tileRender(4, 7)).resolves.toEqual({ png: 'AAAA' });
+    expect(send).toHaveBeenLastCalledWith('render.tile', { docId: 4, index: 7 });
+    const gone = vi.fn();
+    const off = onDocGone(gone);
+    send.mockRejectedValue(new Error('render_unknown_doc'));
+    await expect(settleRender(9)).rejects.toThrow('render_unknown_doc');
+    await expect(tileRender(10, 0)).rejects.toThrow('render_unknown_doc');
+    expect(gone.mock.calls.map(c => c[0])).toEqual([9, 10]);
     off();
   });
   it('fontsRender never throws', async () => {

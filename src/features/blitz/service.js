@@ -38,6 +38,14 @@ export function foldRender(docId, id, open) {
 export function imageRender(docId) {
   return forDoc(docId, send('render.image', { docId }));
 }
+// render.image's wait for the doc's fetches (5 s cap) without the paint: resolves { settled }.
+export function settleRender(docId) {
+  return forDoc(docId, send('render.image', { docId, settleOnly: true }));
+}
+// One tile's PNG over the RPC (not the mvrender scheme: a canvas drawn from a cross-origin image cannot be read back).
+export function tileRender(docId, index) {
+  return forDoc(docId, send('render.tile', { docId, index }));
+}
 // Fonts are a best effort: a family that does not register leaves the stack's fallback drawing.
 export async function fontsRender(families) {
   try { return await send('render.fonts', { families }); } catch { return { registered: [] }; }

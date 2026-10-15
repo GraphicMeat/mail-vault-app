@@ -26,12 +26,14 @@ afterEach(() => { getContext.mockRestore(); _resetBodyRenderersForTest(); useSet
 
 describe('a tall card through Blitz', () => {
   it('keeps the web card size: one shared width, heights added, body under the header', async () => {
-    const shrunk = { width: 1010, height: 16565 }; // 820x13447 css at scale 2 is 44M px: the worker drew it at ~0.616
+    const tile = { width: 1640, height: 1024 }; // 820x13447 css at scale 2 is 44M px: past the image cap, so tiles
     const deps = {
-      openRender: vi.fn(async () => ({ docId: 3, rev: 1, meta: { cssHeight: 13447 } })),
-      imageRender: vi.fn(async () => ({ png: 'x' })),
+      openRender: vi.fn(async () => ({ docId: 3, rev: 1, meta: { cssHeight: 13447, tileCssHeight: 512, tileCount: 27 } })),
+      imageRender: vi.fn(async () => { throw new Error('not for a tall doc'); }),
+      settleRender: vi.fn(async () => ({ settled: true })),
+      tileRender: vi.fn(async () => ({ png: 'x' })),
       closeRender: vi.fn(async () => {}),
-      decode: vi.fn(async () => shrunk),
+      decode: vi.fn(async () => tile),
       createCanvas: () => document.createElement('canvas'),
     };
     const head = { width: 1640, height: 240 };
@@ -43,11 +45,12 @@ describe('a tall card through Blitz', () => {
     const card = await renderSocialCard({ message, bodyHtml: '<p>TALLBODY</p>', appearance: 'light', mail: 'light' });
     expect([card.width, card.height]).toEqual([1640, 240 + 26894]);
     // header drawn at the top, then the body canvas (full size) right under it
-    const stackCalls = drawImage.mock.calls.filter(c => c.length === 3);
+    const stackCalls = drawImage.mock.calls.filter(c => c[0] === head || c[0] instanceof HTMLCanvasElement);
     expect(stackCalls[0][0]).toBe(head);
     expect(stackCalls.map(c => [c[1], c[2]])).toEqual([[0, 0], [0, 240]]);
     expect(stackCalls[1][0]).toMatchObject({ width: 1640, height: 26894 });
-    // and the shrunk PNG was stretched over the whole body canvas, not left in its corner
-    expect(drawImage).toHaveBeenCalledWith(shrunk, 0, 0, 1640, 26894);
+    // the body canvas holds all 27 tiles at full scale, one every 1024 device px
+    expect(drawImage.mock.calls.filter(c => c[0] === tile).map(c => c[2])).toEqual(Array.from({ length: 27 }, (_, i) => i * 1024));
+    expect(deps.imageRender).not.toHaveBeenCalled();
   });
 });

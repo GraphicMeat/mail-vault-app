@@ -55,6 +55,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             .tile(doc(), params["index"].as_u64().unwrap_or(0) as u32)
             .await
             .map(|png| json!({"png": base64::engine::general_purpose::STANDARD.encode(png)})),
+        // `settleOnly`: wait for the doc's fetches, paint nothing (an export past the image area cap draws tiles).
+        "render.image" if params["settleOnly"].as_bool() == Some(true) => host.settle(doc()).await,
         "render.image" => host.image(doc()).await,
         "render.hit" => host.hit(doc(), params["x"].as_f64().unwrap_or(0.0) as f32, params["y"].as_f64().unwrap_or(0.0) as f32).await,
         "render.textRuns" => host.text_runs(doc(), params["index"].as_u64().unwrap_or(0) as u32).await,

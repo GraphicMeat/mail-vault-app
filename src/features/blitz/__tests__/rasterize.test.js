@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 vi.mock('../parity/themeInputs', () => ({ blitzThemeFor: ({ dark, palette }) => ({ mode: dark ? 'dark' : 'light', palette }) }));
 const { rasterizeWithBlitz } = await import('../surfaces/rasterize');
-const { MAX_CSS_HEIGHT } = await import('../surfaces/sizing');
+const { MAX_CSS_HEIGHT, MAX_IMAGE_AREA_PX, TILE_CSS_HEIGHT } = await import('../surfaces/sizing');
 
 function deps(over = {}) {
   const ctx = { fillRect: vi.fn(), drawImage: vi.fn(), set fillStyle(v) { ctx._fill = v; } };
@@ -13,6 +13,8 @@ function deps(over = {}) {
     ctx, canvas,
     openRender: vi.fn(async () => ({ docId: 11, rev: 1, meta: {} })),
     imageRender: vi.fn(async () => ({ png: 'iVBOR' })),
+    settleRender: vi.fn(async () => ({ settled: true })),
+    tileRender: vi.fn(async (_doc, i) => ({ png: `tile${i}` })),
     closeRender: vi.fn(async () => {}),
     decode: vi.fn(async () => ({ width: 1640, height: 3000 })),
     createCanvas: () => canvas,
@@ -95,16 +97,57 @@ describe('rasterizeWithBlitz', () => {
     expect(warn).toHaveBeenCalledWith('[blitz] export rasterize failed', 'redact failed');
   });
 
-  it('a PNG the worker shrank past the area wall is drawn back to the web canvas size (columnWidth*scale by cssHeight*scale)', async () => {
-    const bitmap = { width: 1010, height: 16565 };
-    const d = deps({
-      openRender: vi.fn(async () => ({ docId: 14, rev: 1, meta: { cssHeight: 13447 } })),
-      decode: vi.fn(async () => bitmap),
+  describe('past the image area cap (device px of the web canvas > 16.7M)', () => {
+    const tallDeps = (over = {}) => {
+      const tiles = [];
+      const d = deps({
+        openRender: vi.fn(async () => ({ docId: 14, rev: 1, meta: { cssHeight: 13447, tileCssHeight: 512, tileCount: 27 } })),
+        decode: vi.fn(async (b64) => { const t = { width: 1640, height: 1024, id: b64, close: vi.fn() }; tiles.push(t); return t; }),
+        ...over,
+      });
+      return { d, tiles };
+    };
+
+    it('draws every tile at full scale at its own offset into the web-sized canvas; render.image is never called', async () => {
+      const { d, tiles } = tallDeps();
+      const out = await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2, backgroundColor: '#abcdef' }, d);
+      expect(out).toBe(d.canvas);
+      expect([d.canvas.width, d.canvas.height]).toEqual([1640, 26894]); // 820x2 by 13447x2, as the web canvas
+      expect(d.imageRender).not.toHaveBeenCalled();
+      expect(d.tileRender.mock.calls).toEqual(Array.from({ length: 27 }, (_, i) => [14, i]));
+      expect(d.ctx.drawImage.mock.calls.map(c => c.slice(1))).toEqual(Array.from({ length: 27 }, (_, i) => [0, i * 1024]));
+      expect(d.ctx.drawImage.mock.calls.every((c, i) => c[0] === tiles[i])).toBe(true);
+      expect(d.ctx._fill).toBe('#abcdef');
+      expect(d.ctx.fillRect).toHaveBeenCalledWith(0, 0, 1640, 26894);
+      expect(d.closeRender).toHaveBeenCalledWith(14);
     });
-    const out = await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d);
-    expect(out).toBe(d.canvas);
-    expect([d.canvas.width, d.canvas.height]).toEqual([1640, 26894]);
-    expect(d.ctx.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1640, 26894);
+
+    it('waits for the doc fetches (settle) before the first tile, and draws tiles one at a time', async () => {
+      const order = [];
+      let open = 0; let maxOpen = 0;
+      const { d } = tallDeps({
+        settleRender: vi.fn(async () => { order.push('settle'); return { settled: true }; }),
+        tileRender: vi.fn(async (_doc, i) => { order.push(`tile${i}`); open++; maxOpen = Math.max(maxOpen, open); await Promise.resolve(); open--; return { png: `t${i}` }; }),
+      });
+      await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d);
+      expect(order.slice(0, 3)).toEqual(['settle', 'tile0', 'tile1']);
+      expect(maxOpen).toBe(1);
+    });
+
+    it('a tile failure returns null and still closes the doc', async () => {
+      const { d } = tallDeps({ tileRender: vi.fn(async (_doc, i) => { if (i === 3) throw new Error('render_unavailable'); return { png: 'x' }; }) });
+      expect(await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d)).toBeNull();
+      expect(d.closeRender).toHaveBeenCalledWith(14);
+      expect(warn).toHaveBeenCalledWith('[blitz] export rasterize failed', 'render_unavailable');
+    });
+  });
+
+  it('under the cap it is render.image (which waits for the fetches itself): no settle, no tiles', async () => {
+    const d = deps({ openRender: vi.fn(async () => ({ docId: 16, rev: 1, meta: { cssHeight: 4000, tileCssHeight: 512, tileCount: 8 } })) });
+    await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d); // 1640 x 8000 = 13.1M px
+    expect(d.imageRender).toHaveBeenCalledWith(16);
+    expect(d.settleRender).not.toHaveBeenCalled();
+    expect(d.tileRender).not.toHaveBeenCalled();
   });
 
   it('a PNG at the full export scale keeps its own size and is drawn 1:1', async () => {
@@ -119,11 +162,14 @@ describe('rasterizeWithBlitz', () => {
   });
 });
 
-describe('MAX_CSS_HEIGHT', () => {
-  it('is the worker limit src-render/src/doc.rs clamps at', () => {
-    const rs = readFileSync(resolve(process.cwd(), 'src-render/src/doc.rs'), 'utf8');
-    const m = rs.match(/pub const MAX_CSS_HEIGHT: f32 = ([\d_]+)(?:\.0)?;/);
+describe('limits pinned to the worker', () => {
+  const rust = (file, name) => {
+    const rs = readFileSync(resolve(process.cwd(), 'src-render/src', file), 'utf8');
+    const m = rs.match(new RegExp(`pub const ${name}: \\w+ = ([\\d_]+)(?:\\.0)?;`));
     expect(m).not.toBeNull();
-    expect(Number(m[1].replace(/_/g, ''))).toBe(MAX_CSS_HEIGHT);
-  });
+    return Number(m[1].replace(/_/g, ''));
+  };
+  it('MAX_CSS_HEIGHT is what doc.rs clamps at', () => { expect(rust('doc.rs', 'MAX_CSS_HEIGHT')).toBe(MAX_CSS_HEIGHT); });
+  it('TILE_CSS_HEIGHT is what doc.rs cuts tiles at', () => { expect(rust('doc.rs', 'TILE_CSS_HEIGHT')).toBe(TILE_CSS_HEIGHT); });
+  it('MAX_IMAGE_AREA_PX is the area doc_image.rs shrinks the image past', () => { expect(rust('doc_image.rs', 'MAX_IMAGE_AREA_PX')).toBe(MAX_IMAGE_AREA_PX); });
 });
