@@ -9,6 +9,7 @@ import { getEmailColors } from '../utils/mailChrome';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
 import { useT } from '../i18n/index.js';
 import { useMailFonts } from '../hooks/useMailFonts';
+import { useAltBodyRenderer } from './email/bodyRendererRegistry';
 
 // The theme the reading pane opens a message in: the email theme setting, or
 // the app's own when that is "system".
@@ -33,11 +34,27 @@ export function OriginalThemeToggle({ dark, onToggle, testid = 'compose-original
   );
 }
 
+// The document an original draws: the frame's whole srcdoc, privacy gate
+// included. Blitz draws exactly this (its pre-pass releases the gate when
+// privacy is inactive). `padding` null means no override: the template's own
+// 24px applies (the pop-out window).
+export function buildOriginalFrameHtml({ html, dark, palette, padding, trackerBlocking, privacy, nonce = emailScriptNonce() }) {
+  return buildEmailIframeHtml({
+    bodyHtml: frameBody(html, null, trackerBlocking).body,
+    themeTag: dark ? 'dark' : 'light',
+    extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${padding ? `<style>body { padding: ${padding}; }</style>` : ''}`,
+    nonce,
+    privacy,
+  });
+}
+
 // One message body as HTML (the pop-out and the detached compose window get it
 // over IPC, with no store to read a thread from). Light runs nothing: the
 // sandbox has no allow-scripts. Dark needs Dark Reader, so it takes the reading
 // pane's model: scripts allowed, and the frame's nonce CSP runs only ours.
-export function OriginalFrame({ html, dark, padding = '12px 16px', title, className = '', autoSize = true, message = null }) {
+// `surface` names the seat for the alternative renderer ('original' | 'popout').
+export function OriginalFrame({ html, dark, padding = '12px 16px', title, className = '', autoSize = true, message = null, surface = 'original' }) {
+  const Alt = useAltBodyRenderer(surface);
   const frameRef = useRef(null);
   const palette = useThemeStore(s => s.palette);
   // Same gate the reading pane uses (EmailViewer/ChatBubbleView/
@@ -50,19 +67,30 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
   // The compose pane's quoted original is a reader too, often in a detached
   // window (the gate holds there until the persisted choice is read).
   const privacyOn = usePrivacyFrameGate();
-  useEffect(() => (autoSize ? attachEmailIframeAutoSize(frameRef.current) : undefined), [autoSize]);
+  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its auto-size.
+  useEffect(() => (autoSize && frameRef.current ? attachEmailIframeAutoSize(frameRef.current) : undefined), [autoSize, !!Alt]);
   useMailFonts(frameRef);
-  const srcDoc = useMemo(() => {
-    const nonce = emailScriptNonce();
-    return buildEmailIframeHtml({
-      bodyHtml: frameBody(html, null, trackerBlocking).body,
-      themeTag: dark ? 'dark' : 'light',
-      extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}<style>body { padding: ${padding}; }</style>`,
-      nonce,
-      privacy: privacyOn,
-    });
-  }, [html, dark, palette, padding, trackerBlocking, privacyOn]);
+  const srcDoc = useMemo(
+    () => buildOriginalFrameHtml({ html, dark, palette, padding, trackerBlocking, privacy: privacyOn }),
+    [html, dark, palette, padding, trackerBlocking, privacyOn],
+  );
   useBodyPrivacy(frameRef, srcDoc, { message });
+  if (Alt) {
+    return (
+      <Alt
+        surface={surface}
+        messageKey={message?.messageId}
+        documentHtml={srcDoc}
+        theme={{ dark, palette }}
+        foldQuotes={false}
+        privacy={privacyOn}
+        message={message}
+        sizing={autoSize ? 'content' : 'fill'}
+        className={`block w-full rounded-md ${className}`}
+        style={{ backgroundColor: getEmailColors(dark ? 'dark' : 'light', palette).background }}
+      />
+    );
+  }
   return (
     <iframe
       ref={frameRef}
