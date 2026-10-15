@@ -56,19 +56,27 @@ describe('chat bubble on the body seam', () => {
     const p = seen.at(-1);
     expect(p.surface).toBe('bubble');
     expect(p.sizing).toEqual({ collapsedMax: 400 });
-    expect(p.style).toEqual({ width: BUBBLE_FRAME_WIDTH, maxWidth: '100%', minHeight: 50 });
+    expect(p.style).toEqual({ width: '100%', maxWidth: '100%', minHeight: 50 });
     expect(p.theme.dark).toBe(false);
     expect(p.foldQuotes).toBe(true);
     expect(p.message.uid).toBe(7);
   });
 
-  it('the wrapper gets a definite width rule (BlitzBody measures it, and its open state carries only the class)', () => {
+  // jsdom has no layout, so this pins the rule's tokens; the CSS reasoning is in the Task 6 fix report and
+  // tests/e2e/connected-blitz-surfaces.test.js (bubble width vs iframe) is the real check.
+  it('the wrapper fills the bubble and a 300 px strut gives it the iframe intrinsic width', () => {
     expect(BUBBLE_FRAME_WIDTH).toBe(300);
     registerBodyRenderer('blitz', { Body: Stub });
     useSettingsStore.setState({ emailRenderer: 'blitz' });
-    show();
+    const { container } = show();
     const p = seen.at(-1);
-    expect(p.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-[300px]', 'max-w-full']));
+    expect(p.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', '[contain:inline-size]']));
+    expect(p.className).not.toMatch(/w-\[300px\]/);
+    const strut = container.querySelector('[data-bubble-strut]');
+    expect(strut.style.width).toBe('300px');
+    expect(strut.style.maxWidth).toBe('100%');
+    expect(strut.style.height).toBe('0px');
+    expect(strut.nextElementSibling).toBe(screen.getByTestId('alt-bubble'));
   });
 
   it('a red link raises link safety', () => {

@@ -129,14 +129,22 @@ export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, in
     `;
 }
 
-// The iframe's own width in a shrink-to-fit bubble: an <iframe> with no width
-// attribute is 300 CSS px wide, and `w-full` resolves against that.
+// The iframe's own intrinsic width: an <iframe> with no width attribute is 300 CSS
+// px wide, and `w-full` resolves against that.
 export const BUBBLE_FRAME_WIDTH = 300;
-// The Blitz wrapper's width rule, which must stay in step with BUBBLE_FRAME_WIDTH
-// (Tailwind needs the class literal). BlitzBody measures its wrapper to open, and
-// in the open state the wrapper carries only the class, so a bubble that sizes to
-// its content would otherwise hand it 0 px and the body would never open.
-const BUBBLE_FRAME_CLASS = 'w-[300px] max-w-full';
+// The Blitz body must size like the iframe in a shrink-to-fit bubble: the iframe is
+// `w-full` with an intrinsic 300 px, so it makes the bubble's max-content at least
+// 300 px (a longer sibling, such as an attachment name, makes it wider) and then fills
+// whatever width the bubble ends up with. A fixed 300 px wrapper stayed narrow when a
+// sibling widened the bubble. Here the wrapper fills the bubble (`w-full`, which is also
+// the definite width BlitzBody's open gate measures: in the open state the wrapper
+// carries only the class) and contributes nothing of its own to the bubble's intrinsic
+// width (`contain: inline-size`, so the tiles' px-wide layer cannot pin the bubble
+// wide). The 300 px comes from a zero-height strut instead: a width that is not a
+// percentage contributes to max-content, and `max-width: 100%` clamps it once laid out,
+// so a bubble capped narrower than 300 px (max-w-[80%]) still fits its parent.
+const BUBBLE_FRAME_CLASS = 'w-full [contain:inline-size]';
+const BUBBLE_STRUT_STYLE = { width: BUBBLE_FRAME_WIDTH, maxWidth: '100%', height: 0 };
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const t = useT();
@@ -804,7 +812,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               </div>
               {mergedEmail.html ? (
                 altProps ? (
-                  <Alt {...altProps} style={{ width: BUBBLE_FRAME_WIDTH, maxWidth: '100%', minHeight: 100 }} />
+                  <div><div aria-hidden="true" data-bubble-strut style={BUBBLE_STRUT_STYLE} /><Alt {...altProps} style={{ width: '100%', maxWidth: '100%', minHeight: 100 }} /></div>
                 ) : (
                   <iframe
                     ref={iframeRef}
@@ -824,7 +832,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           ) : hasHtml ? (
             <div className="overflow-hidden">
               {altProps ? (
-                <Alt {...altProps} style={{ width: BUBBLE_FRAME_WIDTH, maxWidth: '100%', minHeight: 50 }} />
+                <div><div aria-hidden="true" data-bubble-strut style={BUBBLE_STRUT_STYLE} /><Alt {...altProps} style={{ width: '100%', maxWidth: '100%', minHeight: 50 }} /></div>
               ) : (
                 <iframe
                   ref={iframeRef}
