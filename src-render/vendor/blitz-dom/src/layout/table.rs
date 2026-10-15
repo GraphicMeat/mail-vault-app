@@ -699,8 +699,8 @@ impl TableTreeWrapper<'_> {
         node_id: taffy::NodeId,
         inputs: taffy::tree::LayoutInput,
     ) -> taffy::LayoutOutput {
-        // MailVault parity fix (plan D): see `max_width_not_below_min_content`.
-        let base_style = self.max_width_not_below_min_content(node_id, &inputs);
+        // MailVault parity fix (plan D): see `min_content_floor`.
+        let base_style = self.min_content_floor(node_id, &inputs);
         self.style_override = base_style.clone();
         let output = taffy::compute_grid_layout(self, node_id, inputs);
         let Some((widths, table_width)) = self.webkit_column_widths(output.size.width, &inputs) else {
@@ -724,27 +724,35 @@ impl TableTreeWrapper<'_> {
     }
 
     /// MailVault parity fix (plan D): a table is never narrower than its minimum content width,
-    /// whatever its `max-width` says. CSS 2.1 17.5.2.2 gives an auto-layout table a minimum
-    /// width of its columns' minimum content widths, and 10.4 leaves `max-width` on tables
-    /// undefined. Measured in macOS WKWebView (300px container, `table {max-width: 100%}`): an
-    /// auto table whose cell holds a 600px box is 600 wide, and with `max-width: 200px` a table
-    /// whose cell holds a 260px box is 260 wide; Blitz clamped them to 300 and 200 and let the
-    /// content overflow. The style the table is laid out with when its `max-width` (a length,
-    /// or a percentage of the parent's width) is below its minimum content width, with the
-    /// `max-width` raised to that width; None when `max-width` is none, a `calc()` or fits.
-    fn max_width_not_below_min_content(
+    /// whatever its `width` or `max-width` says. CSS 2.1 17.5.2.2 gives an auto-layout table a
+    /// minimum width of its columns' minimum content widths, and 10.4 leaves `max-width` on
+    /// tables undefined. Measured in macOS WKWebView (300px container, `table {max-width:
+    /// 100%}`): an auto table whose cell holds a 600px box is 600 wide; with `max-width: 200px`
+    /// a table whose cell holds a 260px box is 260; a `width="100%"` table whose cell holds a
+    /// `width="600"` table is 600 (and 400 for a `width="400"` one). Blitz let the width
+    /// (the container's, a percentage of it, or the max-width) win and the content overflow.
+    ///
+    /// The table's style with `min-width` raised to its minimum content width (taffy clamps with
+    /// the minimum last, so it beats the width and the `max-width`, and applies it to the
+    /// available space of an auto width); None when it is already that wide, for a
+    /// `table-layout: fixed` table (its columns do not follow the content, as with the `clip`
+    /// table mode), and for an intrinsic query (min- and max-content answer for themselves). The
+    /// measurement ignores the table's own `width`, `min-width` and `max-width`, which all
+    /// clamp the grid's content size too.
+    fn min_content_floor(
         &mut self,
         node_id: taffy::NodeId,
         inputs: &taffy::tree::LayoutInput,
     ) -> Option<taffy::Style<Atom>> {
-        let max_width = self.ctx.style.max_size.width.into_raw();
-        let resolved = match max_width.tag() {
-            taffy::CompactLength::LENGTH_TAG => max_width.value(),
-            taffy::CompactLength::PERCENT_TAG => max_width.value() * inputs.parent_size.width?,
-            _ => return None,
-        };
-        // Measured without the max-width, which clamps the grid's content size as well.
+        if self.ctx.is_fixed
+            || (inputs.known_dimensions.width.is_none()
+                && !matches!(inputs.available_space.width, taffy::AvailableSpace::Definite(_)))
+        {
+            return None;
+        }
         let mut unclamped = self.ctx.style.clone();
+        unclamped.size.width = style_helpers::auto();
+        unclamped.min_size.width = style_helpers::auto();
         unclamped.max_size.width = style_helpers::auto();
         self.style_override = Some(unclamped);
         let min_content = taffy::compute_grid_layout(
@@ -767,11 +775,25 @@ impl TableTreeWrapper<'_> {
         .size
         .width;
         self.style_override = None;
-        if min_content <= resolved + 0.01 {
+        // taffy reads `min-width` as a content-box size under `box-sizing: content-box`.
+        let mut floor = min_content;
+        if self.ctx.style.box_sizing == taffy::BoxSizing::ContentBox {
+            let padding = self.ctx.style.padding.resolve_or_zero(inputs.parent_size.width, resolve_calc_value);
+            let border = self.ctx.style.border.resolve_or_zero(inputs.parent_size.width, resolve_calc_value);
+            floor -= padding.left + padding.right + border.left + border.right;
+        }
+        let min_width = self.ctx.style.min_size.width.into_raw();
+        let have = match min_width.tag() {
+            taffy::CompactLength::AUTO_TAG => 0.0,
+            taffy::CompactLength::LENGTH_TAG => min_width.value(),
+            taffy::CompactLength::PERCENT_TAG => min_width.value() * inputs.parent_size.width?,
+            _ => return None,
+        };
+        if floor <= have + 0.01 {
             return None;
         }
         let mut style = self.ctx.style.clone();
-        style.max_size.width = style_helpers::length(min_content);
+        style.min_size.width = style_helpers::length(floor);
         Some(style)
     }
 

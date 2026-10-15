@@ -713,6 +713,46 @@ fn a_table_with_a_length_width_ignores_a_percentage_max_width() {
     assert!(wrong.is_empty(), "table widths differ from WebKit:\n{}", wrong.join("\n"));
 }
 
+/// The layout-in-a-layout shape of the corpus (`ours/tables-legacy`, `ours/table-cell-edges`): a
+/// `width="100%"` table whose only cell holds a fixed-width table (`width="600"`, `"400"`), in
+/// the chat bubble's 268px column with its `table { max-width: 100%; border-collapse: collapse
+/// }`. A table's used width is never below its minimum content width (CSS 2.1 17.5.2), so
+/// WKWebView measures the outer table at 600 (400) and overflows; Blitz laid it out at 268.
+/// Expected values are the harness iframe's (`table[1]` w 600 and 400) and the same shape
+/// measured alone in WKWebView (2026-10-15): outer `width=100%`, auto and `width:50%`, with or
+/// without `border-collapse`, inner 600 or 400: the outer and inner table are both 600 (400);
+/// with the reader's `width:auto !important` both are 54 (the inner shrinks to its content);
+/// an inner 200 table leaves the outer at 268.
+#[test]
+fn a_percentage_width_table_is_never_narrower_than_its_content() {
+    let nested = |inner_width: u32, collapse: bool, outer_attr: &str| {
+        let css = if collapse { "table{max-width:100%;border-collapse:collapse}" } else { "table{max-width:100%}" };
+        let html = format!(
+            r#"<body style="margin:0"><style>{css}</style><div style="width:268px"><table data-mv-id="o" {outer_attr} cellpadding="0" cellspacing="0" border="0"><tr><td align="center"><table data-mv-id="i" width="{inner_width}" cellpadding="10" cellspacing="0" border="0"><tr><td>x</td><td>y</td></tr></table></td></tr></table></div></body>"#
+        );
+        let els = inspect_at(&html, 268);
+        let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+        (w("o"), w("i"))
+    };
+    for collapse in [false, true] {
+        assert_eq!(nested(600, collapse, r#"width="100%""#), (600.0, 600.0), "600 inner, collapse {collapse}");
+        assert_eq!(nested(400, collapse, r#"width="100%""#), (400.0, 400.0), "400 inner, collapse {collapse}");
+        // An auto-width outer table, and the reader's `width:auto !important` ones.
+        assert_eq!(nested(600, collapse, "").0, 600.0, "auto outer, collapse {collapse}");
+        assert_eq!(nested(600, collapse, r#"style="width:50%""#).0, 600.0, "50% outer, collapse {collapse}");
+    }
+    // The reader template: both tables are auto width, so the inner one shrinks to its content
+    // and nothing holds the outer table open.
+    let html = r#"<body style="margin:0"><style>table{max-width:100% !important;width:auto !important}</style><div style="width:268px"><table data-mv-id="o" width="100%"><tr><td><table data-mv-id="i" width="600"><tr><td>x</td></tr></table></td></tr></table></div></body>"#;
+    let els = inspect_at(html, 268);
+    assert!(get(&els, "o").rect.clone().unwrap().w <= 268.0, "reader outer table stays in its column");
+    assert!(get(&els, "i").rect.clone().unwrap().w < 100.0, "reader inner table shrinks to its content");
+    // Content that fits changes nothing.
+    let html = r#"<body style="margin:0"><style>table{max-width:100%}</style><div style="width:268px"><table data-mv-id="o" width="100%"><tr><td><table data-mv-id="i" width="200"><tr><td>x</td></tr></table></td></tr></table></div></body>"#;
+    let els = inspect_at(html, 268);
+    assert_eq!(get(&els, "o").rect.clone().unwrap().w, 268.0);
+}
+
 /// The newsletter hero: `<table><tr><td><img width="600" height="50"></td></tr></table>` in a
 /// narrower container. A replaced element with `max-width: 100%` is compressible (CSS Sizing 3
 /// 5.2.2: its min-content contribution is 0), so the table is not held open by the image's
