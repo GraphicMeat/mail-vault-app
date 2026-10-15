@@ -969,12 +969,13 @@ export const BLITZ_LONG_ATTACHMENT_NAME = 'quarterly-board-review-final-version-
 
 // A phishing-shaped block link first (link safety must fire on click), a
 // fixed 600 px table, an inline data: PNG and enough text for two tiles.
-function blitzHtmlBody(n) {
+// `extra` more paragraphs: the Cleanup preview's fixture must be taller than the preview's 2000 px cap.
+function blitzHtmlBody(n, extra = 0) {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   return `<a href="${PHISH_LINK_HREF}" style="display:block;height:40px;line-height:40px">${PHISH_LINK_TEXT}</a>`
     + `<h2 style="color:#e6375a">Blitz message ${n}</h2>`
     + `<table width="600" style="width:600px;border:1px solid #ccc"><tr><td style="padding:8px">Cell ${n}</td><td><img src="data:image/png;base64,${png}" width="40" height="40" alt=""></td></tr></table>`
-    + Array.from({ length: 18 }, (_, i) => `<p>Paragraph ${i + 1} of message ${n}, long enough to wrap at a narrow width in a chat bubble.</p>`).join('');
+    + Array.from({ length: 18 + extra }, (_, i) => `<p>Paragraph ${i + 1} of message ${n}, long enough to wrap at a narrow width in a chat bubble.</p>`).join('');
 }
 
 function blitzRaw({ uid, from, to, subject, refs, body, attachName = null }) {
@@ -1004,7 +1005,7 @@ export function blitzMailbox({ owner, uidStart = BLITZ_UID_START }) {
   let uid = uidStart;
   const threadRefs = [];
   for (let i = 0; i < 3; i++, uid++) {
-    push(uid, blitzRaw({ uid, from: `Thread Sender <thread${i}@example.com>`, to: owner, subject: i ? `Re: ${BLITZ_THREAD_SUBJECT}` : BLITZ_THREAD_SUBJECT, refs: [...threadRefs], body: blitzHtmlBody(uid) }));
+    push(uid, blitzRaw({ uid, from: `Thread Sender <thread${i}@example.com>`, to: owner, subject: i ? `Re: ${BLITZ_THREAD_SUBJECT}` : BLITZ_THREAD_SUBJECT, refs: [...threadRefs], body: blitzHtmlBody(uid, i === 0 ? 70 : 0) }));
     threadRefs.push(`<blitz-${uid}@mock.test>`);
   }
   const chatRefs = [];

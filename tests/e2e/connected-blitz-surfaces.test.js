@@ -116,6 +116,34 @@ const card = (a) => browser.executeAsync((a, done) => {
   })().catch(e => done({ error: String(e?.message || e) }));
 }, a);
 
+/**
+ * Every render.* RPC the page sends, through the VITE_E2E observer seam (as connected-blitz-reader does):
+ * the proof that the Blitz worker, not the web frame, drew a card. The web path sends none.
+ */
+const installRenderObserver = () => browser.execute(() => {
+  window.__e2eRender = [];
+  window.__INSIGHTS_NATIVE_OBSERVER__ = (cmd, promise) => {
+    if (!String(cmd).startsWith('render.')) return undefined;
+    const rec = { cmd };
+    window.__e2eRender.push(rec);
+    promise.then(() => { rec.ok = true; }, (e) => { rec.ok = false; rec.err = String((e && e.message) || e); });
+    return undefined;
+  };
+});
+const renderMark = () => browser.execute(() => (window.__e2eRender || []).length);
+const renderSince = (mark) => browser.execute((m) => {
+  const out = {};
+  for (const r of (window.__e2eRender || []).slice(m)) { out[r.cmd] = (out[r.cmd] || 0) + 1; if (r.ok === false) out.failed = (out.failed || 0) + 1; }
+  return out;
+}, mark);
+/** `card()` plus the render.* calls it made, and any page rejection (the driver reports a rejected script as a throw). */
+async function cardCalls(a) {
+  const mark = await renderMark();
+  let r;
+  try { r = await card(a); } catch (e) { r = { error: String(e?.message || e) }; }
+  return { ...r, calls: await renderSince(mark) };
+}
+
 const hex = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 
 /** The bubble that carries the long attachment name: its body (iframe or Blitz) and its group, in CSS px. */
@@ -151,6 +179,7 @@ describe('Blitz on every surface', function () {
     const raised = await raise(1280, 900);
     if (raised !== 'ok') await browser.setWindowSize(1280, 900);
     mode0 = await readMode();
+    await installRenderObserver();
     // The what's-new popover sits over the reading pane in every shot.
     await browser.pause(2500);
     await browser.execute(() => [...document.querySelectorAll('button')].find(b => (b.textContent || '').trim() === 'Dismiss')?.click());
@@ -197,6 +226,8 @@ describe('Blitz on every surface', function () {
       const d = [...document.querySelectorAll('[role="alertdialog"]')].find(el => el.offsetHeight > 0);
       [...d.querySelectorAll('button')].find(b => /cancel/i.test(b.textContent || '') || /cancel/i.test(b.getAttribute('aria-label') || ''))?.click();
     });
+    await browser.waitUntil(() => browser.execute(() => ![...document.querySelectorAll('[role="alertdialog"]')].some(d => d.offsetHeight > 0)),
+      { timeout: 5000, timeoutMsg: 'link safety did not close on Cancel' });
     await shootModes('thread', settled('.thread-reader', 'thread'));
   });
 
@@ -210,7 +241,9 @@ describe('Blitz on every surface', function () {
       (async () => {
         const body = document.querySelector('.thread-reader [data-renderer="blitz"][data-blitz-doc] [data-blitz-tiles]');
         const rect = body.getBoundingClientRect();
+        const mark = (window.__e2eRender || []).length;
         const c = await window.__MV_CAPTURE_APP__({ redact: false });
+        const images = (window.__e2eRender || []).slice(mark).filter(r => r.cmd === 'render.image').length;
         const ratio = c.width / window.innerWidth;
         const x0 = Math.max(0, Math.round(rect.left * ratio)); const y0 = Math.max(0, Math.round(rect.top * ratio));
         const w = Math.min(c.width - x0, Math.round(rect.width * ratio)); const h = Math.min(c.height - y0, Math.round(Math.min(rect.height, window.innerHeight - rect.top) * ratio));
@@ -220,13 +253,14 @@ describe('Blitz on every surface', function () {
           if (Math.abs(d[i] - 230) < 14 && Math.abs(d[i + 1] - 55) < 14 && Math.abs(d[i + 2] - 90) < 14) red += 1;
           if (seen.size < 64 && i % 28 === 0) seen.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
         }
-        done({ name, canvas: [c.width, c.height], ratio, region: [x0, y0, w, h], red, distinct: seen.size, png: c.toDataURL('image/png').split(',')[1] });
+        done({ name, canvas: [c.width, c.height], ratio, region: [x0, y0, w, h], red, images, distinct: seen.size, png: c.toDataURL('image/png').split(',')[1] });
       })().catch(e => done({ error: String(e?.message || e) }));
     }, name);
     const light = await shot('light');
     log('appshot-light', { ...light, png: undefined });
     expect(light.error).toBeUndefined();
     expect(light.red).toBeGreaterThan(20); // the heading colour was composited from the live doc
+    expect(light.images).toBeGreaterThan(0); // from the worker: compositeBlitzBodies asks render.image for each settled body
     writeShot('appshot-light', light.png);
     await setMode('dark');
     await browser.pause(500);
@@ -236,6 +270,7 @@ describe('Blitz on every surface', function () {
     log('appshot-dark', { ...dark, png: undefined });
     expect(dark.error).toBeUndefined();
     expect(dark.distinct).toBeGreaterThan(4);
+    expect(dark.images).toBeGreaterThan(0);
     writeShot('appshot-dark', dark.png);
     await setMode('light');
   });
@@ -279,8 +314,8 @@ describe('Blitz on every surface', function () {
     expect(s.iframes).toBe(0);
     // The bubbles without the long attachment name (the last one is checked on its own below).
     s.widths.slice(-web.length).slice(0, -1).forEach((w, i) => expect(Math.abs(w - web[i])).toBeLessThanOrEqual(1));
-    // Task 6 gave the Blitz body a fixed 300 px wrapper: a bubble that grows past 300 px (long attachment name) must not leave it narrower than the iframe.
-    expect(blitzAtt.body).toBeGreaterThanOrEqual(webAtt.body - 2);
+    // A bubble that grows past 300 px (a long attachment name) widens the iframe; the Blitz body must follow it, neither narrower nor wider.
+    expect(Math.abs(blitzAtt.body - webAtt.body)).toBeLessThanOrEqual(2);
   });
 
   it('100-message chat scroll keeps the worker bounded (Review Focus 1)', async () => {
@@ -301,7 +336,7 @@ describe('Blitz on every surface', function () {
     await waitPainted(null, 'bubble', 1);
   });
 
-  it('narrow window: every mounted bubble paints (Review Focus 3)', async () => {
+  it('narrow window: the bubbles still paint and nothing fails (Review Focus 3)', async () => {
     const { width, height } = await browser.getWindowSize();
     await browser.setWindowSize(560, 800);
     try {
@@ -398,6 +433,7 @@ describe('Blitz on every surface', function () {
     await browser.pause(900);
     windowShot('original-dark');
     const ids = await dbg('docIds');
+    expect(ids.length).toBeGreaterThan(0);
     await closePopout(main);
     await browser.pause(1500);
     for (const id of ids) {
@@ -517,37 +553,51 @@ describe('Blitz on every surface', function () {
   it('dark social card matches the web card within tolerance, through Blitz', async () => {
     const BODY = '<div style="background:#ffffff;color:#111111;padding:24px">' + '<p>Hello there, a plain light body for the card.</p>'.repeat(6) + '</div>';
     const base = { appearance: 'dark', mail: 'dark', palette: 'indigo', body: BODY };
-    const web = await card({ ...base, mode: 'web', png: true });
-    const blitz = await card({ ...base, mode: 'blitz', png: true });
+    const web = await cardCalls({ ...base, mode: 'web', png: true });
+    const blitz = await cardCalls({ ...base, mode: 'blitz', png: true });
     log('social-dark', { web: { ...web, png: undefined }, blitz: { ...blitz, png: undefined } });
+    // Blitz drew it: one open, one image and one close for the header and for the body. The web card sends no render call.
+    expect(blitz.calls['render.open']).toBeGreaterThanOrEqual(2);
+    expect(blitz.calls['render.image']).toBe(2);
+    expect(blitz.calls['render.close']).toBeGreaterThanOrEqual(2);
+    expect(blitz.calls.failed).toBeUndefined();
+    expect(web.calls['render.open']).toBeUndefined();
+    expect(web.calls['render.image']).toBeUndefined();
     writeShot('socialcard-dark-web', web.png);
     writeShot('socialcard-dark', blitz.png);
     expect(blitz.error).toBeUndefined();
     expect(blitz.w).toBe(web.w);
     expect(Math.abs(blitz.body - web.body)).toBeLessThanOrEqual(0.03);
-    const light = await card({ ...base, appearance: 'light', mail: 'light', mode: 'blitz', png: true });
+    const light = await cardCalls({ ...base, appearance: 'light', mail: 'light', mode: 'blitz', png: true });
     expect(light.error).toBeUndefined();
+    expect(light.calls['render.image']).toBe(2);
     writeShot('socialcard-light', light.png);
   });
 
   it('the dark card body reaches both bottom corners in the mail background: no white strip', async () => {
     const body = '<p>Hello there, a plain body for the card.</p>'.repeat(6);
     const want = hex(getEmailColors('dark', 'indigo').background);
-    const r = await card({ appearance: 'dark', mail: 'dark', palette: 'indigo', body, mode: 'blitz' });
-    log('dark-corners', { want, bl: r.bl, br: r.br, size: [r.w, r.h] });
+    const r = await cardCalls({ appearance: 'dark', mail: 'dark', palette: 'indigo', body, mode: 'blitz' });
+    log('dark-corners', { want, bl: r.bl, br: r.br, size: [r.w, r.h], calls: r.calls });
     expect(r.error).toBeUndefined();
+    expect(r.calls['render.image']).toBe(2); // the worker drew both halves: the corners are Blitz's, not the web frame's
     expect(r.bl).toEqual(want);
     expect(r.br).toEqual(want);
   });
 
   it('image export draws through Blitz (the same document the export dialog builds)', async () => {
-    const r = await card({ appearance: 'light', mail: 'light', palette: 'graphite', body: '<h2>Export probe</h2>' + '<p>Some text for the export.</p>'.repeat(8), mode: 'blitz', png: true });
-    log('export-light', { w: r.w, h: r.h, error: r.error });
+    const r = await cardCalls({ appearance: 'light', mail: 'light', palette: 'graphite', body: '<h2>Export probe</h2>' + '<p>Some text for the export.</p>'.repeat(8), mode: 'blitz', png: true });
+    log('export-light', { w: r.w, h: r.h, error: r.error, calls: r.calls });
     expect(r.error).toBeUndefined();
     expect(r.w).toBeGreaterThan(0);
+    // The export documents were opened, painted and closed in the worker (header and body).
+    expect(r.calls['render.open']).toBeGreaterThanOrEqual(2);
+    expect(r.calls['render.image']).toBe(2);
+    expect(r.calls['render.close']).toBeGreaterThanOrEqual(2);
     writeShot('export-light', r.png);
-    const d = await card({ appearance: 'dark', mail: 'dark', palette: 'graphite', body: '<h2>Export probe</h2>' + '<p>Some text for the export.</p>'.repeat(8), mode: 'blitz', png: true });
+    const d = await cardCalls({ appearance: 'dark', mail: 'dark', palette: 'graphite', body: '<h2>Export probe</h2>' + '<p>Some text for the export.</p>'.repeat(8), mode: 'blitz', png: true });
     expect(d.error).toBeUndefined();
+    expect(d.calls['render.image']).toBe(2);
     writeShot('export-dark', d.png);
   });
 
@@ -555,14 +605,17 @@ describe('Blitz on every surface', function () {
     await setStore({ emailRenderer: 'blitz' });
     const before = await dbg('openDocs');
     const body = Array.from({ length: 1000 }, (_, i) => `<p>Tall line ${i}</p>`).join('');
-    const r = await card({ appearance: 'light', mail: 'light', palette: 'graphite', body, subject: 'Tall', mode: 'blitz' });
+    const r = await cardCalls({ appearance: 'light', mail: 'light', palette: 'graphite', body, subject: 'Tall', mode: 'blitz' });
     const after = await dbg('openDocs');
     const failures = await dbg('failures');
-    log('tall', { w: r.w, h: r.h, area: r.w * r.h, ink: r.ink, error: r.error, failures, openDocs: { before, after } });
+    log('tall', { w: r.w, h: r.h, area: r.w * r.h, ink: r.ink, calls: r.calls, error: r.error, failures, openDocs: { before, after } });
     expect(r.error).toBeUndefined();
     expect(r.h).toBeGreaterThan(1000);
     // The web card has no area cap (modern-screenshot, maximumCanvasSize 0): always the column at scale 2 wide. Over the wall the worker draws the PNG smaller; rasterize draws it back up, so the card keeps the web size and layout.
     expect(r.w).toBe(1640);
+    // Past the area cap the body is drawn from the worker's tiles, one render.tile each (the head is one image, the body's settle is the other).
+    expect(r.calls['render.tile']).toBeGreaterThanOrEqual(20);
+    expect(r.calls.failed).toBeUndefined();
     expect(failures).toEqual([]);
   });
 
@@ -570,10 +623,17 @@ describe('Blitz on every surface', function () {
     const before = await dbg('openDocs');
     const body = '<p>Top</p><div style="height:210000px;background:#eeeeee">spacer</div><p>Bottom</p>';
     // The page's rejection can reach us as the card's own {error} or as the driver's failed script: either carries the code.
-    let r;
-    try { r = await card({ appearance: 'light', mail: 'light', palette: 'graphite', body, subject: 'Too tall', mode: 'blitz' }); } catch (e) { r = { error: String(e?.message || e) }; }
+    const r = await cardCalls({ appearance: 'light', mail: 'light', palette: 'graphite', body, subject: 'Too tall', mode: 'blitz' });
     const after = await dbg('openDocs');
-    log('ceiling', { error: r.error, w: r.w, h: r.h, openDocs: { before, after } });
+    log('ceiling', { error: r.error, calls: r.calls, openDocs: { before, after } });
     expect(String(r.error || '')).toContain('blitz_export_failed');
+    // The worker opened the documents (so it is Blitz refusing it). The driver re-runs a rejected script, so the
+    // numbers are per attempt: each opens a header and a body, draws the header only (one image), and closes both.
+    const attempts = (r.calls['render.open'] || 0) / 2;
+    expect(attempts).toBeGreaterThanOrEqual(1);
+    expect(Number.isInteger(attempts)).toBe(true);
+    expect(r.calls['render.image']).toBe(attempts);
+    expect(r.calls['render.tile']).toBeUndefined();
+    expect(r.calls['render.close']).toBe(r.calls['render.open']);
   });
 });

@@ -16,6 +16,11 @@ status=0
 args=()
 for spec in "$@"; do args+=(--spec "$spec"); done
 npx wdio run wdio.blitz.conf.js "${args[@]}" >&2 || status=$?
+# A run that wrote no screenshot (skipped, crashed, nothing selected) is a failure.
+if ! compgen -G "$OUT/*.png" > /dev/null; then
+  echo "surfaces-job: no screenshot was written" >&2
+  [ "$status" -ne 0 ] || status=3
+fi
 echo "===MV-SURFACES-TAR-BEGIN==="
 tar -C "$OUT" -czf - . | base64
 echo "===MV-SURFACES-TAR-END==="

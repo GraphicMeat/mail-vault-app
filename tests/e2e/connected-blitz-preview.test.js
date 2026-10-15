@@ -1,8 +1,8 @@
 /**
  * E2E: with emailRenderer 'blitz', the Email Cleanup (and Time Capsule)
  * preview draws through Blitz: no iframe, capped height, scrolling inside.
- * The fixture is the Blitz folder's first message (uid BLITZ_UID_START) on
- * luke, classified into Cleanup through a seeded app.db row. Every value is
+ * The fixture is the Blitz folder's first message (uid BLITZ_UID_START, padded
+ * to about 3 000 CSS px) on luke, classified into Cleanup through a seeded app.db row. Every value is
  * logged as one `[blitzsurf]` line.
  *
  * Out of connected-ci; run with
@@ -38,6 +38,7 @@ const previewState = () => browser.execute(() => {
     iframes: document.querySelector('[data-testid="settings-page"]')?.querySelectorAll('iframe').length ?? -1,
     height: b ? Math.round(b.getBoundingClientRect().height) : 0,
     scrollHeight: b ? b.scrollHeight : 0,
+    clientHeight: b ? b.clientHeight : 0,
     overflowY: b ? getComputedStyle(b).overflowY : null,
   };
 });
@@ -112,9 +113,11 @@ describe('Blitz Cleanup preview', function () {
     const r = await previewState();
     log('preview', r);
     expect(r.iframes).toBe(0);
+    // The fixture body (about 3 000 CSS px) is past the 2000 px cap: the box stops at the cap and scrolls inside.
     expect(r.height).toBeLessThanOrEqual(2000);
-    // The fixture body is about 1 200 CSS px: it fits the cap, and the box keeps its own scroll for a body past it.
-    expect(r.overflowY === 'auto' || r.overflowY === 'hidden').toBe(true);
+    expect(r.height).toBeGreaterThan(1500);
+    expect(r.scrollHeight).toBeGreaterThan(r.clientHeight);
+    expect(r.overflowY).toBe('auto');
     await shootModes('preview', async () => {
       await browser.waitUntil(async () => { const s = await previewState(); return s.present && s.painted && !s.busy; },
         { timeout: 25_000, interval: 250, timeoutMsg: 'preview did not settle after the mode flip' });
