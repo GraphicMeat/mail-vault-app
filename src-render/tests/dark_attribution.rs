@@ -16,7 +16,8 @@ fn root() -> std::path::PathBuf {
 fn ported_files_carry_the_attribution_header() {
     for f in PORTED {
         let p = root().join("src-render/src/dark").join(f);
-        let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{} is listed as ported but cannot be read: {e}", p.display()));
+        // A Windows checkout (core.autocrlf) gives the file CRLF line endings.
+        let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{} is listed as ported but cannot be read: {e}", p.display())).replace("\r\n", "\n");
         assert!(text.starts_with(HEADER), "{} lacks the Dark Reader attribution header", p.display());
     }
 }

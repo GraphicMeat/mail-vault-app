@@ -9,8 +9,14 @@ use std::time::{Duration, Instant};
 
 const WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
 
+/// One timed run at a time: the cases here are CPU-heavy, and libtest runs them in
+/// parallel, so on a two-core CI runner one case's light open and another's dark open
+/// raced each other and the light-vs-dark ratio measured the contention, not the pass.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Run `f` on its own thread; fail instead of hanging when it takes longer than `limit`.
 fn within<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'static) -> (T, Duration) {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (tx, rx) = mpsc::channel();
     // The render worker runs on a 256 MiB stack; libtest's default is 2 MiB (8 MiB with the
     // repo's RUST_MIN_STACK), and a 5000-link variable chain overflows that in a Linux debug build.
