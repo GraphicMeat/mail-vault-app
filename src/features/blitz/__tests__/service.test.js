@@ -4,7 +4,7 @@ vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: (p, proto) => `${proto}
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 import { send } from '../../../services/transport';
 import { onDocGone } from '../surfaces/docGone';
-import { openRender, tileUrl, hitRender, closeRender, textRunsRender, serializeRender, foldRender, fontsRender } from '../service';
+import { openRender, tileUrl, hitRender, closeRender, textRunsRender, serializeRender, foldRender, fontsRender, imageRender } from '../service';
 
 beforeEach(() => { send.mockReset(); });
 
@@ -49,6 +49,17 @@ describe('blitz service', () => {
     send.mockRejectedValue(new Error('render_unavailable'));
     await expect(hitRender(8, 0, 0)).rejects.toThrow('render_unavailable');
     expect(gone).toHaveBeenCalledTimes(4);
+    off();
+  });
+  it('imageRender asks for the whole document, and reports a doc that is gone', async () => {
+    send.mockResolvedValue({ png: 'AAAA' });
+    await expect(imageRender(4)).resolves.toEqual({ png: 'AAAA' });
+    expect(send).toHaveBeenLastCalledWith('render.image', { docId: 4 });
+    const gone = vi.fn();
+    const off = onDocGone(gone);
+    send.mockRejectedValue(new Error('render_unknown_doc'));
+    await expect(imageRender(9)).rejects.toThrow('render_unknown_doc');
+    expect(gone).toHaveBeenCalledWith(9);
     off();
   });
   it('fontsRender never throws', async () => {

@@ -34,6 +34,10 @@ export function serializeRender(docId, start, end) {
 export function foldRender(docId, id, open) {
   return forDoc(docId, send('render.fold', { docId, id, open }));
 }
+// The whole document as one PNG ({ png: base64 }) once its remote images have landed.
+export function imageRender(docId) {
+  return forDoc(docId, send('render.image', { docId }));
+}
 // Fonts are a best effort: a family that does not register leaves the stack's fallback drawing.
 export async function fontsRender(families) {
   try { return await send('render.fonts', { families }); } catch { return { registered: [] }; }

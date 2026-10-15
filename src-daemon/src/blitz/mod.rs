@@ -25,9 +25,11 @@
 //! Network Activity "email images"), at most FETCH_PARALLEL at once.
 pub mod fetch;
 pub mod fonts;
+mod inflight;
 pub mod routes;
 
 use crate::events::EventBus;
+use inflight::{FetchGuard, InFlight};
 use base64::Engine;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -48,6 +50,10 @@ pub const FOLD_TIMEOUT: Duration = Duration::from_secs(4);
 /// render.inspect walks every marked element; it is harness-only traffic. Kept
 /// below the shell's 6 s reply timeout so the daemon answers first.
 pub(crate) const INSPECT_TIMEOUT: Duration = Duration::from_secs(4);
+/// How long `image` waits for the doc's remote images to land before painting what it has.
+const IMAGE_SETTLE: Duration = Duration::from_secs(5);
+/// The worker's paint of a whole document. The shell allows 30 s (blitz_tiles::reply_timeout).
+const IMAGE_TIMEOUT: Duration = Duration::from_secs(20);
 pub const IDLE_EXIT: Duration = Duration::from_secs(120);
 /// Kill only when a call timed out AND the worker has been silent this long.
 pub const WATCHDOG: Duration = Duration::from_secs(6);
@@ -282,6 +288,8 @@ pub struct RenderHost {
     open_docs: StdMutex<HashMap<u64, Instant>>,
     last_used: StdMutex<Instant>,
     fetch_slots: Arc<Semaphore>,
+    /// Fetches still running per doc, for `image` to wait on.
+    inflight: Arc<InFlight>,
     font_frames: Arc<StdMutex<FontFrames>>,
 }
 
@@ -297,6 +305,7 @@ impl RenderHost {
             open_docs: StdMutex::default(),
             last_used: StdMutex::new(Instant::now()),
             fetch_slots: Arc::new(Semaphore::new(FETCH_PARALLEL)),
+            inflight: Arc::default(),
             font_frames: Arc::default(),
         }
     }
@@ -408,6 +417,16 @@ impl RenderHost {
 
     pub fn has_font(&self, family: &str) -> bool {
         self.font_frames.lock().unwrap().has(family)
+    }
+
+    /// The whole document as a PNG, once its remote images have landed (5 s
+    /// cap). A doc that is not open answers at once, without waiting.
+    pub async fn image(&self, doc: u64) -> Result<Value, String> {
+        if !self.open_docs.lock().unwrap().contains_key(&doc) {
+            return Err("render_unknown_doc".to_string());
+        }
+        let _ = self.inflight.settled(doc, IMAGE_SETTLE).await;
+        self.doc_call(doc, json!({"op": "image", "doc": doc}), IMAGE_TIMEOUT).await
     }
 
     /// Per-element measurements for the parity harness. Not foreground traffic.
@@ -541,6 +560,7 @@ impl RenderHost {
         let epoch = self.epoch.fetch_add(1, Ordering::Relaxed) + 1;
         info!("render worker #{epoch} started");
         let (events, slots, w2, s2) = (self.events.clone(), self.fetch_slots.clone(), waiters.clone(), stdin.clone());
+        let inflight = self.inflight.clone();
         let silence = Arc::new(StdMutex::new(Silence::new(Instant::now())));
         let heard = silence.clone();
         let dead = Arc::new(AtomicBool::new(false));
@@ -573,7 +593,13 @@ impl RenderHost {
                     Some("fetch") => {
                         let (doc, fetch, url) = (v["doc"].clone(), v["fetch"].clone(), v["url"].as_str().unwrap_or_default().to_string());
                         let (slots, stdin) = (slots.clone(), s2.clone());
+                        // Counted from here, not from when a slot frees up, so `image`
+                        // also waits for fetches still queued behind FETCH_PARALLEL.
+                        let doc_id = doc.as_u64().unwrap_or(0);
+                        inflight.begin(doc_id);
+                        let guard = FetchGuard(inflight.clone(), doc_id);
                         tokio::spawn(async move {
+                            let _guard = guard;
                             let _permit = slots.acquire_owned().await;
                             let bytes = crate::blitz::fetch::fetch_render_image(&url)
                                 .await
@@ -1084,6 +1110,54 @@ mod tests {
         assert!(els.iter().any(|e| e["mvId"] == "a" && e["tag"] == "p"), "{got}");
         h.close(doc).await;
         assert_eq!(h.inspect(doc).await.unwrap_err(), "render_unknown_doc");
+    }
+
+    #[test]
+    fn image_is_not_foreground_and_the_daemon_answers_before_the_shell() {
+        assert!(!is_foreground("render.image"));
+        // The shell gives render.image 30 s (blitz_tiles::reply_timeout).
+        assert!(IMAGE_SETTLE + IMAGE_TIMEOUT < Duration::from_secs(30));
+    }
+
+    #[tokio::test]
+    async fn image_is_a_png_of_the_whole_doc_and_unknown_docs_are_refused() {
+        let h = host();
+        let opened = h.open(json!({"html": "<body style=\"margin:0\"><div style=\"height:700px;background:#f00\"></div></body>", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        let got = h.image(doc).await.unwrap();
+        let png = base64::engine::general_purpose::STANDARD.decode(got["png"].as_str().unwrap()).unwrap();
+        assert_eq!(&png[1..4], b"PNG");
+        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 100);
+        assert_eq!(u32::from_be_bytes(png[20..24].try_into().unwrap()), 700);
+        h.close(doc).await;
+        assert_eq!(h.image(doc).await.unwrap_err(), "render_unknown_doc");
+    }
+
+    #[tokio::test]
+    async fn image_waits_for_the_docs_fetches_but_not_for_other_docs() {
+        let h = host();
+        let opened = h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap();
+        let doc = opened["docId"].as_u64().unwrap();
+        h.inflight.begin(doc + 1000); // another doc: ignored
+        h.inflight.begin(doc);
+        let (inflight, t0) = (h.inflight.clone(), Instant::now());
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            inflight.end(doc);
+        });
+        assert!(h.image(doc).await.is_ok());
+        assert!(t0.elapsed() >= Duration::from_millis(280), "waited for the fetch: {:?}", t0.elapsed());
+    }
+
+    #[tokio::test]
+    async fn an_evicted_doc_answers_unknown_without_waiting_for_its_fetches() {
+        let h = host();
+        let ids = open_n(&h, MAX_OPEN_DOCS + 1).await;
+        h.inflight.begin(ids[0]);
+        let t0 = Instant::now();
+        assert_eq!(h.image(ids[0]).await.unwrap_err(), "render_unknown_doc");
+        assert!(t0.elapsed() < IMAGE_SETTLE, "{:?}", t0.elapsed());
+        h.inflight.end(ids[0]);
     }
 
     /// Opens `n` tiny docs, returns their ids in open order.
