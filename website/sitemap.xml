@@ -138,7 +138,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -153,7 +153,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/de/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -168,7 +168,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/fr/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -183,7 +183,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/es/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -198,7 +198,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/it/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -213,7 +213,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/ja/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -228,7 +228,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/ko/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -243,7 +243,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/zh/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -258,7 +258,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/pt-br/blog.html</loc>
-    <lastmod>2026-10-08</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -1575,6 +1575,258 @@
       <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/apple-mail-review-mailvault-comparison.html"/>
       <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/apple-mail-review-mailvault-comparison.html"/>
       <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/apple-mail-review-mailvault-comparison.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-archive-app-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/best-email-backup-software-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html"/>
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog/canary-ai-email-review-mailvault-comparison.html</loc>
@@ -3008,6 +3260,132 @@
       <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/gmail-third-party-changes-2027.html"/>
   </url>
   <url>
+    <loc>https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-search-thousands-of-emails-fast.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html"/>
+  </url>
+  <url>
     <loc>https://mailvaultapp.com/blog/how-we-test-mailvault.html</loc>
     <lastmod>2026-10-08</lastmod>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-we-test-mailvault.html"/>
@@ -3258,6 +3636,132 @@
       <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/leave-email-provider-safely.html"/>
       <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/leave-email-provider-safely.html"/>
       <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/leave-email-provider-safely.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/local-email-storage-vs-cloud-email.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html"/>
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog/mailbird-review-mailvault-comparison.html</loc>
@@ -3917,6 +4421,132 @@
       <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/notion-mail-closing.html"/>
   </url>
   <url>
+    <loc>https://mailvaultapp.com/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/offline-email-search-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/offline-email-search-for-mac.html"/>
+  </url>
+  <url>
     <loc>https://mailvaultapp.com/blog/outlook-oauth-odyssey.html</loc>
     <lastmod>2026-10-08</lastmod>
     <priority>0.5</priority>
@@ -4302,6 +4932,132 @@
       <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/phishing-beyond-suspicious-links.html"/>
       <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/phishing-beyond-suspicious-links.html"/>
       <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/phishing-beyond-suspicious-links.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html</loc>
+    <lastmod>2026-10-15</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/private-email-archive-for-mac.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/private-email-archive-for-mac.html"/>
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog/refactoring-mailvault-from-monolith-to-modules.html</loc>

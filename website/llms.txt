@@ -36,6 +36,15 @@
 - [Free up space in Hotmail and Outlook.com](https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html): step by step, keeping a local copy before deleting
 - [Back up Outlook.com email to a Mac](https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html): four methods compared, and how to verify the backup
 
+## Choosing and using a Mac email archive
+
+- [Best Email Archive App for Mac: How to Choose](https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html): Choose an email archive app for Mac by checking offline access, portable files, attachment preservation and backup options. See where MailVault fits.
+- [Offline Email Search for Mac: Find Mail Without a Connection](https://mailvaultapp.com/blog/offline-email-search-for-mac.html): Prepare a searchable local email archive on your Mac. Learn what works offline, what must be downloaded first, and how to check MailVault before you travel.
+- [Private Email Archive for Mac: Keep a Copy You Control](https://mailvaultapp.com/blog/private-email-archive-for-mac.html): Build a private email archive on your Mac with local message files, on-device search and a separate backup. Understand what local storage does and does not protect.
+- [How to Search Thousands of Emails Fast](https://mailvaultapp.com/blog/how-to-search-thousands-of-emails-fast.html): Find old invoices, attachments and conversations with a repeatable search workflow. Use distinctive terms, sender and date filters, and a complete local archive.
+- [Local Email Storage vs Cloud Email: Which Copy Do You Control?](https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html): Compare local email storage and cloud mail by access, privacy, recovery and maintenance. Learn how a MailVault archive can complement your existing provider.
+- [Best Email Backup Software for Mac: Choose by Recovery](https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html): Choose email backup software for Mac by testing message coverage, independent copies and recovery. Compare manual exports, Mac backups and MailVault workflows.
+
 ## Email guides and research
 
 - [Gmail third-party account changes before January 2027](https://mailvaultapp.com/blog/gmail-third-party-changes-2027.html): Gmailify, third-party Send as, and POP fetching changes; what remains supported and how to transition
