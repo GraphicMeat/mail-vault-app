@@ -1,6 +1,6 @@
 import { buildBlitzDocument } from './document';
 import { stampParityIds } from '../parity/parityIds';
-import { applyPrivacyRedaction } from '../../../utils/iframePrivacyRedact';
+import { applyPrivacyRedaction, releasePrivacyGate } from '../../../utils/iframePrivacyRedact';
 import { markFolds } from './folds';
 import { markUnselectable } from './unselectable';
 import { markSearch } from './search';
@@ -30,9 +30,16 @@ export async function runPrepass(props, { privacy = { active: false, dict: null 
   stripScripts(doc);
   // 3. Folds, on the built document, as the iframe's fold scripts run on theirs
   //    while it parses (before privacy's load-time pass).
-  markFolds(doc, { foldQuotes: props.foldQuotes !== false, signatureDisplay: props.signatureDisplay, openFolds });
+  //    foldQuotes === false means the surface injects no fold scripts at all (fullView, original,
+  //    popout, preview): no quote and no signature fold, whatever signatureDisplay says. Handles
+  //    the mail wrote itself are still stripped by markFolds.
+  const folds = props.foldQuotes !== false;
+  markFolds(doc, { foldQuotes: folds, signatureDisplay: folds ? props.signatureDisplay : 'always-show', openFolds });
   // 4. Privacy: the iframe's own redaction. A throw rejects; callers draw nothing.
+  //    Not active (off, or an Option-hold peek): a documentHtml built with the iframe's gate
+  //    (#mv-privacy-gate, <html style="opacity:0!important">) would stay blank, so it comes off.
   if (privacy.active) applyPrivacyRedaction(doc, privacy.dict);
+  else releasePrivacyGate(doc);
   // 5. What the iframe makes unselectable with CSS, then the open search's marks:
   //    AFTER privacy, so a mark never splits a name before the redaction pass sees it.
   markUnselectable(doc);

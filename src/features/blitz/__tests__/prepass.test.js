@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 const redact = vi.hoisted(() => ({ throws: false }));
 vi.mock('../../../utils/iframePrivacyRedact', () => ({
+  releasePrivacyGate: () => {}, // runPrepass releases the gate when privacy is off (F11); the document here has none
   applyPrivacyRedaction: (doc, dict) => {
     if (redact.throws) throw new Error('boom');
     for (const name of dict?.names ?? []) doc.body.innerHTML = doc.body.innerHTML.split(name).join('█████');
