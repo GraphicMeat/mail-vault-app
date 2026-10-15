@@ -2,16 +2,17 @@
 // draws in the app: the context menu (light inline colours that Dark Reader
 // re-themes in the frame) and Dark Reader's ::selection rule.
 //
-// INTERIM: the dark colours come with plan B's render.inspect. Blitz mode never
-// shows an iframe, so there is no probe frame; the default probe returns null (no
-// dark colours, the light ones stand). Plan B supplies a probe that opens SWATCH_HTML
-// in dark mode and returns the inspected colours, in the shape mapSwatch takes.
+// INTERIM: plan B landed the dark paper and render.inspect, but no probe yet. Blitz
+// mode never shows an iframe, so there is no probe frame; the default probe returns
+// null (no dark colours, the light ones stand). The missing probe opens SWATCH_HTML in
+// dark mode through render.inspect and returns the inspected colours, in the shape
+// mapSwatch takes.
 //
 // The dark selection must stay translucent: the text layer is transparent over the
 // tile, so an opaque highlight would hide the glyphs. overlayFor can only return an
 // opaque colour for Dark Reader's real values (rgb(0,77,170) over a near-black paper),
-// so mapSwatch rejects an opaque overlay and the light selection stands until plan B
-// settles how to paint it (for example under the glyphs).
+// so mapSwatch rejects an opaque overlay and the light selection stands until the probe
+// work settles how to paint it (for example under the glyphs).
 import { getContextMenuColors } from '../../../utils/emailIframeTemplate';
 import { overlayFor } from '../text/selectionColors';
 
@@ -72,12 +73,12 @@ export function mapSwatch(raw) {
 const cache = new Map(); // palette -> Promise
 export function _resetDarkSwatchForTest() { cache.clear(); }
 
-const noProbe = async () => null; // plan B's render.inspect probe replaces this
+const noProbe = async () => null; // a render.inspect probe (not written yet) replaces this
 
 /**
  * Dark Reader's menu colours and selection overlay for the theme's palette, or null
  * (the light colours stand). Cached per palette; a failed probe is not cached.
- * `probe` is the seam for plan B (and tests): palette -> raw swatch colours, see mapSwatch.
+ * `probe` is the seam for a render.inspect probe (and tests): palette -> raw swatch colours, see mapSwatch.
  */
 export function darkUiColors(theme, probe = noProbe) {
   const key = theme?.palette || 'default';

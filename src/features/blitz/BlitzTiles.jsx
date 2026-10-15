@@ -295,10 +295,10 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }, []);
   useBodyKeyboard(boxRef, { selectAll: selectAllBody, layerEl: () => textLayerRef.current?.layerEl() });
 
-  // Selection colour: the engine's highlight (grey while the window is inactive), because the
-  // tiles are painted on a light paper whatever the theme (the worker ignores it until plan B).
-  // Dark Reader's colours for the menu and the selection come with plan B's render.inspect
-  // (theme/darkSwatch.js); until then both stay light.
+  // Selection colour: the engine's light highlight (grey while the window is inactive) in
+  // every theme. The worker paints a dark paper in the dark theme (plan B's Dark Reader port),
+  // but nothing wires Dark Reader's colours for the menu and the selection yet: the
+  // theme/darkSwatch.js probe seam has no render.inspect probe, so both stay light.
   const paintSelection = useCallback(() => {
     const el = textLayerRef.current?.layerEl();
     if (!el) return;
@@ -364,7 +364,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
             <BodyContextMenu
               at={menu.at}
               link={menu.link}
-              colors={menuColorsFor(theme, null)} // dark colours: plan B (theme/darkSwatch.js)
+              colors={menuColorsFor(theme, null)} // light in every theme: no dark swatch probe yet (theme/darkSwatch.js)
               clampTo={clampTo}
               inBody={inBody}
               onCopy={() => document.execCommand('copy')}

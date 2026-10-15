@@ -80,8 +80,8 @@ export function inactiveSelectionColor(active) {
 }
 
 // `inactive` is what ::selection:window-inactive paints (blitz.css). It is the active
-// colour unless given. The light path gives the engine's grey one; the dark path (plan B,
-// theme/darkSwatch.js) will not: Dark Reader's author ::selection rule has no inactive
+// colour unless given. The light path gives the engine's grey one; the dark path
+// (theme/darkSwatch.js, not wired yet) will not: Dark Reader's author ::selection rule has no inactive
 // variant, so in dark the iframe keeps its highlight when the window blurs.
 export function applySelectionColors(layerEl, active, inactive = active) {
   const rgba = ({ r, g, b, a }) => `rgba(${r}, ${g}, ${b}, ${a})`;

@@ -17,7 +17,7 @@ const raw = (over = {}) => ({
 beforeEach(() => { vi.clearAllMocks(); _resetDarkSwatchForTest(); });
 
 describe('darkUiColors', () => {
-  it('without a probe (plan B not landed) there are no dark colours: the light ones stand', async () => {
+  it('without a probe (none is wired yet) there are no dark colours: the light ones stand', async () => {
     expect(await darkUiColors({ dark: true, palette: 'graphite' })).toBeNull();
   });
 
@@ -75,7 +75,7 @@ describe('mapSwatch', () => {
     expect(mapSwatch(null)).toBeNull();
   });
   it('an opaque selection overlay is rejected: Dark Reader\'s real blue over a near-black paper would hide the glyphs', () => {
-    // overlayFor can only return a = 1 here; plan B must not hand the text layer an opaque highlight.
+    // overlayFor can only return a = 1 here; a probe must not hand the text layer an opaque highlight.
     expect(mapSwatch(raw({ sel: { backgroundColor: 'rgb(0, 77, 170)' } }))).toBeNull();
   });
   it('a translucent selection swatch is not trusted', () => {

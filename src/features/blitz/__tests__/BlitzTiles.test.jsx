@@ -1000,7 +1000,7 @@ describe('body context menu', () => {
   });
 });
 
-describe('dark mode (interim: light colours until plan B)', () => {
+describe('dark mode (interim: light menu and selection until a dark swatch probe)', () => {
   const dark = (palette = 'graphite') => ({ dark: true, palette });
   const sel = () => screen.getByTestId('blitz-text-layer').style.getPropertyValue('--mv-blitz-sel-bg');
   const inactive = () => screen.getByTestId('blitz-text-layer').style.getPropertyValue('--mv-blitz-sel-inactive-bg');
