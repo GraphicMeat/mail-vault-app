@@ -94,4 +94,14 @@ describe('captureAppWindow with an alternative body renderer', () => {
     useSettingsStore.setState({ emailRenderer: 'other' });
     await expect(captureAppWindow({ redact: false, dict: null })).resolves.toBeTruthy();
   });
+
+  it('a composite hook that throws or rejects does not kill the shot', async () => {
+    document.body.innerHTML = '<div id="root"><p>x</p></div>';
+    useSettingsStore.setState({ emailRenderer: 'blitz' });
+    for (const compositeBodies of [vi.fn(async () => { throw new Error('closed bitmap'); }), vi.fn(() => { throw new Error('sync boom'); })]) {
+      registerBodyRenderer('blitz', { Body: () => null, compositeBodies });
+      await expect(captureAppWindow({ redact: false, dict: null })).resolves.toBeTruthy();
+      expect(compositeBodies).toHaveBeenCalledTimes(1);
+    }
+  });
 });

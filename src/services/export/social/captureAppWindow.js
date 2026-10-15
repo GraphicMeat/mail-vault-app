@@ -163,7 +163,11 @@ async function compositeFrames(canvas, root, onCloneNode, redact) {
     ctx.restore();
   }
   const alt = getActiveBodyRenderer();
-  if (alt?.compositeBodies && await alt.compositeBodies(canvas, root, { scale: SCALE, redact: !!redact })) ctx ||= canvas.getContext('2d');
+  // A hook that throws (a closed bitmap, a failed getComputedStyle) fails closed: the shot goes on without
+  // the Blitz bodies rather than losing the export.
+  const composited = alt?.compositeBodies
+    && await Promise.resolve().then(() => alt.compositeBodies(canvas, root, { scale: SCALE, redact: !!redact })).catch(() => 0);
+  if (composited) ctx ||= canvas.getContext('2d');
   if (ctx && beneath) {
     for (const r of overlays) {
       const x = (r.left - rootRect.left) * SCALE;
