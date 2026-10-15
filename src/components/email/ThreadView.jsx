@@ -53,7 +53,10 @@ import { LinkAlertIcon } from '../LinkAlertIcon';
 import { getEmailColors } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { replyTarget } from '../../utils/replyTarget';
-import { replySelection } from '../../utils/replySelection';
+import { altBodyQuote, replySelection } from '../../utils/replySelection';
+import { useAltBodyRenderer, useActiveBodyRenderer } from './bodyRendererRegistry';
+import { useSearchStore } from '../../stores/searchStore';
+import { activateEmailLink, openExternalUrl } from '../../utils/emailLinkActivation';
 import { registerActiveReply, openCompose } from '../../utils/composeOpener';
 import { QuickReplyChips } from './QuickReplyChips';
 import { AiComposeActions } from '../ai/AiComposeActions';
@@ -77,11 +80,18 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   const pa = usePrivateAttr();
   const iframeRef = useRef(null);
   const plainBodyRef = useRef(null);
+  // An alternative body renderer (the Blitz module) replaces the iframe when one
+  // is registered and chosen; null keeps the iframe path exactly as before.
+  const Alt = useAltBodyRenderer('thread');
+  const altRef = useRef(null);
+  const searchQuery = useSearchStore(s => (s.searchActive ? s.searchQuery : ''));
+  // The same merged message useBodyPrivacy gets (its parties join the mask), kept stable.
+  const altMessage = useMemo(() => (loadedEmail ? { ...email, ...loadedEmail } : email), [email, loadedEmail]);
   selectionRef.current = () => {
     const frame = iframeRef.current;
-    return frame?.contentDocument
-      ? replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.())
-      : replySelection(plainBodyRef.current);
+    if (frame?.contentDocument) return replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.());
+    // The selection lives in the main document, inside the alternative body's text layer.
+    return altBodyQuote(altRef.current, document.getSelection(), plainBodyRef.current);
   };
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
@@ -113,8 +123,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
 
   const scopeKey = emailScopeKey(email, useMailStore.getState());
 
-  const { iframeContent, scanAlertLevel: threadScanAlert, trackerSummary } = useMemo(() => {
-    if (!loadedEmail?.html) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null };
+  const { iframeContent, altBody, altIndicator, scanAlertLevel: threadScanAlert, trackerSummary } = useMemo(() => {
+    if (!loadedEmail?.html) return { iframeContent: '', altBody: '', altIndicator: '', scanAlertLevel: null, trackerSummary: null };
     const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
     const bodyHtml = getEmailBodyContent(htmlWithCid);
     // Scan body (stable per uid → cacheable); wrap with iframe template so
@@ -148,7 +158,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
       nonce,
       privacy: privacyOn,
     });
-    return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
+    return { iframeContent: html, altBody: renderedBody, altIndicator: indicatorStyle, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette, privacyOn]);
 
   // Privacy masking first: it must run on `load` before the search highlight.
@@ -278,14 +288,29 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
           className="rounded-lg overflow-hidden mt-2 max-w-full"
           style={{ backgroundColor: emailColors.background }}
         >
-          <iframe
-            ref={iframeRef}
-            srcDoc={iframeContent}
-            className="w-full border-0"
-            style={{ minHeight: '100px', display: 'block', maxWidth: '100%' }}
-            sandbox="allow-same-origin allow-popups allow-scripts"
-            title={`Email from ${pa(getSenderName(email), 'name')}`}
-          />
+          {Alt ? (
+            <Alt
+              ref={altRef} surface="thread" messageKey={scopeKey} bodyHtml={altBody} indicatorCss={altIndicator}
+              plainText={loadedEmail.text || loadedEmail.textBody || ''} theme={{ dark: isDark, palette }}
+              signatureDisplay={signatureDisplay} foldQuotes privacy={privacyOn}
+              message={altMessage} searchQuery={searchQuery} accountId={email?._accountId}
+              onLink={link => activateEmailLink(link, {
+                accountId: email?._accountId || loadedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
+                // A read-only copy (the compose pane) composes nothing, as the iframe path.
+                openMailtoCompose: readOnly ? () => {} : openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
+              })}
+              sizing="content" style={{ minHeight: 100 }}
+            />
+          ) : (
+            <iframe
+              ref={iframeRef}
+              srcDoc={iframeContent}
+              className="w-full border-0"
+              style={{ minHeight: '100px', display: 'block', maxWidth: '100%' }}
+              sandbox="allow-same-origin allow-popups allow-scripts"
+              title={`Email from ${pa(getSenderName(email), 'name')}`}
+            />
+          )}
         </div>
       ) : (
         <div
@@ -387,6 +412,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
   const emailDarkMode = effectiveTheme === 'dark';
   const key = emailKey(email);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
+  const altRenderer = useActiveBodyRenderer();
   const scopeKey = emailScopeKey(email, useMailStore.getState());
   // Where this message actually lives. A thread mixes INBOX and Sent, so the
   // active view is not it — reading a UID from the wrong folder returns a
@@ -538,6 +564,8 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
               const bodyHtml = getEmailBodyContent(rawHtml);
               // Same body, second window — strip there too.
               const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
+              // The renderer owns the window under it (no iframe page, no Dark Reader).
+              if (altRenderer?.openWindow) { void altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: email.subject || 'Email' }); return; }
               // file:// popup inherits no CSP; DR needs the meta's nonce to run.
               const popupNonce = emailScriptNonce();
               const popupHtml = buildEmailIframeHtml({
