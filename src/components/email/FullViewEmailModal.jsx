@@ -248,7 +248,9 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
       nonce,
       privacy: privacyOn,
     });
-  }, [frameBodyHtml, theme, palette, privacyOn, !!Alt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // `email` stays a dep: a new message object rebuilds the srcDoc (fresh nonce, reload), as before the split,
+  // so the handler effect below never re-attaches to a document that did not reload.
+  }, [email, frameBodyHtml, theme, palette, privacyOn, !!Alt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Intercept links and prevent native context menu in full-view iframe
   // The full-view window is a third reader of the same body — the highlight

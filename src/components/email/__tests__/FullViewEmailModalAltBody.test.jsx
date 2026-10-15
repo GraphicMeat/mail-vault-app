@@ -92,6 +92,15 @@ describe('full view on the body seam', () => {
     expect(screen.queryByTestId('alt-full')).toBeNull();
   });
 
+  it('web: a new email object with the same body reloads the iframe, so handlers attach to a fresh document once', () => {
+    useSettingsStore.setState({ emailRenderer: 'web' });
+    const { rerender } = render(<FullViewEmailModal email={email} onClose={() => {}} />);
+    const before = document.querySelector('iframe').getAttribute('srcdoc');
+    rerender(<FullViewEmailModal email={{ ...email, flags: ['\\Seen'] }} onClose={() => {}} />);
+    // Fresh nonce per build: the document reloads, so the effect's setup() never runs twice on one document.
+    expect(document.querySelector('iframe').getAttribute('srcdoc')).not.toBe(before);
+  });
+
   it('switching blitz to web attaches the iframe handlers to the fresh iframe', () => {
     render(<FullViewEmailModal email={email} onClose={() => {}} />);
     expect(document.querySelector('iframe')).toBeNull();
