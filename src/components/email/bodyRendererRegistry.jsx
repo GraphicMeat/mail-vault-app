@@ -27,3 +27,15 @@ export function BodyRendererSettingsSlot() {
   const rows = [...renderers.values()].map(r => r.SettingsRow).filter(Boolean);
   return <>{rows.map((Row, i) => <Row key={i} />)}</>;
 }
+
+/** The active renderer's whole impl, for code outside React (export, capture), or null. */
+export function getActiveBodyRenderer() {
+  const mode = useSettingsStore.getState().emailRenderer;
+  return mode && mode !== 'web' ? renderers.get(mode) ?? null : null;
+}
+
+/** The same, as a hook: re-renders when the setting changes. */
+export function useActiveBodyRenderer() {
+  const mode = useSettingsStore(s => s.emailRenderer);
+  return mode && mode !== 'web' ? renderers.get(mode) ?? null : null;
+}
