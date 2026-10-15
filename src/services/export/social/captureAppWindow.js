@@ -5,6 +5,7 @@ import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useThemeStore } from '../../../stores/themeStore';
 import { PRIVACY_GATE_ID } from '../../../utils/emailIframeTemplate.js';
 import { isUiString } from '../../../i18n/index.js';
+import { getActiveBodyRenderer } from '../../../components/email/bodyRendererRegistry';
 import { fetchAssetViaTauri } from '../exportService';
 
 /**
@@ -120,7 +121,7 @@ function visibleRect(iframe, root) {
 
 // Parts of the app that float over a message frame (the sender-details popover):
 // the frame is painted after the clone, so these pixels are put back on top.
-async function compositeFrames(canvas, root, onCloneNode) {
+async function compositeFrames(canvas, root, onCloneNode, redact) {
   const rootRect = root.getBoundingClientRect();
   const overlays = [...root.querySelectorAll('[data-capture-overlay]')]
     .map(el => intersect(el.getBoundingClientRect(), rootRect))
@@ -161,6 +162,8 @@ async function compositeFrames(canvas, root, onCloneNode) {
     ctx.drawImage(body, bx * SCALE, by * SCALE, bodyRect.width * SCALE, bodyRect.height * SCALE);
     ctx.restore();
   }
+  const alt = getActiveBodyRenderer();
+  if (alt?.compositeBodies && await alt.compositeBodies(canvas, root, { scale: SCALE, redact: !!redact })) ctx ||= canvas.getContext('2d');
   if (ctx && beneath) {
     for (const r of overlays) {
       const x = (r.left - rootRect.left) * SCALE;
@@ -177,6 +180,10 @@ const READY_TIMEOUT_MS = 2000;
 const POLL_MS = 16;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// An alternative body renderer marks a body still drawing (aria-busy). One inside an
+// excluded region (the export dialog) is never composited, so it is not waited for.
+const bodiesBusy = (root) => [...root.querySelectorAll('[data-renderer][aria-busy="true"]')].some(keep);
+
 const frameDoc = (iframe) => {
   try { return iframe.contentDocument; } catch { return null; }
 };
@@ -191,6 +198,7 @@ function snapshotFrames(root) {
 
 // Every frame whose srcdoc changed (or that is new) has loaded its new document.
 function framesReady(root, before, redact) {
+  if (bodiesBusy(root)) return false;
   for (const iframe of root.querySelectorAll('iframe')) {
     if (!keep(iframe)) continue;
     const old = before.get(iframe);
@@ -235,6 +243,7 @@ async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails }
     if (senderDetails) privacy.setCaptureSenderDetails(senderDetails);
     // One frame for React to render masked, one for the frames' pass to land.
     if (redact || senderDetails) await nextPaint();
+    if (bodiesBusy(root)) await waitForFrames(root, snapshotFrames(root), redact);
     const themes = useThemeStore.getState();
     const flipApp = (theme === 'light' || theme === 'dark') && theme !== themes.theme && theme !== themes.captureTheme;
     // Set whenever asked: whether the reader already shows it is the reader's
@@ -256,7 +265,7 @@ async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails }
       backgroundColor: getComputedStyle(document.body).backgroundColor || null,
     });
     // A message body is the sender's text, not the app's: no labels are kept.
-    await compositeFrames(canvas, root, cloneHook(redact, clonedDict));
+    await compositeFrames(canvas, root, cloneHook(redact, clonedDict), redact);
     return canvas;
   } finally {
     // Not behind the masking count: a reveal belongs to this capture alone.

@@ -9,6 +9,7 @@ import { installDebugHook } from './surfaces/debugHook';
 import { openBlitzWindow, installWindowDocCleanup } from './surfaces/popout';
 import { getDocRegistry, onFirstDocAcquire } from './surfaces/docRegistry';
 import { rasterizeWithBlitz } from './surfaces/rasterize';
+import { compositeBlitzBodies } from './surfaces/compositeBodies';
 import { useSettingsStore } from '../../stores/settingsStore';
 import './blitz.css';
 
@@ -16,7 +17,7 @@ import './blitz.css';
 // scheme, so no tile could load) and the sandboxed worker spawn is unproven:
 // register nothing there, so neither the setting nor the body exists.
 if (!IS_APPSTORE_BUILD) {
-  registerBodyRenderer('blitz', { Body: BlitzBody, SettingsRow, openWindow: openBlitzWindow, rasterize: rasterizeWithBlitz });
+  registerBodyRenderer('blitz', { Body: BlitzBody, SettingsRow, openWindow: openBlitzWindow, rasterize: rasterizeWithBlitz, compositeBodies: compositeBlitzBodies });
   installDebugHook(); // e2e builds only
 
   try {
