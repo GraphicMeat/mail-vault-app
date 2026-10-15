@@ -1,20 +1,37 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { buildEmailIframeHtml, attachEmailIframeAutoSize, getEmailBodyContent } from '../../../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, attachEmailIframeAutoSize, getEmailBodyContent, emailScriptNonce } from '../../../utils/emailIframeTemplate';
+import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../../utils/iframeQuoteFolding';
+import { buildChatBubbleDocument } from '../../../components/ChatBubbleView';
 import Body from '../BlitzBody';
+import { hitRender } from '../service';
 import { getDocRegistry } from './docRegistry';
 
 // The thread and chat perf gate's probe (tests/e2e/connected-blitz-perf.test.js).
 // E2E builds only: installPerfProbe is a no-op unless VITE_E2E === '1'.
 
-function IframeBody({ html }) {
+// The frame as the real surfaces mount it (same sandbox, same auto-size, minHeight 100). `onLoad` does not fire for the
+// initial about:blank document, so `data-perf-loaded` is set only once the srcdoc document itself has loaded.
+function IframeBody({ doc }) {
   const ref = React.useRef(null);
   React.useEffect(() => attachEmailIframeAutoSize(ref.current, { minHeight: 100 }), []);
-  return <iframe ref={ref} data-perf-body srcDoc={buildEmailIframeHtml({ bodyHtml: getEmailBodyContent(html) })} style={{ width: '100%', minHeight: 100, border: 0, display: 'block' }} sandbox="allow-same-origin" title="perf" />;
+  return (
+    <iframe
+      ref={ref} data-perf-body srcDoc={doc} title="perf" sandbox="allow-same-origin allow-popups allow-scripts"
+      onLoad={(e) => { e.currentTarget.dataset.perfLoaded = '1'; }}
+      style={{ width: '100%', minHeight: 100, border: 0, display: 'block' }}
+    />
+  );
 }
 
-const painted = (el) => {
-  if (el.tagName === 'IFRAME') return el.contentDocument?.readyState === 'complete' && parseFloat(el.style.height) > 1;
+const srcdocLoaded = (el) => {
+  try { return el.contentWindow?.location.href === 'about:srcdoc' && !!el.contentDocument?.body?.firstChild; } catch { return false; }
+};
+
+export const painted = (el) => {
+  if (el.tagName === 'IFRAME') {
+    return el.dataset.perfLoaded === '1' && srcdocLoaded(el) && el.contentDocument?.readyState === 'complete' && parseFloat(el.style.height) > 1;
+  }
   const t = el.querySelector('[data-testid="blitz-tile"]');
   return !!(t && t.complete && t.naturalWidth > 0);
 };
@@ -24,11 +41,54 @@ let runCounter = 0;
 
 /**
  * The deferred docs of the previous run would answer the next run's opens from the registry (an LRU of 8 for 60 s),
- * so the gate would time the pre-pass alone. Closed before and after every Blitz run (plan D F14).
+ * so the gate would time the pre-pass alone. Closed before and after every Blitz run (plan D F14), and the closes
+ * awaited: a doc the worker still holds would load the next run's worker. The registry's close is fire-and-forget,
+ * so the closes are observed through the worker: a hit on a closed doc rejects.
  */
 async function dropDeferred() {
-  getDocRegistry().closeDeferred();
+  const registry = getDocRegistry();
+  const before = registry.docIds();
+  registry.closeDeferred();
   await tick();
+  const live = new Set(registry.docIds());
+  const gone = before.filter((id) => !live.has(id));
+  await Promise.all(gone.map(async (id) => {
+    for (let i = 0; i < 100; i++) {
+      try { await hitRender(id, 0, 0); } catch { return; }
+      await tick();
+    }
+  }));
+  const until = performance.now() + 5000;
+  while (registry.pendingCount() > 0 && performance.now() < until) await tick();
+}
+
+// Each surface's body as the real surface hands it over: the thread's iframe template with the fold scripts
+// (ThreadView) and Blitz's bodyHtml; the chat's bubble document (ChatBubbleView) for both. Built before the clock starts,
+// as the surfaces build theirs in a memo.
+const SIGNATURE = 'smart';
+export function buildBodies(htmls, surface) {
+  return htmls.map((h) => {
+    const bodyHtml = getEmailBodyContent(h);
+    const nonce = emailScriptNonce();
+    if (surface === 'bubble') {
+      return { bodyHtml, iframeDoc: buildChatBubbleDocument({ bodyHtml, fromUser: false, theme: 'light', palette: 'graphite', indicatorStyle: '', privacy: false, signatureDisplay: SIGNATURE, nonce }) };
+    }
+    return {
+      bodyHtml,
+      iframeDoc: buildEmailIframeHtml({ bodyHtml, themeTag: 'light', extraBody: `${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(SIGNATURE, nonce)}`, nonce }),
+    };
+  });
+}
+
+// The Blitz body's props for one built body, its html unique to this run and index (a comment survives the pre-pass).
+export function blitzProps(surface, body, run, i) {
+  const stamp = `<!--perf run ${run} body ${i}-->`;
+  const common = { surface, messageKey: `perf-${run}-${i}`, theme: { dark: false, palette: 'graphite' }, signatureDisplay: SIGNATURE, foldQuotes: true };
+  if (surface === 'bubble') {
+    const end = body.iframeDoc.lastIndexOf('</body>');
+    return { ...common, documentHtml: end < 0 ? body.iframeDoc + stamp : body.iframeDoc.slice(0, end) + stamp + body.iframeDoc.slice(end), sizing: { collapsedMax: 400 } };
+  }
+  return { ...common, bodyHtml: body.bodyHtml + stamp, sizing: 'content', style: { minHeight: 100 } };
 }
 
 /**
@@ -36,12 +96,15 @@ async function dropDeferred() {
  * Resolves { ms, longestGapMs, visible } plus, for Blitz, the registry evidence that every body was a fresh
  * render.open: `opens` (new doc ids this run created), `drawn` (bodies that ended with a doc) and `visibleDocs`.
  */
-export async function runPerf({ htmls, width, mode, surface }) {
+export async function runPerf({ htmls: all, width, mode, surface, limit = null }) {
+  // `limit`: mount only the first N bodies (the diagnostic control, not the gate).
+  const htmls = limit ? all.slice(0, limit) : all;
   const blitz = mode === 'blitz';
   const registry = getDocRegistry();
   if (blitz) await dropDeferred();
   const idsBefore = new Set(registry.docIds());
   const run = ++runCounter;
+  const bodies = buildBodies(htmls, surface);
   const box = document.createElement('div');
   // data-blitz-scroll-root: the lazy open's IntersectionObserver root, as the thread and chat scrollers are.
   box.setAttribute('data-blitz-scroll-root', '');
@@ -54,9 +117,9 @@ export async function runPerf({ htmls, width, mode, surface }) {
   const t0 = performance.now();
   // Each body's html is unique to this run and index (a comment survives the pre-pass), so even a registry hit
   // across runs, or two corpus entries that are equal, cannot share a doc: every body is its own render.open.
-  root.render(<div>{htmls.map((h, i) => (blitz
-    ? <div key={i} data-perf-body style={{ width }}><Body surface={surface} messageKey={`perf-${run}-${i}`} bodyHtml={`${getEmailBodyContent(h)}<!--perf run ${run} body ${i}-->`} theme={{ dark: false, palette: 'graphite' }} sizing="content" style={{ minHeight: 100 }} /></div>
-    : <IframeBody key={i} html={h} />))}</div>);
+  root.render(<div>{bodies.map((b, i) => (blitz
+    ? <div key={i} data-perf-body style={{ width }}><Body {...blitzProps(surface, b, run, i)} /></div>
+    : <IframeBody key={i} doc={b.iframeDoc} />))}</div>);
   const visibleBodies = () => [...box.querySelectorAll('[data-perf-body]')].filter((el) => { const r = el.getBoundingClientRect(); const b = box.getBoundingClientRect(); return r.bottom > b.top && r.top < b.bottom; });
   try {
     await new Promise((resolve, reject) => {
