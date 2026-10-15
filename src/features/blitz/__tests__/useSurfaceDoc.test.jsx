@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
+import { createDocRegistry } from '../surfaces/docRegistry';
 
 const keyCalls = vi.hoisted(() => ({ n: 0 }));
 vi.mock('../surfaces/docRegistry', async (orig) => {
@@ -70,7 +71,7 @@ describe('useSurfaceDoc', () => {
     await land(reg, 2);
     expect(result.current.doc.docId).toBe(2);
     expect(result.current.busy).toBe(false);
-    expect(reg.release).toHaveBeenCalledWith(oldKey, { now: true });
+    expect(reg.release).toHaveBeenCalledWith(oldKey, { now: true, docId: 1 });
   });
 
   it('a reply superseded before it landed is released at once and never painted', async () => {
@@ -79,7 +80,7 @@ describe('useSurfaceDoc', () => {
     const staleKey = result.current.key;
     rerender({ p: P({ html: '<p>next' }) });
     await land(reg, 1); // the stale one
-    expect(reg.release).toHaveBeenCalledWith(staleKey, { now: true });
+    expect(reg.release).toHaveBeenCalledWith(staleKey, { now: true, docId: 1 });
     expect(result.current.doc).toBeNull();
     await land(reg, 2);
     expect(result.current.doc.docId).toBe(2);
@@ -92,7 +93,7 @@ describe('useSurfaceDoc', () => {
       await land(reg);
       const key = result.current.key;
       unmount();
-      expect(reg.release).toHaveBeenCalledWith(key, { now });
+      expect(reg.release).toHaveBeenCalledWith(key, { now, docId: 1 });
     }
   });
 
@@ -103,7 +104,7 @@ describe('useSurfaceDoc', () => {
       const key = result.current.key;
       unmount();
       await land(reg);
-      expect(reg.release).toHaveBeenCalledWith(key, { now });
+      expect(reg.release).toHaveBeenCalledWith(key, { now, docId: 1 });
     }
   });
 
@@ -131,8 +132,8 @@ describe('useSurfaceDoc', () => {
     const { result } = renderHook(() => useSurfaceDoc(P(), { registry: reg }));
     await land(reg, 1);
     const key = result.current.key;
-    act(() => { result.current.retry(); });
-    expect(reg.discard).toHaveBeenCalledWith(key);
+    act(() => { result.current.retry(1); });
+    expect(reg.discard).toHaveBeenCalledWith(key, 1);
     expect(result.current.doc).toBeNull(); // the discarded doc's tiles are gone in the same render
     expect(result.current.busy).toBe(true);
     expect(reg.acquire).toHaveBeenCalledTimes(2);
@@ -141,5 +142,70 @@ describe('useSurfaceDoc', () => {
     expect(result.current.busy).toBe(false);
     // the discarded doc was not also released: nothing holds it
     expect(reg.release).not.toHaveBeenCalledWith(key, expect.anything());
+  });
+});
+
+// The same hook over a REAL registry (a fake open that lands by hand, a close spy).
+describe('useSurfaceDoc over a real registry: per-doc handles', () => {
+  function real() {
+    const opens = [];
+    let next = 1;
+    const close = vi.fn(async () => {});
+    const registry = createDocRegistry({
+      open: (p) => new Promise((resolve) => opens.push(() => resolve({ docId: next++, rev: 1, meta }))),
+      close,
+    });
+    const land = () => act(async () => { opens.shift()(); await Promise.resolve(); await Promise.resolve(); });
+    return { registry, opens, close, land };
+  }
+  const mount = (registry, over = {}, opts = {}) => renderHook(({ p }) => useSurfaceDoc(p, { registry, ...opts }), { initialProps: { p: P(over) } });
+
+  it('two holders of one key: A retries, then B releases: A\'s reopened doc is neither closed nor deferred', async () => {
+    const { registry, close, land } = real();
+    const a = mount(registry); const b = mount(registry);
+    await land();
+    expect(a.result.current.doc.docId).toBe(1);
+    expect(b.result.current.doc.docId).toBe(1);
+    act(() => { a.result.current.retry(1); });
+    expect(close).toHaveBeenCalledWith(1);
+    b.unmount(); // B still held the dead entry: its release must not touch the replacement
+    await land();
+    expect(a.result.current.doc.docId).toBe(2);
+    expect(close).not.toHaveBeenCalledWith(2);
+    expect(registry.deferredCount()).toBe(0);
+    expect(registry.liveCount()).toBe(1);
+  });
+
+  it('B\'s late failure after A\'s reopen landed does not discard it; B joins it', async () => {
+    const { registry, close, land } = real();
+    const a = mount(registry); const b = mount(registry);
+    await land();
+    act(() => { a.result.current.retry(1); });
+    await land();
+    expect(a.result.current.doc.docId).toBe(2);
+    act(() => { b.result.current.retry(1); }); // B's tile of the dead doc 1 errors late
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(close).not.toHaveBeenCalledWith(2);
+    expect(b.result.current.doc.docId).toBe(2); // joined, no third open
+    expect(registry.liveCount()).toBe(1);
+    expect(registry.openCount()).toBe(1);
+    a.unmount();
+    expect(close).not.toHaveBeenCalledWith(2); // B still holds it
+    b.unmount();
+    expect(close).toHaveBeenCalledWith(2);
+  });
+
+  it('returning to the key on screen before the other open lands takes no second ref: unmount closes the doc', async () => {
+    const { registry, close, land } = real();
+    const { result, rerender, unmount } = mount(registry);
+    await land();
+    const docId = result.current.doc.docId;
+    rerender({ p: P({ html: '<p>other' }) }); // K2 pending
+    rerender({ p: P() }); // back to K before K2 lands
+    await land(); // K2 lands: nobody wants it
+    expect(result.current.doc.docId).toBe(docId);
+    unmount();
+    expect(close).toHaveBeenCalledWith(docId);
+    expect(registry.openCount()).toBe(0);
   });
 });

@@ -115,9 +115,12 @@ export function createDocRegistry({
   // `now`: close as soon as no one else holds the doc (a holder that replaced
   // it with a newer one, or a surface that is not lazy). Without it the doc
   // defers (thread and bubble churn reuse).
-  function release(key, { now = false } = {}) {
+  // `docId`: the doc the caller held. A holder whose entry was discarded and replaced under the same key
+  // (another holder's retry) must not decrement the replacement, so a mismatch is a no-op.
+  function release(key, { now = false, docId } = {}) {
     const e = entries.get(key);
     if (!e || e.refs === 0) return;
+    if (docId !== undefined && e.docId !== docId) return;
     e.refs -= 1;
     if (e.refs === 0 && e.doc) { if (now) drop(key); else defer(key); }
     else if (e.refs === 0 && now) { e.dropped = true; entries.delete(key); } // still opening: close on landing
@@ -162,7 +165,11 @@ export function createDocRegistry({
       e.subs.add(fn);
       return () => e.subs.delete(fn);
     },
-    discard: drop,
+    // `docId`: discard only if the entry still holds that doc (a late discard by a holder of a dead doc leaves its replacement alone).
+    discard: (key, docId) => {
+      if (docId !== undefined && entries.get(key)?.docId !== docId) return undefined;
+      return drop(key);
+    },
     closeDeferred: () => { [...deferred].forEach(drop); },
     openCount: () => [...entries.values()].filter(e => e.docId != null).length,
     liveCount: () => [...entries.values()].filter(e => e.docId != null && e.refs > 0).length,

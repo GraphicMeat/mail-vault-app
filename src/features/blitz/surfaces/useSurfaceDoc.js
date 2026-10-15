@@ -14,7 +14,7 @@ const DISCARDED = 'render_discarded';
  * once otherwise.
  * `busy` is true while what is on screen is not the current key's doc.
  * A holder whose open is discarded by another holder's retry opens again.
- * `retry()` discards the current key's doc and opens it again; the discarded
+ * `retry(docId)` discards the current key's doc and opens it again; the discarded
  * doc is off screen in the same render, so none of its tiles can fail the retry.
  */
 export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDocRegistry() } = {}) {
@@ -26,7 +26,9 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
   );
   const [state, setState] = useState({ key: null, doc: null, error: null, sentWidth: null });
   const [attempt, setAttempt] = useState(0);
-  const held = useRef(null); // the key whose doc is on screen (one registry ref held)
+  // The registry ref this body holds: { key, docId }. Release and discard name the docId, so a body whose
+  // doc another holder already discarded cannot touch the entry that replaced it under the same key.
+  const held = useRef(null);
   const unmounted = useRef(false);
   const deferRef = useRef(deferOnUnmount);
   deferRef.current = deferOnUnmount;
@@ -35,6 +37,9 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
 
   useEffect(() => {
     if (!key) return undefined;
+    // Back on the key already on screen (the key changed and changed back before the other open landed):
+    // its ref is already held. Acquiring again would take a second ref nothing releases.
+    if (held.current?.key === key) return undefined;
     let live = true;
     const sentWidth = paramsRef.current.cssWidth;
     registry.acquire(key, paramsRef.current).then(
@@ -42,13 +47,13 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
         if (!live) {
           // Superseded (or unmounted) before it landed: never painted. Superseded closes at once; an
           // unmounted lazy body keeps it for the churn that follows.
-          registry.release(key, { now: !(unmounted.current && deferRef.current) });
+          registry.release(key, { now: !(unmounted.current && deferRef.current), docId: doc.docId });
           return;
         }
         const prev = held.current;
-        held.current = key;
+        held.current = { key, docId: doc.docId };
         setState({ key, doc, error: null, sentWidth });
-        if (prev && prev !== key) registry.release(prev, { now: true });
+        if (prev && prev.key !== key) registry.release(prev.key, { now: true, docId: prev.docId });
       },
       (err) => {
         if (!live) return;
@@ -58,7 +63,7 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
         const prev = held.current;
         held.current = null;
         setState({ key, doc: null, error: err?.message || err?.code || String(err), sentWidth });
-        if (prev && prev !== key) registry.release(prev, { now: true });
+        if (prev && prev.key !== key) registry.release(prev.key, { now: true, docId: prev.docId });
       },
     );
     return () => { live = false; };
@@ -75,7 +80,7 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
     unmounted.current = false;
     return () => {
       unmounted.current = true;
-      if (held.current) registry.release(held.current, { now: !deferRef.current });
+      if (held.current) registry.release(held.current.key, { now: !deferRef.current, docId: held.current.docId });
       held.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,10 +92,13 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
     sentWidth: state.sentWidth,
     error: current ? state.error : null,
     busy: !!key && !(current && (state.doc || state.error)),
-    retry: () => {
+    // `docId`: the doc whose failure this is. If the key's entry already holds another doc (another holder
+    // retried first) nothing is discarded and this body just opens the key again, joining that entry.
+    // No docId (an open that failed): the registry already dropped the entry, nothing to discard.
+    retry: (docId) => {
       if (!key) return;
-      if (held.current === key) held.current = null;
-      registry.discard(key);
+      if (held.current?.key === key) held.current = null;
+      if (docId != null) registry.discard(key, docId);
       setState({ key, doc: null, error: null, sentWidth: state.sentWidth });
       setAttempt(n => n + 1);
     },

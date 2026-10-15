@@ -123,13 +123,13 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   // One quiet retry per key: the first tile error (or an open that finds its doc gone) discards the doc
   // and opens it again, which hides a worker restart or an eviction. The second failure is the user's.
   const retriedKey = useRef(null);
-  const failOrRetry = useCallback((code) => {
+  const failOrRetry = useCallback((code, failedDocId) => {
     if (failed.current) return;
     if (retriedKey.current !== docKeyNow) {
       retriedKey.current = docKeyNow;
       // Off the live list now: a sibling tile of the discarded doc that errors before the re-render is not a second failure.
       docIdRef.current = null;
-      retry();
+      retry(failedDocId);
       return;
     }
     fail(code);
@@ -331,7 +331,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   } : null;
   return (
     <div ref={boxRef} data-renderer="blitz" data-testid="blitz-email-body" data-doc-id={doc?.docId} {...parityAttrs}
-      data-blitz-surface={surface} aria-busy={busy ? 'true' : 'false'} data-blitz-doc={!busy && doc ? doc.docId : undefined}
+      data-blitz-surface={surface} aria-busy={busy || (!doc && !error) ? 'true' : 'false'} data-blitz-doc={!busy && doc ? doc.docId : undefined}
       data-blitz-masked={String(privacy)}
       // Focusable like the iframe's document: a click focuses it, Tab leaves it, no ring.
       tabIndex={-1}
@@ -347,8 +347,9 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
               <img key={i} ref={el => { tileEls.current[i] = el; }} data-index={i} data-testid="blitz-tile"
                 src={shown.has(i) ? tileUrl(doc.docId, doc.rev, i) : undefined}
                 alt="" draggable={false} decoding="async"
-                // A tile of a doc that was just closed fails by design; only the live doc's tiles count.
-                onError={() => { if (tileDoc === docIdRef.current) failOrRetry('render_tile_failed'); }}
+                // A tile of a doc that was just closed fails by design; only the live doc's tiles count. A doc still on
+                // screen while its key's successor opens (busy) is being replaced: its error is not the successor's failure.
+                onError={() => { if (tileDoc === docIdRef.current && !busy) failOrRetry('render_tile_failed', tileDoc); }}
                 style={{ position: 'absolute', left: 0, top, width: m.cssWidth, height: Math.min(m.tileCssHeight, m.cssHeight - top) }} />
             );
           })}
@@ -375,7 +376,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
         </div>
       )}
       {hover && !privacy && (
-        <div data-testid="blitz-link-chip" className="sticky bottom-0 left-0 max-w-[60%] truncate text-xs px-2 py-1 rounded bg-mail-surface border border-mail-border text-mail-text-muted">
+        <div data-testid="blitz-link-chip" className="sticky bottom-0 left-0 max-w-[60%] truncate text-xs px-2 py-1 rounded pointer-events-none bg-mail-surface border border-mail-border text-mail-text-muted">
           {hover.href}
         </div>
       )}

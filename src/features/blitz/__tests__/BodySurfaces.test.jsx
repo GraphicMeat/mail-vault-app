@@ -191,6 +191,25 @@ describe('BlitzBody on every surface', () => {
     expect(screen.queryByTestId('blitz-failure-notice')).toBeNull();
   });
 
+  it('a tile error of the old doc while the next key opens is not the next key\'s failure and spends no retry', async () => {
+    const { rerender } = render(<BlitzBody {...base} surface="fullView" bodyHtml="<p>One</p>" />);
+    await landed();
+    const oldTile = screen.getAllByTestId('blitz-tile')[0];
+    rerender(<BlitzBody {...base} surface="fullView" bodyHtml="<p>Two</p>" />);
+    await waitFor(() => expect(svc.opens).toHaveLength(1)); // Two is opening, One is still on screen
+    expect(root().getAttribute('aria-busy')).toBe('true');
+    vi.mocked(closeRender).mockClear();
+    act(() => { oldTile.dispatchEvent(new Event('error')); });
+    expect(closeRender).not.toHaveBeenCalled();
+    expect(svc.opens).toHaveLength(1); // the pending open was not discarded and re-issued
+    await settle();
+    await waitFor(() => expect(root().getAttribute('aria-busy')).toBe('false'));
+    // Two still has its quiet retry: its own tile error reopens instead of failing.
+    act(() => { screen.getAllByTestId('blitz-tile')[0].dispatchEvent(new Event('error')); });
+    await waitFor(() => expect(svc.opens).toHaveLength(1));
+    expect(screen.queryByTestId('blitz-failure-notice')).toBeNull();
+  });
+
   it('churn: stale opens never paint and are released', async () => {
     const { rerender, unmount } = render(<BlitzBody {...base} surface="fullView" bodyHtml="<p>A</p>" />);
     for (let i = 0; i < 20; i++) rerender(<BlitzBody {...base} surface="fullView" bodyHtml={`<p>${i % 2 ? 'A' : 'B'}</p>`} />);
@@ -282,6 +301,21 @@ describe('BlitzBody on every surface', () => {
     await waitFor(() => expect(screen.getByText('Plain fallback text')).toBeTruthy());
   });
 
+  it('a fresh BlitzTiles is busy until its own measure lands, not for one frame not-busy', async () => {
+    const { default: BlitzTiles } = await import('../BlitzTiles');
+    let fire;
+    globalThis.ResizeObserver = class { constructor(cb) { this.cb = cb; } observe(el) { fire = () => this.cb([{ contentRect: { width: 600 }, target: el }]); } disconnect() {} };
+    render(<BlitzTiles html="<p>x" theme={{ dark: false }} sizing="content" surface="fullView" />);
+    expect(root().getAttribute('aria-busy')).toBe('true'); // before the first ResizeObserver callback
+    expect(root().hasAttribute('data-blitz-doc')).toBe(false);
+    act(() => { fire(); });
+    await waitFor(() => expect(svc.opens).toHaveLength(1));
+    expect(root().getAttribute('aria-busy')).toBe('true');
+    await settle();
+    expect(root().getAttribute('aria-busy')).toBe('false');
+    expect(root().hasAttribute('data-blitz-doc')).toBe(true);
+  });
+
   describe('links', () => {
     const hover = async () => {
       const layer = (await screen.findAllByTestId('blitz-tile'))[0].parentElement;
@@ -310,6 +344,22 @@ describe('BlitzBody on every surface', () => {
       expect(layer.style.cursor).toBe('pointer');
       await act(async () => { fireEvent.click(layer, { clientX: 10, clientY: 10 }); });
       expect(onLink).toHaveBeenCalledWith({ href: 'https://example.test/', text: 'go' });
+    });
+
+    it('the chip sits in flow below the tile layer, pinned to the box bottom, and never takes the pointer', async () => {
+      svc.hit = { link: { href: 'https://example.test/', text: 'go' }, fold: null };
+      render(<BlitzBody {...base} surface="reader" messageKey="k-chip" onLink={vi.fn()} />);
+      await landed();
+      await hover();
+      const chip = screen.getByTestId('blitz-link-chip');
+      // content sizing fixes the root at the doc height with overflow hidden: the sticky chip is pulled up into the box
+      // (checked in a real browser), so it is not clipped; it must not catch the pointer over the last link, which
+      // would end the hover and hide it again.
+      expect(chip.className).toContain('sticky');
+      expect(chip.className).toContain('bottom-0');
+      expect(chip.className).toContain('pointer-events-none');
+      expect(chip.parentElement).toBe(root());
+      expect(root().style.overflowY).toBe('hidden');
     });
 
     it('with no onLink a fold still gets its pointer and its click', async () => {

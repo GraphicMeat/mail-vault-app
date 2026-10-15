@@ -240,3 +240,40 @@ describe('docRegistry', () => {
     await expect(p).rejects.toThrow('render_discarded');
   });
 });
+
+describe('docRegistry handles: release and discard name the doc they hold', () => {
+  it('a release for a doc the key no longer holds is a no-op; the matching one releases', async () => {
+    const h = harness();
+    const k = docKey(P('x'));
+    const a = h.reg.acquire(k, P('x'));
+    await h.settle();
+    const first = (await a).docId;
+    h.reg.discard(k, first); // another holder threw it away
+    const b = h.reg.acquire(k, P('x')); // and opened it again
+    await h.settle();
+    const second = (await b).docId;
+    expect(second).not.toBe(first);
+    h.reg.release(k, { now: true, docId: first }); // the first holder leaves late
+    expect(h.close).not.toHaveBeenCalledWith(second);
+    expect(h.reg.liveCount()).toBe(1);
+    h.reg.release(k, { now: true, docId: second });
+    expect(h.close).toHaveBeenCalledWith(second);
+  });
+
+  it('a discard for a doc the key no longer holds leaves the replacement alone; with no docId it is unconditional', async () => {
+    const h = harness();
+    const k = docKey(P('x'));
+    const a = h.reg.acquire(k, P('x'));
+    await h.settle();
+    const first = (await a).docId;
+    h.reg.discard(k, first);
+    const b = h.reg.acquire(k, P('x'));
+    await h.settle();
+    const second = (await b).docId;
+    h.reg.discard(k, first);
+    expect(h.close).not.toHaveBeenCalledWith(second);
+    expect(h.reg.liveCount()).toBe(1);
+    h.reg.discard(k);
+    expect(h.close).toHaveBeenCalledWith(second);
+  });
+});
