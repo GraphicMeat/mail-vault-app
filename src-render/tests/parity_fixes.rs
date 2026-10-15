@@ -733,3 +733,122 @@ fn a_fixed_width_table_in_a_narrow_container_keeps_its_columns() {
         assert_eq!((r("a"), r("b"), r("c")), ((0.0, 200.0), (200.0, 200.0), (400.0, 200.0)), "{table}");
     }
 }
+
+/// Decoded RGB of the first tile of `body` in a white 300px page, at `scale`, with the
+/// table `t`'s border box in device pixels (x0, y0, x1, y1).
+fn paint_table(body: &str, scale: f32) -> (u32, u32, Vec<u8>, (u32, u32, u32, u32)) {
+    let html = format!(r#"<body style="margin:0;background:#fff"><div style="width:300px">{body}</div></body>"#);
+    let mut doc = RenderDoc::open(&html, RenderOptions { css_width: 300, scale, ..Default::default() }, None).unwrap();
+    let r = doc.inspect().into_iter().find(|e| e.mv_id == "t").unwrap().rect.unwrap();
+    let png = doc.tile_png(0).unwrap();
+    let mut reader = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).unwrap();
+    assert_eq!(info.color_type, png::ColorType::Rgb);
+    let s = scale as f64;
+    let rect = ((r.x * s).round() as u32, (r.y * s).round() as u32, ((r.x + r.w) * s).round() as u32, ((r.y + r.h) * s).round() as u32);
+    (info.width, info.height, buf, rect)
+}
+
+fn px(img: &(u32, u32, Vec<u8>, (u32, u32, u32, u32)), x: u32, y: u32) -> [u8; 3] {
+    let i = ((y * img.0 + x) * 3) as usize;
+    [img.2[i], img.2[i + 1], img.2[i + 2]]
+}
+
+fn near(a: [u8; 3], b: [u8; 3]) -> bool {
+    a.iter().zip(b).all(|(x, y)| (*x as i32 - y as i32).abs() <= 1)
+}
+
+const WHITE: [u8; 3] = [255, 255, 255];
+const CCC: [u8; 3] = [204, 204, 204];
+
+/// CSS 2.1 17.6.2: in the collapsing border model a border whose style is `none` (the
+/// initial value) has the lowest priority and contributes nothing, and CSS Backgrounds 3 4.3
+/// gives such a border a used width of 0, although the computed `border-width` is still
+/// `medium` (3px). The paint code for collapsed borders took the first cell's computed width
+/// and `currentcolor`, so every cerberus table, the export header's `.mv-meta` and the chat
+/// bubble's tables had a 3px dark frame (WKWebView: nothing). The page is white, so every
+/// pixel must stay white, inside and outside the table's box.
+#[test]
+fn a_collapsed_table_without_borders_paints_no_border_pixels() {
+    for scale in [1.0f32, 2.0] {
+        let img = paint_table(
+            r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:20px"></td><td></td></tr><tr><td style="height:10px"></td><td></td></tr></table>"#,
+            scale,
+        );
+        let (w, h, _, rect) = (img.0, img.1, 0, img.3);
+        assert!(rect.2 > rect.0 && rect.3 > rect.1, "table box {rect:?}");
+        let mut dark = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                if !near(px(&img, x, y), WHITE) {
+                    dark.push((x, y, px(&img, x, y)));
+                }
+            }
+        }
+        assert!(dark.is_empty(), "scale {scale}: table box {rect:?}, first non-white pixels {:?}", &dark[..dark.len().min(8)]);
+    }
+}
+
+/// The table's own `border: 1px solid #ccc` under `border-collapse: collapse` (the borderless
+/// cells do not add to it): WKWebView draws a 1 CSS px #ccc line on each side, inside the
+/// table's box, and nothing else. Measured: a 100px table at the page origin has #ccc on
+/// column 0 and 99 and rows 0 and (height - 1) and white everywhere else.
+#[test]
+fn a_collapsed_table_border_paints_one_css_px_in_its_colour() {
+    for scale in [1.0f32, 2.0] {
+        let img = paint_table(
+            r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px;border:1px solid #ccc"><tr><td style="height:20px"></td><td></td></tr></table>"#,
+            scale,
+        );
+        let (w, h, _, (x0, y0, x1, y1)) = (img.0, img.1, 0, img.3);
+        let band = scale as u32;
+        let mut bad = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                let inside = x >= x0 && x < x1 && y >= y0 && y < y1;
+                let on_ring = inside && (x < x0 + band || x >= x1 - band || y < y0 + band || y >= y1 - band);
+                let want = if on_ring { CCC } else { WHITE };
+                if !near(px(&img, x, y), want) {
+                    bad.push((x, y, px(&img, x, y), want));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "scale {scale}: table box {:?}, first wrong pixels (x, y, got, want) {:?}", (x0, y0, x1, y1), &bad[..bad.len().min(8)]);
+    }
+}
+
+/// Collapsed borders given by the cells (`td { border: 1px solid #ccc }`, the usual data
+/// table): nothing darker than #ccc anywhere and nothing outside the table's box. (The
+/// paint code in blitz-paint puts the right and bottom outer lines one border width inside
+/// the box instead of on its last pixels; that residue is not asserted.)
+#[test]
+fn collapsed_cell_borders_paint_in_their_colour_inside_the_table_box() {
+    for scale in [1.0f32, 2.0] {
+        let img = paint_table(
+            r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:20px;border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr></table>"#,
+            scale,
+        );
+        let (w, h, _, (x0, y0, x1, y1)) = (img.0, img.1, 0, img.3);
+        let mut dark = Vec::new();
+        let mut outside = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                let p = px(&img, x, y);
+                if p.iter().any(|c| *c < 203) {
+                    dark.push((x, y, p));
+                }
+                if !(x >= x0 && x < x1 && y >= y0 && y < y1) && !near(p, WHITE) {
+                    outside.push((x, y, p));
+                }
+            }
+        }
+        assert!(dark.is_empty(), "scale {scale}: darker than #ccc {:?}", &dark[..dark.len().min(8)]);
+        assert!(outside.is_empty(), "scale {scale}: table box {:?}, pixels outside it {:?}", (x0, y0, x1, y1), &outside[..outside.len().min(8)]);
+        // The top and left lines are one CSS px of #ccc. They stop two borders short of the
+        // far corner (the paint code measures them from the track area, not the border box).
+        let band = scale as u32;
+        assert!((x0..x1 - 2 * band).all(|x| (0..band).all(|d| near(px(&img, x, y0 + d), CCC))), "scale {scale}: top line");
+        assert!((y0..y1 - 2 * band).all(|y| (0..band).all(|d| near(px(&img, x0 + d, y), CCC))), "scale {scale}: left line");
+    }
+}

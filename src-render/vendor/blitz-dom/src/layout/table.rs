@@ -128,6 +128,55 @@ pub(crate) fn drop_percentage_max_width_of_fixed_width_table(style: &mut taffy::
     }
 }
 
+/// MailVault parity fix (plan D): the used border widths of a cell, in CSS px, ordered top,
+/// right, bottom, left. A side with `border-style: none` or `hidden` has a used width of 0
+/// (CSS Backgrounds 3 4.3), although its computed `border-width` is still `medium` (3px); in
+/// the collapsing border model such a border has the lowest priority and contributes nothing
+/// (CSS 2.1 17.6.2.1).
+fn used_border_widths(border: &Border) -> [f32; 4] {
+    let used = |width: &style::values::computed::BorderSideWidth, style: style::values::specified::BorderStyle| {
+        if style.none_or_hidden() {
+            0.0
+        } else {
+            width.0.to_f32_px()
+        }
+    };
+    [
+        used(&border.border_top_width, border.border_top_style),
+        used(&border.border_right_width, border.border_right_style),
+        used(&border.border_bottom_width, border.border_bottom_style),
+        used(&border.border_left_width, border.border_left_style),
+    ]
+}
+
+/// MailVault parity fix (plan D): the border blitz-paint draws the collapsed grid lines with.
+/// `draw_table_borders` takes the width and colour of the *top* border of this value for
+/// every line it draws, outer and inner, and does not look at the border style. Handing it
+/// the first cell's computed border drew a 3px (`medium`) frame in `currentcolor` around
+/// every collapsed table whose first cell has no border (cerberus, the export header's
+/// `.mv-meta`, the bubble's tables), where WKWebView draws nothing. Here a cell without any
+/// visible side gives `None` (nothing is painted); otherwise the top width is the smallest
+/// used width of the four sides, so an outer line is only drawn where every side has one
+/// (the inner lines take their width from the track gutters, see `gap` in
+/// `build_table_context`), and the colour is that of the first side that has a visible
+/// border. CSS 2.1 17.6.2.1 (a border style of none, or a width of 0, loses every conflict).
+fn collapsed_paint_border(border: &ServoArc<Border>) -> Option<ServoArc<Border>> {
+    let used = used_border_widths(border);
+    let visible = used.iter().position(|width| *width > 0.0)?;
+    let colours = [
+        &border.border_top_color,
+        &border.border_right_color,
+        &border.border_bottom_color,
+        &border.border_left_color,
+    ];
+    let mut paint = (**border).clone();
+    paint.border_top_width = style::values::computed::BorderSideWidth(app_units::Au::from_f32_px(
+        used.iter().copied().fold(f32::INFINITY, f32::min),
+    ));
+    paint.border_top_color = colours[visible].clone();
+    Some(ServoArc::new(paint))
+}
+
 pub(crate) fn build_table_context(
     doc: &mut BaseDocument,
     table_root_node_id: NodeId,
@@ -230,21 +279,10 @@ pub(crate) fn build_table_context(
                 // MailVault parity fix (plan B): a side with border-style none/hidden has a
                 // used width of 0 (CSS Backgrounds 3, 4.3), but its computed width is still
                 // `medium` (3px); using that put every borderless collapsed table 3px inset.
-                let used = |width: &style::values::computed::BorderSideWidth,
-                            style: style::values::specified::BorderStyle| {
-                    if style.none_or_hidden() {
-                        0.0
-                    } else {
-                        width.0.to_f32_px()
-                    }
-                };
-                let x = used(&border.border_left_width, border.border_left_style)
-                    .max(used(&border.border_right_width, border.border_right_style));
-                let y = used(&border.border_top_width, border.border_top_style)
-                    .max(used(&border.border_bottom_width, border.border_bottom_style));
+                let [top, right, bottom, left] = used_border_widths(border);
                 taffy::Size {
-                    width: style_helpers::length(x),
-                    height: style_helpers::length(y),
+                    width: style_helpers::length(left.max(right)),
+                    height: style_helpers::length(top.max(bottom)),
                 }
             })
             .unwrap_or(taffy::Size::ZERO.map(style_helpers::length)),
@@ -271,7 +309,11 @@ pub(crate) fn build_table_context(
             rows,
             computed_grid_info: AtomicRefCell::new(None),
             border_collapse,
-            border_style: first_cell_border,
+            // MailVault parity fix (plan D): see `collapsed_paint_border`.
+            border_style: match border_collapse {
+                BorderCollapse::Collapse => first_cell_border.as_ref().and_then(collapsed_paint_border),
+                BorderCollapse::Separate => first_cell_border,
+            },
             is_fixed,
         },
         layout_children,
