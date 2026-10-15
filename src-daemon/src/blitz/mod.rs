@@ -8,6 +8,10 @@
 //! (the body shows its failure view) and the next call spawns a fresh one.
 //! Rendering never runs in this process.
 //!
+//! At most MAX_OPEN_DOCS documents stay open: an `open` past that closes the
+//! least recently used others, and an evicted doc answers `render_unknown_doc`
+//! like a closed one (the body reopens it quietly).
+//!
 //! The worker survives a panic in one document: each operation runs under
 //! `catch_unwind`, which needs panic=unwind. The `[profile.release]
 //! panic = "abort"` in this crate's manifest is ignored (cargo ignores a
@@ -26,14 +30,14 @@ pub mod routes;
 use crate::events::EventBus;
 use base64::Engine;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{oneshot, Mutex, Semaphore};
-use tracing::info;
+use tracing::{debug, info};
 
 pub const OPEN_TIMEOUT: Duration = Duration::from_secs(8);
 pub const TILE_TIMEOUT: Duration = Duration::from_secs(4);
@@ -48,6 +52,10 @@ pub const IDLE_EXIT: Duration = Duration::from_secs(120);
 /// Kill only when a call timed out AND the worker has been silent this long.
 pub const WATCHDOG: Duration = Duration::from_secs(6);
 const FETCH_PARALLEL: usize = 6;
+/// Open documents per worker. A document can peak at hundreds of MiB, so a long
+/// thread or chat must not hold an unbounded number on the one worker. Past this,
+/// an `open` closes the least recently used other docs (`evict_for`).
+pub const MAX_OPEN_DOCS: usize = 32;
 pub const UNAVAILABLE: &str = "render_unavailable";
 pub const RENDER_UPDATED: &str = "render-updated";
 
@@ -270,7 +278,8 @@ pub struct RenderHost {
     epoch: AtomicU64,
     next_req: AtomicU64,
     next_doc: AtomicU64,
-    open_docs: StdMutex<HashSet<u64>>,
+    /// Open docs and when each was last used (`touch`). Eviction reads the stamps.
+    open_docs: StdMutex<HashMap<u64, Instant>>,
     last_used: StdMutex<Instant>,
     fetch_slots: Arc<Semaphore>,
     font_frames: Arc<StdMutex<FontFrames>>,
@@ -308,37 +317,72 @@ impl RenderHost {
                 return Err(e);
             }
         };
-        self.open_docs.lock().unwrap().insert(doc);
+        // The new doc is the newest stamp, so it is never its own victim. Closing
+        // the old ones is best effort and never fails this open.
+        let victims = {
+            let mut docs = self.open_docs.lock().unwrap();
+            docs.insert(doc, Instant::now());
+            Self::lru_victims(&mut docs, doc)
+        };
+        for victim in victims {
+            debug!("render doc {victim} evicted: over {MAX_OPEN_DOCS} open");
+            self.close(victim).await;
+        }
         Ok(json!({"docId": doc, "rev": ok["rev"], "meta": ok["meta"]}))
     }
 
+    /// Removes and returns the least recently used docs (oldest first, ties by id)
+    /// other than `keep` until at most MAX_OPEN_DOCS remain. The caller closes them.
+    fn lru_victims(docs: &mut HashMap<u64, Instant>, keep: u64) -> Vec<u64> {
+        let mut victims = Vec::new();
+        while docs.len() > MAX_OPEN_DOCS {
+            let Some(victim) = docs.iter().filter(|(d, _)| **d != keep).min_by_key(|(d, t)| (**t, **d)).map(|(d, _)| *d) else { break };
+            docs.remove(&victim);
+            victims.push(victim);
+        }
+        victims
+    }
+
+    /// Stamps `doc` as used now. An unknown (closed or evicted) doc is not re-added.
+    fn touch(&self, doc: u64) {
+        if let Some(t) = self.open_docs.lock().unwrap().get_mut(&doc) {
+            *t = Instant::now();
+        }
+    }
+
+    /// `call` for an op on an open doc: counts as use for the LRU.
+    async fn doc_call(&self, doc: u64, frame: Value, timeout: Duration) -> Result<Value, String> {
+        self.touch(doc);
+        self.call(frame, timeout).await
+    }
+
     pub async fn tile(&self, doc: u64, index: u32) -> Result<Vec<u8>, String> {
-        let ok = self.call(json!({"op": "tile", "doc": doc, "index": index}), TILE_TIMEOUT).await?;
+        let ok = self.doc_call(doc, json!({"op": "tile", "doc": doc, "index": index}), TILE_TIMEOUT).await?;
         base64::engine::general_purpose::STANDARD.decode(ok["png"].as_str().unwrap_or_default()).map_err(|_| UNAVAILABLE.to_string())
     }
 
     /// A slow hit (queued behind tiles) is "no link" and no fold, never an
     /// error. A reply is passed on whole: `{link, fold}`.
     pub async fn hit(&self, doc: u64, x: f32, y: f32) -> Result<Value, String> {
-        match self.call(json!({"op": "hit", "doc": doc, "x": x, "y": y}), HIT_TIMEOUT).await {
+        match self.doc_call(doc, json!({"op": "hit", "doc": doc, "x": x, "y": y}), HIT_TIMEOUT).await {
             Err(e) if e == UNAVAILABLE => Ok(json!({"link": null, "fold": null})),
             other => other,
         }
     }
 
     pub async fn text_runs(&self, doc: u64, index: u32) -> Result<Value, String> {
-        self.call(json!({"op": "textRuns", "doc": doc, "index": index}), TEXT_RUNS_TIMEOUT).await
+        self.doc_call(doc, json!({"op": "textRuns", "doc": doc, "index": index}), TEXT_RUNS_TIMEOUT).await
     }
 
     pub async fn serialize(&self, doc: u64, start: Value, end: Value) -> Result<Value, String> {
-        self.call(json!({"op": "serialize", "doc": doc, "start": start, "end": end}), SERIALIZE_TIMEOUT).await
+        self.doc_call(doc, json!({"op": "serialize", "doc": doc, "start": start, "end": end}), SERIALIZE_TIMEOUT).await
     }
 
     /// Opens or closes one fold. The new layout reaches the frontend through
     /// the `render-updated` event the worker also sends; fold state lives in
     /// the document and dies with the worker (`render_unknown_doc`).
     pub async fn fold(&self, doc: u64, id: &str, open: bool) -> Result<Value, String> {
-        self.call(json!({"op": "fold", "doc": doc, "id": id, "open": open}), FOLD_TIMEOUT).await
+        self.doc_call(doc, json!({"op": "fold", "doc": doc, "id": id, "open": open}), FOLD_TIMEOUT).await
     }
 
     /// Sends the families the worker does not have yet and keeps them: a
@@ -362,7 +406,7 @@ impl RenderHost {
 
     /// Per-element measurements for the parity harness. Not foreground traffic.
     pub async fn inspect(&self, doc: u64) -> Result<Value, String> {
-        self.call(json!({"op": "inspect", "doc": doc}), INSPECT_TIMEOUT).await
+        self.doc_call(doc, json!({"op": "inspect", "doc": doc}), INSPECT_TIMEOUT).await
     }
 
     /// For tests: how many workers have been started.
@@ -1034,5 +1078,74 @@ mod tests {
         assert!(els.iter().any(|e| e["mvId"] == "a" && e["tag"] == "p"), "{got}");
         h.close(doc).await;
         assert_eq!(h.inspect(doc).await.unwrap_err(), "render_unknown_doc");
+    }
+
+    /// Opens `n` tiny docs, returns their ids in open order.
+    async fn open_n(h: &RenderHost, n: usize) -> Vec<u64> {
+        let mut ids = Vec::new();
+        for _ in 0..n {
+            let r = h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap();
+            ids.push(r["docId"].as_u64().unwrap());
+        }
+        ids
+    }
+
+    #[tokio::test]
+    async fn the_open_past_the_cap_evicts_the_least_recently_used_doc() {
+        let h = host();
+        let ids = open_n(&h, MAX_OPEN_DOCS + 1).await;
+        assert_eq!(h.open_docs.lock().unwrap().len(), MAX_OPEN_DOCS);
+        assert_eq!(h.tile(ids[0], 0).await.unwrap_err(), "render_unknown_doc", "the first-opened, never-touched doc is the victim");
+        assert!(h.tile(ids[1], 0).await.is_ok(), "the rest are untouched");
+        assert!(h.tile(ids[MAX_OPEN_DOCS], 0).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn touching_a_doc_spares_it_and_the_next_oldest_goes() {
+        let h = host();
+        let ids = open_n(&h, MAX_OPEN_DOCS).await;
+        assert!(h.tile(ids[0], 0).await.is_ok());
+        let extra = open_n(&h, 1).await;
+        assert_eq!(h.open_docs.lock().unwrap().len(), MAX_OPEN_DOCS);
+        assert!(h.tile(ids[0], 0).await.is_ok(), "doc 0 was touched, so it stays");
+        assert_eq!(h.tile(ids[1], 0).await.unwrap_err(), "render_unknown_doc", "doc 1 is now the oldest");
+        assert!(h.tile(extra[0], 0).await.is_ok(), "the open that evicted returns its own doc normally");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn every_op_on_a_doc_touches_it_and_eviction_sends_one_close_per_victim() {
+        let dir = tempfile::tempdir().unwrap();
+        let (h, log) = fake_worker(dir.path(), "");
+        let ids = open_n(&h, MAX_OPEN_DOCS).await;
+        // Touch the oldest docs, one op each; the fake worker answers every request with an empty ok.
+        h.tile(ids[0], 0).await.unwrap();
+        h.hit(ids[1], 0.0, 0.0).await.unwrap();
+        h.text_runs(ids[2], 0).await.unwrap();
+        h.serialize(ids[3], json!({}), json!({})).await.unwrap();
+        h.fold(ids[4], "q0", true).await.unwrap();
+        h.inspect(ids[5]).await.unwrap();
+        let extra = open_n(&h, 6).await;
+        assert_eq!(h.open_docs.lock().unwrap().len(), MAX_OPEN_DOCS);
+        let docs: Vec<u64> = h.open_docs.lock().unwrap().keys().copied().collect();
+        for id in &ids[..6] { assert!(docs.contains(id), "doc {id} was touched"); }
+        for id in &ids[6..12] { assert!(!docs.contains(id), "doc {id} was the oldest untouched"); }
+        for id in &extra { assert!(docs.contains(id)); }
+        // 32 + 6 opens, 6 touches, 6 closes.
+        wait_for_frames(&log, MAX_OPEN_DOCS + 6 + 6 + 6).await;
+        let closed: Vec<u64> = frames_read(&log).iter().filter(|f| f["op"] == "close").map(|f| f["doc"].as_u64().unwrap()).collect();
+        assert_eq!(closed, ids[6..12].to_vec(), "one close frame per victim, oldest first");
+    }
+
+    #[test]
+    fn victims_are_the_oldest_stamps_ties_by_id_and_never_the_kept_doc() {
+        let t0 = Instant::now();
+        let mut docs: HashMap<u64, Instant> = (1..=MAX_OPEN_DOCS as u64 + 2).map(|d| (d, t0)).collect();
+        // The kept doc is the oldest stamp of all; it must still survive.
+        docs.insert(1, t0 - Duration::from_secs(5));
+        assert_eq!(RenderHost::lru_victims(&mut docs, 1), vec![2, 3], "equal stamps go by id");
+        assert_eq!(docs.len(), MAX_OPEN_DOCS);
+        assert!(docs.contains_key(&1));
+        assert!(RenderHost::lru_victims(&mut docs, 1).is_empty(), "at the cap nothing goes");
     }
 }
