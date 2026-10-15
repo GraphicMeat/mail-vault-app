@@ -120,13 +120,16 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   useEffect(() => { failed.current = false; }, [docKeyNow]);
   useEffect(() => { setHover(null); setHoverFold(null); }, [doc?.docId]);
 
-  // One quiet retry per key: the first tile error (or an open that finds its doc gone) discards the doc
-  // and opens it again, which hides a worker restart or an eviction. The second failure is the user's.
-  const retriedKey = useRef(null);
-  const failOrRetry = useCallback((code, failedDocId) => {
+  // One quiet reopen per failure: the first tile error (or an open that finds its doc gone) discards the doc
+  // and opens it again, which hides a worker restart or an eviction. A second failure before the reopened doc
+  // has drawn is the user's. Once it has drawn the tile that failed, the budget is back, so a long session's
+  // later evictions each get their own quiet reopen. A tile that keeps failing while its siblings draw never
+  // refills it (that would reopen forever): `index` is the tile that failed, null when none did (an open).
+  const retried = useRef({ key: null, index: null });
+  const failOrRetry = useCallback((code, failedDocId, index = null) => {
     if (failed.current) return;
-    if (retriedKey.current !== docKeyNow) {
-      retriedKey.current = docKeyNow;
+    if (retried.current.key !== docKeyNow) {
+      retried.current = { key: docKeyNow, index };
       // Off the live list now: a sibling tile of the discarded doc that errors before the re-render is not a second failure.
       docIdRef.current = null;
       retry(failedDocId);
@@ -134,6 +137,10 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
     }
     fail(code);
   }, [docKeyNow, retry, fail]);
+  const refillRetry = (tileDoc, index) => {
+    const r = retried.current;
+    if (r.key === docKeyNow && tileDoc === docIdRef.current && (r.index == null || r.index === index)) retried.current = { key: null, index: null };
+  };
   useEffect(() => {
     if (!error) return;
     if (error === 'render_unknown_doc') failOrRetry(error); else fail(error);
@@ -349,7 +356,8 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
                 alt="" draggable={false} decoding="async"
                 // A tile of a doc that was just closed fails by design; only the live doc's tiles count. A doc still on
                 // screen while its key's successor opens (busy) is being replaced: its error is not the successor's failure.
-                onError={() => { if (tileDoc === docIdRef.current && !busy) failOrRetry('render_tile_failed', tileDoc); }}
+                onLoad={() => refillRetry(tileDoc, i)}
+                onError={() => { if (tileDoc === docIdRef.current && !busy) failOrRetry('render_tile_failed', tileDoc, i); }}
                 style={{ position: 'absolute', left: 0, top, width: m.cssWidth, height: Math.min(m.tileCssHeight, m.cssHeight - top) }} />
             );
           })}

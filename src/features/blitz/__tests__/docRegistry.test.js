@@ -94,6 +94,21 @@ describe('docRegistry', () => {
     expect(h.open).toHaveBeenCalledTimes(2);
   });
 
+  it('forgetDoc drops the entry that holds a doc the worker evicted; the next acquire opens fresh (3b)', async () => {
+    const h = harness();
+    const k = docKey(P('x'));
+    h.reg.acquire(k, P('x')); await h.settle();
+    h.reg.release(k); // deferred, and the daemon evicts it meanwhile
+    h.reg.forgetDoc(1);
+    expect(h.reg.deferredCount()).toBe(0);
+    expect(h.reg.openCount()).toBe(0);
+    const again = h.reg.acquire(k, P('x')); await h.settle();
+    expect((await again).docId).toBe(2);
+    expect(h.open).toHaveBeenCalledTimes(2);
+    h.reg.forgetDoc(999); // unknown ids are a no-op
+    expect(h.reg.openCount()).toBe(1);
+  });
+
   it('a failed open is forgotten so the next acquire retries', async () => {
     const h = harness();
     const k = docKey(P('x'));

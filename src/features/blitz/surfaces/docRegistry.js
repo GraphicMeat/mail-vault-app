@@ -1,4 +1,5 @@
 import { openRender, closeRender, onRenderUpdated } from '../service';
+import { onDocGone } from './docGone';
 
 // 53-bit FNV-1a over the html, so a key never holds a 4 MB string twice.
 function hash(str) {
@@ -170,6 +171,12 @@ export function createDocRegistry({
       if (docId !== undefined && entries.get(key)?.docId !== docId) return undefined;
       return drop(key);
     },
+    // The worker no longer has `docId` (evicted past its cap, or lost in a restart): drop the entry that holds it so
+    // the next acquire opens fresh instead of serving a dead id. A holder still on it recovers through its own retry.
+    forgetDoc: (docId) => {
+      const key = byDoc.get(docId);
+      return key == null ? undefined : drop(key);
+    },
     closeDeferred: () => { [...deferred].forEach(drop); },
     openCount: () => [...entries.values()].filter(e => e.docId != null).length,
     liveCount: () => [...entries.values()].filter(e => e.docId != null && e.refs > 0).length,
@@ -181,9 +188,14 @@ export function createDocRegistry({
 }
 
 let shared = null;
+let unGone = null;
 /** The app-wide registry (one per webview). */
 export function getDocRegistry() {
-  shared ||= createDocRegistry({ open: openRender, close: closeRender, onUpdated: onRenderUpdated });
+  if (!shared) {
+    shared = createDocRegistry({ open: openRender, close: closeRender, onUpdated: onRenderUpdated });
+    const reg = shared;
+    unGone = onDocGone((docId) => reg.forgetDoc(docId));
+  }
   return shared;
 }
 
@@ -191,4 +203,6 @@ export function getDocRegistry() {
 export function _resetDocRegistryForTest() {
   shared?._reset();
   shared = null;
+  if (unGone) unGone();
+  unGone = null;
 }

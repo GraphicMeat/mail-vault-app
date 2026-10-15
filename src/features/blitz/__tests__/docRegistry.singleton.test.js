@@ -6,6 +6,7 @@ const svc = vi.hoisted(() => ({
   onRenderUpdated: vi.fn(),
 }));
 vi.mock('../service', () => svc);
+import { reportDocGone } from '../surfaces/docGone';
 import { getDocRegistry, _resetDocRegistryForTest, docKey } from '../surfaces/docRegistry';
 
 const P = { html: '<p>x', cssWidth: 600, scale: 2, allowRemote: true, theme: { mode: 'light' } };
@@ -74,5 +75,27 @@ describe('getDocRegistry / _resetDocRegistryForTest (F2)', () => {
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     getDocRegistry().acquire(docKey({ ...P, html: '<p>y' }), { ...P, html: '<p>y' });
     expect(svc.onRenderUpdated).toHaveBeenCalledTimes(2);
+  });
+
+  it('render_unknown_doc from any op drops the deferred doc, so the next acquire opens fresh (3b)', async () => {
+    const k = docKey(P);
+    const reg = getDocRegistry();
+    await reg.acquire(k, P);
+    reg.release(k); // deferred
+    reportDocGone(1, new Error('render_unknown_doc'));
+    expect(reg.openCount()).toBe(0);
+    svc.openRender.mockResolvedValueOnce({ docId: 2, rev: 1, meta: { cssHeight: 10 } });
+    expect((await reg.acquire(k, P)).docId).toBe(2);
+    expect(svc.openRender).toHaveBeenCalledTimes(2);
+  });
+
+  it('any other error leaves the doc alone, and a reset stops listening', async () => {
+    const k = docKey(P);
+    const reg = getDocRegistry();
+    await reg.acquire(k, P);
+    reportDocGone(1, new Error('render_unavailable'));
+    expect(reg.openCount()).toBe(1);
+    _resetDocRegistryForTest();
+    expect(() => reportDocGone(1, new Error('render_unknown_doc'))).not.toThrow();
   });
 });

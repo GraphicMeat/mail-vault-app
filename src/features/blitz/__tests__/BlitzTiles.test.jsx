@@ -90,6 +90,41 @@ describe('BlitzTiles', () => {
     expect(onFailure2).toHaveBeenCalledWith('render_tile_failed');
   });
 
+  it('each eviction gets one quiet reopen: evict, reopen, draw, evict again, reopen again (3b)', async () => {
+    const onFailure = vi.fn();
+    openRender.mockResolvedValueOnce({ docId: 3, rev: 1, meta: meta() });
+    render(tiles({ onFailure }));
+    let t = await screen.findAllByTestId('blitz-tile');
+    openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: meta() });
+    fireEvent.error(t[0]); fireEvent.error(t[1]); // the worker evicted doc 3
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('4%2F1%2F0'));
+    t = screen.getAllByTestId('blitz-tile');
+    fireEvent.load(t[0]); // the reopened doc drew a tile: the budget is back
+    openRender.mockResolvedValueOnce({ docId: 5, rev: 1, meta: meta() });
+    fireEvent.error(t[0]); fireEvent.error(t[1]); // evicted again, much later
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('5%2F1%2F0'));
+    expect(onFailure).not.toHaveBeenCalled();
+    t = screen.getAllByTestId('blitz-tile');
+    fireEvent.error(t[0]); // the reopened doc fails before drawing anything: now it is the user's
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledWith('render_tile_failed');
+  });
+
+  it('a tile that keeps failing while its siblings draw does not reopen forever (3b)', async () => {
+    const onFailure = vi.fn();
+    openRender.mockResolvedValueOnce({ docId: 3, rev: 1, meta: meta() });
+    render(tiles({ onFailure }));
+    let t = await screen.findAllByTestId('blitz-tile');
+    openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: meta() });
+    fireEvent.error(t[1]);
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('4%2F1%2F0'));
+    t = screen.getAllByTestId('blitz-tile');
+    fireEvent.load(t[0]); // another tile drew, the failing one did not
+    fireEvent.error(t[1]);
+    expect(onFailure).toHaveBeenCalledWith('render_tile_failed');
+    expect(openRender).toHaveBeenCalledTimes(2);
+  });
+
   it('click hit-tests and hands the link to onLink', async () => {
     const onLink = vi.fn();
     openRender.mockResolvedValue({ docId: 5, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
