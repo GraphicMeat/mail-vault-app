@@ -584,6 +584,10 @@ impl BaseDocument {
 
                 (stylo_taffy::to_taffy_style(style), style.clone_display())
             };
+            // MailVault parity fix (plan D): see `drop_percentage_max_width_of_fixed_width_table`.
+            if display_constructed_as.inside() == DisplayInside::Table {
+                crate::layout::table::drop_percentage_max_width_of_fixed_width_table(&mut taffy_style);
+            }
             taffy_style.item_is_replaced = node
                 .data
                 .downcast_element()

@@ -644,3 +644,92 @@ fn a_wrapped_inline_box_excludes_the_space_its_line_wrapped_at() {
     let w = get(&els, "wrapped").rect.clone().unwrap().w;
     assert!((w - 302.04).abs() < 0.1, "wrapped span, widest line without its trailing space: {w}");
 }
+
+// ---- Plan D, Task 13b: table widths and collapsed borders -------------------------------------
+
+/// The table `t` of `table_html` laid out alone in a 300px container (the chat bubble's
+/// inner width), next to a `table{max-width:100%}` rule like `buildChatBubbleDocument`'s.
+fn table_in_300(table_html: &str) -> Vec<InspectedElement> {
+    let html = format!(
+        r#"<body style="margin:0"><style>table{{max-width:100%}}</style><div style="width:300px">{table_html}</div></body>"#
+    );
+    inspect_at(&html, 300)
+}
+
+/// A table's `min-width` / `max-width`. CSS 2.1 10.4 leaves both undefined for tables, so the
+/// expected widths are WKWebView's, measured with `getBoundingClientRect` on `<table
+/// style="..." cellspacing=0 cellpadding=0>` in a 300px `div` (macOS WKWebView, 2026-10-15).
+/// WebKit honours `min-width` and a length `max-width` and also a percentage `max-width` on an
+/// auto or percentage width table, but ignores a percentage `max-width` when the table's
+/// `width` is a length (attribute or CSS): `width=600` with `max-width:100%` stays 600 and
+/// overflows. Blitz clamped it to the container (268 in the bubble). The cases Blitz already
+/// matched are pinned here too, so the fix cannot widen what it drops.
+#[test]
+fn a_table_with_a_length_width_ignores_a_percentage_max_width() {
+    let row = "<tr><td>a</td><td>b</td></tr>";
+    let long = "<tr><td>lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore</td></tr>";
+    // (attributes and style of the table, rows, WebKit's width)
+    let cases: &[(&str, &str, f64)] = &[
+        // Length width + percentage max-width: ignored.
+        (r#"width="600""#, row, 600.0),
+        (r#"style="width:600px""#, row, 600.0),
+        (r#"width="600" style="max-width:50%""#, row, 600.0),
+        (r#"width="600" style="max-width:100%""#, row, 600.0),
+        (r#"style="width:600px;max-width:50%""#, row, 600.0),
+        (r#"style="width:400px;max-width:50%""#, row, 400.0),
+        (r#"style="width:400px;max-width:75%""#, row, 400.0),
+        (r#"style="width:400px;max-width:100%""#, row, 400.0),
+        (r#"width="600" style="max-width:100%""#, long, 600.0),
+        // Length max-width: honoured with a length width.
+        (r#"width="600" style="max-width:300px""#, row, 300.0),
+        (r#"width="600" style="max-width:200px""#, row, 200.0),
+        (r#"width="400" style="max-width:200px""#, row, 200.0),
+        // Percentage max-width: honoured with an auto or percentage width.
+        (r#"style="max-width:50%""#, long, 150.0),
+        (r#"width="100%" style="max-width:50%""#, row, 150.0),
+        (r#"width="50%" style="max-width:100px""#, row, 100.0),
+        (r#"style="max-width:200px""#, long, 200.0),
+        (r#""#, long, 300.0),
+        // The reader template's `width:auto !important; max-width:100% !important`.
+        (r#"width="600" style="width:auto !important;max-width:100% !important""#, long, 300.0),
+        // The auto table cannot be narrower than its content, and a wide fixed div is content.
+        (r#""#, "<tr><td><div style=\"width:600px\">x</div></td></tr>", 600.0),
+        (r#"style="max-width:200px""#, "<tr><td><div style=\"width:100px\">x</div></td></tr>", 100.0),
+        (r#"style="max-width:200px""#, "<tr><td><div style=\"width:260px\">x</div></td></tr>", 260.0),
+        // min-width is honoured (not part of this fix, pinned so it stays so).
+        (r#"style="width:100px;min-width:400px""#, "<tr><td>a</td></tr>", 400.0),
+        (r#"style="min-width:250px""#, "<tr><td>a</td></tr>", 250.0),
+        (r#"style="min-width:400px""#, "<tr><td>a</td></tr>", 400.0),
+        (r#"width="100%" style="min-width:100%""#, "<tr><td>a</td></tr>", 300.0),
+    ];
+    let mut wrong = Vec::new();
+    for (attrs, rows, expected) in cases {
+        let els = table_in_300(&format!(r#"<table data-mv-id="t" {attrs} cellspacing="0" cellpadding="0">{rows}</table>"#));
+        let w = get(&els, "t").rect.clone().unwrap().w;
+        if (w - expected).abs() > 0.51 {
+            wrong.push(format!("<table {attrs}>: WebKit {expected}, Blitz {w}"));
+        }
+    }
+    assert!(wrong.is_empty(), "table widths differ from WebKit:\n{}", wrong.join("\n"));
+}
+
+/// The bubble's shape: a 600px table of three 200px cells in a 300px container keeps its cells
+/// (WebKit: table 600, cells 200 / 200 / 200 at x = 0, 200, 400) whether the width comes from
+/// the attribute, the style, or both.
+#[test]
+fn a_fixed_width_table_in_a_narrow_container_keeps_its_columns() {
+    for table in [
+        r#"<table data-mv-id="t" width="600" cellspacing="0" cellpadding="0">"#,
+        r#"<table data-mv-id="t" style="width:600px" cellspacing="0" cellpadding="0">"#,
+    ] {
+        let els = table_in_300(&format!(
+            r#"{table}<tr><td data-mv-id="a" style="width:200px">a</td><td data-mv-id="b" style="width:200px">b</td><td data-mv-id="c" style="width:200px">c</td></tr></table>"#
+        ));
+        let r = |id: &str| {
+            let r = get(&els, id).rect.clone().unwrap();
+            (r.x, r.w)
+        };
+        assert_eq!(r("t"), (0.0, 600.0), "{table}");
+        assert_eq!((r("a"), r("b"), r("c")), ((0.0, 200.0), (200.0, 200.0), (400.0, 200.0)), "{table}");
+    }
+}
