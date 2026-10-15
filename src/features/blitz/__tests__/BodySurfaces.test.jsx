@@ -161,6 +161,36 @@ describe('BlitzBody on every surface', () => {
     expect(root().style.height).toBe('100%');
   });
 
+  it('collapsedMax caps the box at the cap and scrolls inside past it', async () => {
+    render(<BlitzBody {...base} surface="bubble" sizing={{ collapsedMax: 400 }} documentHtml="<html><body><p>x</p></body></html>" />);
+    near();
+    await landed();
+    expect(root().style.height).toBe('400px'); // the mock doc is 900 tall
+    expect(root().style.overflowY).toBe('auto');
+    expect(root().className).toContain('overflow-y-auto');
+  });
+
+  it('two bubbles sharing one doc both recover when it dies: neither is left busy', async () => {
+    const doc = '<html><body><p>Thanks</p></body></html>';
+    render(<>
+      <BlitzBody {...base} surface="bubble" messageKey="b-a" documentHtml={doc} />
+      <BlitzBody {...base} surface="bubble" messageKey="b-b" documentHtml={doc} />
+    </>);
+    near();
+    await waitFor(() => expect(svc.opens).toHaveLength(1)); // one registry entry for both
+    await settle();
+    const roots = () => [...document.querySelectorAll('[data-renderer="blitz"]')];
+    await waitFor(() => expect(roots().every(r => r.hasAttribute('data-blitz-doc'))).toBe(true));
+    const [a, b] = [...document.querySelectorAll('[data-testid="blitz-tile"]')].filter(t => t.dataset.index === '0');
+    // The worker restarted: each body's tile of the shared doc fails, each retries and discards the entry.
+    act(() => { a.dispatchEvent(new Event('error')); });
+    act(() => { b.dispatchEvent(new Event('error')); });
+    await act(async () => { await Promise.resolve(); });
+    for (let i = 0; i < 4 && svc.opens.length; i++) await settle();
+    await waitFor(() => expect(roots().every(r => r.hasAttribute('data-blitz-doc') && r.getAttribute('aria-busy') === 'false')).toBe(true));
+    expect(screen.queryByTestId('blitz-failure-notice')).toBeNull();
+  });
+
   it('churn: stale opens never paint and are released', async () => {
     const { rerender, unmount } = render(<BlitzBody {...base} surface="fullView" bodyHtml="<p>A</p>" />);
     for (let i = 0; i < 20; i++) rerender(<BlitzBody {...base} surface="fullView" bodyHtml={`<p>${i % 2 ? 'A' : 'B'}</p>`} />);

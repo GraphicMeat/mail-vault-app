@@ -13,6 +13,7 @@ const DISCARDED = 'render_discarded';
  * with deferral when `deferOnUnmount` (the lazy surfaces: churn reuse), at
  * once otherwise.
  * `busy` is true while what is on screen is not the current key's doc.
+ * A holder whose open is discarded by another holder's retry opens again.
  * `retry()` discards the current key's doc and opens it again; the discarded
  * doc is off screen in the same render, so none of its tiles can fail the retry.
  */
@@ -50,8 +51,10 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
         if (prev && prev !== key) registry.release(prev, { now: true });
       },
       (err) => {
-        // render_discarded: this acquire was released or discarded while opening; not a failure.
-        if (!live || err?.message === DISCARDED) return;
+        if (!live) return;
+        // render_discarded while this body still wants the doc: another holder of the same key retried and threw
+        // the entry away. Not a failure: open again (the next acquirer joins whichever new entry is already pending).
+        if (err?.message === DISCARDED) { setAttempt(n => n + 1); return; }
         const prev = held.current;
         held.current = null;
         setState({ key, doc: null, error: err?.message || err?.code || String(err), sentWidth });

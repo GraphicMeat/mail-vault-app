@@ -107,11 +107,23 @@ describe('useSurfaceDoc', () => {
     }
   });
 
-  it('a discarded open (render_discarded) is not a failure', async () => {
+  it('an open discarded under a body that still wants it (another holder retried) is not a failure: it opens again', async () => {
     const reg = fakeRegistry();
     const { result } = renderHook(() => useSurfaceDoc(P(), { registry: reg }));
     await act(async () => { reg.pending.shift().reject(new Error('render_discarded')); await Promise.resolve(); });
     expect(result.current.error).toBeNull();
+    expect(result.current.busy).toBe(true);
+    expect(reg.acquire).toHaveBeenCalledTimes(2);
+    await land(reg, 7);
+    expect(result.current.doc.docId).toBe(7);
+  });
+
+  it('an open discarded after this body went away is ignored', async () => {
+    const reg = fakeRegistry();
+    const { unmount } = renderHook(() => useSurfaceDoc(P(), { registry: reg }));
+    unmount();
+    await act(async () => { reg.pending.shift().reject(new Error('render_discarded')); await Promise.resolve(); });
+    expect(reg.acquire).toHaveBeenCalledTimes(1);
   });
 
   it('an open error is the error; retry discards the key, drops the doc at once and opens again', async () => {
