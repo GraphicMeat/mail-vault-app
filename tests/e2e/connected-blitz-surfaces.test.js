@@ -561,8 +561,8 @@ describe('Blitz on every surface', function () {
     log('tall', { w: r.w, h: r.h, area: r.w * r.h, ink: r.ink, error: r.error, failures, openDocs: { before, after } });
     expect(r.error).toBeUndefined();
     expect(r.h).toBeGreaterThan(1000);
-    // Over the wall (area at scale 2 > 16.7e6 px), the worker draws at a smaller scale: the card is narrower than 820 x 2, or within the cap outright.
-    expect(r.w < 1640 || r.w * r.h <= 16.7e6).toBe(true);
+    // The web card has no area cap (modern-screenshot, maximumCanvasSize 0): always the column at scale 2 wide. Over the wall the worker draws the PNG smaller; rasterize draws it back up, so the card keeps the web size and layout.
+    expect(r.w).toBe(1640);
     expect(failures).toEqual([]);
   });
 

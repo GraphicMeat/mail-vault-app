@@ -33,16 +33,32 @@ export async function rasterizeWithBlitz({ html, width, scale, dark = false, pal
     const source = `<!doctype html>\n${doc.documentElement.outerHTML}`;
     const opened = await deps.openRender({ html: source, cssWidth: width, scale, allowRemote: true, theme: blitzThemeFor({ dark, palette }) });
     docId = opened.docId;
-    if (opened.meta?.cssHeight >= MAX_CSS_HEIGHT) return null;
+    const cssHeight = opened.meta?.cssHeight;
+    if (cssHeight >= MAX_CSS_HEIGHT) {
+      console.warn(`[blitz] export refused: the document reaches the ${MAX_CSS_HEIGHT} CSS px height limit`);
+      return null;
+    }
     const { png } = await deps.imageRender(docId);
     const bitmap = await deps.decode(png);
+    // The frame rasterizer's canvas is always columnWidth*scale by height*scale, however tall (modern-screenshot
+    // has no area cap; imagePacker splits pages, never downscales). The worker shrinks a PNG past the area wall,
+    // so it is drawn back up to that size: the card keeps the web card's dimensions and the header/body stack
+    // (renderSocialCard stack) keeps its one shared width.
+    const fullW = Math.round(width * scale);
+    const fullH = Number.isFinite(cssHeight) ? Math.round(cssHeight * scale) : bitmap.height;
+    const shrunk = bitmap.width < fullW - 1;
     const canvas = deps.createCanvas();
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
+    canvas.width = shrunk ? fullW : bitmap.width;
+    canvas.height = shrunk ? Math.max(fullH, 1) : bitmap.height;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, 0, 0);
+    if (shrunk) {
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.drawImage(bitmap, 0, 0);
+    }
     return canvas;
   } catch (err) {
     console.warn('[blitz] export rasterize failed', err?.message || err);
