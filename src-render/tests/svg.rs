@@ -404,3 +404,91 @@ fn an_svg_without_nested_rasters_is_drawn_any_number_of_times() {
     let (px, _) = probe_pts(&body(&divs), &(0..10).map(|i| (i * 20 + 10, 50)).collect::<Vec<_>>());
     assert!(px.iter().all(|p| *p == RED), "{px:?}");
 }
+
+// ---- vector complexity: `<use>` fan-out ----
+
+/// A red 10x10 SVG built from `levels` layers of `fan` `<use>` copies each: usvg copies the
+/// linked subtree for every `<use>`, so a kilobyte of markup becomes `fan^levels` rectangles.
+fn fan_svg(levels: u32, fan: u32) -> String {
+    let mut defs = String::from(r##"<g id="l0"><rect width="10" height="10" fill="#f00"/></g>"##);
+    for l in 1..=levels {
+        let uses = format!(r##"<use href="#l{}"/>"##, l - 1).repeat(fan as usize);
+        defs.push_str(&format!(r#"<g id="l{l}">{uses}</g>"#));
+    }
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs>{defs}</defs><use href="#l{levels}"/></svg>"##
+    )
+}
+
+/// `rows` variants of `fan_svg(levels, fan)` (a comment makes each one a different url
+/// when `wrap` makes it an `<img>`), one per 10 px row of a document 10 px wide.
+/// Returns how many rows painted red, how long the open took, and the markup size.
+fn red_rows(levels: u32, fan: u32, rows: u32, wrap: impl Fn(&str) -> String) -> (u32, std::time::Duration, usize) {
+    let svg = fan_svg(levels, fan);
+    let html = body(
+        &(0..rows)
+            .map(|i| format!(r#"<div style="height:10px;overflow:hidden">{}</div>"#, wrap(&svg.replacen("<defs>", &format!("<!--{i}--><defs>"), 1))))
+            .collect::<String>(),
+    );
+    let t = std::time::Instant::now();
+    let net = BridgeNet::new(true);
+    let mut doc = RenderDoc::open(&html, RenderOptions::new(200, 1.0), Some(net)).unwrap();
+    doc.apply_resources();
+    let took = t.elapsed();
+    let png = doc.tile_png(0).unwrap();
+    let red = (0..rows).filter(|i| rgb_at(&png, 5, i * 10 + 5) == RED).count() as u32;
+    (red, took, html.len())
+}
+
+fn data_img(svg: &str) -> String {
+    format!(r#"<img style="display:block" width="10" height="10" src="data:image/svg+xml;base64,{}">"#, b64(svg.as_bytes()))
+}
+
+#[test]
+fn a_fan_out_bomb_is_refused_in_bounded_time() {
+    // About 1 KB of markup that usvg expands to 300,000 nodes: past what one SVG may keep.
+    let (red, took, bytes) = red_rows(5, 10, 1, |s| s.to_string());
+    assert!(bytes < 4096, "the bomb is small markup: {bytes} bytes");
+    assert_eq!(red, 0, "a bomb tree was kept and drawn");
+    assert!(took.as_secs() < 20, "opening one bomb took {took:?}");
+}
+
+#[test]
+fn a_marker_fan_out_is_refused() {
+    // Not a `<use>`: a 30,000-vertex path draws its marker at every vertex, and usvg builds a
+    // group per marker instance. ~150 KB of markup, 90,000+ nodes, no `<use>` to count.
+    let verts = " L51 50 L50 50".repeat(15_000);
+    let svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs><marker id="m" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10"><rect width="10" height="10" fill="#f00"/><rect width="10" height="10" fill="#f00"/><rect width="10" height="10" fill="#f00"/></marker></defs><path d="M50 50{verts}" fill="none" stroke="#fff" marker-start="url(#m)" marker-mid="url(#m)" marker-end="url(#m)"/></svg>"##
+    );
+    let small = svg.replace(&verts, " L51 50 L50 50");
+    assert_eq!(probe(&body(&small)), RED, "the same SVG with few vertices draws its marker");
+    assert_eq!(probe(&body(&svg)), WHITE, "a marker bomb was kept and drawn");
+}
+
+#[test]
+fn ten_bombs_in_one_document_open_in_bounded_time_and_draw_nothing() {
+    for wrap in [(|s: &str| s.to_string()) as fn(&str) -> String, data_img] {
+        let (red, took, _) = red_rows(5, 10, 10, wrap);
+        assert_eq!(red, 0, "a bomb tree was kept and drawn");
+        assert!(took.as_secs() < 60, "opening ten bombs took {took:?}");
+    }
+}
+
+#[test]
+fn svgs_under_the_per_svg_cap_still_share_one_document_budget() {
+    // Each of these is some 26,000 nodes, under the per-SVG cap of 50,000; the document
+    // keeps at most 200,000 in all, so about seven of ten are drawn, inline or as images.
+    for wrap in [(|s: &str| s.to_string()) as fn(&str) -> String, data_img] {
+        let (red, took, _) = red_rows(5, 6, 10, wrap);
+        assert!(took.as_secs() < 30, "opening ten took {took:?}");
+        assert!((5..=8).contains(&red), "{red} of 10 drawn");
+    }
+}
+
+#[test]
+fn a_normal_svg_logo_is_not_charged_into_refusal() {
+    for wrap in [(|s: &str| s.to_string()) as fn(&str) -> String, data_img] {
+        assert_eq!(red_rows(2, 3, 10, wrap).0, 10);
+    }
+}

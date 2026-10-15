@@ -4,6 +4,66 @@ use std::sync::Arc;
 
 use usvg::roxmltree;
 
+/// MailVault parity fix (plan B): an upper bound on the elements `usvg::Tree::from_xmltree`
+/// will build for `doc` once every `<use>` has copied its target (a `<use>` costs its own
+/// element plus the whole linked subtree; `<defs>` and `<symbol>` cost nothing until used).
+/// usvg bounds the expansion only at 1,000,000 elements, which takes seconds and hundreds of
+/// MiB to build and then to throw away, per SVG; a kilobyte of nested `<use>` reaches it.
+/// This counts the same expansion from the XML alone, in time linear in the markup (every
+/// element's size is computed once), and stops as soon as the figure passes `limit`. Local
+/// `#id` hrefs only (the others are stripped or unresolvable). Cycles and reference chains
+/// deeper than `MAX_DEPTH` count as past the limit.
+fn expanded_element_count(doc: &roxmltree::Document, limit: u64) -> u64 {
+    use std::collections::HashMap;
+    const MAX_DEPTH: u32 = 256;
+    const XLINK: &str = "http://www.w3.org/1999/xlink";
+
+    struct Cx<'a, 'i> {
+        ids: HashMap<&'a str, roxmltree::Node<'a, 'i>>,
+        memo: HashMap<roxmltree::NodeId, u64>,
+        active: std::collections::HashSet<roxmltree::NodeId>,
+        limit: u64,
+    }
+
+    fn size<'a, 'i>(cx: &mut Cx<'a, 'i>, node: roxmltree::Node<'a, 'i>, depth: u32) -> u64 {
+        if let Some(&n) = cx.memo.get(&node.id()) {
+            return n;
+        }
+        let over = cx.limit.saturating_add(1);
+        if depth > MAX_DEPTH || !cx.active.insert(node.id()) {
+            return over;
+        }
+        let name = node.tag_name().name();
+        let mut total = 1u64;
+        if name != "defs" && name != "symbol" {
+            for child in node.children().filter(|c| c.is_element()) {
+                total = total.saturating_add(size(cx, child, depth + 1));
+                if total > cx.limit {
+                    break;
+                }
+            }
+        }
+        if name == "use" && total <= cx.limit {
+            let href = node.attribute((XLINK, "href")).or_else(|| node.attribute("href"));
+            if let Some(target) = href.and_then(|h| h.strip_prefix('#')).and_then(|id| cx.ids.get(id).copied()) {
+                total = total.saturating_add(size(cx, target, depth + 1));
+            }
+        }
+        cx.active.remove(&node.id());
+        let total = total.min(over);
+        cx.memo.insert(node.id(), total);
+        total
+    }
+
+    let mut cx = Cx { ids: HashMap::new(), memo: HashMap::new(), active: Default::default(), limit };
+    for node in doc.descendants().filter(|n| n.is_element()) {
+        if let Some(id) = node.attribute("id") {
+            cx.ids.entry(id).or_insert(node);
+        }
+    }
+    size(&mut cx, doc.root_element(), 0)
+}
+
 /// Dimensions declared on the root `<svg>` element, before any resolution.
 ///
 /// Unlike [`usvg::Tree::size`], which always produces a concrete size, this
@@ -76,6 +136,9 @@ pub struct SvgImageData {
     /// JPEG, GIF, WebP), as their headers declare them. usvg's renderer decodes them again
     /// every time an element draws the tree, so the document charges this figure per use.
     pub nested_pixels: u64,
+    /// MailVault parity fix (plan B): vector nodes in the converted tree, charged once
+    /// against the document's `MAX_DOC_SVG_NODES` (`BaseDocument::charge_svg_nodes`).
+    pub nodes: u64,
 }
 
 impl SvgImageData {
@@ -112,11 +175,15 @@ impl SvgImageData {
         };
         let doc = roxmltree::Document::parse_with_options(text, xml_options)
             .map_err(usvg::Error::ParsingFailed)?;
+        if expanded_element_count(&doc, crate::util::MAX_SVG_TREE_NODES) > crate::util::MAX_SVG_TREE_NODES {
+            return Err(usvg::Error::ElementsLimitReached);
+        }
         let tree = usvg::Tree::from_xmltree(&doc, options)?;
         Ok(Self {
             tree: Arc::new(tree),
             intrinsic_dimensions: SvgIntrinsicDimensions::from_xmltree(&doc),
             nested_pixels: 0,
+            nodes: 0,
         })
     }
 

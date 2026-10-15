@@ -329,6 +329,12 @@ pub struct BaseDocument {
     #[cfg(feature = "svg")]
     pub(crate) svg_nested_pixels_left: u64,
 
+    /// MailVault parity fix (plan B): vector nodes this document may still keep in parsed
+    /// SVG trees (`charge_svg_nodes`). A tree is charged once when it is kept, however many
+    /// elements draw it; an inline `<svg>` that is rebuilt gives its old tree's share back.
+    #[cfg(feature = "svg")]
+    pub(crate) svg_nodes_left: u64,
+
     /// Tracks in-flight image requests. When an image is being fetched, additional
     /// requests for the same URL are queued here instead of starting new fetches.
     /// Value is a list of (node_id, image_type) pairs waiting for the image.
@@ -506,6 +512,8 @@ impl BaseDocument {
             image_cache: HashMap::new(),
             #[cfg(feature = "svg")]
             svg_nested_pixels_left: crate::util::MAX_SVG_IMAGE_PIXELS,
+            #[cfg(feature = "svg")]
+            svg_nodes_left: crate::util::MAX_DOC_SVG_NODES,
             pending_images: HashMap::new(),
             pending_style_image_nodes: Vec::new(),
             pending_critical_resources: HashSet::new(),
@@ -1406,6 +1414,33 @@ impl BaseDocument {
         let _ = image;
     }
 
+    /// MailVault parity fix (plan B): keep `image` against the document's vector-node budget.
+    /// False when it no longer fits: the caller drops the tree. Rasters always pass.
+    pub(crate) fn charge_svg_nodes(&mut self, image: &ImageData) -> bool {
+        #[cfg(feature = "svg")]
+        if let ImageData::Svg(svg) = image {
+            match self.svg_nodes_left.checked_sub(svg.nodes) {
+                Some(left) => self.svg_nodes_left = left,
+                None => return false,
+            }
+        }
+        let _ = image;
+        true
+    }
+
+    /// MailVault parity fix (plan B): give back the vector nodes of a tree that is dropped
+    /// (only an inline `<svg>` owns its tree; cached trees live as long as the document).
+    pub(crate) fn release_svg_nodes(&mut self, image: &ImageData) {
+        #[cfg(feature = "svg")]
+        if let ImageData::Svg(svg) = image {
+            self.svg_nodes_left = self
+                .svg_nodes_left
+                .saturating_add(svg.nodes)
+                .min(crate::util::MAX_DOC_SVG_NODES);
+        }
+        let _ = image;
+    }
+
     /// Cache a loaded image and apply it to all nodes waiting on it
     /// (`<img>` elements, `background-image` layers and `mask-image` layers).
     fn apply_loaded_image(&mut self, url: &str, image: ImageData) {
@@ -1417,6 +1452,12 @@ impl BaseDocument {
             "Image {url} loaded, applying to {} nodes",
             waiting_nodes.len()
         );
+
+        // MailVault parity fix (plan B): a tree past the document's vector-node budget is
+        // dropped (the waiting elements stay empty), not cached.
+        if !self.charge_svg_nodes(&image) {
+            return;
+        }
 
         // Cache the image
         self.image_cache.insert(url.to_string(), image.clone());

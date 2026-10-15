@@ -159,6 +159,38 @@ pub fn walk_tree(indent: usize, node: &Node) {
 #[cfg(feature = "svg")]
 pub(crate) const MAX_SVG_IMAGE_PIXELS: u64 = 16_000_000;
 
+/// MailVault parity fix (plan B): the most vector nodes (groups, paths, images, text) one
+/// parsed SVG may keep. A real logo or icon is a few hundred; usvg expands `<use>` by copying
+/// the linked subtree, so a kilobyte of fan-out becomes a tree of a million nodes. The
+/// transient cost of building one is bounded by usvg's own 1,000,000-element cap (a few
+/// hundred MiB at worst, freed when the tree is refused here); only what passes this is
+/// retained, and `BaseDocument::charge_svg_nodes` charges it against `MAX_DOC_SVG_NODES`.
+#[cfg(feature = "svg")]
+pub(crate) const MAX_SVG_TREE_NODES: u64 = 50_000;
+
+/// MailVault parity fix (plan B): the vector nodes all the SVG trees of one document may
+/// keep together (inline `<svg>`, `<img>` and CSS images; a tree shared by URL counts once).
+#[cfg(feature = "svg")]
+pub(crate) const MAX_DOC_SVG_NODES: u64 = 200_000;
+
+/// Nodes of a converted tree, subtrees of clip paths, masks, patterns and flattened text
+/// included. Recursion is as deep as usvg let the SVG nest (1024 levels at most).
+#[cfg(feature = "svg")]
+fn count_tree_nodes(tree: &usvg::Tree) -> u64 {
+    fn walk(group: &usvg::Group, count: &mut u64) {
+        for node in group.children() {
+            *count += 1;
+            if let usvg::Node::Group(g) = node {
+                walk(g, count);
+            }
+            node.subroots(|sub| walk(sub, count));
+        }
+    }
+    let mut count = 0;
+    walk(tree.root(), &mut count);
+    count
+}
+
 /// MailVault parity fix (plan B): an href resolver that can never read a file or fetch a url.
 /// usvg's default `resolve_string` opens any non-`data:` href as a local file path (a UNC
 /// share on Windows), so a mail could read the machine's files through `<image href>`.
@@ -203,6 +235,11 @@ pub(crate) fn parse_svg_image(source: &[u8]) -> Result<crate::node::SvgImageData
         ..Default::default()
     };
     let mut svg = crate::node::SvgImageData::from_data(source, &options)?;
+    // MailVault parity fix (plan B): refuse a tree past the per-SVG cap (nothing is kept).
+    svg.nodes = count_tree_nodes(&svg.tree);
+    if svg.nodes > MAX_SVG_TREE_NODES {
+        return Err(usvg::Error::ElementsLimitReached);
+    }
     // MailVault parity fix (plan B): what the resolver let through, for the document's
     // per-use budget (`BaseDocument::admit_image_use`).
     svg.nested_pixels = MAX_SVG_IMAGE_PIXELS - budget.load(Ordering::Acquire);

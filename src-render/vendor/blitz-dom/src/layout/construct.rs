@@ -570,14 +570,19 @@ fn collect_layout_children_with_wrap(
                     );
                     if let SpecialElementData::Image(old) = old {
                         doc.release_image_use(&old);
+                        doc.release_svg_nodes(&old);
                     }
                     let image = crate::node::ImageData::Svg(svg);
-                    if doc.admit_image_use(&image) {
-                        doc.get_node_mut(container_node_id)
-                            .unwrap()
-                            .element_data_mut()
-                            .unwrap()
-                            .special_data = SpecialElementData::Image(Box::new(image));
+                    if doc.charge_svg_nodes(&image) {
+                        if doc.admit_image_use(&image) {
+                            doc.get_node_mut(container_node_id)
+                                .unwrap()
+                                .element_data_mut()
+                                .unwrap()
+                                .special_data = SpecialElementData::Image(Box::new(image));
+                        } else {
+                            doc.release_svg_nodes(&image);
+                        }
                     }
                 }
                 Err(err) => {
