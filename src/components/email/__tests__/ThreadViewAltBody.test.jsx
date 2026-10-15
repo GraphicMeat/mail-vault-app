@@ -3,7 +3,7 @@ import React, { forwardRef, useImperativeHandle } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 
-const { bodies, seen, mounts } = vi.hoisted(() => ({ bodies: new Map(), seen: [], mounts: { count: 0, unmounts: 0 } }));
+const { bodies, seen, mounts, autosized } = vi.hoisted(() => ({ bodies: new Map(), seen: [], autosized: [], mounts: { count: 0, unmounts: 0 } }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 144,
   getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ index, key: options.getItemKey(index), start: index * 72 })),
@@ -11,6 +11,10 @@ vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
 vi.mock('../../../hooks/useChatBodyLoader', async () => {
   const { emailKey } = await import('../../../stores/slices/unifiedHelpers');
   return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: bodies }, registerListener: () => () => {} }) };
+});
+vi.mock('../../../utils/emailIframeTemplate', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, attachEmailIframeAutoSize: (frame, ...rest) => { autosized.push(frame); return actual.attachEmailIframeAutoSize(frame, ...rest); } };
 });
 vi.mock('../EmailActionBar', () => ({ EmailActionBar: (p) => (
   <div><button onClick={() => p.onReply()}>bar-reply</button><button onClick={() => p.onOpenInWindow()}>bar-window</button></div>
@@ -21,6 +25,7 @@ vi.mock('../../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 const { ThreadView } = await import('../ThreadView');
 const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../bodyRendererRegistry');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
+const { usePrivacyStore } = await import('../../../stores/privacyStore');
 const { useThemeStore } = await import('../../../stores/themeStore');
 const { emailKey, emailScopeKey } = await import('../../../stores/slices/unifiedHelpers');
 const { useMailStore } = await import('../../../stores/mailStore');
@@ -59,7 +64,7 @@ beforeEach(() => {
   bodies.set(emailKey(newest), { status: 'loaded', email: { ...newest, html: newestHtml, text: 'Newest body' } });
   window.__TAURI__ = { core: { invoke: vi.fn() } };
 });
-afterEach(() => { cleanup(); bodies.clear(); seen.length = 0; mounts.count = 0; mounts.unmounts = 0; _resetBodyRenderersForTest(); useSettingsStore.setState({ emailRenderer: 'web' }); delete window.__TAURI__; });
+afterEach(() => { cleanup(); bodies.clear(); seen.length = 0; autosized.length = 0; openWindow.mockClear(); usePrivacyStore.setState({ enabled: false }); mounts.count = 0; mounts.unmounts = 0; _resetBodyRenderersForTest(); useSettingsStore.setState({ emailRenderer: 'web' }); delete window.__TAURI__; });
 
 const last = () => seen.at(-1);
 
@@ -136,5 +141,23 @@ describe('ThreadView with an alternative body renderer', () => {
     fireEvent.click(screen.getByText('bar-window'));
     expect(openWindow).toHaveBeenCalledWith({ html: expect.stringContaining('Newest body'), dark: true, title: 'Re: Lunch' });
     expect(window.__TAURI__.core.invoke).not.toHaveBeenCalled();
+  });
+
+  it('Open in window under privacy is refused before the renderer is asked', () => {
+    usePrivacyStore.setState({ enabled: true });
+    render(<ThreadView thread={thread} />);
+    fireEvent.click(screen.getByText('bar-window'));
+    expect(openWindow).not.toHaveBeenCalled();
+    expect(window.__TAURI__.core.invoke).not.toHaveBeenCalled();
+  });
+
+  it('switching blitz to web attaches the iframe handlers to the fresh iframe', () => {
+    const { container } = render(<ThreadView thread={thread} />);
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(autosized).toHaveLength(0);
+    act(() => { useSettingsStore.setState({ emailRenderer: 'web' }); });
+    const frame = container.querySelector('iframe');
+    expect(frame).not.toBeNull();
+    expect(autosized).toContain(frame);
   });
 });

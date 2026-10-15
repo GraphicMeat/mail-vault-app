@@ -84,7 +84,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   // is registered and chosen; null keeps the iframe path exactly as before.
   const Alt = useAltBodyRenderer('thread');
   const altRef = useRef(null);
-  const searchQuery = useSearchStore(s => (s.searchActive ? s.searchQuery : ''));
+  const searchQuery = useSearchStore(s => (Alt && s.searchActive ? s.searchQuery : ''));
   // The same merged message useBodyPrivacy gets (its parties join the mask), kept stable.
   const altMessage = useMemo(() => (loadedEmail ? { ...email, ...loadedEmail } : email), [email, loadedEmail]);
   selectionRef.current = () => {
@@ -240,7 +240,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
     };
     // Theme is NOT a dep: DR is inlined into the iframe HTML (see useMemo),
     // so theme toggles don't need to tear down the load listener.
-  }, [loadedEmail?.html, readOnly]);
+  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
+  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
+  }, [loadedEmail?.html, readOnly, !!Alt]);
 
   // The search index's snippet stands in while the body downloads
   // (useChatBodyLoader); replies still wait for the real body.
