@@ -57,3 +57,23 @@ describe('a documentHtml carrying the iframe privacy gate (F11)', () => {
     expect(html).not.toMatch(/opacity:\s*0/);
   });
 });
+
+describe('a documentHtml built with a fresh CSP nonce (I1)', () => {
+  const withNonce = (n) => `<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${n}'"><style>p{margin:0}</style></head><body><p>Hello</p></body></html>`;
+
+  it('two nonces serialize to the same HTML: the doc key does not move per build', async () => {
+    const a = await runPrepass({ ...base, documentHtml: withNonce('aaaa1111') }, off);
+    const b = await runPrepass({ ...base, documentHtml: withNonce('bbbb2222') }, off);
+    expect(a.html).toBe(b.html);
+    expect(a.html).not.toContain('aaaa1111');
+    expect(a.html).toContain('Hello');
+  });
+
+  it('a bubble document built twice with the live builder pre-passes to one string', async () => {
+    const { buildChatBubbleDocument } = await import('../../../components/ChatBubbleView');
+    const mk = () => buildChatBubbleDocument({ bodyHtml: '<p>Hi</p>', fromUser: false, theme: 'light', palette: 'graphite', indicatorStyle: '', privacy: false, signatureDisplay: 'collapse' });
+    const a = await runPrepass({ ...base, documentHtml: mk() }, off);
+    const b = await runPrepass({ ...base, documentHtml: mk() }, off);
+    expect(a.html).toBe(b.html);
+  });
+});

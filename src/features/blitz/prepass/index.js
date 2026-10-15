@@ -1,4 +1,4 @@
-import { buildBlitzDocument } from './document';
+import { buildBlitzDocument, BLITZ_NONCE } from './document';
 import { stampParityIds } from '../parity/parityIds';
 import { applyPrivacyRedaction, releasePrivacyGate } from '../../../utils/iframePrivacyRedact';
 import { markFolds } from './folds';
@@ -28,6 +28,10 @@ export async function runPrepass(props, { privacy = { active: false, dict: null 
   // script, the mail's) and every inline on* handler, so nothing script-shaped
   // reaches the worker whatever the build step produced.
   stripScripts(doc);
+  // Nor does a CSP nonce guard anything. A surface that builds its own document (the chat bubble)
+  // stamps a fresh random one per mount, and it would reach the doc key: a remounted bubble could
+  // never reuse its deferred doc. One constant keeps equal content one key.
+  normalizeCspNonce(doc);
   // 3. Folds, on the built document, as the iframe's fold scripts run on theirs
   //    while it parses (before privacy's load-time pass).
   //    foldQuotes === false means the surface injects no fold scripts at all (fullView, original,
@@ -56,5 +60,14 @@ export function stripScripts(doc) {
     for (const attr of [...el.attributes]) {
       if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
     }
+  }
+}
+
+// Every `'nonce-…'` source in a CSP <meta> becomes BLITZ_NONCE. The meta has no layout effect.
+function normalizeCspNonce(doc) {
+  for (const m of doc.querySelectorAll('meta[http-equiv]')) {
+    if (m.getAttribute('http-equiv').toLowerCase() !== 'content-security-policy') continue;
+    const c = m.getAttribute('content');
+    if (c) m.setAttribute('content', c.replace(/'nonce-[^']*'/gi, `'nonce-${BLITZ_NONCE}'`));
   }
 }

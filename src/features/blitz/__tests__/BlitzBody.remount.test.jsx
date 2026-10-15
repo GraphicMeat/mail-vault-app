@@ -161,3 +161,24 @@ describe('BlitzBody message keys', () => {
     expect(closeRender).toHaveBeenCalledWith(1);
   });
 });
+
+describe('BlitzBody deferred-doc reuse (I1)', () => {
+  // A bubble builds its own document with a fresh CSP nonce on every mount; Blitz runs no
+  // script, so the nonce must not reach the doc key.
+  const bubbleDoc = (nonce) => `<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'"></head><body><p>Shall we meet at two?</p></body></html>`;
+  const bubbleProps = (nonce) => props({ surface: 'bubble', messageKey: 'p-bubble', message: null, bodyHtml: undefined, documentHtml: bubbleDoc(nonce), plainText: 'Shall we meet at two?', sizing: { collapsedMax: 400 } });
+
+  it('a remounted bubble with a fresh nonce reuses its deferred doc: no second open', async () => {
+    openRender.mockResolvedValue(opened(1));
+    const first = render(<BlitzBody {...bubbleProps('aaaa1111')} />);
+    await screen.findAllByTestId('blitz-tile');
+    expect(openRender).toHaveBeenCalledTimes(1);
+    first.unmount(); // the virtualizer unmounts: the doc is deferred, not closed
+    expect(closeRender).not.toHaveBeenCalled();
+    render(<BlitzBody {...bubbleProps('bbbb2222')} />);
+    const tiles = await screen.findAllByTestId('blitz-tile');
+    expect(tiles[0].getAttribute('src')).toContain('1%2F1%2F0'); // doc 1, not a new one
+    expect(openRender).toHaveBeenCalledTimes(1);
+    expect(closeRender).not.toHaveBeenCalled();
+  });
+});
