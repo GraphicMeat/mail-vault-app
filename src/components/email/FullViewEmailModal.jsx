@@ -39,7 +39,10 @@ import { describeReaderPurge, describeReaderDelete } from '../../utils/custodyCo
 import { useExportStore } from '../../stores/exportStore';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
-import { replySelection } from '../../utils/replySelection';
+import { altBodyQuote, replySelection } from '../../utils/replySelection';
+import { useAltBodyRenderer } from './bodyRendererRegistry';
+import { useSearchStore } from '../../stores/searchStore';
+import { activateEmailLink, openExternalUrl } from '../../utils/emailLinkActivation';
 import { isOutgoingMailboxName } from '../../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../../services/workflows/messageMutations';
@@ -59,9 +62,17 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const iframeRef = useRef(null);
   const privacyOn = usePrivacyFrameGate();
   const pa = usePrivateAttr();
+  // An alternative body renderer (the Blitz module) replaces the iframe when one
+  // is registered and chosen; null keeps the iframe path exactly as before.
+  const Alt = useAltBodyRenderer('fullView');
+  const altRef = useRef(null);
+  // The same value useSearchHighlight reads, for the alternative body only.
+  const searchQuery = useSearchStore(s => (Alt && s.searchActive ? s.searchQuery : ''));
   const selectedReplyHtml = () => {
     const frame = iframeRef.current;
-    return replySelection(frame?.contentDocument?.body, frame?.contentWindow?.getSelection?.());
+    if (frame?.contentDocument) return replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.());
+    // The selection lives in the main document, inside the alternative body's text layer.
+    return altBodyQuote(altRef.current, document.getSelection());
   };
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const selectionOwnership = useRef(null);
@@ -210,8 +221,8 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     recordTrackerVerdict(key, scanTrackers(replaceCidUrls(email.html, email.attachments), key).trackers);
   }, [email]);
 
-  // Build full HTML content for iframe
-  const iframeContent = useMemo(() => {
+  // The pre-processed body (cid, tracker frame): the iframe and the alternative renderer draw the same one.
+  const frameBodyHtml = useMemo(() => {
     // Escapes (including `&`, which the hand-rolled pair here used to let
     // through) and turns any address into a mailto: the frame's click
     // handler already knows what to do with.
@@ -220,17 +231,24 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     // Full-view is a fourth renderer of the same body; blocking holds here too.
     const cidResolved = replaceCidUrls(htmlBody, email.attachments);
     const scannedForFrame = frameBody(cidResolved, emailScopeKey(email, useMailStore.getState()), trackerBlocking).body;
+    return getEmailBodyContent(scannedForFrame);
+  }, [email, trackerBlocking]);
+
+  // Build full HTML content for iframe. Empty while the alternative body draws, so
+  // the hooks below that key on it run again when the iframe comes back (!!Alt).
+  const iframeContent = useMemo(() => {
+    if (Alt) return '';
     // One nonce per render: the frame's CSP runs only our nonced DR script, not
     // anything the mail carries.
     const nonce = emailScriptNonce();
     return buildEmailIframeHtml({
-      bodyHtml: getEmailBodyContent(scannedForFrame),
+      bodyHtml: frameBodyHtml,
       themeTag: theme,
       extraHead: isDark ? getDarkReaderInlineScripts({ palette, nonce }) : '',
       nonce,
       privacy: privacyOn,
     });
-  }, [email, trackerBlocking, theme, palette, privacyOn]);
+  }, [frameBodyHtml, theme, palette, privacyOn, !!Alt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Intercept links and prevent native context menu in full-view iframe
   // The full-view window is a third reader of the same body — the highlight
@@ -277,7 +295,8 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     iframe.addEventListener('load', setup);
     setup(); // in case already loaded
     return () => iframe.removeEventListener('load', setup);
-  }, [email]);
+  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
+  }, [email, !!Alt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -383,6 +402,17 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                 <span className="text-sm text-mail-text-muted">{t('email.fullView.loadingEmailContent')}</span>
               </div>
             </div>
+          ) : Alt ? (
+            <Alt
+              ref={altRef} surface="fullView" messageKey={emailScopeKey(email, useMailStore.getState())} bodyHtml={frameBodyHtml}
+              plainText={email.text || email.textBody || ''} theme={{ dark: isDark, palette }} foldQuotes={false}
+              privacy={privacyOn} message={email} searchQuery={searchQuery} accountId={email?._accountId}
+              onLink={link => activateEmailLink(link, {
+                accountId: email?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
+                openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
+              })}
+              sizing="fill" className="w-full h-full"
+            />
           ) : (
             <iframe
               ref={iframeRef}
