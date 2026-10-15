@@ -1,16 +1,21 @@
 //! Layout-text byte -> DOM position, for one inline root.
 //!
 //! Replays the push order of blitz-dom's `build_inline_layout_into`
-//! (blitz-dom 0.3.0-beta.2, src/layout/construct.rs:1013-1295, MIT OR
-//! Apache-2.0): list marker, ::before, children (recursing into inline-flow
-//! elements and `display: contents`, skipping display:none, hidden inputs and
-//! comments, atomic inline boxes carrying no text), `<br>` as "\n", ::after;
-//! text pushed case-transformed. The pushes then go through a model of parley
+//! (blitz-dom 0.3.0-beta.2 as vendored in src-render/vendor/blitz-dom,
+//! src/layout/construct.rs, MIT OR Apache-2.0): list marker, ::before, children
+//! (recursing into inline-flow elements and `display: contents`, skipping
+//! display:none, hidden inputs and comments, atomic inline boxes carrying no
+//! text), `<br>` as "\n", ::after; text pushed case-transformed, with plan B's
+//! two vendored changes: the collapsible spaces that end a text right before a
+//! `<br>` are dropped (`precedes_forced_break`), and an edge no-break space gets
+//! a word joiner on its outer side (`push_text_keeping_nbsp`); a joiner maps to
+//! the DOM text's edge with no width. The pushes then go through a model of parley
 //! 0.11.1's `TreeStyleBuilder` (src/resolve/tree.rs), which decides what
 //! whitespace survives into `TextLayout.text`, so the model's output can be
 //! compared char for char with the layout text. A match gives every layout
 //! char its DOM source; any difference makes the root degrade to element
 //! granularity and never panics.
+use crate::text::WORD_JOINER;
 use blitz_dom::node::{ListItemLayoutPosition, Marker};
 use blitz_dom::{local_name, BaseDocument, NodeData, NodeId};
 use style::computed_values::white_space_collapse::T as Wsc;
@@ -196,6 +201,60 @@ fn text_chars(content: &str, node: NodeId, case: Case, pseudo: Option<(NodeId, b
     out
 }
 
+/// The spaces CSS collapses: not the no-break space (vendored construct.rs).
+fn is_collapsible_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')
+}
+
+/// The vendored construct.rs's `precedes_forced_break`: whether the next thing
+/// on the line after text node `node` is a `<br>`, looking past
+/// whitespace-only text and out of the plain inline elements the node ends.
+fn precedes_forced_break(doc: &BaseDocument, node: NodeId) -> bool {
+    let mut id = node;
+    loop {
+        let Some(parent) = doc.get_node(id).and_then(|n| n.parent).and_then(|p| doc.get_node(p)) else { return false };
+        let Some(index) = parent.children.iter().position(|&c| c == id) else { return false };
+        let next = parent.children[index + 1..].iter().copied().find(|&sib| {
+            doc.get_node(sib).and_then(|n| n.text_data()).map_or(true, |t| !t.content.chars().all(is_collapsible_space))
+        });
+        match next {
+            Some(sib) => return doc.get_node(sib).is_some_and(|n| n.data.is_element_with_tag_name(&local_name!("br"))),
+            None => {
+                let plain_inline = parent.after().is_none()
+                    && parent.primary_styles().is_some_and(|s| {
+                        let d = s.clone_display();
+                        d.outside() == DisplayOutside::Inline && d.inside() == DisplayInside::Flow
+                    });
+                if !plain_inline {
+                    return false;
+                }
+                id = parent.id;
+            }
+        }
+    }
+}
+
+/// A text node's pushes as the vendored construct.rs makes them: trailing
+/// collapsible spaces before a `<br>` dropped, case-mapped, and a word joiner
+/// outside a leading or trailing nbsp of the result. A joiner is a zero-length
+/// slot at the DOM text's edge, so a point on either side of it lands there.
+fn text_pushes(doc: &BaseDocument, id: NodeId, content: &str, collapse: bool, case: Case, pseudo: Option<(NodeId, bool)>) -> Pushed {
+    const NBSP: char = '\u{a0}';
+    let content = if collapse && precedes_forced_break(doc, id) { content.trim_end_matches(is_collapsible_space) } else { content };
+    let mut chars = text_chars(content, id, case, pseudo);
+    let joiner = |byte: usize| match pseudo {
+        Some((owner, after)) => (WORD_JOINER, Src::Gen { owner, after }),
+        None => (WORD_JOINER, Src::Text { node: id, byte, len: 0 }),
+    };
+    if chars.first().is_some_and(|(c, _)| *c == NBSP) {
+        chars.insert(0, joiner(0));
+    }
+    if chars.last().is_some_and(|(c, _)| *c == NBSP) {
+        chars.push(joiner(content.len()));
+    }
+    chars
+}
+
 /// `is_replaced_element` of blitz-dom (layout/replaced.rs) plus the form
 /// controls `construct.rs` also makes inline boxes.
 fn is_atomic_tag(tag: &str) -> bool {
@@ -250,7 +309,7 @@ fn rec(doc: &BaseDocument, sim: &mut Sim, id: NodeId, collapse_in: bool, case_in
                 _ => sim.inline_box(in_flow),
             }
         }
-        NodeData::Text(t) => sim.push(text_chars(&t.content, id, case_in, pseudo)),
+        NodeData::Text(t) => sim.push(text_pushes(doc, id, &t.content, collapse, case_in, pseudo)),
         _ => {}
     }
 }

@@ -163,6 +163,11 @@ fn dommap_aligns_every_inline_shape() {
         "<div>one <p>block child</p> two</div>",
         "<table><tr><td> a </td><td>b <i>c</i></td></tr></table>",
         "<p></p><p> </p><p><b></b></p>",
+        // Plan B's vendored engine: the space before a `<br>` is dropped, and an
+        // edge nbsp gets a word joiner (after the trim, after the case mapping).
+        "<p>x <b>y </b><br>z</p>",
+        "<p>a&nbsp; <br>b</p>",
+        "<p style=\"text-transform:uppercase\">&nbsp;up&nbsp;</p>",
     ];
     let mut checked = 0;
     for html in corpus {
@@ -626,4 +631,46 @@ fn a_select_all_over_a_four_mebibyte_document_serializes_in_budget() {
     let d = open(&body);
     let (_, chars) = select_all_in_budget("4 MiB document of paragraphs", &d);
     assert!(chars > 3_000_000, "{chars}");
+}
+
+/// The vendored engine puts a U+2060 word joiner on the outer side of an edge
+/// nbsp (plan B, `push_text_keeping_nbsp`); it is layout-only. A select-all of
+/// nbsp-edged text copies the nbsp (a plain space, `&nbsp;` in the markup) and
+/// never the joiner: a Reply quote takes this text.
+#[test]
+fn copy_of_nbsp_edged_text_has_no_word_joiner() {
+    let d = open("<p>&nbsp;lead</p><p>a&nbsp;&nbsp;b&nbsp;</p>");
+    let runs: Vec<_> = (0..4).flat_map(|i| d.text_runs(i)).collect();
+    let (first, last) = (runs.first().unwrap(), runs.last().unwrap());
+    let out = d.serialize(
+        Endpoint { node: first.node, offset: first.start },
+        Endpoint { node: last.node, offset: last.start + last.text.len() },
+    );
+    assert!(!out.text.contains('\u{2060}') && !out.html.contains('\u{2060}'), "{out:?}");
+    assert_eq!(out.text, " lead\n\na  b ");
+    assert_eq!(out.html, "<p>&nbsp;lead</p><p>a&nbsp;&nbsp;b&nbsp;</p>");
+    // A partial selection over both edges: character-precise, not the whole roots.
+    let out = d.serialize(at(&d, "ad", false), at(&d, "\u{a0}\u{a0}b\u{a0}", true));
+    assert!(!out.text.contains('\u{2060}') && !out.html.contains('\u{2060}'), "{out:?}");
+    assert_eq!(out.text, "ad\n\na  b ");
+    assert_eq!(out.html, "<p>ad</p><p>a&nbsp;&nbsp;b&nbsp;</p>");
+}
+
+/// Offsets after an edge nbsp land on the right DOM char: the joiner has no
+/// DOM counterpart, so it must not shift them.
+#[test]
+fn offsets_after_an_edge_nbsp_point_at_the_right_dom_char() {
+    let d = open("<p>a&nbsp;<b>bold</b> tail</p><table><tr><td>&nbsp;Hi</td></tr></table>");
+    let out = d.serialize(at(&d, "bold", false), at(&d, "bo", true));
+    assert_eq!(out.text, "bo");
+    assert_eq!(out.html, "<b>bo</b>");
+    let out = d.serialize(at(&d, "ld", false), at(&d, "tai", true));
+    assert_eq!(out.text, "ld tai");
+    assert_eq!(out.html, "<b>ld</b> tai");
+    let out = d.serialize(at(&d, "Hi", false), at(&d, "Hi", true));
+    assert_eq!(out.text, "Hi");
+    assert_eq!(out.html, "Hi");
+    let out = d.serialize(at(&d, "\u{a0}Hi", false), at(&d, "H", true));
+    assert_eq!(out.text, " H");
+    assert_eq!(out.html, "&nbsp;H");
 }

@@ -290,3 +290,14 @@ fn root_overflow_hidden_does_not_clip_text_below_the_first_screen() {
         assert_eq!(texts, ["far below"], "{body_style}");
     }
 }
+
+/// The U+2060 the vendored engine puts beside an edge nbsp is layout-only: runs
+/// carry the text without it and offsets that do not count it, so the layer's
+/// text, its copy and the offsets it sends back match the DOM.
+#[test]
+fn runs_of_nbsp_edged_text_carry_no_word_joiner() {
+    let runs = open(r#"<p style="margin:0">&nbsp;lead a&nbsp;<b>bold</b>&nbsp;</p>"#).text_runs(0);
+    assert_partition(&runs, "\u{a0}lead a\u{a0}bold\u{a0}");
+    let bold = runs.iter().find(|r| r.text.starts_with("bold")).expect("bold is a run");
+    assert_eq!(bold.start, "\u{a0}lead a\u{a0}".len(), "{runs:?}");
+}

@@ -5,7 +5,8 @@
 //! line and glyph-run geometry, divided by the layout scale (parley lays out
 //! in device px). `node` is the inline root; `start` is a UTF-8 byte offset
 //! into its `TextLayout.text`, the same coordinates as blitz's own
-//! `set_text_selection`.
+//! `set_text_selection`, less the word joiners (see `WORD_JOINER`): every
+//! offset the frontend sees or sends back counts the layout text without them.
 use crate::TILE_CSS_HEIGHT;
 use blitz_dom::{local_name, BaseDocument, LocalName, Node, NodeId};
 use parley::PositionedLayoutItem;
@@ -13,6 +14,35 @@ use std::ops::Range;
 use serde::Serialize;
 
 pub const NOSELECT_ATTR: &str = "data-mv-noselect";
+
+/// U+2060. The vendored engine (plan B, `push_text_keeping_nbsp` in
+/// construct.rs) pushes one on the outer side of a text's leading or trailing
+/// no-break space, because parley trims and hangs an edge nbsp. It is
+/// layout-only, with no DOM counterpart: runs carry the text without any, and
+/// their offsets (`start`, `seg`, and the endpoints `serialize` gets back) do
+/// not count them. A U+2060 written in the mail is treated the same way: zero
+/// width, nothing to see or copy.
+pub const WORD_JOINER: char = '\u{2060}';
+const JOINER_LEN: usize = WORD_JOINER.len_utf8();
+
+/// Layout byte -> offset without the joiners before it.
+fn to_page(joiners: &[usize], byte: usize) -> usize {
+    byte - JOINER_LEN * joiners.partition_point(|&j| j < byte)
+}
+
+/// Offset without joiners -> layout byte of `text`, past any joiner at that
+/// spot (so an offset at the end of the visible text is the end of the layout
+/// text, and one before a leading nbsp is at the nbsp).
+pub(crate) fn to_layout(text: &str, page: usize) -> usize {
+    let mut out = page;
+    for (j, _) in text.match_indices(WORD_JOINER) {
+        if j > out {
+            break;
+        }
+        out += JOINER_LEN;
+    }
+    out
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -201,7 +231,7 @@ fn root_runs(doc: &BaseDocument, root: &Node, out: &mut Vec<TextRun>) {
             let end = run.start + run.text.len();
             if next.start > end {
                 let gap = &tl.text[end..next.start];
-                if gap.chars().all(char::is_whitespace) {
+                if gap.chars().all(|c| c.is_whitespace() || c == WORD_JOINER) {
                     run.text.push_str(gap);
                 }
             }
@@ -219,6 +249,15 @@ fn root_runs(doc: &BaseDocument, root: &Node, out: &mut Vec<TextRun>) {
         }
         r.seg = seg;
         prev = Some(r.start);
+    }
+    let joiners: Vec<usize> = tl.text.match_indices(WORD_JOINER).map(|(j, _)| j).collect();
+    if !joiners.is_empty() {
+        for r in &mut kept {
+            r.start = to_page(&joiners, r.start);
+            r.seg = to_page(&joiners, r.seg);
+            r.text.retain(|c| c != WORD_JOINER);
+        }
+        kept.retain(|r| !r.text.is_empty());
     }
     out.extend(kept);
 }

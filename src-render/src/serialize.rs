@@ -14,14 +14,16 @@
 //! order (`Nesting`): a nested root's text is spliced in at its box, as the
 //! iframe copies it.
 use crate::dommap::{align, collapses, dom_end_point, dom_point, pseudo_owner, DomPoint, Slot};
-use crate::text::{inline_roots, is_unselectable, is_visibility_hidden, NOSELECT_ATTR};
+use crate::text::{inline_roots, is_unselectable, is_visibility_hidden, to_layout, NOSELECT_ATTR, WORD_JOINER};
 use blitz_dom::{BaseDocument, LocalName, Node, NodeData, NodeId};
 use parley::InlineBoxKind;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// A selection end: `node` is the inline root (`NodeId::as_u64`), `offset` a
-/// UTF-8 byte offset into its `TextLayout.text`.
+/// UTF-8 byte offset into its `TextLayout.text` less the word joiners, as the
+/// text runs count it (`text::WORD_JOINER`). Everything below works in layout
+/// bytes: `serialize` converts the offsets on the way in.
 #[derive(Deserialize, Clone, Copy, Debug)]
 pub struct Endpoint {
     pub node: u64,
@@ -46,7 +48,7 @@ pub fn serialize(doc: &BaseDocument, a: Endpoint, b: Endpoint) -> Serialized {
     // An endpoint that is not a visible inline root (stale id, folded away) copies nothing.
     let at = |e: Endpoint| {
         let id = NodeId::from_u64(e.node);
-        nest.order.contains_key(&id).then(|| (id, e.offset.min(layout_len(doc, id))))
+        nest.order.contains_key(&id).then(|| (id, to_layout(layout_text(doc, id), e.offset).min(layout_len(doc, id))))
     };
     let (Some(mut a), Some(mut b)) = (at(a), at(b)) else { return empty() };
     if nest.key(doc, a) > nest.key(doc, b) {
@@ -81,8 +83,12 @@ fn snap(doc: &BaseDocument, root: NodeId, offset: usize, up: bool) -> usize {
     o
 }
 
+fn layout_text(doc: &BaseDocument, root: NodeId) -> &str {
+    doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()).map_or("", |t| t.text.as_str())
+}
+
 fn layout_len(doc: &BaseDocument, root: NodeId) -> usize {
-    doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()).map_or(0, |t| t.text.len())
+    layout_text(doc, root).len()
 }
 
 // ── reading order ──
@@ -382,8 +388,8 @@ fn plain(doc: &BaseDocument, nest: &Nesting, roots: &[NodeId], lo: &[Step], hi: 
     out
 }
 
-/// `text[s..e]` of `root`, less generated content and every char that comes
-/// from an unselectable or visibility-hidden DOM node.
+/// `text[s..e]` of `root`, less generated content, word joiners and every
+/// char that comes from an unselectable or visibility-hidden DOM node.
 fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize, slots: &[Slot]) -> String {
     let Some(tl) = doc.get_node(root).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()) else { return String::new() };
     let e = e.min(tl.text.len());
@@ -397,7 +403,7 @@ fn selectable_slice(doc: &BaseDocument, root: NodeId, s: usize, e: usize, slots:
         .iter()
         .take_while(|x| x.byte < e)
         .filter(|x| {
-            if x.generated() {
+            if x.generated() || x.ch == WORD_JOINER {
                 return false;
             }
             let node = x.dom_node();
