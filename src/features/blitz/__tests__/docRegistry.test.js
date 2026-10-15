@@ -170,7 +170,7 @@ describe('docRegistry', () => {
     expect(await done).toBe(1);
   });
 
-  it('release now with a deferral already pending closes immediately for a non-lazy holder, deferral stays the default (F2)', async () => {
+  it('release now closes a landed doc at once instead of deferring it (F2)', async () => {
     const h = harness();
     const k = docKey(P('x'));
     h.reg.acquire(k, P('x')); await h.settle();
@@ -211,5 +211,32 @@ describe('docRegistry', () => {
     await Promise.resolve();
     h.reg.acquire(docKey(P('c')), P('c'));
     expect(onUpdated).toHaveBeenCalledTimes(1);
+  });
+
+  it('release now on a still-opening doc raises no unhandled rejection when the caller ignores acquire (render_discarded)', async () => {
+    const seen = [];
+    const on = (err) => seen.push(err);
+    process.on('unhandledRejection', on);
+    try {
+      const h = harness();
+      const k = docKey(P('x'));
+      h.reg.acquire(k, P('x')); // result deliberately dropped, no catch
+      h.reg.release(k, { now: true });
+      await h.settle();
+      await new Promise(r => setTimeout(r, 10)); // let node's unhandled-rejection pass run
+      expect(h.close).toHaveBeenCalledWith(1);
+      expect(seen).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', on);
+    }
+  });
+
+  it('a caller that awaits acquire still sees render_discarded', async () => {
+    const h = harness();
+    const k = docKey(P('x'));
+    const p = h.reg.acquire(k, P('x'));
+    h.reg.release(k, { now: true });
+    await h.settle();
+    await expect(p).rejects.toThrow('render_discarded');
   });
 });

@@ -105,6 +105,9 @@ export function createDocRegistry({
       if (entries.get(key) === e) { unDefer(key); entries.delete(key); }
       throw err;
     });
+    // A caller that ignores acquire's result must not raise an unhandled
+    // render_discarded; callers who await it still see the rejection.
+    e.promise.catch(() => {});
     entries.set(key, e);
     return e.promise;
   }

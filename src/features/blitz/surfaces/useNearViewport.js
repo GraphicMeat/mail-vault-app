@@ -13,7 +13,8 @@ export function useNearViewport(ref, { enabled = true, margin = '100% 0px' } = {
     const el = ref.current;
     const IO = globalThis.IntersectionObserver;
     if (!el || !IO) { setNear(true); return undefined; }
-    const root = el.closest('.overflow-y-auto, [data-blitz-scroll-root]') ?? null;
+    // parentElement: the element itself may carry overflow-y-auto (BlitzTiles root when sizing scrolls inside)
+    const root = el.parentElement?.closest('.overflow-y-auto, [data-blitz-scroll-root]') ?? null;
     const io = new IO((entries) => {
       if (entries.some(e => e.isIntersecting)) { setNear(true); io.disconnect(); }
     }, { root, rootMargin: margin });

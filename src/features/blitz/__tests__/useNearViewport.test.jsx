@@ -8,10 +8,10 @@ let fire;
 let opts;
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); fire = undefined; opts = undefined; });
 
-function Probe({ enabled }) {
+function Probe({ enabled, className }) {
   const ref = useRef(null);
   const near = useNearViewport(ref, { enabled });
-  return <div ref={ref} data-testid="probe" data-near={String(near)} />;
+  return <div ref={ref} className={className} data-testid="probe" data-near={String(near)} />;
 }
 const stubIO = () => vi.stubGlobal('IntersectionObserver', class { constructor(cb, o) { fire = cb; opts = o; } observe() {} disconnect() {} });
 
@@ -52,6 +52,16 @@ describe('useNearViewport', () => {
       stubIO();
       const { container } = render(<div className="overflow-y-auto"><div className="overflow-y-auto" data-testid="inner"><Probe enabled /></div></div>);
       expect(opts.root).toBe(container.querySelector('[data-testid="inner"]'));
+    });
+    it('ignores the element itself: its own overflow-y-auto never becomes the root', () => {
+      stubIO();
+      const { container } = render(<div className="overflow-y-auto" data-testid="scroller"><Probe enabled className="overflow-y-auto" /></div>);
+      expect(opts.root).toBe(container.querySelector('[data-testid="scroller"]'));
+    });
+    it('is null when only the element itself has overflow-y-auto', () => {
+      stubIO();
+      render(<Probe enabled className="overflow-y-auto" />);
+      expect(opts.root).toBeNull();
     });
     it('is null (the viewport) with no scroller above', () => {
       stubIO();
