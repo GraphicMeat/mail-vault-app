@@ -38,7 +38,8 @@ export function foldRender(docId, id, open) {
 export function imageRender(docId) {
   return forDoc(docId, send('render.image', { docId }));
 }
-// render.image's wait for the doc's fetches (5 s cap) without the paint: resolves { settled }.
+// render.image's wait for the doc's fetches (5 s cap) without the paint: resolves { settled, rev, meta } with the doc's
+// CURRENT meta (the worker applied what landed first; open's meta predates the images).
 export function settleRender(docId) {
   return forDoc(docId, send('render.image', { docId, settleOnly: true }));
 }

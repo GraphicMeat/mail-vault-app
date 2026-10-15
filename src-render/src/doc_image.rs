@@ -1,7 +1,9 @@
 //! The whole document as one PNG (`image` op): the export canvas and the
 //! social app shot draw it. Painted at the doc's own scale until the image
-//! would pass the canvas area WebKit accepts (imagePacker.js MAX_PAGE_AREA,
-//! the same wall modern-screenshot shrinks at today), then just below it.
+//! would pass the canvas area WebKit accepts (imagePacker.js MAX_PAGE_AREA: the
+//! export packer splits pages at it, and modern-screenshot has no cap of its
+//! own), then just below it. A caller that needs the web canvas size past the
+//! wall draws the doc's tiles, which are always at doc scale, instead.
 
 pub const MAX_IMAGE_AREA_PX: f64 = 16_700_000.0;
 

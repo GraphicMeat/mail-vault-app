@@ -33,29 +33,38 @@ export async function rasterizeWithBlitz({ html, width, scale, dark = false, pal
     const source = `<!doctype html>\n${doc.documentElement.outerHTML}`;
     const opened = await deps.openRender({ html: source, cssWidth: width, scale, allowRemote: true, theme: blitzThemeFor({ dark, palette }) });
     docId = opened.docId;
-    const cssHeight = opened.meta?.cssHeight;
-    if (cssHeight >= MAX_CSS_HEIGHT) {
+    const refuse = (cssHeight) => {
+      if (!(cssHeight >= MAX_CSS_HEIGHT)) return false;
       console.warn(`[blitz] export refused: the document reaches the ${MAX_CSS_HEIGHT} CSS px height limit`);
-      return null;
-    }
+      return true;
+    };
+    if (refuse(opened.meta?.cssHeight)) return null;
     // The frame rasterizer's canvas is always columnWidth*scale by height*scale, however tall (modern-screenshot
-    // has no area cap; imagePacker splits pages, never downscales). Up to the worker's image area cap that is
-    // `render.image` (it also waits for the doc's remote images). Past it the worker would shrink the PNG, so the
-    // tiles, which are always at doc scale, are drawn at their own offsets instead: as sharp as the web canvas.
-    const fullW = Math.round(width * scale);
-    const fullH = Number.isFinite(cssHeight) ? Math.round(cssHeight * scale) : 0;
-    // 0.99: the worker compares unrounded floats, so a doc right at the cap must not land on its shrinking side.
-    const tiled = fullH > 0 && fullW * fullH > MAX_IMAGE_AREA_PX * 0.99;
-    const canvas = deps.createCanvas();
-    if (tiled) {
-      await deps.settleRender(docId); // the same fetch wait render.image makes, without its paint
-      canvas.width = fullW;
-      canvas.height = fullH;
+    // has no area cap; imagePacker splits pages, never downscales). The column is the worker's: its tiles are
+    // ceil(meta.cssWidth) * scale wide, which a mail that overflows sideways makes wider than `width`.
+    const geometry = (meta) => {
+      const w = Math.round(Math.ceil(meta?.cssWidth ?? width) * scale);
+      const h = Number.isFinite(meta?.cssHeight) ? Math.round(meta.cssHeight * scale) : 0;
+      // 0.99: the worker compares unrounded floats, so a doc right at the cap must not land on its shrinking side.
+      return { w, h, over: h > 0 && w * h > MAX_IMAGE_AREA_PX * 0.99 };
+    };
+    // Past the worker's image area cap `render.image` would shrink the PNG, so the tiles, which are always at doc
+    // scale, are drawn at their own offsets instead: as sharp as the web canvas. The size comes from the meta the
+    // settle returns, not from `open`'s: the doc's images land after open and relayout it (taller or shorter).
+    const drawTiles = async () => {
+      const settled = await deps.settleRender(docId); // render.image's fetch wait, without its paint; also applies what landed
+      const meta = settled?.meta ?? opened.meta;
+      if (refuse(meta?.cssHeight)) return null;
+      const { w, h } = geometry(meta);
+      if (!(h > 0)) throw new Error('render_unavailable');
+      const canvas = deps.createCanvas();
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = backgroundColor;
-      ctx.fillRect(0, 0, fullW, fullH);
-      const tileCssHeight = opened.meta?.tileCssHeight || TILE_CSS_HEIGHT;
-      const count = opened.meta?.tileCount || Math.ceil(cssHeight / tileCssHeight);
+      ctx.fillRect(0, 0, w, h);
+      const tileCssHeight = meta.tileCssHeight || TILE_CSS_HEIGHT;
+      const count = meta.tileCount || Math.ceil(meta.cssHeight / tileCssHeight);
       for (let i = 0; i < count; i++) { // one at a time: a tile is up to 1640x1024 px, and the worker is one thread
         const { png } = await deps.tileRender(docId, i);
         const tile = await deps.decode(png);
@@ -63,9 +72,13 @@ export async function rasterizeWithBlitz({ html, width, scale, dark = false, pal
         tile.close?.();
       }
       return canvas;
-    }
-    const { png } = await deps.imageRender(docId);
+    };
+    if (geometry(opened.meta).over) return await drawTiles();
+    const { png } = await deps.imageRender(docId); // waits for the doc's fetches itself
     const bitmap = await deps.decode(png);
+    // The images may have grown the doc past the cap after all: the worker then shrank this PNG. Redo it from tiles.
+    if (bitmap.width < geometry(opened.meta).w - 1) return await drawTiles();
+    const canvas = deps.createCanvas();
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
     const ctx = canvas.getContext('2d');

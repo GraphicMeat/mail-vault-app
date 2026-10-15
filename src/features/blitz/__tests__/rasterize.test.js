@@ -22,6 +22,7 @@ function deps(over = {}) {
   };
 }
 
+const metaOf = (cssHeight, over = {}) => ({ cssWidth: 820, cssHeight, tileCssHeight: 512, tileCount: Math.ceil(cssHeight / 512), ...over });
 let warn;
 beforeEach(() => { warn = vi.spyOn(console, 'warn').mockImplementation(() => {}); });
 afterEach(() => warn.mockRestore());
@@ -132,6 +133,48 @@ describe('rasterizeWithBlitz', () => {
       await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d);
       expect(order.slice(0, 3)).toEqual(['settle', 'tile0', 'tile1']);
       expect(maxOpen).toBe(1);
+    });
+
+    it('sizes the canvas, the tile loop and the cap from the SETTLED meta, not open\'s (images relayout the doc): taller', async () => {
+      const { d } = tallDeps({ settleRender: vi.fn(async () => ({ settled: true, rev: 2, meta: metaOf(20000) })) });
+      await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d);
+      expect([d.canvas.width, d.canvas.height]).toEqual([1640, 40000]);
+      expect(d.tileRender).toHaveBeenCalledTimes(40); // ceil(20000 / 512), not open's 27
+      expect(d.tileRender).toHaveBeenLastCalledWith(14, 39);
+      expect(d.ctx.drawImage.mock.calls.at(-1).slice(1)).toEqual([0, 39 * 1024]);
+    });
+
+    it('a doc that SHRANK when its images landed asks for no tile past its new end', async () => {
+      const { d } = tallDeps({ settleRender: vi.fn(async () => ({ settled: true, rev: 2, meta: metaOf(9000) })) });
+      await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d);
+      expect([d.canvas.width, d.canvas.height]).toEqual([1640, 18000]);
+      expect(d.tileRender).toHaveBeenCalledTimes(18); // ceil(9000 / 512)
+    });
+
+    it('a doc that reaches the height limit only after its images landed is refused', async () => {
+      const { d } = tallDeps({ settleRender: vi.fn(async () => ({ settled: true, rev: 2, meta: metaOf(MAX_CSS_HEIGHT) })) });
+      expect(await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d)).toBeNull();
+      expect(d.tileRender).not.toHaveBeenCalled();
+      expect(d.closeRender).toHaveBeenCalledWith(14);
+      expect(warn.mock.calls[0][0]).toContain('200000 CSS px height limit');
+    });
+
+    it('the column is the worker\'s ceil(meta.cssWidth): a mail overflowing sideways gets tiles\' width', async () => {
+      const { d } = tallDeps({ openRender: vi.fn(async () => ({ docId: 14, rev: 1, meta: metaOf(13447, { cssWidth: 900.4 }) })) });
+      await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d);
+      expect(d.canvas.width).toBe(1802); // ceil(900.4) * 2
+    });
+
+    it('a doc under the cap at open that the images grew past it is redrawn from tiles, not left as a shrunk PNG', async () => {
+      const d = deps({
+        openRender: vi.fn(async () => ({ docId: 17, rev: 1, meta: metaOf(4000) })), // 1640 x 8000: render.image
+        settleRender: vi.fn(async () => ({ settled: true, rev: 2, meta: metaOf(9000) })), // grew: 1640 x 18000
+        decode: vi.fn(async (b64) => (b64 === 'iVBOR' ? { width: 1010, height: 11000 } : { width: 1640, height: 1024, close: vi.fn() })),
+      });
+      await rasterizeWithBlitz({ html: '<p>x</p>', width: 820, scale: 2 }, d);
+      expect(d.imageRender).toHaveBeenCalledWith(17);
+      expect([d.canvas.width, d.canvas.height]).toEqual([1640, 18000]);
+      expect(d.tileRender).toHaveBeenCalledTimes(18);
     });
 
     it('a tile failure returns null and still closes the doc', async () => {

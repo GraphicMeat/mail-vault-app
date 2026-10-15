@@ -611,7 +611,7 @@ describe('Blitz on every surface', function () {
     log('tall', { w: r.w, h: r.h, area: r.w * r.h, ink: r.ink, calls: r.calls, error: r.error, failures, openDocs: { before, after } });
     expect(r.error).toBeUndefined();
     expect(r.h).toBeGreaterThan(1000);
-    // The web card has no area cap (modern-screenshot, maximumCanvasSize 0): always the column at scale 2 wide. Over the wall the worker draws the PNG smaller; rasterize draws it back up, so the card keeps the web size and layout.
+    // The web card has no area cap (modern-screenshot, maximumCanvasSize 0): always the column at scale 2 wide. Over the wall render.image would shrink the PNG, so rasterize draws the doc's full-scale tiles instead: the card keeps the web size, sharp.
     expect(r.w).toBe(1640);
     // Past the area cap the body is drawn from the worker's tiles, one render.tile each (the head is one image, the body's settle is the other).
     expect(r.calls['render.tile']).toBeGreaterThanOrEqual(20);

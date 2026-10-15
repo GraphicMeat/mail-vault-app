@@ -328,3 +328,33 @@ fn an_image_op_paints_the_resources_that_arrived_just_before_it() {
     let px = (5 * info.width as usize + 5) * 3;
     assert_eq!(&buf[px..px + 3], &[255, 0, 0], "the fetched image is in the picture");
 }
+
+/// The settle step of an export that draws tiles: images that landed relaid the doc out, so the reply carries the
+/// NEW meta (taller than `open`'s) and rev, after the `updated` frame, and paints nothing.
+#[test]
+fn a_settle_only_image_op_refreshes_a_dirty_doc_and_replies_with_its_new_meta() {
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":1,"html":"<body style=\"margin:0\"><img src=\"https://i.test/a.png\" width=10></body>","cssWidth":20,"scale":1.0,"allowRemote":true}),
+        json!({"op":"fetched","doc":1,"fetch":1,"bytes":red_square_png()}),
+        json!({"op":"image","req":2,"doc":1,"settleOnly":true}),
+        json!({"op":"image","req":3,"doc":1,"settleOnly":true}),
+        json!({"op":"tile","req":4,"doc":1,"index":0}),
+        json!({"op":"image","req":5,"doc":99,"settleOnly":true}),
+    ]);
+    let open_h = out.iter().find(|f| f["req"] == 1).unwrap()["ok"]["meta"]["cssHeight"].as_f64().unwrap();
+    let updated = out.iter().position(|f| f["kind"] == "updated").expect("an updated frame");
+    let reply = out.iter().position(|f| f["req"] == 2).expect("the settle reply");
+    assert!(updated < reply, "updated before the settle reply: {out:?}");
+    let ok = &out[reply]["ok"];
+    assert!(ok.get("png").is_none(), "settle paints nothing: {ok}");
+    assert_eq!(ok["rev"], 2, "the refresh bumped rev");
+    assert_eq!(ok["meta"], out[updated]["meta"]);
+    let new_h = ok["meta"]["cssHeight"].as_f64().unwrap();
+    assert!(new_h >= 10.0 && new_h > open_h, "the doc grew when the image landed: {open_h} -> {new_h}");
+    // Nothing is dirty the second time: same rev, no second updated frame.
+    let again = out.iter().find(|f| f["req"] == 3).unwrap();
+    assert_eq!(again["ok"]["rev"], 2);
+    assert_eq!(out.iter().filter(|f| f["kind"] == "updated").count(), 1);
+    assert_eq!(out.iter().find(|f| f["req"] == 4).unwrap()["kind"], "reply");
+    assert_eq!(out.iter().find(|f| f["req"] == 5).unwrap(), &json!({"kind":"error","req":5,"code":"render_unknown_doc"}));
+}

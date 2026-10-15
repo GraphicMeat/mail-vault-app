@@ -31,7 +31,14 @@ enum In {
     },
     Tile { req: u64, doc: u64, index: u32 },
     /// The whole document as one PNG (plan D's export and social shot).
-    Image { req: u64, doc: u64 },
+    /// `settle_only` (the daemon's settle step for an export that draws tiles): apply what arrived and answer with
+    /// the doc's current `rev` and `meta`, painting nothing.
+    Image {
+        req: u64,
+        doc: u64,
+        #[serde(default, rename = "settleOnly")]
+        settle_only: bool,
+    },
     Hit { req: u64, doc: u64, x: f32, y: f32 },
     Fold { req: u64, doc: u64, id: String, open: bool },
     TextRuns { req: u64, doc: u64, index: u32 },
@@ -234,13 +241,29 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
             },
             None => unknown(out, req),
         },
-        In::Image { req, doc } => {
+        In::Image { req, doc, settle_only } => {
             // `fetched` and `image` can share a stdin batch (the host asks right
             // after its last answer is written): apply what arrived first, the way
             // the end of the batch would, so the picture is not missing images.
             // Fetches the relayout finds go out in `run_loop`'s flush after this message.
             if dirty.remove(&doc) && !refresh(docs, doc, out, tainted)? {
                 return unavailable(out, req);
+            }
+            if settle_only {
+                // The images that landed have relaid the doc out: the caller sizes its tiles from this, not from `open`'s meta.
+                return match docs.get_mut(&doc) {
+                    Some(o) => {
+                        let rev = o.rev;
+                        match guarded(tainted, || o.doc.meta()) {
+                            Some(meta) => line(out, json!({"kind":"reply","req":req,"ok":{"rev":rev,"meta":meta}})),
+                            None => {
+                                discard(docs, doc, tainted);
+                                unavailable(out, req)
+                            }
+                        }
+                    }
+                    None => unknown(out, req),
+                };
             }
             match docs.get_mut(&doc) {
                 Some(o) => match guarded(tainted, || o.doc.image_png()) {

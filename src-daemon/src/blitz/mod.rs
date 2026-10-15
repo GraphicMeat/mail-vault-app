@@ -455,16 +455,19 @@ impl RenderHost {
         self.doc_call(doc, json!({"op": "image", "doc": doc}), IMAGE_TIMEOUT).await
     }
 
-    /// `render.image` with `settleOnly`: waits for the doc's fetches as `image` does (5 s cap) and
-    /// paints nothing. The export of a document past the image area cap draws its tiles at full
-    /// scale instead of a shrunk PNG, and this is how those tiles know the images have landed.
+    /// `render.image` with `settleOnly`: waits for the doc's fetches as `image` does (5 s cap), has the worker apply
+    /// what landed, and answers `{settled, rev, meta}` with the doc's CURRENT meta, painting nothing. The export of a
+    /// document past the image area cap draws its tiles at full scale instead of a shrunk PNG, and sizes them from this
+    /// meta: `open`'s predates the images, which relayout the doc.
     pub async fn settle(&self, doc: u64) -> Result<Value, String> {
         match self.open_docs.lock().unwrap().get_mut(&doc) {
             Some(t) => *t = Instant::now(),
             None => return Err("render_unknown_doc".to_string()),
         }
         let settled = self.inflight.settled(doc, IMAGE_SETTLE).await;
-        Ok(json!({"settled": settled}))
+        let mut reply = self.doc_call(doc, json!({"op": "image", "doc": doc, "settleOnly": true}), IMAGE_TIMEOUT).await?;
+        reply["settled"] = json!(settled);
+        Ok(reply)
     }
 
     /// Per-element measurements for the parity harness. Not foreground traffic.
@@ -1258,7 +1261,9 @@ mod tests {
             inflight.end(doc);
         });
         let got = h.settle(doc).await.unwrap();
-        assert_eq!(got, json!({"settled": true}));
+        assert_eq!(got["settled"], json!(true));
+        assert!(got["meta"]["cssHeight"].is_number() && got["rev"].is_number(), "the doc's current meta: {got}");
+        assert!(got.get("png").is_none());
         assert!(t0.elapsed() >= Duration::from_millis(280), "waited for the fetch: {:?}", t0.elapsed());
         h.close(doc).await;
         assert_eq!(h.settle(doc).await.unwrap_err(), "render_unknown_doc");
