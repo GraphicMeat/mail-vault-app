@@ -12,7 +12,10 @@ import zhHans from '../locales/zh-Hans.json';
 // The Rust renderer fetches remote images itself and lists them; the standard
 // renderer's iframe loads remote images directly (the app CSP allows nothing
 // else in the reader; a pop-out window has no app CSP) and they are counted,
-// not listed. The note must be true in both modes.
+// not listed. With either renderer the mail's Google Fonts are downloaded by the
+// daemon (fontService familyForMail, skipped under tracker blocking) and listed
+// under the Fonts purpose, so "nothing else" may only follow them. The note must
+// be true in both modes.
 const KEY = 'netActivity.notShown.webContent';
 const OLD_EN = 'Remote images and other web content inside emails. Images are counted above.';
 const catalogs = { en, es, fr, it: itIT, de, 'pt-BR': ptBR, ja, ko, 'zh-Hans': zhHans };
@@ -29,6 +32,15 @@ describe(KEY, () => {
   });
   it.each(Object.keys(catalogs))('%s names the Rust renderer\'s images by their purpose label', (loc) => {
     expect(catalogs[loc][KEY]).toContain(catalogs[loc]['netActivity.purposes.emailImages']);
+  });
+  it.each(Object.keys(catalogs))('%s names the mail fonts both renderers get by their purpose label', (loc) => {
+    expect(catalogs[loc][KEY]).toContain('Google Fonts');
+    expect(catalogs[loc][KEY]).toContain(catalogs[loc]['netActivity.purposes.fonts']);
+  });
+  it('says the mail fonts are downloaded with either renderer, and only then that nothing else loads', () => {
+    expect(en[KEY]).toContain('With either renderer, the Google Fonts an email uses are downloaded by the app, unless tracker blocking is on, and listed as Fonts');
+    expect(en[KEY]).not.toContain('Email images; it loads nothing else');
+    expect(en[KEY].indexOf('nothing else')).toBeGreaterThan(en[KEY].indexOf('Google Fonts'));
   });
   it('uses each script\'s own punctuation', () => {
     expect(catalogs['zh-Hans'][KEY]).not.toMatch(/[,;:()]/);

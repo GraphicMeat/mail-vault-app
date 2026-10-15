@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "Fontes",
   "netActivity.purposes.emailImages": "Imagens de e-mail",
   "netActivity.notShown.title": "O que esta lista não mostra",
-  "netActivity.notShown.webContent": "Conteúdo da web que o renderizador padrão carrega dentro dos e-mails: imagens remotas, contadas acima mas não listadas, e, em um e-mail aberto em uma janela própria, as fontes e os estilos que ele vincula. O renderizador Rust baixa as imagens remotas por conta própria e as lista como Imagens de e-mail; ele não carrega mais nada.",
+  "netActivity.notShown.webContent": "Conteúdo da web que o renderizador padrão carrega dentro dos e-mails: imagens remotas, contadas acima mas não listadas, e, em um e-mail aberto em uma janela própria, as fontes e os estilos que ele vincula. O renderizador Rust baixa as imagens remotas por conta própria e as lista como Imagens de e-mail. Com qualquer um dos renderizadores, o app baixa as fontes do Google Fonts que um e-mail usa, exceto com o bloqueio de rastreadores ativado, e as lista como Fontes; o renderizador Rust não carrega mais nada.",
   "netActivity.notShown.appWindow": "Solicitações que a própria janela do app faz, como verificações de compra.",
   "netActivity.notShown.updates": "Downloads de atualizações do app e, no macOS, também a verificação de atualizações.",
   "netActivity.notShown.innerDns": "Consultas DNS feitas dentro de solicitações web e do envio de e-mails.",

@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "Fonts",
   "netActivity.purposes.emailImages": "Email images",
   "netActivity.notShown.title": "What this list does not show",
-  "netActivity.notShown.webContent": "Web content the standard renderer loads inside emails: remote images, counted above but not listed, and in an email opened in its own window, the fonts and styles it links to. The Rust renderer fetches remote images itself and lists them as Email images; it loads nothing else.",
+  "netActivity.notShown.webContent": "Web content the standard renderer loads inside emails: remote images, counted above but not listed, and in an email opened in its own window, the fonts and styles it links to. The Rust renderer fetches remote images itself and lists them as Email images. With either renderer, the Google Fonts an email uses are downloaded by the app, unless tracker blocking is on, and listed as Fonts; the Rust renderer loads nothing else.",
   "netActivity.notShown.appWindow": "Requests the app window makes itself, such as purchase checks.",
   "netActivity.notShown.updates": "App update downloads, and on macOS the update check too.",
   "netActivity.notShown.innerDns": "DNS lookups made inside web requests and outgoing mail.",

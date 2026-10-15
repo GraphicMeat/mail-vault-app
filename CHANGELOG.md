@@ -30,7 +30,7 @@
 
 ### Changed
 - **The experimental Rust renderer lays out mail much closer to the standard renderer.** Tables (column widths, cell padding and spacing, borders, row heights, vertical alignment), line spacing and fonts now line up with the standard view, so fewer messages wrap or shift differently. A few messages still differ, mostly those that use a web font the Rust renderer does not load yet.
-- **Network Activity describes web content correctly.** Its note said that web content inside emails is not listed; it now says that the standard renderer loads remote images there (counted, not listed), plus linked fonts and styles in an email opened in its own window, and that the Rust renderer lists its remote images as Email images and loads nothing else.
+- **Network Activity describes web content correctly.** Its note said that web content inside emails is not listed; it now says that the standard renderer loads remote images there (counted, not listed), plus linked fonts and styles in an email opened in its own window, that the Rust renderer lists its remote images as Email images, and that with either renderer the Google Fonts an email uses are downloaded by the app (not with tracker blocking on) and listed as Fonts, the Rust renderer loading nothing else.
 
 ### Fixed
 - **The screen-reader list of links no longer shows addresses in privacy mode.** With the experimental Rust renderer, privacy mode now hides each link's address from screen readers and reads only the link's visible text; a link with no visible text is left out of the list.

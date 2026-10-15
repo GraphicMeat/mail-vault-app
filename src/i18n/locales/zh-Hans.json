@@ -3737,7 +3737,7 @@
   "netActivity.purposes.fonts": "字体",
   "netActivity.purposes.emailImages": "邮件图片",
   "netActivity.notShown.title": "此列表不显示的内容",
-  "netActivity.notShown.webContent": "标准渲染器在邮件中加载的网页内容：远程图片会在上方计数，但不会列出；在单独窗口中打开的邮件还会加载其链接的字体和样式。Rust 渲染器自行获取远程图片，并将其列为“邮件图片”；除此之外它不加载任何内容。",
+  "netActivity.notShown.webContent": "标准渲染器在邮件中加载的网页内容：远程图片会在上方计数，但不会列出；在单独窗口中打开的邮件还会加载其链接的字体和样式。Rust 渲染器自行获取远程图片，并将其列为“邮件图片”。无论使用哪种渲染器，邮件使用的 Google Fonts 字体都由应用下载（开启追踪拦截时除外），并列为“字体”；除此之外 Rust 渲染器不加载任何内容。",
   "netActivity.notShown.appWindow": "应用窗口自己发出的请求，例如购买验证。",
   "netActivity.notShown.updates": "应用更新的下载，在 macOS 上还包括检查更新。",
   "netActivity.notShown.innerDns": "网页请求和发送邮件内部进行的 DNS 查询。",
