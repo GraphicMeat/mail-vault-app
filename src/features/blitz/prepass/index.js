@@ -43,7 +43,7 @@ export async function runPrepass(props, { privacy = { active: false, dict: null 
   return { html: `<!doctype html>\n${doc.documentElement.outerHTML}`, doc };
 }
 
-function stripScripts(doc) {
+export function stripScripts(doc) {
   for (const s of doc.querySelectorAll('script')) s.remove();
   for (const el of doc.querySelectorAll('*')) {
     for (const attr of [...el.attributes]) {

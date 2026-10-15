@@ -7,7 +7,7 @@ vi.mock('../../../utils/iframePrivacyRedact', () => ({
     for (const name of dict?.names ?? []) doc.body.innerHTML = doc.body.innerHTML.split(name).join('█████');
   },
 }));
-import { runPrepass } from '../prepass';
+import { runPrepass, stripScripts } from '../prepass';
 import { buildEmailIframeHtml } from '../../../utils/emailIframeTemplate';
 
 const props = (over = {}) => ({ bodyHtml: '<p>Hi Alice</p><script>evil()</script>', indicatorCss: 'a{outline:1px}', theme: { dark: false }, ...over });
@@ -105,6 +105,15 @@ describe('runPrepass', () => {
       const ids = [...on.doc.body.querySelectorAll('[data-mv-id]')].map((e) => e.getAttribute('data-mv-id'));
       expect(ids).toEqual(expect.arrayContaining(['div[1]', 'div[1]/p[1]', 'div[1]/p[2]']));
       expect(on.html).toContain('data-mv-id="div[1]/p[2]"');
+    });
+  });
+  describe('stripScripts export (F31)', () => {
+    it('drops scripts and inline on* handlers from a parsed document, in place', () => {
+      const doc = new DOMParser().parseFromString('<html><body><p onclick="x()" class="k">Hi</p><script>a()</script></body></html>', 'text/html');
+      stripScripts(doc);
+      expect(doc.querySelector('script')).toBeNull();
+      expect(doc.querySelector('p').hasAttribute('onclick')).toBe(false);
+      expect(doc.querySelector('p').className).toBe('k');
     });
   });
 });
