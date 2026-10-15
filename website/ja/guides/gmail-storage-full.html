@@ -38,7 +38,7 @@
   "description": "Gmailが容量いっぱいだと言い、新しいメールが弾かれています。実際に容量を空けるもの、空けないもの、そしてGoogleに毎月払う代わりに古いメールをローカルにアーカイブする方法を解説します。",
   "url": "https://mailvaultapp.com/ja/guides/gmail-storage-full.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-15",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -168,7 +168,7 @@
 <details class="mv-language" translate="no">
 <summary aria-label="言語を選択"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
-<ul>
+<ul class="list-disc pl-6 space-y-2">
 <li><a data-i18n-abs href="/guides/gmail-storage-full.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
 </li>
 <li><a data-i18n-abs href="/de/guides/gmail-storage-full.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
@@ -217,6 +217,22 @@
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h2>メールを失わずにGmailの容量を空ける：検証から始めるチェックリスト</h2>
+          <p>Gmailのアーカイブボタンは受信トレイのラベルを外すだけで、Googleのサーバーからメールを移しません。ダウンロードしたローカルアーカイブとは異なります。読めるコピーを残しながら容量を空けたい場合は、次の順序で進めてください。</p>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li>古いメールやサイズの大きいメールを少量選びます。まず<a href="/ja/guides/backup-gmail-to-eml.html">GmailからEMLへのガイド</a>に従ってローカルに保存します。</li>
+          <li>MailVaultを<strong>保管庫</strong>に切り替え、接続を切って、その範囲のメールと添付ファイルを開きます。</li>
+          <li>プロバイダー側のコピーを削除する前に、保管庫のバックアップを別のドライブに書き出し、検証します。</li>
+          <li>Premiumでは、バックアップ用ドライブを設定済みなら<strong>アーカイブ・バックアップして削除</strong>を使います。自分で別途バックアップを作成した後なら、<strong>アーカイブして削除</strong>を使います。フォルダ、日付範囲、削除の概要を慎重に確認してください。</li>
+          <li>Gmailのゴミ箱を完全に空にする前に、アーカイブした範囲をもう一度確認します。プロバイダー側の復旧用コピーが不要になってから、ゴミ箱を空にしてください。</li></ol>
+          <p>Googleの説明によると、削除したGmailのメールはゴミ箱に入り、30日後に完全に削除されます。自分でゴミ箱を空にすると、それより早く削除されます。<a href="https://support.google.com/mail/answer/7401?hl=en">Gmailの削除手順</a>をご覧ください。使用容量の表示更新には時間がかかることがあります。次の範囲を削除する前に、Googleのストレージ画面で結果を確認してください。</p>
+          <section aria-labelledby="archive-delete-keep-local-video">
+          <h2 id="archive-delete-keep-local-video">短いデモ：サーバー上のコピーを削除する前にアーカイブする</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/ja/archive-delete-keep-local-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/ja/archive-delete-keep-local-full-window-v4.mp4" type="video/mp4"></video>
+          <p class="text-sm">既存のmacOSデモ録画を編集した、架空のメールによるデモです。アカウントへのログインと一部の準備は録画外で行っています。実際のプロバイダーへのライブ接続ではありません。</p>
+          <details><summary>デモの説明を読む</summary>
+          <p>架空のメールボックスに、過去の日付範囲を設定しています。デモでは「アーカイブして削除」を確定し、処理の完了を示してから、保管庫に切り替えて残ったメールを表示します。Premiumが必要です。実際のメールを削除する前に、別途作成したバックアップを検証してください。</p></details></section>
 
           <p>
             Gmailは、無料のアカウントすべてに、Gmail、Google Drive、Google Photosで共有する15 GBを与えます。その上限に達すると2つのことが起きます。新しいメールを受け取れなくなり（送信者にはエラーが返ります）、Googleが容量の追加購入をうながし始めます。どちらも危険ではありませんが、どちらも煩わしく、多くの人が選ぶ対処 &mdash; 100 GBのためにGoogleへ $1.99/月 を払う &mdash; は問題を先送りにするだけです。メールボックスは増え続け、いずれまた同じところに戻ってきます。
@@ -310,7 +326,11 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Graphic Meat の作品</p>
+          <h2 id="studio-title">MailVault を作る人々をご紹介します。</h2>
+          <p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>

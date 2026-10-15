@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook-E-Mails als EML exportieren — MailVault</title>
+  <meta name="description" content="Exportiere eine Outlook-Nachricht als EML, verstehe die Unterschiede zu PST und MSG und archiviere E-Mails aus Outlook.com oder Microsoft 365 lokal mit einem geprüften Backup.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/de/guides/export-outlook-to-eml.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/de/guides/export-outlook-to-eml.html">
+  <meta property="og:title" content="Outlook-E-Mails als EML exportieren — MailVault">
+  <meta property="og:description" content="Exportiere eine Outlook-Nachricht als EML, verstehe die Unterschiede zu PST und MSG und archiviere E-Mails aus Outlook.com oder Microsoft 365 lokal mit einem geprüften Backup.">
+  <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="de_DE">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Outlook-E-Mails als EML exportieren — MailVault">
+  <meta name="twitter:description" content="Exportiere eine Outlook-Nachricht als EML, verstehe die Unterschiede zu PST und MSG und archiviere E-Mails aus Outlook.com oder Microsoft 365 lokal mit einem geprüften Backup.">
+  <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Outlook-E-Mails als EML exportieren",
+  "description": "Exportiere eine Outlook-Nachricht als EML, verstehe die Unterschiede zu PST und MSG und archiviere E-Mails aus Outlook.com oder Microsoft 365 lokal mit einem geprüften Backup.",
+  "url": "https://mailvaultapp.com/de/guides/export-outlook-to-eml.html",
+  "datePublished": "2026-10-15",
+  "dateModified": "2026-10-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/export-outlook-to-eml.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/export-outlook-to-eml.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/de/" aria-label="MailVault-Startseite"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">von Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Hauptnavigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="MailVault auf GitHub einen Stern geben" title="MailVault auf GitHub einen Stern geben"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault ein Herz schicken" title="MailVault ein Herz schicken"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+
+<details class="mv-language" translate="no">
+<summary aria-label="Sprache auswählen"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Deutsch</span><span class="mv-language-code" aria-hidden="true">DE</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/export-outlook-to-eml.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/export-outlook-to-eml.html" lang="de" hreflang="de" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/export-outlook-to-eml.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/export-outlook-to-eml.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/export-outlook-to-eml.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/export-outlook-to-eml.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/export-outlook-to-eml.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/export-outlook-to-eml.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/export-outlook-to-eml.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Farbschema wechseln" title="Farbschema wechseln"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo</a><a class="mv-button mv-nav-download" href="/de/get-started.html?plan=free">Download</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menü</span></summary>
+<nav aria-label="Mobile Navigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a><a href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo ausprobieren</a><a href="/de/get-started.html?plan=free">Kostenlos herunterladen</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Farbschema wechseln</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/de/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Zurück zur Startseite
+      </a>
+
+      <article>
+          <header class="mb-8">
+          <p data-i18n-block class="text-sm">Anleitungen für E-Mail-Backups · <time datetime="2026-10-15">15. Oktober 2026</time></p>
+          <h1>Outlook-E-Mails als EML exportieren</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>Der Outlook-Export hängt von deiner Outlook-Version ab. Das neue Outlook und Outlook im Web bieten eine Möglichkeit, einzelne Nachrichten zu speichern. Das klassische Outlook nutzt einen anderen Exportablauf, und ein Postfachbackup als PST ist kein Ordner mit EML-Dateien. Um ein ganzes Postfach als einzelne EML-Dateien zu sichern, archiviere das verbundene Konto mit einer kompatiblen Desktop-App.</p>
+          <h2 data-i18n-block>Eine einzelne Nachricht im neuen Outlook oder Outlook im Web speichern</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>Öffne die Nachricht im Lesebereich oder in einem eigenen Fenster.</li>
+          <li data-i18n-block>Wähle im neuen Outlook <strong>Weitere Aktionen → Speichern unter</strong>. Öffne im Web das Menü „Weitere Aktionen“ der Nachricht und suche je nach Oberfläche nach <strong>Speichern unter</strong> oder <strong>Herunterladen</strong>.</li>
+          <li data-i18n-block>Wähle bei Aufforderung ein Ziel. Prüfe die Dateiendung der gespeicherten Datei und öffne sie dann in einer Mail-App, um Nachricht und Anhänge zu kontrollieren.</li></ol>
+          <p data-i18n-block>Prüfe <a href="https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft">Microsofts versionsspezifische Speicheranleitung</a>, falls deine Menüs abweichen. Das Speichern einer Nachricht exportiert nicht den Rest ihrer Unterhaltung oder ihres Postfachs.</p>
+          <h2 data-i18n-block>Ein Postfach aus Outlook.com oder Microsoft 365 als EML exportieren</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>Installiere MailVault und füge das Konto über die Microsoft-Anmeldung hinzu. Outlook.com-Konten nutzen Microsoft Graph in MailVault; Microsoft 365 unterstützt auch die OAuth-Kontoverbindung der App. Organisationsrichtlinien können den Zugriff verhindern.</li>
+          <li data-i18n-block>Prüfe Posteingang, Gesendet und eigene Ordner. Stelle sicher, dass die benötigten E-Mails im verbundenen Konto tatsächlich verfügbar sind; Onlinearchive und freigegebene Postfächer benötigen möglicherweise einen separaten unterstützten Zugriffsweg.</li>
+          <li data-i18n-block>Wähle in den Massenaktionen Ordner und Daten, dann <strong>Archivieren</strong>, und lass den Download abschließen. Nutze für dein erstes Backup nur Archivieren.</li>
+          <li data-i18n-block>Wechsle zur Quelle Tresor und prüfe ältere Nachrichten und Anhänge. Archivierte Nachrichten werden lokal als einzelne .eml-Dateien gespeichert.</li></ol>
+          <h2 data-i18n-block>Prüfe das Archiv, bevor du dich darauf verlässt</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>Wechsle die Nachrichtenquelle zu <strong>Tresor</strong> statt Server oder Alle. Suche nach einer alten Nachricht, die du kennst.</li>
+          <li data-i18n-block>Trenne die Netzwerkverbindung und öffne einige archivierte Nachrichten aus verschiedenen Ordnern und Jahren. Öffne auch ihre Anhänge. Eine Betreffzeile in einer Liste beweist nicht, dass der Nachrichtentext gespeichert ist.</li>
+          <li data-i18n-block>Öffne in den Einstellungen <strong>Sichern &amp; Wiederherstellen</strong> und nutze <strong>Sicherung exportieren</strong>. Wähle einen Speicherort auf einem zweiten Laufwerk. Die ZIP-Datei enthält den Tresor, Konten und Einstellungen; Nachrichten, die nur auf dem Server liegen, sind nicht enthalten.</li>
+          <li data-i18n-block>Prüfe, ob sich die ZIP-Datei öffnen lässt, .eml-Dateien enthält und die gewünschten Ordner umfasst. Teste bei wichtigen E-Mails die Wiederherstellung einer Kopie in einer separaten Installation, bevor du etwas löschst.</li></ol>
+          <section aria-labelledby="search-local-archive-video">
+          <h2 data-i18n-block id="search-local-archive-video">Kurze Demo: prüfen, ob E-Mails im Tresor verfügbar sind</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/de/search-local-archive-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/de/search-local-archive-full-window-v4.mp4" type="video/mp4"></video>
+          <p data-i18n-block class="text-sm">Demo mit fiktiven E-Mails, geschnitten aus den vorhandenen macOS-Demoaufnahmen. Kontoanmeldung und ein Teil der Vorbereitung erfolgen außerhalb der Aufnahme; es besteht keine Live-Verbindung zu einem Anbieter.</p>
+          <details><summary data-i18n-block>Demobeschreibung lesen</summary>
+          <p data-i18n-block>Die Aufnahme zeigt eine Suche in einem vorbereiteten lokalen Archiv. Öffne die gespeicherten Ergebnisse und teste Anhänge offline, bevor du dich auf dein Backup verlässt. Es werden durchgehend fiktive Demo-E-Mails verwendet.</p></details></section>
+          <h2 data-i18n-block>Was, wenn du bereits eine PST- oder MSG-Datei hast?</h2>
+          <p data-i18n-block>PST ist ein Outlook-Datencontainer; MSG ist ein anderes Format für einzelne Nachrichten. Das Umbenennen in .eml konvertiert keines der beiden Formate. Bewahre die Originaldatei auf, nutze Outlook oder einen Konverter, der das Format ausdrücklich unterstützt, und prüfe eine Beispielkonvertierung, bevor du den gesamten Bestand verarbeitest. Die Anleitung zur Archivierung verbundener Konten mit MailVault auf dieser Seite importiert oder konvertiert keine PST-Dateien.</p>
+          <p data-i18n-block>Microsofts eigenen Weg zum Postfachbackup findest du unter <a href="https://support.microsoft.com/en-us/office/back-up-your-email-e5845b0b-1aeb-424f-924c-aa1c33b18833">Outlook-E-Mails sichern</a>. Den Mac-Ablauf findest du unter <a href="/de/guides/back-up-outlook-com-email-to-mac.html">Outlook.com-E-Mails auf dem Mac sichern</a>. Falls Speicherplatz das Problem ist, lies weiter unter <a href="/de/guides/free-up-space-hotmail-outlook-com.html">Speicherplatz in Outlook.com freigeben</a>.</p>
+          <p data-i18n-block><a href="/de/get-started.html">Lade MailVault kostenlos herunter</a>, um dein erstes lokales Archiv zu erstellen. Manuelle Archivierung ist kostenlos; automatische Archivierung, geplante Sicherungen und Archivieren &amp; löschen erfordern <a href="/de/pricing.html">Premium</a>.</p>
+          <p data-i18n-block>Weitere praktische Anleitungen: <a href="/de/guides/backup-gmail-to-eml.html">Gmail als EML-Dateien sichern</a> · <a href="/de/guides/download-all-emails-mac.html">Alle E-Mails auf dem Mac herunterladen</a> · <a href="/de/guides/backup-email-linux.html">E-Mails unter Linux als EML sichern</a> · <a href="/de/guides/linux-email-archive.html">Ein lokales E-Mail-Archiv für Linux: Worauf du achten solltest</a></p></div></article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Eine Kreation von Graphic Meat</p>
+          <h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2>
+          <p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/de/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Lies deine E-Mails. Behalte deine E-Mails.</p>
+</div>
+<nav aria-label="MailVault entdecken"><a href="/de/use-cases.html">Anwendungsfälle</a><a href="/de/blog.html">Blog</a><a href="/changelog.html">Neuigkeiten</a><a href="/de/mentioned-in.html">Erwähnungen</a><a href="/de/faq.html">FAQ</a><a href="/de/docs.html">Hilfe</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code auf GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Team kontaktieren ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Gemacht von <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Datenschutz</a><a href="/terms.html">AGB</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

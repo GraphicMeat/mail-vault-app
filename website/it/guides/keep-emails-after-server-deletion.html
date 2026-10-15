@@ -38,7 +38,7 @@
   "description": "Elimina le email dal tuo server senza perderle. MailVault archivia le email in locale come file .eml prima dell'eliminazione — ricercabili, offline, tue per sempre.",
   "url": "https://mailvaultapp.com/it/guides/keep-emails-after-server-deletion.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-03-15",
+  "dateModified": "2026-10-15",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -126,7 +126,7 @@
 <details class="mv-language" translate="no">
 <summary aria-label="Scegli lingua"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Italiano</span><span class="mv-language-code" aria-hidden="true">IT</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
-<ul>
+<ul class="list-disc pl-6 space-y-2">
 <li><a data-i18n-abs href="/guides/keep-emails-after-server-deletion.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
 </li>
 <li><a data-i18n-abs href="/de/guides/keep-emails-after-server-deletion.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
@@ -175,6 +175,22 @@
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h2>Elimina le email dal server e conserva una copia locale: l'ordine sicuro</h2>
+          <p>Una cartella sincronizzata è una vista del server. Prima di eliminarvi la posta, crea un archivio conservato che puoi aprire in modo indipendente. La sorgente <strong>Cassaforte</strong> di MailVault mostra le copie salvate; <strong>Server</strong> mostra la posta del provider. Vedere un messaggio sotto Tutti non dimostra, da solo, che esista una copia locale.</p>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li>Archivia prima un piccolo gruppo con <strong>Archivia</strong>. Attendi il completamento dell'operazione.</li>
+          <li>Passa a <strong>Cassaforte</strong> e controlla offline i messaggi selezionati e i loro allegati.</li>
+          <li>Esporta un backup su un'altra unità. I messaggi presenti solo sul server non sono inclusi nell'esportazione: termina prima l'archiviazione.</li>
+          <li>Usa <strong>Archivia ed elimina</strong> (Premium) per l'intervallo selezionato oppure <strong>Archivia, esegui il backup ed elimina</strong> con una destinazione di backup configurata. Controlla il riepilogo prima di confermare.</li>
+          <li>Conferma che i messaggi rimangano leggibili nella cassaforte dopo la rimozione dal server. Svuota il Cestino del provider solo dopo aver controllato le copie conservate e il backup.</li></ol>
+          <p>Se il messaggio è scomparso dal provider prima che lo salvassi, un'app locale non può ricrearne il corpo mancante. Controlla prima il Cestino o le opzioni di recupero del provider. Un archivio locale protegge i messaggi già salvati, non quelli mai scaricati.</p>
+          <section aria-labelledby="archive-delete-keep-local-video">
+          <h2 id="archive-delete-keep-local-video">Breve demo: eliminazione dal server con posta conservata nella cassaforte</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/it/archive-delete-keep-local-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/it/archive-delete-keep-local-full-window-v4.mp4" type="video/mp4"></video>
+          <p class="text-sm">Demo con posta fittizia, montata a partire dalle registrazioni dimostrative esistenti per macOS. L'accesso all'account e parte della preparazione avvengono fuori campo; non è una connessione in diretta a un provider.</p>
+          <details><summary>Leggi la descrizione della demo</summary>
+          <p>In una casella fittizia, Archivia ed elimina salva la posta selezionata prima di rimuoverla dal server. Il conteggio sul server scende e la cassaforte conserva i messaggi archiviati. Questa operazione Premium viene mostrata con la configurazione fuori campo.</p></details></section>
 
           <p>
             Eliminare le email dal server sembra definitivo &mdash; e per quasi tutti lo è. Una volta svuotato il cestino in Gmail o Outlook, quei messaggi non ci sono più. Il server non li ha più. Non c'è modo di tornare indietro dopo la scadenza del periodo di conservazione. Per questo la gente accumula sul server email che non le servono, con la paura di cancellare qualsiasi cosa perché un giorno potrebbe servire.
@@ -289,7 +305,11 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Una creazione di Graphic Meat</p>
+          <h2 id="studio-title">Conosci le persone dietro MailVault.</h2>
+          <p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/it/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>

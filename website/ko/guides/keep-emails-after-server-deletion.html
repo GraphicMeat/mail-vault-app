@@ -38,7 +38,7 @@
   "description": "메일을 잃지 않고 서버에서 삭제하십시오. MailVault는 삭제 전에 메일을 .eml 파일로 로컬에 보관합니다 — 검색 가능하고, 오프라인에서 열리며, 영원히 사용자의 것입니다.",
   "url": "https://mailvaultapp.com/ko/guides/keep-emails-after-server-deletion.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-03-15",
+  "dateModified": "2026-10-15",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -126,7 +126,7 @@
 <details class="mv-language" translate="no">
 <summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
-<ul>
+<ul class="list-disc pl-6 space-y-2">
 <li><a data-i18n-abs href="/guides/keep-emails-after-server-deletion.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
 </li>
 <li><a data-i18n-abs href="/de/guides/keep-emails-after-server-deletion.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
@@ -175,6 +175,22 @@
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h2>서버에서 이메일을 삭제하고 로컬 사본 유지하기: 안전한 순서</h2>
+          <p>동기화된 폴더는 서버의 상태를 보여 줍니다. 그곳에서 메일을 삭제하기 전에 독립적으로 열 수 있는 보존용 보관함을 만드십시오. MailVault의 <strong>보관함</strong> 소스는 저장된 사본을, <strong>서버</strong>는 제공업체의 메일을 보여 줍니다. 전체에서 메시지가 보인다는 사실만으로 로컬 사본이 있다고 할 수는 없습니다.</p>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li>먼저 <strong>보관</strong>으로 소량의 메시지를 보관하십시오. 작업이 완료될 때까지 기다리십시오.</li>
+          <li><strong>보관함</strong>으로 전환하고 오프라인에서 선택한 메시지와 첨부 파일을 확인하십시오.</li>
+          <li>다른 드라이브로 백업을 내보내십시오. 서버에만 있는 메시지는 내보내기에 포함되지 않으므로 먼저 보관을 완료하십시오.</li>
+          <li>선택한 범위에 <strong>보관 후 삭제</strong>(Premium)를 사용하거나, 백업 위치를 설정한 뒤 <strong>보관, 백업 후 삭제</strong>를 사용하십시오. 확인하기 전에 요약을 검토하십시오.</li>
+          <li>서버에서 제거한 후에도 보관함에서 메시지를 읽을 수 있는지 확인하십시오. 보존한 사본과 백업을 확인한 후에만 제공업체의 휴지통을 비우십시오.</li></ol>
+          <p>저장하기 전에 메시지가 제공업체에서 사라졌다면 로컬 앱으로 누락된 본문을 다시 만들 수는 없습니다. 먼저 제공업체의 휴지통이나 복구 옵션을 확인하십시오. 로컬 보관함은 이미 저장한 메시지를 보호하며 다운로드한 적 없는 메시지는 보호하지 못합니다.</p>
+          <section aria-labelledby="archive-delete-keep-local-video">
+          <h2 id="archive-delete-keep-local-video">짧은 데모: 서버에서 삭제해도 보관함에 남는 메일</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/ko/archive-delete-keep-local-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/ko/archive-delete-keep-local-full-window-v4.mp4" type="video/mp4"></video>
+          <p class="text-sm">기존 macOS 데모 녹화 영상을 편집한 가상 메일 시연입니다. 계정 로그인과 일부 준비 과정은 화면 밖에서 진행되며 실제 제공업체에 연결한 영상이 아닙니다.</p>
+          <details><summary>데모 설명 읽기</summary>
+          <p>가상 메일함에서 보관 후 삭제는 서버에서 제거하기 전에 선택한 메일을 저장합니다. 서버의 메일 수는 줄어들고 보관함에는 보관한 메시지가 그대로 남습니다. 이 Premium 작업의 설정 과정은 화면 밖에서 진행했습니다.</p></details></section>
 
           <p>
             서버에서 메일을 지우는 일은 되돌릴 수 없게 느껴지고, 대부분의 사람에게는 실제로 그렇습니다. Gmail이나 Outlook에서 휴지통을 비우고 나면 그 메시지는 사라집니다. 서버에는 더 이상 없습니다. 보관 기간이 지나면 되돌리기도 없습니다. 그래서 사람들은 언젠가 필요할까 봐 아무것도 지우지 못하고, 서버에 필요 없는 메일까지 쌓아 둡니다.
@@ -289,7 +305,11 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Graphic Meat가 만들었습니다</p>
+          <h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2>
+          <p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>

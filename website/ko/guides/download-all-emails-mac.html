@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac에서 모든 이메일을 다운로드하는 방법 — MailVault</title>
+  <meta name="description" content="Apple Mail 또는 MailVault로 Mac에 전체 이메일을 로컬 보관합니다. 폴더를 확인하고 첨부 파일을 저장한 뒤 오프라인에서 백업을 검증합니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/download-all-emails-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/download-all-emails-mac.html">
+  <meta property="og:title" content="Mac에서 모든 이메일을 다운로드하는 방법 — MailVault">
+  <meta property="og:description" content="Apple Mail 또는 MailVault로 Mac에 전체 이메일을 로컬 보관합니다. 폴더를 확인하고 첨부 파일을 저장한 뒤 오프라인에서 백업을 검증합니다.">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mac에서 모든 이메일을 다운로드하는 방법 — MailVault">
+  <meta name="twitter:description" content="Apple Mail 또는 MailVault로 Mac에 전체 이메일을 로컬 보관합니다. 폴더를 확인하고 첨부 파일을 저장한 뒤 오프라인에서 백업을 검증합니다.">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Mac에서 모든 이메일을 다운로드하는 방법",
+  "description": "Apple Mail 또는 MailVault로 Mac에 전체 이메일을 로컬 보관합니다. 폴더를 확인하고 첨부 파일을 저장한 뒤 오프라인에서 백업을 검증합니다.",
+  "url": "https://mailvaultapp.com/ko/guides/download-all-emails-mac.html",
+  "datePublished": "2026-10-15",
+  "dateModified": "2026-10-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-emails-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-emails-mac.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+<nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+
+<details class="mv-language" translate="no">
+<summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/download-all-emails-mac.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/download-all-emails-mac.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/download-all-emails-mac.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/download-all-emails-mac.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/download-all-emails-mac.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/download-all-emails-mac.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/download-all-emails-mac.html" lang="ko" hreflang="ko" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/download-all-emails-mac.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/download-all-emails-mac.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary>
+<nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+          <header class="mb-8">
+          <p data-i18n-block class="text-sm">이메일 백업 가이드 · <time datetime="2026-10-15">2026년 10월 15일</time></p>
+          <h1>Mac에서 모든 이메일을 다운로드하는 방법</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>Mac에서 모든 이메일을 다운로드하려면 Apple Mail의 메일상자 내보내기나 전용 로컬 보관 도구를 선택하십시오. 중요한 것은 빠짐없이 저장하는 것입니다. 받은편지함만으로 계정 전체를 담는 경우는 드물며 동기화된 메일함에는 서버의 삭제 사항이 반영될 수 있습니다.</p>
+          <h2 data-i18n-block>방법 1: Apple Mail에서 메일상자 내보내기</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>Apple Mail에 계정을 연결하고 메시지를 모두 가져올 때까지 기다리십시오. 오래된 메일을 포함해 받은편지함, 보낸편지함, 필요한 모든 폴더를 확인하십시오.</li>
+          <li data-i18n-block>사이드바에서 원하는 메일상자를 선택한 뒤 <strong>메일상자 → 메일상자 내보내기</strong>를 선택하십시오.</li>
+          <li data-i18n-block>Mac이나 외장 드라이브의 폴더를 선택하십시오. Apple Mail은 메일상자 데이터를 MBOX 형식으로 내보냅니다.</li>
+          <li data-i18n-block>두 번째 사본을 보관하고 <strong>파일 → 메일상자 가져오기</strong>로 가져오기를 시험하십시오. 가져온 사본에서 대표적인 메시지와 첨부 파일을 열어 보십시오.</li></ol>
+          <p data-i18n-block>이 메뉴 이름과 MBOX 형식은 <a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac">Apple의 메일상자 가져오기 및 내보내기 가이드</a>에 설명되어 있습니다. 내보낸 메일상자는 별도의 파일입니다. Mail에 계정을 연결해 두기만 하는 것은 같은 백업이 아닙니다.</p>
+          <h2 data-i18n-block>방법 2: MailVault로 검색 가능한 EML 보관함 만들기</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block><a href="/ko/get-started.html">시작하기</a>에서 macOS 버전을 다운로드하고 이메일 계정을 추가하십시오. 사용할 수 있다면 Google 또는 Microsoft 로그인을 사용하십시오.</li>
+          <li data-i18n-block>받은편지함, 보낸편지함, 사용자 지정 폴더, 받은편지함 밖의 메일이 있는 라벨로 폴더 체크리스트를 만드십시오. 필요하다면 제공업체의 보관된 폴더나 숨겨진 폴더가 연결된 앱에 표시되도록 설정하십시오.</li>
+          <li data-i18n-block>일괄 작업에서 필요한 폴더와 날짜를 선택한 뒤 <strong>보관</strong>을 선택하십시오. 완료될 때까지 기다리고 실패 항목이나 건너뛴 폴더를 확인하십시오.</li>
+          <li data-i18n-block>소스를 <strong>보관함</strong>으로 전환해 독립적인 로컬 사본을 확인하십시오. 보관함의 메시지는 .eml 파일을 사용합니다. 서버에서만 보이는 메시지는 아직 보관함에 포함되지 않았습니다.</li></ol>
+          <h2 data-i18n-block>보관한 메일을 신뢰하기 전에 검증하기</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>메시지 소스를 서버나 전체가 아닌 <strong>보관함</strong>으로 전환하십시오. 기억나는 오래된 메시지를 검색하십시오.</li>
+          <li data-i18n-block>네트워크 연결을 끊고 서로 다른 폴더와 연도의 보관된 메시지를 몇 개 열어 보십시오. 첨부 파일도 열어 보십시오. 목록에 제목이 보인다는 것만으로 메시지 본문이 저장되었다고 할 수는 없습니다.</li>
+          <li data-i18n-block>설정에서 <strong>백업 및 복원</strong>을 열고 <strong>백업 내보내기</strong>를 사용하십시오. 두 번째 드라이브의 위치를 선택하십시오. ZIP에는 보관함, 계정, 설정이 포함되며 서버에만 있는 메시지는 제외됩니다.</li>
+          <li data-i18n-block>ZIP이 열리는지, .eml 파일이 들어 있는지, 보존하려던 폴더가 포함되어 있는지 확인하십시오. 중요한 메일이라면 무엇이든 삭제하기 전에 별도로 설치한 앱에서 사본을 복원해 보십시오.</li></ol>
+          <section aria-labelledby="search-local-archive-video">
+          <h2 data-i18n-block id="search-local-archive-video">짧은 데모: 로컬 보관함 검색하기</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/ko/search-local-archive-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/ko/search-local-archive-full-window-v4.mp4" type="video/mp4"></video>
+          <p data-i18n-block class="text-sm">기존 macOS 데모 녹화 영상을 편집한 가상 메일 시연입니다. 계정 로그인과 일부 준비 과정은 화면 밖에서 진행되며 실제 제공업체에 연결한 영상이 아닙니다.</p>
+          <details><summary data-i18n-block>데모 설명 읽기</summary>
+          <p data-i18n-block>데모에서는 준비된 보관함의 가상 메일을 검색합니다. 자신의 보관함은 연결을 끊은 상태에서 오래된 메시지와 첨부 파일을 열어 검증하고 다른 드라이브에 두 번째 사본을 보관하십시오.</p></details></section>
+          <h2 data-i18n-block>“모든 이메일”에 폴더 체크리스트가 필요한 이유</h2>
+          <p data-i18n-block>데스크톱 연결은 제공업체가 노출하는 메일만 보관할 수 있습니다. 숨겨진 Gmail 라벨, 두 번째 계정, 온라인 보관함, 관리자 제한 때문에 누락이 생길 수 있습니다. 제공업체 웹 앱과 앱의 폴더 목록을 비교하고 중요한 각 폴더에서 가장 오래된 메시지와 최신 메시지를 표본으로 확인하십시오. Gmail 라벨이 겹치면 단순 개수도 정확한 판단 기준이 되지 못합니다. 같은 메시지가 여러 라벨에 나타날 수 있기 때문입니다.</p>
+          <p data-i18n-block>계정별 안내는 <a href="/ko/guides/backup-gmail-to-eml.html">Gmail을 EML로 저장하기</a>, <a href="/ko/guides/export-outlook-to-eml.html">Outlook을 EML로 저장하기</a>, <a href="/ko/guides/export-icloud-mail.html">iCloud Mail 내보내기</a>를 읽으십시오. Windows용 보관 도구에서 옮겨 온다면 <a href="/ko/guides/mailstore-alternative-mac.html">Mac용 MailStore 대안</a>부터 확인하십시오.</p>
+          <p data-i18n-block><a href="/ko/get-started.html">MailVault를 무료로 다운로드</a>하고 첫 로컬 보관함을 만드십시오. 수동 보관은 무료입니다. 자동 보관, 예약 백업, 보관 후 삭제에는 <a href="/ko/pricing.html">Premium</a>이 필요합니다.</p>
+          <p data-i18n-block>더 많은 실용 가이드: <a href="/ko/guides/backup-gmail-to-eml.html">Gmail을 EML 파일로 백업하는 방법</a> · <a href="/ko/guides/export-outlook-to-eml.html">Outlook 이메일을 EML로 내보내는 방법</a> · <a href="/ko/guides/backup-email-linux.html">Linux에서 이메일을 EML로 백업하는 방법</a> · <a href="/ko/guides/linux-email-archive.html">Linux용 로컬 이메일 보관 도구: 확인할 사항</a></p></div></article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Graphic Meat가 만들었습니다</p>
+          <h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2>
+          <p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>메일을 읽고, 메일을 보관하세요.</p>
+</div>
+<nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/mentioned-in.html">언급</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">커뮤니티 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">팀에 문의하기 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

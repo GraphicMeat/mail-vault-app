@@ -1,0 +1,47 @@
+[
+  {
+    "duration" : 6.4333330000000002,
+    "edits" : "Original full app-window recording. Pointer follows the action log. Click shown at full scale; smoothstep zoom follows the click. No added text or captions.",
+    "fictionalMail" : true,
+    "file" : "backup-archived-email-full-window-v4.mp4",
+    "firstClickAt" : 0.95000000000000007,
+    "height" : 900,
+    "host" : "m4s-mac-mini.local",
+    "motionVersion" : 4,
+    "slug" : "backup-archived-email",
+    "source" : "takes\/manual-backup.mov",
+    "sourceDuration" : 6.8333329999999997,
+    "width" : 1440,
+    "zoomStartsAt" : 1.0700000000000001
+  },
+  {
+    "duration" : 11.300000000000001,
+    "edits" : "Original full app-window recording. Pointer follows the action log. Click shown at full scale; smoothstep zoom follows the click. No added text or captions.",
+    "fictionalMail" : true,
+    "file" : "archive-delete-keep-local-full-window-v4.mp4",
+    "firstClickAt" : 0.84999999999999998,
+    "height" : 900,
+    "host" : "m4s-mac-mini.local",
+    "motionVersion" : 4,
+    "slug" : "archive-delete-keep-local",
+    "source" : "takes\/archive-delete.mov",
+    "sourceDuration" : 11.75,
+    "width" : 1440,
+    "zoomStartsAt" : 0.96999999999999997
+  },
+  {
+    "duration" : 4.9666670000000002,
+    "edits" : "Original full app-window recording. Pointer follows the action log. Click shown at full scale; smoothstep zoom follows the click. No added text or captions.",
+    "fictionalMail" : true,
+    "file" : "search-local-archive-full-window-v4.mp4",
+    "firstClickAt" : 0.77860009765624993,
+    "height" : 900,
+    "host" : "m4s-mac-mini.local",
+    "motionVersion" : 4,
+    "slug" : "search-local-archive",
+    "source" : "takes\/search-local.mov",
+    "sourceDuration" : 5.1666670000000003,
+    "width" : 1440,
+    "zoomStartsAt" : 0.89860009765624993
+  }
+]

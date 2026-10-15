@@ -48,6 +48,17 @@ describe('rewriteSrcset', () => {
 });
 
 describe('localizeShot', () => {
+  it('uses each locale’s own guide video and poster without rewriting them twice', () => {
+    for (const loc of LOCALES) {
+      for (const ext of ['mp4', 'jpg']) {
+        const file = `search-local-archive-full-window-v4.${ext}`;
+        const localized = `/assets/videos/guides/${loc.dir}/${file}`;
+        expect(localizeShot(`/assets/videos/guides/${file}`, loc)).toBe(localized);
+        expect(localizeShot(localized, loc)).toBe(localized);
+      }
+    }
+  });
+
   it('redirects to the locale directory when that file exists', () => {
     expect(localizeShot('/screenshots/email-list-view-1440.webp', de))
       .toBe('/screenshots/de/email-list-view-1440.webp');

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何将 Gmail 备份为 EML 文件 — MailVault</title>
+  <meta name="description" content="将一封 Gmail 邮件保存为 EML，或在本地归档整个邮箱。比较 Gmail 下载、Google Takeout 和 MailVault，并验证备份。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/backup-gmail-to-eml.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/backup-gmail-to-eml.html">
+  <meta property="og:title" content="如何将 Gmail 备份为 EML 文件 — MailVault">
+  <meta property="og:description" content="将一封 Gmail 邮件保存为 EML，或在本地归档整个邮箱。比较 Gmail 下载、Google Takeout 和 MailVault，并验证备份。">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="如何将 Gmail 备份为 EML 文件 — MailVault">
+  <meta name="twitter:description" content="将一封 Gmail 邮件保存为 EML，或在本地归档整个邮箱。比较 Gmail 下载、Google Takeout 和 MailVault，并验证备份。">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "如何将 Gmail 备份为 EML 文件",
+  "description": "将一封 Gmail 邮件保存为 EML，或在本地归档整个邮箱。比较 Gmail 下载、Google Takeout 和 MailVault，并验证备份。",
+  "url": "https://mailvaultapp.com/zh/guides/backup-gmail-to-eml.html",
+  "datePublished": "2026-10-15",
+  "dateModified": "2026-10-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-gmail-to-eml.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-gmail-to-eml.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+<nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+
+<details class="mv-language" translate="no">
+<summary aria-label="选择语言"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/backup-gmail-to-eml.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/backup-gmail-to-eml.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/backup-gmail-to-eml.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/backup-gmail-to-eml.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/backup-gmail-to-eml.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/backup-gmail-to-eml.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/backup-gmail-to-eml.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/backup-gmail-to-eml.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/backup-gmail-to-eml.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary>
+<nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+          <header class="mb-8">
+          <p data-i18n-block class="text-sm">邮件备份指南 · <time datetime="2026-10-15">2026年10月15日</time></p>
+          <h1>如何将 Gmail 备份为 EML 文件</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>要将 Gmail 备份为 <code>.eml</code>，单封邮件可使用<strong>下载邮件</strong>，整个邮箱则可使用将每封邮件保存为 EML 的桌面应用归档。Google Takeout 也是一种有用的备份方式，但它导出的邮件采用 MBOX，而不是独立的 EML 文件。开始前请先确定所需的格式。</p>
+          <h2 data-i18n-block>无需安装软件，保存一封 Gmail 邮件</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>在桌面浏览器中打开 Gmail，再打开所需邮件。</li>
+          <li data-i18n-block>打开邮件的三点<strong>更多</strong>菜单，再选择<strong>下载邮件</strong>。</li>
+          <li data-i18n-block>保留下载的 .eml 文件，并在桌面邮件应用中打开，检查内容。对其他需要的邮件重复这些操作。</li></ol>
+          <p data-i18n-block>这些步骤遵循 <a href="https://support.google.com/mail/answer/9261412?hl=en">Google 的邮件下载说明</a>。保存收据或几封重要邮件时很方便，但对整个邮箱逐封重复操作会很慢。</p>
+          <h2 data-i18n-block>将整个 Gmail 邮箱备份为独立的 EML 文件</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>安装 MailVault，通过 Google 登录添加 Google 账户。检查请求的访问权限。如果是工作或学校账户，管理员可能会限制第三方访问。</li>
+          <li data-i18n-block>选择需要的文件夹或标签。除了收件箱，也要包含已发送邮件和旧文件夹。如果某个标签未显示，请检查 Gmail 的 IMAP 可见性设置。</li>
+          <li data-i18n-block>打开批量操作流程，选择日期范围，然后选择<strong>归档</strong>。这会将邮件保存在本地，不删除服务器副本。先从较小范围开始，便于检查结果。</li>
+          <li data-i18n-block>归档操作完成前，请勿合上电脑或开始清理。由于服务商的下载限制，大型账户可能需要分多次处理。</li>
+          <li data-i18n-block>打开 MailVault 的邮件存储设置，找到保险库位置。归档邮件以 .eml 文件保存在 Maildir 结构中；不要重命名或移动正在使用的保险库内的文件。</li></ol>
+          <h2 data-i18n-block>先验证归档，再依赖它</h2>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li data-i18n-block>将邮件来源切换为<strong>保险库</strong>，而不是服务器或全部。搜索一封您记得的旧邮件。</li>
+          <li data-i18n-block>断开网络，打开几封来自不同文件夹、不同年份的归档邮件，也打开它们的附件。列表中有邮件主题，并不能证明邮件正文已保存。</li>
+          <li data-i18n-block>在设置中打开<strong>备份与恢复</strong>，使用<strong>导出备份</strong>。选择第二块硬盘上的位置。ZIP 包含保险库、账户和设置，不包含只存在于服务器上的邮件。</li>
+          <li data-i18n-block>检查 ZIP 能否打开、是否包含 .eml 文件，以及是否包含您打算保留的文件夹。对于重要邮件，删除任何内容前，请在单独安装的应用中测试恢复一份副本。</li></ol>
+          <section aria-labelledby="backup-archived-email-video">
+          <h2 data-i18n-block id="backup-archived-email-video">简短演示：为保险库另做一份备份</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/zh/backup-archived-email-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/zh/backup-archived-email-full-window-v4.mp4" type="video/mp4"></video>
+          <p data-i18n-block class="text-sm">本演示使用虚构邮件，由现有 macOS 演示录屏剪辑而成。账户登录和部分准备工作在画面外完成，并未实时连接邮件服务商。</p>
+          <details><summary data-i18n-block>阅读演示说明</summary>
+          <p data-i18n-block>邮件归档完成后，选择备份位置并运行备份。录屏使用虚构邮件和预先准备好的目标位置。第二份副本可以防范电脑丢失；只存在于服务器上的邮件必须先归档。</p></details></section>
+          <h2 data-i18n-block>Gmail EML 备份与 Google Takeout 比较</h2>
+          <p data-i18n-block>如果需要独立的邮件文件和可搜索、可日常使用的归档，请选择 EML。如果需要由 Google 准备的账户导出文件，请选择 <a href="https://support.google.com/accounts/answer/3024190?hl=en">Google Takeout</a>。Takeout 邮件采用 MBOX；从 Takeout 下载 ZIP 并不会将它转换为 EML。如果您已有导出文件，MailVault 也支持在备份与恢复中导入 MBOX。</p>
+          <p data-i18n-block>下载邮件或将邮件移入 Gmail 的归档都不会释放存储空间。验证两份本地副本后，请阅读<a href="/zh/guides/gmail-storage-full.html">如何释放 Gmail 存储空间而不丢失邮件</a>。要进一步比较格式，请参阅<a href="/zh/guides/download-all-gmail-emails.html">下载所有 Gmail 邮件</a>。</p>
+          <p data-i18n-block><a href="/zh/get-started.html">免费下载 MailVault</a>，创建您的第一份本地归档。手动归档免费；自动归档、定时备份和归档并删除需要 <a href="/zh/pricing.html">Premium</a>。</p>
+          <p data-i18n-block>更多实用指南：<a href="/zh/guides/export-outlook-to-eml.html">如何将 Outlook 邮件导出为 EML</a> · <a href="/zh/guides/download-all-emails-mac.html">如何在 Mac 上下载所有邮件</a> · <a href="/zh/guides/backup-email-linux.html">如何在 Linux 上将邮件备份为 EML</a> · <a href="/zh/guides/linux-email-archive.html">选择 Linux 本地邮件归档工具：需要检查什么</a></p></div></article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Graphic Meat 出品</p>
+          <h2 id="studio-title">认识 MailVault 背后的人。</h2>
+          <p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>阅读你的邮件。保留你的邮件。</p>
+</div>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

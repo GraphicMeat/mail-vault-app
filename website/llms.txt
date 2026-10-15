@@ -36,6 +36,12 @@
 - [Free up space in Hotmail and Outlook.com](https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html): step by step, keeping a local copy before deleting
 - [Back up Outlook.com email to a Mac](https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html): four methods compared, and how to verify the backup
 
+- [Back up Gmail to EML](https://mailvaultapp.com/guides/backup-gmail-to-eml.html): individual downloads, mailbox archiving, formats, and backup verification
+- [Export Outlook to EML](https://mailvaultapp.com/guides/export-outlook-to-eml.html): new Outlook and web downloads, whole-account archiving, and PST/MSG differences
+- [Download all emails on Mac](https://mailvaultapp.com/guides/download-all-emails-mac.html): Apple Mail exports and local EML archives, with offline verification
+- [Back up email on Linux](https://mailvaultapp.com/guides/backup-email-linux.html): local EML archives, attachments, second-drive copies, and restore checks
+- [Choose a Linux email archive](https://mailvaultapp.com/guides/linux-email-archive.html): a practical checklist for retention, formats, offline access, and restore options
+
 ## Choosing and using a Mac email archive
 
 - [Best Email Archive App for Mac: How to Choose](https://mailvaultapp.com/blog/best-email-archive-app-for-mac.html): Choose an email archive app for Mac by checking offline access, portable files, attachment preservation and backup options. See where MailVault fits.

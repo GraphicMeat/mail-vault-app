@@ -38,7 +38,7 @@
   "description": "Gmail이 저장 공간이 가득 찼다고 하고 새 메일이 반송되고 있습니까? 실제로 공간을 확보해 주는 것과 그렇지 않은 것, 그리고 매달 Google에 돈을 내는 대신 오래된 메일을 로컬에 보관하는 방법을 정리했습니다.",
   "url": "https://mailvaultapp.com/ko/guides/gmail-storage-full.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-15",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -168,7 +168,7 @@
 <details class="mv-language" translate="no">
 <summary aria-label="언어 선택"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
-<ul>
+<ul class="list-disc pl-6 space-y-2">
 <li><a data-i18n-abs href="/guides/gmail-storage-full.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
 </li>
 <li><a data-i18n-abs href="/de/guides/gmail-storage-full.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
@@ -217,6 +217,22 @@
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h2>이메일을 잃지 않고 Gmail 저장공간 확보하기: 먼저 검증하는 체크리스트</h2>
+          <p>Gmail의 보관 버튼은 받은편지함 라벨을 제거할 뿐 Google 서버에서 메일을 옮기지 않습니다. 다운로드한 로컬 보관함은 다릅니다. 읽을 수 있는 사본을 유지하면서 공간을 확보하려면 다음 순서를 따르십시오.</p>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li>오래되었거나 용량이 큰 메시지를 소량 선택하십시오. 먼저 <a href="/ko/guides/backup-gmail-to-eml.html">Gmail을 EML로 백업하는 가이드</a>에 따라 로컬에 저장하십시오.</li>
+          <li>MailVault를 <strong>보관함</strong>으로 전환하고 연결을 끊은 뒤 해당 묶음의 메시지와 첨부 파일을 여십시오.</li>
+          <li>제공업체의 사본을 제거하기 전에 보관함 백업을 두 번째 드라이브로 내보내고 검증하십시오.</li>
+          <li>Premium에서는 백업 드라이브를 설정했다면 <strong>보관, 백업 후 삭제</strong>를 사용하고, 직접 별도 백업을 만들었다면 <strong>보관 후 삭제</strong>를 사용하십시오. 폴더, 날짜 범위, 삭제 요약을 꼼꼼히 검토하십시오.</li>
+          <li>Gmail 휴지통을 영구적으로 비우기 전에 해당 묶음이 보관되어 있는지 다시 확인하십시오. 제공업체의 복구용 사본을 포기할 준비가 되었을 때만 휴지통을 비우십시오.</li></ol>
+          <p>Google 안내에 따르면 삭제한 Gmail 메시지는 휴지통으로 이동하며 30일 후, 또는 직접 휴지통을 비우면 그보다 먼저 영구 삭제됩니다. <a href="https://support.google.com/mail/answer/7401?hl=en">Gmail 삭제 안내</a>를 참조하십시오. 저장공간 사용량이 갱신되기까지 시간이 걸릴 수 있으므로 다음 묶음을 제거하기 전에 Google 저장공간 화면에서 결과를 확인하십시오.</p>
+          <section aria-labelledby="archive-delete-keep-local-video">
+          <h2 id="archive-delete-keep-local-video">짧은 데모: 서버 사본을 제거하기 전에 보관하기</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/ko/archive-delete-keep-local-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/ko/archive-delete-keep-local-full-window-v4.mp4" type="video/mp4"></video>
+          <p class="text-sm">기존 macOS 데모 녹화 영상을 편집한 가상 메일 시연입니다. 계정 로그인과 일부 준비 과정은 화면 밖에서 진행되며 실제 제공업체에 연결한 영상이 아닙니다.</p>
+          <details><summary>데모 설명 읽기</summary>
+          <p>가상 메일함에 오래된 날짜 범위를 미리 설정했습니다. 데모에서는 보관 후 삭제를 확인하고 작업 완료를 보여 준 다음 보관함으로 전환해 남아 있는 메일을 보여 줍니다. Premium이 필요합니다. 실제 메일을 삭제하기 전에 별도 백업을 검증하십시오.</p></details></section>
 
           <p>
             Gmail은 모든 무료 계정에 Gmail, Google Drive, Google Photos가 함께 쓰는 15 GB를 줍니다. 그 한도에 닿으면 두 가지 일이 벌어집니다. 새 메일을 받지 못하고(보낸 사람에게 반송 메시지가 갑니다), Google이 저장 공간을 더 사라고 재촉하기 시작합니다. 위험한 일은 아니지만 둘 다 성가시고, 대부분이 택하는 해결책 &mdash; 100 GB에 $1.99/월을 Google에 내는 것 &mdash; 은 문제를 미룰 뿐입니다. 메일함은 계속 자라고, 결국 다시 이 자리로 돌아옵니다.
@@ -310,7 +326,11 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Graphic Meat가 만들었습니다</p>
+          <h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2>
+          <p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>

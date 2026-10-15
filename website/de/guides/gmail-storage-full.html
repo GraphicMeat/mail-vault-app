@@ -38,7 +38,7 @@
   "description": "Gmail sagt, dein Speicher sei voll, und neue Post kommt zurück. Hier steht, was wirklich Platz freigibt, was nicht, und wie du alte E-Mails lokal archivierst, statt Google jeden Monat zu bezahlen.",
   "url": "https://mailvaultapp.com/de/guides/gmail-storage-full.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-15",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -168,7 +168,7 @@
 <details class="mv-language" translate="no">
 <summary aria-label="Sprache auswählen"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Deutsch</span><span class="mv-language-code" aria-hidden="true">DE</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
 </summary>
-<ul>
+<ul class="list-disc pl-6 space-y-2">
 <li><a data-i18n-abs href="/guides/gmail-storage-full.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
 </li>
 <li><a data-i18n-abs href="/de/guides/gmail-storage-full.html" lang="de" hreflang="de" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
@@ -217,6 +217,22 @@
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h2>Gmail-Speicherplatz freigeben, ohne E-Mails zu verlieren: erst prüfen, dann löschen</h2>
+          <p>Gmails Schaltfläche „Archivieren“ entfernt das Label „Posteingang“; sie verschiebt keine E-Mails von Googles Servern. Ein heruntergeladenes lokales Archiv ist etwas anderes. Nutze diese Reihenfolge, wenn du Speicherplatz freigeben und lesbare Kopien behalten möchtest:</p>
+          <ol class="list-decimal pl-6 space-y-2">
+          <li>Wähle eine kleine Gruppe alter oder großer Nachrichten. Speichere sie zuerst lokal mithilfe <a href="/de/guides/backup-gmail-to-eml.html">der Anleitung für Gmail als EML</a>.</li>
+          <li>Wechsle MailVault zu <strong>Tresor</strong>, trenne die Verbindung und öffne Nachrichten und Anhänge aus dieser Gruppe.</li>
+          <li>Exportiere das Tresorbackup auf ein zweites Laufwerk und prüfe es, bevor du Kopien beim Anbieter entfernst.</li>
+          <li>Nutze mit Premium <strong>Archivieren, sichern &amp; löschen</strong>, wenn du ein Sicherungslaufwerk konfiguriert hast, oder <strong>Archivieren &amp; löschen</strong>, nachdem du selbst ein separates Backup erstellt hast. Prüfe Ordner, Zeitraum und Löschübersicht sorgfältig.</li>
+          <li>Prüfe die archivierte Gruppe erneut, bevor du den Gmail-Papierkorb endgültig leerst. Leere ihn erst, wenn du auf die Wiederherstellungskopie beim Anbieter verzichten kannst.</li></ol>
+          <p>Google dokumentiert, dass gelöschte Gmail-Nachrichten in den Papierkorb verschoben und nach 30 Tagen endgültig gelöscht werden, oder früher, wenn du ihn selbst leerst. Siehe <a href="https://support.google.com/mail/answer/7401?hl=en">Gmails Löschanleitung</a>. Die Speicheranzeige kann sich verzögert aktualisieren; bestätige das Ergebnis in deiner Google-Speicherübersicht, bevor du eine weitere Gruppe entfernst.</p>
+          <section aria-labelledby="archive-delete-keep-local-video">
+          <h2 id="archive-delete-keep-local-video">Kurze Demo: vor dem Entfernen von Serverkopien archivieren</h2>
+          <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/de/archive-delete-keep-local-full-window-v4.jpg" style="width:100%;height:auto">
+          <source src="/assets/videos/guides/de/archive-delete-keep-local-full-window-v4.mp4" type="video/mp4"></video>
+          <p class="text-sm">Demo mit fiktiven E-Mails, geschnitten aus den vorhandenen macOS-Demoaufnahmen. Kontoanmeldung und ein Teil der Vorbereitung erfolgen außerhalb der Aufnahme; es besteht keine Live-Verbindung zu einem Anbieter.</p>
+          <details><summary>Demobeschreibung lesen</summary>
+          <p>Das fiktive Postfach ist mit einem älteren Zeitraum vorbereitet. Die Demo bestätigt Archivieren &amp; löschen, zeigt den abgeschlossenen Vorgang und wechselt zum Tresor, um die behaltenen E-Mails zu zeigen. Premium ist erforderlich. Prüfe ein separates Backup, bevor du echte E-Mails löschst.</p></details></section>
 
           <p>
             Gmail gibt jedem kostenlosen Konto 15 GB, geteilt zwischen Gmail, Google Drive und Google Fotos. Erreichst du diese Grenze, passieren zwei Dinge: Du empfängst keine neue Post mehr (Absender bekommen eine Fehlermeldung zurück), und Google drängt dich, mehr Speicher zu kaufen. Beides ist nicht gefährlich, aber lästig, und die Lösung, zu der die meisten greifen &mdash; $1.99/Monat für 100 GB an Google zu zahlen &mdash;, schiebt das Problem nur auf. Dein Postfach wächst weiter, und irgendwann bist du wieder hier.
@@ -310,7 +326,11 @@
   </main>
 
   <!-- Footer -->
-  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
+          <p class="mv-eyebrow">Eine Kreation von Graphic Meat</p>
+          <h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2>
+          <p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products">
+          <h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
 <div class="mv-footer-top">
 <div><a class="mv-brand" href="/de/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>

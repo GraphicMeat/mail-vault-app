@@ -52,6 +52,13 @@ describe('collect', () => {
     expect(texts).toContain('MailVault logo');
   });
 
+  it('preserves ISO billing durations even when a dictionary contains those tokens', () => {
+    const page = '<html lang="en"><head><script type="application/ld+json">{"@type":"Offer","name":"Premium monthly","priceSpecification":{"billingDuration":"P1M"}}</script></head></html>';
+    expect(collect(page).map(f => f.text)).not.toContain('P1M');
+    const out = render(page, 'index.html', de, dict({ P1M: 'invalid translated duration' }));
+    expect(JSON.parse(out.match(/ld\+json">([\s\S]*?)<\/script>/)[1]).priceSpecification.billingDuration).toBe('P1M');
+  });
+
   it('picks up JSON-LD prose but not its schema keys or URLs', () => {
     expect(texts).toContain('Simple, Honest Pricing');
     expect(texts).not.toContain('WebPage');

@@ -326,7 +326,7 @@ const LD_SKIP_KEYS = new Set(['@context', '@type', '@id', 'url', 'sameas', 'imag
   'ratingvalue', 'bestrating', 'worstrating', 'ratingcount', 'reviewcount',
   'operatingsystem', 'applicationcategory', 'availability', 'itemcondition',
   'validfrom', 'priceValidUntil'.toLowerCase(), 'contenturl', 'email', 'telephone',
-  'addresscountry', 'inlanguage', 'position', 'target', 'querystring']);
+  'addresscountry', 'inlanguage', 'position', 'target', 'querystring', 'billingduration']);
 
 function walkLd(node, key, fn) {
   if (Array.isArray(node)) return node.map((v) => walkLd(v, key, fn));
@@ -433,6 +433,8 @@ function shotsFor(dir) {
  * (scripts/website-clips-upload.sh), so every locale page names them without checking.
  */
 export function localizeShot(abs, loc) {
+  const guide = /^\/assets\/videos\/guides\/([^/]+\.(?:mp4|jpg))$/.exec(abs);
+  if (guide) return `/assets/videos/guides/${loc.dir}/${guide[1]}`;
   const clip = /^\/assets\/clips\/en\/([^/]+)$/.exec(abs);
   if (clip) return `/assets/clips/${loc.dir}/${clip[1]}`;
   const m = /^\/screenshots\/([^/]+)$/.exec(abs);
