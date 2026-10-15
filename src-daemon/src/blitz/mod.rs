@@ -15,6 +15,12 @@
 //! least recently used others, and an evicted doc answers `render_unknown_doc`
 //! like a closed one (the body reopens it quietly).
 //!
+//! The reaper tick also closes any doc untouched for DOC_IDLE (`idle_docs`), by the same
+//! per-doc stamps and the same close path. A webview destroyed without a close request
+//! (a detached compose window) never releases its docs; without this they would hold the
+//! worker open for the life of the daemon. A body still on screen recovers through the
+//! quiet reopen on `render_unknown_doc`.
+//!
 //! The worker survives a panic in one document: each operation runs under
 //! `catch_unwind`, which needs panic=unwind. The `[profile.release]
 //! panic = "abort"` in this crate's manifest is ignored (cargo ignores a
@@ -58,12 +64,15 @@ const IMAGE_SETTLE: Duration = Duration::from_secs(5);
 /// The worker's paint of a whole document. The shell allows 30 s (blitz_tiles::reply_timeout).
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(20);
 pub const IDLE_EXIT: Duration = Duration::from_secs(120);
+/// A doc nobody has touched for this long is closed by the reaper (`idle_docs`). Every tile, hit,
+/// fold and export touches it, so only a doc whose window is gone (or hidden for ten minutes) goes.
+pub const DOC_IDLE: Duration = Duration::from_secs(600);
 /// Kill only when a call timed out AND the worker has been silent this long.
 pub const WATCHDOG: Duration = Duration::from_secs(6);
 const FETCH_PARALLEL: usize = 6;
 /// Open documents per worker. A document can peak at hundreds of MiB, so a long
 /// thread or chat must not hold an unbounded number on one worker. Past this,
-/// an `open` closes the least recently used other docs (`evict_for`).
+/// an `open` closes the least recently used other docs (`lru_victims`).
 pub const MAX_OPEN_DOCS: usize = 32;
 /// Render workers. Two, so a long thread's tiles and a chat's do not queue behind
 /// one single-threaded Blitz. Docs are pinned by `worker_for(doc, WORKERS)`.
@@ -444,6 +453,20 @@ impl RenderHost {
         victims
     }
 
+    /// Removes and returns the docs whose last use is older than `ttl` at `now`, oldest first
+    /// (ties by id). The caller closes them.
+    fn idle_docs(docs: &mut HashMap<u64, Instant>, now: Instant, ttl: Duration) -> Vec<u64> {
+        let mut stale: Vec<(Instant, u64)> = docs.iter()
+            .filter(|(_, t)| now.saturating_duration_since(**t) > ttl)
+            .map(|(d, t)| (*t, *d))
+            .collect();
+        stale.sort();
+        for (_, d) in &stale {
+            docs.remove(d);
+        }
+        stale.into_iter().map(|(_, d)| d).collect()
+    }
+
     /// `call` for an op on an open doc: counts as use for the LRU. A doc that is
     /// not open here (closed, evicted, lost with a worker) is unknown without
     /// asking the worker, which may not have read its close frame yet.
@@ -546,10 +569,16 @@ impl RenderHost {
         let _ = self.send(json!({"op": "close", "doc": doc})).await;
     }
 
-    /// Called by the reaper ticker every 30 s. Kills an idle worker. Idleness
-    /// is re-checked under the slot lock, so a call that arrives between the
+    /// Called by the reaper ticker every 30 s. Closes docs untouched for DOC_IDLE (a window
+    /// destroyed without a close request leaves them behind), then kills an idle worker.
+    /// Idleness is re-checked under the slot lock, so a call that arrives between the
     /// check and the kill is never failed by it.
     pub async fn reap_idle(&self) {
+        let stale = Self::idle_docs(&mut self.open_docs.lock().unwrap(), Instant::now(), DOC_IDLE);
+        for doc in stale {
+            debug!("render doc {doc} closed: untouched for {DOC_IDLE:?}");
+            let _ = self.send(json!({"op": "close", "doc": doc})).await;
+        }
         let mut guard = self.worker.lock().await;
         let idle = self.last_used.lock().unwrap().elapsed() > IDLE_EXIT
             && self.open_docs.lock().unwrap().is_empty()
@@ -1424,6 +1453,43 @@ mod tests {
         *h.last_used.lock().unwrap() = long_ago();
         h.reap_idle().await;
         assert!(h.worker.lock().await.is_none(), "no open docs and idle: reaped");
+    }
+
+    #[test]
+    fn idle_docs_are_the_stamps_older_than_the_ttl_oldest_first_and_only_those() {
+        let now = Instant::now();
+        let ago = |s| now - Duration::from_secs(s);
+        let mut docs: HashMap<u64, Instant> = HashMap::from([(1, ago(700)), (2, ago(601)), (3, ago(600)), (4, ago(5)), (5, ago(700))]);
+        assert_eq!(RenderHost::idle_docs(&mut docs, now, DOC_IDLE), vec![1, 5, 2], "oldest first, ties by id; exactly at the ttl is not idle");
+        let mut left: Vec<u64> = docs.keys().copied().collect();
+        left.sort();
+        assert_eq!(left, vec![3, 4]);
+        assert!(RenderHost::idle_docs(&mut docs, now, DOC_IDLE).is_empty());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_reaper_closes_a_doc_untouched_for_ten_minutes_then_the_worker_idles_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let (h, log) = fake_worker(dir.path(), "");
+        let ids = open_n(&h, 2).await;
+        let (idle, fresh) = (ids[0], ids[1]);
+        // A window destroyed without a close request: its doc was last used 11 minutes ago.
+        h.open_docs.lock().unwrap().insert(idle, Instant::now() - DOC_IDLE - Duration::from_secs(60));
+        h.reap_idle().await;
+        assert_eq!(h.tile(idle, 0).await.unwrap_err(), "render_unknown_doc", "the idle doc is closed: a body still showing it reopens quietly");
+        assert!(h.open_docs.lock().unwrap().contains_key(&fresh), "the fresh doc is kept");
+        assert!(h.worker.lock().await.is_some(), "an open doc still keeps the worker");
+        // The same close path as eviction: one close frame, for that doc only (2 opens, 1 close).
+        wait_for_frames(&log, 3).await;
+        let closed: Vec<u64> = frames_read(&log).iter().filter(|f| f["op"] == "close").map(|f| f["doc"].as_u64().unwrap()).collect();
+        assert_eq!(closed, vec![idle]);
+        // Nobody touches the other one either: it goes on a later tick, and the worker idles out.
+        h.open_docs.lock().unwrap().insert(fresh, Instant::now() - DOC_IDLE - Duration::from_secs(60));
+        *h.last_used.lock().unwrap() = Instant::now() - IDLE_EXIT - Duration::from_secs(1);
+        h.reap_idle().await;
+        assert!(h.open_docs.lock().unwrap().is_empty());
+        assert!(h.worker.lock().await.is_none(), "no docs left and idle: the worker ends");
     }
 }
 
