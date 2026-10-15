@@ -112,7 +112,7 @@ pub struct DaemonState {
     pub events: crate::events::EventBus,
     /// The Blitz render worker's supervisor (`render.*`); the worker process is spawned lazily.
     #[cfg(feature = "blitz-render")]
-    pub blitz: Arc<crate::blitz::RenderHost>,
+    pub blitz: Arc<crate::blitz::RenderPool>,
     pub search_index: Arc<crate::search_index::SearchIndexState>,
     /// What the vault holds, answered from `<app_dir>/vault_registry.db`
     /// (architecture.md "Reads come from the database"). Every vault writer
@@ -883,10 +883,9 @@ impl DaemonState {
         let vault_registry = open_vault_registry(&registry_dir, &mail_dir, &search_index);
         // The worker process is spawned on the first call, so no reaper runs in tests.
         #[cfg(feature = "blitz-render")]
-        let blitz = Arc::new(crate::blitz::RenderHost::new(
-            events.clone(),
-            crate::blitz::WorkerCommand::current_exe().expect("current_exe"),
-        ));
+        let blitz = Arc::new(crate::blitz::RenderPool::new(|| {
+            crate::blitz::RenderHost::new(events.clone(), crate::blitz::WorkerCommand::current_exe().expect("current_exe"))
+        }));
         let state = Arc::new(DaemonState {
             net,
             idle,

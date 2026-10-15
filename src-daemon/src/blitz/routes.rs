@@ -44,31 +44,32 @@ pub(crate) fn validate_fold(p: &Value) -> Result<(&str, bool), &'static str> {
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
-    let host = &state.blitz;
+    let pool = &state.blitz;
     let doc = || params["docId"].as_u64().unwrap_or(0);
     let res = match method {
         "render.open" => match validate_open(params) {
-            Ok(frame) => host.open(frame).await,
+            Ok(frame) => pool.open(frame).await,
             Err(msg) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, &msg)),
         },
-        "render.tile" => host
+        "render.tile" => pool
+            .for_doc(doc())
             .tile(doc(), params["index"].as_u64().unwrap_or(0) as u32)
             .await
             .map(|png| json!({"png": base64::engine::general_purpose::STANDARD.encode(png)})),
         // `settleOnly`: wait for the doc's fetches, paint nothing (an export past the image area cap draws tiles).
-        "render.image" if params["settleOnly"].as_bool() == Some(true) => host.settle(doc()).await,
-        "render.image" => host.image(doc()).await,
-        "render.hit" => host.hit(doc(), params["x"].as_f64().unwrap_or(0.0) as f32, params["y"].as_f64().unwrap_or(0.0) as f32).await,
-        "render.textRuns" => host.text_runs(doc(), params["index"].as_u64().unwrap_or(0) as u32).await,
-        "render.serialize" => host.serialize(doc(), params["start"].clone(), params["end"].clone()).await,
+        "render.image" if params["settleOnly"].as_bool() == Some(true) => pool.for_doc(doc()).settle(doc()).await,
+        "render.image" => pool.for_doc(doc()).image(doc()).await,
+        "render.hit" => pool.for_doc(doc()).hit(doc(), params["x"].as_f64().unwrap_or(0.0) as f32, params["y"].as_f64().unwrap_or(0.0) as f32).await,
+        "render.textRuns" => pool.for_doc(doc()).text_runs(doc(), params["index"].as_u64().unwrap_or(0) as u32).await,
+        "render.serialize" => pool.for_doc(doc()).serialize(doc(), params["start"].clone(), params["end"].clone()).await,
         "render.fold" => match validate_fold(params) {
-            Ok((fold_id, open)) => host.fold(doc(), fold_id, open).await,
+            Ok((fold_id, open)) => pool.for_doc(doc()).fold(doc(), fold_id, open).await,
             Err(msg) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, msg)),
         },
         "render.fonts" => super::fonts::render_fonts(state, params).await,
-        "render.inspect" => host.inspect(doc()).await,
+        "render.inspect" => pool.for_doc(doc()).inspect(doc()).await,
         "render.close" => {
-            host.close(doc()).await;
+            pool.for_doc(doc()).close(doc()).await;
             Ok(json!({}))
         }
         _ => return None,

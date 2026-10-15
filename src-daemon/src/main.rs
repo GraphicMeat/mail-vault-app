@@ -502,9 +502,9 @@ async fn daemon_main() {
     contacts.attach_db(Arc::clone(&custody.db));
     #[cfg(feature = "blitz-render")]
     let blitz = {
-        let host = Arc::new(blitz::RenderHost::new(events.clone(), blitz::WorkerCommand::current_exe().expect("current_exe")));
-        blitz::spawn_reaper(Arc::clone(&host));
-        host
+        let pool = Arc::new(blitz::RenderPool::new(|| blitz::RenderHost::new(events.clone(), blitz::WorkerCommand::current_exe().expect("current_exe"))));
+        blitz::spawn_reaper(Arc::clone(&pool));
+        pool
     };
     let state = Arc::new(server::DaemonState {
         token,

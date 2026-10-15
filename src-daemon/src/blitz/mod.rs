@@ -1,14 +1,17 @@
 //! Supervises the Blitz render worker (`mailvault-daemon --render-worker`).
 //!
-//! One worker, spawned lazily on the first `render.open`, killed after
-//! IDLE_EXIT with no open docs. A timeout alone never kills it (busy is not
+//! WORKERS (two) workers, each spawned lazily by the first `render.open` that
+//! lands on it and killed after IDLE_EXIT with no open docs. `RenderPool` pins a
+//! doc to a worker by id (`worker_for`), so every later op on it goes to the
+//! worker that holds it, and the supervision below is per worker (`RenderHost`):
+//! a hung or crashed worker takes only its own docs with it. A timeout alone never kills it (busy is not
 //! hung): the kill needs a timed-out call AND WATCHDOG of silence from the
 //! worker while it owes an answer (`Silence`). EOF, a failed stdin write and
 //! the reaper end it too; every waiter then fails with `render_unavailable`
 //! (the body shows its failure view) and the next call spawns a fresh one.
 //! Rendering never runs in this process.
 //!
-//! At most MAX_OPEN_DOCS documents stay open: an `open` past that closes the
+//! At most MAX_OPEN_DOCS documents stay open per worker: an `open` past that closes the
 //! least recently used others, and an evicted doc answers `render_unknown_doc`
 //! like a closed one (the body reopens it quietly).
 //!
@@ -59,9 +62,12 @@ pub const IDLE_EXIT: Duration = Duration::from_secs(120);
 pub const WATCHDOG: Duration = Duration::from_secs(6);
 const FETCH_PARALLEL: usize = 6;
 /// Open documents per worker. A document can peak at hundreds of MiB, so a long
-/// thread or chat must not hold an unbounded number on the one worker. Past this,
+/// thread or chat must not hold an unbounded number on one worker. Past this,
 /// an `open` closes the least recently used other docs (`evict_for`).
 pub const MAX_OPEN_DOCS: usize = 32;
+/// Render workers. Two, so a long thread's tiles and a chat's do not queue behind
+/// one single-threaded Blitz. Docs are pinned by `worker_for(doc, WORKERS)`.
+pub const WORKERS: usize = 2;
 pub const UNAVAILABLE: &str = "render_unavailable";
 pub const RENDER_UPDATED: &str = "render-updated";
 
@@ -251,13 +257,62 @@ impl FontFrames {
     }
 }
 
-/// Ticks every 30 s and kills a worker that has been idle with no open docs.
-pub fn spawn_reaper(host: Arc<RenderHost>) {
+/// The worker a doc lives on. Ids are handed out one by one, so consecutive docs
+/// alternate between workers.
+pub fn worker_for(doc: u64, workers: usize) -> usize {
+    (doc % workers.max(1) as u64) as usize
+}
+
+/// The workers and the doc id counter. A doc id is allocated here, once, and its
+/// remainder picks the worker for the doc's whole life.
+pub struct RenderPool {
+    pub(crate) hosts: Vec<Arc<RenderHost>>,
+    /// Starts at a per-boot seed (`next_doc_id_seed`), never at 1: the shell caches
+    /// tiles by docId as immutable, so ids must not repeat across daemon boots.
+    next_doc: AtomicU64,
+}
+
+impl RenderPool {
+    pub fn new(make: impl Fn() -> RenderHost) -> Self {
+        Self { hosts: (0..WORKERS).map(|_| Arc::new(make())).collect(), next_doc: AtomicU64::new(next_doc_id_seed()) }
+    }
+
+    pub async fn open(&self, p: Value) -> Result<Value, String> {
+        let doc = self.next_doc.fetch_add(1, Ordering::Relaxed);
+        self.for_doc(doc).open_as(doc, p).await
+    }
+
+    /// The worker that holds `doc` (or would, were it open).
+    pub fn for_doc(&self, doc: u64) -> &Arc<RenderHost> {
+        &self.hosts[worker_for(doc, self.hosts.len())]
+    }
+
+    /// Each worker has its own font registry, so a family goes to every one.
+    pub async fn register_fonts(&self, families: Vec<Value>) {
+        for h in &self.hosts {
+            h.register_fonts(families.clone()).await;
+        }
+    }
+
+    /// Every worker has the family (they are always registered together).
+    pub fn has_font(&self, family: &str) -> bool {
+        self.hosts.iter().all(|h| h.has_font(family))
+    }
+
+    pub async fn reap_idle(&self) {
+        for h in &self.hosts {
+            h.reap_idle().await;
+        }
+    }
+}
+
+/// Ticks every 30 s and kills each worker that has been idle with no open docs.
+pub fn spawn_reaper(pool: Arc<RenderPool>) {
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(30));
         loop {
             tick.tick().await;
-            host.reap_idle().await;
+            pool.reap_idle().await;
         }
     });
 }
@@ -333,8 +388,14 @@ impl RenderHost {
         }
     }
 
+    /// Opens a doc under this host's own id counter (a lone host; a pool allocates ids itself).
     pub async fn open(self: &Arc<Self>, p: Value) -> Result<Value, String> {
         let doc = self.next_doc.fetch_add(1, Ordering::Relaxed);
+        self.open_as(doc, p).await
+    }
+
+    /// Opens a doc under the id the caller chose.
+    pub async fn open_as(self: &Arc<Self>, doc: u64, p: Value) -> Result<Value, String> {
         let mut frame = json!({"op": "open", "doc": doc});
         for k in ["html", "cssWidth", "scale", "allowRemote", "theme"] {
             frame[k] = p.get(k).cloned().unwrap_or(Value::Null);
@@ -688,7 +749,7 @@ mod tests {
     /// harness (`target/<profile>/deps/<test>` -> `target/<profile>/mailvault-daemon`).
     /// `src-daemon/tests/` has an integration test, so a plain
     /// `cargo test -p mailvault-daemon` always builds it.
-    fn daemon_exe() -> std::path::PathBuf {
+    pub(super) fn daemon_exe() -> std::path::PathBuf {
         let mut dir = std::env::current_exe().expect("current_exe");
         dir.pop();
         if dir.ends_with("deps") {
@@ -1363,5 +1424,118 @@ mod tests {
         *h.last_used.lock().unwrap() = long_ago();
         h.reap_idle().await;
         assert!(h.worker.lock().await.is_none(), "no open docs and idle: reaped");
+    }
+}
+
+#[cfg(test)]
+mod pool_tests {
+    use super::tests::daemon_exe;
+    use super::*;
+    use serde_json::json;
+
+    fn pool() -> RenderPool {
+        RenderPool::new(|| RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(daemon_exe())))
+    }
+
+    fn open_p(html: &str) -> Value {
+        json!({"html": html, "cssWidth": 200, "scale": 1.0, "allowRemote": false})
+    }
+
+    const P: &str = "<body style=\"margin:0\"><p>x</p></body>";
+
+    async fn open_doc(pool: &RenderPool, html: &str) -> u64 {
+        pool.open(open_p(html)).await.unwrap()["docId"].as_u64().unwrap()
+    }
+
+    #[test]
+    fn docs_pin_to_one_worker_by_id() {
+        assert_eq!(WORKERS, 2);
+        assert_eq!((worker_for(1, 2), worker_for(2, 2), worker_for(3, 2)), (1, 0, 1));
+        for doc in 0..50u64 {
+            assert_eq!(worker_for(doc, 1), 0);
+        }
+        assert_eq!(worker_for(7, 0), 0, "zero workers never divides by zero");
+    }
+
+    #[tokio::test]
+    async fn every_op_for_a_doc_goes_to_the_worker_that_opened_it() {
+        let pool = pool();
+        let a = open_doc(&pool, P).await;
+        let b = open_doc(&pool, P).await;
+        assert_ne!(worker_for(a, WORKERS), worker_for(b, WORKERS), "consecutive docs land on different workers");
+        assert!(pool.for_doc(a).tile(a, 0).await.is_ok());
+        assert!(pool.for_doc(b).tile(b, 0).await.is_ok());
+        // The other worker never saw doc a.
+        let other = &pool.hosts[1 - worker_for(a, WORKERS)];
+        assert_eq!(other.tile(a, 0).await.unwrap_err(), "render_unknown_doc");
+        assert_eq!(pool.hosts.iter().map(|h| h.spawned()).sum::<u64>(), 2, "one process per worker");
+        pool.for_doc(a).close(a).await;
+        assert_eq!(pool.for_doc(a).tile(a, 0).await.unwrap_err(), "render_unknown_doc");
+        assert!(pool.for_doc(b).tile(b, 0).await.is_ok(), "closing a leaves b");
+    }
+
+    #[tokio::test]
+    async fn doc_ids_start_at_a_boot_seed_never_at_one() {
+        // The webview caches tiles by docId for its whole life: a daemon boot must not reuse small ids.
+        let (p, q) = (pool(), pool());
+        let (a, b) = (p.next_doc.load(Ordering::Relaxed), q.next_doc.load(Ordering::Relaxed));
+        assert_ne!(a, b, "two pools do not share a first id");
+        assert!(a > 1 << 20 || b > 1 << 20, "the seed is a random slot of the id space, not 1");
+        assert!(a < 1u64 << 53 && b < 1u64 << 53);
+    }
+
+    #[tokio::test]
+    async fn the_doc_cap_is_per_worker_not_per_pool() {
+        let pool = pool();
+        let n = MAX_OPEN_DOCS + 8; // more than one worker may hold, within what two may
+        let mut ids = Vec::new();
+        for _ in 0..n {
+            ids.push(open_doc(&pool, "<p>x").await);
+        }
+        for h in &pool.hosts {
+            assert!(h.open_docs.lock().unwrap().len() <= MAX_OPEN_DOCS);
+        }
+        for id in ids {
+            assert!(pool.for_doc(id).tile(id, 0).await.is_ok(), "doc {id} was not evicted: each worker holds {} of {n}", n / WORKERS);
+        }
+    }
+
+    #[tokio::test]
+    async fn fonts_register_on_every_worker() {
+        let pool = pool();
+        let fam = json!({"family": "Lora", "faces": []});
+        pool.register_fonts(vec![fam]).await;
+        assert!(pool.hosts.iter().all(|h| h.has_font("Lora")), "each worker keeps its own registry");
+        assert!(pool.has_font("Lora"));
+        assert!(!pool.has_font("Roboto"));
+    }
+
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn a_crash_in_one_worker_leaves_the_other_docs_alive() {
+        let pool = pool();
+        let a = open_doc(&pool, P).await;
+        // The next id lands on the other worker; it panics (debug sentinel) and dies alone.
+        let err = pool.open(open_p(PANIC_SENTINEL)).await.unwrap_err();
+        assert_eq!(err, "render_unavailable");
+        assert!(pool.for_doc(a).tile(a, 0).await.is_ok(), "doc a lives on the healthy worker");
+        assert_eq!(pool.for_doc(a).spawned(), 1, "the healthy worker was not respawned");
+    }
+
+    #[tokio::test]
+    async fn reap_idle_ends_every_idle_worker() {
+        let pool = pool();
+        let a = open_doc(&pool, P).await;
+        let b = open_doc(&pool, P).await;
+        pool.for_doc(a).close(a).await;
+        pool.for_doc(b).close(b).await;
+        let long_ago = Instant::now() - IDLE_EXIT - Duration::from_secs(1);
+        for h in &pool.hosts {
+            *h.last_used.lock().unwrap() = long_ago;
+        }
+        pool.reap_idle().await;
+        for h in &pool.hosts {
+            assert!(h.worker.lock().await.is_none(), "both workers are reaped");
+        }
     }
 }

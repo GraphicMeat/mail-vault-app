@@ -48,11 +48,11 @@ pub(crate) async fn render_fonts(state: &Arc<DaemonState>, params: &Value) -> Re
     let mut wanted: Vec<String> = params["families"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect()).unwrap_or_default();
     let mut seen = std::collections::HashSet::new();
     wanted.retain(|f| seen.insert(f.clone()));
-    let host = &state.blitz;
-    let (mut registered, fresh): (Vec<String>, Vec<String>) = wanted.into_iter().partition(|f| host.has_font(f));
+    let pool = &state.blitz;
+    let (mut registered, fresh): (Vec<String>, Vec<String>) = wanted.into_iter().partition(|f| pool.has_font(f));
     let root: PathBuf = gf::fonts_root(&state.app_dir);
     let (frames, names) = tokio::task::spawn_blocking(move || frames_for(&root, &fresh)).await.map_err(|_| super::UNAVAILABLE.to_string())?;
-    host.register_fonts(frames).await;
+    pool.register_fonts(frames).await;
     registered.extend(names);
     Ok(json!({"registered": registered}))
 }
