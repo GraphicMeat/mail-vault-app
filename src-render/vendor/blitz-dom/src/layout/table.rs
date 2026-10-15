@@ -734,7 +734,9 @@ impl TableTreeWrapper<'_> {
     ///
     /// The table's style with `min-width` raised to its minimum content width (taffy clamps with
     /// the minimum last, so it beats the width and the `max-width`, and applies it to the
-    /// available space of an auto width); None when it is already that wide, for a
+    /// available space of an auto width); None when the table's own `min-width` is already at
+    /// least that (it compares against `min-width` only, not the width the table is laid out
+    /// at, so a table with a definite width pays one extra grid measure), for a
     /// `table-layout: fixed` table (its columns do not follow the content, as with the `clip`
     /// table mode), and for an intrinsic query (min- and max-content answer for themselves). The
     /// measurement ignores the table's own `width`, `min-width` and `max-width`, which all

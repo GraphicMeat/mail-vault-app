@@ -762,7 +762,7 @@ fn a_percentage_width_table_is_never_narrower_than_its_content() {
 /// `cellspacing=0 cellpadding=0` the image is the full container width. The same table with
 /// no `img { max-width }` rule (not compressible) is 606 wide, the image 600. The bubble's
 /// shape (`table { max-width: 100% }` alone, no `!important`, auto width) measured the same.
-/// The min-content floor (`max_width_not_below_min_content`) must not widen the first two.
+/// The min-content floor (`min_content_floor`) must not widen the first two.
 #[test]
 fn a_compressible_image_does_not_hold_a_table_open() {
     const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -935,8 +935,10 @@ fn collapsed_cell_borders_paint_in_their_colour_inside_the_table_box() {
         let outside = img.pixels_where(|x, y, p| !(x >= x0 && x < x1 && y >= y0 && y < y1) && !near(p, WHITE), 8);
         assert!(dark.is_empty(), "scale {scale}: darker than #ccc {dark:?}");
         assert!(outside.is_empty(), "scale {scale}: table box {:?}, pixels outside it {outside:?}", img.rect);
-        // The top and left lines are one CSS px of #ccc. They stop two borders short of the
-        // far corner (the paint code measures them from the track area, not the border box).
+        // The top and left lines are one CSS px of #ccc. They stop short of the far end (the paint
+        // code measures them from the track area, not the border box): the last column and row
+        // stay white (pinned by the residue test below), and they are solid up to two borders
+        // from that end, which is what is asserted here.
         let band = scale as u32;
         assert!((x0..x1 - 2 * band).all(|x| (0..band).all(|d| near(img.px(x, y0 + d), CCC))), "scale {scale}: top line");
         assert!((y0..y1 - 2 * band).all(|y| (0..band).all(|d| near(img.px(x0 + d, y), CCC))), "scale {scale}: left line");
@@ -979,7 +981,7 @@ const ROW_SEPARATORS: &str = r#"<style>td{border-bottom:1px solid #ddd}</style><
 /// outermost pixels of the box, e.g. columns 0 and 99 of a 100px table):
 ///  - the right and bottom lines sit one border width inside the box, leaving the last
 ///    `scale` px column and row white;
-///  - the top and left lines stop one border width short of the far end;
+///  - the top and left lines stop one border width short of the far end.
 /// A painter fix flips these assertions: move the lines to the box edge and update them.
 #[test]
 fn known_residue_cell_borders_outer_lines_are_inset() {
