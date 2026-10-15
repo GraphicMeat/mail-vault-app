@@ -713,6 +713,47 @@ fn a_table_with_a_length_width_ignores_a_percentage_max_width() {
     assert!(wrong.is_empty(), "table widths differ from WebKit:\n{}", wrong.join("\n"));
 }
 
+/// The newsletter hero: `<table><tr><td><img width="600" height="50"></td></tr></table>` in a
+/// narrower container. A replaced element with `max-width: 100%` is compressible (CSS Sizing 3
+/// 5.2.2: its min-content contribution is 0), so the table is not held open by the image's
+/// 600px. Measured in macOS WKWebView, 2026-10-15, with the reader's `table { max-width: 100%
+/// !important; width: auto !important }` and `img { max-width: 100% }`: in a 375px `div` the
+/// table is 375 wide and the image 369 (3px cell padding); in 300px, 300 and 294; with
+/// `cellspacing=0 cellpadding=0` the image is the full container width. The same table with
+/// no `img { max-width }` rule (not compressible) is 606 wide, the image 600. The bubble's
+/// shape (`table { max-width: 100% }` alone, no `!important`, auto width) measured the same.
+/// The min-content floor (`max_width_not_below_min_content`) must not widen the first two.
+#[test]
+fn a_compressible_image_does_not_hold_a_table_open() {
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    let page = |css: &str, container: u32, table_attrs: &str| {
+        let html = format!(
+            r#"<body style="margin:0"><style>{css}</style><div style="width:{container}px"><table data-mv-id="t" {table_attrs}><tr><td><img data-mv-id="i" width="600" height="50" src="data:image/png;base64,{PNG}"></td></tr></table></div></body>"#
+        );
+        let els = inspect_at(&html, container);
+        let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+        (w("t"), w("i"))
+    };
+    let reader = "table{max-width:100%!important;width:auto!important}img{max-width:100%}";
+    let bubble = "table{max-width:100%}img{max-width:100%}";
+    for (css, container, attrs, expected) in [
+        (reader, 375, "", (375.0, 369.0)),
+        (reader, 300, "", (300.0, 294.0)),
+        (reader, 375, r#"cellspacing="0" cellpadding="0""#, (375.0, 375.0)),
+        (reader, 375, r#"width="600""#, (375.0, 369.0)),
+        (bubble, 375, "", (375.0, 369.0)),
+        (bubble, 300, "", (300.0, 294.0)),
+        ("table{max-width:100%!important;width:auto!important}", 375, "", (606.0, 600.0)),
+        ("table{max-width:100%}", 300, "", (606.0, 600.0)),
+    ] {
+        let got = page(css, container, attrs);
+        assert!(
+            (got.0 - expected.0).abs() <= 0.51 && (got.1 - expected.1).abs() <= 0.51,
+            "{css} in {container}px, table {attrs:?}: WebKit (table, img) {expected:?}, Blitz {got:?}"
+        );
+    }
+}
+
 /// The bubble's shape: a 600px table of three 200px cells in a 300px container keeps its cells
 /// (WebKit: table 600, cells 200 / 200 / 200 at x = 0, 200, 400) whether the width comes from
 /// the attribute, the style, or both.
@@ -734,25 +775,53 @@ fn a_fixed_width_table_in_a_narrow_container_keeps_its_columns() {
     }
 }
 
+/// The first tile of a painted table page: size in device pixels, RGB bytes and the border
+/// box of the table `t` in device pixels.
+struct Painted {
+    w: u32,
+    h: u32,
+    rgb: Vec<u8>,
+    /// (x0, y0, x1, y1), exclusive at x1 and y1.
+    rect: (u32, u32, u32, u32),
+}
+
+impl Painted {
+    fn px(&self, x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * self.w + x) * 3) as usize;
+        [self.rgb[i], self.rgb[i + 1], self.rgb[i + 2]]
+    }
+    /// The first `limit` pixels (x, y, rgb) for which `bad` holds.
+    fn pixels_where(&self, bad: impl Fn(u32, u32, [u8; 3]) -> bool, limit: usize) -> Vec<(u32, u32, [u8; 3])> {
+        let mut found = Vec::new();
+        'all: for y in 0..self.h {
+            for x in 0..self.w {
+                let p = self.px(x, y);
+                if bad(x, y, p) {
+                    found.push((x, y, p));
+                    if found.len() >= limit {
+                        break 'all;
+                    }
+                }
+            }
+        }
+        found
+    }
+}
+
 /// Decoded RGB of the first tile of `body` in a white 300px page, at `scale`, with the
-/// table `t`'s border box in device pixels (x0, y0, x1, y1).
-fn paint_table(body: &str, scale: f32) -> (u32, u32, Vec<u8>, (u32, u32, u32, u32)) {
+/// table `t`'s border box in device pixels.
+fn paint_table(body: &str, scale: f32) -> Painted {
     let html = format!(r#"<body style="margin:0;background:#fff"><div style="width:300px">{body}</div></body>"#);
     let mut doc = RenderDoc::open(&html, RenderOptions { css_width: 300, scale, ..Default::default() }, None).unwrap();
     let r = doc.inspect().into_iter().find(|e| e.mv_id == "t").unwrap().rect.unwrap();
     let png = doc.tile_png(0).unwrap();
     let mut reader = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
-    let mut buf = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).unwrap();
+    let mut rgb = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut rgb).unwrap();
     assert_eq!(info.color_type, png::ColorType::Rgb);
     let s = scale as f64;
     let rect = ((r.x * s).round() as u32, (r.y * s).round() as u32, ((r.x + r.w) * s).round() as u32, ((r.y + r.h) * s).round() as u32);
-    (info.width, info.height, buf, rect)
-}
-
-fn px(img: &(u32, u32, Vec<u8>, (u32, u32, u32, u32)), x: u32, y: u32) -> [u8; 3] {
-    let i = ((y * img.0 + x) * 3) as usize;
-    [img.2[i], img.2[i + 1], img.2[i + 2]]
+    Painted { w: info.width, h: info.height, rgb, rect }
 }
 
 fn near(a: [u8; 3], b: [u8; 3]) -> bool {
@@ -776,17 +845,10 @@ fn a_collapsed_table_without_borders_paints_no_border_pixels() {
             r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:20px"></td><td></td></tr><tr><td style="height:10px"></td><td></td></tr></table>"#,
             scale,
         );
-        let (w, h, _, rect) = (img.0, img.1, 0, img.3);
+        let rect = img.rect;
         assert!(rect.2 > rect.0 && rect.3 > rect.1, "table box {rect:?}");
-        let mut dark = Vec::new();
-        for y in 0..h {
-            for x in 0..w {
-                if !near(px(&img, x, y), WHITE) {
-                    dark.push((x, y, px(&img, x, y)));
-                }
-            }
-        }
-        assert!(dark.is_empty(), "scale {scale}: table box {rect:?}, first non-white pixels {:?}", &dark[..dark.len().min(8)]);
+        let dark = img.pixels_where(|_, _, p| !near(p, WHITE), 8);
+        assert!(dark.is_empty(), "scale {scale}: table box {rect:?}, first non-white pixels {dark:?}");
     }
 }
 
@@ -801,27 +863,26 @@ fn a_collapsed_table_border_paints_one_css_px_in_its_colour() {
             r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px;border:1px solid #ccc"><tr><td style="height:20px"></td><td></td></tr></table>"#,
             scale,
         );
-        let (w, h, _, (x0, y0, x1, y1)) = (img.0, img.1, 0, img.3);
+        let (x0, y0, x1, y1) = img.rect;
         let band = scale as u32;
-        let mut bad = Vec::new();
-        for y in 0..h {
-            for x in 0..w {
+        let bad = img.pixels_where(
+            |x, y, p| {
                 let inside = x >= x0 && x < x1 && y >= y0 && y < y1;
                 let on_ring = inside && (x < x0 + band || x >= x1 - band || y < y0 + band || y >= y1 - band);
-                let want = if on_ring { CCC } else { WHITE };
-                if !near(px(&img, x, y), want) {
-                    bad.push((x, y, px(&img, x, y), want));
-                }
-            }
-        }
-        assert!(bad.is_empty(), "scale {scale}: table box {:?}, first wrong pixels (x, y, got, want) {:?}", (x0, y0, x1, y1), &bad[..bad.len().min(8)]);
+                !near(p, if on_ring { CCC } else { WHITE })
+            },
+            8,
+        );
+        assert!(bad.is_empty(), "scale {scale}: table box {:?}, first wrong pixels (x, y, got) {bad:?}", img.rect);
     }
 }
 
 /// Collapsed borders given by the cells (`td { border: 1px solid #ccc }`, the usual data
-/// table): nothing darker than #ccc anywhere and nothing outside the table's box. (The
-/// paint code in blitz-paint puts the right and bottom outer lines one border width inside
-/// the box instead of on its last pixels; that residue is not asserted.)
+/// table): nothing darker than #ccc anywhere and nothing outside the table's box. This is a
+/// characterization test: it passes on the code before the border fix too, because a first
+/// cell with a real 1px border already painted a 1px #ccc ring (the 3px dark frame needed a
+/// borderless first cell). It guards the fix against regressing that shape. The painter's
+/// misplaced outer lines are pinned by the KNOWN RESIDUE tests below.
 #[test]
 fn collapsed_cell_borders_paint_in_their_colour_inside_the_table_box() {
     for scale in [1.0f32, 2.0] {
@@ -829,26 +890,117 @@ fn collapsed_cell_borders_paint_in_their_colour_inside_the_table_box() {
             r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:20px;border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr></table>"#,
             scale,
         );
-        let (w, h, _, (x0, y0, x1, y1)) = (img.0, img.1, 0, img.3);
-        let mut dark = Vec::new();
-        let mut outside = Vec::new();
-        for y in 0..h {
-            for x in 0..w {
-                let p = px(&img, x, y);
-                if p.iter().any(|c| *c < 203) {
-                    dark.push((x, y, p));
-                }
-                if !(x >= x0 && x < x1 && y >= y0 && y < y1) && !near(p, WHITE) {
-                    outside.push((x, y, p));
-                }
-            }
-        }
-        assert!(dark.is_empty(), "scale {scale}: darker than #ccc {:?}", &dark[..dark.len().min(8)]);
-        assert!(outside.is_empty(), "scale {scale}: table box {:?}, pixels outside it {:?}", (x0, y0, x1, y1), &outside[..outside.len().min(8)]);
+        let (x0, y0, x1, y1) = img.rect;
+        let dark = img.pixels_where(|_, _, p| p.iter().any(|c| *c < 203), 8);
+        let outside = img.pixels_where(|x, y, p| !(x >= x0 && x < x1 && y >= y0 && y < y1) && !near(p, WHITE), 8);
+        assert!(dark.is_empty(), "scale {scale}: darker than #ccc {dark:?}");
+        assert!(outside.is_empty(), "scale {scale}: table box {:?}, pixels outside it {outside:?}", img.rect);
         // The top and left lines are one CSS px of #ccc. They stop two borders short of the
         // far corner (the paint code measures them from the track area, not the border box).
         let band = scale as u32;
-        assert!((x0..x1 - 2 * band).all(|x| (0..band).all(|d| near(px(&img, x, y0 + d), CCC))), "scale {scale}: top line");
-        assert!((y0..y1 - 2 * band).all(|y| (0..band).all(|d| near(px(&img, x0 + d, y), CCC))), "scale {scale}: left line");
+        assert!((x0..x1 - 2 * band).all(|x| (0..band).all(|d| near(img.px(x, y0 + d), CCC))), "scale {scale}: top line");
+        assert!((y0..y1 - 2 * band).all(|y| (0..band).all(|d| near(img.px(x0 + d, y), CCC))), "scale {scale}: left line");
+    }
+}
+
+const DDD: [u8; 3] = [221, 221, 221];
+
+/// The usual row-separator table: `td { border-bottom: 1px solid #ddd }` under
+/// `border-collapse: collapse`. Before the fix its first cell's computed top border (3px
+/// `currentcolor`) framed the whole table in black. The inner separators (between the rows)
+/// are `scale` px of #ddd, and nothing on the page is darker than #ddd.
+#[test]
+fn collapsed_row_separators_paint_in_their_colour() {
+    for scale in [1.0f32, 2.0] {
+        let img = paint_table(ROW_SEPARATORS, scale);
+        let (x0, y0, x1, y1) = img.rect;
+        let band = scale as u32;
+        let dark = img.pixels_where(|_, _, p| p.iter().any(|c| *c < 220), 8);
+        assert!(dark.is_empty(), "scale {scale}: darker than #ddd {dark:?}");
+        let x = x0 + (x1 - x0) / 4;
+        let rows: Vec<u32> = (y0..y1).filter(|y| !near(img.px(x, *y), WHITE)).collect();
+        assert_eq!(rows.len() as u32, 2 * band, "scale {scale}: two separators of {band}px each, at rows {rows:?}");
+        assert!(rows.iter().all(|y| near(img.px(x, *y), DDD)), "scale {scale}: separator colour, rows {rows:?}");
+        let (first, second) = rows.split_at(band as usize);
+        assert!(first.windows(2).all(|w| w[1] == w[0] + 1) && second.windows(2).all(|w| w[1] == w[0] + 1), "scale {scale}: each separator is {band}px thick: {rows:?}");
+        assert!(first[0] > y0 + 2 * band && second[second.len() - 1] < y1 - band, "scale {scale}: between the rows {rows:?}");
+        // Each separator runs across the table (it stops short of the far corner, see below).
+        for y in [first[0], second[0]] {
+            assert!((x0..x1 - 2 * band).all(|x| near(img.px(x, y), DDD)), "scale {scale}: separator at row {y} spans the table");
+        }
+    }
+}
+
+const ROW_SEPARATORS: &str = r#"<style>td{border-bottom:1px solid #ddd}</style><table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:10px"></td><td></td></tr><tr><td style="height:10px"></td><td></td></tr><tr><td style="height:10px"></td><td></td></tr></table>"#;
+
+/// KNOWN RESIDUE (blitz-paint, unvendored): `draw_table_borders` measures the outer lines from
+/// the track area instead of the table's border box, and draws each of them with the first
+/// cell's values. Today, with `td { border: 1px solid #ccc }` (WKWebView: the ring lies on the
+/// outermost pixels of the box, e.g. columns 0 and 99 of a 100px table):
+///  - the right and bottom lines sit one border width inside the box, leaving the last
+///    `scale` px column and row white;
+///  - the top and left lines stop one border width short of the far end;
+/// A painter fix flips these assertions: move the lines to the box edge and update them.
+#[test]
+fn known_residue_cell_borders_outer_lines_are_inset() {
+    for scale in [1.0f32, 2.0] {
+        let img = paint_table(
+            r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:20px;border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr></table>"#,
+            scale,
+        );
+        let (x0, y0, x1, y1) = img.rect;
+        let b = scale as u32;
+        let (mid_x, mid_y) = (x0 + (x1 - x0) / 4, y0 + (y1 - y0) / 2);
+        // Right line one border inside; the box's last column is white.
+        assert!((0..b).all(|d| near(img.px(x1 - 2 * b + d, mid_y), CCC)), "scale {scale}: right line at [x1 - 2b, x1 - b)");
+        assert!((0..b).all(|d| near(img.px(x1 - b + d, mid_y), WHITE)), "scale {scale}: last column white");
+        // Bottom line one border inside; the box's last row is white.
+        assert!((0..b).all(|d| near(img.px(mid_x, y1 - 2 * b + d), CCC)), "scale {scale}: bottom line at [y1 - 2b, y1 - b)");
+        assert!((0..b).all(|d| near(img.px(mid_x, y1 - b + d), WHITE)), "scale {scale}: last row white");
+        // The top line misses the last column of the box, the left line the last row.
+        assert!(near(img.px(x1 - b, y0), WHITE), "scale {scale}: top line stops short of the last column");
+        assert!(near(img.px(x0, y1 - b), WHITE), "scale {scale}: left line stops short of the last row");
+    }
+}
+
+/// KNOWN RESIDUE (blitz-paint, unvendored): with a table border and cell borders both
+/// (`border: 1px solid #ccc` on the table and on its cells), the table's own box border is
+/// drawn on the box's outermost pixels and the painter's ring a border inside it, so the
+/// right and bottom edges are two `scale` px thick where WKWebView draws one.
+#[test]
+fn known_residue_table_plus_cell_borders_draw_a_double_line() {
+    for scale in [1.0f32, 2.0] {
+        let img = paint_table(
+            r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px;border:1px solid #ccc"><tr><td style="height:20px;border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr></table>"#,
+            scale,
+        );
+        let (x0, y0, x1, y1) = img.rect;
+        let b = scale as u32;
+        let (mid_x, mid_y) = (x0 + (x1 - x0) / 4, y0 + (y1 - y0) / 2);
+        assert!((0..2 * b).all(|d| near(img.px(x1 - 2 * b + d, mid_y), CCC)), "scale {scale}: right edge is 2 borders thick");
+        assert!((0..2 * b).all(|d| near(img.px(mid_x, y1 - 2 * b + d), CCC)), "scale {scale}: bottom edge is 2 borders thick");
+        // The left and top edges are single lines.
+        assert!(near(img.px(x0, mid_y), CCC) && near(img.px(x0 + b, mid_y), WHITE), "scale {scale}: left edge");
+        assert!(near(img.px(mid_x, y0), CCC) && near(img.px(mid_x, y0 + b), WHITE), "scale {scale}: top edge");
+    }
+}
+
+/// KNOWN RESIDUE (blitz-paint, unvendored): the painter takes one width for every outer line,
+/// the narrowest used side of the first cell, so the bottom-only borders of a row-separator
+/// table give no outer line at all. The last row's bottom separator (CSS 2.1 17.6.2: the
+/// border-bottom of the last row is a border of the table's edge) and the three other sides
+/// are not drawn. Before the fix this table had a 3px black frame.
+#[test]
+fn known_residue_row_separators_have_no_outer_lines() {
+    for scale in [1.0f32, 2.0] {
+        let img = paint_table(ROW_SEPARATORS, scale);
+        let (x0, y0, x1, y1) = img.rect;
+        let b = scale as u32;
+        assert!((x0..x1).all(|x| (0..b).all(|d| near(img.px(x, y1 - b + d), WHITE))), "scale {scale}: no bottom line");
+        assert!((x0..x1).all(|x| (0..b).all(|d| near(img.px(x, y0 + d), WHITE))), "scale {scale}: no top line");
+        // The first row, above the first separator (which crosses the outer columns).
+        let first_row = y0..y0 + 12 * b;
+        assert!(first_row.clone().all(|y| (0..b).all(|d| near(img.px(x0 + d, y), WHITE))), "scale {scale}: no left line");
+        assert!(first_row.clone().all(|y| (0..b).all(|d| near(img.px(x1 - b + d, y), WHITE))), "scale {scale}: no right line");
     }
 }

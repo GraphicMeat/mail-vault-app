@@ -130,9 +130,11 @@ pub(crate) fn drop_percentage_max_width_of_fixed_width_table(style: &mut taffy::
 
 /// MailVault parity fix (plan D): the used border widths of a cell, in CSS px, ordered top,
 /// right, bottom, left. A side with `border-style: none` or `hidden` has a used width of 0
-/// (CSS Backgrounds 3 4.3), although its computed `border-width` is still `medium` (3px); in
-/// the collapsing border model such a border has the lowest priority and contributes nothing
-/// (CSS 2.1 17.6.2.1).
+/// (CSS Backgrounds 3 4.3), although its computed `border-width` is still `medium` (3px). In
+/// the collapsing border model (CSS 2.1 17.6.2.1) `none` has the lowest priority and
+/// contributes nothing, while `hidden` has the highest and suppresses every border it meets;
+/// both leave this cell's own side without a visible line, which is all this reads. A
+/// `hidden` neighbour that would also suppress this cell's border is not modelled.
 fn used_border_widths(border: &Border) -> [f32; 4] {
     let used = |width: &style::values::computed::BorderSideWidth, style: style::values::specified::BorderStyle| {
         if style.none_or_hidden() {
