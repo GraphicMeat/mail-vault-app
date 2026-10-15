@@ -94,6 +94,18 @@ sed -i.bak '/# blitz-render/d' Cargo.toml src-daemon/Cargo.toml
 sed -i.bak -e 's/, *"blitz-render"//' -e '/^blitz-render *=/d' -e '/^# Blitz reader tiles/d' src-tauri/Cargo.toml
 rm -f src/main.jsx.bak Cargo.toml.bak src-daemon/Cargo.toml.bak src-tauri/Cargo.toml.bak
 
+# The deletions above are `rm -f`, which says nothing about a file that survived: assert they are gone.
+for gone in src/features/blitz src-render src-daemon/src/blitz src-tauri/src/blitz_tiles.rs \
+    tests/e2e/blitzSurfaceShots.js wdio.blitz.conf.js tests/fixtures/blitz-corpus; do
+  if [ -e "$gone" ]; then
+    echo "module file still present after deletion: $gone" >&2
+    exit 1
+  fi
+done
+if compgen -G "tests/e2e/connected-blitz-*.test.js" > /dev/null; then
+  echo "a connected-blitz spec is still present after deletion" >&2
+  exit 1
+fi
 if grep -q "features/blitz" src/main.jsx; then
   echo "entry import still present" >&2
   exit 1
