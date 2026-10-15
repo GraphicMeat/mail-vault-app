@@ -1,6 +1,6 @@
 use anyrender::ImageRenderer;
 use anyrender_vello_cpu::VelloCpuImageRenderer;
-use blitz_dom::{local_name, DocumentConfig, FontContext, NodeId, Point};
+use blitz_dom::{local_name, BaseDocument, DocumentConfig, FontContext, NodeId, Point};
 use blitz_html::HtmlDocument;
 use crate::net::{img_srcs, BridgeNet};
 use blitz_traits::net::NetProvider;
@@ -116,20 +116,28 @@ pub struct RenderDoc {
 /// happens for data: chains.
 const SETTLE_ROUNDS: usize = 4;
 
+/// Decide every held request and ingest what the net provider delivered, with
+/// the CSS-image window still closed (see the module comment in `net.rs`): a
+/// `data:` stylesheet answered during the parse is applied here, and whatever
+/// `@font-face` / `@import` it then requests is denied, never queued.
+fn settle_all(doc: &mut BaseDocument, net: &Arc<BridgeNet>) {
+    for _ in 0..SETTLE_ROUNDS {
+        if !net.has_held() {
+            break;
+        }
+        net.settle(&img_srcs(doc));
+        doc.handle_messages();
+    }
+    net.deny_held();
+    doc.handle_messages();
+}
+
 /// Apply what the net provider delivered, deciding every held request first
 /// (see the module comment in `net.rs`), then relayout with the layout window
 /// open so CSS images are queued.
 fn apply(doc: &mut HtmlDocument, net: Option<&Arc<BridgeNet>>) {
     if let Some(n) = net {
-        for _ in 0..SETTLE_ROUNDS {
-            if !n.has_held() {
-                break;
-            }
-            n.settle(&img_srcs(doc));
-            doc.handle_messages();
-        }
-        n.deny_held();
-        doc.handle_messages();
+        settle_all(doc, n);
         n.begin_layout();
         doc.resolve(0.0);
         n.end_layout();
@@ -185,8 +193,11 @@ impl RenderDoc {
         strip_svg_references(&mut doc);
         match &opts.dark {
             Some(theme) => crate::dark::apply(&mut doc, theme, &mut |d| {
-                // Same layout window as `apply`: CSS images found now are queued, not denied.
+                // Same order as `apply`: decide held requests and ingest data: sheets
+                // BEFORE the layout window opens, so their fonts and imports are
+                // denied; CSS images found by the layout itself are queued.
                 if let Some(n) = &net {
+                    settle_all(d, n);
                     n.begin_layout();
                 }
                 d.resolve(0.0);

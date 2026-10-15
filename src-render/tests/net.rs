@@ -78,31 +78,57 @@ fn complete_unknown_id_is_false_and_fail_all_answers_everything() {
 }
 
 fn queued_urls(html: &str) -> Vec<String> {
+    queued_urls_in(html, opts())
+}
+
+fn queued_urls_in(html: &str, opts: RenderOptions) -> Vec<String> {
     let net = BridgeNet::new(true);
-    let mut doc = RenderDoc::open(html, opts(), Some(net.clone())).unwrap();
+    let mut doc = RenderDoc::open(html, opts, Some(net.clone())).unwrap();
     doc.apply_resources();
     net.take_outbox().into_iter().map(|f| f.url).collect()
 }
 
+/// Cases whose remote import / font / frame URLs must never reach the daemon.
+const PRIVACY_CASES: [&str; 10] = [
+    r#"<style>@import url(https://css.example.com/a.css);</style><p>x"#,
+    r#"<style>@import "https://css.example.com/b.css";</style><p>x"#,
+    r#"<style>@font-face{font-family:f;src:url(https://fonts.example.com/f.woff2) format("woff2")}</style><p style="font-family:f">x"#,
+    r#"<style>@font-face{font-family:f;src:url(https://fonts.example.com/f.ttf)}</style><p style="font-family:f">x"#,
+    r#"<iframe src="https://frame.example.com/f.html"></iframe>"#,
+    r#"<iframe srcdoc="&lt;img src=&quot;https://img.example.com/in-frame.png&quot;&gt;"></iframe>"#,
+    r#"<link rel="stylesheet" href="https://css.example.com/s.css"><link rel="icon" href="https://img.example.com/i.png">"#,
+    // A data: stylesheet is answered during the parse but applied afterwards: its
+    // @font-face and @import must be held to the same rule as an inline <style>.
+    r#"<link rel="stylesheet" href="data:text/css,@font-face%7Bfont-family:f%3Bsrc:url(https://fonts.example.com/f.woff2)%7D"><p style="font-family:f">x"#,
+    r#"<link rel="stylesheet" href="data:text/css,@import%20url(https://css.example.com/n.css)%3B"><p>x"#,
+    r#"<style>@import url("data:text/css,@font-face%7Bfont-family:f%3Bsrc:url(https://fonts.example.com/g.woff2)%7D");</style><p style="font-family:f">x"#,
+];
+
 #[test]
 fn remote_import_font_and_frame_urls_are_never_requested() {
-    let cases = [
-        r#"<style>@import url(https://css.example.com/a.css);</style><p>x"#,
-        r#"<style>@import "https://css.example.com/b.css";</style><p>x"#,
-        r#"<style>@font-face{font-family:f;src:url(https://fonts.example.com/f.woff2) format("woff2")}</style><p style="font-family:f">x"#,
-        r#"<style>@font-face{font-family:f;src:url(https://fonts.example.com/f.ttf)}</style><p style="font-family:f">x"#,
-        r#"<iframe src="https://frame.example.com/f.html"></iframe>"#,
-        r#"<iframe srcdoc="&lt;img src=&quot;https://img.example.com/in-frame.png&quot;&gt;"></iframe>"#,
-        r#"<link rel="stylesheet" href="https://css.example.com/s.css"><link rel="icon" href="https://img.example.com/i.png">"#,
-        // A data: stylesheet is answered during the parse but applied afterwards: its
-        // @font-face and @import must be held to the same rule as an inline <style>.
-        r#"<link rel="stylesheet" href="data:text/css,@font-face%7Bfont-family:f%3Bsrc:url(https://fonts.example.com/f.woff2)%7D"><p style="font-family:f">x"#,
-        r#"<link rel="stylesheet" href="data:text/css,@import%20url(https://css.example.com/n.css)%3B"><p>x"#,
-        r#"<style>@import url("data:text/css,@font-face%7Bfont-family:f%3Bsrc:url(https://fonts.example.com/g.woff2)%7D");</style><p style="font-family:f">x"#,
-    ];
-    for html in cases {
+    for html in PRIVACY_CASES {
         let q = queued_urls(html);
         assert!(q.is_empty(), "{html} queued {q:?}");
+    }
+}
+
+#[test]
+fn remote_import_font_and_frame_urls_are_never_requested_in_dark_mode() {
+    // A coloured SVG element makes dark mode run an early full layout (to measure
+    // boxes). That pass must not ingest a data: stylesheet inside the CSS-image window.
+    let theme = mailvault_render::dark::DarkTheme {
+        bg: "#0a0a12".into(),
+        fg: "#e8e8ef".into(),
+        brightness: 100.0,
+        contrast: 100.0,
+        sepia: 0.0,
+        top_level: false,
+    };
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>"##;
+    for html in PRIVACY_CASES {
+        let opts = RenderOptions { dark: Some(theme.clone()), ..opts() };
+        let q = queued_urls_in(&format!("{html}{svg}"), opts);
+        assert!(q.is_empty(), "dark: {html} queued {q:?}");
     }
 }
 

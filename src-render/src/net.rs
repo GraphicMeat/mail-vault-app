@@ -237,7 +237,7 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
 }
 
 /// The resolved `src` of every `<img>`: the urls blitz fetches as images while parsing.
-pub(crate) fn img_srcs(doc: &blitz_html::HtmlDocument) -> HashSet<String> {
+pub(crate) fn img_srcs(doc: &blitz_dom::BaseDocument) -> HashSet<String> {
     use blitz_dom::local_name;
     let base: &Url = doc.base_url();
     doc.tree()
