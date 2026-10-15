@@ -48,6 +48,17 @@ describe('openBlitzWindow', () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
+  it('a window that is gone when the payload is sent does not raise from the ready handler', async () => {
+    let handler; const stop = vi.fn();
+    const deps = {
+      uuid: () => 't', listen: vi.fn(async (_n, fn) => { handler = fn; return stop; }), emitTo: vi.fn(async () => { throw new Error('window closed'); }),
+      invoke: vi.fn(async () => 'original-2'), setTimer: vi.fn(() => 'timer'), clearTimer: vi.fn(),
+    };
+    await openBlitzWindow({ html: '', dark: false, title: '' }, deps);
+    await expect(handler({ payload: { token: 't', label: 'original-2' } })).resolves.toBeUndefined();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it('a window that fails to open stops listening and rethrows', async () => {
     const stop = vi.fn();
     const deps = { uuid: () => 't', listen: vi.fn(async () => stop), emitTo: vi.fn(), invoke: vi.fn(async () => { throw new Error('nope'); }), setTimer: () => 'timer', clearTimer: vi.fn() };

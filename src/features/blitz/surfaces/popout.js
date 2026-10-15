@@ -19,7 +19,8 @@ export async function openBlitzWindow({ html, dark, title }, deps = defaults) {
   const done = () => { if (timer != null) deps.clearTimer(timer); timer = null; stop?.(); stop = null; };
   stop = await deps.listen('original-message-ready', async (event) => {
     if (event.payload?.token !== token) return;
-    try { await deps.emitTo(event.payload.label, 'original-message-payload', { token, html, dark, title, surface: 'popout' }); } finally { done(); }
+    // A window that closed or crashed before the payload is not an error worth raising from a listener.
+    try { await deps.emitTo(event.payload.label, 'original-message-payload', { token, html, dark, title, surface: 'popout' }); } catch { /* gone */ } finally { done(); }
   });
   timer = deps.setTimer(done, READY_TIMEOUT_MS);
   try {
