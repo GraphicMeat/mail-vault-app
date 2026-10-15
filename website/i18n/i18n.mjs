@@ -545,7 +545,7 @@ export function render(html, pageRel, loc, dict) {
     // walkLd deliberately leaves URLs alone as *strings*; they still have to point
     // at this locale's copy, or the structured data declares the German page to be
     // the English one.
-    const json = JSON.stringify(out, null, 2)
+    const json = JSON.stringify(out, (key, value) => key === 'inLanguage' ? loc.htmlLang : value, 2)
       .replace(ORIGIN_RE, (m, rest) => {
         const cut = rest.search(/[?#]/);
         const p = (cut === -1 ? rest : rest.slice(0, cut)) || '/';
@@ -613,7 +613,11 @@ export function render(html, pageRel, loc, dict) {
     }
   }
 
-  return applyEdits(html, edits);
+  // Companion articles use Graphic Meat's locale routes (zh-hans rather than zh).
+  return applyEdits(html, edits).replace(
+    /href="https:\/\/graphicmeat\.com\/blog\/(why-email-is-hard-to-build|jmap-modern-email-apps)"/g,
+    (_, slug) => `href="https://graphicmeat.com/${loc.dir === 'zh' ? 'zh-hans' : loc.dir}/blog/${slug}"`,
+  );
 }
 
 /*

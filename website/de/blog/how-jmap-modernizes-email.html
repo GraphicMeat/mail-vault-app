@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wie JMAP E-Mail modernisiert, ohne sie zu ersetzen - MailVault Blog</title>
+  <meta name="description" content="JMAP bringt JSON über HTTPS, gebündelte Anfragen, Änderungsverfolgung und Push-Benachrichtigungen in E-Mail-Apps. Was es verbessert und was es nicht lösen kann.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/de/blog/how-jmap-modernizes-email.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/de/blog/how-jmap-modernizes-email.html">
+  <meta property="og:title" content="Wie JMAP E-Mail modernisiert, ohne sie zu ersetzen">
+  <meta property="og:description" content="JMAP bringt JSON über HTTPS, gebündelte Anfragen, Änderungsverfolgung und Push-Benachrichtigungen in E-Mail-Apps. Was es verbessert und was es nicht lösen kann.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="de_DE">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Wie JMAP E-Mail modernisiert, ohne sie zu ersetzen">
+  <meta name="twitter:description" content="JMAP bringt JSON über HTTPS, gebündelte Anfragen, Änderungsverfolgung und Push-Benachrichtigungen in E-Mail-Apps. Was es verbessert und was es nicht lösen kann.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-jmap-modernizes-email.html">
+  <!-- /i18n:alternates -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Wie JMAP E-Mail modernisiert, ohne sie zu ersetzen",
+  "description": "JMAP bringt JSON über HTTPS, gebündelte Anfragen, Änderungsverfolgung und Push-Benachrichtigungen in E-Mail-Apps. Was es verbessert und was es nicht lösen kann.",
+  "datePublished": "2026-10-15",
+  "dateModified": "2026-10-15",
+  "inLanguage": "de",
+  "mainEntityOfPage": "https://mailvaultapp.com/de/blog/how-jmap-modernizes-email.html",
+  "author": {
+    "@type": "Organization",
+    "name": "Graphic Meat",
+    "url": "https://graphicmeat.com"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com/de/"
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/de/" aria-label="MailVault-Startseite"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">von Graphic Meat</a></div>
+      <nav class="mv-navlinks" aria-label="Hauptnavigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="MailVault auf GitHub einen Stern geben" title="MailVault auf GitHub einen Stern geben"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault ein Herz schicken" title="MailVault ein Herz schicken"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="Sprache auswählen"><span class="mv-language-name">Deutsch</span><span class="mv-language-code" aria-hidden="true">DE</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/how-jmap-modernizes-email.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/how-jmap-modernizes-email.html" lang="de" hreflang="de" translate="no" aria-current="page">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/how-jmap-modernizes-email.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/how-jmap-modernizes-email.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/how-jmap-modernizes-email.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/how-jmap-modernizes-email.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/how-jmap-modernizes-email.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/how-jmap-modernizes-email.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/how-jmap-modernizes-email.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="Farbschema wechseln" title="Farbschema wechseln">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo</a><a class="mv-button mv-nav-download" href="/de/get-started.html?plan=free">Download</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menü</span></summary><nav aria-label="Mobile Navigation"><a href="/de/features.html">Funktionen</a><a href="/de/pricing.html">Preise</a><a href="/de/faq.html">FAQ</a><a href="/demo/?lang=de" target="_blank" rel="noopener" aria-label="MailVault-Demo in einem neuen Fenster öffnen">Demo ausprobieren</a><a href="/de/get-started.html?plan=free">Kostenlos herunterladen</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Farbschema wechseln</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/de/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← Zurück zum Blog</a>
+      <article><header class="mb-8"><time datetime="2026-10-15" class="text-sm text-primary-500 font-medium">October 15, 2026</time><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Wie JMAP E-Mail modernisiert, ohne sie zu ersetzen</h1><p>4 Min. Lesezeit</p></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed"><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Bei der Verbindung zu deinem Postfach anfangen</h2><p>Ein Posteingang kann modern aussehen und im Hintergrund viel Arbeit für die Synchronisierung leisten. Die App muss Nachrichten finden, ihre Inhalte abrufen, Änderungen erfassen und nach einer Zeit ohne Verbindung aufholen. Unser begleitender Artikel erklärt, <a href="/de/blog/why-email-is-still-complicated.html">warum E-Mail weiterhin kompliziert ist</a>. JMAP setzt an einem wichtigen Teil dieses Problems an: der Kommunikation zwischen einer App und dem Server, auf dem deine E-Mails liegen.</p><p>Die IETF veröffentlichte <a href="https://www.rfc-editor.org/rfc/rfc8620.html">die Kernspezifikation von JMAP</a> im Juli 2019 und <a href="https://www.rfc-editor.org/rfc/rfc8621.html">JMAP for Mail</a> im August 2019. Es verbindet ein allgemeines Synchronisierungsprotokoll mit E-Mail-spezifischen Objekten wie Postfächern, Nachrichten, Unterhaltungen und Sendeaufträgen.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Weniger Wege durch das Netzwerk</h2><p>JMAP tauscht strukturierte JSON-Daten über HTTPS aus. Ein Client kann mehrere Methodenaufrufe in einer Anfrage bündeln und in späteren Aufrufen auf Ergebnisse früherer Aufrufe verweisen. Beispielsweise kann er passende Nachrichten-IDs abfragen und ausgewählte Eigenschaften dieser Nachrichten anfordern, ohne dass dazwischen eine weitere Anfrage vom Client an den Server nötig ist.</p><p>Das ist bei hoher Latenz wichtig: Das Warten auf das Netzwerk kann länger dauern als die Datenverarbeitung. Gebündelte Anfragen verkürzen diese Wartezeiten. Die tatsächliche Geschwindigkeit hängt weiterhin vom Server, der Verbindung, dem Postfach und dem Client ab; die Wahl eines Protokolls allein ist kein Leistungstest.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Änderungen abfragen, statt von vorn anzufangen</h2><p>JMAP verwendet undurchsichtige Zustandstoken, um Sammlungen zu verfolgen. Eine App kann ein Token speichern und später fragen, welche Objekte seit diesem Zustand erstellt, geändert oder gelöscht wurden. So erhält der Client einen festgelegten Weg, sich zu aktualisieren, statt immer wieder alles herunterzuladen.</p><p>Auch für die Wiederherstellung gibt es einen Weg. Ein Server kann möglicherweise die Änderungen seit einem alten Zustand nicht mehr berechnen und gibt dann <code>cannotCalculateChanges</code> zurück. Der Client muss die betreffende Ansicht anschließend neu aufbauen. JMAP benennt diesen Fall ausdrücklich; längere Abwesenheiten und unterbrochene Synchronisierungen müssen trotzdem behandelt werden.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Push-Signale und ein gemeinsames E-Mail-Modell</h2><p>Push-Benachrichtigungen können einer App mitteilen, dass sich der Zustand geändert hat, damit sie die Unterschiede abruft. Eine Benachrichtigung ist ein Signal zur Synchronisierung, kein vollständiger Ersatz dafür. Werden Benachrichtigungen oder der Netzwerkzugriff unterbrochen, muss sich die App erneut verbinden und den aktuellen Stand wiederherstellen.</p><p>JMAP for Mail beschreibt auch Suche, Unterhaltungen und den Versand von Nachrichten innerhalb derselben API-Familie. Ein Client kann ausgehende E-Mails über JMAP einreichen, während der Anbieter weiterhin SMTP nutzt, um sie an andere Mailserver zuzustellen. Moderner Zugriff und die bestehende Zustellung im Internet können nebeneinander bestehen.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Was JMAP dem übrigen System überlässt</h2><p>Sowohl die App als auch der Anbieter müssen JMAP unterstützen. Ein Client allein kann es nicht für jedes beliebige Postfach aktivieren. Es verhindert auch nicht automatisch Spam, ergänzt keine Ende-zu-Ende-Verschlüsselung, bewahrt kein Backup auf und macht nicht jede Nachricht offline verfügbar. Dafür sind andere Systeme und Produktentscheidungen zuständig.</p><p>Für MailVault ergänzen sich effizienter Postfachzugriff und eine nützliche lokale Historie. JMAP verbessert die Kommunikation mit einem kompatiblen Server; lokale Speicherung, Suche und Wiederherstellung brauchen weiterhin eigene Entwicklungsarbeit. Mehr zu diesen Entwurfsentscheidungen findest du in <a href="https://graphicmeat.com/de/blog/jmap-modern-email-apps">Graphic Meats Blick auf JMAP und moderne E-Mail-Apps</a>.</p></div></article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/de/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Lies deine E-Mails. Behalte deine E-Mails.</p></div><nav aria-label="MailVault entdecken"><a href="/de/use-cases.html">Anwendungsfälle</a><a href="/de/blog.html">Blog</a><a href="/changelog.html">Neuigkeiten</a><a href="/de/faq.html">FAQ</a><a href="/de/docs.html">Hilfe</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code auf GitHub ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Gemacht von <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Datenschutz</a><a href="/terms.html">AGB</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

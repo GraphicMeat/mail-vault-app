@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JMAP은 이메일을 대체하지 않고 어떻게 현대화하는가 - MailVault 블로그</title>
+  <meta name="description" content="JMAP은 HTTPS 기반 JSON, 요청 일괄 처리, 변경 추적, 푸시 알림을 이메일 앱에 제공합니다. 무엇을 개선하고 무엇을 해결하지 못하는지 설명합니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/how-jmap-modernizes-email.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/how-jmap-modernizes-email.html">
+  <meta property="og:title" content="JMAP은 이메일을 대체하지 않고 어떻게 현대화하는가">
+  <meta property="og:description" content="JMAP은 HTTPS 기반 JSON, 요청 일괄 처리, 변경 추적, 푸시 알림을 이메일 앱에 제공합니다. 무엇을 개선하고 무엇을 해결하지 못하는지 설명합니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="JMAP은 이메일을 대체하지 않고 어떻게 현대화하는가">
+  <meta name="twitter:description" content="JMAP은 HTTPS 기반 JSON, 요청 일괄 처리, 변경 추적, 푸시 알림을 이메일 앱에 제공합니다. 무엇을 개선하고 무엇을 해결하지 못하는지 설명합니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-jmap-modernizes-email.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-jmap-modernizes-email.html">
+  <!-- /i18n:alternates -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "JMAP은 이메일을 대체하지 않고 어떻게 현대화하는가",
+  "description": "JMAP은 HTTPS 기반 JSON, 요청 일괄 처리, 변경 추적, 푸시 알림을 이메일 앱에 제공합니다. 무엇을 개선하고 무엇을 해결하지 못하는지 설명합니다.",
+  "datePublished": "2026-10-15",
+  "dateModified": "2026-10-15",
+  "inLanguage": "ko",
+  "mainEntityOfPage": "https://mailvaultapp.com/ko/blog/how-jmap-modernizes-email.html",
+  "author": {
+    "@type": "Organization",
+    "name": "Graphic Meat",
+    "url": "https://graphicmeat.com"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com/ko/"
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+      <nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="언어 선택"><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/how-jmap-modernizes-email.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/how-jmap-modernizes-email.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/how-jmap-modernizes-email.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/how-jmap-modernizes-email.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/how-jmap-modernizes-email.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/how-jmap-modernizes-email.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/how-jmap-modernizes-email.html" lang="ko" hreflang="ko" translate="no" aria-current="page">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/how-jmap-modernizes-email.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/how-jmap-modernizes-email.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary><nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
+      <article><header class="mb-8"><time datetime="2026-10-15" class="text-sm text-primary-500 font-medium">2026년 10월 15일</time><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">JMAP은 이메일을 대체하지 않고 어떻게 현대화하는가</h1><p>4분 분량</p></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed"><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">메일함 연결부터 살펴보기</h2><p>받은편지함은 겉으로는 현대적으로 보여도 동기화를 유지하기 위해 많은 작업을 수행합니다. 메시지를 찾고, 내용을 가져오고, 변경 사항을 기록하고, 오프라인 동안의 변경을 반영해야 합니다. 관련 글에서는 <a href="/ko/blog/why-email-is-still-complicated.html">이메일이 여전히 복잡한 이유</a>를 설명합니다. JMAP은 이 문제의 중요한 부분인, 앱과 메일을 보관하는 서버 사이의 통신 방식을 다룹니다.</p><p>IETF는 2019년 7월에 <a href="https://www.rfc-editor.org/rfc/rfc8620.html">JMAP 핵심 명세</a>를, 2019년 8월에 <a href="https://www.rfc-editor.org/rfc/rfc8621.html">JMAP for Mail</a>을 발표했습니다. 범용 동기화 프로토콜에 메일함, 메시지, 스레드, 전송 요청 같은 이메일 전용 객체를 결합합니다.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">네트워크 왕복 줄이기</h2><p>JMAP은 HTTPS를 통해 구조화된 JSON을 교환합니다. 클라이언트는 여러 메서드 호출을 하나의 요청으로 묶고, 뒤의 호출에서 앞선 호출의 결과를 참조할 수 있습니다. 예를 들어 조건에 맞는 메시지 ID를 조회하고 해당 메시지의 필요한 속성을 요청할 때, 두 작업 사이에 클라이언트와 서버가 별도로 왕복 통신할 필요가 없습니다.</p><p>지연 시간이 길 때 이 점이 중요합니다. 데이터를 처리하는 것보다 네트워크 응답을 기다리는 데 더 많은 시간이 걸릴 수 있기 때문입니다. 일괄 처리는 이러한 대기를 줄입니다. 실제 속도는 서버, 연결, 메일함, 클라이언트에도 좌우됩니다. 프로토콜 선택만으로 성능을 평가할 수는 없습니다.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">처음부터 다시 시작하지 않고 변경 사항 묻기</h2><p>JMAP은 내부 의미를 해석할 필요가 없는 상태 토큰으로 컬렉션을 추적합니다. 앱은 토큰을 저장했다가 나중에 그 상태 이후 어떤 객체가 생성, 수정, 삭제되었는지 물을 수 있습니다. 덕분에 클라이언트는 모든 데이터를 반복해서 다운로드하는 대신 정해진 방식으로 최신 상태를 반영할 수 있습니다.</p><p>복구 방법도 있습니다. 서버가 오래된 상태로부터의 변경 사항을 계산하지 못하면 <code>cannotCalculateChanges</code>를 반환할 수 있습니다. 그러면 클라이언트는 해당 화면의 데이터를 다시 구성해야 합니다. JMAP은 이 상황을 명확히 정의하지만, 장기간의 미접속이나 동기화 중단을 처리할 필요까지 없애지는 않습니다.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">푸시 알림과 공통 메일 모델</h2><p>푸시 알림은 상태가 변경되었음을 앱에 알려 차이를 가져오도록 유도할 수 있습니다. 알림은 동기화를 시작하라는 신호이며, 동기화를 완전히 대체하지는 않습니다. 알림이나 네트워크 접근이 끊기면 앱은 다시 연결하고 복구해야 합니다.</p><p>JMAP for Mail은 검색, 스레드, 메시지 전송도 같은 API 체계에서 정의합니다. 클라이언트가 JMAP으로 발신 메일을 제출하고, 제공업체는 계속 SMTP를 사용해 다른 메일 서버로 전달할 수 있습니다. 현대적인 접근 방식과 기존 인터넷 전송 방식은 공존할 수 있습니다.</p><h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">JMAP이 시스템의 다른 부분에 맡기는 것</h2><p>앱과 제공업체가 모두 JMAP을 지원해야 합니다. 클라이언트만으로 임의의 메일함에 JMAP을 활성화할 수는 없습니다. 또한 스팸 차단, 종단 간 암호화 추가, 백업 보존, 모든 메시지의 오프라인 이용이 자동으로 이루어지지는 않습니다. 이는 다른 시스템과 제품 설계에 달려 있습니다.</p><p>MailVault에서 효율적인 메일함 접근과 유용한 로컬 기록 보존은 서로 보완하는 목표입니다. JMAP은 호환 서버와의 통신을 개선하지만, 로컬 저장, 검색, 복구에는 각각의 설계와 구현이 필요합니다. 이러한 설계 선택에 관해서는 <a href="https://graphicmeat.com/ko/blog/jmap-modern-email-apps">JMAP과 현대적인 이메일 앱에 대한 Graphic Meat의 관점</a>을 읽어 보세요.</p></div></article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>
