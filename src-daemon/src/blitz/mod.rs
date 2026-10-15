@@ -301,7 +301,7 @@ impl RenderHost {
         }
     }
 
-    pub async fn open(&self, p: Value) -> Result<Value, String> {
+    pub async fn open(self: &Arc<Self>, p: Value) -> Result<Value, String> {
         let doc = self.next_doc.fetch_add(1, Ordering::Relaxed);
         let mut frame = json!({"op": "open", "doc": doc});
         for k in ["html", "cssWidth", "scale", "allowRemote", "theme"] {
@@ -317,16 +317,23 @@ impl RenderHost {
                 return Err(e);
             }
         };
-        // The new doc is the newest stamp, so it is never its own victim. Closing
-        // the old ones is best effort and never fails this open.
+        // The new doc is the newest stamp, so it is never its own victim. Victims
+        // leave `open_docs` here, so ops on them answer render_unknown_doc at once
+        // (`doc_call`); their close frames go out on a task, in order, and this
+        // open does not wait for them or see their errors.
         let victims = {
             let mut docs = self.open_docs.lock().unwrap();
             docs.insert(doc, Instant::now());
             Self::lru_victims(&mut docs, doc)
         };
-        for victim in victims {
-            debug!("render doc {victim} evicted: over {MAX_OPEN_DOCS} open");
-            self.close(victim).await;
+        if !victims.is_empty() {
+            let host = Arc::clone(self);
+            tokio::spawn(async move {
+                for victim in victims {
+                    debug!("render doc {victim} evicted: over {MAX_OPEN_DOCS} open");
+                    let _ = host.send(json!({"op": "close", "doc": victim})).await;
+                }
+            });
         }
         Ok(json!({"docId": doc, "rev": ok["rev"], "meta": ok["meta"]}))
     }
@@ -336,23 +343,22 @@ impl RenderHost {
     fn lru_victims(docs: &mut HashMap<u64, Instant>, keep: u64) -> Vec<u64> {
         let mut victims = Vec::new();
         while docs.len() > MAX_OPEN_DOCS {
-            let Some(victim) = docs.iter().filter(|(d, _)| **d != keep).min_by_key(|(d, t)| (**t, **d)).map(|(d, _)| *d) else { break };
+            let oldest = docs.iter().filter(|(d, _)| **d != keep).min_by_key(|(d, t)| (**t, **d));
+            let Some((&victim, _)) = oldest else { break };
             docs.remove(&victim);
             victims.push(victim);
         }
         victims
     }
 
-    /// Stamps `doc` as used now. An unknown (closed or evicted) doc is not re-added.
-    fn touch(&self, doc: u64) {
-        if let Some(t) = self.open_docs.lock().unwrap().get_mut(&doc) {
-            *t = Instant::now();
-        }
-    }
-
-    /// `call` for an op on an open doc: counts as use for the LRU.
+    /// `call` for an op on an open doc: counts as use for the LRU. A doc that is
+    /// not open here (closed, evicted, lost with a worker) is unknown without
+    /// asking the worker, which may not have read its close frame yet.
     async fn doc_call(&self, doc: u64, frame: Value, timeout: Duration) -> Result<Value, String> {
-        self.touch(doc);
+        match self.open_docs.lock().unwrap().get_mut(&doc) {
+            Some(t) => *t = Instant::now(),
+            None => return Err("render_unknown_doc".to_string()),
+        }
         self.call(frame, timeout).await
     }
 
@@ -622,8 +628,8 @@ mod tests {
         exe
     }
 
-    fn host() -> RenderHost {
-        RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(daemon_exe()))
+    fn host() -> Arc<RenderHost> {
+        Arc::new(RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(daemon_exe())))
     }
 
     #[tokio::test]
@@ -655,7 +661,7 @@ mod tests {
 
     #[tokio::test]
     async fn burst_of_tiles_and_a_hit_never_kills_the_worker() {
-        let h = Arc::new(host());
+        let h = host();
         let html = format!("<body style=\"margin:0\">{}</body>", "<p style=\"height:500px;background:linear-gradient(#fff,#09f)\">x</p>".repeat(40));
         // Debug-build Blitz is slow: keep the burst inside the 4 s tile budget
         // (8 small tiles) so the test pins "no kill", not raster speed.
@@ -947,7 +953,7 @@ mod tests {
     /// (`{"kind":"font","family","ok":true}`). `dies_on` names a family it exits on
     /// when it reaches it, before acknowledging it. Returns the host and the log.
     #[cfg(unix)]
-    fn fake_worker(dir: &std::path::Path, dies_on: &str) -> (RenderHost, std::path::PathBuf) {
+    fn fake_worker(dir: &std::path::Path, dies_on: &str) -> (Arc<RenderHost>, std::path::PathBuf) {
         use std::os::unix::fs::PermissionsExt;
         let log = dir.join("frames.log");
         let script = dir.join("fake-worker.sh");
@@ -967,7 +973,7 @@ mod tests {
             log = log.display(),
         )).unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        (RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(&script)), log)
+        (Arc::new(RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(&script))), log)
     }
 
     /// The frames the fake worker has read so far.
@@ -1081,7 +1087,7 @@ mod tests {
     }
 
     /// Opens `n` tiny docs, returns their ids in open order.
-    async fn open_n(h: &RenderHost, n: usize) -> Vec<u64> {
+    async fn open_n(h: &Arc<RenderHost>, n: usize) -> Vec<u64> {
         let mut ids = Vec::new();
         for _ in 0..n {
             let r = h.open(json!({"html": "<p>x", "cssWidth": 100, "scale": 1.0, "allowRemote": false})).await.unwrap();
@@ -1147,5 +1153,21 @@ mod tests {
         assert_eq!(docs.len(), MAX_OPEN_DOCS);
         assert!(docs.contains_key(&1));
         assert!(RenderHost::lru_victims(&mut docs, 1).is_empty(), "at the cap nothing goes");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_reaper_leaves_a_worker_with_open_docs_and_ends_an_idle_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let (h, _log) = fake_worker(dir.path(), "");
+        let doc = open_n(&h, 1).await[0];
+        let long_ago = || Instant::now() - IDLE_EXIT - Duration::from_secs(1);
+        *h.last_used.lock().unwrap() = long_ago();
+        h.reap_idle().await;
+        assert!(h.worker.lock().await.is_some(), "an open doc keeps the worker");
+        h.close(doc).await;
+        *h.last_used.lock().unwrap() = long_ago();
+        h.reap_idle().await;
+        assert!(h.worker.lock().await.is_none(), "no open docs and idle: reaped");
     }
 }

@@ -14,6 +14,7 @@ import { lightSelectionColor } from '../text/selectionColors';
 import { openRender, hitRender, closeRender, onRenderUpdated, textRunsRender, serializeRender, foldRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
 import { _resetDocRegistryForTest } from '../surfaces/docRegistry';
+import { reportDocGone } from '../surfaces/docGone';
 import { replySelection } from '../../../utils/replySelection';
 import { getEmailColors } from '../../../utils/mailChrome';
 
@@ -123,6 +124,44 @@ describe('BlitzTiles', () => {
     fireEvent.error(t[1]);
     expect(onFailure).toHaveBeenCalledWith('render_tile_failed');
     expect(openRender).toHaveBeenCalledTimes(2);
+  });
+
+  it('a reopened doc that lays out shorter still refills the budget (3b review)', async () => {
+    const onFailure = vi.fn();
+    openRender.mockResolvedValueOnce({ docId: 3, rev: 1, meta: meta() }); // 3 tiles
+    render(tiles({ onFailure }));
+    let t = await screen.findAllByTestId('blitz-tile');
+    openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: meta({ tileCount: 2, cssHeight: 1024 }) }); // image pending: shorter
+    fireEvent.error(t[2]); // tile 2 of doc 3 failed
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')).toHaveLength(2));
+    t = screen.getAllByTestId('blitz-tile');
+    expect(t[0].getAttribute('src')).toContain('4%2F1%2F0');
+    fireEvent.load(t[0]); // tile 2 no longer exists; another tile drew
+    openRender.mockResolvedValueOnce({ docId: 5, rev: 1, meta: meta() });
+    fireEvent.error(t[0]); fireEvent.error(t[1]); // evicted again
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('5%2F1%2F0'));
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it('a drawn body whose doc was evicted reopens quietly on the next hit, then serves hits again (3b review)', async () => {
+    const onFailure = vi.fn();
+    openRender.mockResolvedValueOnce({ docId: 3, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    // As the real service does: an op that finds its doc gone reports it, then rejects.
+    hitRender.mockImplementationOnce(async (docId) => { const e = new Error('render_unknown_doc'); reportDocGone(docId, e); throw e; });
+    hitRender.mockResolvedValue({ link: { href: 'https://calendly.com/jane', text: 'book', alert: null, title: null }, fold: null });
+    render(tiles({ onFailure }));
+    let t = await screen.findAllByTestId('blitz-tile');
+    fireEvent.load(t[0]); // fully drawn: no tile will ever error
+    openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: meta({ tileCount: 1, cssHeight: 100 }) });
+    fireEvent.mouseMove(t[0], { clientX: 10, clientY: 10 });
+    await waitFor(() => expect(screen.getAllByTestId('blitz-tile')[0].getAttribute('src')).toContain('4%2F1%2F0'));
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(closeRender).not.toHaveBeenCalledWith(4);
+    t = screen.getAllByTestId('blitz-tile');
+    fireEvent.mouseLeave(t[0].parentElement);
+    fireEvent.mouseMove(t[0], { clientX: 11, clientY: 11 });
+    await waitFor(() => expect(screen.getByTestId('blitz-link-chip').textContent).toContain('calendly.com/jane'));
+    expect(hitRender).toHaveBeenLastCalledWith(4, expect.any(Number), expect.any(Number));
   });
 
   it('click hit-tests and hands the link to onLink', async () => {

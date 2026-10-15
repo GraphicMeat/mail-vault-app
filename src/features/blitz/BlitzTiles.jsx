@@ -2,6 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import { useT } from '../../i18n/index.js';
 import { tileUrl, hitRender, serializeRender, foldRender } from './service';
 import { useSurfaceDoc } from './surfaces/useSurfaceDoc';
+import { onDocGone } from './surfaces/docGone';
 import { boxStyle, scrollsInside, MIN_OPEN_WIDTH, LAZY_SURFACES } from './surfaces/sizing';
 import { foldLabels } from './prepass/folds';
 import { blitzThemeFor } from './parity/themeInputs';
@@ -139,8 +140,18 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   }, [docKeyNow, retry, fail]);
   const refillRetry = (tileDoc, index) => {
     const r = retried.current;
-    if (r.key === docKeyNow && tileDoc === docIdRef.current && (r.index == null || r.index === index)) retried.current = { key: null, index: null };
+    if (r.key !== docKeyNow || tileDoc !== docIdRef.current) return;
+    // The reopened doc may lay out shorter (images still pending): a tile that no longer exists cannot draw.
+    const gone = r.index != null && r.index >= (docRef.current?.meta?.tileCount ?? Infinity);
+    if (r.index == null || r.index === index || gone) retried.current = { key: null, index: null };
   };
+  // A hit, fold, text-run or serialize call that finds the live doc gone (the worker evicted it) takes the same quiet
+  // path as a tile error. A drawn body fires no tile error, so without this it would stay inert (dead links, folds, selection).
+  const failOrRetryRef = useRef(failOrRetry);
+  failOrRetryRef.current = failOrRetry;
+  useEffect(() => onDocGone((id) => {
+    if (id === docIdRef.current) failOrRetryRef.current('render_unknown_doc', id);
+  }), []);
   useEffect(() => {
     if (!error) return;
     if (error === 'render_unknown_doc') failOrRetry(error); else fail(error);

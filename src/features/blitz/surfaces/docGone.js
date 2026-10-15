@@ -12,6 +12,6 @@ export function onDocGone(fn) {
 
 /** For an op's rejection: reports `docId` when the error says the worker no longer has it. */
 export function reportDocGone(docId, err) {
-  if ((err?.message ?? err?.code ?? err) !== UNKNOWN_DOC) return;
+  if ((err?.message || err?.code || err) !== UNKNOWN_DOC) return;
   listeners.forEach((fn) => { try { fn(docId); } catch { /* a listener never breaks the op's own rejection */ } });
 }
