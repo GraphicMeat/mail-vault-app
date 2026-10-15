@@ -81,7 +81,9 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
             drop(FetchGuard(g.clone(), 1));
         });
+        let t0 = std::time::Instant::now();
         assert!(f.settled(1, Duration::from_secs(2)).await);
+        assert!(t0.elapsed() < Duration::from_secs(1), "doc 2's fetch did not hold doc 1: {:?}", t0.elapsed());
         assert!(!f.settled(2, Duration::from_millis(30)).await, "doc 2 still fetching");
     }
 

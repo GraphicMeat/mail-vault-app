@@ -32,7 +32,7 @@ use crate::events::EventBus;
 use inflight::{FetchGuard, InFlight};
 use base64::Engine;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -107,17 +107,40 @@ struct Silence {
     /// went from owing nothing to owing something.
     since: Instant,
     owed: usize,
+    /// `req`s of the `image` frames still owed. A whole-document paint writes
+    /// nothing until it ends, so while one is outstanding the worker may be
+    /// silent for as long as IMAGE_TIMEOUT before it counts as hung.
+    images: HashSet<u64>,
 }
 
 impl Silence {
     fn new(now: Instant) -> Self {
-        Self { since: now, owed: 0 }
+        Self { since: now, owed: 0, images: HashSet::new() }
     }
 
     /// A request is about to be written.
     fn request(&mut self, now: Instant) {
         self.since = silence_clock(self.since, now, self.owed);
         self.owed += 1;
+    }
+
+    /// `request` for frame `req`; `image` marks a whole-document paint.
+    fn request_op(&mut self, now: Instant, req: u64, image: bool) {
+        self.request(now);
+        if image {
+            self.images.insert(req);
+        }
+    }
+
+    /// `reply` to frame `req`.
+    fn reply_to(&mut self, now: Instant, req: u64) {
+        self.images.remove(&req);
+        self.reply(now);
+    }
+
+    /// How long the worker may stay silent while it owes an answer before it is hung.
+    fn watchdog(&self) -> Duration {
+        if self.images.is_empty() { WATCHDOG } else { IMAGE_TIMEOUT }
     }
 
     /// The worker wrote a line that answers nothing (fetch, updated).
@@ -422,8 +445,11 @@ impl RenderHost {
     /// The whole document as a PNG, once its remote images have landed (5 s
     /// cap). A doc that is not open answers at once, without waiting.
     pub async fn image(&self, doc: u64) -> Result<Value, String> {
-        if !self.open_docs.lock().unwrap().contains_key(&doc) {
-            return Err("render_unknown_doc".to_string());
+        // Touched now, not only when the frame is sent: opens during the settle
+        // wait must not evict the doc being exported.
+        match self.open_docs.lock().unwrap().get_mut(&doc) {
+            Some(t) => *t = Instant::now(),
+            None => return Err("render_unknown_doc".to_string()),
         }
         let _ = self.inflight.settled(doc, IMAGE_SETTLE).await;
         self.doc_call(doc, json!({"op": "image", "doc": doc}), IMAGE_TIMEOUT).await
@@ -497,7 +523,7 @@ impl RenderHost {
             silence = w.silence.clone();
             {
                 let mut pending = w.waiters.lock().unwrap();
-                silence.lock().unwrap().request(Instant::now());
+                silence.lock().unwrap().request_op(Instant::now(), req, frame["op"] == "image");
                 pending.insert(req, tx);
             }
             let mut stdin = w.stdin.lock().await;
@@ -516,7 +542,11 @@ impl RenderHost {
                 // kill only if the worker has gone silent: busy is not hung. The
                 // forgotten request is still owed, so this does not restart the clock.
                 waiters.lock().unwrap().remove(&req);
-                if silence.lock().unwrap().silent_for(Instant::now()) >= WATCHDOG {
+                let hung = {
+                    let s = silence.lock().unwrap();
+                    s.silent_for(Instant::now()) >= s.watchdog()
+                };
+                if hung {
                     self.kill_epoch(epoch).await;
                 }
                 Err(UNAVAILABLE.into())
@@ -575,7 +605,7 @@ impl RenderHost {
                 };
                 let kind = v["kind"].as_str();
                 if matches!(kind, Some("reply") | Some("error")) {
-                    heard.lock().unwrap().reply(Instant::now());
+                    heard.lock().unwrap().reply_to(Instant::now(), v["req"].as_u64().unwrap_or(0));
                 } else {
                     heard.lock().unwrap().line(Instant::now());
                 }
@@ -788,6 +818,60 @@ mod tests {
         assert_eq!(h.spawned(), 1);
         h.kill_epoch(live).await;
         assert_eq!(h.tile(doc, 0).await.unwrap_err(), "render_unknown_doc", "killing the right epoch does kill it");
+    }
+
+    #[test]
+    fn an_outstanding_image_stretches_the_watchdog_until_it_is_answered() {
+        let t0 = Instant::now();
+        let mut s = Silence::new(t0);
+        assert_eq!(s.watchdog(), WATCHDOG);
+        s.request_op(t0, 1, true);
+        s.request_op(t0, 2, false);
+        assert_eq!(s.watchdog(), IMAGE_TIMEOUT, "a paint writes nothing until it ends");
+        s.reply_to(t0, 2);
+        assert_eq!(s.watchdog(), IMAGE_TIMEOUT, "answering another request does not end the paint");
+        s.reply_to(t0, 1);
+        assert_eq!(s.watchdog(), WATCHDOG);
+        assert_eq!(s.owed, 0);
+    }
+
+    /// A fake worker that answers `image` after 7 s (longer than WATCHDOG) and never answers `hit`.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_long_image_paint_is_not_a_hung_worker_when_another_call_times_out() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("slow-image-worker.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\n\
+             while IFS= read -r l; do\n\
+             r=${l#*'\"req\":'}; r=${r%%[,\\}]*}\n\
+             case \"$l\" in\n\
+             *'\"op\":\"image\"'*) ( sleep 7; printf '{\"kind\":\"reply\",\"req\":%s,\"ok\":{\"png\":\"AA==\"}}\\n' \"$r\" ) &;;\n\
+             *'\"op\":\"hit\"'*) ;;\n\
+             *) printf '{\"kind\":\"reply\",\"req\":%s,\"ok\":{}}\\n' \"$r\";;\n\
+             esac\n\
+             done\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let h = Arc::new(RenderHost::new(crate::events::EventBus::new(16), WorkerCommand::exe(&script)));
+        h.open_docs.lock().unwrap().insert(7, Instant::now());
+        h.open_docs.lock().unwrap().insert(8, Instant::now());
+        let painter = {
+            let h = h.clone();
+            tokio::spawn(async move { h.image(7).await })
+        };
+        // Past WATCHDOG of silence since the paint began, then a call that times out.
+        tokio::time::sleep(WATCHDOG - Duration::from_millis(500)).await;
+        let hit = h.call(json!({"op": "hit", "doc": 8, "x": 0, "y": 0}), Duration::from_secs(1)).await;
+        assert_eq!(hit.unwrap_err(), UNAVAILABLE, "the hit itself times out");
+        assert_eq!(h.spawned(), 1, "same worker");
+        assert!(h.open_docs.lock().unwrap().contains_key(&8), "other docs are still open");
+        let png = painter.await.unwrap().expect("the paint succeeds");
+        assert_eq!(png["png"], "AA==");
+        assert_eq!(h.spawned(), 1);
     }
 
     #[test]
@@ -1147,6 +1231,7 @@ mod tests {
         });
         assert!(h.image(doc).await.is_ok());
         assert!(t0.elapsed() >= Duration::from_millis(280), "waited for the fetch: {:?}", t0.elapsed());
+        assert!(t0.elapsed() < IMAGE_SETTLE, "but not for doc {}'s fetch or the cap: {:?}", doc + 1000, t0.elapsed());
     }
 
     #[tokio::test]
