@@ -19,3 +19,8 @@ export function boxStyle(sizing, meta, style = {}) {
   }
   return { ...style, height: h, overflowX: 'auto', overflowY: 'hidden' };
 }
+
+/** Whether the box scrolls inside (fill, collapsedMax): the root then carries overflow-y-auto, which the tile observer's root lookup finds. */
+export function scrollsInside(sizing) {
+  return sizing === 'fill' || (!!sizing && typeof sizing === 'object' && Number.isFinite(sizing.collapsedMax));
+}

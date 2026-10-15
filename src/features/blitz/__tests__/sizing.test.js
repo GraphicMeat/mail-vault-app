@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boxStyle, MIN_OPEN_WIDTH, LAZY_SURFACES } from '../surfaces/sizing';
+import { boxStyle, scrollsInside, MIN_OPEN_WIDTH, LAZY_SURFACES } from '../surfaces/sizing';
 
 const meta = (h) => ({ cssWidth: 600, cssHeight: h, tileCssHeight: 512, tileCount: Math.ceil(h / 512), links: [], plainText: '', folds: [] });
 
@@ -26,5 +26,15 @@ describe('constants', () => {
   it('MIN_OPEN_WIDTH is 40 and only thread and bubble are lazy (F2)', () => {
     expect(MIN_OPEN_WIDTH).toBe(40);
     expect([...LAZY_SURFACES].sort()).toEqual(['bubble', 'thread']);
+  });
+});
+
+describe('scrollsInside', () => {
+  it('fill and collapsedMax scroll inside; content and unknown do not', () => {
+    expect(scrollsInside('fill')).toBe(true);
+    expect(scrollsInside({ collapsedMax: 400 })).toBe(true);
+    expect(scrollsInside('content')).toBe(false);
+    expect(scrollsInside(undefined)).toBe(false);
+    expect(scrollsInside({})).toBe(false);
   });
 });
