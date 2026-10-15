@@ -3,7 +3,7 @@ import React, { forwardRef, useImperativeHandle } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 
-const { bodies, seen, mounts, autosized } = vi.hoisted(() => ({ bodies: new Map(), seen: [], autosized: [], mounts: { count: 0, unmounts: 0 } }));
+const { bodies, seen, mounts, autosized, highlighted } = vi.hoisted(() => ({ bodies: new Map(), seen: [], autosized: [], highlighted: [], mounts: { count: 0, unmounts: 0 } }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 144,
   getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ index, key: options.getItemKey(index), start: index * 72 })),
@@ -16,6 +16,10 @@ vi.mock('../../../utils/emailIframeTemplate', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, attachEmailIframeAutoSize: (frame, ...rest) => { autosized.push(frame); return actual.attachEmailIframeAutoSize(frame, ...rest); } };
 });
+vi.mock('../../../utils/iframeSearchHighlight', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, applySearchHighlight: (doc, terms) => { highlighted.push({ doc, terms }); return actual.applySearchHighlight(doc, terms); } };
+});
 vi.mock('../EmailActionBar', () => ({ EmailActionBar: (p) => (
   <div><button onClick={() => p.onReply()}>bar-reply</button><button onClick={() => p.onOpenInWindow()}>bar-window</button></div>
 ) }));
@@ -27,6 +31,7 @@ const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../bo
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { usePrivacyStore } = await import('../../../stores/privacyStore');
 const { useThemeStore } = await import('../../../stores/themeStore');
+const { useSearchStore } = await import('../../../stores/searchStore');
 const { emailKey, emailScopeKey } = await import('../../../stores/slices/unifiedHelpers');
 const { useMailStore } = await import('../../../stores/mailStore');
 const { isTrackerBlockingActive } = await import('../../../stores/settingsStore');
@@ -64,7 +69,7 @@ beforeEach(() => {
   bodies.set(emailKey(newest), { status: 'loaded', email: { ...newest, html: newestHtml, text: 'Newest body' } });
   window.__TAURI__ = { core: { invoke: vi.fn() } };
 });
-afterEach(() => { cleanup(); bodies.clear(); seen.length = 0; autosized.length = 0; openWindow.mockClear(); usePrivacyStore.setState({ enabled: false }); mounts.count = 0; mounts.unmounts = 0; _resetBodyRenderersForTest(); useSettingsStore.setState({ emailRenderer: 'web' }); delete window.__TAURI__; });
+afterEach(() => { cleanup(); bodies.clear(); seen.length = 0; autosized.length = 0; highlighted.length = 0; openWindow.mockClear(); usePrivacyStore.setState({ enabled: false }); mounts.count = 0; mounts.unmounts = 0; _resetBodyRenderersForTest(); useSettingsStore.setState({ emailRenderer: 'web' }); delete window.__TAURI__; });
 
 const last = () => seen.at(-1);
 
@@ -174,5 +179,20 @@ describe('ThreadView with an alternative body renderer', () => {
     const frame = container.querySelector('iframe');
     expect(frame).not.toBeNull();
     expect(autosized).toContain(frame);
+  });
+
+  it('switching blitz to web paints the open search into the fresh iframe', () => {
+    act(() => { useSearchStore.setState({ searchActive: true, searchQuery: 'newest' }); });
+    try {
+      const { container } = render(<ThreadView thread={thread} />);
+      expect(container.querySelector('iframe')).toBeNull();
+      expect(highlighted).toHaveLength(0);
+      act(() => { useSettingsStore.setState({ emailRenderer: 'web' }); });
+      const frame = container.querySelector('iframe');
+      expect(frame).not.toBeNull();
+      expect(highlighted.some(h => h.doc === frame.contentDocument && h.terms.includes('newest'))).toBe(true);
+    } finally {
+      act(() => { useSearchStore.setState({ searchActive: false, searchQuery: '' }); });
+    }
   });
 });

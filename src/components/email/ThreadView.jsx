@@ -166,7 +166,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   useBodyPrivacy(iframeRef, iframeContent, { message: loadedEmail ? { ...email, ...loadedEmail } : email });
   // The thread is a second reader of the same body — including for the search
   // highlight, or a hit opened in thread mode is marked nowhere.
-  useSearchHighlight(iframeRef, iframeContent);
+  // Under Alt there is no iframe: a null key makes the effect re-run when the iframe comes back, so a
+  // live blitz-to-web switch paints the open search into the fresh frame (iframeContent itself does not change).
+  useSearchHighlight(iframeRef, Alt ? null : iframeContent);
   useMailFonts(iframeRef);
 
   // The thread is a second reader of the same body: what it finds has to reach
@@ -240,7 +242,6 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
     };
     // Theme is NOT a dep: DR is inlined into the iframe HTML (see useMemo),
     // so theme toggles don't need to tear down the load listener.
-  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
   // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
   }, [loadedEmail?.html, readOnly, !!Alt]);
 
