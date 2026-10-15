@@ -7,7 +7,9 @@
 #   shell build with the `blitz-render` feature off.
 #   Phase 2 (module deleted): the physical-deletion path. Every file of the
 #   module is removed, the feature definitions go with it, and the app must
-#   still build and the core tests must still pass.
+#   still build and the core tests must still pass. The files that exist only
+#   for the module (its e2e specs, their shot helper, the Blitz wdio conf and
+#   the parity corpus) are deleted with it, so nothing core may depend on them.
 #
 #   Every cargo check runs with --all-targets, so the cfg(test) modules and
 #   integration tests are compiled in both phases too (test-only lines such as
@@ -82,6 +84,10 @@ cargo check -p mailvault --no-default-features --features custom-protocol,sparkl
 
 step "phase 2: delete the module"
 rm -rf src/features/blitz src-render src-daemon/src/blitz src-tauri/src/blitz_tiles.rs
+# Module-only tests and tooling (architecture.md, File and Module Placement, step 4).
+# src-render/tools/ (run-surfaces.sh, surfaces-job.sh, ...) went with src-render above.
+rm -f tests/e2e/connected-blitz-*.test.js tests/e2e/blitzSurfaceShots.js wdio.blitz.conf.js
+rm -rf tests/fixtures/blitz-corpus
 sed -i.bak "/import '.\/features\/blitz';/d" src/main.jsx
 sed -i.bak '/# blitz-render/d' Cargo.toml src-daemon/Cargo.toml
 # src-tauri's feature is code-free (cfg only): drop it from default, its comment and its definition.
@@ -106,7 +112,7 @@ cargo check -p mailvault-daemon --all-targets
 cargo check -p mailvault --all-targets
 
 step "phase 2: core tests"
-npx vitest run src/components src/stores src/features
+npx vitest run src/components src/stores src/features src/services/export
 
 echo
 echo "blitz module removal: OK"
