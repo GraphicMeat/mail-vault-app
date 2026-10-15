@@ -99,3 +99,14 @@ describe('getDocRegistry / _resetDocRegistryForTest (F2)', () => {
     expect(() => reportDocGone(1, new Error('render_unknown_doc'))).not.toThrow();
   });
 });
+
+describe('a doc that is not a registry body reports itself gone (export docs)', () => {
+  it('render_unknown_doc for an id no entry holds is a no-op: held docs stay open', async () => {
+    const reg = getDocRegistry();
+    await reg.acquire(docKey(P), P);
+    expect(reg.openCount()).toBe(1);
+    reportDocGone(987654, new Error('render_unknown_doc'));
+    expect(reg.openCount()).toBe(1);
+    expect(reg.forgetDoc(987654)).toBeUndefined();
+  });
+});

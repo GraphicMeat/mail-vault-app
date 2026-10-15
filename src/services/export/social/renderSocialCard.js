@@ -61,7 +61,7 @@ export async function renderSocialCard({ message, bodyHtml, appearance = 'light'
   if (mail === 'dark') {
     const nonce = emailScriptNonce();
     body = await renderMessageToCanvas({
-      message, bodyHtml, part: 'body', theme: 'dark', redactStyle, onCloneNode, width,
+      message, bodyHtml, part: 'body', theme: 'dark', palette, redactStyle, onCloneNode, width,
       sandbox: 'allow-same-origin allow-scripts',
       extraHead: `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">${getDarkReaderInlineScripts({ palette, nonce })}`,
       backgroundColor: getEmailColors('dark', palette).background,

@@ -78,6 +78,11 @@ describe('renderSocialCard', () => {
     expect(callFor('head').theme).toBe('light');
   });
 
+  it('dark mail: the palette reaches the renderer, for an alternative renderer to theme the body', async () => {
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', mail: 'dark', palette: 'indigo' });
+    expect(callFor('body')).toMatchObject({ palette: 'indigo', theme: 'dark' });
+  });
+
   it('a fresh nonce for every render', async () => {
     await renderSocialCard({ message, bodyHtml: '', mail: 'dark' });
     await renderSocialCard({ message, bodyHtml: '', mail: 'dark' });

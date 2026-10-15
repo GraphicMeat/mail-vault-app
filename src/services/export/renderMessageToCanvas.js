@@ -1,6 +1,7 @@
 import { domToCanvas } from 'modern-screenshot';
 import { buildMessageDocument, EXPORT_WIDTH_PX, EXPORT_SCALE } from './exportDocument';
 import { trace } from './exportTrace';
+import { getActiveBodyRenderer } from '../../components/email/bodyRendererRegistry';
 
 // The export frame gets no allow-scripts unless the caller asks (`sandbox`).
 // Quotes and signatures are expanded by building the document that way, so
@@ -117,16 +118,30 @@ function adopt(canvas) {
 // behind the document. `beforeCapture(doc)`: awaited once the frame is
 // measured, before it is rasterized (a dark card waits for Dark Reader).
 // `width`: the column in CSS px (default EXPORT_WIDTH_PX), for the document,
-// the frame and the canvas alike.
+// the frame and the canvas alike. `palette`: the Appearance palette, for an
+// alternative renderer's dark body (the frame path gets it through extraHead).
 export async function renderMessageToCanvas({
   message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode,
-  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture, width,
+  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture, width, palette,
 }) {
   const columnWidth = Number.isFinite(width) && width > 0 ? Math.round(width) : EXPORT_WIDTH_PX;
   const html = buildMessageDocument({
     message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml,
     ...(columnWidth !== EXPORT_WIDTH_PX ? { width: columnWidth } : {}),
   });
+  // An alternative renderer draws the whole document itself. Only the body of a
+  // dark card is dark for it; the header's dark is CSS in the document. Null is
+  // "could not draw this": the message fails (exportService lists it) and no
+  // hidden frame is mounted in this mode (overview A10).
+  const alt = getActiveBodyRenderer();
+  if (alt?.rasterize) {
+    const canvas = await alt.rasterize({
+      html, width: columnWidth, scale: EXPORT_SCALE, dark: theme === 'dark' && part === 'body',
+      palette, onCloneNode, backgroundColor,
+    });
+    if (!canvas) throw new Error('blitz_export_failed');
+    return canvas;
+  }
   const frame = await mountExportFrame(html, { loadTimeoutMs, width: columnWidth, ...(sandbox ? { sandbox } : {}) });
   try {
     if (beforeCapture) await beforeCapture(frame.doc);

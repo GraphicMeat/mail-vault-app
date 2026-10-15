@@ -1,6 +1,9 @@
 // Below this a surface has no real width yet (a hidden pane, a bubble mid-layout):
 // opening at it would render a doc nobody sees and that must be thrown away.
 export const MIN_OPEN_WIDTH = 40;
+// The worker clamps a document's height here and never errors for it (src-render MAX_CSS_HEIGHT).
+// A doc whose meta.cssHeight reaches it was truncated, so an export refuses to draw it (F12).
+export const MAX_CSS_HEIGHT = 200000;
 // Surfaces that mount bodies far outside the viewport (virtualizer overscan).
 // Only these defer a doc's close on unmount (churn reuse); every other surface
 // releases it at once.
