@@ -423,6 +423,9 @@ export const config = {
     // battery. wdio.blitz.conf.js selects them by name.
     './tests/e2e/connected-blitz-surfaces.test.js',
     './tests/e2e/connected-blitz-preview.test.js',
+    // The thread and chat perf gate: it is a debug-build timing gate, so it
+    // stays out of the battery. wdio.blitz.conf.js selects it by name.
+    './tests/e2e/connected-blitz-perf.test.js',
   ],
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state

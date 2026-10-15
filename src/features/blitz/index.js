@@ -22,6 +22,8 @@ if (!IS_APPSTORE_BUILD) {
   // e2e builds only, and loaded lazily: the surface builders it imports (ChatBubbleView, through it EmailViewer)
   // must not join the entry chunk of every window.
   if (import.meta.env.VITE_E2E === '1') import('./surfaces/surfaceDocs').then((m) => m.installSurfaceDocsHook()).catch(() => {});
+  // The thread and chat perf gate's probe (tests/e2e/connected-blitz-perf.test.js): e2e builds only, lazy for the same reason.
+  if (import.meta.env.VITE_E2E === '1') import('./surfaces/perfProbe').then((m) => m.installPerfProbe()).catch(() => {});
 
   try {
     const win = getCurrentWebviewWindow();
