@@ -894,9 +894,14 @@ function renderWorkers() {
   const out = ps(`Get-CimInstance Win32_Process -Filter "ParentProcessId=${daemonPid}" | Where-Object { $_.CommandLine -like '*--render-worker*' } | ForEach-Object { "$($_.ProcessId)" }`);
   return out.split(/\s+/).filter(Boolean).map((q) => ({ pid: Number(q), ppid: daemonPid, daemonPid }));
 }
-// By pid, of the one child of THIS run's daemon: never by name.
+// By pid, of a child of THIS run's daemon: never by name.
 function killWorker(pid) {
   if (IS_MAC) process.kill(pid, 'SIGKILL'); else ps(`Stop-Process -Id ${pid} -Force`);
+}
+// The daemon runs a pool of render workers (spawned lazily, so which one holds a doc is not visible from
+// outside): every child of this run's daemon goes, whichever holds the doc under test.
+function killAllWorkers(workers) {
+  for (const w of workers) killWorker(w.pid);
 }
 
 // ── Real keystrokes into the focused app (macOS System Events, Windows SendKeys), best effort ────
@@ -1962,9 +1967,9 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
       const w0 = await kit('probeWidth', PROBE);
       const before = renderWorkers();
       log('respawn.before', { workers: before, lora: w0 });
-      ck(before.length === 1, `expected exactly one render worker child of the daemon, found ${before.length}`);
-      if (before.length !== 1) return;
-      killWorker(before[0].pid);
+      ck(before.length >= 1, `expected at least one render worker child of the daemon, found ${before.length}`);
+      if (before.length < 1) return;
+      killAllWorkers(before);
       await browser.pause(3000);
       const docId = (await kit('blitz')).docId;
       const dead = { hit: await rpc('render.hit', { docId, x: 10, y: 10 }), tile: await rpc('render.tile', { docId, index: 0 }).then((r) => (r && r.png ? 'png' : r)) };
@@ -1979,9 +1984,10 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
       await browser.pause(2500);
       const w1 = await kit('probeWidth', PROBE);
       const after = renderWorkers();
+      const beforePids = new Set(before.map((w) => w.pid));
       const fontsList = await rpc('fonts.list');
-      log('respawn.after', { selfRecovered: self, reopened, lora: w1, workers: after, newWorker: after.length === 1 && after[0].pid !== before[0].pid, fonts: (fontsList.fonts || []).map((f) => f.family) });
-      ck(after.length === 1 && after[0].pid !== before[0].pid, 'a fresh worker did not appear after the re-open');
+      log('respawn.after', { selfRecovered: self, reopened, lora: w1, workers: after, freshWorkers: after.length >= 1 && after.every((w) => !beforePids.has(w.pid)), fonts: (fontsList.fonts || []).map((f) => f.family) });
+      ck(after.length >= 1 && after.every((w) => !beforePids.has(w.pid)), `a fresh worker did not appear after the re-open (before ${[...beforePids]}, after ${after.map((w) => w.pid)})`);
       ck(reopened === 'ready', `the body did not recover after a re-open: ${reopened}`);
       ck(Math.abs(w1.lora - w0.lora) <= 2 && Math.abs(w1.lora - w1.georgia) > 3, `Lora did not replay: probe width ${w0.lora} before, ${w1.lora} after (Georgia control ${w1.georgia})`);
     });
@@ -1992,8 +1998,8 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
       await openFixture('blitz', SUBJECT_A);
       const b0 = await kit('blitz');
       const before = renderWorkers();
-      if (before.length !== 1) { log('respawn.scroll', { skipped: `workers: ${before.length}` }); return; }
-      killWorker(before[0].pid);
+      if (before.length < 1) { log('respawn.scroll', { skipped: `workers: ${before.length}` }); return; }
+      killAllWorkers(before);
       await browser.pause(2500);
       const scrolled = await kit('scrollBottom');
       await browser.pause(5000);
