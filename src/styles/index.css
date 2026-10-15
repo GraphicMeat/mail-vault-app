@@ -1105,6 +1105,10 @@ input[type="range"]::-moz-range-thumb:hover {
 .mail-toolbar-button:hover:not(:disabled) { background: var(--mail-surface-hover); color: var(--mail-text); }
 .mail-toolbar-button:disabled { opacity: .4; cursor: default; }
 .mail-toolbar-button.is-active { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+/* Two halves read as one control: a hairline around both, the chevron half narrow. */
+.mail-split-button { display: inline-flex; align-items: stretch; border: 1px solid var(--mail-border); border-radius: 6px; padding: 1px; gap: 1px; }
+.mail-split-button .mail-toolbar-button { min-height: 28px; border-radius: 5px; }
+.mail-split-button .mail-toolbar-button + .mail-toolbar-button { min-width: 0; padding-inline: 3px; }
 .mail-thread-select { flex: 1; min-width: 80px; max-width: 160px; padding: 5px 4px; min-height: 30px; border: 0; border-radius: 6px; background: var(--mail-surface); color: var(--mail-text-muted); font-size: 12px; cursor: pointer; }
 .mail-thread-select:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
 .mail-list .custom-checkbox { width: 16px; height: 16px; border-width: 1.5px; flex-shrink: 0; vertical-align: middle; }
@@ -1123,11 +1127,11 @@ input[type="range"]::-moz-range-thumb:hover {
   .mail-toolbar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .mail-toolbar-button { min-width: 30px; }
 }
-/* Icon-only, the row needs ~376px (~342px plus the always icon-only Hide
-   view mail toggle) and the pane can be dragged to 300px: the select takes a
-   row of its own for that whole range instead of the switch wrapping a few
-   pixels at a time. */
-@container mail-list (max-width: 380px) {
+/* Icon-only, the row needs ~398px (~342px plus the always icon-only, split
+   Hide view mail button) and the pane can be dragged to 300px: the select
+   takes a row of its own for that whole range instead of the switch wrapping
+   a few pixels at a time. */
+@container mail-list (max-width: 400px) {
   .mail-thread-select { order: 1; max-width: none; width: 100%; margin: 0 4px; }
 }
 @container mail-list (max-width: 300px) {

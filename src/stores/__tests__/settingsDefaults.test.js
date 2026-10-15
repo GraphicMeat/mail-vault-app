@@ -59,6 +59,19 @@ describe('settings defaults', () => {
     expect(state().hideViewMail).toBe(false);
     const { GLOBAL_SETTINGS_ALLOWLIST } = await import('../../services/transfer/settingsTransfer');
     expect(GLOBAL_SETTINGS_ALLOWLIST).toContain('hideViewMail');
+    expect(GLOBAL_SETTINGS_ALLOWLIST).toContain('hideViewMailViews');
+  });
+
+  it('the views whose mail is hidden start unpicked and keep only view ids', async () => {
+    const { useSettingsStore } = await loadOn('Win32');
+    const state = () => useSettingsStore.getState();
+    expect(state().hideViewMailViews).toBeNull();
+    state().setHideViewMailViews(['v1', 'v1', 3, '', 'v2']);
+    expect(state().hideViewMailViews).toEqual(['v1', 'v2']);
+    state().setHideViewMailViews([]);
+    expect(state().hideViewMailViews).toEqual([]);
+    state().setHideViewMailViews('v1');
+    expect(state().hideViewMailViews).toEqual([]);
   });
 
   it('text starts in Instrument Sans at 100%, keeps only known choices, and travels in a transfer', async () => {

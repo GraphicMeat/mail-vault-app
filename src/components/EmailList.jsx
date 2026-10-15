@@ -52,9 +52,9 @@ import {
   Network,
   Clock3,
   RotateCcw,
-  EyeOff,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
+import { HideViewMailButton } from './HideViewMailButton';
 import { FollowUpPinnedRows } from './FollowUpPinnedRows';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BulkSelectionBubble } from './BulkSelectionBubble';
@@ -234,7 +234,6 @@ function EmailListComponent({ stacked = false }) {
   const activeViewId = useViewStore(s => s.activeViewId);
   const hideToggleOffered = !activeViewId && viewCount > 0;
   const hideViewMail = useSettingsStore(s => s.hideViewMail);
-  const setHideViewMail = useSettingsStore(s => s.setHideViewMail);
   const searchResults = useSearchStore(s => s.searchResults);
   const searchHasAttachments = useSearchStore(s => !!s.searchFilters?.hasAttachments);
   const flagSeq = useUiStore(s => s._flagSeq);
@@ -1363,11 +1362,7 @@ function EmailListComponent({ stacked = false }) {
         {/* Every mode: the hide filters the folder's rows, which the explorer
             draws too. Icon-only at every width, like Reset: its words are its
             name and tooltip, so the labelled toolbar never has to fit them. */}
-        {hideToggleOffered && <button type="button"
-          data-testid="hide-view-mail-toggle" className={`mail-toolbar-button ${hideViewMail ? 'is-active' : ''}`}
-          aria-pressed={!!hideViewMail} aria-label={t('list.hideViewMail')}
-          title={hideViewMail ? t('list.hideViewMailOn') : t('list.hideViewMailOff')}
-          onClick={() => setHideViewMail(!hideViewMail)}><EyeOff size={14} /></button>}
+        {hideToggleOffered && <HideViewMailButton />}
         {/* The switch is pinned to the right edge and always last: the controls
             before it come and go with the mode, and it must not move under the
             pointer when they do. */}

@@ -34,7 +34,8 @@ describe('list toolbar labels', () => {
   });
 });
 
-// Icon-only, the controls need ~376px (Hide view mail included) and the list
+// Icon-only, the controls need ~398px (the split Hide view mail button
+// included) and the list
 // pane can be dragged to 300px. Between those the row would wrap by a few pixels at a time, so the
 // thread select drops to a row of its own for the whole narrow range, and the
 // height is then the same whatever a click does.
@@ -44,7 +45,7 @@ describe('the thread select in the narrowest list', () => {
     expect(at, 'the select-on-its-own-row rule').toBeGreaterThan(-1);
     const opener = css.lastIndexOf('@container mail-list', at);
     const width = Number(css.slice(opener, at).match(/max-width: (\d+)px/)?.[1]);
-    expect(width).toBeGreaterThanOrEqual(376);
+    expect(width).toBeGreaterThanOrEqual(398);
   });
 });
 

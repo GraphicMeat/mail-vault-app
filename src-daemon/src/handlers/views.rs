@@ -182,11 +182,19 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
         }
         // Every message any saved view finds, per account and mailbox, for
         // the list that hides view mail. Background work: not foreground.
+        // `viewIds` narrows it to the views the person picked; absent is all.
         "views.hidden_members" => {
             let accounts = accounts_of(params)?;
+            let picked: Option<Vec<String>> = params
+                .get("viewIds")
+                .map(|ids| serde_json::from_value(ids.clone()).map_err(|e| format!("viewIds: {e}")))
+                .transpose()?;
             let (all, keys) = app_db::with(app_dir, |conn| {
                 views::ensure_starters(conn)?;
-                let all = views::list(conn)?;
+                let mut all = views::list(conn)?;
+                if let Some(picked) = &picked {
+                    all.retain(|view| picked.contains(&view.id));
+                }
                 let mut keys = HashMap::new();
                 for view in &all {
                     keys.insert(view.id.clone(), filter_keys(conn, &view.def, &accounts)?);
@@ -1423,6 +1431,14 @@ mod tests {
         uids.sort();
         assert_eq!(uids, vec![1, 3], "uid 2 is in no view: {out}");
         assert_eq!(out["members"]["a"]["INBOX"]["unread"], 1, "{out}");
+
+        // `viewIds` narrows the union to the views the person picked; an
+        // empty pick hides nothing.
+        let only_v1 = call(&s, "views.hidden_members", json!({ "accounts": accounts(), "viewIds": ["v1"] })).await;
+        assert_eq!(only_v1["members"]["a"]["INBOX"]["uids"], json!([1]), "{only_v1}");
+        let none = call(&s, "views.hidden_members", json!({ "accounts": accounts(), "viewIds": [] })).await;
+        assert_eq!(none["available"], true, "{none}");
+        assert_eq!(none["members"], json!({}), "{none}");
     }
 
     /// A message the header cache no longer lists is not on the list to hide.

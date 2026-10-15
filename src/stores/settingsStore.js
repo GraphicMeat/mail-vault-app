@@ -588,6 +588,8 @@ export const useSettingsStore = create(
       listTimelineVisible: false,
       // Leave mail any saved view holds out of the mailbox lists.
       hideViewMail: false,
+      // The views whose mail that hides; null until the person first picks.
+      hideViewMailViews: null,
       explorerGrouping: 'date', // 'date' | 'sender' | 'conversation'
       explorerDateDepth: 'month',
       explorerPaths: {},
@@ -1378,6 +1380,9 @@ export const useSettingsStore = create(
       setEmailListView: value => set({ emailListView: normalizeEmailListView(value) }),
       setListTimelineVisible: value => set({ listTimelineVisible: Boolean(value) }),
       setHideViewMail: value => set({ hideViewMail: Boolean(value) }),
+      setHideViewMailViews: ids => set({
+        hideViewMailViews: [...new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && id) : [])],
+      }),
       setExplorerGrouping: value => set({ explorerGrouping: normalizeExplorerGrouping(value) }),
       setExplorerDateDepth: value => set({ explorerDateDepth: normalizeExplorerDateDepth(value) }),
       setExplorerPath: (scope, path) => set(state => {
@@ -1678,6 +1683,7 @@ export const useSettingsStore = create(
           emailListView: 'list',
           listTimelineVisible: false,
           hideViewMail: false,
+          hideViewMailViews: null,
           explorerGrouping: 'date',
           explorerDateDepth: 'month',
           explorerPaths: {},

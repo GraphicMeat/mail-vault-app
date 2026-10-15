@@ -67,10 +67,25 @@ describe('Hide view mail', function () {
     return button ? button.getAttribute('aria-pressed') : null;
   });
   const clickToggle = () => browser.execute(() => document.querySelector('[data-testid="hide-view-mail-toggle"]')?.click());
+  const configOffered = () => browser.execute(() => !!document.querySelector('[data-testid="hide-view-mail-config"]'));
+  /// Never picked: the one button opens the picker; OK with this view picked
+  /// turns the hide on and splits the button.
+  const pickViewToHide = async (id) => {
+    await browser.execute(() => document.querySelector('[data-testid="hide-view-mail-config"]')?.click());
+    await browser.waitUntil(() => browser.execute((viewId) =>
+      !!document.querySelector(`[data-testid="hide-view-mail-pick"][data-view-id="${viewId}"]`), id),
+    { timeout: 5_000, timeoutMsg: 'the picker never listed the view' });
+    await browser.execute((viewId) =>
+      document.querySelector(`[data-testid="hide-view-mail-pick"][data-view-id="${viewId}"]`).click(), id);
+    await browser.execute(() => document.querySelector('[data-testid="hide-view-mail-ok"]')?.click());
+  };
+  const forgetPick = () => browser.execute(() =>
+    window.__SETTINGS_STORE__?.setState({ hideViewMail: false, hideViewMailViews: null }));
 
   before(async function () {
     await waitForApp();
     await waitForEmails();
+    await forgetPick();
     await switchToFolder(LUKE, 'INBOX');
 
     const fresh = (await rows()).filter((r) => /Luke message \d\d(?!\d)/.test(r.text)
@@ -138,19 +153,17 @@ describe('Hide view mail', function () {
   });
 
   after(async function () {
-    await browser.execute(() => {
-      const settings = window.__SETTINGS_STORE__?.getState();
-      if (settings?.hideViewMail) settings.setHideViewMail(false);
-    }).catch(() => {});
+    await forgetPick().catch(() => {});
     await rpc('views.delete', { id: VIEW_ID }).catch(() => {});
   });
 
   it('keeps the message a view holds off INBOX while on, and gives it back when off', async function () {
     // The stale window store still lists the starters loaded at launch, so the
-    // toggle is offered; the daemon reads the views itself.
-    await browser.waitUntil(async () => (await toggleState()) !== null,
-      { timeout: 15_000, timeoutMsg: 'the hide view mail toggle was never offered' });
-    expect(await toggleState()).toBe('false');
+    // button is offered; the daemon reads the views itself. Never picked, it
+    // is one button and no on/off half.
+    await browser.waitUntil(configOffered,
+      { timeout: 15_000, timeoutMsg: 'the hide view mail button was never offered' });
+    expect(await toggleState()).toBe(null);
 
     // Anti-vacuity: the message is in the list, and the header has a total.
     await browser.waitUntil(async () => (await listed()).inStore, {
@@ -162,9 +175,9 @@ describe('Hide view mail', function () {
       timeout: 30_000, interval: 300, timeoutMsg: 'the INBOX header never showed a total',
     });
 
-    await clickToggle();
+    await pickViewToHide(VIEW_ID);
     await browser.waitUntil(async () => (await toggleState()) === 'true',
-      { timeout: 5_000, timeoutMsg: 'the toggle did not turn on' });
+      { timeout: 5_000, timeoutMsg: 'OK in the picker did not turn the hide on' });
 
     // An index still building answers "unknown", which hides nothing, and
     // nothing asks again until a count refresh: flip it to ask again.

@@ -443,6 +443,11 @@ async function runScheduledCounts() {
 }
 
 const hideViewMailOn = () => !!useSettingsStore.getState?.()?.hideViewMail;
+/// The views picked to hide, or null for never picked (every view).
+const hideViewMailViews = () => {
+  const ids = useSettingsStore.getState?.()?.hideViewMailViews;
+  return Array.isArray(ids) ? ids : null;
+};
 
 /// Which messages the saved views hold, for the lists that leave them out
 /// (`useViewHideStore`). Only asked while `hideViewMail` is on; off, the
@@ -452,7 +457,7 @@ const hideViewMailOn = () => !!useSettingsStore.getState?.()?.hideViewMail;
 /// `refreshCounts` does. A failure leaves the membership unknown, which
 /// shows everything.
 export function refreshHiddenMembers() {
-  if (!hideViewMailOn()) {
+  if (!hideViewMailOn() || hideViewMailViews()?.length === 0) {
     // A queued ask finds the setting off and asks nothing.
     useViewHideStore.getState().clear();
     return Promise.resolve();
@@ -466,9 +471,13 @@ export function refreshHiddenMembers() {
   }
   hiddenInFlight = (async () => {
     try {
-      const reply = await daemonCall('views.hidden_members', { accounts: accountsPayload() });
-      // Turned off while the answer was on its way: it must not hide anything.
-      if (!hideViewMailOn()) useViewHideStore.getState().clear();
+      const viewIds = hideViewMailViews();
+      const reply = await daemonCall('views.hidden_members', viewIds
+        ? { accounts: accountsPayload(), viewIds }
+        : { accounts: accountsPayload() });
+      // Turned off (or every view unpicked) while the answer was on its way:
+      // it must not hide anything.
+      if (!hideViewMailOn() || hideViewMailViews()?.length === 0) useViewHideStore.getState().clear();
       else useViewHideStore.getState().setMembers(reply);
     } catch {
       useViewHideStore.getState().clear();
@@ -479,14 +488,15 @@ export function refreshHiddenMembers() {
   return hiddenInFlight;
 }
 
-/// The setting flipped: on asks, off forgets. Also fires when the persisted
+/// The setting flipped or the picked views changed: on asks, off forgets. Also fires when the persisted
 /// settings load at launch. `subscribe?.`: many specs mock the settings store
 /// with `getState` alone, and importing this module must not throw there.
 let stopHideViewMailWatch = null;
 function watchHideViewMail() {
   stopHideViewMailWatch?.();
   stopHideViewMailWatch = useSettingsStore.subscribe?.((state, previous) => {
-    if (state.hideViewMail === previous?.hideViewMail) return;
+    if (state.hideViewMail === previous?.hideViewMail
+      && state.hideViewMailViews === previous?.hideViewMailViews) return;
     void refreshHiddenMembers();
   }) || null;
 }

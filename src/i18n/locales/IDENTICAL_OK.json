@@ -86,6 +86,7 @@
   "hook.useKeyboardShortcuts.ctrl",
   "hook.useKeyboardShortcuts.meta",
   "hook.useKeyboardShortcuts.shift",
+  "list.hideViewMailOk",
   "menu.file_submenu",
   "menu.open_blog",
   "netActivity.account",

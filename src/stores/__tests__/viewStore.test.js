@@ -48,7 +48,7 @@ beforeEach(() => {
   };
   useViewStore.setState({ views: [], counts: {}, activeViewId: null, unavailableReason: null, loading: false });
   useSearchStore.getState().clearSearch();
-  useSettingsStore.setState({ hideViewMail: false });
+  useSettingsStore.setState({ hideViewMail: false, hideViewMailViews: null });
   useViewHideStore.getState().clear();
   // A count one spec left pending would hold every later count behind it.
   __resetViewCountsForTests();
@@ -682,6 +682,24 @@ describe('mail the views hold, hidden from the mailbox lists', () => {
     await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(1));
     await useViewStore.getState().refreshCounts();
     await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(2));
+  });
+
+  it('asks only about the views the person picked, and again when the pick changes', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.hidden_members' ? HELD : {}));
+    useSettingsStore.setState({ hideViewMail: true, hideViewMailViews: ['v1'] });
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(1));
+    expect(hiddenCalls()[0][1]).toEqual({ accounts: [expect.objectContaining({ accountId: 'acct-1' })], viewIds: ['v1'] });
+    useSettingsStore.getState().setHideViewMailViews(['v1', 'v2']);
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(2));
+    expect(hiddenCalls()[1][1].viewIds).toEqual(['v1', 'v2']);
+  });
+
+  it('an empty pick hides nothing and asks nothing', async () => {
+    fill();
+    useSettingsStore.setState({ hideViewMail: true, hideViewMailViews: [] });
+    await refreshHiddenMembers();
+    expect(hiddenCalls()).toHaveLength(0);
+    expect(useViewHideStore.getState().keys).toBeNull();
   });
 
   it('a count while the setting is off asks nothing about membership', async () => {

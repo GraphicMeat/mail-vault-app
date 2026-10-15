@@ -227,6 +227,9 @@ vi.mock('../../stores/settingsStore', async () => {
     // The real store's default: off, nothing a view holds is hidden.
     hideViewMail: false,
     setHideViewMail: vi.fn(value => store.setState({ hideViewMail: Boolean(value) })),
+    // Never picked: the button opens the picker instead of hiding.
+    hideViewMailViews: null,
+    setHideViewMailViews: vi.fn(ids => store.setState({ hideViewMailViews: ids })),
     // A real store underneath, so a saved view's layout change re-renders the
     // list the way the app's store does.
     viewOverrides: {},
@@ -2536,7 +2539,7 @@ describe('the hide view mail toggle', () => {
   const count = () => screen.getByTestId('email-list-count').textContent;
 
   const mount = async ({
-    views = [{ id: 'v1', name: 'Saved', def: {} }], activeViewId = null, hideViewMail = false,
+    views = [{ id: 'v1', name: 'Saved', def: {} }], activeViewId = null, hideViewMail = false, hideViewMailViews = ['v1'],
     totalEmails = 2, sortedEmails = makeEmails(2), emails, activeMailbox = 'INBOX', mailboxScope = null,
     unifiedInbox = false, hiddenByMailbox = null, keys = null,
   } = {}) => {
@@ -2548,7 +2551,7 @@ describe('the hide view mail toggle', () => {
       sortedEmails, totalEmails, emails: emails ?? sortedEmails, activeMailbox, activeAccountId: 'acc1', mailboxScope, unifiedInbox,
       unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
     });
-    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', viewOverrides: {}, hideViewMail });
+    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', viewOverrides: {}, hideViewMail, hideViewMailViews });
     useViewStore.setState({ views, activeViewId });
     useViewHideStore.setState({ keys, hiddenByMailbox, unreadByMailbox: null });
     const { EmailList } = await import('../EmailList.jsx');
@@ -2564,8 +2567,9 @@ describe('the hide view mail toggle', () => {
     const { useViewStore } = await import('../../stores/viewStore');
     const { useViewHideStore } = await import('../../stores/viewHideStore');
     useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, emails: undefined, activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false });
-    useSettingsStore.setState({ emailListView: 'list', hideViewMail: false, viewOverrides: {} });
+    useSettingsStore.setState({ emailListView: 'list', hideViewMail: false, hideViewMailViews: null, viewOverrides: {} });
     useSettingsStore.getState().setHideViewMail.mockClear();
+    useSettingsStore.getState().setHideViewMailViews.mockClear();
     useViewStore.setState({ views: [], activeViewId: null, loading: false });
     useViewHideStore.setState({ keys: null, hiddenByMailbox: null, unreadByMailbox: null });
   });
@@ -2595,7 +2599,96 @@ describe('the hide view mail toggle', () => {
 
   it('sits before the list/explorer switch, which stays last', async () => {
     const { container } = await mount();
-    expect(toggle(container).nextElementSibling.classList.contains('mail-list-view-switch')).toBe(true);
+    expect(container.querySelector('[data-testid="hide-view-mail-split"]').nextElementSibling.classList.contains('mail-list-view-switch')).toBe(true);
+  });
+
+  const config = container => container.querySelector('[data-testid="hide-view-mail-config"]');
+  const picks = () => [...document.querySelectorAll('[data-testid="hide-view-mail-pick"]')];
+  const pick = id => picks().find(button => button.dataset.viewId === id);
+  const TWO = [{ id: 'v1', name: 'Saved', def: {} }, { id: 'v2', name: 'Bills', def: {} }];
+
+  it('never picked: one button, and it opens the picker instead of hiding', async () => {
+    const { container } = await mount({ hideViewMailViews: null, views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    expect(toggle(container)).toBeNull();
+    expect(config(container).getAttribute('aria-label')).toBe('Hide view mail');
+    fireEvent.click(config(container));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMail).not.toHaveBeenCalled();
+    expect(screen.getByTestId('hide-view-mail-modal')).toBeTruthy();
+    expect(picks().map(button => button.textContent)).toEqual(['Saved', 'Bills']);
+    expect(picks().map(button => button.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+  });
+
+  it('OK keeps the picked views and turns the hide on; after that the button is split', async () => {
+    const { container } = await mount({ hideViewMailViews: null, views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(config(container));
+    await settle();
+    fireEvent.click(pick('v2'));
+    expect(pick('v2').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByTestId('hide-view-mail-ok'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailViews).toHaveBeenLastCalledWith(['v2']);
+    expect(useSettingsStore.getState().setHideViewMail).toHaveBeenLastCalledWith(true);
+    expect(screen.queryByTestId('hide-view-mail-modal')).toBeNull();
+    expect(toggle(container).getAttribute('aria-pressed')).toBe('true');
+    expect(config(container)).not.toBeNull();
+    expect(config(container).getAttribute('title')).toBe('Choose which views to hide');
+  });
+
+  it('Cancel changes nothing, and the picker reopens on what was saved', async () => {
+    const { container } = await mount({ hideViewMailViews: ['v1'], views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(config(container));
+    await settle();
+    expect(pick('v1').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(pick('v1'));
+    fireEvent.click(pick('v2'));
+    fireEvent.click(screen.getByText('Cancel'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailViews).not.toHaveBeenCalled();
+    fireEvent.click(config(container));
+    await settle();
+    expect(picks().map(button => button.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+  });
+
+  it('OK with nothing picked turns the hide off and leaves the switch inactive', async () => {
+    const { container } = await mount({ hideViewMailViews: ['v1'], hideViewMail: true, views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(config(container));
+    await settle();
+    fireEvent.click(pick('v1'));
+    fireEvent.click(screen.getByTestId('hide-view-mail-ok'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailViews).toHaveBeenLastCalledWith([]);
+    expect(useSettingsStore.getState().setHideViewMail).toHaveBeenLastCalledWith(false);
+    expect(toggle(container).disabled).toBe(true);
+    expect(toggle(container).getAttribute('title')).toBe('Pick a view to hide first');
+  });
+
+  // Views made in the Settings window (or by the daemon) since this window
+  // loaded its list must be pickable: opening the picker asks again.
+  it('the picker asks for the views again when it opens', async () => {
+    const { container } = await mount({ hideViewMailViews: null });
+    const { useViewStore } = await import('../../stores/viewStore');
+    const original = useViewStore.getState().loadViews;
+    useViewStore.setState({ loadViews: vi.fn(async () => useViewStore.setState({ views: TWO })) });
+    try {
+      fireEvent.click(config(container));
+      await settle();
+      expect(useViewStore.getState().loadViews).toHaveBeenCalledTimes(1);
+      expect(picks().map(button => button.dataset.viewId)).toEqual(['v1', 'v2']);
+    } finally {
+      useViewStore.setState({ loadViews: original });
+    }
+  });
+
+  // A picked view that was deleted since holds nothing: it does not count.
+  it('a pick of only deleted views leaves the switch inactive', async () => {
+    const { container } = await mount({ hideViewMailViews: ['gone'] });
+    expect(toggle(container).disabled).toBe(true);
+    expect(config(container).disabled).toBe(false);
   });
 
   it('is not offered inside a view', async () => {

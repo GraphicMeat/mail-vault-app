@@ -398,7 +398,9 @@ before the index lock is taken, so no path holds both.
 
 **Hiding view mail.** With `hideViewMail` on (default off), a folder's list
 leaves out every message some saved view holds. The daemon decides membership:
-`views.hidden_members` runs each view over each account through
+`views.hidden_members` runs each view in `hideViewMailViews` (the person's
+pick; `viewIds` on the call, absent means every view, an empty pick asks
+nothing and hides nothing) over each account through
 `search_index::member_keys` (keys only, uncapped, no row JSON, one index lock
 hold per view and account), unions the hits per account and mailbox, skips
 local-only folders, and narrows them to the uids the header cache lists, read
