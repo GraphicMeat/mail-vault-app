@@ -387,6 +387,11 @@ describe('BlitzTiles', () => {
       globalThis.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} }; // only tiles 0,1 shown
       render(tiles());
       const body = await screen.findByTestId('blitz-email-body');
+      // The shown tiles' spans first: they prove the text layer's mount effects ran. A select
+      // all pressed between the layer's commit and those effects has its requests forgotten
+      // by the layer's first reset and every tile asked again (seen on the Windows runner).
+      await screen.findByText('t0');
+      await screen.findByText('t1');
       fireEvent.keyDown(body, { key: 'a', metaKey: true, ctrlKey: true });
       // The spans of the never-shown tile commit after loadAll resolves, so wait for the selection.
       await waitFor(() => expect(window.getSelection().toString()).toContain('t2'));
