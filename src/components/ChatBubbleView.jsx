@@ -48,6 +48,8 @@ import { getEmailColors, getChatLinkColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, keepImageProportions, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
 import { attachImageDoubleClick } from '../utils/emailImages';
 import { openMailtoCompose } from '../utils/mailto';
+import { useAltBodyRenderer } from './email/bodyRendererRegistry';
+import { activateEmailLink, openExternalUrl } from '../utils/emailLinkActivation';
 import { AddressText } from './email/AddressText';
 import { TagChips } from './TagChips';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
@@ -58,6 +60,83 @@ import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../services/workflows/messageMutations';
 import { startThreadReadTimer, cancelThreadReadTimers } from '../services/workflows/threadReadTimer';
+
+// The bubble's own document: transparent, tinted per side, no Dark Reader.
+// Exported so the alternative renderer and the parity harness draw this exact
+// document (overview amendment A1).
+// It carries the same CSP as buildEmailIframeHtml: script-src 'nonce-...' as
+// the first head element, and the fold scripts carry that nonce. The mail's
+// own script and inline handlers get no nonce and are blocked.
+export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, indicatorStyle, privacy, signatureDisplay, nonce = emailScriptNonce() }) {
+  // srcDoc is an isolated document and cannot inherit the app's CSS
+  // variables. Resolve the active palette here so light chat bubbles keep
+  // readable text after an Appearance change.
+  const textColor = fromUser ? '#ffffff' : getEmailColors(theme, palette).text;
+  const chatLinks = getChatLinkColors(palette, theme);
+  const linkColor = fromUser ? chatLinks.sent : chatLinks.received;
+  const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
+  const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
+  return `
+      <!DOCTYPE html>
+      <html${privacy ? PRIVACY_HTML_ATTR : ''}>
+        <head>
+          <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">
+          <meta charset="UTF-8">
+          <base target="_blank">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            * { box-sizing: border-box; }
+            html, body {
+              margin: 0;
+              padding: 8px;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              font-size: 14px;
+              line-height: 1.5;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              background-color: transparent !important;
+              color: ${textColor};
+            }
+            img {
+              max-width: 100%;
+              height: auto;
+            }
+            a {
+              color: ${linkColor};
+            }
+            table {
+              max-width: 100%;
+              border-collapse: collapse;
+            }
+            pre, code {
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              max-width: 100%;
+              overflow-x: auto;
+            }
+            blockquote {
+              border-left: 3px solid ${quoteBorder};
+              margin: 8px 0;
+              padding-left: 12px;
+              color: ${quoteColor};
+            }
+            ${indicatorStyle}
+          </style>
+          ${privacy ? PRIVACY_FRAME_HEAD : ''}
+        </head>
+        <body>${keepImageProportions(neutralizeEmailDarkScheme(bodyHtml))}${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}</body>
+      </html>
+    `;
+}
+
+// The iframe's own width in a shrink-to-fit bubble: an <iframe> with no width
+// attribute is 300 CSS px wide, and `w-full` resolves against that.
+export const BUBBLE_FRAME_WIDTH = 300;
+// The Blitz wrapper's width rule, which must stay in step with BUBBLE_FRAME_WIDTH
+// (Tailwind needs the class literal). BlitzBody measures its wrapper to open, and
+// in the open state the wrapper carries only the class, so a bubble that sizes to
+// its content would otherwise hand it 0 px and the body would never open.
+const BUBBLE_FRAME_CLASS = 'w-[300px] max-w-full';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const t = useT();
@@ -284,6 +363,8 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
 const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onReply, onReplyAll, onForward, onOpenFullView, bodiesMapRef, registerListener }) {
   const t = useT();
   const iframeRef = useRef(null);
+  // The alternative renderer drawing this bubble's body, or null for the iframe.
+  const Alt = useAltBodyRenderer('bubble');
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
@@ -491,16 +572,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const iframeContent = useMemo(() => {
     if (!mergedEmail.html) return '';
 
-    // Use appropriate text color based on bubble type
-    // srcDoc is an isolated document and cannot inherit the app's CSS
-    // variables. Resolve the active palette here so light chat bubbles keep
-    // readable text after an Appearance change.
-    const textColor = fromUser ? '#ffffff' : getEmailColors(theme, palette).text;
-    const chatLinks = getChatLinkColors(palette, theme);
-    const linkColor = fromUser ? chatLinks.sent : chatLinks.received;
-    const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
-    const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
-
     // Linkified here: this frame is built without getEmailBodyContent.
     const rawBody = linkifyHtml(replaceCidUrls(mergedEmail.html, mergedEmail.attachments));
     const chatScopeKey = emailScopeKey(email, useMailStore.getState());
@@ -519,62 +590,8 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       chatAlertLevel = scan.maxAlertLevel;
     }
 
-    // Chat bubbles build their own document (transparent bg, per-bubble tint),
-    // so they carry the same CSP as buildEmailIframeHtml: script-src 'nonce-…'
-    // as the first head element, and the fold scripts carry that nonce. The
-    // mail's own script and inline handlers get no nonce and are blocked.
-    const nonce = emailScriptNonce();
-    const builtHtml = `
-      <!DOCTYPE html>
-      <html${privacyOn ? PRIVACY_HTML_ATTR : ''}>
-        <head>
-          <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">
-          <meta charset="UTF-8">
-          <base target="_blank">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            * { box-sizing: border-box; }
-            html, body {
-              margin: 0;
-              padding: 8px;
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-              font-size: 14px;
-              line-height: 1.5;
-              word-wrap: break-word;
-              overflow-wrap: break-word;
-              background-color: transparent !important;
-              color: ${textColor};
-            }
-            img {
-              max-width: 100%;
-              height: auto;
-            }
-            a {
-              color: ${linkColor};
-            }
-            table {
-              max-width: 100%;
-              border-collapse: collapse;
-            }
-            pre, code {
-              white-space: pre-wrap;
-              word-wrap: break-word;
-              max-width: 100%;
-              overflow-x: auto;
-            }
-            blockquote {
-              border-left: 3px solid ${quoteBorder};
-              margin: 8px 0;
-              padding-left: 12px;
-              color: ${quoteColor};
-            }
-            ${indicatorStyle}
-          </style>
-          ${privacyOn ? PRIVACY_FRAME_HEAD : ''}
-        </head>
-        <body>${keepImageProportions(neutralizeEmailDarkScheme(scannedBody))}${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}</body>
-      </html>
-    `;
+    // Chat bubbles build their own document (transparent bg, per-bubble tint).
+    const builtHtml = buildChatBubbleDocument({ bodyHtml: scannedBody, fromUser, theme, palette, indicatorStyle, privacy: privacyOn, signatureDisplay });
     return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };
   }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette, privacyOn]);
 
@@ -582,6 +599,19 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const iframeHtmlContent = iframeContent?.html || '';
   // One ref for both frames (original and cleaned): the hook follows whichever is mounted.
   useBodyPrivacy(iframeRef, iframeHtmlContent, { message: mergedEmail });
+  // Blitz draws the very document the iframe gets (the privacy gate included: its
+  // pre-pass releases it when privacy is inactive), always light, on a transparent canvas.
+  const altProps = Alt && iframeHtmlContent ? {
+    surface: 'bubble', messageKey: iframeContent.scopeKey, documentHtml: iframeHtmlContent,
+    plainText, theme: { dark: false, palette }, signatureDisplay, foldQuotes: true,
+    privacy: privacyOn, message: mergedEmail, accountId: mergedEmail?._accountId,
+    onLink: link => activateEmailLink(link, {
+      accountId: mergedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
+      openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
+    }),
+    sizing: { collapsedMax: 400 },
+    className: BUBBLE_FRAME_CLASS,
+  } : null;
   const chatScanAlert = iframeContent?.alertLevel || null;
   const chatTrackerSummary = iframeContent?.trackerSummary || null;
 
@@ -672,7 +702,8 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     }
 
     return () => window.removeEventListener('message', handleMessage);
-  }, [mergedEmail.html]);
+  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
+  }, [mergedEmail.html, !!Alt]);
 
   // The mail's own Google Fonts, from the daemon. They change the text's
   // height after the load-time sizing above, so size once more.
@@ -772,14 +803,18 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                 {t('chat.bubble.originalMessage')}
               </div>
               {mergedEmail.html ? (
-                <iframe
-                  ref={iframeRef}
-                  srcDoc={iframeHtmlContent}
-                  className="w-full border-0 rounded"
-                  style={{ minHeight: '100px', maxHeight: '400px' }}
-                  sandbox="allow-same-origin allow-popups allow-scripts"
-                  title={t('chat.bubble.emailContent')}
-                />
+                altProps ? (
+                  <Alt {...altProps} style={{ width: BUBBLE_FRAME_WIDTH, maxWidth: '100%', minHeight: 100 }} />
+                ) : (
+                  <iframe
+                    ref={iframeRef}
+                    srcDoc={iframeHtmlContent}
+                    className="w-full border-0 rounded"
+                    style={{ minHeight: '100px', maxHeight: '400px' }}
+                    sandbox="allow-same-origin allow-popups allow-scripts"
+                    title={t('chat.bubble.emailContent')}
+                  />
+                )
               ) : (
                 <div className="whitespace-pre-wrap break-words text-sm">
                   <AddressText text={mergedEmail.text || mergedEmail.textBody || '(No text content)'} accountId={mergedEmail?._accountId} />
@@ -788,14 +823,18 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             </div>
           ) : hasHtml ? (
             <div className="overflow-hidden">
-              <iframe
-                ref={iframeRef}
-                srcDoc={iframeHtmlContent}
-                className="w-full border-0"
-                style={{ minHeight: '50px', maxHeight: '400px' }}
-                sandbox="allow-same-origin allow-popups allow-scripts"
-                title={t('chat.bubble.emailContent')}
-              />
+              {altProps ? (
+                <Alt {...altProps} style={{ width: BUBBLE_FRAME_WIDTH, maxWidth: '100%', minHeight: 50 }} />
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={iframeHtmlContent}
+                  className="w-full border-0"
+                  style={{ minHeight: '50px', maxHeight: '400px' }}
+                  sandbox="allow-same-origin allow-popups allow-scripts"
+                  title={t('chat.bubble.emailContent')}
+                />
+              )}
             </div>
           ) : hasDisplayableContent ? (
             <div className="px-4 py-2.5 whitespace-pre-wrap break-words text-sm">
