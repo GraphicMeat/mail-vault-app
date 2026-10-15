@@ -7,7 +7,7 @@ import BlitzBody from './BlitzBody';
 import SettingsRow from './SettingsRow';
 import { installDebugHook } from './surfaces/debugHook';
 import { openBlitzWindow, installWindowDocCleanup } from './surfaces/popout';
-import { getDocRegistry } from './surfaces/docRegistry';
+import { getDocRegistry, onFirstDocAcquire } from './surfaces/docRegistry';
 import { rasterizeWithBlitz } from './surfaces/rasterize';
 import { useSettingsStore } from '../../stores/settingsStore';
 import './blitz.css';
@@ -23,7 +23,10 @@ if (!IS_APPSTORE_BUILD) {
     const win = getCurrentWebviewWindow();
     // Only the windows this module owns the life of. A compose window may
     // refuse its close (unsaved draft), and closing its docs then would blank it.
-    if (win?.label?.startsWith('original-')) void installWindowDocCleanup(getDocRegistry(), { win }).catch(() => {});
+    // And only once the window draws a doc: a web-mode window closes as it always did.
+    if (win?.label?.startsWith('original-')) {
+      onFirstDocAcquire(() => { void installWindowDocCleanup(getDocRegistry(), { win }).catch(() => {}); });
+    }
   } catch { /* no Tauri (vitest) */ }
 
   // Leaving Blitz closes the docs nobody holds, so the worker can idle out.

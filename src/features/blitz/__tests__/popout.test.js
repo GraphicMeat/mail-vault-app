@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { openBlitzWindow, installWindowDocCleanup } from '../surfaces/popout';
+import { openBlitzWindow, installWindowDocCleanup, READY_TIMEOUT_MS } from '../surfaces/popout';
 
 describe('openBlitzWindow', () => {
   it('opens the original window and hands it the body on its ready event', async () => {
@@ -9,6 +9,7 @@ describe('openBlitzWindow', () => {
       listen: vi.fn(async (_name, fn) => { handler = fn; return stop; }),
       emitTo: vi.fn(async () => {}),
       invoke: vi.fn(async () => 'original-4'),
+      setTimer: () => 'timer', clearTimer: vi.fn(),
     };
     const label = await openBlitzWindow({ html: '<p>B</p>', dark: true, title: 'Hi' }, deps);
     expect(label).toBe('original-4');
@@ -20,9 +21,36 @@ describe('openBlitzWindow', () => {
     expect(stop).toHaveBeenCalled();
   });
 
+  it('a window that never says ready stops listening after the timeout, not before', async () => {
+    const stop = vi.fn(); let fire; const clearTimer = vi.fn();
+    const deps = {
+      uuid: () => 't', listen: vi.fn(async () => stop), emitTo: vi.fn(),
+      invoke: vi.fn(async () => 'original-2'),
+      setTimer: vi.fn((fn, ms) => { fire = fn; return { ms }; }), clearTimer,
+    };
+    await openBlitzWindow({ html: '<p>x</p>', dark: false, title: 'T' }, deps);
+    expect(deps.setTimer).toHaveBeenCalledWith(expect.any(Function), READY_TIMEOUT_MS);
+    expect(READY_TIMEOUT_MS).toBe(10_000);
+    expect(stop).not.toHaveBeenCalled();
+    fire();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('a ready event clears the timeout', async () => {
+    let handler; const stop = vi.fn(); const clearTimer = vi.fn();
+    const deps = {
+      uuid: () => 't', listen: vi.fn(async (_n, fn) => { handler = fn; return stop; }), emitTo: vi.fn(async () => {}),
+      invoke: vi.fn(async () => 'original-2'), setTimer: vi.fn(() => 'timer'), clearTimer,
+    };
+    await openBlitzWindow({ html: '', dark: false, title: '' }, deps);
+    await handler({ payload: { token: 't', label: 'original-2' } });
+    expect(clearTimer).toHaveBeenCalledWith('timer');
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it('a window that fails to open stops listening and rethrows', async () => {
     const stop = vi.fn();
-    const deps = { uuid: () => 't', listen: vi.fn(async () => stop), emitTo: vi.fn(), invoke: vi.fn(async () => { throw new Error('nope'); }) };
+    const deps = { uuid: () => 't', listen: vi.fn(async () => stop), emitTo: vi.fn(), invoke: vi.fn(async () => { throw new Error('nope'); }), setTimer: () => 'timer', clearTimer: vi.fn() };
     await expect(openBlitzWindow({ html: '', dark: false, title: '' }, deps)).rejects.toThrow('nope');
     expect(stop).toHaveBeenCalled();
   });
@@ -69,5 +97,15 @@ describe('installWindowDocCleanup (Review Focus 5, F21)', () => {
     await Promise.all([a, b]);
     expect(win.destroy).toHaveBeenCalledTimes(1);
     expect(registry.closeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('a destroy that rejects does not swallow the next close request', async () => {
+    let onClose;
+    const win = { onCloseRequested: vi.fn(async (fn) => { onClose = fn; return () => {}; }), destroy: vi.fn().mockRejectedValueOnce(new Error('denied')).mockResolvedValue(undefined) };
+    const registry = { closeAll: vi.fn(async () => 0) };
+    await installWindowDocCleanup(registry, { win });
+    await onClose({ preventDefault: vi.fn() });
+    await onClose({ preventDefault: vi.fn() });
+    expect(win.destroy).toHaveBeenCalledTimes(2);
   });
 });

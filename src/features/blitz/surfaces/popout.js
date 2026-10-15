@@ -1,7 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
 
-const defaults = { invoke, listen, emitTo, uuid: () => crypto.randomUUID() };
+const defaults = {
+  invoke, listen, emitTo, uuid: () => crypto.randomUUID(),
+  setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: (t) => clearTimeout(t),
+};
+// A window that never says ready (crashed, closed at once) must not leave the
+// listener, and the html it holds, registered for the life of the app.
+export const READY_TIMEOUT_MS = 10_000;
 
 // Blitz mode's "Open in window": the app's own Original Message window (the
 // shell already opens it; `original-*` is in the default capability) drawing
@@ -9,15 +15,17 @@ const defaults = { invoke, listen, emitTo, uuid: () => crypto.randomUUID() };
 export async function openBlitzWindow({ html, dark, title }, deps = defaults) {
   const token = deps.uuid();
   let stop = null;
+  let timer = null;
+  const done = () => { if (timer != null) deps.clearTimer(timer); timer = null; stop?.(); stop = null; };
   stop = await deps.listen('original-message-ready', async (event) => {
     if (event.payload?.token !== token) return;
-    await deps.emitTo(event.payload.label, 'original-message-payload', { token, html, dark, title, surface: 'popout' });
-    stop?.();
+    try { await deps.emitTo(event.payload.label, 'original-message-payload', { token, html, dark, title, surface: 'popout' }); } finally { done(); }
   });
+  timer = deps.setTimer(done, READY_TIMEOUT_MS);
   try {
     return await deps.invoke('open_auxiliary_window', { kind: 'original', token });
   } catch (err) {
-    stop?.();
+    done();
     throw err;
   }
 }
@@ -36,6 +44,6 @@ export function installWindowDocCleanup(registry, { win, waitMs = 1000 }) {
     if (closing) return;
     closing = true;
     try { await registry.closeAll({ waitMs }); } catch { /* close the window regardless */ }
-    await win.destroy();
+    try { await win.destroy(); } catch { closing = false; } // a later close request must still get through
   });
 }

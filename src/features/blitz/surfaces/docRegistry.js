@@ -26,7 +26,7 @@ export function docKey({ html, cssWidth, scale, allowRemote, theme }) {
  * not in LAZY_SURFACES). `close` may return a promise; closeAll awaits them.
  */
 export function createDocRegistry({
-  open, close, onUpdated = null, deferredMax = 8, deferredTtlMs = 60_000,
+  open, close, onUpdated = null, onFirstAcquire = null, deferredMax = 8, deferredTtlMs = 60_000,
   setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = (t) => clearTimeout(t),
 }) {
   const entries = new Map(); // key -> { refs, promise, doc, docId, dropped, subs, timer, closing }
@@ -35,6 +35,7 @@ export function createDocRegistry({
   let listening = false;
   let generation = 0; // bumped by _reset so a late subscription unlistens itself
   let unlisten = null;
+  let acquiredOnce = false;
 
   // Never throws: a close that fails (worker gone) leaves nothing to close.
   const safeClose = (docId) => {
@@ -87,6 +88,10 @@ export function createDocRegistry({
   };
 
   function acquire(key, params) {
+    if (!acquiredOnce) {
+      acquiredOnce = true;
+      try { onFirstAcquire?.(); } catch { /* a hook must not fail an open */ }
+    }
     listen();
     const have = entries.get(key);
     if (have) {
@@ -189,10 +194,17 @@ export function createDocRegistry({
 
 let shared = null;
 let unGone = null;
+let firstAcquireHook = null;
+
+/** Runs `fn` once, when the app-wide registry first hands out a doc. Lets a window install per-window cleanup only if it draws through Blitz at all. */
+export function onFirstDocAcquire(fn) { firstAcquireHook = fn; }
 /** The app-wide registry (one per webview). */
 export function getDocRegistry() {
   if (!shared) {
-    shared = createDocRegistry({ open: openRender, close: closeRender, onUpdated: onRenderUpdated });
+    shared = createDocRegistry({
+      open: openRender, close: closeRender, onUpdated: onRenderUpdated,
+      onFirstAcquire: () => { const fn = firstAcquireHook; firstAcquireHook = null; fn?.(); },
+    });
     const reg = shared;
     unGone = onDocGone((docId) => reg.forgetDoc(docId));
   }
@@ -203,6 +215,7 @@ export function getDocRegistry() {
 export function _resetDocRegistryForTest() {
   shared?._reset();
   shared = null;
+  firstAcquireHook = null;
   if (unGone) unGone();
   unGone = null;
 }

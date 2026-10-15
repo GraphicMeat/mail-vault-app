@@ -649,7 +649,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     // stripped in the pane but left in the window still fires.
     const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
     // The renderer owns the window under it (no iframe page, no Dark Reader).
-    if (altRenderer?.openWindow) { void altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: selectedEmail.subject || 'Email' }); return; }
+    if (altRenderer?.openWindow) { void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: selectedEmail.subject || 'Email' })).catch(() => {}); return; }
     // The popup loads from file:// and inherits no CSP, so its meta
     // (script-src 'nonce-…') is the ONLY policy: Dark Reader has to
     // carry the same nonce to run there.
