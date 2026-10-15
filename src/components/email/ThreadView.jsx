@@ -567,7 +567,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
               // Same body, second window — strip there too.
               const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
               // The renderer owns the window under it (no iframe page, no Dark Reader).
-              if (altRenderer?.openWindow) { void altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: email.subject || 'Email' }); return; }
+              if (altRenderer?.openWindow) { void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: email.subject || 'Email' })).catch(() => {}); return; }
               // file:// popup inherits no CSP; DR needs the meta's nonce to run.
               const popupNonce = emailScriptNonce();
               const popupHtml = buildEmailIframeHtml({

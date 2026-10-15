@@ -136,6 +136,21 @@ describe('ThreadView with an alternative body renderer', () => {
     expect(last().messageKey).toBe(key);
   });
 
+  it('a rejecting renderer window is not an unhandled rejection', async () => {
+    // A plain function: a vi.fn() attaches its own handler to a returned promise and would hide the defect.
+    let calls = 0;
+    registerBodyRenderer('blitz', { Body: Stub, openWindow: () => { calls += 1; return Promise.reject(new Error('window failed')); } });
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      render(<ThreadView thread={thread} />);
+      fireEvent.click(screen.getByText('bar-window'));
+      await new Promise(r => setTimeout(r, 20));
+      expect(calls).toBe(1);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally { process.off('unhandledRejection', unhandled); }
+  });
+
   it('Open in window goes to the renderer, not open_email_window', () => {
     render(<ThreadView thread={thread} />);
     fireEvent.click(screen.getByText('bar-window'));

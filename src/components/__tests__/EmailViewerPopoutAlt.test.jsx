@@ -48,6 +48,20 @@ describe('Open in window', () => {
     fireEvent.click(screen.getByText('bar-window'));
     expect(openWindow).not.toHaveBeenCalled();
   });
+  it('blitz: a rejecting renderer window is not an unhandled rejection', async () => {
+    // A plain function: a vi.fn() attaches its own handler to a returned promise and would hide the defect.
+    let calls = 0;
+    registerBodyRenderer('blitz', { Body: () => <div />, openWindow: () => { calls += 1; return Promise.reject(new Error('window failed')); } });
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      show({ emailRenderer: 'blitz' });
+      fireEvent.click(screen.getByText('bar-window'));
+      await new Promise(r => setTimeout(r, 20));
+      expect(calls).toBe(1);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally { process.off('unhandledRejection', unhandled); }
+  });
   it('blitz: without Tauri nothing opens', () => {
     show({ emailRenderer: 'blitz' });
     delete window.__TAURI__;
