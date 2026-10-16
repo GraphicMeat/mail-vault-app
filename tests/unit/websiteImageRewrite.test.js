@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rewriteSrcset, localizeShot, LOCALES } from '../../website/i18n/i18n.mjs';
+import { rewriteSrcset, localizeShot, render, LOCALES } from '../../website/i18n/i18n.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const de = LOCALES.find((l) => l.dir === 'de');
@@ -50,12 +50,21 @@ describe('rewriteSrcset', () => {
 describe('localizeShot', () => {
   it('uses each locale’s own guide video and poster without rewriting them twice', () => {
     for (const loc of LOCALES) {
-      for (const ext of ['mp4', 'jpg']) {
+      for (const ext of ['mp4', 'jpg', 'vtt']) {
         const file = `search-local-archive-full-window-v4.${ext}`;
         const localized = `/assets/videos/guides/${loc.dir}/${file}`;
         expect(localizeShot(`/assets/videos/guides/${file}`, loc)).toBe(localized);
         expect(localizeShot(localized, loc)).toBe(localized);
       }
+    }
+  });
+
+  it('keeps guide captions in the page language, including their player menu label', () => {
+    for (const loc of LOCALES) {
+      const html = render('<video><track kind="captions" src="/assets/videos/guides/search-local-archive-full-window-v4.vtt" srclang="en" label="English" default></video>', 'blog/how-to-check-email-backup.html', loc, {});
+      expect(html).toContain(`src="/assets/videos/guides/${loc.dir}/search-local-archive-full-window-v4.vtt"`);
+      expect(html).toContain(`srclang="${loc.htmlLang}"`);
+      expect(html).toContain(`label="${loc.name}" default`);
     }
   });
 

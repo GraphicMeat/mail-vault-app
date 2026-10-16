@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何在需要之前检查邮件备份 - MailVault 博客</title>
+  <meta name="description" content="打开已保存的邮件、附件以及独立的恢复副本，检查邮件备份。了解离线测试能证明什么，以及不能证明什么。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/how-to-check-email-backup.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/how-to-check-email-backup.html">
+  <meta property="og:title" content="如何在需要之前检查邮件备份">
+  <meta property="og:description" content="打开已保存的邮件、附件以及独立的恢复副本，检查邮件备份。了解离线测试能证明什么，以及不能证明什么。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="如何在需要之前检查邮件备份">
+  <meta name="twitter:description" content="打开已保存的邮件、附件以及独立的恢复副本，检查邮件备份。了解离线测试能证明什么，以及不能证明什么。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "如何在需要之前检查邮件备份",
+  "description": "打开已保存的邮件、附件以及独立的恢复副本，检查邮件备份。了解离线测试能证明什么，以及不能证明什么。",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "mainEntityOfPage": "https://mailvaultapp.com/zh/blog/how-to-check-email-backup.html",
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-check-email-backup.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+      <nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="选择语言"><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/how-to-check-email-backup.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/how-to-check-email-backup.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/how-to-check-email-backup.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/how-to-check-email-backup.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/how-to-check-email-backup.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/how-to-check-email-backup.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/how-to-check-email-backup.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/how-to-check-email-backup.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/how-to-check-email-backup.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary><nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-15" class="text-sm text-primary-500 font-medium">2026年10月15日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何在需要之前检查邮件备份</h1>
+          <p class="text-sm text-slate-500">作者：MailVault · 阅读需 4 分钟</p>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+<p><strong>检查邮件备份时，要打开已保存的副本，阅读不同文件夹和日期的邮件，并试着打开附件。</strong>然后，从独立的备份位置恢复一小部分样本。下载完成只是起点；能使用保存下来的内容，才是你需要的结果。</p>
+<p>想象一下，明天需要用到一个旧附件。你知道自己导出过邮件，却记不清存在哪块硬盘上，也不记得该用什么应用打开。邮件可能完好无损，但你仍有恢复方面的问题要解决。</p>
+<p>现在原始邮箱还在，可以用来对照，你就能把这些问题弄清楚。整个检查过程中，请把原始邮件保留在原处。</p>
+<h2 id="scope">1. 写下备份应该包含哪些内容</h2>
+<p>记录账户、文件夹、日期范围以及创建副本的时间。包括你原本打算保留的已发送邮件和自定义文件夹。如果只选择了近期或少数几个文件夹，请在备份标签中说明范围，免得以后把它误认为完整的账户副本。</p>
+<p>将范围与导出或备份报告对照。检查跳过的邮件、错误和缺失的时段。工具处理文件夹、标签或重复项的方式会影响邮件总数，因此数量一致本身并不能证明所需内容都在。</p>
+<h2 id="open">2. 打开已保存的邮件</h2>
+<p>用打算用于恢复的软件打开存档或导出的文件。找一封旧邮件、一封近期邮件，以及一封自己发出的回复。从多个文件夹中选取样本。阅读正文，并将发件人、主题和日期与原件对照。</p>
+<p>如果导出的是邮箱文件，请尝试把副本导入独立的本地测试配置，或用合适的阅读软件打开。保持原始导出文件不变。不要把所有内容导入正在使用的账户来测试恢复，这可能产生重复邮件或改变邮箱。</p>
+<h2 id="attachments">3. 试着打开附件</h2>
+<p>从已保存的邮件中打开一份文档和一张图片。也检查一封有多个附件的邮件。只看到附件名称还不够，文件本身必须存在且能够使用。</p>
+<p>区分附件和链接。保存了包含共享云盘链接的邮件，并不一定包含链接指向的文档。记下仍需单独保存的重要文件。</p>
+<h2 id="offline">4. 检查离线时能使用哪些内容</h2>
+<p>断开网络，打开并非刚刚查看过的已保存邮件。试着阅读正文并打开附件。这有助于判断应用是在依赖从服务器获取内容，还是真的保留了邮件内容。</p>
+<p><strong>离线检查能证明你可以访问测试过的邮件，但不能证明所有邮件都已保存，也不能证明同步缓存会在以后删除服务器邮件时仍然保留。</strong>请确认副本是明确导出或归档的结果，并且能够独立保留。如果需要测试这种行为，请在测试账户中使用可以丢弃的邮件。</p>
+<h2 id="recover">5. 从备份位置取出副本并阅读</h2>
+<p>从备份硬盘或其他备份目标复制少量样本到一个独立的临时文件夹。打开这些复制出来的文件。如果备份已加密，请确认能用平常的恢复流程解锁。</p>
+<p>这与阅读电脑上日常使用的存档所检验的问题不同：如果这台电脑无法使用，你能从届时要依靠的位置取回可用的邮件吗？测试时，请保持日常存档和备份完好不变。</p>
+<h2 id="record">6. 给未来的自己留一份说明</h2>
+<p>记录备份位置、覆盖范围、打开所需的应用、检查日期，以及尚未解决的缺漏。恢复凭据应保存在密码管理器中，而不是这份说明里。更改备份流程或加入重要新资料后，请再次检查。</p>
+<p>抽样能发现问题，但不能为每个文件作保证。请结合这些检查与工具的完成报告，以及可用的完整性检查。如果发现缺漏，先修复副本，再依靠它进行清理或关闭账户。</p>
+<h2 id="mailvault">检查 MailVault 存档</h2>
+<p>在 MailVault 中，明确归档的邮件会保存为标准 <code>.eml</code> 文件。邮件出现在列表中，本身并不能证明完整内容已经归档：不同下载模式保留的邮件内容范围可能不同。请检查它的存储状态，并测试已保存的内容。</p>
+<p>手动归档和手动备份都是免费的。Premium 增加了定时备份和备份健康验证。无论使用哪一种，亲自打开样本都能确认你知道怎样找到并使用保存的邮件。请参阅 <a href="/zh/features/local-backups.html">MailVault 的备份选项</a>。</p>
+<section aria-labelledby="mailvault-demo">
+<h2 id="mailvault-demo">视频：运行手动备份并检查状态</h2>
+<figure>
+  <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/zh/backup-archived-email-full-window-v4.jpg" aria-label="视频：运行手动备份并检查状态" aria-describedby="mailvault-demo-caption" style="display:block;width:100%;height:auto;border-radius:14px">
+    <source src="/assets/videos/guides/zh/backup-archived-email-full-window-v4.mp4" type="video/mp4">
+    <track kind="captions" src="/assets/videos/guides/zh/backup-archived-email-full-window-v4.vtt" srclang="zh-Hans" label="简体中文" default>
+    <a href="/assets/videos/guides/zh/backup-archived-email-full-window-v4.mp4">观看 MailVault 演示</a>.
+  </video>
+  <figcaption id="mailvault-demo-caption" class="text-sm text-slate-500 mt-3">在 Mac mini 上录制的 macOS 版 MailVault，使用虚构的演示邮件。点击播放即可观看。</figcaption>
+</figure>
+<p>这段录屏展示“立即备份所有账户”、备份进度和更新后的备份状态。它演示的是备份操作；上文介绍的恢复与附件检查需要另外进行。</p>
+</section>
+<p>如果下一步是从服务器删除邮件，请按照<a href="/zh/guides/keep-emails-after-server-deletion.html">服务器删除后保留邮件指南</a>操作。如果还在决定保留什么，可以先从<a href="/zh/blog/which-personal-emails-should-you-keep.html">一小份私人邮件收藏</a>开始。</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-slate-50 border border-slate-200">
+            <p class="font-semibold text-slate-900 mb-3">建立一个你知道如何打开的存档。</p>
+            <p class="text-sm mb-4">用 MailVault 在电脑上保存可搜索的邮件文件。支持 macOS、Windows 和 Linux。</p>
+            <div class="flex flex-wrap gap-3">
+              <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/zh/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="how-to-check-email-backup" data-acquisition-destination="download">免费开始归档</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="how-to-check-email-backup" data-acquisition-destination="demo">体验演示 ↗</a>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

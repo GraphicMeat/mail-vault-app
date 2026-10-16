@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>필요해지기 전에 메일 백업을 확인하는 방법 - MailVault 블로그</title>
+  <meta name="description" content="저장한 메일, 첨부 파일, 별도 복구 사본을 열어 메일 백업을 확인하세요. 오프라인 테스트로 무엇을 입증할 수 있고 무엇을 입증할 수 없는지 알아보세요.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/how-to-check-email-backup.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/how-to-check-email-backup.html">
+  <meta property="og:title" content="필요해지기 전에 메일 백업을 확인하는 방법">
+  <meta property="og:description" content="저장한 메일, 첨부 파일, 별도 복구 사본을 열어 메일 백업을 확인하세요. 오프라인 테스트로 무엇을 입증할 수 있고 무엇을 입증할 수 없는지 알아보세요.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="필요해지기 전에 메일 백업을 확인하는 방법">
+  <meta name="twitter:description" content="저장한 메일, 첨부 파일, 별도 복구 사본을 열어 메일 백업을 확인하세요. 오프라인 테스트로 무엇을 입증할 수 있고 무엇을 입증할 수 없는지 알아보세요.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "필요해지기 전에 메일 백업을 확인하는 방법",
+  "description": "저장한 메일, 첨부 파일, 별도 복구 사본을 열어 메일 백업을 확인하세요. 오프라인 테스트로 무엇을 입증할 수 있고 무엇을 입증할 수 없는지 알아보세요.",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "mainEntityOfPage": "https://mailvaultapp.com/ko/blog/how-to-check-email-backup.html",
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-to-check-email-backup.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-to-check-email-backup.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+      <nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="언어 선택"><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/how-to-check-email-backup.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/how-to-check-email-backup.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/how-to-check-email-backup.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/how-to-check-email-backup.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/how-to-check-email-backup.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/how-to-check-email-backup.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/how-to-check-email-backup.html" lang="ko" hreflang="ko" translate="no" aria-current="page">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/how-to-check-email-backup.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/how-to-check-email-backup.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary><nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-15" class="text-sm text-primary-500 font-medium">2026년 10월 15일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">필요해지기 전에 메일 백업을 확인하는 방법</h1>
+          <p class="text-sm text-slate-500">MailVault 작성 · 읽는 시간 4분</p>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+<p><strong>저장한 사본을 열고 서로 다른 폴더와 날짜의 메일을 읽으며 첨부 파일을 사용해 보면서 메일 백업을 확인하세요.</strong> 그런 다음 별도 백업 위치에서 표본을 복구해 보세요. 다운로드 완료는 출발점이며, 필요한 결과는 저장한 것을 사용할 수 있는 상태입니다.</p>
+<p>내일 오래된 첨부 파일이 필요해진다고 상상해 보세요. 메일을 내보낸 것은 알지만 어느 드라이브에 있는지, 어느 앱으로 파일을 여는지 기억나지 않습니다. 메일 자체는 온전할 수 있습니다. 그래도 복구를 위해 해결해야 할 문제가 남아 있습니다.</p>
+<p>비교할 원래 메일함이 있는 지금 그 답을 찾을 수 있습니다. 이 확인 과정 내내 원본 메일은 그대로 두세요.</p>
+<h2 id="scope">1. 백업에 포함되어야 할 내용 적기</h2>
+<p>계정, 폴더, 날짜 범위, 사본을 만든 시점을 기록하세요. 보존하려던 보낸편지함과 사용자 지정 폴더도 포함하세요. 최근 기간이나 일부 폴더만 선택했다면 나중에 계정 전체 사본으로 착각하지 않도록 백업에 그 범위를 표시하세요.</p>
+<p>범위를 내보내기 또는 백업 보고서와 비교하세요. 건너뛴 메일, 오류, 빠진 기간을 확인하세요. 도구가 폴더, 라벨, 중복을 처리하는 방식에 따라 메일 총수가 달라질 수 있으므로 숫자가 같다는 사실만으로 필요한 내용이 모두 있다고 입증되지는 않습니다.</p>
+<h2 id="open">2. 저장한 메일 열기</h2>
+<p>복구에 사용할 소프트웨어로 보관함이나 내보낸 파일을 여세요. 오래된 메일, 최근 메일, 자신이 보낸 답장을 찾으세요. 여러 폴더에서 표본을 고릅니다. 본문을 읽고 발신자, 제목, 날짜를 원본과 비교하세요.</p>
+<p>메일함 파일을 내보냈다면 사본을 별도의 로컬 테스트 프로필로 가져오거나 적절한 뷰어에서 열어 보세요. 원본 내보내기 파일은 그대로 두세요. 실제 사용하는 계정에 전부 가져오는 방식으로 복구를 시험하지 마세요. 중복이 생기거나 메일함이 바뀔 수 있습니다.</p>
+<h2 id="attachments">3. 첨부 파일 사용해 보기</h2>
+<p>저장한 메일에서 문서와 이미지를 여세요. 첨부 파일이 여러 개인 메일도 확인하세요. 첨부 파일 이름이 보이는 것으로는 부족합니다. 파일 자체가 존재하고 사용할 수 있어야 합니다.</p>
+<p>첨부 파일과 링크를 구분하세요. 공유 드라이브 링크가 담긴 메일을 저장해도 연결된 문서가 반드시 포함되는 것은 아닙니다. 아직 따로 저장해야 할 중요한 파일을 기록하세요.</p>
+<h2 id="offline">4. 오프라인에서 작동하는지 확인하기</h2>
+<p>네트워크 연결을 끊고 방금 열어 보지 않은 저장된 메일을 여세요. 본문을 읽고 첨부 파일을 열어 보세요. 이를 통해 앱이 서버에서 가져오기에 의존하는지, 실제로 메일 내용을 보관하고 있는지 확인할 수 있습니다.</p>
+<p><strong>오프라인 확인은 시험한 메일에 접근할 수 있음을 입증합니다. 모든 메일이 저장되었다거나, 동기화된 캐시가 나중에 서버에서 삭제한 뒤에도 남는다는 뜻은 아닙니다.</strong> 해당 사본이 독립적으로 유지되는 명시적 내보내기 또는 보관 결과인지 확인하세요. 그 동작을 시험해야 한다면 테스트 계정에서 버려도 되는 메일을 사용하세요.</p>
+<h2 id="recover">5. 백업 위치에서 사본을 가져와 읽기</h2>
+<p>백업 드라이브나 다른 백업 대상에서 소량의 표본을 별도 임시 폴더로 복사하세요. 복사한 파일을 여세요. 백업이 암호화되어 있다면 평소 복구 절차로 잠금을 해제할 수 있는지 확인하세요.</p>
+<p>이것은 컴퓨터에서 사용하는 보관함을 읽는 것과 다른 점을 시험합니다. 그 컴퓨터를 사용할 수 없을 때 의지할 장소에서 사용 가능한 메일을 되찾을 수 있는지입니다. 시험하는 동안 사용 중인 보관함과 백업은 그대로 유지하세요.</p>
+<h2 id="record">6. 미래의 자신을 위한 메모 남기기</h2>
+<p>백업 위치, 포함 범위, 여는 데 필요한 앱, 확인 날짜, 해결되지 않은 누락을 기록하세요. 복구 자격 증명은 메모 대신 비밀번호 관리자에 보관하세요. 백업 절차를 바꾸거나 중요한 새 자료를 추가할 때 확인을 반복하세요.</p>
+<p>표본 검사는 문제를 찾지만 모든 파일을 보증할 수는 없습니다. 가능하다면 도구의 완료 보고서 및 무결성 검사와 함께 확인하세요. 누락을 발견하면 정리나 계정 폐쇄를 위해 사본에 의존하기 전에 보완하세요.</p>
+<h2 id="mailvault">MailVault 보관함 확인하기</h2>
+<p>MailVault에서 명시적으로 보관한 메일은 표준 <code>.eml</code> 파일로 저장됩니다. 메일이 목록에 보인다는 사실만으로 전체 내용이 보관되었다고 입증되지는 않습니다. 다운로드 모드에 따라 유지하는 메일 내용의 범위가 다를 수 있기 때문입니다. 저장 상태를 확인하고 저장된 내용을 시험하세요.</p>
+<p>수동 보관과 수동 백업은 무료입니다. Premium에는 예약 백업과 백업 상태 검증이 추가됩니다. 어느 쪽이든 표본을 직접 열어 보면 저장한 메일을 찾고 사용하는 방법을 알고 있는지 확인할 수 있습니다. <a href="/ko/features/local-backups.html">MailVault의 백업 옵션</a>을 참고하세요.</p>
+<section aria-labelledby="mailvault-demo">
+<h2 id="mailvault-demo">영상: 수동 백업 실행 후 상태 확인하기</h2>
+<figure>
+  <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/ko/backup-archived-email-full-window-v4.jpg" aria-label="영상: 수동 백업 실행 후 상태 확인하기" aria-describedby="mailvault-demo-caption" style="display:block;width:100%;height:auto;border-radius:14px">
+    <source src="/assets/videos/guides/ko/backup-archived-email-full-window-v4.mp4" type="video/mp4">
+    <track kind="captions" src="/assets/videos/guides/ko/backup-archived-email-full-window-v4.vtt" srclang="ko" label="한국어" default>
+    <a href="/assets/videos/guides/ko/backup-archived-email-full-window-v4.mp4">MailVault 데모 보기</a>.
+  </video>
+  <figcaption id="mailvault-demo-caption" class="text-sm text-slate-500 mt-3">가상의 데모 메일을 사용해 Mac mini에서 녹화한 macOS용 MailVault입니다. 재생을 눌러 시청하세요.</figcaption>
+</figure>
+<p>이 녹화에서는 ‘모든 계정 지금 백업’, 진행 상황, 갱신된 백업 상태를 보여 줍니다. 백업 작업의 시연이며, 위에서 설명한 복구와 첨부 파일 확인은 별도 단계입니다.</p>
+</section>
+<p>다음 단계로 서버에서 메일을 삭제하려면 <a href="/ko/guides/keep-emails-after-server-deletion.html">서버에서 삭제한 뒤에도 메일을 보관하는 가이드</a>를 따르세요. 아직 무엇을 남길지 결정하는 중이라면 <a href="/ko/blog/which-personal-emails-should-you-keep.html">개인 메일을 조금 모으는 일</a>부터 시작하세요.</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-slate-50 border border-slate-200">
+            <p class="font-semibold text-slate-900 mb-3">여는 방법을 아는 보관함을 만드세요.</p>
+            <p class="text-sm mb-4">MailVault로 검색 가능한 메일 파일을 컴퓨터에 보관하세요. macOS, Windows, Linux에서 사용할 수 있습니다.</p>
+            <div class="flex flex-wrap gap-3">
+              <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/ko/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="how-to-check-email-backup" data-acquisition-destination="download">무료 보관 시작</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ko" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="how-to-check-email-backup" data-acquisition-destination="demo">데모 살펴보기 ↗</a>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

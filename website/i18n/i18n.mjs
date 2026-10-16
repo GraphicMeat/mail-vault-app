@@ -55,11 +55,6 @@ const EXCLUDE = new Set([
   'terms.html',
   'download-stats.html',
   'oauth/yahoo/callback.html',
-  // Editorial posts kept in English until translations are available.
-  'blog/does-archiving-gmail-free-up-space.html',
-  'blog/which-personal-emails-should-you-keep.html',
-  'blog/how-to-check-email-backup.html',
-
 ]);
 
 const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
@@ -438,7 +433,7 @@ function shotsFor(dir) {
  * (scripts/website-clips-upload.sh), so every locale page names them without checking.
  */
 export function localizeShot(abs, loc) {
-  const guide = /^\/assets\/videos\/guides\/([^/]+\.(?:mp4|jpg))$/.exec(abs);
+  const guide = /^\/assets\/videos\/guides\/([^/]+\.(?:mp4|jpg|vtt))$/.exec(abs);
   if (guide) return `/assets/videos/guides/${loc.dir}/${guide[1]}`;
   const clip = /^\/assets\/clips\/en\/([^/]+)$/.exec(abs);
   if (clip) return `/assets/clips/${loc.dir}/${clip[1]}`;
@@ -585,6 +580,13 @@ export function render(html, pageRel, loc, dict) {
 
     if (tag.name === 'html' && a.lang && a.lang.vs >= 0) {
       edits.push({ start: a.lang.vs, end: a.lang.ve, text: loc.htmlLang });
+    }
+
+    // Guide tracks follow the localized recording; name them correctly in the player.
+    if (tag.name === 'track' && /^\/assets\/videos\/guides\/[^/]+\.vtt$/.test(a.src?.value || '')) {
+      for (const [name, value] of [['srclang', loc.htmlLang], ['label', loc.name]]) {
+        if (a[name]?.vs >= 0) edits.push({ start: a[name].vs, end: a[name].ve, text: value });
+      }
     }
 
     // Canonical, og:url and og:locale must point at this locale's copy, or the
@@ -948,11 +950,7 @@ export function missing(spec) {
 const SITEMAP = path.join(ROOT, 'sitemap.xml');
 
 // English-only pages that are still worth indexing (EXCLUDE keeps them out of translation).
-const SITEMAP_EXTRA = ['changelog.html', 'privacy.html', 'terms.html',
-  'blog/does-archiving-gmail-free-up-space.html',
-  'blog/which-personal-emails-should-you-keep.html',
-  'blog/how-to-check-email-backup.html',
-];
+const SITEMAP_EXTRA = ['changelog.html', 'privacy.html', 'terms.html'];
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 // The deploy checks out one commit, where every page would get that commit's date,
