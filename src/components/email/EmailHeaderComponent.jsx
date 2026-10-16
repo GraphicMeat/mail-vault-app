@@ -13,7 +13,10 @@ import {
   AlertTriangle,
   Info,
 } from 'lucide-react';
-import { checkSenderVerification, parseAuthResults } from '../../utils/senderCheck';
+import { checkSenderVerification, parseAuthResults, parseDkimSignature, formatDkimKey } from '../../utils/senderCheck';
+import { daemonCall } from '../../services/daemonClient';
+import { useMailStore } from '../../stores/mailStore';
+import { accountEmailOf } from '../../stores/slices/unifiedHelpers';
 import { getSenderName } from '../../utils/emailParser';
 import { useViewportShift } from '../../hooks/useViewportShift';
 import { t, useT  } from '../../i18n/index.js';
@@ -23,12 +26,46 @@ import { useCaptureSenderDetails } from '../../hooks/useCaptureSenderDetails';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
+// DKIM key lookups for this session: one DNS ask per selector and domain, however
+// many messages and popovers share them. A miss or a failure is not kept, so a
+// later open asks again.
+const dkimKeyLookups = new Map();
+
+export function _resetDkimKeyLookups() { dkimKeyLookups.clear(); }
+
+// The signer's published key (type and size), asked of the daemon when the popover
+// shows a passing DKIM result that names its selector and domain.
+function useDkimKey(email, signature, passed) {
+  const [key, setKey] = useState(null);
+  const domain = signature?.domain;
+  const selector = signature?.selector;
+  useEffect(() => {
+    setKey(null);
+    if (!passed || !domain || !selector) return undefined;
+    let live = true;
+    const id = `${selector}\n${domain}`;
+    if (!dkimKeyLookups.has(id)) {
+      // Network Activity shows the lookup as the account whose message asked.
+      const accountEmail = accountEmailOf(email, useMailStore.getState());
+      const lookup = daemonCall('dkim_key', { domain, selector, accountEmail })
+        .then(result => result?.key || null, () => null)
+        .then(found => { if (!found) dkimKeyLookups.delete(id); return found; });
+      dkimKeyLookups.set(id, lookup);
+    }
+    dkimKeyLookups.get(id).then(found => { if (live) setKey(found); });
+    return () => { live = false; };
+  }, [domain, selector, passed]);
+  return key;
+}
+
 export function AuthDetailPopover({ email, onClose, anchorRect }) {
   const t = useT();
   const popoverRef = useRef(null);
   const auth = useMemo(() => parseAuthResults(email?.authenticationResults), [email?.authenticationResults]);
   const verification = useMemo(() => checkSenderVerification(email), [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]);
   const hasAuth = auth.spf !== null || auth.dkim !== null || auth.dmarc !== null;
+  const dkimSignature = useMemo(() => parseDkimSignature(email), [email?.dkimSignature, email?.authenticationResults]);
+  const dkimKey = formatDkimKey(useDkimKey(email, dkimSignature, auth.dkim === 'pass'));
 
   // Check reply-to match
   const fromDomain = email?.from?.address?.split('@')[1]?.toLowerCase() || '';
@@ -114,10 +151,12 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
             <span className="text-mail-text-muted w-12">{t('email.header.spf')}</span>
             <span className="text-mail-text">{auth.spf || 'none'}</span>
           </div>
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
             <StatusDot result={auth.dkim} />
             <span className="text-mail-text-muted w-12">{t('email.header.dkim')}</span>
             <span className="text-mail-text">{auth.dkim || 'none'}</span>
+            {dkimSignature?.algorithm && <span className="text-mail-text-muted">{dkimSignature.algorithm}</span>}
+            {dkimKey && <span className="text-mail-text-muted">{dkimKey}</span>}
           </div>
           <div className="flex items-center gap-2 text-xs">
             <StatusDot result={auth.dmarc} />

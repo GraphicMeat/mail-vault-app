@@ -133,6 +133,7 @@ export const PANEL_CSS = `
   .mv-row { display: flex; align-items: flex-start; gap: 10px; padding: 1px 0; }
   .mv-k { width: 64px; flex: none; color: #6b7280; }
   .mv-val { min-width: 0; overflow-wrap: anywhere; }
+  .mv-alg { color: #6b7280; }
   .mv-sep { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e3e5ea; }
   .mv-muted { color: #6b7280; }
   .mv-dot { display: inline-block; flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: #6b7280; }

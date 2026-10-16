@@ -176,6 +176,19 @@ describe('selectEmail keeps the row\'s sender-auth headers on the opened message
     expect(mockFetchEmailLight).not.toHaveBeenCalled();
   });
 
+  it('the DKIM signature summary comes across from the row, a body\'s own wins', async () => {
+    const SIG = 'a=rsa-sha256; d=example.test; s=k1';
+    mockFetchEmailLight.mockResolvedValue({ ...MSG, html: '<p>body</p>' });
+    primeStore({ emails: [{ ...ROW, dkimSignature: SIG }] });
+    await useMailStore.getState().selectEmail(42, 'server');
+    expect(useMailStore.getState().selectedEmail.dkimSignature).toBe(SIG);
+
+    mockFetchEmailLight.mockResolvedValue({ ...MSG, html: '<p>body</p>', dkimSignature: 'a=ed25519-sha256' });
+    primeStore({ emails: [{ ...ROW, dkimSignature: SIG }] });
+    await useMailStore.getState().selectEmail(42, 'server');
+    expect(useMailStore.getState().selectedEmail.dkimSignature).toBe('a=ed25519-sha256');
+  });
+
   it('a body that carries its own value keeps it', async () => {
     mockFetchEmailLight.mockResolvedValue({ ...MSG, html: '<p>body</p>', authenticationResults: 'own; spf=fail' });
     primeStore({ emails: [ROW] });

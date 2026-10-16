@@ -32,6 +32,7 @@ pub const HEADER_PROPS: &[&str] = &[
     "header:List-Id",
     "header:Precedence",
     "header:Authentication-Results",
+    "header:DKIM-Signature",
     "header:Return-Path",
     "header:Auto-Submitted",
     "header:X-Autoreply",
@@ -167,10 +168,27 @@ pub fn to_header(email: &Value, uid: u32) -> EmailHeader {
         reply_to: email["replyTo"].as_array().and_then(|a| a.first()).map(address),
         return_path: raw_header(email, "header:Return-Path"),
         authentication_results: raw_header(email, "header:Authentication-Results"),
+        dkim_signature: raw_header(email, "header:DKIM-Signature").and_then(|v| crate::dkim::signature_summary(&v)),
         list_unsubscribe: raw_header(email, "header:List-Unsubscribe"),
         list_unsubscribe_post: raw_header(email, "header:List-Unsubscribe-Post"),
         list_id: raw_header(email, "header:List-Id"),
         precedence: raw_header(email, "header:Precedence"),
         auto_reply: auto_reply(email),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_jmap_row_carries_the_dkim_summary() {
+        assert!(HEADER_PROPS.contains(&"header:DKIM-Signature"));
+        let email = serde_json::json!({
+            "id": "e1",
+            "header:DKIM-Signature": " v=1; a=rsa-sha256;\r\n d=brand.test; s=k1; b=abc=",
+        });
+        let row = serde_json::to_value(to_header(&email, 1)).unwrap();
+        assert_eq!(row["dkimSignature"], "a=rsa-sha256; d=brand.test; s=k1");
     }
 }

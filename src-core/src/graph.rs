@@ -210,6 +210,7 @@ impl GraphMessage {
             reply_to: None,
             return_path: None,
             authentication_results: self.get_header("Authentication-Results"),
+            dkim_signature: self.get_header("DKIM-Signature").and_then(|v| crate::dkim::signature_summary(&v)),
             list_unsubscribe: self.get_header("List-Unsubscribe"),
             list_unsubscribe_post: self.get_header("List-Unsubscribe-Post"),
             list_id: self.get_header("List-Id"),
@@ -1392,6 +1393,16 @@ mod tests {
         assert_eq!(row["receivedAt"], "2026-09-09T00:30:00Z");
         assert_eq!(row["sentAt"], "2026-09-08T23:30:00Z");
         assert_eq!(row["messageDate"], "Tue, 08 Sep 2026 23:00:00 +0000");
+    }
+
+    #[test]
+    fn graph_header_row_carries_the_dkim_summary() {
+        let msg: GraphMessage = serde_json::from_value(serde_json::json!({
+            "id":"m1",
+            "internetMessageHeaders":[{"name":"DKIM-Signature","value":"v=1; a=rsa-sha256; d=brand.test; s=k1; b=abc="}]
+        })).unwrap();
+        let row = serde_json::to_value(msg.to_email_header(1)).unwrap();
+        assert_eq!(row["dkimSignature"], "a=rsa-sha256; d=brand.test; s=k1");
     }
 
     #[test]

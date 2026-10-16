@@ -18,7 +18,7 @@
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::dns;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 fn domain_arg(id: &Value, params: &Value) -> Result<String, RpcResponse> {
@@ -27,6 +27,17 @@ fn domain_arg(id: &Value, params: &Value) -> Result<String, RpcResponse> {
         .and_then(Value::as_str)
         .map(str::to_owned)
         .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, "Missing domain".to_string()))
+}
+
+/// A name read off a message, checked before it is put in a DNS query: dotted
+/// labels of letters, digits, `-` and (for a selector) `_`.
+fn dns_name_ok(name: &str, selector: bool) -> bool {
+    !name.is_empty()
+        && name.len() <= 253
+        && (selector || name.contains('.'))
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || (selector && c == '_'))
 }
 
 pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -59,6 +70,24 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
                 },
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
+        }
+
+        // The sender-details popover's key size: a signature's selector and domain, as the message names them.
+        "dkim_key" => {
+            let arg = |k: &str| params.get(k).and_then(Value::as_str).unwrap_or("").trim().trim_end_matches('.').to_ascii_lowercase();
+            let (domain, selector) = (arg("domain"), arg("selector"));
+            if !dns_name_ok(&domain, false) || !dns_name_ok(&selector, true) {
+                return Some(RpcResponse::success(id, json!({"key": null})));
+            }
+            let lookup = dns::dkim_key_for(&domain, &selector);
+            let key = match mailvault_core::net_activity::with_purpose("open message", lookup).await {
+                Ok(key) => key,
+                Err(e) => {
+                    tracing::warn!("[dkim] {selector}._domainkey.{domain}: {e}");
+                    None
+                }
+            };
+            RpcResponse::success(id, json!({"key": key}))
         }
 
         _ => return None,
@@ -109,6 +138,38 @@ mod tests {
         let resp = call(&s, "dns_mail_health", json!({"newImapHost": "imap.example.com"})).await;
         assert!(resp.result.is_none());
         assert_eq!(resp.error.expect("must be an error").code, ipc::INVALID_PARAMS);
+    }
+
+    // `dkim_key` is asked by the sender-details popover with a domain and a
+    // selector read from a message, so both are checked before any lookup, and a
+    // lookup that fails is "no key to show", never an error in the popover.
+    #[tokio::test]
+    async fn dkim_key_refuses_a_domain_or_selector_that_is_not_a_dns_label_before_any_lookup() {
+        let s = st();
+        for params in [
+            json!({"domain": "../etc", "selector": "k1"}),
+            json!({"domain": "brand.test", "selector": "k1/../evil.test"}),
+            json!({"domain": "brand.test", "selector": "k 1"}),
+            json!({"domain": "evil.test/x", "selector": "k1"}),
+            json!({"domain": "brand.test", "selector": ""}),
+            json!({"domain": "brand.test"}),
+            json!({"selector": "k1"}),
+        ] {
+            let resp = call(&s, "dkim_key", params).await;
+            assert_eq!(resp.result.expect("answered, not errored"), json!({"key": null}));
+        }
+        assert!(mailvault_core::net_activity::snapshot().iter().all(|e| !e.host.contains("evil.test")));
+    }
+
+    #[tokio::test]
+    async fn dkim_key_for_a_name_that_does_not_resolve_is_no_key() {
+        let s = st();
+        let domain = format!("mv-{}.test", uuid::Uuid::new_v4().simple());
+        let resp = call(&s, "dkim_key", json!({"domain": domain, "selector": "k1"})).await;
+        assert_eq!(resp.result.expect("answered"), json!({"key": null}));
+        let events: Vec<_> = mailvault_core::net_activity::snapshot().into_iter().filter(|e| e.host.ends_with(&domain)).collect();
+        assert!(!events.is_empty(), "the lookup was recorded");
+        assert!(events.iter().all(|e| e.purpose == "open message"), "{events:?}");
     }
 
     #[tokio::test]

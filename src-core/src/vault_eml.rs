@@ -53,6 +53,9 @@ pub struct LightEmail {
 pub struct HeaderMeta {
     #[serde(rename = "authenticationResults", default, skip_serializing_if = "Option::is_none")]
     pub authentication_results: Option<String>,
+    /// `a=`, `d=`, `s=` of the DKIM-Signature (`dkim::signature_summary`).
+    #[serde(rename = "dkimSignature", default, skip_serializing_if = "Option::is_none")]
+    pub dkim_signature: Option<String>,
     #[serde(rename = "returnPath", default, skip_serializing_if = "Option::is_none")]
     pub return_path: Option<String>,
     #[serde(rename = "listId", default, skip_serializing_if = "Option::is_none")]
@@ -73,6 +76,7 @@ impl HeaderMeta {
             .filter(|v| !v.is_empty());
         HeaderMeta {
             authentication_results: get("Authentication-Results"),
+            dkim_signature: get("DKIM-Signature").and_then(|v| crate::dkim::signature_summary(&v)),
             return_path: get("Return-Path"),
             list_id: get("List-Id"),
             list_unsubscribe: get("List-Unsubscribe"),
@@ -572,6 +576,20 @@ Subject: Hi\r\n\r\nbody";
             "attachments": [], "hasAttachments": false, "isArchived": false,
         })).unwrap();
         assert!(old.meta.authentication_results.is_none());
+    }
+
+    #[test]
+    fn a_light_parse_carries_the_dkim_summary_not_the_signature() {
+        let raw = b"From: Brand <news@brand.test>\r\n\
+DKIM-Signature: v=1; a=rsa-sha256; d=brand.test; s=k1; bh=abc=; b=zzz=\r\n\
+Subject: Hi\r\n\r\nbody";
+        let email = serde_json::to_value(parse_eml_bytes_light(raw, 3, Vec::new()).unwrap()).unwrap();
+        assert_eq!(email["dkimSignature"], "a=rsa-sha256; d=brand.test; s=k1");
+        assert!(!email.to_string().contains("zzz"), "the signature itself is not stored");
+        let row: serde_json::Value = serde_json::from_str(&light_row_json(raw, 3).unwrap()).unwrap();
+        assert_eq!(row["dkimSignature"], "a=rsa-sha256; d=brand.test; s=k1");
+        let bare = serde_json::to_value(parse_eml_bytes_light(PLAIN_EMAIL, 1, Vec::new()).unwrap()).unwrap();
+        assert!(bare.get("dkimSignature").is_none());
     }
 
     #[test]

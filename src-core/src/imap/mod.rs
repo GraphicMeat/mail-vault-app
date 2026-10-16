@@ -217,6 +217,9 @@ pub struct EmailHeader {
     pub return_path: Option<String>,
     #[serde(rename = "authenticationResults", skip_serializing_if = "Option::is_none")]
     pub authentication_results: Option<String>,
+    /// The DKIM-Signature's `a=`, `d=`, `s=` (`dkim::signature_summary`); a row cached before this field has none.
+    #[serde(rename = "dkimSignature", skip_serializing_if = "Option::is_none")]
+    pub dkim_signature: Option<String>,
     #[serde(rename = "listUnsubscribe", skip_serializing_if = "Option::is_none")]
     pub list_unsubscribe: Option<String>,
     #[serde(rename = "listUnsubscribePost", skip_serializing_if = "Option::is_none")]
@@ -736,7 +739,7 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
 // both. Thunderbird fetches the size on every pass; BODYSTRUCTURE is a few
 // hundred bytes per multipart message under DEFLATE, and this exact spec has
 // served search results in production since the search feature shipped.
-const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Unsubscribe-Post List-Id Precedence Auto-Submitted X-Autoreply X-Autorespond X-Auto-Response-Suppress)])";
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results DKIM-Signature Return-Path Reply-To List-Unsubscribe List-Unsubscribe-Post List-Id Precedence Auto-Submitted X-Autoreply X-Autorespond X-Auto-Response-Suppress)])";
 
 /// Gmail suspends accounts that exceed daily IMAP bandwidth caps (2500 MB down,
 /// 500 MB up) — the suspension can last up to 24h and locks webmail sign-in too.
@@ -3276,6 +3279,10 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
     let authentication_results = raw_headers.as_ref()
         .and_then(|raw| parse_single_header(raw, "Authentication-Results"));
 
+    let dkim_signature = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "DKIM-Signature"))
+        .and_then(|sig| crate::dkim::signature_summary(&sig));
+
     let return_path = raw_headers.as_ref()
         .and_then(|raw| parse_single_header(raw, "Return-Path"));
 
@@ -3359,6 +3366,7 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         reply_to,
         return_path,
         authentication_results,
+        dkim_signature,
         list_unsubscribe,
         list_unsubscribe_post,
         list_id,
@@ -3913,6 +3921,14 @@ pub async fn fetch_email_by_uid_light_timed(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn header_fetch_asks_for_the_dkim_signature_and_summarises_it() {
+        assert!(HEADER_FETCH_SPEC.contains("DKIM-Signature"));
+        let raw = "Authentication-Results: mx.test; dkim=pass\r\nDKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;\r\n\td=brand.test; s=k1;\r\n\tb=abc=\r\n";
+        let sig = parse_single_header(raw, "DKIM-Signature").unwrap();
+        assert_eq!(crate::dkim::signature_summary(&sig), Some("a=rsa-sha256; d=brand.test; s=k1".into()));
+    }
 
     // ── compress_uid_ranges ─────────────────────────────────────────────
 

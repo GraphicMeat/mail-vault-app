@@ -31,6 +31,44 @@ export function parseAuthResults(header) {
   return results;
 }
 
+const DKIM_TAGS = [
+  ['algorithm', 'a', /^[a-z0-9-]+$/, /\bheader\.a=([A-Za-z0-9-]+)/],
+  ['domain', 'd', /^[a-z0-9.-]+$/, /\bheader\.d=([A-Za-z0-9.-]+)/],
+  ['selector', 's', /^[a-z0-9._-]+$/, /\bheader\.s=([A-Za-z0-9._-]+)/],
+];
+
+/**
+ * What the message says about its DKIM signature: algorithm (`rsa-sha256`,
+ * `ed25519-sha256`), signing domain and selector. Read tag by tag from the
+ * `a=; d=; s=` summary the daemon keeps of the DKIM-Signature header, else from
+ * `header.a/d/s=` in Authentication-Results. Null when neither names anything.
+ * The key's size is not here: it is in DNS (`dkim_key`).
+ */
+export function parseDkimSignature(email) {
+  if (!email) return null;
+  const summary = {};
+  for (const part of String(email.dkimSignature || '').split(';')) {
+    const [name, ...value] = part.split('=');
+    summary[name.trim().toLowerCase()] = value.join('=').trim().toLowerCase();
+  }
+  const auth = email.authenticationResults || '';
+  const out = {};
+  for (const [field, tag, ok, resultsPattern] of DKIM_TAGS) {
+    const own = summary[tag];
+    out[field] = (own && ok.test(own) ? own : auth.match(resultsPattern)?.[1]?.toLowerCase()) || null;
+  }
+  return out.algorithm || out.domain || out.selector ? out : null;
+}
+
+const KEY_TYPE_NAMES = { rsa: 'RSA', ed25519: 'Ed25519', ed448: 'Ed448' };
+
+/** A `dkim_key` answer as the popover prints it: `RSA 2048-bit`, `Ed25519 256-bit`. Empty for none or a revoked key. */
+export function formatDkimKey(key) {
+  if (!key || key.revoked) return '';
+  const name = KEY_TYPE_NAMES[key.keyType] || key.keyType;
+  return key.bits ? `${name} ${key.bits}-bit` : name;
+}
+
 /**
  * Check sender verification for an email.
  *

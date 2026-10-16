@@ -475,6 +475,7 @@ mod tests {
             reply_to: None,
             return_path: None,
             authentication_results: None,
+            dkim_signature: None,
             list_unsubscribe: None,
             list_unsubscribe_post: None,
             list_id: None,

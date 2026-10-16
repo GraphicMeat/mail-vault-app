@@ -725,6 +725,20 @@ pub async fn bimi_logo_url_for(domain: &str) -> Result<Option<String>, String> {
         .and_then(|(record, _)| bimi_logo_url(&record)))
 }
 
+/// The DKIM key a signer publishes at `<selector>._domainkey.<domain>`.
+/// `Ok(None)` is a definitive "no key record"; `Err` is a lookup that failed.
+pub async fn dkim_key_for(domain: &str, selector: &str) -> Result<Option<crate::dkim::KeyInfo>, String> {
+    let name = format!("{}._domainkey.{}", selector.trim_matches('.'), domain.trim_matches('.')).to_ascii_lowercase();
+    let resolver = TokioResolver::builder_tokio()
+        .map_err(|e| format!("Failed to create DNS resolver: {}", e))?
+        .build()
+        .map_err(|e| format!("Failed to build DNS resolver: {}", e))?;
+    Ok(txt_records_strict(&resolver, &name)
+        .await?
+        .iter()
+        .find_map(|record| crate::dkim::parse_key_record(record)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

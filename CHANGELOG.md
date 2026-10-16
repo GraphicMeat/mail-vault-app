@@ -6,6 +6,8 @@
 - **View builder.** See an email's distinctive words, who else writes about them, and turn them into a view. Click Make a view from this email (the wand beside Sender insights) in the reading pane, pick words, then add them to a saved view or make a new view for that account, or for that folder only. Point at a word to see its top senders and subjects.
 - **Hide view mail.** A list button keeps mail your views already hold out of your folders. The first click opens a list of your views: pick the ones whose mail should go and press OK. From then on the button has two halves, one that turns the hiding on and off and one that reopens the list; with no view picked, the on/off half is greyed out.
 
+- **Sender details show the DKIM algorithm and key size.** Next to a passing DKIM result the popover now names the signing algorithm (rsa-sha256, ed25519-sha256) and, once the sender's key has been looked up in DNS, its type and size: RSA 1024, 2048 or 4096-bit, Ed25519, Ed448. The lookup runs when you open the popover and shows in Network Activity. Mail synced before this update shows the algorithm only when its Authentication-Results names one.
+
 ### Changed
 - **The experimental Rust renderer draws mail in more places.** With it turned on in Settings, Appearance, Colors, it now also draws conversations, chat bubbles, the full message view, the quoted original in compose, the Open in window view, the Cleanup preview, image exports and social cards, with no web view inside the message.
 

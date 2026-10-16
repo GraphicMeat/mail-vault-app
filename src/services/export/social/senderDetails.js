@@ -1,4 +1,4 @@
-import { checkSenderVerification, parseAuthResults } from '../../../utils/senderCheck';
+import { checkSenderVerification, parseAuthResults, parseDkimSignature } from '../../../utils/senderCheck';
 import { maskText, findPii, EMPTY_DICTIONARY } from '../../../utils/privacy/piiDetector';
 import { t } from '../../../i18n/index.js';
 import { esc } from '../exportDocument';
@@ -28,7 +28,7 @@ export function senderDetailsModel(message) {
   const replyTo = replyToAddress
     ? { address: replyToAddress, matches: domainOf(replyToAddress) === domainOf(from?.address) }
     : null;
-  return { address, name, issues, auth: hasAuth ? parsed : null, replyTo, noData: !hasAuth && issues.length === 0 };
+  return { address, name, issues, auth: hasAuth ? parsed : null, dkimAlgorithm: parseDkimSignature(message)?.algorithm ?? null, replyTo, noData: !hasAuth && issues.length === 0 };
 }
 
 // senderCheck's own clean-up of a display name before it quotes it.
@@ -74,8 +74,8 @@ const dotClass = (result) => {
   return '';
 };
 
-const authRow = (label, result) =>
-  `<div class="mv-row"><span class="mv-dot ${dotClass(result)}"></span><span class="mv-k">${esc(label)}</span><span class="mv-val">${esc(result || 'none')}</span></div>`;
+const authRow = (label, result, alg) =>
+  `<div class="mv-row"><span class="mv-dot ${dotClass(result)}"></span><span class="mv-k">${esc(label)}</span><span class="mv-val">${esc(result || 'none')}</span>${alg ? `<span class="mv-alg">${esc(alg)}</span>` : ''}</div>`;
 
 /** The box, for the header block's document (PANEL_CSS styles it). Every value escaped. */
 export function senderDetailsHtml(model) {
@@ -92,7 +92,7 @@ export function senderDetailsHtml(model) {
   if (model.auth) {
     body += `<div class="mv-sep"><h3 class="mv-sub">${esc(t('email.header.authentication'))}</h3>`
       + authRow(t('email.header.spf'), model.auth.spf)
-      + authRow(t('email.header.dkim'), model.auth.dkim)
+      + authRow(t('email.header.dkim'), model.auth.dkim, model.dkimAlgorithm)
       + authRow(t('email.header.dmarc'), model.auth.dmarc);
     if (model.replyTo) {
       body += `<div class="mv-row mv-sep"><span class="mv-dot ${model.replyTo.matches ? 'mv-ok' : 'mv-warn'}"></span><span class="mv-k">${esc(t('email.header.reply'))}</span><span class="mv-val">${esc(model.replyTo.matches ? t('email.header.matchesSender') : model.replyTo.address)}</span></div>`;

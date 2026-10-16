@@ -137,3 +137,24 @@ describe('senderDetailsHtml', () => {
     expect(html).toContain('&lt;img src=x onerror=b()&gt;');
   });
 });
+
+describe('DKIM algorithm on the social card', () => {
+  const msg = { from: { address: 'a@x.example' }, authenticationResults: 'mx; spf=pass; dkim=pass; dmarc=pass', dkimSignature: 'a=rsa-sha256; d=x.example; s=k1' };
+
+  it('the model carries it, outside the results object', () => {
+    const m = senderDetailsModel(msg);
+    expect(m.dkimAlgorithm).toBe('rsa-sha256');
+    expect(m.auth).toEqual({ spf: 'pass', dkim: 'pass', dmarc: 'pass' });
+    expect(senderDetailsModel({ ...msg, dkimSignature: undefined }).dkimAlgorithm).toBeNull();
+  });
+
+  it('the box prints it beside the DKIM verdict', () => {
+    expect(senderDetailsHtml(senderDetailsModel(msg))).toContain('pass</span><span class="mv-alg">rsa-sha256</span>');
+  });
+
+  it('a value that is not an algorithm token is never printed', () => {
+    const html = senderDetailsHtml(senderDetailsModel({ ...msg, dkimSignature: 'a=<b>' }));
+    expect(html).not.toContain('<b>');
+    expect(html).not.toContain('mv-alg');
+  });
+});

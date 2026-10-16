@@ -535,6 +535,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       precedence: e.precedence ?? row?.precedence,
       // Same gap: the SPF/DKIM shield (SenderVerificationBadge) reads these.
       authenticationResults: e.authenticationResults ?? row?.authenticationResults,
+      dkimSignature: e.dkimSignature ?? row?.dkimSignature,
       returnPath: e.returnPath ?? row?.returnPath,
       // The subject line's shields read the verdicts the list painted on the
       // row; a body read carries none of its own.
