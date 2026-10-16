@@ -223,6 +223,10 @@ describe('attachEmailIframeAutoSize', () => {
       if (fireObserverOnRead) observers.forEach((o) => o.targets.length && o.fire());
       return rootHeight();
     };
+    const rootStyle = {
+      props: {},
+      setProperty(k, v, prio = '') { this.props[k] = { v, prio }; },
+    };
     const doc = {
       body: {
         get scrollHeight() { return bodyHeight(); },
@@ -233,6 +237,7 @@ describe('attachEmailIframeAutoSize', () => {
         get scrollHeight() { return readRoot(); },
         get offsetHeight() { return rootHeight(); },
         getBoundingClientRect: () => ({ height: rootHeight() }),
+        style: rootStyle,
       },
     };
     const listeners = {};
@@ -299,6 +304,25 @@ describe('attachEmailIframeAutoSize', () => {
     globalThis.ResizeObserver = realRO;
     window.addEventListener = realAdd;
     window.removeEventListener = realRemove;
+  });
+
+  // The frame is sized to its document, so the document must never scroll on
+  // its own: a mail whose content tracks the frame (min-height:100vh, % heights)
+  // ends up a few px taller than the frame it was measured against, and a
+  // scrollbar inside the pane's scrollbar appears. The root is the invariant.
+  it('locks the frame document root against scrolling, both axes, important', () => {
+    const iframe = makeIframe(500);
+    attachEmailIframeAutoSize(iframe, { minHeight: 300 });
+    const { props } = iframe._doc.documentElement.style;
+    expect(props['overflow']).toEqual({ v: 'hidden', prio: 'important' });
+  });
+
+  it('re-locks the root after a reload swaps the document in', () => {
+    const iframe = makeIframe(500);
+    attachEmailIframeAutoSize(iframe, { minHeight: 300 });
+    iframe._doc.documentElement.style.props = {};
+    iframe._fire('load');
+    expect(iframe._doc.documentElement.style.props['overflow']).toEqual({ v: 'hidden', prio: 'important' });
   });
 
   it('sizes the frame to its content plus padding on attach', () => {

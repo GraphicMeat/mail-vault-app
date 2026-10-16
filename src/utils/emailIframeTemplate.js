@@ -179,9 +179,21 @@ export function attachEmailIframeAutoSize(iframe, { minHeight = 0, pad = 8 } = {
     }
   };
 
+  // The frame is sized to its document, so the document must never scroll on
+  // its own. A mail whose content tracks the frame (`min-height: 100vh`, `%`
+  // heights) lands a few px taller than the frame it was measured against;
+  // without this lock that overflow is a scrollbar inside the pane's scrollbar.
+  // Locked on the root, `!important`, so the mail's own `html { overflow }`
+  // cannot undo it. Per document: a reload brings a fresh root.
+  const lockRoot = (doc) => {
+    doc?.documentElement?.style?.setProperty('overflow', 'hidden', 'important');
+  };
+
   // Re-point the observer at whichever document the frame is showing now.
   const observe = () => {
-    const body = docOf()?.body;
+    const doc = docOf();
+    lockRoot(doc);
+    const body = doc?.body;
     if (!body) return;
     observer?.disconnect();
     const Observer = globalThis.ResizeObserver;
