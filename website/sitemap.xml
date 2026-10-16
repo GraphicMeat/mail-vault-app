@@ -138,7 +138,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -153,7 +153,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/de/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -168,7 +168,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/fr/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -183,7 +183,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/es/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -198,7 +198,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/it/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -213,7 +213,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/ja/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -228,7 +228,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/ko/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -243,7 +243,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/zh/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -258,7 +258,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/pt-br/blog.html</loc>
-    <lastmod>2026-10-15</lastmod>
+    <lastmod>2026-10-16</lastmod>
     <priority>0.6</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html"/>
@@ -14460,5 +14460,17 @@
     <loc>https://mailvaultapp.com/terms.html</loc>
     <lastmod>2026-10-08</lastmod>
     <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/does-archiving-gmail-free-up-space.html</loc>
+    <lastmod>2026-10-16</lastmod>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/which-personal-emails-should-you-keep.html</loc>
+    <lastmod>2026-10-16</lastmod>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/how-to-check-email-backup.html</loc>
+    <lastmod>2026-10-16</lastmod>
   </url>
 </urlset>

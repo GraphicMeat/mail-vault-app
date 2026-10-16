@@ -53,6 +53,10 @@
 
 ## Email guides and research
 
+- [Does Archiving Gmail Free Up Space?](https://mailvaultapp.com/blog/does-archiving-gmail-free-up-space.html): Gmail Archive clears your inbox, not your storage. Learn the difference between archiving in Gmail and keeping an independent copy before deleting mail.
+- [Which Personal Emails Should You Keep?](https://mailvaultapp.com/blog/which-personal-emails-should-you-keep.html): Decide which personal emails are worth keeping, from meaningful conversations to useful attachments, and start a small archive you can find your way around.
+- [How to Check Your Email Backup Before You Need It](https://mailvaultapp.com/blog/how-to-check-email-backup.html): Check your email backup by opening saved messages, attachments and a separate recovery copy. Learn what an offline test proves and what it cannot prove.
+
 - [Gmail third-party account changes before January 2027](https://mailvaultapp.com/blog/gmail-third-party-changes-2027.html): Gmailify, third-party Send as, and POP fetching changes; what remains supported and how to transition
 - [Email Insights: who fills your inbox](https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html): sender map, timeline and activity views built from local headers, and how to act on them
 - [Cloud versus local email search](https://mailvaultapp.com/blog/cloud-vs-local-email-search.html): AI search availability, local index coverage, offline retrieval, and diagrams showing where processing happens

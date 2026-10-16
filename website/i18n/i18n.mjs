@@ -55,6 +55,11 @@ const EXCLUDE = new Set([
   'terms.html',
   'download-stats.html',
   'oauth/yahoo/callback.html',
+  // Editorial posts kept in English until translations are available.
+  'blog/does-archiving-gmail-free-up-space.html',
+  'blog/which-personal-emails-should-you-keep.html',
+  'blog/how-to-check-email-backup.html',
+
 ]);
 
 const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
@@ -943,7 +948,11 @@ export function missing(spec) {
 const SITEMAP = path.join(ROOT, 'sitemap.xml');
 
 // English-only pages that are still worth indexing (EXCLUDE keeps them out of translation).
-const SITEMAP_EXTRA = ['changelog.html', 'privacy.html', 'terms.html'];
+const SITEMAP_EXTRA = ['changelog.html', 'privacy.html', 'terms.html',
+  'blog/does-archiving-gmail-free-up-space.html',
+  'blog/which-personal-emails-should-you-keep.html',
+  'blog/how-to-check-email-backup.html',
+];
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 // The deploy checks out one commit, where every page would get that commit's date,
