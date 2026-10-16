@@ -10,15 +10,17 @@ vi.mock('../../i18n/index.js', () => ({
 }));
 
 let store;
+let premiumPlan = false;
 vi.mock('../../stores/viewStore', () => ({
   useViewStore: Object.assign(selector => store(selector), { getState: () => store.getState() }),
   viewLabel: (view, tr) => view?.name || (view?.builtin ? tr(`views.builtin.${view.builtin}`) : ''),
   viewQueryIsEmpty: view => !(view?.def?.query || '').trim(),
   MAX_FREE_VIEWS: 3,
 }));
+let settings = { searchIndexAttachments: true };
 vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: selector => selector({ billingProfile: null }),
-  hasPremiumAccess: () => false,
+  useSettingsStore: selector => selector({ billingProfile: null, ...settings }),
+  hasPremiumAccess: () => premiumPlan,
 }));
 
 const { ViewBuilderPanel } = await import('../email/ViewBuilderPanel');
@@ -56,7 +58,7 @@ const pickTarget = id => {
   fireEvent.click(screen.getByTestId(`view-builder-target-option-${id}`));
 };
 
-beforeEach(() => make());
+beforeEach(() => { premiumPlan = false; settings = { searchIndexAttachments: true }; make(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('ViewBuilderPanel', () => {
@@ -291,5 +293,104 @@ describe('KeywordHovercard', () => {
     await renderPanel();
     await act(async () => { fireEvent.focus(chip('gruyere')); });
     expect(screen.getByTestId('keyword-hovercard')).toBeTruthy();
+  });
+  describe('identifiers, phrases and attachments', () => {
+    beforeEach(() => { premiumPlan = true; make(); });
+    const BODY = [
+      { term: 'Mindaugo g. 30-49', tf: 1, df: 0, kind: 'phrase', source: 'body' },
+      { term: 'vandenu', tf: 2, df: 3, kind: 'word', source: 'body' },
+    ];
+    const FULL = [
+      { term: 'BV530133', tf: 1, df: 0, kind: 'identifier', source: 'attachment' },
+      ...BODY,
+    ];
+    const answering = (first, second) => vi.fn(async (_email, opts) => (opts?.withAttachments ? second : first));
+
+    it('does not reload for a new object of the same email, attachments included', async () => {
+      const loadKeywords = answering({ available: true, keywords: BODY }, { available: true, keywords: FULL });
+      make({ loadKeywords });
+      const { rerender } = await renderPanel();
+      rerender(<ViewBuilderPanel email={{ ...EMAIL }} accountId="acct-1" mailbox="INBOX" onClose={() => {}} />);
+      await flush();
+      expect(loadKeywords).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks for the attachments after the words, and shows the identifier they hold', async () => {
+      const loadKeywords = answering({ available: true, keywords: BODY }, { available: true, keywords: FULL });
+      make({ loadKeywords });
+      await renderPanel();
+      expect(loadKeywords).toHaveBeenNthCalledWith(1, EMAIL);
+      expect(loadKeywords).toHaveBeenNthCalledWith(2, EMAIL, { withAttachments: true });
+      expect(chips().map(el => el.textContent)).toEqual(['BV530133', 'Mindaugo g. 30-49', 'vandenu']);
+    });
+
+    it('labels a row for each kind, identifiers first', async () => {
+      make({ loadKeywords: answering({ available: true, keywords: FULL }, { available: true, keywords: FULL }) });
+      await renderPanel();
+      const rows = ['identifier', 'phrase', 'word'].map(kind => screen.getByTestId(`view-builder-row-${kind}`));
+      expect(rows.map(row => row.querySelector('h4').textContent))
+        .toEqual(['viewBuilder.identifiers', 'viewBuilder.phrases', 'viewBuilder.words']);
+      expect(within(rows[0]).getAllByRole('checkbox').map(el => el.textContent)).toEqual(['BV530133']);
+    });
+
+    it('marks a chip that came from an attachment, and only that one', async () => {
+      make({ loadKeywords: answering({ available: true, keywords: FULL }, { available: true, keywords: FULL }) });
+      await renderPanel();
+      expect(within(chip('BV530133')).getByRole('img', { name: 'viewBuilder.fromAttachment' })).toBeTruthy();
+      expect(within(chip('vandenu')).queryByRole('img')).toBeNull();
+    });
+
+    it('never reads the attachments without the plan or with the switch off', async () => {
+      for (const [plan, setting] of [[false, true], [true, false]]) {
+        premiumPlan = plan;
+        settings = { searchIndexAttachments: setting };
+        const loadKeywords = answering({ available: true, keywords: BODY }, { available: true, keywords: FULL });
+        make({ loadKeywords });
+        await renderPanel();
+        expect(loadKeywords).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('view-builder-reading-attachments')).toBeNull();
+        cleanup();
+      }
+    });
+
+    it('shows no row labels while only one kind is on offer', async () => {
+      await renderPanel();
+      expect(screen.getByTestId('view-builder-row-word').querySelector('h4')).toBeNull();
+    });
+
+    it('keeps the first answer when the attachments cannot be read', async () => {
+      const loadKeywords = vi.fn(async (_email, opts) => {
+        if (opts?.withAttachments) throw new Error('boom');
+        return { available: true, keywords: BODY };
+      });
+      make({ loadKeywords });
+      await renderPanel();
+      expect(chips().map(el => el.textContent)).toEqual(['Mindaugo g. 30-49', 'vandenu']);
+      expect(screen.queryByTestId('view-builder-reading-attachments')).toBeNull();
+    });
+
+    it('says the attachments are being read until they answer', async () => {
+      let answer;
+      const loadKeywords = vi.fn((_email, opts) => (opts?.withAttachments
+        ? new Promise(r => { answer = r; })
+        : Promise.resolve({ available: true, keywords: BODY })));
+      make({ loadKeywords });
+      await renderPanel();
+      expect(screen.getByTestId('view-builder-reading-attachments')).toBeTruthy();
+      await act(async () => { answer({ available: true, keywords: FULL }); });
+      expect(screen.queryByTestId('view-builder-reading-attachments')).toBeNull();
+      expect(chips()).toHaveLength(3);
+    });
+
+    it('adds an identifier to a view like any other term', async () => {
+      make({ loadKeywords: answering({ available: true, keywords: FULL }, { available: true, keywords: FULL }) });
+      await renderPanel();
+      fireEvent.click(chip('BV530133'));
+      fireEvent.click(chip('Mindaugo'));
+      pickTarget('v-full');
+      fireEvent.click(screen.getByTestId('view-builder-add'));
+      await flush();
+      expect(store.getState().addTermsToView).toHaveBeenCalledWith('v-full', ['BV530133', 'Mindaugo g. 30-49']);
+    });
   });
 });

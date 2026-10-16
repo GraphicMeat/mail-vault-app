@@ -326,15 +326,18 @@ export const useViewStore = create((set, get) => ({
     return get().createView(view, premium);
   },
 
-  /// The open email's distinctive words, best first:
-  /// `{ available, keywords: [{ term, tf, df }] }`. The email is placed the
+  /// The open email's distinctive terms:
+  /// `{ available, keywords: [{ term, tf, df, kind, source }] }`, `kind` one
+  /// of `identifier`, `phrase`, `word`, `source` `body` or `attachment`. With
+  /// `withAttachments` the daemon reads the email's attachments too (slower,
+  /// so asked for after the first answer). The email is placed the
   /// way every other row action places it (`rowIdentity`); one that cannot be
   /// placed (a unified row with no stamp) has no words to offer. A message the
   /// daemon cannot find rejects.
-  loadKeywords: async (email) => {
+  loadKeywords: async (email, { withAttachments = false } = {}) => {
     const where = rowIdentity(email, useMailStore.getState());
     if (!where || where.uid == null) return { available: false, keywords: [] };
-    return daemonCall('views.keywords', where);
+    return daemonCall('views.keywords', withAttachments ? { ...where, withAttachments: true } : where);
   },
 
   /// Who sends and what subjects carry one word, across the person's accounts:

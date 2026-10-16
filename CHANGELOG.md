@@ -9,6 +9,7 @@
 - **Sender details show the DKIM algorithm and key size.** Next to a passing DKIM result the popover now names the signing algorithm (rsa-sha256, ed25519-sha256) and, once the sender's key has been looked up in DNS, its type and size: RSA 1024, 2048 or 4096-bit, Ed25519, Ed448. The lookup runs when you open the popover and shows in Network Activity. Mail synced before this update shows the algorithm only when its Authentication-Results names one.
 
 ### Changed
+- **The view builder offers reference numbers and addresses, not only words.** Make a view from this email now lists reference numbers (an invoice or customer number such as BV530133) and street addresses (such as Mindaugo g. 30-49) in their own labelled rows above the words. It also reads the email's attachments (PDF, Office and text files) and marks the words found only there with a paperclip; the attachment words appear a moment after the rest.
 - **The experimental Rust renderer draws mail in more places.** With it turned on in Settings, Appearance, Colors, it now also draws conversations, chat bubbles, the full message view, the quoted original in compose, the Open in window view, the Cleanup preview, image exports and social cards, with no web view inside the message.
 
 ### Fixed

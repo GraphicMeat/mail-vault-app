@@ -106,6 +106,197 @@ impl Counts {
     }
 }
 
+/// Words that name the number after them (`Kliento kodas 7712345`), lowercase.
+const ID_LABELS: &[&str] = &[
+    "nr", "no", "number", "numeris", "numero", "número", "numéro", "kodas", "kodo", "kliento", "abonento",
+    "abonentas", "vartotojo", "objekto", "sutarties", "id", "account", "acct", "ref", "reference", "invoice",
+    "customer", "contract", "konto", "kundennummer",
+];
+/// A bare number (no letters) this long, after a label, is an identifier.
+const BARE_ID_DIGITS: std::ops::RangeInclusive<usize> = 7..=14;
+/// Longest identifier kept, separators aside.
+const MAX_ID_CHARS: usize = 24;
+/// Hex-only tokens from this length are hashes, not references.
+const HASH_MIN_CHARS: usize = 16;
+
+fn trim_edges(token: &str) -> &str {
+    token.trim_matches(|c: char| !c.is_alphanumeric())
+}
+
+fn label_of(token: &str) -> String {
+    token.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase()
+}
+
+/// `20241013` style: a year 19xx/20xx then month then day.
+fn looks_like_date(digits: &str) -> bool {
+    if digits.len() != 8 || !(digits.starts_with("19") || digits.starts_with("20")) {
+        return false;
+    }
+    let month: u32 = digits[4..6].parse().unwrap_or(0);
+    let day: u32 = digits[6..8].parse().unwrap_or(0);
+    (1..=12).contains(&month) && (1..=31).contains(&day)
+}
+
+/// Whether an ASCII token is a reference number on its own shape: letters and
+/// at least four digits, letters of one case, not a hash or a unit.
+fn is_reference_shape(token: &str) -> bool {
+    if !token.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '/' | '_')) {
+        return false;
+    }
+    let core: Vec<char> = token.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    if !(5..=MAX_ID_CHARS).contains(&core.len()) {
+        return false;
+    }
+    let digits = core.iter().filter(|c| c.is_ascii_digit()).count();
+    let letters: Vec<&char> = core.iter().filter(|c| c.is_ascii_alphabetic()).collect();
+    if digits < 4 || letters.is_empty() {
+        return false;
+    }
+    if core.len() >= HASH_MIN_CHARS && core.iter().all(|c| c.is_ascii_hexdigit()) {
+        return false;
+    }
+    let upper = letters.iter().filter(|c| c.is_ascii_uppercase()).count();
+    if upper != 0 && upper != letters.len() {
+        return false;
+    }
+    // `2024m`, `100kg`: a number with its unit.
+    !(core[0].is_ascii_digit() && letters.len() <= 2 && upper == 0)
+}
+
+/// Tallies display strings by their lowercase key, first spelling shown.
+struct Tally {
+    seen: HashMap<String, (String, u32, usize)>,
+    next: usize,
+}
+
+impl Tally {
+    fn new() -> Self {
+        Tally { seen: HashMap::new(), next: 0 }
+    }
+    fn add(&mut self, shown: String) {
+        let key: String = shown.chars().map(fold_char).collect();
+        let next = self.next;
+        let e = self.seen.entry(key).or_insert_with(|| (shown, 0, next));
+        if e.2 == next {
+            self.next += 1;
+        }
+        e.1 = e.1.saturating_add(1);
+    }
+    fn top(self, max: usize) -> Vec<(String, u32)> {
+        let mut out: Vec<(String, u32, usize)> = self.seen.into_values().map(|(s, n, first)| (s, n, first)).collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.2.cmp(&b.2)));
+        out.truncate(max);
+        out.into_iter().map(|(s, n, _)| (s, n)).collect()
+    }
+}
+
+/// Reference numbers in `text`, as written: letters and digits in one case
+/// (`BV530133`), or a bare number of 7 to 14 digits right after a label word
+/// (`Kliento kodas 7712345`). Not dates, hashes, amounts, phones, URLs or
+/// addresses. Most frequent first, ties by first occurrence.
+pub fn identifiers(text: &str, max: usize) -> Vec<(String, u32)> {
+    let mut tally = Tally::new();
+    for line in text.lines() {
+        let mut before: Vec<String> = Vec::new();
+        for chunk in line.split_whitespace() {
+            let token = trim_edges(chunk);
+            let labels_it = before.iter().rev().take(2).any(|prev| ID_LABELS.contains(&prev.as_str()));
+            before.push(label_of(chunk));
+            if token.is_empty() || is_address_or_url(chunk) {
+                continue;
+            }
+            if is_reference_shape(token) {
+                tally.add(token.to_string());
+                continue;
+            }
+            let digits: String = token.chars().filter(|c| c.is_ascii_digit()).collect();
+            let bare = token.chars().all(|c| c.is_ascii_digit());
+            if bare && labels_it && BARE_ID_DIGITS.contains(&digits.len()) && !looks_like_date(&digits) {
+                tally.add(token.to_string());
+            }
+        }
+    }
+    tally.top(max)
+}
+
+/// Street words that follow the street name (`Mindaugo g.`, `Baker Street`).
+const STREET_AFTER: &[&str] = &[
+    "g", "gatve", "gatvė", "pr", "prospektas", "al", "aleja", "skg", "pl", "st", "street", "rd", "road", "ave",
+    "avenue", "ln", "lane", "blvd", "dr", "drive", "str", "strasse", "straße", "weg", "platz",
+];
+/// Street words that come before the name (`Rue Lafayette`).
+const STREET_BEFORE: &[&str] = &["rue", "via", "calle", "avenida", "ul", "ulica"];
+
+fn is_house_number(token: &str) -> bool {
+    let token = token.trim_end_matches(|c: char| matches!(c, ',' | ';' | '.'));
+    let mut parts = 0;
+    for part in token.split(|c| c == '-' || c == '/') {
+        parts += 1;
+        let digits = part.chars().take_while(|c| c.is_ascii_digit()).count();
+        let rest = &part[digits..];
+        if !(1..=4).contains(&digits) || rest.chars().count() > 1 || !rest.chars().all(|c| c.is_ascii_alphabetic()) {
+            return false;
+        }
+    }
+    (1..=2).contains(&parts)
+}
+
+fn marker_in(token: &str, set: &[&str]) -> bool {
+    let word = token.trim_end_matches(|c: char| matches!(c, ',' | ';' | '.' | ':')).to_lowercase();
+    !word.is_empty() && set.contains(&word.as_str())
+}
+
+fn is_name_word(token: &str) -> bool {
+    let word = token.trim_matches(|c: char| !c.is_alphanumeric());
+    word.chars().next().is_some_and(char::is_uppercase) && word.chars().all(char::is_alphabetic) && word.chars().count() >= 2
+}
+
+fn plain(token: &str) -> &str {
+    token.trim_end_matches(|c: char| matches!(c, ',' | ';' | ':'))
+}
+
+/// Street addresses in `text`, as written: `Mindaugo g. 30-49`,
+/// `Main St 12B`, `221 Baker Street`, `Rue Lafayette 5`. A street word and a
+/// house number are both required, within one line. Most frequent first.
+pub fn phrases(text: &str, max: usize) -> Vec<(String, u32)> {
+    let mut tally = Tally::new();
+    for line in text.lines() {
+        let t: Vec<&str> = line.split_whitespace().collect();
+        let mut spans: Vec<(usize, usize)> = Vec::new();
+        for i in 0..t.len() {
+            // Name, street word, number.
+            if marker_in(t[i], STREET_AFTER) && i >= 1 && i + 1 < t.len() && is_name_word(t[i - 1]) && is_house_number(t[i + 1]) {
+                spans.push((i - 1, i + 1));
+            }
+            // Street word, name, number.
+            if marker_in(t[i], STREET_BEFORE) && i + 2 < t.len() && is_name_word(t[i + 1]) && is_house_number(t[i + 2]) {
+                spans.push((i, i + 2));
+            }
+            // Number, name (one or two), street word.
+            if is_house_number(t[i]) {
+                for names in 1..=2usize {
+                    let end = i + names + 1;
+                    if end < t.len() && t[i + 1..=i + names].iter().all(|w| is_name_word(w)) && marker_in(t[end], STREET_AFTER) {
+                        spans.push((i, end));
+                        break;
+                    }
+                }
+            }
+        }
+        for (from, to) in spans {
+            let mut words: Vec<String> = Vec::new();
+            for (n, w) in t[from..=to].iter().enumerate() {
+                let w = plain(w);
+                // The street word keeps its dot (`g.`); the last word drops
+                // any sentence period.
+                words.push(if n + from == to { w.trim_end_matches('.').to_string() } else { w.to_string() });
+            }
+            tally.add(words.join(" "));
+        }
+    }
+    tally.top(max)
+}
+
 /// The most document frequency `rank` needs to see for a mailbox of
 /// `total_docs`: a word in more than a fifth of the mail is dropped whatever
 /// its exact count, so a probe may stop counting at `n/5 + 1`. `None` below
@@ -422,5 +613,62 @@ mod tests {
         let r = rank(cands, 10, |t: &str| { asked.push(t.to_string()); Ok(1) }, 10, false).unwrap();
         assert_eq!(asked, vec!["alpha", "beta"]);
         assert_eq!(r.len(), 2);
+    }
+
+    #[test]
+    fn identifiers_keep_a_reference_number_and_its_case() {
+        let text = "Sąskaita faktūra BV530133\nKliento kodas: SFR04153491, mokėti iki 2026-09-30";
+        let ids = identifiers(text, 10);
+        assert_eq!(ids, vec![("BV530133".to_string(), 1), ("SFR04153491".to_string(), 1)]);
+    }
+
+    #[test]
+    fn identifiers_count_repeats_and_fold_case_for_the_tally() {
+        let ids = identifiers("BV530133 and again bv530133 then BV530133", 10);
+        assert_eq!(ids, vec![("BV530133".to_string(), 3)]);
+    }
+
+    #[test]
+    fn identifiers_skip_hashes_dates_amounts_and_plain_numbers() {
+        let text = "2026-09-30 10:30 30kg 12.50 +37060012345 3f9a1c77d2e04b58a6c1 AbC9xZ12qW tel 800 19118 order 20241013";
+        assert!(identifiers(text, 10).is_empty(), "{:?}", identifiers(text, 10));
+    }
+
+    #[test]
+    fn identifiers_take_a_bare_number_only_after_a_label() {
+        let ids = identifiers("Kliento kodas 7712345 ir 9988776 be pavadinimo", 10);
+        assert_eq!(ids, vec![("7712345".to_string(), 1)]);
+        let ids = identifiers("Invoice no. 20457811 due", 10);
+        assert_eq!(ids, vec![("20457811".to_string(), 1)]);
+    }
+
+    #[test]
+    fn identifiers_skip_urls_and_addresses() {
+        let text = "https://pay.example.com/BV530133 info@vv.lt";
+        assert!(identifiers(text, 10).is_empty());
+    }
+
+    #[test]
+    fn phrases_find_a_street_address() {
+        let text = "Paslaugos vieta: Mindaugo g. 30-49, Vilnius\nSąskaita BV530133";
+        assert_eq!(phrases(text, 10), vec![("Mindaugo g. 30-49".to_string(), 1)]);
+    }
+
+    #[test]
+    fn phrases_find_western_street_shapes() {
+        let text = "Ship to 221 Baker Street, London. Or Main St 12B. Rue Lafayette 5";
+        let found: Vec<String> = phrases(text, 10).into_iter().map(|(p, _)| p).collect();
+        assert_eq!(found, vec!["221 Baker Street", "Main St 12B", "Rue Lafayette 5"]);
+    }
+
+    #[test]
+    fn phrases_need_a_street_marker_and_a_house_number() {
+        assert!(phrases("Mindaugo 30 and page 3 of 5 and Vilnius g. alone", 10).is_empty());
+    }
+
+    #[test]
+    fn phrases_count_repeats() {
+        let text = "Mindaugo g. 30-49\nlater: MINDAUGO G. 30-49";
+        assert_eq!(phrases(text, 10), vec![("Mindaugo g. 30-49".to_string(), 2)]);
     }
 }

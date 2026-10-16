@@ -322,6 +322,36 @@ pub(crate) fn read_attachment_part(
     ))
 }
 
+/// Most attachment parts the view builder reads for one message.
+const BUILDER_MAX_PARTS: usize = 4;
+
+/// The text of the open message's attachments, for the view builder: each
+/// non-image part through the same extractor the index uses. A part that
+/// fails or has no text is skipped. Images are not read (OCR is slow and
+/// noisy for a hover-time answer).
+pub(crate) fn attachment_texts(raw: &[u8]) -> Vec<String> {
+    use mailvault_core::search_index::attachments::{extract, AttachmentInput, MAX_PART_BYTES};
+    let Ok(parsed) = mailparse::parse_mail(raw) else { return Vec::new() };
+    let mut parts = Vec::new();
+    collect_attachment_parts(&parsed, &mut parts);
+    let extractor = crate::attachment_extract::current_extractor();
+    let mut out = Vec::new();
+    for part in parts.into_iter().take(BUILDER_MAX_PARTS) {
+        let mime = part.ctype.mimetype.clone();
+        if mime.to_lowercase().starts_with("image/") || encoded_part_size(part) > MAX_PART_BYTES {
+            continue;
+        }
+        let Ok(bytes) = part.get_body_raw() else { continue };
+        let input = AttachmentInput { filename: part_filename(part), mime, size: bytes.len() as u64, bytes };
+        if let ("ok", Some(text)) = extract(&input, true, true, extractor) {
+            if !text.trim().is_empty() {
+                out.push(text);
+            }
+        }
+    }
+    out
+}
+
 /// One row per hit from the stored header cache. Current filename flags remain
 /// authoritative; the reader revalidates the message when a result is opened.
 pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {

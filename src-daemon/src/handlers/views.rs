@@ -235,6 +235,11 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
 const KEYWORD_CANDIDATES: usize = 150;
 /// Ranked words a `views.keywords` reply holds.
 const KEYWORDS_KEPT: usize = 15;
+/// Reference numbers and street addresses it holds, each.
+const KEYWORD_IDENTIFIERS_KEPT: usize = 6;
+const KEYWORD_PHRASES_KEPT: usize = 6;
+/// Candidate words read from attachment text.
+const KEYWORD_ATTACHMENT_CANDIDATES: usize = 60;
 /// `views.keywords` replies kept, most recently used last.
 const KEYWORD_CACHE_CAP: usize = 64;
 /// Hits a `views.keyword_detail` aggregates (the index's per-query cap).
@@ -269,8 +274,12 @@ fn cache_keywords(key: String, reply: Value) {
     }
 }
 
-/// `{ available, keywords: [{ term, tf, df }] }`: the open message's most
-/// distinctive words, at most 15, best first. The text is what the index
+/// `{ available, keywords: [{ term, tf, df, kind, source }] }`: the open
+/// message's most distinctive terms. `kind` is `identifier` (a reference
+/// number, at most 6), `phrase` (a street address, at most 6) or `word` (at
+/// most 15), each kind best first, in that order. `source` is `body` or
+/// `attachment`; attachment text is read only with `withAttachments`. The
+/// words: The text is what the index
 /// itself stores for the message (subject and stripped body); each word's
 /// document frequency is one index probe, the lock released between probes
 /// so a click never waits behind the whole list, and each probe stops
@@ -278,10 +287,13 @@ fn cache_keywords(key: String, reply: Value) {
 /// that cannot answer (off, closed, still building) is `available: false`
 /// with no words, cached or not.
 fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
-    use mailvault_core::search_index::keywords::{candidates, df_cap, rank};
+    use mailvault_core::search_index::keywords::{candidates, df_cap, identifiers, phrases, rank};
     let account_id = params.get("accountId").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("Missing accountId")?;
     let mailbox = params.get("mailbox").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("Missing mailbox")?;
     let uid = params.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()).ok_or("Missing uid")?;
+    // Attachment text is read only when asked for: the first answer must not
+    // wait on a PDF.
+    let with_attachments = params.get("withAttachments").and_then(Value::as_bool).unwrap_or(false);
     let unavailable = || serde_json::json!({ "available": false, "keywords": [] });
     let index = &state.search_index;
     // The readiness gate comes before the cache: an index switched off or
@@ -313,7 +325,7 @@ fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     };
     let key = message_id
         .filter(|id| !id.is_empty())
-        .map(|id| format!("{}|{account_id}|{mailbox}|{uid}|{id}|{held}", state.data_dir.display()));
+        .map(|id| format!("{}|{account_id}|{mailbox}|{uid}|{id}|{held}|{with_attachments}", state.data_dir.display()));
     if let Some(reply) = key.as_deref().and_then(cached_keywords) {
         return Ok(reply);
     }
@@ -323,35 +335,76 @@ fn keywords(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
         .block_on(crate::raw_message::raw_message(state, account_id, mailbox, uid, true))?;
     let doc = crate::search_index::index_doc_from_light(&raw, uid, "")
         .ok_or_else(|| format!("Email UID {uid} could not be parsed"))?;
-    let words = candidates(&doc.subject, &doc.body_text, KEYWORD_CANDIDATES);
+    let att_text = if with_attachments { crate::search_index::attachment_texts(&raw).join("\n") } else { String::new() };
+    let body_text = format!("{}\n{}", doc.subject, doc.body_text);
     let cap = df_cap(total);
-    let mut gone = false;
-    let ranked = rank(
-        words,
-        total,
-        |term| {
-            // A person is waiting on every probe: the indexer stays parked
-            // for the whole loop, not just its first lock hold.
-            crate::search_index::note_foreground(index);
-            match crate::search_index::term_doc_count(index, term, cap)? {
-                Ok(df) => Ok(df),
-                Err(reason) => {
-                    gone = true;
-                    Err(reason.to_string())
+    let gone = std::cell::Cell::new(false);
+    // A word the index never saw is noise only when the whole message came
+    // from the index's own reading of it: attachment text is not indexed.
+    let drop_unseen = body_indexed && att_text.is_empty();
+    let rank_kind = |cands: Vec<(String, u32)>, keep: usize| {
+        rank(
+            cands,
+            total,
+            |term| {
+                // A person is waiting on every probe: the indexer stays parked
+                // for the whole loop, not just its first lock hold.
+                crate::search_index::note_foreground(index);
+                match crate::search_index::term_doc_count(index, term, cap)? {
+                    Ok(df) => Ok(df),
+                    Err(reason) => {
+                        gone.set(true);
+                        Err(reason.to_string())
+                    }
+                }
+            },
+            keep,
+            drop_unseen,
+        )
+    };
+    let mut keywords: Vec<Value> = Vec::new();
+    for (kind, keep, from_body, from_att) in [
+        (
+            "identifier",
+            KEYWORD_IDENTIFIERS_KEPT,
+            identifiers(&body_text, KEYWORD_CANDIDATES),
+            identifiers(&att_text, KEYWORD_CANDIDATES),
+        ),
+        (
+            "phrase",
+            KEYWORD_PHRASES_KEPT,
+            phrases(&body_text, KEYWORD_CANDIDATES),
+            phrases(&att_text, KEYWORD_CANDIDATES),
+        ),
+        (
+            "word",
+            KEYWORDS_KEPT,
+            candidates(&doc.subject, &doc.body_text, KEYWORD_CANDIDATES),
+            candidates("", &att_text, KEYWORD_ATTACHMENT_CANDIDATES),
+        ),
+    ] {
+        // Body first; a term in both counts once, at both counts, from the body.
+        let mut merged: Vec<(String, u32)> = from_body;
+        let mut source: HashMap<String, &str> = merged.iter().map(|(t, _)| (t.to_lowercase(), "body")).collect();
+        for (term, tf) in from_att {
+            match merged.iter_mut().find(|(t, _)| t.to_lowercase() == term.to_lowercase()) {
+                Some(known) => known.1 = known.1.saturating_add(tf),
+                None => {
+                    source.insert(term.to_lowercase(), "attachment");
+                    merged.push((term, tf));
                 }
             }
-        },
-        KEYWORDS_KEPT,
-        body_indexed,
-    );
-    // The index went away between probes: unknown, not "no keywords".
-    if gone {
-        return Ok(unavailable());
+        }
+        let ranked = rank_kind(merged, keep);
+        // The index went away between probes: unknown, not "no keywords".
+        if gone.get() {
+            return Ok(unavailable());
+        }
+        for k in ranked? {
+            let from = source.get(&k.term.to_lowercase()).copied().unwrap_or("body");
+            keywords.push(serde_json::json!({ "term": k.term, "tf": k.tf, "df": k.df, "kind": kind, "source": from }));
+        }
     }
-    let keywords: Vec<Value> = ranked?
-        .into_iter()
-        .map(|k| serde_json::json!({ "term": k.term, "tf": k.tf, "df": k.df }))
-        .collect();
     let reply = serde_json::json!({ "available": true, "keywords": keywords });
     if let Some(key) = key {
         cache_keywords(key, reply.clone());
@@ -1668,10 +1721,10 @@ mod tests {
         assert_eq!(
             out,
             json!({ "available": true, "keywords": [
-                { "term": "quokka", "tf": 4, "df": 1 },
-                { "term": "fondue", "tf": 4, "df": 2 },
+                { "term": "quokka", "tf": 4, "df": 1, "kind": "word", "source": "body" },
+                { "term": "fondue", "tf": 4, "df": 2, "kind": "word", "source": "body" },
                 // Right at the cut: kept, with its exact count.
-                { "term": "budget", "tf": 1, "df": 12 },
+                { "term": "budget", "tf": 1, "df": 12, "kind": "word", "source": "body" },
             ] })
         );
         assert_eq!(call(&s, "views.keywords", params).await, out, "asked again, same answer");
@@ -1681,6 +1734,40 @@ mod tests {
         assert!(terms.contains(&"unseenword".to_owned()), "not in the index at all: {fresh}");
         assert!(!terms.contains(&"meeting".to_owned()), "a fifth of the mail is not distinctive: {fresh}");
         assert!(!terms.contains(&"quotedword".to_owned()), "{fresh}");
+    }
+
+    fn kinds_of(out: &Value, kind: &str) -> Vec<(String, String)> {
+        out["keywords"].as_array().unwrap().iter()
+            .filter(|k| k["kind"] == kind)
+            .map(|k| (k["term"].as_str().unwrap().to_owned(), k["source"].as_str().unwrap().to_owned()))
+            .collect()
+    }
+
+    /// A utility bill: the address is in the body, the reference number only
+    /// in the attached text. The attachment is read only when asked for.
+    #[tokio::test]
+    async fn keywords_offer_an_address_and_an_attached_reference_number() {
+        let s = st();
+        keyword_index(&s);
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "a", "INBOX");
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        let eml = "From: ann@x.test\r\nSubject: Vandens mokejimas\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n\
+            --B\r\nContent-Type: text/plain\r\n\r\nPaslaugos vieta: Mindaugo g. 30-49, Vilnius\r\n\
+            --B\r\nContent-Type: text/plain; name=\"bill.txt\"\r\n\
+            Content-Disposition: attachment; filename=\"bill.txt\"\r\n\r\nSaskaita faktura BV530133\r\n--B--\r\n";
+        std::fs::write(cur.join(format!("98{p}S.eml")), eml).unwrap();
+        let params = json!({ "accountId": "a", "mailbox": "INBOX", "uid": 98 });
+
+        let first = call(&s, "views.keywords", params.clone()).await;
+        assert_eq!(kinds_of(&first, "phrase"), vec![("Mindaugo g. 30-49".to_owned(), "body".to_owned())], "{first}");
+        assert!(kinds_of(&first, "identifier").is_empty(), "the attachment is not read yet: {first}");
+
+        let mut with = params;
+        with["withAttachments"] = json!(true);
+        let full = call(&s, "views.keywords", with).await;
+        assert_eq!(kinds_of(&full, "identifier"), vec![("BV530133".to_owned(), "attachment".to_owned())], "{full}");
+        assert_eq!(kinds_of(&full, "phrase"), vec![("Mindaugo g. 30-49".to_owned(), "body".to_owned())], "{full}");
     }
 
     /// A listed message whose body the index has not read yet has words the

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Check, X } from 'lucide-react';
+import { Check, Paperclip, X } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
 import { useViewStore, viewLabel, viewQueryIsEmpty, MAX_FREE_VIEWS } from '../../stores/viewStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
@@ -15,13 +15,20 @@ const OPEN_DELAY = 250;
 /// The card survives the pointer's trip from the chip onto it.
 const CLOSE_GRACE = 150;
 
+/// The rows, in the order they are offered: what names a mail best first.
+const KINDS = [
+  { kind: 'identifier', labelKey: 'viewBuilder.identifiers' },
+  { kind: 'phrase', labelKey: 'viewBuilder.phrases' },
+  { kind: 'word', labelKey: 'viewBuilder.words' },
+];
+
 const NOTICE_KEYS = { added: 'viewBuilder.added', created: 'viewBuilder.created', saveFailed: 'viewBuilder.saveFailed' };
 
 /**
  * One word to pick. Masked by privacy mode, its name is the filler on screen:
  * the masked run is aria-hidden, and the word itself must never be the name.
  */
-function KeywordChip({ term, checked, describedBy, ...handlers }) {
+function KeywordChip({ term, checked, fromAttachment, attachmentLabel, describedBy, ...handlers }) {
   const { text, masked } = usePrivateWord(term);
   return (
     <button
@@ -37,6 +44,7 @@ function KeywordChip({ term, checked, describedBy, ...handlers }) {
     >
       {checked && <Check size={11} aria-hidden="true" />}
       {masked ? <span className="mv-private" aria-hidden="true">{text}</span> : text}
+      {fromAttachment && <Paperclip size={11} className="text-mail-text-muted" aria-label={attachmentLabel} role="img" />}
     </button>
   );
 }
@@ -56,8 +64,14 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
   const addTermsToView = useViewStore(state => state.addTermsToView);
   const createViewFromTerms = useViewStore(state => state.createViewFromTerms);
   const premium = useSettingsStore(state => hasPremiumAccess(state.billingProfile));
+  // Reading attachment text is the Premium "Index attachment text" feature:
+  // the same switch and plan gate as the index's own.
+  const readAttachments = useSettingsStore(state => !!state.searchIndexAttachments && hasPremiumAccess(state.billingProfile));
 
   const [load, setLoad] = useState({ status: 'loading', keywords: [] });
+  // The attachments' words come in a second answer; until it lands the chips
+  // from the body are already on screen.
+  const [readingAttachments, setReadingAttachments] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [targetId, setTargetId] = useState(null);
   const [mailboxOnly, setMailboxOnly] = useState(false);
@@ -97,6 +111,8 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
   };
   const closeCard = useCallback(() => { clearTimers(); setHover(null); }, []);
 
+  const readAttachmentsRef = useRef(readAttachments);
+  readAttachmentsRef.current = readAttachments;
   const emailRef = useRef(email);
   emailRef.current = email;
   // The email's own stamp first, the props only for a row that carries none:
@@ -113,22 +129,38 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
     setNotice(null);
     setBusy(false);
     closeCard();
+    setReadingAttachments(false);
+    const live = () => ticket === request.current && alive.current;
+    const show = reply => {
+      const keywords = Array.isArray(reply?.keywords) ? reply.keywords.filter(k => k?.term) : [];
+      if (!reply?.available) setLoad({ status: 'unavailable', keywords: [] });
+      else setLoad({ status: keywords.length ? 'ready' : 'empty', keywords });
+      return !!reply?.available;
+    };
     Promise.resolve()
       .then(() => loadKeywords(emailRef.current))
       .then(
         reply => {
-          if (ticket !== request.current || !alive.current) return;
-          const keywords = Array.isArray(reply?.keywords) ? reply.keywords.filter(k => k?.term) : [];
-          if (!reply?.available) setLoad({ status: 'unavailable', keywords: [] });
-          else setLoad({ status: keywords.length ? 'ready' : 'empty', keywords });
+          if (!live()) return;
+          if (!show(reply) || !readAttachmentsRef.current) return;
+          // Then the attachments: a failure here leaves the first answer.
+          setReadingAttachments(true);
+          return Promise.resolve()
+            .then(() => loadKeywords(emailRef.current, { withAttachments: true }))
+            .then(more => { if (live() && more?.available) show(more); }, () => {})
+            .then(() => { if (live()) setReadingAttachments(false); });
         },
         () => {
-          if (ticket === request.current && alive.current) setLoad({ status: 'error', keywords: [] });
+          if (live()) setLoad({ status: 'error', keywords: [] });
         },
       );
     return () => { request.current += 1; };
   }, [identity, loadKeywords, closeCard]);
 
+  // A daemon that sends no kind is the words-only answer it used to be.
+  const rows = KINDS
+    .map(({ kind, labelKey }) => ({ kind, labelKey, items: load.keywords.filter(k => (k.kind || 'word') === kind) }))
+    .filter(row => row.items.length);
   const terms = load.keywords.map(k => k.term).filter(term => selected.has(term));
   const target = views.find(view => view.id === targetId) || views[0] || null;
   const options = useMemo(() => views.map(view => ({ value: view.id, label: viewLabel(view, t) })), [views, t]);
@@ -206,30 +238,46 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
         </div>
 
         {load.status !== 'ready' ? (
-          <p data-testid="view-builder-state" className="text-xs text-mail-text-muted">{t(STATE_KEYS[load.status])}</p>
+          <p data-testid="view-builder-state" className="text-xs text-mail-text-muted">{t(load.status === 'empty' && readingAttachments ? 'viewBuilder.readingAttachments' : STATE_KEYS[load.status])}</p>
         ) : (
           <>
-            <div data-testid="view-builder-chips" role="group" aria-label={t('viewBuilder.title')} className="flex flex-wrap gap-1.5">
-              {load.keywords.map(({ term }) => {
-                const checked = selected.has(term);
-                return (
-                  <KeywordChip
-                    key={term}
-                    term={term}
-                    checked={checked}
-                    describedBy={hover?.term === term ? cardId : undefined}
-                    // A click that focused nothing (an already focused chip,
-                    // or WebKit, which never focuses a clicked button) must
-                    // not leave the flag to swallow the next Tab.
-                    onClick={() => { pointerFocus.current = false; toggle(term); }}
-                    onPointerDown={() => { pointerFocus.current = true; }}
-                    onPointerEnter={e => hoverIn(term, e.currentTarget)}
-                    onPointerLeave={() => { pointerFocus.current = false; hoverOut(); }}
-                    onFocus={e => focusIn(term, e.currentTarget)}
-                    onBlur={() => { pointerFocus.current = false; hoverOut(); }}
-                  />
-                );
-              })}
+            <div data-testid="view-builder-chips" role="group" aria-label={t('viewBuilder.title')} className="flex flex-col gap-2">
+              {rows.map(({ kind, labelKey, items }) => (
+                <div key={kind} data-testid={`view-builder-row-${kind}`} className="flex flex-col gap-1">
+                  {rows.length > 1 && (
+                    <h4 className="text-[11px] font-medium uppercase tracking-wide text-mail-text-muted">{t(labelKey)}</h4>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {items.map(({ term, source }) => {
+                      const checked = selected.has(term);
+                      return (
+                        <KeywordChip
+                          key={term}
+                          term={term}
+                          checked={checked}
+                          fromAttachment={source === 'attachment'}
+                          attachmentLabel={t('viewBuilder.fromAttachment')}
+                          describedBy={hover?.term === term ? cardId : undefined}
+                          // A click that focused nothing (an already focused chip,
+                          // or WebKit, which never focuses a clicked button) must
+                          // not leave the flag to swallow the next Tab.
+                          onClick={() => { pointerFocus.current = false; toggle(term); }}
+                          onPointerDown={() => { pointerFocus.current = true; }}
+                          onPointerEnter={e => hoverIn(term, e.currentTarget)}
+                          onPointerLeave={() => { pointerFocus.current = false; hoverOut(); }}
+                          onFocus={e => focusIn(term, e.currentTarget)}
+                          onBlur={() => { pointerFocus.current = false; hoverOut(); }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {readingAttachments && (
+                <p data-testid="view-builder-reading-attachments" className="text-xs text-mail-text-muted">
+                  {t('viewBuilder.readingAttachments')}
+                </p>
+              )}
             </div>
 
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
