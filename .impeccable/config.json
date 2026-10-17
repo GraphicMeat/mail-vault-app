@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "inter",
+        "files": [
+          "website/mentioned-in.html"
+        ],
+        "createdAt": "2026-10-17T12:28:09.757Z",
+        "reason": "Agent verified DESIGN.md:287 explicitly specifies Inter for the marketing website; this content update does not change typography."
+      }
+    ]
+  }
+}
