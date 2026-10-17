@@ -1,0 +1,21 @@
+{
+  "ac3d0cf173e4": "1. E-Mail-Bereinigung öffnen",
+  "5bbefcb11689": "Öffne die E-Mail-Bereinigung für ein Konto. Sie verwendet zwischengespeicherte E-Mail-Kopfzeilen und benötigt keinen Modell-Download.",
+  "a2ec0590818e": "Lokale Regeln, ein Naive-Bayes-Klassifikator und integrierte Heuristiken ordnen E-Mails den Kategorien Newsletter, Werbung, Transaktion, Privat, Arbeit und Spam zu.",
+  "3e8c884a2b6c": "Prüfe jede Kategorie, bevor du eine Aktion ausführst. Archivieren speichert und überprüft eine Kopie im Tresor, bevor die Serverkopie entfernt wird; Löschen entfernt E-Mails vom Server, ohne sie zuvor zu archivieren.",
+  "2739a4dc5f3f": "Die Bereinigung klassifiziert E-Mails auf deinem Computer. Sie sendet weder E-Mail-Inhalte noch Metadaten oder Adressen an einen KI-Dienst. Die separaten KI-Schreibwerkzeuge können einen Anbieter deiner Wahl verwenden.",
+  "9c1313e2e572": "Die Klassifizierung erfolgt auf deinem Computer anhand zwischengespeicherter Kopfzeilen",
+  "400c068c2e21": "Korrigiere eine Kategorie, um den Klassifikator mit deinen E-Mails zu trainieren",
+  "79e93103fb89": "Kein zusätzlicher RAM-Bedarf für ein großes Modell",
+  "8529cd91dcca": "Kein mehrere Gigabyte großer Modell-Download",
+  "6208dc37e92e": "Für die Bereinigung nicht erforderlich",
+  "e6a3ffcf6395": "Zum Synchronisieren von E-Mails und Ändern von Serverkopien erforderlich",
+  "60e051643e4f": "Muss für die Bereinigung ein KI-Modell heruntergeladen werden?",
+  "574c3615ba77": "Nein. Die Bereinigung verwendet lokale Regeln, einen Naive-Bayes-Klassifikator und integrierte Heuristiken. Sie lernt aus deinen Kategoriekorrekturen, ohne ein LLM herunterzuladen.",
+  "3afa38a8833e": "Ist die Bereinigung dasselbe wie KI-Schreiben?",
+  "6ecb1a5060dc": "Nein. KI-Schreiben hat eigene Anbietereinstellungen für Apple Intelligence, ein heruntergeladenes Modell oder einen kompatiblen Endpunkt wie Ollama. Ein Wechsel dieses Anbieters ändert den Klassifikator der Bereinigung nicht.",
+  "eea32a5141b1": "Löschen entfernt die Serverkopie und erstellt vorher keine Tresorkopie. Verwende Archivieren in der Bereinigung, um eine lokale Kopie zu speichern und zu überprüfen, bevor du sie vom Server entfernst. Die Zeitkapsel kann gespeicherte Verläufe anzeigen, aber keine Nachricht wiederherstellen, die nie gespeichert wurde.",
+  "3e016ad79e11": "Verbinde Yahoo mit einem App-Passwort, archiviere deine Ordner und überprüfe deine lokale Kopie.",
+  "c7beb003a3af": "Kontaktauswahl und Adressbuch — Vorschläge beim Schreiben, Kontaktverlauf, Zusammenführen sowie vCard-Import und -Export",
+  "2820f998042a": "Deine E-Mails bleiben auf deinem Computer. MailVault überprüft Absender, speichert Zugangsdaten im macOS-Schlüsselbund, in der Windows-Anmeldeinformationsverwaltung oder im Linux Secret Service und läuft in einer Sandbox. Kein MailVault-Dienst zur E-Mail-Speicherung, keine Telemetrie. Optionale KI-Endpunkte erhalten nur den Text, den du freigibst; Gmail-E-Mails bleiben auf dem Gerät."
+}

@@ -102,6 +102,14 @@
         "@type": "Answer",
         "text": "MailVault는 개인정보 보호를 우선으로 설계되었습니다. 메일 자격 증명은 macOS 키체인, Windows 자격 증명 관리자, 또는 Linux Secret Service에 저장되며, 평문 파일에는 절대 저장되지 않습니다. 모든 데이터는 사용자의 컴퓨터에 머뭅니다 — 클라우드 동기화도, 추적도, 분석도, 데이터 수집도 없습니다. 소스 코드는 GitHub에 있으므로 직접 읽어 볼 수 있습니다."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "주소록은 어디에 있나요?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "사이드바에서 연락처를 엽니다. 메일과 직접 추가한 사람을 바탕으로 연락처 카드를 만들고, 교신 기록, 추천, 발견된 주소의 검토 대기 목록을 제공합니다. 미리보기를 검토한 뒤 중복 연락처를 병합하고, 병합을 취소하거나 vCard 파일을 가져오고 내보낼 수 있습니다. 연락처는 이 컴퓨터에 보관되며 보관함 백업과 계정 이전에 포함됩니다. 제공업체의 주소록과는 동기화하지 않습니다."
+      }
     }
   ]
 }
@@ -219,7 +227,7 @@
               MailVault는 메일을 자신의 디스크에 있는 볼트에 저장하는 macOS, Windows, Linux용 무료 데스크톱 메일 클라이언트입니다. IMAP으로 메일 계정에 연결하고 모든 메시지를 표준 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 파일(RFC 5322)</a>로 컴퓨터에 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 형식으로 저장하므로, 업체 종속 없는 영구적인 오프라인 백업이 생깁니다.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/email-list-view-720.webp 720w, /screenshots/ko/email-list-view-1440.webp 1440w, /screenshots/ko/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/email-list-view-light-1440.webp" srcset="/screenshots/ko/email-list-view-light-720.webp 720w, /screenshots/ko/email-list-view-light-1440.webp 1440w, /screenshots/ko/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="스레드 대화가 있는 받은편지함을 보여 주는 MailVault 메일 목록 화면" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/email-list-view-720.webp 720w, /screenshots/ko/email-list-view-1440.webp 1440w, /screenshots/ko/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/email-list-view-light-1440.webp" srcset="/screenshots/ko/email-list-view-light-720.webp 720w, /screenshots/ko/email-list-view-light-1440.webp 1440w, /screenshots/ko/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="스레드 대화가 있는 받은편지함을 보여 주는 MailVault 메일 목록 화면 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -243,11 +251,11 @@
               네. 설정 &rsaquo; 모양 &rsaquo; 강조 표시에서 메시지 목록이 현재 위치를 보여 주는 방식을 두 가지 중에서 고를 수 있습니다. <strong>포인터 따라가기</strong>가 기본값이며, MailVault가 지금까지 해 온 방식 그대로입니다. 마우스가 지나가는 줄이 밝아지고, 열어 둔 메시지에는 옅게 색이 깔린 띠가 남습니다. <strong>읽고 있는 항목 표시</strong>는 이를 뒤집습니다. 포인터로는 아무것도 바뀌지 않고, 열린 메시지는 짙은 회색으로 채워지며, 같은 대화의 나머지 메시지는 연한 회색이 됩니다. 그래서 한눈에 무엇을 읽고 있는지, 그것이 어디에 속하는지 알 수 있습니다. 두 가지 모두 모든 계정과 폴더에 적용되고, 언제든지 서로 바꿀 수 있습니다.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/list-highlight-hover-720.webp 720w, /screenshots/ko/list-highlight-hover-1440.webp 1440w, /screenshots/ko/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/list-highlight-hover-light-1440.webp" srcset="/screenshots/ko/list-highlight-hover-light-720.webp 720w, /screenshots/ko/list-highlight-hover-light-1440.webp 1440w, /screenshots/ko/list-highlight-hover-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="기본 강조 표시를 적용한 MailVault 메시지 목록. 열린 메시지에 색이 깔린 띠가 있습니다" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/list-highlight-hover-720.webp 720w, /screenshots/ko/list-highlight-hover-1440.webp 1440w, /screenshots/ko/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/list-highlight-hover-light-1440.webp" srcset="/screenshots/ko/list-highlight-hover-light-720.webp 720w, /screenshots/ko/list-highlight-hover-light-1440.webp 1440w, /screenshots/ko/list-highlight-hover-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="기본 강조 표시를 적용한 MailVault 메시지 목록. 열린 메시지에 색이 깔린 띠가 있습니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">포인터 따라가기: 줄이 마우스에 반응하고 열린 메시지에는 색이 깔립니다.</figcaption>
             </figure>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/list-highlight-selection-720.webp 720w, /screenshots/ko/list-highlight-selection-1440.webp 1440w, /screenshots/ko/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/list-highlight-selection-light-1440.webp" srcset="/screenshots/ko/list-highlight-selection-light-720.webp 720w, /screenshots/ko/list-highlight-selection-light-1440.webp 1440w, /screenshots/ko/list-highlight-selection-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="열린 메시지를 짙은 회색으로, 같은 대화의 나머지를 연한 회색으로 표시하는 MailVault 메시지 목록" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/list-highlight-selection-720.webp 720w, /screenshots/ko/list-highlight-selection-1440.webp 1440w, /screenshots/ko/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/list-highlight-selection-light-1440.webp" srcset="/screenshots/ko/list-highlight-selection-light-720.webp 720w, /screenshots/ko/list-highlight-selection-light-1440.webp 1440w, /screenshots/ko/list-highlight-selection-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="열린 메시지를 짙은 회색으로, 같은 대화의 나머지를 연한 회색으로 표시하는 MailVault 메시지 목록 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">읽고 있는 항목 표시: 포인터는 조용하고, 열린 메시지는 채워지며, 그 대화는 한 단계 연하게 남습니다.</figcaption>
             </figure>
         </article>
@@ -261,7 +269,7 @@
               <p><strong>읽기</strong>는 대화를 다룹니다 &mdash; <em>그룹화</em>는 답장을 한 행으로 접고, <em>펼치기</em>는 목록 안에서 펼쳐 보여 주며, <em>끄기</em>는 모든 메시지에 각자의 행을 줍니다 &mdash; 여기에 스레드 순서, 서명 처리, 행 강조, 동작 버튼 스타일이 함께 있습니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-layout-720.webp 720w, /screenshots/ko/settings-layout-1440.webp 1440w, /screenshots/ko/settings-layout-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/settings-layout-light-1440.webp" srcset="/screenshots/ko/settings-layout-light-720.webp 720w, /screenshots/ko/settings-layout-light-1440.webp 1440w, /screenshots/ko/settings-layout-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 설정 모양 화면의 레이아웃 섹션. 읽기 창, 메시지 행, 사이드바 레이아웃, 밀도 옵션이 보입니다" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-layout-720.webp 720w, /screenshots/ko/settings-layout-1440.webp 1440w, /screenshots/ko/settings-layout-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/settings-layout-light-1440.webp" srcset="/screenshots/ko/settings-layout-light-720.webp 720w, /screenshots/ko/settings-layout-light-1440.webp 1440w, /screenshots/ko/settings-layout-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 설정 모양 화면의 레이아웃 섹션. 읽기 창, 메시지 행, 사이드바 레이아웃, 밀도 옵션이 보입니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">설정 &rsaquo; 모양 &rsaquo; 레이아웃: 읽기 창, 메시지 행, 사이드바, 밀도가 한곳에 있습니다.</figcaption>
             </figure>
         </article>
@@ -271,6 +279,11 @@
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               MailVault는 개인정보 보호를 우선으로 설계되었습니다. 메일 자격 증명은 macOS 키체인, Windows 자격 증명 관리자, 또는 Linux Secret Service에 저장되며, 평문 파일에는 절대 저장되지 않습니다. 모든 데이터는 사용자의 컴퓨터에 머뭅니다 — 클라우드 동기화도, 추적도, 분석도, 데이터 수집도 없습니다. 소스 코드는 GitHub에 있으므로 직접 읽어 볼 수 있습니다.
             </p>
+        </article>
+
+        <article id="contacts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">주소록은 어디에 있나요?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>사이드바에서 연락처를 엽니다. 메일과 직접 추가한 사람을 바탕으로 연락처 카드를 만들고, 교신 기록, 추천, 발견된 주소의 검토 대기 목록을 제공합니다. 미리보기를 검토한 뒤 중복 연락처를 병합하고, 병합을 취소하거나 vCard 파일을 가져오고 내보낼 수 있습니다. 연락처는 이 컴퓨터에 보관되며 보관함 백업과 계정 이전에 포함됩니다. 제공업체의 주소록과는 동기화하지 않습니다.</p></div>
         </article>
 
       </div>

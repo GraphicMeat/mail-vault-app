@@ -102,7 +102,7 @@ index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>这张表有两点值得看。第一，耗时与匹配数量无关：15 条命中比 2,500 条用得更久，因为花时间的是查询的形态（两个词的短语比单个词更费事），而不是返回多少邮件。第二，列表最多显示最新的 500 条匹配，超出时会明确说明，所以无论匹配多少封邮件，绘制结果的工作量都是有上限的。</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-results-1440.webp"><img src="/screenshots/zh/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 在一个包含 50,000 封邮件的保管库中搜索 invoice 一词的结果。搜索框下方的标题说明列表显示所有文件夹中约 2,500 条已保存匹配结果里最新的 500 条，下面是一列邮件行。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-results-1440.webp"><img src="/screenshots/zh/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 在一个包含 50,000 封邮件的保管库中搜索 invoice 一词的结果。搜索框下方的标题说明列表显示所有文件夹中约 2,500 条已保存匹配结果里最新的 500 条，下面是一列邮件行。 · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">应用中的同类搜索：在一个包含 50,000 封邮件的保管库里搜索“invoice”。列表显示约 2,500 条已保存匹配结果中最新的 500 条，并明确说明了这一点。顶部的几行来自共用这个窗口的演示邮箱，保管库的文件夹名为 Projects、Correspondence 和 Clients，与基准测试中的不同。</figcaption>
           </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
@@ -143,7 +143,7 @@ status check             5 ms</code></pre>
 
           <p>一次性的成本是构建索引：50,000 封邮件大约十一秒，约每秒 4,000 封，占用 225 MB 磁盘。它在后台进行，运行期间你可以继续使用 MailVault，之后只会为新增和变更的邮件建立索引。</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-index-1440.webp"><img src="/screenshots/zh/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 设置的“存储”标签页中的搜索索引卡片，显示已索引 50,000 / 50,000 和约 270 MB，并带有邮件正文、附件文本和图片文字的开关。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-index-1440.webp"><img src="/screenshots/zh/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 设置的“存储”标签页中的搜索索引卡片，显示已索引 50,000 / 50,000 和约 270 MB，并带有邮件正文、附件文本和图片文字的开关。 · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">设置、存储、搜索索引构建完成后的状态：50,000 封邮件中已索引 50,000 封，磁盘占用约 270 MB。这是在应用中单独进行的一次运行，因此大小与上方基准测试表中的 225 MB 不同。</figcaption>
           </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1 ms 和 7 ms 是什么感觉</h3>
@@ -189,7 +189,7 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">服务器邮件、归档和备份：一次搜索</h3>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-results-1440.webp"><img src="/screenshots/zh/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 某个查询的搜索结果，底部的图例说明了仅在服务器、在你的保险库里、唯一副本和在备份驱动器上这几种标记" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-results-1440.webp"><img src="/screenshots/zh/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 某个查询的搜索结果，底部的图例说明了仅在服务器、在你的保险库里、唯一副本和在备份驱动器上这几种标记 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">每条结果都会说明邮件存放在哪里：仅在服务器上、在你的保险库里、唯一副本，或在你的备份驱动器上。</figcaption>
           </figure>
           <p>MailVault 把三类邮件并排放在一起：从服务器同步来的邮件、你归档的邮件，以及从备份还原的邮件。它们最终都是同一个保险库里的文件，所以都进入同一个索引。在测试中，邮件分布在收件箱、归档和已发送文件夹里，一次查询就覆盖了全部。邮件从哪里来，并不影响它被找到的速度。</p>

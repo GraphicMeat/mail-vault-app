@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>How to Back Up Yahoo Mail to Your Computer — MailVault</title>
-  <meta name="description" content="Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.">
+  <meta name="description" content="Back up Yahoo Mail using an app password and IMAP. Save a local archive with MailVault and keep a second copy on another drive.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/guides/yahoo-mail-backup.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/guides/yahoo-mail-backup.html">
   <meta property="og:title" content="How to Back Up Yahoo Mail to Your Computer — MailVault">
-  <meta property="og:description" content="Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.">
+  <meta property="og:description" content="Back up Yahoo Mail using an app password and IMAP. Save a local archive with MailVault and keep a second copy on another drive.">
   <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="How to Back Up Yahoo Mail to Your Computer — MailVault">
-  <meta name="twitter:description" content="Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.">
+  <meta name="twitter:description" content="Back up Yahoo Mail using an app password and IMAP. Save a local archive with MailVault and keep a second copy on another drive.">
   <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -35,7 +35,7 @@
     "@context": "https://schema.org",
     "@type": "Article",
     "headline": "How to Back Up Yahoo Mail to Your Computer",
-    "description": "Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.",
+    "description": "Back up Yahoo Mail using an app password and IMAP. Save a local archive with MailVault and keep a second copy on another drive.",
     "url": "https://mailvaultapp.com/guides/yahoo-mail-backup.html",
     "datePublished": "2026-07-15",
     "dateModified": "2026-07-15",
@@ -218,31 +218,23 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-          <p>
-            Yahoo Mail has changed ownership and infrastructure several times over the years, and its account security options have shifted along with it. A lot of older backup tutorials tell you to generate an "app password" for Yahoo and use it to connect a mail client over IMAP. That advice is now out of date &mdash; <strong>Yahoo Mail does not support app-specific passwords</strong> the way Gmail or iCloud do. If a tool is asking you to generate one for Yahoo specifically, it's following an outdated flow that won't work for most accounts today.
-          </p>
+          <p>Yahoo supports app passwords for third-party mail clients. In Yahoo Account Security, open External connections and create an app password for MailVault. Copy it into the password field when adding your Yahoo account. See <a href="https://help.yahoo.com/kb/SLN15241.html" target="_blank" rel="noopener">Yahoo’s app-password instructions</a>.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What actually works for Yahoo Mail</h3>
 
-          <p>
-            Yahoo still fully supports IMAP access for third-party mail clients &mdash; you just connect through Yahoo's standard sign-in flow instead of an app password. In practice, that means:
-          </p>
+          <p>MailVault connects to Yahoo over IMAP. Use these settings:</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>IMAP server</strong>: <code>imap.mail.yahoo.com</code>, port 993, SSL/TLS.</li>
-            <li><strong>SMTP server</strong> (if you're also sending): <code>smtp.mail.yahoo.com</code>, port 465 or 587, SSL/TLS.</li>
-            <li><strong>Sign-in</strong>: use your regular Yahoo account credentials through the client's normal connection flow. Depending on your account's security settings, Yahoo may prompt you to approve the new device or client the first time.</li>
+            <li><strong>SMTP server</strong>: <code>smtp.mail.yahoo.com</code>, port 465 with SSL/TLS or port 587 with STARTTLS.</li>
+            <li><strong>Sign-in</strong>: enter your full Yahoo email address and a Yahoo app password, not your normal account password.</li>
           </ul>
 
-          <p>
-            If your mail client specifically insists on an app password and Yahoo's account settings no longer offer a way to generate one, that client's Yahoo support may simply be broken or outdated &mdash; it's not something wrong with your account.
-          </p>
+          <p>If Yahoo does not let you create an app password, follow its account-security guidance. Do not substitute your normal password or disable two-step verification.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Why back up Yahoo Mail at all</h3>
 
-          <p>
-            Yahoo gives free accounts a generous 1 TB of storage, so running out of space is rarely the reason people back up Yahoo Mail. The more common reasons are:
-          </p>
+          <p>A mailbox quota is not a backup. Keep a separate copy for these reasons:</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li>Yahoo has been sold and restructured multiple times, and product changes or account security incidents have made long-time users understandably cautious about relying on it as the only copy of their email history.</li>
@@ -252,17 +244,15 @@
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Backing up Yahoo Mail with MailVault</h3>
 
-          <p>
-            MailVault is a free desktop email app for macOS, Windows and Linux that connects to Yahoo Mail through its standard IMAP connection flow &mdash; no app password required, no workaround needed. Add your Yahoo account, sign in normally, and MailVault downloads your mail as individual <code>.eml</code> files stored in a standard Maildir structure on your disk. Each email is its own file, so you can browse, search, and open your archive directly, or point another mail client at the same files later if you ever want to.
-          </p>
+          <p>In MailVault, add an account, choose Yahoo Mail and enter your email address and app password. Archive the folders you want to keep, then open saved messages and attachments offline to check the copy. Maildir, the default vault format, stores each message as an <code>.eml</code> file. Keep a second copy on another drive before deleting anything from Yahoo.</p>
 
           <p>
             Manual archiving of your full Yahoo mailbox is free and unlimited in MailVault. If you want your Yahoo backup to update itself automatically on a schedule rather than archiving in batches, that's part of MailVault Premium ($4/month or $25/year; 14-day free trial on yearly).
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Back up Yahoo Mail without an app password</p>
-            <p class="text-sm mb-4">MailVault connects to Yahoo through its standard sign-in flow and archives your mail as individual .eml files. Free, with the source live on GitHub.</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Back up Yahoo Mail with an app password</p>
+            <p class="text-sm mb-4">Connect Yahoo over IMAP with an app password and archive your mail locally. Manual backups are free, with the source live on GitHub.</p>
             <div class="flex flex-wrap gap-3">
               <a href="/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
                 Download MailVault

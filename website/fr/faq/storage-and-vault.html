@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stockage et votre coffre — MailVault FAQ</title>
-  <meta name="description" content="Où MailVault range votre courrier sur le disque, pourquoi il utilise .eml et Maildir, et comment déplacer le coffre vers un autre disque.">
+  <meta name="description" content="Où MailVault conserve vos e-mails, les différences entre le stockage Maildir et JMAP, et comment déplacer ou convertir le coffre.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/fr/faq/storage-and-vault.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,8 +13,8 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/fr/faq/storage-and-vault.html">
   <meta property="og:title" content="Stockage et votre coffre — MailVault FAQ">
-  <meta property="og:description" content="Où MailVault range votre courrier sur le disque, pourquoi il utilise .eml et Maildir, et comment déplacer le coffre vers un autre disque.">
-  <meta property="og:image:alt" content="MailVault : recherche rapide, courrier privé, à vous pour de bon. Gratuit pour macOS, Windows et Linux, avec un aperçu de l'app.">
+  <meta property="og:description" content="Où MailVault conserve vos e-mails, les différences entre le stockage Maildir et JMAP, et comment déplacer ou convertir le coffre.">
+  <meta property="og:image:alt" content="MailVault : recherche rapide, courrier privé, à vous pour de bon. Gratuit pour macOS, Windows et Linux, avec un aperçu de l&#39;app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -24,8 +24,8 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Stockage et votre coffre — MailVault FAQ">
-  <meta name="twitter:description" content="Où MailVault range votre courrier sur le disque, pourquoi il utilise .eml et Maildir, et comment déplacer le coffre vers un autre disque.">
-  <meta name="twitter:image:alt" content="MailVault : recherche rapide, courrier privé, à vous pour de bon. Gratuit pour macOS, Windows et Linux, avec un aperçu de l'app.">
+  <meta name="twitter:description" content="Où MailVault conserve vos e-mails, les différences entre le stockage Maildir et JMAP, et comment déplacer ou convertir le coffre.">
+  <meta name="twitter:image:alt" content="MailVault : recherche rapide, courrier privé, à vous pour de bon. Gratuit pour macOS, Windows et Linux, avec un aperçu de l&#39;app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -60,7 +60,7 @@
       "name": "Où mes e-mails sont-ils stockés ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Votre coffre est un dossier de fichiers .eml standard organisés au format Maildir — sur votre ordinateur — un fichier par e-mail, sans base de données. Sur macOS, MailVault s'exécute en bac à sable : le dossier est donc ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ et non ~/Library/Application Support. Sous Linux, c'est ~/.local/share/com.mailvault.app/ pour le paquet .deb, ou ~/snap/mailvault/current/.local/share/com.mailvault.app/ pour le Snap. ~/Library est masqué dans le Finder et Spotlight ne l'indexe pas, c'est pourquoi chercher com.mailvault.app sur le disque ne donne rien : dans le Finder, appuyez sur Maj + Commande + G et tapez ~/Library, ou maintenez Option en ouvrant le menu Aller du Finder, ou appuyez sur Commande + J dans votre dossier de départ et cochez Afficher le dossier Bibliothèque. MailVault indique aussi le dossier qu'il utilise dans Paramètres, Sauvegarde et restauration, Paramètres de sauvegarde, Où votre courrier est stocké. Vos données ne quittent jamais votre ordinateur et ne sont jamais envoyées vers un service cloud. Comme .eml est un format d'e-mail largement pris en charge, vos e-mails peuvent être ouverts par Apple Mail, Thunderbird, Outlook ou d'autres apps compatibles EML — vous n'êtes jamais prisonnier de MailVault."
+        "text": "Par défaut, votre coffre est un dossier de fichiers .eml standard organisés au format Maildir — sur votre ordinateur — un fichier par e-mail, sans base de données. Sous macOS, MailVault fonctionne dans un bac à sable : le dossier se trouve donc dans ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ plutôt que dans ~/Library/Application Support. Sous Linux, il se trouve dans ~/.local/share/com.mailvault.app/ pour le paquet .deb, ou dans ~/snap/mailvault/current/.local/share/com.mailvault.app/ pour le Snap. ~/Library est masqué dans le Finder et n'est pas indexé par Spotlight, c'est pourquoi une recherche de com.mailvault.app sur le disque ne donne aucun résultat : dans le Finder, appuyez sur Shift + Command + G et saisissez ~/Library, maintenez Option en ouvrant le menu Aller du Finder, ou appuyez sur Command + J dans votre dossier de départ et cochez Afficher le dossier Bibliothèque. MailVault indique aussi le dossier utilisé dans Paramètres, Sauvegarde et restauration, Paramètres de sauvegarde, Où votre courrier est stocké. Vos données ne quittent jamais votre ordinateur et ne sont jamais envoyées à un service cloud. Le format .eml étant largement pris en charge, vos e-mails peuvent être ouverts par Apple Mail, Thunderbird, Outlook ou toute autre application compatible EML — vous n'êtes jamais lié à MailVault."
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": "Que sont les fichiers .eml et Maildir ? Pourquoi est-ce important ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": ".eml (RFC 5322) est le format standard d'Internet pour les messages électroniques. Chaque e-mail est stocké dans un seul fichier texte autonome qui s'ouvre dans n'importe quel client de messagerie. Maildir est une structure de dossiers éprouvée pour stocker du courrier, utilisée par les serveurs de messagerie depuis des décennies. Chaque e-mail est un fichier, donc il n'y a pas de base de données unique qui puisse se corrompre. Ensemble, .eml + Maildir garantissent que vos e-mails restent lisibles dans le temps, portables, et jamais captifs d'une seule application."
+        "text": ".eml (RFC 5322) est le format standard d'Internet pour les messages électroniques. Avec le stockage Maildir, chaque e-mail est enregistré dans un fichier texte unique et autonome, lisible par n'importe quel client de messagerie. Maildir est une structure de répertoires éprouvée pour le stockage des e-mails, utilisée par les serveurs de messagerie depuis des décennies. Chaque e-mail est un fichier : aucune base de données unique ne risque donc d'être corrompue. Ensemble, .eml + Maildir rendent vos e-mails pérennes, portables et indépendants de toute application particulière."
       }
     },
     {
@@ -109,6 +109,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "MailVault conserve toujours une copie de travail de vos e-mails dans le stockage propre à l’application — c’est celle que vous lisez, cherchez et ouvrez. Un emplacement de sauvegarde externe ajoute une seconde copie indépendante sur le disque de votre choix : SSD externe, partage NAS ou dossier synchronisé. Elle est écrite pendant les sauvegardes, en même temps que la copie de travail, avec la même organisation .eml et Maildir ; les applications qui prennent en charge EML peuvent donc lire les fichiers de messages. L’application ne la lit pas au quotidien : c’est du stockage à froid ; les e-mails supprimés du serveur ou retirés de MailVault restent dans la copie externe. Réglez-la dans Réglages, sous Sauvegarde, dans « Seconde copie — stockage à froid externe ». Sur macOS, MailVault enregistre un signet de sécurité pour le dossier afin que l’accès survive aux redémarrages et aux mises à jour ; le badge d’état indique Prêt, Réautorisation nécessaire, Indisponible ou Accès refusé, et la réautorisation se fait en un clic. Si le disque est débranché pendant une sauvegarde, la copie de travail réussit quand même et MailVault indique combien de messages n’ont pas atteint la copie externe ; la prochaine exécution les copiera."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je changer le format de stockage du coffre ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui. Paramètres &gt; Stockage permet de convertir entre les formats de stockage Maildir et JMAP. Maildir est le format par défaut, avec un fichier .eml par message. Le stockage JMAP conserve les octets d'origine du message et un enregistrement JSON JMAP standard, et ne stocke qu'une seule fois les messages identiques présents dans plusieurs dossiers. Choisissez de conserver les anciens fichiers à part ou de les supprimer après vérification de chaque message. La conversion s'exécute en arrière-plan et reprend après un redémarrage. Ce choix de stockage est indépendant du protocole de votre compte : IMAP, Microsoft Graph ou JMAP."
       }
     }
   ]
@@ -206,7 +214,7 @@
   <main id="main" class="pt-32 pb-20">
     <div class="mv-wrap mv-directory">
 
-      <nav aria-label="Fil d'Ariane" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+      <nav aria-label="Fil d&#39;Ariane" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
           <li><a href="/fr/" class="hover:text-primary-500 transition-colors">Accueil</a></li>
           <li aria-hidden="true">/</li>
@@ -217,14 +225,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">Stockage et votre coffre</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Où MailVault range votre courrier sur le disque, pourquoi il utilise .eml et Maildir, et comment déplacer le coffre vers un autre disque.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Où MailVault conserve vos e-mails, les différences entre le stockage Maildir et JMAP, et comment déplacer ou convertir le coffre.</p>
 
       <div class="space-y-4">
 
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Où mes e-mails sont-ils stockés ?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Votre coffre est un dossier de <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">fichiers .eml</a> standard organisés au format <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> sur votre ordinateur &mdash; un fichier par e-mail, sans base de données. Vos données ne quittent jamais votre ordinateur et ne sont jamais envoyées vers un service cloud. Comme .eml est un format d'e-mail largement pris en charge, vos e-mails peuvent être ouverts par Apple Mail, Thunderbird, Outlook ou d'autres apps compatibles EML — vous n'êtes jamais prisonnier de MailVault.</p>
+              <p class="mb-4">Par défaut, votre coffre est un dossier de <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">fichiers .eml</a> standard organisés au format <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> sur votre ordinateur &mdash; un fichier par e-mail, sans base de données. Vos données ne quittent jamais votre ordinateur et ne sont jamais envoyées à un service cloud. Le format .eml étant largement pris en charge, vos e-mails peuvent être ouverts par Apple Mail, Thunderbird, Outlook ou toute autre application compatible EML — vous n'êtes jamais lié à MailVault.</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Le dossier exact</p>
               <p class="mb-2">MailVault est une app en bac à sable : sous macOS, votre coffre se trouve donc dans le conteneur de l'app &mdash; pas directement sous <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code>, là où la plupart des gens regardent d'abord :</p>
@@ -289,7 +297,7 @@
               Oui. Une fois vos e-mails synchronisés, ils sont stockés en local et vous pouvez tous les lire, les rechercher et les parcourir sans connexion Internet. Internet ne vous sert qu'à synchroniser les nouveaux e-mails ou à envoyer des messages.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/local-vault-720.webp 720w, /screenshots/fr/local-vault-1440.webp 1440w, /screenshots/fr/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/local-vault-light-1440.webp" srcset="/screenshots/fr/local-vault-light-720.webp 720w, /screenshots/fr/local-vault-light-1440.webp 1440w, /screenshots/fr/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Vue locale de MailVault montrant des e-mails gardés sur le disque après leur suppression du serveur" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/local-vault-720.webp 720w, /screenshots/fr/local-vault-1440.webp 1440w, /screenshots/fr/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/local-vault-light-1440.webp" srcset="/screenshots/fr/local-vault-light-720.webp 720w, /screenshots/fr/local-vault-light-1440.webp 1440w, /screenshots/fr/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Vue locale de MailVault montrant des e-mails gardés sur le disque après leur suppression du serveur · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -343,6 +351,11 @@
                 Si le support est débranché en cours de sauvegarde, la copie de travail va tout de même au bout et MailVault indique combien de messages n'ont pas atteint la copie externe. L'exécution suivante les recopie — rien n'est perdu, et l'échec n'est jamais silencieux.
               </p>
             </div>
+        </article>
+
+        <article id="jmap-storage" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Puis-je changer le format de stockage du coffre ?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Oui. Paramètres &gt; Stockage permet de convertir entre les formats de stockage Maildir et JMAP. Maildir est le format par défaut, avec un fichier .eml par message. Le stockage JMAP conserve les octets d'origine du message et un enregistrement JSON JMAP standard, et ne stocke qu'une seule fois les messages identiques présents dans plusieurs dossiers. Choisissez de conserver les anciens fichiers à part ou de les supprimer après vérification de chaque message. La conversion s'exécute en arrière-plan et reprend après un redémarrage. Ce choix de stockage est indépendant du protocole de votre compte : IMAP, Microsoft Graph ou JMAP.</p></div>
         </article>
 
       </div>

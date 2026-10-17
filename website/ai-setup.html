@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Email Cleanup — Local AI-Powered Email Classification | MailVault</title>
-  <meta name="description" content="MailVault's Email Cleanup uses a local AI model to classify your emails and suggest what's safe to delete from the server. Everything runs on your machine — no email data leaves your device.">
+  <meta name="description" content="MailVault Email Cleanup uses local rules and a Naive Bayes classifier. No model download required. Review categories before archiving or deleting server copies.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ai-setup.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/ai-setup.html">
   <meta property="og:title" content="AI Email Cleanup — Local AI-Powered Email Classification | MailVault">
-  <meta property="og:description" content="Classify and clean up your mailbox with a local AI model. No data leaves your device.">
+  <meta property="og:description" content="Classify mail locally without an LLM download. Review categories, archive safely and keep control of server copies.">
   <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:site_name" content="MailVault">
@@ -20,7 +20,7 @@
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="AI Email Cleanup — Local AI Classification | MailVault">
-  <meta name="twitter:description" content="Classify and clean up your mailbox with a local AI model. No data leaves your device.">
+  <meta name="twitter:description" content="Classify mail locally without an LLM download. Review categories, archive safely and keep control of server copies.">
   <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -123,22 +123,22 @@
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
             </div>
-            <h3 class="font-semibold text-lg mb-2">1. Download the Model</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Enable AI in Settings and download a model (~2-5 GB). It's stored locally in your app data folder. One-time download.</p>
+            <h3 class="font-semibold text-lg mb-2">1. Open Email Cleanup</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Open Email Cleanup for an account. It uses cached email headers and needs no model download.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">2. Automatic Classification</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">After each backup, the AI classifies your emails: newsletters, promotions, notifications, personal, work, and more.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Local rules, a Naive Bayes classifier and built-in heuristics sort mail into Newsletter, Promotional, Transactional, Personal, Work and Spam.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">3. Review & Clean Up</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Review the cleanup report, approve bulk actions, and free up server storage. Local copies are always preserved.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Review each category before acting. Archive saves and verifies a vault copy before removing the server copy; Delete removes mail from the server without first archiving it.</p>
           </div>
         </div>
       </div>
@@ -150,13 +150,11 @@
         <div class="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <h2 class="text-2xl font-bold mb-4">100% Private. Zero Cloud.</h2>
-            <p class="text-slate-600 dark:text-slate-400 mb-6">
-              Unlike cloud-based email tools, MailVault's AI runs entirely on your computer. The model processes your emails locally — nothing is sent to any server, API, or third-party service. Your emails are yours.
-            </p>
+            <p class="text-slate-600 dark:text-slate-400 mb-6">Cleanup classifies mail on your computer. It does not send email content, metadata or addresses to an AI service. The separate AI writing tools can use a provider you choose.</p>
             <ul class="space-y-3">
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">Model runs on your CPU/GPU — no internet needed for classification</span>
+                <span class="text-slate-700 dark:text-slate-300">Classification runs on your computer using cached headers</span>
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -164,7 +162,7 @@
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">Delete the model anytime to free disk space</span>
+                <span class="text-slate-700 dark:text-slate-300">Correct a category to train the classifier on your mail</span>
               </li>
             </ul>
           </div>
@@ -173,19 +171,19 @@
             <div class="space-y-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">RAM</span>
-                <span class="font-medium">16 GB recommended (8 GB minimum with smaller model)</span>
+                <span class="font-medium">No separate large-model RAM requirement</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">Disk Space</span>
-                <span class="font-medium">~2-5 GB for the model file</span>
+                <span class="font-medium">No multi-gigabyte model download</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">GPU</span>
-                <span class="font-medium">Optional — uses Metal on Apple Silicon, CPU elsewhere</span>
+                <span class="font-medium">Not required for Cleanup</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">Internet</span>
-                <span class="font-medium">Only for initial model download</span>
+                <span class="font-medium">Needed to sync mail and change server copies</span>
               </div>
             </div>
           </div>
@@ -199,16 +197,16 @@
         <h2 class="text-2xl font-bold text-center mb-12">Frequently Asked Questions</h2>
         <div class="space-y-6">
           <div>
-            <h3 class="font-semibold mb-2">Which AI model does MailVault use?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">MailVault downloads open-source models in GGUF format. The recommended model is Llama 3.1 8B (~4.6 GB), which offers the best balance of classification quality and speed. A smaller 3B model is available for machines with less RAM.</p>
+            <h3 class="font-semibold mb-2">Does Cleanup need an AI model download?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">No. Cleanup uses local rules, a Naive Bayes classifier and built-in heuristics. It learns from your category corrections without downloading an LLM.</p>
           </div>
           <div>
-            <h3 class="font-semibold mb-2">Can I use my own model?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Yes. Place any GGUF-format model file in the models directory (shown in Settings &gt; AI &amp; Cleanup) and it will appear in the model selector.</p>
+            <h3 class="font-semibold mb-2">Is Cleanup the same as AI writing?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">No. AI writing has its own provider settings for Apple Intelligence, a downloaded model, or a compatible endpoint such as Ollama. Changing that provider does not change the Cleanup classifier.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">What happens when I "delete from server"?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">The email is removed from your IMAP server (freeing server storage), but the local .eml copy in MailVault is always preserved. You can browse or restore any email from the Time Capsule feature at any time.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Delete removes the server copy and does not create a vault copy first. Use Archive in Cleanup to save and verify a local copy before removing it from the server. Time Capsule can show saved history, but cannot recover a message that was never saved.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">Does the AI learn from my corrections?</h3>

@@ -365,7 +365,8 @@ export function collect(html) {
       if (a.vs < 0) continue;
       if (!attrIsTranslatable(tag, name)) continue;
       if (!isTranslatable(a.value)) continue;
-      found.push({ key: keyOf(a.value), text: normalize(a.value) });
+      const description = mediaDescription(tag, name, a.value);
+      found.push({ key: keyOf(description), text: normalize(description) });
     }
   }
 
@@ -377,8 +378,17 @@ export function collect(html) {
   return found;
 }
 
+// Keep release provenance invariant while reusing the existing translated media description.
+function mediaDescription(tag, name, value) {
+  if ((tag.name === 'img' || tag.name === 'video') && tag.attrs['data-mailvault-version'] && (name === 'alt' || name === 'aria-label')) {
+    return value.replace(/ · (?:Reviewed for )?MailVault version \d+\.\d+\.\d+$/, '');
+  }
+  return value;
+}
+
 function attrIsTranslatable(tag, name) {
   if (tag.selfNoTranslate) return false;
+  if ((tag.name === 'img' || tag.name === 'video') && tag.attrs['data-mailvault-version'] && name === 'title') return false;
   if (TRANSLATABLE_ATTRS.has(name)) return true;
   if (tag.name === 'meta' && name === 'content') {
     const id = (tag.attrs.name || tag.attrs.property || {}).value;
@@ -604,7 +614,8 @@ export function render(html, pageRel, loc, dict) {
     for (const [name, at] of Object.entries(a)) {
       if (at.vs < 0) continue;
       if (attrIsTranslatable(tag, name) && isTranslatable(at.value)) {
-        edits.push({ start: at.vs, end: at.ve, text: ESC(tr(at.value)) });
+        const description = mediaDescription(tag, name, at.value);
+        edits.push({ start: at.vs, end: at.ve, text: ESC(tr(description) + at.value.slice(description.length)).replace(/"/g, '&quot;').replace(/'/g, '&#39;') });
       }
       if ((name === 'href' || name === 'src' || name === 'poster') && !('data-i18n-abs' in a)) {
         const r = absolutize(at.value, pageRel);

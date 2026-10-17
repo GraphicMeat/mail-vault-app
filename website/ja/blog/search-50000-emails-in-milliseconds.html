@@ -102,7 +102,7 @@ index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>この表から読み取れることが 2 つあります。1 つ目は、時間が一致件数に比例しないことです。15 件の一致のほうが 2,500 件よりも長くかかりました。時間を左右するのはクエリの形(2 語のフレーズは 1 語より手間がかかる)で、返ってくるメールの量ではありません。2 つ目は、一覧に表示されるのは新しい順で最大 500 件までで、それを超える場合はその旨が表示されることです。そのため、何通一致しても結果の描画にかかる作業量には上限があります。</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-50k-results-1440.webp"><img src="/screenshots/ja/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="50,000 通のメッセージを保管した MailVault の保管庫で、invoice という語を検索した結果です。検索ボックスの下に、すべてのフォルダーで保存済みの一致約 2,500 件のうち新しい 500 件を表示していると示され、その下にメッセージ行の一覧が続きます。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-50k-results-1440.webp"><img src="/screenshots/ja/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="50,000 通のメッセージを保管した MailVault の保管庫で、invoice という語を検索した結果です。検索ボックスの下に、すべてのフォルダーで保存済みの一致約 2,500 件のうち新しい 500 件を表示していると示され、その下にメッセージ行の一覧が続きます。 · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">アプリでの同じ種類の検索です。50,000 通のメッセージを保管した保管庫で「invoice」を検索しました。一覧には保存済みの一致約 2,500 件のうち新しい 500 件が表示され、そのことも明記されています。先頭の数行はこのウィンドウを共有するデモ用メールボックスのもので、保管庫のフォルダー名はベンチマークとは異なり Projects、Correspondence、Clients です。</figcaption>
           </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
@@ -143,7 +143,7 @@ status check             5 ms</code></pre>
 
           <p>一度だけかかるコストはインデックスの構築で、50,000 通でおよそ 11 秒、毎秒約 4,000 通のペースで、ディスクは 225 MB です。構築はバックグラウンドで行われ、実行中も MailVault を使い続けられます。その後は、新しいメッセージと変更されたメッセージだけがインデックスされます。</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-50k-index-1440.webp"><img src="/screenshots/ja/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault の設定、ストレージタブにある検索インデックスのカードです。50,000 / 50,000 件がインデックス済みで約 270 MB と表示され、メッセージ本文、添付ファイルのテキスト、画像内のテキストのスイッチが並んでいます。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-50k-index-1440.webp"><img src="/screenshots/ja/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault の設定、ストレージタブにある検索インデックスのカードです。50,000 / 50,000 件がインデックス済みで約 270 MB と表示され、メッセージ本文、添付ファイルのテキスト、画像内のテキストのスイッチが並んでいます。 · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">設定、ストレージ、検索インデックスの構築が完了した状態です。50,000 通中 50,000 通がインデックス済みで、ディスク上の容量は約 270 MB です。アプリ内の別の実行なので、上のベンチマーク表の 225 MB とは容量が異なります。</figcaption>
           </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1 ms と 7 ms はどんな感覚か</h3>
@@ -189,7 +189,7 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">サーバーのメール、アーカイブ、バックアップを 1 回の検索で</h3>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-results-1440.webp"><img src="/screenshots/ja/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault のクエリの検索結果。下部の凡例で、サーバーのみ、保管庫の中、唯一のコピー、バックアップドライブ上の印を説明している" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-results-1440.webp"><img src="/screenshots/ja/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault のクエリの検索結果。下部の凡例で、サーバーのみ、保管庫の中、唯一のコピー、バックアップドライブ上の印を説明している · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">検索結果にはすべて、メッセージの所在が表示されます。サーバーのみ、保管庫の中、唯一のコピー、バックアップドライブ上のいずれかです。</figcaption>
           </figure>
           <p>MailVault は 3 種類のメールを並べて保管します。サーバーから同期したメッセージ、自分でアーカイブしたメッセージ、バックアップから復元したメッセージです。どれも同じ保管庫の中のファイルになるので、すべて同じインデックスに入ります。テストでは、メールは受信トレイ、アーカイブ、送信済みの各フォルダーにあり、1 つのクエリで全体を検索しました。メッセージの出どころによって、見つかる速さは変わりません。</p>

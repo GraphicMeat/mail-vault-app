@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 邮件清理 — 本地 AI 邮件分类 | MailVault</title>
-  <meta name="description" content="MailVault 的邮件清理用本地 AI 模型对你的邮件分类，并建议哪些可以安全地从服务器删除。全部在你的机器上运行——邮件数据不会离开你的设备。">
+  <meta name="description" content="MailVault 邮件清理使用本地规则和朴素贝叶斯分类器，无需下载模型。归档或删除服务器副本前，请先检查类别。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/ai-setup.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/zh/ai-setup.html">
   <meta property="og:title" content="AI 邮件清理 — 本地 AI 邮件分类 | MailVault">
-  <meta property="og:description" content="用本地 AI 模型分类并清理你的邮箱。数据不会离开你的设备。">
+  <meta property="og:description" content="在本地对邮件分类，无需下载大语言模型。检查类别，安全归档，自主掌控服务器副本。">
   <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:site_name" content="MailVault">
@@ -20,7 +20,7 @@
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="AI 邮件清理 — 本地 AI 分类 | MailVault">
-  <meta name="twitter:description" content="用本地 AI 模型分类并清理你的邮箱。数据不会离开你的设备。">
+  <meta name="twitter:description" content="在本地对邮件分类，无需下载大语言模型。检查类别，安全归档，自主掌控服务器副本。">
   <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -123,22 +123,22 @@
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
             </div>
-            <h3 class="font-semibold text-lg mb-2">1. 下载模型</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">在设置里启用 AI 并下载一个模型（约 2-5 GB）。模型保存在你本机的应用数据文件夹中，只需下载一次。</p>
+            <h3 class="font-semibold text-lg mb-2">1. 打开邮件清理</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">打开某个账户的邮件清理功能。它使用缓存的邮件标头，无需下载模型。</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">2. 自动分类</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">每次备份之后，AI 会对你的邮件进行分类：订阅邮件、促销、通知、私人、工作等等。</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">本地规则、朴素贝叶斯分类器和内置启发式规则会将邮件分为通讯、促销、交易、个人、工作和垃圾邮件。</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">3. 复核并清理</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">查看清理报告，确认批量操作，腾出服务器存储空间。本地副本始终保留。</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">操作前请检查每个类别。归档会先在保险库中保存并验证副本，再移除服务器副本；删除则直接从服务器移除邮件，不会先归档。</p>
           </div>
         </div>
       </div>
@@ -150,13 +150,11 @@
         <div class="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <h2 class="text-2xl font-bold mb-4">100% 本地，零云端。</h2>
-            <p class="text-slate-600 dark:text-slate-400 mb-6">
-              与基于云的邮件工具不同，MailVault 的 AI 完全在你的电脑上运行。模型在本地处理你的邮件——不会发送到任何服务器、API 或第三方服务。你的邮件属于你自己。
-            </p>
+            <p class="text-slate-600 dark:text-slate-400 mb-6">邮件清理在你的电脑上对邮件进行分类，不会将邮件内容、元数据或地址发送给 AI 服务。独立的 AI 写作工具可以使用你选择的服务商。</p>
             <ul class="space-y-3">
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">模型在你的 CPU/GPU 上运行——分类过程无需联网</span>
+                <span class="text-slate-700 dark:text-slate-300">使用缓存的标头，在你的电脑上进行分类</span>
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -164,7 +162,7 @@
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">随时删除模型以释放磁盘空间</span>
+                <span class="text-slate-700 dark:text-slate-300">纠正类别，让分类器学习你的邮件</span>
               </li>
             </ul>
           </div>
@@ -173,19 +171,19 @@
             <div class="space-y-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">内存</span>
-                <span class="font-medium">建议 16 GB（使用较小的模型时最低 8 GB）</span>
+                <span class="font-medium">没有大型模型所需的额外内存要求</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">磁盘空间</span>
-                <span class="font-medium">模型文件约 2-5 GB</span>
+                <span class="font-medium">无需下载数 GB 的模型</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">GPU</span>
-                <span class="font-medium">可选——在 Apple Silicon 上使用 Metal，其他平台使用 CPU</span>
+                <span class="font-medium">邮件清理不需要</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">网络</span>
-                <span class="font-medium">仅首次下载模型时需要</span>
+                <span class="font-medium">同步邮件和修改服务器副本时需要</span>
               </div>
             </div>
           </div>
@@ -199,16 +197,16 @@
         <h2 class="text-2xl font-bold text-center mb-12">常见问题</h2>
         <div class="space-y-6">
           <div>
-            <h3 class="font-semibold mb-2">MailVault 用的是哪个 AI 模型？</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">MailVault 下载 GGUF 格式的开源模型。推荐使用 Llama 3.1 8B（约 4.6 GB），它在分类质量和速度之间最为均衡。内存较小的机器可以选择更小的 3B 模型。</p>
+            <h3 class="font-semibold mb-2">邮件清理需要下载 AI 模型吗？</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">不需要。邮件清理使用本地规则、朴素贝叶斯分类器和内置启发式规则。它会从你对类别的纠正中学习，无需下载大语言模型。</p>
           </div>
           <div>
-            <h3 class="font-semibold mb-2">我可以用自己的模型吗？</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">可以。把任意 GGUF 格式的模型文件放进 models 目录（路径见 设置 &gt; AI &amp; Cleanup），它就会出现在模型选择列表里。</p>
+            <h3 class="font-semibold mb-2">邮件清理与 AI 写作是同一功能吗？</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">不是。AI 写作有独立的服务商设置，可选择 Apple Intelligence、已下载的模型或 Ollama 等兼容端点。更改此服务商不会改变邮件清理的分类器。</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">选择「从服务器删除」时会发生什么？</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">这封邮件会从你的 IMAP 服务器上移除（腾出服务器空间），但 MailVault 里本地的 .eml 副本始终保留。你随时可以通过 时间胶囊 功能浏览或恢复任何一封邮件。</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">删除会移除服务器副本，不会先创建保险库副本。要在从服务器移除邮件之前保存并验证本地副本，请使用邮件清理中的归档。时间胶囊可以显示已保存的历史记录，但无法恢复从未保存过的邮件。</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">AI 会从我的修正中学习吗？</h3>

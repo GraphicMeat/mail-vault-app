@@ -1,0 +1,22 @@
+{
+  "ac3d0cf173e4": "1. Abra Limpeza de e-mails",
+  "5bbefcb11689": "Abra Limpeza de e-mails para uma conta. Ela usa os cabeçalhos dos e-mails em cache e não precisa baixar nenhum modelo.",
+  "a2ec0590818e": "Regras locais, um classificador Naive Bayes e heurísticas integradas classificam o e-mail em Newsletter, Promocional, Transacional, Pessoal, Trabalho e Spam.",
+  "3e8c884a2b6c": "Revise cada categoria antes de agir. Arquivar salva e verifica uma cópia no cofre antes de remover a cópia do servidor; Excluir remove o e-mail do servidor sem arquivá-lo primeiro.",
+  "2739a4dc5f3f": "Limpeza de e-mails classifica as mensagens no seu computador. Ela não envia conteúdo, metadados nem endereços de e-mail para um serviço de IA. As ferramentas de escrita com IA são separadas e podem usar o provedor que você escolher.",
+  "9c1313e2e572": "A classificação acontece no seu computador usando cabeçalhos em cache",
+  "400c068c2e21": "Corrija uma categoria para treinar o classificador com o seu e-mail",
+  "79e93103fb89": "Sem exigência adicional de RAM para um modelo grande",
+  "8529cd91dcca": "Sem baixar modelos de vários gigabytes",
+  "6208dc37e92e": "Não é necessário para Limpeza de e-mails",
+  "e6a3ffcf6395": "Necessário para sincronizar o e-mail e alterar as cópias do servidor",
+  "60e051643e4f": "Limpeza de e-mails precisa baixar um modelo de IA?",
+  "574c3615ba77": "Não. Limpeza de e-mails usa regras locais, um classificador Naive Bayes e heurísticas integradas. Ela aprende com suas correções de categorias sem baixar um LLM.",
+  "3afa38a8833e": "Limpeza de e-mails é o mesmo que escrita com IA?",
+  "6ecb1a5060dc": "Não. A escrita com IA tem suas próprias configurações de provedor para Apple Intelligence, um modelo baixado ou um endpoint compatível, como Ollama. Alterar esse provedor não muda o classificador da Limpeza de e-mails.",
+  "eea32a5141b1": "Excluir remove a cópia do servidor sem criar uma cópia no cofre primeiro. Use Arquivar em Limpeza de e-mails para salvar e verificar uma cópia local antes de removê-la do servidor. Cápsula do tempo pode mostrar o histórico salvo, mas não pode recuperar uma mensagem que nunca foi salva.",
+  "3e016ad79e11": "Conecte o Yahoo com uma senha de app, arquive suas pastas e verifique sua cópia local.",
+  "6dda9750c924": "Onde fica o catálogo de endereços?",
+  "69a1744ca80e": "Limpeza de e-mails do MailVault usa regras locais e um classificador Naive Bayes. Não precisa baixar nenhum modelo. Revise as categorias antes de arquivar ou excluir cópias do servidor.",
+  "88101e500957": "Classifique e-mails localmente sem baixar um LLM. Revise categorias, arquive com segurança e mantenha o controle das cópias do servidor."
+}

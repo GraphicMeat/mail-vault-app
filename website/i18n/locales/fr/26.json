@@ -1,0 +1,21 @@
+{
+  "ac3d0cf173e4": "1. Ouvrez le Nettoyage des e-mails",
+  "5bbefcb11689": "Ouvrez le Nettoyage des e-mails pour un compte. Il utilise les en-têtes des e-mails en cache et ne nécessite aucun téléchargement de modèle.",
+  "a2ec0590818e": "Des règles locales, un classificateur bayésien naïf et des heuristiques intégrées classent les e-mails dans les catégories Newsletter, Promotionnel, Transactionnel, Personnel, Travail et Spam.",
+  "3e8c884a2b6c": "Examinez chaque catégorie avant d'agir. Archiver enregistre et vérifie une copie dans le coffre avant de supprimer celle du serveur ; Supprimer retire les e-mails du serveur sans les archiver au préalable.",
+  "2739a4dc5f3f": "Le nettoyage classe les e-mails sur votre ordinateur. Il n'envoie aucun contenu, aucune métadonnée ni aucune adresse à un service d'IA. Les outils de rédaction par IA, distincts, peuvent utiliser le fournisseur de votre choix.",
+  "9c1313e2e572": "Le classement s'effectue sur votre ordinateur à partir des en-têtes en cache",
+  "400c068c2e21": "Corrigez une catégorie pour entraîner le classificateur sur vos e-mails",
+  "79e93103fb89": "Aucun besoin de mémoire vive supplémentaire pour un grand modèle",
+  "8529cd91dcca": "Aucun modèle de plusieurs gigaoctets à télécharger",
+  "6208dc37e92e": "Non requis pour le nettoyage",
+  "e6a3ffcf6395": "Nécessaire pour synchroniser les e-mails et modifier les copies sur le serveur",
+  "60e051643e4f": "Le nettoyage nécessite-t-il de télécharger un modèle d'IA ?",
+  "574c3615ba77": "Non. Le nettoyage utilise des règles locales, un classificateur bayésien naïf et des heuristiques intégrées. Il apprend de vos corrections de catégories sans télécharger de LLM.",
+  "3afa38a8833e": "Le nettoyage est-il la même chose que la rédaction par IA ?",
+  "6ecb1a5060dc": "Non. La rédaction par IA dispose de ses propres paramètres de fournisseur pour Apple Intelligence, un modèle téléchargé ou un point de terminaison compatible comme Ollama. Changer ce fournisseur ne modifie pas le classificateur du nettoyage.",
+  "eea32a5141b1": "Supprimer retire la copie du serveur sans créer d'abord de copie dans le coffre. Utilisez Archiver dans le nettoyage pour enregistrer et vérifier une copie locale avant de la supprimer du serveur. La Capsule temporelle peut afficher l'historique enregistré, mais ne peut pas récupérer un message qui n'a jamais été sauvegardé.",
+  "3e016ad79e11": "Connectez Yahoo avec un mot de passe d'application, archivez vos dossiers et vérifiez votre copie locale.",
+  "c7beb003a3af": "Sélecteur de contacts et carnet d'adresses — suggestions pendant la rédaction, historique des contacts, fusion et import/export vCard",
+  "2820f998042a": "Vos e-mails restent sur votre ordinateur. MailVault vérifie les expéditeurs, stocke les identifiants dans le Trousseau macOS, le Gestionnaire d'informations d'identification Windows ou Linux Secret Service, et fonctionne dans un bac à sable. Aucun service MailVault de stockage des e-mails, aucune télémétrie. Les points de terminaison IA facultatifs ne reçoivent que le texte que vous approuvez ; les e-mails Gmail restent sur l'appareil."
+}

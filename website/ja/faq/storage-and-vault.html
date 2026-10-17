@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>保存場所と保管庫 — MailVault FAQ</title>
-  <meta name="description" content="MailVaultがメールをディスクのどこに置くのか、なぜ.emlとMaildirを使うのか、保管庫を別のドライブへ移す方法。">
+  <meta name="description" content="MailVault がメールを保存する場所、Maildir と JMAP の保存形式の違い、保管庫の移動や変換の方法。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ja/faq/storage-and-vault.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/ja/faq/storage-and-vault.html">
   <meta property="og:title" content="保存場所と保管庫 — MailVault FAQ">
-  <meta property="og:description" content="MailVaultがメールをディスクのどこに置くのか、なぜ.emlとMaildirを使うのか、保管庫を別のドライブへ移す方法。">
+  <meta property="og:description" content="MailVault がメールを保存する場所、Maildir と JMAP の保存形式の違い、保管庫の移動や変換の方法。">
   <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="保存場所と保管庫 — MailVault FAQ">
-  <meta name="twitter:description" content="MailVaultがメールをディスクのどこに置くのか、なぜ.emlとMaildirを使うのか、保管庫を別のドライブへ移す方法。">
+  <meta name="twitter:description" content="MailVault がメールを保存する場所、Maildir と JMAP の保存形式の違い、保管庫の移動や変換の方法。">
   <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -60,7 +60,7 @@
       "name": "メールはどこに保存されますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "保管庫は、コンピュータ上で Maildir 形式に整理された標準的な .eml ファイルのフォルダです — 1 通につき 1 ファイルで、データベースは不要です。macOS では MailVault はサンドボックス内で動作するため、フォルダは ~/Library/Application Support ではなく ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ になります。Linux では、.deb パッケージなら ~/.local/share/com.mailvault.app/、Snap なら ~/snap/mailvault/current/.local/share/com.mailvault.app/ です。~/Library は Finder で隠されていて Spotlight の索引対象にもならないため、ドライブを com.mailvault.app で検索しても何も見つかりません。Finder で Shift + Command + G を押して ~/Library と入力するか、Option キーを押しながら Finder の「移動」メニューを開くか、ホームフォルダで Command + J を押して「ライブラリフォルダを表示」にチェックを入れてください。MailVault は、使用中のフォルダを 設定 → バックアップと復元 → バックアップ設定 → メールの保存場所 にも表示します。データがコンピュータの外に出ることはなく、どのクラウドサービスにもアップロードされません。.eml は広く対応しているメール形式なので、Apple Mail、Thunderbird、Outlook など EML に対応したアプリで開けます — MailVault に縛られることはありません。"
+        "text": "既定では、保管庫はコンピューター上の Maildir 形式に整理された標準の .eml ファイルのフォルダーです。メール 1 件につき 1 ファイルで、データベースは不要です。macOS では MailVault がサンドボックス内で動作するため、フォルダーは ~/Library/Application Support ではなく ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ です。Linux では .deb パッケージの場合は ~/.local/share/com.mailvault.app/、Snap の場合は ~/snap/mailvault/current/.local/share/com.mailvault.app/ です。~/Library は Finder で非表示になっており、Spotlight のインデックス対象でもないため、ドライブで com.mailvault.app を検索しても見つかりません。Finder で Shift + Command + G を押して ~/Library と入力するか、Option を押しながら Finder の「移動」メニューを開くか、ホームフォルダーで Command + J を押して「ライブラリフォルダを表示」を選んでください。MailVault でも、設定、バックアップと復元、バックアップ設定、メールの保存場所で使用中のフォルダーを確認できます。データがコンピューターの外に出たり、クラウドサービスにアップロードされたりすることはありません。.eml は広く対応されているメール形式なので、Apple Mail、Thunderbird、Outlook など EML 対応のアプリでメールを開けます。MailVault だけに縛られることはありません。"
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": ".emlファイルとMaildirとは何ですか？ なぜ重要なのですか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": ".eml（RFC 5322）は、メールメッセージのインターネット標準形式です。メールはすべて、単独で完結する1つのテキストファイルとして保存され、どのメールクライアントでも開けます。Maildirは、メールサーバーが何十年も使ってきた実績のあるメール保存用のディレクトリ構成です。メール1通が1ファイルなので、壊れる可能性のある単一のデータベースが存在しません。.emlとMaildirの組み合わせによって、メールは将来も読み続けられ、持ち運びができ、特定のアプリケーションに縛られることがありません。"
+        "text": ".eml（RFC 5322）はメールメッセージのインターネット標準形式です。Maildir 形式では、各メールを単独で完結する 1 つのテキストファイルとして保存し、どのメールクライアントでも開けます。Maildir は、メールサーバーで何十年も使われてきた実績あるメール保存用のディレクトリ構造です。メール 1 件につき 1 ファイルなので、破損すると全体に影響する単一のデータベースはありません。.eml + Maildir により、メールを将来も使い続け、持ち運べるようになり、特定のアプリケーションに縛られません。"
       }
     },
     {
@@ -109,6 +109,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "MailVault は常にアプリ自身のストレージにメールの作業用コピーを保持します。これが閲覧、検索、開封に使うコピーです。外部バックアップ場所を設定すると、外付け SSD、NAS 共有、同期フォルダーなど、選んだドライブに独立した二つ目のコピーができます。バックアップ実行時に作業用コピーと同時に同じ .eml と Maildir のレイアウトで書き込まれるため、EML 対応アプリでメッセージファイルを読めます。アプリは日常的にはこれを読みません。これはコールドストレージであり、サーバーから削除したメールや MailVault 内で削除したメールも外部コピーには残ります。「設定」の「バックアップ」にある「2 つ目のコピー — 外部コールドストレージ」で設定します。macOS では、再起動やアプリ更新後もアクセスを維持できるよう、MailVault がフォルダーのセキュリティスコープ付きブックマークを保存します。状態バッジには「準備完了」「再認証が必要」「利用不可」「アクセス拒否」が表示され、再認証は一回のクリックでできます。バックアップ中にドライブが外れても作業用コピーは成功し、外部コピーへ届かなかったメッセージ数が報告されます。次の実行でそれらをコピーします。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "保管庫の保存形式は変更できますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "はい。設定 &gt; ストレージで、Maildir と JMAP の保存形式を相互に変換できます。既定の Maildir では、メッセージ 1 件につき 1 つの .eml ファイルを保存します。JMAP は元のメッセージのバイト列と標準の JMAP JSON レコードを保持し、フォルダーをまたぐ同一のメッセージを 1 度だけ保存します。古いファイルを別に残すか、各メッセージの検証後に削除するかを選べます。変換はバックグラウンドで実行され、再起動後も再開します。この保存形式の選択は、アカウントが IMAP、Microsoft Graph、JMAP のどれを使うかとは関係ありません。"
       }
     }
   ]
@@ -217,14 +225,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">保存場所と保管庫</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVaultがメールをディスクのどこに置くのか、なぜ.emlとMaildirを使うのか、保管庫を別のドライブへ移す方法。</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault がメールを保存する場所、Maildir と JMAP の保存形式の違い、保管庫の移動や変換の方法。</p>
 
       <div class="space-y-4">
 
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">メールはどこに保存されますか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">保管庫は、コンピュータ上で <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 形式に整理された、標準的な <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml ファイル</a>のフォルダです &mdash; 1 通につき 1 ファイルで、データベースは不要です。データがコンピュータの外に出ることはなく、どのクラウドサービスにもアップロードされません。.eml は広く対応しているメール形式なので、Apple Mail、Thunderbird、Outlook など EML に対応したアプリで開けます — MailVault に縛られることはありません。</p>
+              <p class="mb-4">既定では、保管庫はコンピューター上の <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 形式に整理された標準の <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml ファイル</a>のフォルダーです &mdash; メール 1 件につき 1 ファイルで、データベースは不要です。データがコンピューターの外に出たり、クラウドサービスにアップロードされたりすることはありません。.eml は広く対応されているメール形式なので、Apple Mail、Thunderbird、Outlook など EML 対応のアプリでメールを開けます。MailVault だけに縛られることはありません。</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">正確なフォルダ</p>
               <p class="mb-2">MailVault はサンドボックス化されたアプリなので、macOS では保管庫はアプリ自身のコンテナ内にあります &mdash; 多くの人が最初に見る <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> の直下ではありません:</p>
@@ -289,7 +297,7 @@
               はい。同期が済んだメールはローカルに保存されるので、インターネット接続がなくてもすべて閲覧、検索、参照できます。インターネットが必要なのは、新しいメールを同期するときと、メールを送信するときだけです。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーから削除したあともディスクに残っているメールを表示している、MailVaultのローカル表示" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーから削除したあともディスクに残っているメールを表示している、MailVaultのローカル表示 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -343,6 +351,11 @@
                 バックアップの途中でドライブが取り外された場合でも、作業用コピーの処理は最後まで完了し、MailVaultは外部のコピーに届かなかったメッセージの数を報告します。次回の実行でそれらがコピーされるので、失われるものはなく、失敗が黙って見過ごされることもありません。
               </p>
             </div>
+        </article>
+
+        <article id="jmap-storage" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">保管庫の保存形式は変更できますか？</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>はい。設定 &gt; ストレージで、Maildir と JMAP の保存形式を相互に変換できます。既定の Maildir では、メッセージ 1 件につき 1 つの .eml ファイルを保存します。JMAP は元のメッセージのバイト列と標準の JMAP JSON レコードを保持し、フォルダーをまたぐ同一のメッセージを 1 度だけ保存します。古いファイルを別に残すか、各メッセージの検証後に削除するかを選べます。変換はバックグラウンドで実行され、再起動後も再開します。この保存形式の選択は、アカウントが IMAP、Microsoft Graph、JMAP のどれを使うかとは関係ありません。</p></div>
         </article>
 
       </div>

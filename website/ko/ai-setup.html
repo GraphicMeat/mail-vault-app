@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 메일 정리 — 로컬 AI 기반 메일 분류 | MailVault</title>
-  <meta name="description" content="MailVault의 메일 정리 기능은 로컬 AI 모델로 메일을 분류하고 서버에서 지워도 안전한 메일을 제안합니다. 모든 처리는 사용자의 컴퓨터에서 이루어지며 — 메일 데이터는 기기 밖으로 나가지 않습니다.">
+  <meta name="description" content="MailVault 메일 정리는 로컬 규칙과 나이브 베이즈 분류기를 사용합니다. 모델을 다운로드할 필요가 없습니다. 서버 사본을 보관하거나 삭제하기 전에 카테고리를 검토하십시오.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ko/ai-setup.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/ko/ai-setup.html">
   <meta property="og:title" content="AI 메일 정리 — 로컬 AI 기반 메일 분류 | MailVault">
-  <meta property="og:description" content="로컬 AI 모델로 메일함을 분류하고 정리합니다. 데이터는 기기 밖으로 나가지 않습니다.">
+  <meta property="og:description" content="LLM을 다운로드하지 않고 메일을 로컬에서 분류합니다. 카테고리를 검토하고 안전하게 보관하며 서버 사본을 직접 관리하십시오.">
   <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:site_name" content="MailVault">
@@ -20,7 +20,7 @@
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="AI 메일 정리 — 로컬 AI 분류 | MailVault">
-  <meta name="twitter:description" content="로컬 AI 모델로 메일함을 분류하고 정리합니다. 데이터는 기기 밖으로 나가지 않습니다.">
+  <meta name="twitter:description" content="LLM을 다운로드하지 않고 메일을 로컬에서 분류합니다. 카테고리를 검토하고 안전하게 보관하며 서버 사본을 직접 관리하십시오.">
   <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -123,22 +123,22 @@
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
             </div>
-            <h3 class="font-semibold text-lg mb-2">1. 모델 다운로드</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">설정에서 AI를 켜고 모델(~2-5 GB)을 내려받습니다. 모델은 앱 데이터 폴더에 로컬로 저장됩니다. 한 번만 내려받으면 됩니다.</p>
+            <h3 class="font-semibold text-lg mb-2">1. 메일 정리 열기</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">계정의 메일 정리를 엽니다. 캐시된 메일 헤더를 사용하므로 모델을 다운로드할 필요가 없습니다.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">2. 자동 분류</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">백업이 끝날 때마다 AI가 메일을 분류합니다: 뉴스레터, 프로모션, 알림, 개인, 업무 등으로 나뉩니다.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">로컬 규칙, 나이브 베이즈 분류기, 내장 휴리스틱이 메일을 뉴스레터, 프로모션, 거래, 개인, 업무, 스팸으로 분류합니다.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">3. 검토 및 정리</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">정리 보고서를 검토하고, 일괄 작업을 승인하고, 서버 저장 공간을 확보합니다. 로컬 사본은 항상 그대로 보존됩니다.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">작업하기 전에 각 카테고리를 검토하십시오. 보관은 보관함에 사본을 저장하고 검증한 뒤 서버 사본을 삭제합니다. 삭제는 먼저 보관하지 않고 서버에서 메일을 삭제합니다.</p>
           </div>
         </div>
       </div>
@@ -150,13 +150,11 @@
         <div class="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <h2 class="text-2xl font-bold mb-4">100% 프라이빗. 클라우드 없음.</h2>
-            <p class="text-slate-600 dark:text-slate-400 mb-6">
-              클라우드 기반 메일 도구와 달리 MailVault의 AI는 전적으로 사용자의 컴퓨터에서 실행됩니다. 모델은 메일을 로컬에서 처리합니다 — 어떤 서버나 API, 제3자 서비스로도 전송되는 것은 없습니다. 메일은 사용자의 것입니다.
-            </p>
+            <p class="text-slate-600 dark:text-slate-400 mb-6">메일 정리는 이 컴퓨터에서 메일을 분류합니다. 메일 내용, 메타데이터, 주소를 AI 서비스로 보내지 않습니다. 별도의 AI 글쓰기 도구는 선택한 제공업체를 사용할 수 있습니다.</p>
             <ul class="space-y-3">
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">모델은 사용자의 CPU/GPU에서 실행되며 — 분류에 인터넷이 필요하지 않습니다</span>
+                <span class="text-slate-700 dark:text-slate-300">캐시된 헤더를 사용해 이 컴퓨터에서 분류합니다</span>
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -164,7 +162,7 @@
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">디스크 공간이 필요하면 언제든 모델을 삭제할 수 있습니다</span>
+                <span class="text-slate-700 dark:text-slate-300">카테고리를 수정하면 분류기가 내 메일을 학습합니다</span>
               </li>
             </ul>
           </div>
@@ -173,19 +171,19 @@
             <div class="space-y-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">RAM</span>
-                <span class="font-medium">16 GB 권장 (작은 모델 사용 시 최소 8 GB)</span>
+                <span class="font-medium">대형 모델용 별도 RAM 요구 사항이 없습니다</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">디스크 공간</span>
-                <span class="font-medium">모델 파일용 ~2-5 GB</span>
+                <span class="font-medium">수 GB 크기의 모델을 다운로드할 필요가 없습니다</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">GPU</span>
-                <span class="font-medium">선택 사항 — Apple Silicon에서는 Metal을, 그 외에서는 CPU를 사용합니다</span>
+                <span class="font-medium">메일 정리에는 필요하지 않습니다</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">인터넷</span>
-                <span class="font-medium">최초 모델 다운로드에만 필요합니다</span>
+                <span class="font-medium">메일을 동기화하고 서버 사본을 변경할 때 필요합니다</span>
               </div>
             </div>
           </div>
@@ -199,16 +197,16 @@
         <h2 class="text-2xl font-bold text-center mb-12">자주 묻는 질문</h2>
         <div class="space-y-6">
           <div>
-            <h3 class="font-semibold mb-2">MailVault는 어떤 AI 모델을 사용합니까?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">MailVault는 GGUF 형식의 오픈소스 모델을 내려받습니다. 권장 모델은 Llama 3.1 8B(~4.6 GB)로, 분류 품질과 속도의 균형이 가장 좋습니다. RAM이 적은 컴퓨터를 위해 더 작은 3B 모델도 제공됩니다.</p>
+            <h3 class="font-semibold mb-2">메일 정리에 AI 모델 다운로드가 필요한가요?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">아니요. 메일 정리는 로컬 규칙, 나이브 베이즈 분류기, 내장 휴리스틱을 사용합니다. LLM을 다운로드하지 않고도 카테고리 수정에서 학습합니다.</p>
           </div>
           <div>
-            <h3 class="font-semibold mb-2">직접 준비한 모델을 쓸 수 있습니까?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">가능합니다. GGUF 형식의 모델 파일을 모델 디렉터리(설정 &gt; AI &amp; 정리에 표시됩니다)에 넣으면 모델 선택 목록에 나타납니다.</p>
+            <h3 class="font-semibold mb-2">메일 정리와 AI 글쓰기는 같은 기능인가요?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">아니요. AI 글쓰기에는 Apple Intelligence, 다운로드한 모델 또는 Ollama 같은 호환 엔드포인트를 선택하는 자체 제공업체 설정이 있습니다. 해당 제공업체를 바꿔도 메일 정리 분류기는 바뀌지 않습니다.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">"서버에서 삭제"하면 어떻게 됩니까?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">해당 메일은 IMAP 서버에서 제거되어 서버 저장 공간이 확보되지만, MailVault에 있는 로컬 .eml 사본은 항상 그대로 유지됩니다. 타임캡슐 기능에서 언제든 메일을 열람하거나 복원할 수 있습니다.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">삭제는 서버 사본을 삭제하며, 보관함 사본을 먼저 만들지 않습니다. 서버에서 삭제하기 전에 로컬 사본을 저장하고 검증하려면 메일 정리의 보관을 사용하십시오. 타임캡슐은 저장된 기록을 보여 줄 수 있지만 한 번도 저장하지 않은 메시지는 복구할 수 없습니다.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">AI가 제 수정 내용을 학습합니까?</h3>

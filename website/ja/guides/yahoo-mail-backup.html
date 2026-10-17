@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yahoo Mailをパソコンにバックアップする方法 — MailVault</title>
-  <meta name="description" content="Yahoo Mailはアプリパスワードに対応しておらず、多くのバックアップの解説がここでつまずきます。アプリパスワードなしでYahoo Mailのアカウントを自分のコンピューターへバックアップする方法を解説します。">
+  <meta name="description" content="アプリパスワードと IMAP を使って Yahoo Mail をバックアップします。MailVault でローカルアーカイブを保存し、別のドライブにもコピーを保管してください。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ja/guides/yahoo-mail-backup.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/ja/guides/yahoo-mail-backup.html">
   <meta property="og:title" content="Yahoo Mailをパソコンにバックアップする方法 — MailVault">
-  <meta property="og:description" content="Yahoo Mailはアプリパスワードに対応しておらず、多くのバックアップの解説がここでつまずきます。アプリパスワードなしでYahoo Mailのアカウントを自分のコンピューターへバックアップする方法を解説します。">
+  <meta property="og:description" content="アプリパスワードと IMAP を使って Yahoo Mail をバックアップします。MailVault でローカルアーカイブを保存し、別のドライブにもコピーを保管してください。">
   <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Yahoo Mailをパソコンにバックアップする方法 — MailVault">
-  <meta name="twitter:description" content="Yahoo Mailはアプリパスワードに対応しておらず、多くのバックアップの解説がここでつまずきます。アプリパスワードなしでYahoo Mailのアカウントを自分のコンピューターへバックアップする方法を解説します。">
+  <meta name="twitter:description" content="アプリパスワードと IMAP を使って Yahoo Mail をバックアップします。MailVault でローカルアーカイブを保存し、別のドライブにもコピーを保管してください。">
   <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -35,7 +35,7 @@
   "@context": "https://schema.org",
   "@type": "Article",
   "headline": "Yahoo Mailをパソコンにバックアップする方法",
-  "description": "Yahoo Mailはアプリパスワードに対応しておらず、多くのバックアップの解説がここでつまずきます。アプリパスワードなしでYahoo Mailのアカウントを自分のコンピューターへバックアップする方法を解説します。",
+  "description": "アプリパスワードと IMAP を使って Yahoo Mail をバックアップします。MailVault でローカルアーカイブを保存し、別のドライブにもコピーを保管してください。",
   "url": "https://mailvaultapp.com/ja/guides/yahoo-mail-backup.html",
   "datePublished": "2026-07-15",
   "dateModified": "2026-07-15",
@@ -218,31 +218,23 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-          <p>
-            Yahoo Mailは長年のあいだに何度も持ち主と基盤が変わり、それに合わせてアカウントの安全に関する選択肢も変わってきました。古いバックアップの手引きの多くは、Yahoo用に「アプリパスワード」を作ってIMAPでメールクライアントをつなぐよう書いています。この助言はもう古くなっています &mdash; <strong>Yahoo MailはGmailやiCloudのようなアプリ固有のパスワードに対応していません</strong>。Yahooに限ってそれを作るよう求めるツールがあれば、今日のたいていのアカウントでは通らない、時代遅れの手順に従っています。
-          </p>
+          <p>Yahoo は他社製メールクライアント用のアプリパスワードに対応しています。Yahoo のアカウントセキュリティで外部接続を開き、MailVault 用のアプリパスワードを作成します。Yahoo アカウントを追加するときに、パスワード欄にコピーしてください。<a href="https://help.yahoo.com/kb/SLN15241.html" target="_blank" rel="noopener">Yahoo のアプリパスワードの手順</a>をご覧ください。</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Yahoo Mailで実際に使える方法</h3>
 
-          <p>
-            Yahooは、サードパーティのメールクライアント向けのIMAPアクセスに今も完全に対応しています &mdash; アプリパスワードではなく、Yahooの標準のサインインの流れで接続するだけです。具体的には次のとおりです。
-          </p>
+          <p>MailVault は IMAP で Yahoo に接続します。次の設定を使ってください。</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>IMAPのサーバー</strong>: <code>imap.mail.yahoo.com</code>、ポート993、SSL/TLS。</li>
-            <li><strong>SMTPのサーバー</strong>（送信もする場合）: <code>smtp.mail.yahoo.com</code>、ポート465または587、SSL/TLS。</li>
-            <li><strong>サインイン</strong>: クライアントの通常の接続の流れで、いつものYahooのアカウントの認証情報を使います。アカウントの安全の設定によっては、初回にYahooが新しい端末やクライアントの承認を求めることがあります。</li>
+            <li><strong>SMTP サーバー</strong>: <code>smtp.mail.yahoo.com</code>。SSL/TLS ではポート 465、STARTTLS ではポート 587 を使います。</li>
+            <li><strong>サインイン</strong>: Yahoo の完全なメールアドレスと Yahoo のアプリパスワードを入力します。通常のアカウントパスワードは使いません。</li>
           </ul>
 
-          <p>
-            メールクライアントがどうしてもアプリパスワードを要求し、Yahooのアカウントの設定にそれを生成する手段がもうないなら、そのクライアントのYahoo対応が壊れているか古いだけです &mdash; あなたのアカウントに問題があるわけではありません。
-          </p>
+          <p>Yahoo でアプリパスワードを作成できない場合は、Yahoo のアカウントセキュリティの案内に従ってください。通常のパスワードで代用したり、2 段階認証を無効にしたりしないでください。</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">そもそもYahoo Mailをバックアップする理由</h3>
 
-          <p>
-            Yahooは無料のアカウントに1 TBという大きな容量を与えるので、容量不足がYahoo Mailをバックアップする理由になることはめったにありません。よくある理由は次のものです。
-          </p>
+          <p>メールボックスの容量はバックアップではありません。次の理由から、別のコピーを保存してください。</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li>Yahooは何度も売却と再編を経ており、製品の変更やアカウントのセキュリティの事案があったため、長年のユーザーが、メールの履歴の唯一のコピーとして頼ることに慎重になるのも無理はありません。</li>
@@ -252,17 +244,15 @@
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVaultでYahoo Mailをバックアップする</h3>
 
-          <p>
-            MailVault は、Yahoo Mail に標準の IMAP 接続の流れでつながる、macOS・Windows・Linux 向けの無料のデスクトップメールアプリです &mdash; アプリパスワードも回避策も要りません。Yahoo アカウントを追加して普段どおりサインインすると、MailVault はメールを個別の <code>.eml</code> ファイルとしてダウンロードし、ディスク上の標準的な Maildir 構造に保存します。1 通ずつが独立したファイルなので、アーカイブを直接閲覧・検索して開けますし、必要になれば後から別のメールクライアントに同じファイルを読ませることもできます。
-          </p>
+          <p>MailVault でアカウントを追加し、Yahoo Mail を選んでメールアドレスとアプリパスワードを入力します。残したいフォルダーをアーカイブし、保存済みのメッセージと添付ファイルをオフラインで開いてコピーを確認してください。保管庫の既定形式である Maildir は、各メッセージを <code>.eml</code> ファイルとして保存します。Yahoo から何かを削除する前に、別のドライブにもコピーを保存してください。</p>
 
           <p>
             Yahooのメールボックス全体の手動でのアーカイブは、MailVaultでは無料で無制限です。まとめてアーカイブするのではなく、Yahooのバックアップをスケジュールで自動的に更新したい場合は、MailVault Premium（$4/月 または $25/年、年額は14日間の無料トライアル）の一部です。
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">アプリパスワードなしでYahoo Mailをバックアップする</p>
-            <p class="text-sm mb-4">MailVault は Yahoo に標準のサインインの流れで接続し、メールを個別の .eml ファイルとしてアーカイブします。無料で、ソースコードは GitHub で公開されています。</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">アプリパスワードで Yahoo Mail をバックアップ</p>
+            <p class="text-sm mb-4">アプリパスワードを使って IMAP で Yahoo に接続し、メールをローカルにアーカイブします。手動バックアップは無料で、ソースコードは GitHub で公開されています。</p>
             <div class="flex flex-wrap gap-3">
               <a href="/ja/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
                 MailVaultをダウンロード

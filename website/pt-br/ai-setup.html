@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Limpeza de e-mails com IA — Classificação local de e-mails com IA | MailVault</title>
-  <meta name="description" content="A Limpeza de e-mails do MailVault usa um modelo de IA local para classificar seus e-mails e sugerir o que pode ser apagado do servidor com segurança. Tudo roda na sua máquina — nenhum dado de e-mail sai do seu dispositivo.">
+  <meta name="description" content="Limpeza de e-mails do MailVault usa regras locais e um classificador Naive Bayes. Não precisa baixar nenhum modelo. Revise as categorias antes de arquivar ou excluir cópias do servidor.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/pt-br/ai-setup.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/pt-br/ai-setup.html">
   <meta property="og:title" content="Limpeza de e-mails com IA — Classificação local de e-mails com IA | MailVault">
-  <meta property="og:description" content="Classifique e limpe sua caixa postal com um modelo de IA local. Nenhum dado sai do seu dispositivo.">
+  <meta property="og:description" content="Classifique e-mails localmente sem baixar um LLM. Revise categorias, arquive com segurança e mantenha o controle das cópias do servidor.">
   <meta property="og:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:site_name" content="MailVault">
@@ -20,7 +20,7 @@
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Limpeza de e-mails com IA — Classificação local com IA | MailVault">
-  <meta name="twitter:description" content="Classifique e limpe sua caixa postal com um modelo de IA local. Nenhum dado sai do seu dispositivo.">
+  <meta name="twitter:description" content="Classifique e-mails localmente sem baixar um LLM. Revise categorias, arquive com segurança e mantenha o controle das cópias do servidor.">
   <meta name="twitter:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -123,22 +123,22 @@
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
             </div>
-            <h3 class="font-semibold text-lg mb-2">1. Baixe o modelo</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Ative a IA nas Configurações e baixe um modelo (~2-5 GB). Ele fica guardado localmente na pasta de dados do aplicativo. Download único.</p>
+            <h3 class="font-semibold text-lg mb-2">1. Abra Limpeza de e-mails</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Abra Limpeza de e-mails para uma conta. Ela usa os cabeçalhos dos e-mails em cache e não precisa baixar nenhum modelo.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">2. Classificação automática</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Depois de cada backup, a IA classifica seus e-mails: newsletters, promoções, notificações, pessoais, trabalho e mais.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Regras locais, um classificador Naive Bayes e heurísticas integradas classificam o e-mail em Newsletter, Promocional, Transacional, Pessoal, Trabalho e Spam.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">3. Revise e limpe</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Revise o relatório de limpeza, aprove as ações em massa e libere espaço no servidor. As cópias locais são sempre preservadas.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Revise cada categoria antes de agir. Arquivar salva e verifica uma cópia no cofre antes de remover a cópia do servidor; Excluir remove o e-mail do servidor sem arquivá-lo primeiro.</p>
           </div>
         </div>
       </div>
@@ -150,13 +150,11 @@
         <div class="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <h2 class="text-2xl font-bold mb-4">100% privado. Zero nuvem.</h2>
-            <p class="text-slate-600 dark:text-slate-400 mb-6">
-              Ao contrário das ferramentas de e-mail baseadas na nuvem, a IA do MailVault roda inteiramente no seu computador. O modelo processa seus e-mails localmente — nada é enviado a nenhum servidor, API ou serviço de terceiros. Seus e-mails são seus.
-            </p>
+            <p class="text-slate-600 dark:text-slate-400 mb-6">Limpeza de e-mails classifica as mensagens no seu computador. Ela não envia conteúdo, metadados nem endereços de e-mail para um serviço de IA. As ferramentas de escrita com IA são separadas e podem usar o provedor que você escolher.</p>
             <ul class="space-y-3">
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">O modelo roda na sua CPU/GPU — não precisa de internet para classificar</span>
+                <span class="text-slate-700 dark:text-slate-300">A classificação acontece no seu computador usando cabeçalhos em cache</span>
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -164,7 +162,7 @@
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">Apague o modelo quando quiser para liberar espaço em disco</span>
+                <span class="text-slate-700 dark:text-slate-300">Corrija uma categoria para treinar o classificador com o seu e-mail</span>
               </li>
             </ul>
           </div>
@@ -173,19 +171,19 @@
             <div class="space-y-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">RAM</span>
-                <span class="font-medium">16 GB recomendados (8 GB no mínimo com um modelo menor)</span>
+                <span class="font-medium">Sem exigência adicional de RAM para um modelo grande</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">Espaço em disco</span>
-                <span class="font-medium">~2-5 GB para o arquivo do modelo</span>
+                <span class="font-medium">Sem baixar modelos de vários gigabytes</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">GPU</span>
-                <span class="font-medium">Opcional — usa Metal no Apple Silicon, CPU nos demais</span>
+                <span class="font-medium">Não é necessário para Limpeza de e-mails</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">Internet</span>
-                <span class="font-medium">Apenas para o download inicial do modelo</span>
+                <span class="font-medium">Necessário para sincronizar o e-mail e alterar as cópias do servidor</span>
               </div>
             </div>
           </div>
@@ -199,16 +197,16 @@
         <h2 class="text-2xl font-bold text-center mb-12">Perguntas frequentes</h2>
         <div class="space-y-6">
           <div>
-            <h3 class="font-semibold mb-2">Qual modelo de IA o MailVault usa?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">O MailVault baixa modelos de código aberto no formato GGUF. O modelo recomendado é o Llama 3.1 8B (~4.6 GB), que oferece o melhor equilíbrio entre qualidade de classificação e velocidade. Um modelo menor, de 3B, está disponível para máquinas com menos RAM.</p>
+            <h3 class="font-semibold mb-2">Limpeza de e-mails precisa baixar um modelo de IA?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Não. Limpeza de e-mails usa regras locais, um classificador Naive Bayes e heurísticas integradas. Ela aprende com suas correções de categorias sem baixar um LLM.</p>
           </div>
           <div>
-            <h3 class="font-semibold mb-2">Posso usar meu próprio modelo?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Sim. Coloque qualquer arquivo de modelo no formato GGUF no diretório de modelos (indicado em Configurações &gt; IA &amp; Limpeza) e ele aparecerá no seletor de modelos.</p>
+            <h3 class="font-semibold mb-2">Limpeza de e-mails é o mesmo que escrita com IA?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Não. A escrita com IA tem suas próprias configurações de provedor para Apple Intelligence, um modelo baixado ou um endpoint compatível, como Ollama. Alterar esse provedor não muda o classificador da Limpeza de e-mails.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">O que acontece quando eu "apago do servidor"?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">O e-mail é removido do seu servidor IMAP (liberando espaço no servidor), mas a cópia local em .eml dentro do MailVault é sempre preservada. Você pode consultar ou restaurar qualquer e-mail pelo recurso Cápsula do tempo a qualquer momento.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Excluir remove a cópia do servidor sem criar uma cópia no cofre primeiro. Use Arquivar em Limpeza de e-mails para salvar e verificar uma cópia local antes de removê-la do servidor. Cápsula do tempo pode mostrar o histórico salvo, mas não pode recuperar uma mensagem que nunca foi salva.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">A IA aprende com as minhas correções?</h3>

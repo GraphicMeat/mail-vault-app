@@ -69,6 +69,14 @@ This file is for local agent guidance and repo-specific working rules. Stable ar
 - Keep root `index.html` in sync with `website/index.html` when homepage content changes.
 - If a change affects product messaging or discoverability, consider whether `README.md`, `website/index.html`, and `website/faq.html` should also be updated.
 
+### Website media accessibility and versions
+
+- Every image needs an `alt` attribute; describe meaningful content. Decorative logos beside an existing accessible brand name may keep `alt=""`. Every video needs a descriptive `aria-label`.
+- Every MailVault screenshot, clip, and poster needs a descriptive accessible name followed by its version label, plus `data-mailvault-version`, `data-mailvault-version-kind`, and a visible version tag (a native `title` tooltip is the minimum). Preserve surrounding layout and captions.
+- Record evidence in `website/media-versions.json`. A `capture` version identifies the actual recorded app build. If historical capture provenance is unavailable, only an explicit visual/capability review permits a `reviewed` tag, spelled `Reviewed for MailVault version X.X.X`. Never infer capture version from today's package version or an asset import date.
+- Keep version suffixes and numbers invariant in translations; preserve the translated description and locale-specific asset URLs. Apply tags to English sources with `node scripts/website-media-policy.mjs --write`, then extract/build translations and synchronize root `index.html`. The command reports unresolved assets and exits nonzero until each has evidence.
+- Check the tagging rules with `~/.claude/bin/testq node --test scripts/website-media-policy.check.mjs`; use its exported `validateMedia` to validate source and generated HTML after applying tags.
+
 ### Website crawl files (every page added, removed, renamed, or amended)
 
 - `website/sitemap.xml` is generated: run `cd website && node i18n/i18n.mjs build` and commit the result. Never hand-edit it. `noindex` pages are left out automatically; English-only pages to index go in `SITEMAP_EXTRA` in `i18n.mjs`.

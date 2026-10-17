@@ -87,7 +87,7 @@
           <p>이 테스트는 로컬 테스트 메일 서버에 있는 이메일 계정 두 개를 씁니다. 받은편지함에 메시지 58개가 있는 계정과 10,000개가 있는 계정입니다. 자동화된 실행이 사람처럼 실제 앱을 조작합니다. MailVault를 열고 작은 받은편지함을 연 다음, 큰 계정으로 전환해 메시지 헤더 10,000개가 모두 목록에 뜰 때까지 기다립니다. 목록 전체를 맨 위에서 맨 아래까지 스크롤한 뒤, 앱을 10분 동안 그대로 둡니다. 각 단계마다 MailVault가 소유한 모든 프로세스의 메모리를 기록합니다.</p>
           <p>노트북은 MSI 제품으로 Intel Core i7-13620H와 메모리 16 GB를 갖췄고, 전원에 연결한 채 Windows 11 23H2에서 실행했습니다. 깨끗한 환경이 아니라 MailVault 사본 하나를 포함해 다른 앱도 열려 있었으므로, 평범하게 바쁜 컴퓨터에서 나온 결과로 봐 주십시오. 전체 테스트를 매번 새 빈 프로필로 세 번 실행했고, 아래 수치는 그 세 번의 실행 범위입니다. 빌드는 MailVault 2.16의 최적화된 릴리스 빌드에 테스트용 후크를 켠 것으로, 배포판과 거의 같지만 바이트 단위까지 동일하지는 않습니다.</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="이메일 58개가 든 작은 테스트 받은편지함을 보여 주는 Windows 11의 MailVault입니다. 사이드바에 테스트 계정 두 개, 빈 읽기 창이 있습니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="이메일 58개가 든 작은 테스트 받은편지함을 보여 주는 Windows 11의 MailVault입니다. 사이드바에 테스트 계정 두 개, 빈 읽기 창이 있습니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">가장 먼저 측정하는 순간입니다. 작은 테스트 받은편지함을 연 Windows 11의 MailVault를 테스트 실행 중에 그대로 캡처했습니다.</figcaption>
           </figure>
 
@@ -114,7 +114,7 @@ background helper, 10,000 msgs    22 – 23 MB
 app window                        11 – 13 MB</code></pre>
           <p>두 번째 열은 커밋 크기입니다. 각 프로세스가 예약해 둔 프라이빗 메모리로, 지금 RAM에 있는지 여부와는 무관합니다. 이 항목은 첫 실행 뒤에 추가했으므로 세 번이 아니라 두 번의 실행만 담고 있습니다. 이는 마지막 행에서 중요해집니다. 몇 분 동안 입력이 없으면 Windows는 쓰이지 않는 프로세스에서 메모리를 거둬 가고, 작업 관리자의 수치는 약 110 MB까지 떨어집니다. 이 메모리는 MailVault가 해제한 것이 아니라 Windows가 따로 챙겨 둔 것이며, 커밋 크기를 보면 앱이 돌아왔을 때 되찾을 수 있는 약 310 MB를 여전히 쥐고 있음을 알 수 있습니다. Windows에서 MailVault의 비용을 숫자 하나로 말한다면, 큰 메일함을 기준으로 대략 300 MB, 그 숫자를 쓰면 됩니다.</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="큰 테스트 계정을 선택한 Windows 11의 MailVault입니다. 받은편지함 헤더에는 이메일 10,000개라고 표시되고, 목록 맨 아래에는 가장 오래된 테스트 메시지가 보입니다." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="큰 테스트 계정을 선택한 Windows 11의 MailVault입니다. 받은편지함 헤더에는 이메일 10,000개라고 표시되고, 목록 맨 아래에는 가장 오래된 테스트 메시지가 보입니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">헤더 10,000개를 모두 불러오고 목록을 끝까지 스크롤한 순간, 곧 "10,000 messages loaded" 행에 해당하는 장면입니다. 받은편지함에는 이메일 10,000개라고 표시되고, 이 테스트에서는 아무것도 보관하지 않았으므로 볼트 카운터는 0으로 표시됩니다.</figcaption>
           </figure>
 

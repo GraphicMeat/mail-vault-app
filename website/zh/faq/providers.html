@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>邮件服务商 — MailVault 常见问题</title>
-  <meta name="description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
+  <meta name="description" content="连接 Gmail、Microsoft 365、Outlook.com、Proton Mail 和 Fastmail 等 JMAP 服务器，并使用别名发信。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/faq/providers.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/providers.html">
   <meta property="og:title" content="邮件服务商 — MailVault 常见问题">
-  <meta property="og:description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
+  <meta property="og:description" content="连接 Gmail、Microsoft 365、Outlook.com、Proton Mail 和 Fastmail 等 JMAP 服务器，并使用别名发信。">
   <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="邮件服务商 — MailVault 常见问题">
-  <meta name="twitter:description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
+  <meta name="twitter:description" content="连接 Gmail、Microsoft 365、Outlook.com、Proton Mail 和 Fastmail 等 JMAP 服务器，并使用别名发信。">
   <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -60,7 +60,7 @@
       "name": "MailVault 支持 Gmail 和 Outlook 吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "可以。MailVault 适用于 Gmail、Outlook 以及任何支持 IMAP 的邮件服务。对于 Gmail，直接用你的 Google 账户通过 OAuth2 登录 — 无需手动填写 IMAP 设置。Microsoft 365 商业版和企业版账户可以直接用你的 Microsoft 账户通过 OAuth2 登录。个人 Outlook.com、Hotmail 和 Live.com 账户通过 Microsoft Graph API 连接。"
+        "text": "可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录。个人 Outlook.com、Hotmail 和 Live.com 账户通过 Microsoft Graph API 连接。"
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "我可以用与登录地址不同的地址发信吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "可以。在 设置 → 账户 → 别名 中把该地址添加为账户的别名，写信时在发件人一栏选中它，或把它设为默认。用户名和密码不变，MailVault 仍以你设置的账户登录 IMAP 和 SMTP，也不会添加 Reply-To 标头。该地址必须是服务商允许这个登录身份用来发信的地址。"
+        "text": "可以。在设置 → 账户 → 别名中将该地址添加为账户别名，然后在写信时从发件人一栏选择，或设为默认地址。用户名和密码保持不变，MailVault 仍使用你设置的账户登录，也不会添加 Reply-To 标头。该地址必须是服务商允许此登录账户用于发信的地址。"
       }
     },
     {
@@ -93,6 +93,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "打开 设置 → 账户，选中账户，进入它的别名部分，这里列出该账户用来发信的所有地址：先是登录地址，然后是各个别名。对于用 Google 登录的 Google 账户，MailVault 会获取 Gmail 允许你用来发信的地址。对于其他服务商，MailVault 会推荐它在你自己的邮件里见过的地址，也就是你发过信的地址和你收信的地址，你也可以手动添加任何地址。给每个别名起一个收件人看到的名称，并选择新邮件默认从哪个地址发出。验证会从别名发送一封测试邮件，让你看看服务商是否接受。服务商必须允许该地址：在 Fastmail 中，先把它添加为别名或身份；在 Gmail 中，在 设置 → 帐号和导入 → 用这个地址发送邮件 中添加；对于 Microsoft 365 和 Outlook.com，别名在 Microsoft 账户中添加。改变的只有发件地址和名称，也不会添加 Reply-To 标头，所以回复会回到该别名。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "如何连接 Fastmail 或其他 JMAP 账户？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "添加账户时选择 Fastmail，并粘贴在 Fastmail 设置中授予 Mail 和 Submission 访问权限的 API 令牌。对于其他服务器，选择 JMAP 并使用其密码或 API 令牌。如果域名发布了会话 URL，MailVault 会自动发现；否则请输入完整的 HTTPS 会话 URL。对于发现的陌生服务器，请在发送凭据之前确认。新邮件使用推送接收，无法使用推送时回退到轮询；发件地址来自服务器上的发件身份。Fastmail 也提供 IMAP 应用密码选项。"
       }
     }
   ]
@@ -201,14 +209,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">邮件服务商</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">连接 Gmail、Microsoft 365、Outlook.com、Proton Mail 和 Fastmail 等 JMAP 服务器，并使用别名发信。</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 支持 Gmail 和 Outlook 吗？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              可以。MailVault 适用于 Gmail、Outlook 以及任何支持 IMAP 的邮件服务。对于 Gmail，直接用你的 Google 账户通过 OAuth2 登录 — 无需手动填写 IMAP 设置。Microsoft 365 商业版和企业版账户可以直接用你的 Microsoft 账户通过 OAuth2 登录，与双重身份验证也能无缝配合。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">通过 Microsoft Graph API 连接</a>。
+              可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录，并顺畅支持双重身份验证。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">通过 Microsoft Graph API 连接</a>。
             </p>
         </article>
 
@@ -256,10 +264,10 @@
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我可以用与登录地址不同的地址发信吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">可以。按照<a href="#send-from-an-alias" class="text-primary-500 hover:underline">如何用别名发信？</a>中的说明把该地址添加为账户的别名，写信时在发件人一栏选中它，或把它设为默认。在 Fastmail 上，以及任何“登录用的地址不是你对外给的地址”的服务商那里，这都很常见。</p>
-              <p>变的只有外发邮件的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 地址。你的用户名和密码原封不动，MailVault 仍然以你设置的那个账户登录 IMAP 和 SMTP，而且<strong>不会添加 Reply-To 头</strong> &mdash; 回信会寄到你用来发信的那个地址。</p>
+              <p>只会更改发出邮件的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 地址。用户名和密码保持不变，MailVault 仍使用你设置的账户登录，而且<strong>不会添加 Reply-To 标头</strong> &mdash; 回复会发送到你用来发信的地址。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/compose-email-720.webp 720w, /screenshots/zh/compose-email-1440.webp 1440w, /screenshots/zh/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/compose-email-light-1440.webp" srcset="/screenshots/zh/compose-email-light-720.webp 720w, /screenshots/zh/compose-email-light-1440.webp 1440w, /screenshots/zh/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 撰写与回复窗口，支持富文本编辑" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/compose-email-720.webp 720w, /screenshots/zh/compose-email-1440.webp 1440w, /screenshots/zh/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/compose-email-light-1440.webp" srcset="/screenshots/zh/compose-email-light-720.webp 720w, /screenshots/zh/compose-email-light-1440.webp 1440w, /screenshots/zh/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 撰写与回复窗口，支持富文本编辑 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -270,6 +278,7 @@
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">添加和设置别名：</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>Google 账户</strong>：如果你是用 Google 登录的，MailVault 会获取 Gmail 允许你用来发信的地址并列出来。</li>
+                <li><strong>JMAP 账户</strong>：发件地址来自服务器上配置的发件身份。请在服务器上添加或更改。</li>
                 <li><strong>其他服务商</strong>：MailVault 会推荐它在你自己的邮件里见过的地址，也就是你发过信的地址和你收信的地址。你也可以手动添加任何地址。</li>
                 <li><strong>名称</strong>：给每个别名起一个收件人看到的名称。从该别名发出的邮件会使用这个名称。</li>
                 <li><strong>默认</strong>：选择新邮件默认从哪个地址发出。</li>
@@ -283,6 +292,11 @@
               </ul>
               <p>改变的只有发件地址和名称。MailVault 仍以你设置的账户登录，并且<strong>不会添加 Reply-To 标头</strong>，所以回复会回到该别名。</p>
             </div>
+        </article>
+
+        <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何连接 Fastmail 或其他 JMAP 账户？</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>添加账户时选择 Fastmail，并粘贴在 Fastmail 设置中授予 Mail 和 Submission 访问权限的 API 令牌。对于其他服务器，选择 JMAP 并使用其密码或 API 令牌。如果域名发布了会话 URL，MailVault 会自动发现；否则请输入完整的 HTTPS 会话 URL。对于发现的陌生服务器，请在发送凭据之前确认。新邮件使用推送接收，无法使用推送时回退到轮询；发件地址来自服务器上的发件身份。Fastmail 也提供 IMAP 应用密码选项。</p></div>
         </article>
 
       </div>

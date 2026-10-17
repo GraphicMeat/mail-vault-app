@@ -87,7 +87,7 @@
           <p>このテストでは、ローカルのテスト用メールサーバー上に2つのメールアカウントを用意します。受信トレイに58 通のものと、10,000 通のものです。自動実行が、人が操作するのと同じように実際のアプリを動かします。MailVaultを開き、小さいほうの受信トレイを開いてから、大きいほうのアカウントに切り替え、10,000 通すべてのメッセージヘッダーが一覧に表示されるまで待ちます。一覧全体を先頭から末尾までスクロールしたあと、アプリを10分間放置します。各段階で、MailVaultが所有するすべてのプロセスのメモリを記録します。</p>
           <p>使用したノートパソコンはMSI製で、Intel Core i7-13620Hとメモリ16 GBを搭載し、Windows 11 23H2を電源に接続した状態で動かしました。まっさらな環境ではなく、MailVaultのもう1つのコピーを含む他のアプリも開いていたため、普段どおりの、忙しいコンピューターでの結果と考えてください。テスト全体を、毎回新しい空のプロファイルで3回実行し、以下の数値はその3回の実行の範囲です。ビルドはMailVault 2.16の最適化されたリリースビルドにテスト用のフックを有効にしたもので、配布版とほぼ同じですが、バイト単位で完全に同一ではありません。</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="58 通のメールが入った小さいテスト用受信トレイを表示しているWindows 11版MailVault。サイドバーに2つのテストアカウント、空の閲覧ペインがあります。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="58 通のメールが入った小さいテスト用受信トレイを表示しているWindows 11版MailVault。サイドバーに2つのテストアカウント、空の閲覧ペインがあります。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">最初に測定する瞬間：小さいテスト用受信トレイを開いた状態のWindows 11版MailVaultを、テスト実行中にそのまま撮影したものです。</figcaption>
           </figure>
 
@@ -114,7 +114,7 @@ background helper, 10,000 msgs    22 – 23 MB
 app window                        11 – 13 MB</code></pre>
           <p>2列目はコミット サイズです。各プロセスが予約しているプライベートメモリで、いまRAM上にあるかどうかは問いません。これは最初の実行のあとに追加したため、3回ではなく2回分の実行をカバーしています。これが効いてくるのが最後の行です。数分間操作がないと、Windowsは使われていないプロセスからメモリを取り上げ、タスク マネージャーの数値は約110 MBまで下がります。このメモリはMailVaultが解放したのではなくWindowsが取り置いているだけで、コミット サイズを見ると、戻ってきたときに取り戻せる約310 MBをアプリがまだ保持していることが分かります。Windows上でのMailVaultのコストを1つの数値で言うなら、大きなメールボックスがある場合でおよそ300 MBという数値を使ってください。</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="大きいテストアカウントを選択した状態のWindows 11版MailVault。受信トレイのヘッダーには10,000 通のメールと表示され、一覧の最下部には最も古いテストメッセージが表示されています。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="大きいテストアカウントを選択した状態のWindows 11版MailVault。受信トレイのヘッダーには10,000 通のメールと表示され、一覧の最下部には最も古いテストメッセージが表示されています。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">10,000件すべてのヘッダーを読み込み、一覧を末尾までスクロールした瞬間、つまり「10,000 messages loaded」の行に当たる場面です。受信トレイには10,000 通のメールと表示され、このテストでは何もアーカイブしていないため、保管庫のカウンターは0と表示されています。</figcaption>
           </figure>
 

@@ -87,7 +87,7 @@
           <p>测试使用本地测试邮件服务器上的两个邮箱账户：一个收件箱有 58 封邮件，另一个有 10,000 封。一次自动化运行像真人一样操作真实的应用：打开 MailVault，打开小收件箱，然后切换到大账户，等到全部 10,000 条邮件标题都出现在列表中。它把整个列表从头滚动到尾，然后让应用静置十分钟。每一步都会记录 MailVault 拥有的每个进程的内存。</p>
           <p>这台笔记本电脑是一台 MSI，配备 Intel Core i7-13620H 和 16 GB 内存，接着电源运行 Windows 11 23H2。它不是一台干净的机器：其他应用也开着，包括另一份 MailVault，所以请把它当作一台普通、繁忙的电脑。我们把整个测试完整做了三遍，每次都用全新的空白配置文件，下面的数字是这三次运行的范围。所用的构建是 MailVault 2.16 打开测试钩子后的优化发布版本，因此和正式下载版接近，但并非逐字节相同。</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上显示有 58 封邮件的小测试收件箱，侧边栏中有两个测试账户，阅读窗格为空。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上显示有 58 封邮件的小测试收件箱，侧边栏中有两个测试账户，阅读窗格为空。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">我们测量的第一个时刻：MailVault 在 Windows 11 上打开小测试收件箱，截取自测试运行本身。</figcaption>
           </figure>
 
@@ -114,7 +114,7 @@ background helper, 10,000 msgs    22 – 23 MB
 app window                        11 – 13 MB</code></pre>
           <p>第二列是提交大小：每个进程已经保留的私有内存，无论它此刻是否驻留在内存中。我们是在第一次运行之后才加上这一列的，所以它只覆盖两次而不是三次运行。它对最后一行尤其重要：几分钟没有操作之后，Windows 会从不使用内存的进程手里收回内存，任务管理器的数字会降到约 110 MB。这部分内存不是 MailVault 释放的，而是 Windows 收走的，提交大小显示应用仍然保留着约 310 MB，等你回来时可以要回。如果只想要一个数字来说明 MailVault 在 Windows 上的代价，就用这个：加载大邮箱时大约 300 MB。</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上选中了大测试账户。收件箱标题显示 10,000 封邮件，列表底部是最早的测试邮件。" class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上选中了大测试账户。收件箱标题显示 10,000 封邮件，列表底部是最早的测试邮件。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">全部 10,000 条邮件标题已加载，列表也滚动到了末尾，也就是“已加载 10,000 封邮件”这一行对应的时刻。收件箱显示 10,000 封邮件，保险库计数器显示为 0，因为这次测试中没有任何邮件被归档。</figcaption>
           </figure>
 

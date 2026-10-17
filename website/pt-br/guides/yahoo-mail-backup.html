@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Como fazer backup do Yahoo Mail no seu computador — MailVault</title>
-  <meta name="description" content="O Yahoo Mail não suporta senhas de aplicativo, o que derruba a maioria dos guias de backup. Veja como realmente copiar uma conta do Yahoo Mail para o seu computador sem uma delas.">
+  <meta name="description" content="Faça backup do Yahoo Mail usando uma senha de app e IMAP. Salve um arquivo local com o MailVault e mantenha uma segunda cópia em outra unidade.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/pt-br/guides/yahoo-mail-backup.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/pt-br/guides/yahoo-mail-backup.html">
   <meta property="og:title" content="Como fazer backup do Yahoo Mail no seu computador — MailVault">
-  <meta property="og:description" content="O Yahoo Mail não suporta senhas de aplicativo, o que derruba a maioria dos guias de backup. Veja como realmente copiar uma conta do Yahoo Mail para o seu computador sem uma delas.">
+  <meta property="og:description" content="Faça backup do Yahoo Mail usando uma senha de app e IMAP. Salve um arquivo local com o MailVault e mantenha uma segunda cópia em outra unidade.">
   <meta property="og:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Como fazer backup do Yahoo Mail no seu computador — MailVault">
-  <meta name="twitter:description" content="O Yahoo Mail não suporta senhas de aplicativo, o que derruba a maioria dos guias de backup. Veja como realmente copiar uma conta do Yahoo Mail para o seu computador sem uma delas.">
+  <meta name="twitter:description" content="Faça backup do Yahoo Mail usando uma senha de app e IMAP. Salve um arquivo local com o MailVault e mantenha uma segunda cópia em outra unidade.">
   <meta name="twitter:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -35,7 +35,7 @@
   "@context": "https://schema.org",
   "@type": "Article",
   "headline": "Como fazer backup do Yahoo Mail no seu computador",
-  "description": "O Yahoo Mail não suporta senhas de aplicativo, o que derruba a maioria dos guias de backup. Veja como realmente copiar uma conta do Yahoo Mail para o seu computador sem uma delas.",
+  "description": "Faça backup do Yahoo Mail usando uma senha de app e IMAP. Salve um arquivo local com o MailVault e mantenha uma segunda cópia em outra unidade.",
   "url": "https://mailvaultapp.com/pt-br/guides/yahoo-mail-backup.html",
   "datePublished": "2026-07-15",
   "dateModified": "2026-07-15",
@@ -218,31 +218,23 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-          <p>
-            O Yahoo Mail já mudou de dono e de infraestrutura várias vezes ao longo dos anos, e as opções de segurança das contas mudaram junto. Muito tutorial antigo de backup manda você gerar uma "senha de aplicativo" no Yahoo e usá-la para conectar um cliente de e-mail por IMAP. Esse conselho está desatualizado &mdash; <strong>o Yahoo Mail não aceita senhas de aplicativo</strong> como o Gmail ou o iCloud. Se uma ferramenta pede que você gere uma especificamente para o Yahoo, ela está seguindo um fluxo antigo, que não funciona na maioria das contas hoje.
-          </p>
+          <p>O Yahoo aceita senhas de app para clientes de e-mail de terceiros. Em Segurança da conta do Yahoo, abra Conexões externas e crie uma senha de app para o MailVault. Cole-a no campo de senha ao adicionar sua conta do Yahoo. Consulte as <a href="https://help.yahoo.com/kb/SLN15241.html" target="_blank" rel="noopener">instruções do Yahoo sobre senhas de app</a>.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">O que realmente funciona no Yahoo Mail</h3>
 
-          <p>
-            O Yahoo ainda suporta plenamente o acesso IMAP para clientes de e-mail de terceiros &mdash; você só conecta pelo fluxo de login padrão do Yahoo, em vez de uma senha de aplicativo. Na prática, isso significa:
-          </p>
+          <p>O MailVault se conecta ao Yahoo por IMAP. Use estas configurações:</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Servidor IMAP</strong>: <code>imap.mail.yahoo.com</code>, porta 993, SSL/TLS.</li>
-            <li><strong>Servidor SMTP</strong> (se você também for enviar): <code>smtp.mail.yahoo.com</code>, porta 465 ou 587, SSL/TLS.</li>
-            <li><strong>Entrada</strong>: use as credenciais normais da sua conta Yahoo, pelo fluxo de conexão comum do cliente. Dependendo das configurações de segurança da sua conta, o Yahoo pode pedir que você aprove o novo dispositivo ou cliente na primeira vez.</li>
+            <li><strong>Servidor SMTP</strong>: <code>smtp.mail.yahoo.com</code>, porta 465 com SSL/TLS ou porta 587 com STARTTLS.</li>
+            <li><strong>Login</strong>: digite seu endereço de e-mail completo do Yahoo e uma senha de app do Yahoo, não a senha normal da conta.</li>
           </ul>
 
-          <p>
-            Se o seu cliente de e-mail insiste em uma senha de aplicativo e as configurações da conta Yahoo não oferecem mais um jeito de gerar uma, o suporte a Yahoo daquele cliente pode estar simplesmente quebrado ou desatualizado &mdash; não é algo errado com a sua conta.
-          </p>
+          <p>Se o Yahoo não permitir criar uma senha de app, siga as orientações de segurança da conta. Não use sua senha normal no lugar dela nem desative a verificação em duas etapas.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Por que fazer backup do Yahoo Mail</h3>
 
-          <p>
-            O Yahoo dá generosos 1 TB de armazenamento às contas gratuitas, então ficar sem espaço raramente é o motivo pelo qual as pessoas copiam o Yahoo Mail. Os motivos mais comuns são:
-          </p>
+          <p>A cota de uma caixa de e-mail não é um backup. Guarde uma cópia separada por estes motivos:</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li>O Yahoo já foi vendido e reestruturado várias vezes, e mudanças de produto ou incidentes de segurança de contas deixaram usuários antigos compreensivelmente cautelosos em depender dele como única cópia do histórico de e-mail.</li>
@@ -252,17 +244,15 @@
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Fazendo backup do Yahoo Mail com o MailVault</h3>
 
-          <p>
-            O MailVault é um app de e-mail de desktop gratuito para macOS, Windows e Linux que se conecta ao Yahoo Mail pelo fluxo de conexão IMAP padrão &mdash; sem senha de app, sem gambiarra. Adicione sua conta do Yahoo, entre normalmente, e o MailVault baixa seus e-mails como arquivos <code>.eml</code> individuais guardados numa estrutura Maildir padrão no seu disco. Cada e-mail é um arquivo próprio, então você pode navegar, pesquisar e abrir seu arquivo diretamente, ou apontar outro cliente de e-mail para os mesmos arquivos mais tarde, se um dia quiser.
-          </p>
+          <p>No MailVault, adicione uma conta, escolha Yahoo Mail e digite seu endereço de e-mail e senha de app. Arquive as pastas que quer guardar e depois abra mensagens e anexos salvos sem internet para conferir a cópia. Maildir, o formato padrão do cofre, guarda cada mensagem como um arquivo <code>.eml</code>. Mantenha uma segunda cópia em outra unidade antes de excluir qualquer coisa do Yahoo.</p>
 
           <p>
             O arquivamento manual da sua caixa postal completa do Yahoo é gratuito e sem limite no MailVault. Se você quiser que o backup do Yahoo se atualize sozinho com uma agenda, em vez de arquivar em lotes, isso faz parte do MailVault Premium ($4/mês ou $25/ano; 14 dias de teste grátis no anual).
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Faça backup do Yahoo Mail sem senha de aplicativo</p>
-            <p class="text-sm mb-4">O MailVault se conecta ao Yahoo pelo fluxo de login padrão e arquiva seus e-mails como arquivos .eml individuais. Grátis, com o código-fonte no GitHub.</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Faça backup do Yahoo Mail com uma senha de app</p>
+            <p class="text-sm mb-4">Conecte o Yahoo por IMAP com uma senha de app e arquive seu e-mail localmente. Backups manuais são gratuitos, e o código-fonte está no GitHub.</p>
             <div class="flex flex-wrap gap-3">
               <a href="/pt-br/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
                 Baixar o MailVault

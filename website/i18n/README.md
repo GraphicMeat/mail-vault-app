@@ -158,3 +158,26 @@ Append an entry to `LOCALES` in `i18n.mjs` (`dir`, `hreflang`, `htmlLang`,
 switcher), create `i18n/locales/<dir>/`, translate the chunks, then
 `npm run i18n`. The hreflang blocks, switcher and sitemap pick it up on the next
 `inject`/`build`.
+
+## Media descriptions and version tags
+
+Every meaningful image has descriptive `alt` text and every video has a descriptive
+`aria-label`. Decorative branding can keep empty alt text when its name is already
+provided beside it. MailVault screenshots, clips and posters also carry a version
+suffix and `data-mailvault-version` / `data-mailvault-version-kind` attributes.
+The `title` tooltip exposes the same version without changing image layout.
+
+Capture provenance lives in `website/media-versions.json`. `capture` means the
+recorded build is known; `reviewed` means the media was checked against that release
+and must say **Reviewed for MailVault version X.X.X**. These are different claims:
+never update an old screenshot to the latest capture version just because the app
+released again.
+
+Run `node ../scripts/website-media-policy.mjs` from `website/` for a dry-run report;
+add `--write` to apply known tags to English source pages before `extract`. The
+report provides `{from, to, suffix}` translation mappings and unresolved assets.
+The generator extracts and translates only the description, then appends the exact
+invariant suffix. It also preserves the version title and metadata. Keep localized
+screenshot/clip routing on every build; never replace a localized description with English.
+New media needs a manifest entry with capture evidence or an explicit compatibility
+review. Synchronize the root homepage after applying tags.

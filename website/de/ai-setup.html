@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KI-E-Mail-Bereinigung — Lokale KI-gestützte E-Mail-Klassifizierung | MailVault</title>
-  <meta name="description" content="Die E-Mail-Bereinigung von MailVault nutzt ein lokales KI-Modell, um deine E-Mails zu klassifizieren und vorzuschlagen, was sich gefahrlos vom Server löschen lässt. Alles läuft auf deinem Rechner — keine E-Mail-Daten verlassen dein Gerät.">
+  <meta name="description" content="Die MailVault E-Mail-Bereinigung verwendet lokale Regeln und einen Naive-Bayes-Klassifikator. Kein Modell-Download erforderlich. Prüfe Kategorien, bevor du Serverkopien archivierst oder löschst.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/de/ai-setup.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/de/ai-setup.html">
   <meta property="og:title" content="KI-E-Mail-Bereinigung — Lokale KI-gestützte E-Mail-Klassifizierung | MailVault">
-  <meta property="og:description" content="Klassifiziere und bereinige dein Postfach mit einem lokalen KI-Modell. Keine Daten verlassen dein Gerät.">
+  <meta property="og:description" content="Klassifiziere E-Mails lokal ohne LLM-Download. Prüfe Kategorien, archiviere sicher und behalte die Kontrolle über Serverkopien.">
   <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:site_name" content="MailVault">
@@ -20,7 +20,7 @@
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="KI-E-Mail-Bereinigung — Lokale KI-Klassifizierung | MailVault">
-  <meta name="twitter:description" content="Klassifiziere und bereinige dein Postfach mit einem lokalen KI-Modell. Keine Daten verlassen dein Gerät.">
+  <meta name="twitter:description" content="Klassifiziere E-Mails lokal ohne LLM-Download. Prüfe Kategorien, archiviere sicher und behalte die Kontrolle über Serverkopien.">
   <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -123,22 +123,22 @@
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
             </div>
-            <h3 class="font-semibold text-lg mb-2">1. Modell herunterladen</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Aktiviere KI in den Einstellungen und lade ein Modell herunter (~2–5 GB). Es wird lokal in deinem App-Datenordner abgelegt. Einmaliger Download.</p>
+            <h3 class="font-semibold text-lg mb-2">1. E-Mail-Bereinigung öffnen</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Öffne die E-Mail-Bereinigung für ein Konto. Sie verwendet zwischengespeicherte E-Mail-Kopfzeilen und benötigt keinen Modell-Download.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">2. Automatische Klassifizierung</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Nach jedem Backup klassifiziert die KI deine E-Mails: Newsletter, Werbung, Benachrichtigungen, Privates, Berufliches und mehr.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Lokale Regeln, ein Naive-Bayes-Klassifikator und integrierte Heuristiken ordnen E-Mails den Kategorien Newsletter, Werbung, Transaktion, Privat, Arbeit und Spam zu.</p>
           </div>
           <div class="text-center">
             <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">3. Prüfen &amp; bereinigen</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Sieh dir den Bereinigungsbericht an, gib Sammelaktionen frei und mach Serverspeicher frei. Die lokalen Kopien bleiben immer erhalten.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Prüfe jede Kategorie, bevor du eine Aktion ausführst. Archivieren speichert und überprüft eine Kopie im Tresor, bevor die Serverkopie entfernt wird; Löschen entfernt E-Mails vom Server, ohne sie zuvor zu archivieren.</p>
           </div>
         </div>
       </div>
@@ -150,13 +150,11 @@
         <div class="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <h2 class="text-2xl font-bold mb-4">100 % privat. Null Cloud.</h2>
-            <p class="text-slate-600 dark:text-slate-400 mb-6">
-              Anders als cloudbasierte E-Mail-Tools läuft die KI von MailVault vollständig auf deinem Computer. Das Modell verarbeitet deine E-Mails lokal — nichts wird an einen Server, eine API oder einen Drittdienst gesendet. Deine E-Mails gehören dir.
-            </p>
+            <p class="text-slate-600 dark:text-slate-400 mb-6">Die Bereinigung klassifiziert E-Mails auf deinem Computer. Sie sendet weder E-Mail-Inhalte noch Metadaten oder Adressen an einen KI-Dienst. Die separaten KI-Schreibwerkzeuge können einen Anbieter deiner Wahl verwenden.</p>
             <ul class="space-y-3">
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">Das Modell läuft auf deiner CPU/GPU — für die Klassifizierung ist kein Internet nötig</span>
+                <span class="text-slate-700 dark:text-slate-300">Die Klassifizierung erfolgt auf deinem Computer anhand zwischengespeicherter Kopfzeilen</span>
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -164,7 +162,7 @@
               </li>
               <li class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                <span class="text-slate-700 dark:text-slate-300">Lösche das Modell jederzeit, um Speicherplatz freizugeben</span>
+                <span class="text-slate-700 dark:text-slate-300">Korrigiere eine Kategorie, um den Klassifikator mit deinen E-Mails zu trainieren</span>
               </li>
             </ul>
           </div>
@@ -173,19 +171,19 @@
             <div class="space-y-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">RAM</span>
-                <span class="font-medium">16 GB empfohlen (8 GB Minimum mit kleinerem Modell)</span>
+                <span class="font-medium">Kein zusätzlicher RAM-Bedarf für ein großes Modell</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">Speicherplatz</span>
-                <span class="font-medium">~2–5 GB für die Modelldatei</span>
+                <span class="font-medium">Kein mehrere Gigabyte großer Modell-Download</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">GPU</span>
-                <span class="font-medium">Optional — nutzt Metal auf Apple Silicon, sonst die CPU</span>
+                <span class="font-medium">Für die Bereinigung nicht erforderlich</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-600 dark:text-slate-400">Internet</span>
-                <span class="font-medium">Nur für den ersten Modell-Download</span>
+                <span class="font-medium">Zum Synchronisieren von E-Mails und Ändern von Serverkopien erforderlich</span>
               </div>
             </div>
           </div>
@@ -199,16 +197,16 @@
         <h2 class="text-2xl font-bold text-center mb-12">Häufig gestellte Fragen</h2>
         <div class="space-y-6">
           <div>
-            <h3 class="font-semibold mb-2">Welches KI-Modell nutzt MailVault?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">MailVault lädt quelloffene Modelle im GGUF-Format herunter. Empfohlen ist Llama 3.1 8B (~4,6 GB) — es bietet die beste Balance aus Klassifizierungsqualität und Geschwindigkeit. Für Rechner mit weniger RAM gibt es ein kleineres 3B-Modell.</p>
+            <h3 class="font-semibold mb-2">Muss für die Bereinigung ein KI-Modell heruntergeladen werden?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Nein. Die Bereinigung verwendet lokale Regeln, einen Naive-Bayes-Klassifikator und integrierte Heuristiken. Sie lernt aus deinen Kategoriekorrekturen, ohne ein LLM herunterzuladen.</p>
           </div>
           <div>
-            <h3 class="font-semibold mb-2">Kann ich mein eigenes Modell nutzen?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Ja. Lege eine beliebige Modelldatei im GGUF-Format in das Modellverzeichnis (angezeigt unter Einstellungen &gt; KI &amp; Bereinigung), und sie erscheint in der Modellauswahl.</p>
+            <h3 class="font-semibold mb-2">Ist die Bereinigung dasselbe wie KI-Schreiben?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Nein. KI-Schreiben hat eigene Anbietereinstellungen für Apple Intelligence, ein heruntergeladenes Modell oder einen kompatiblen Endpunkt wie Ollama. Ein Wechsel dieses Anbieters ändert den Klassifikator der Bereinigung nicht.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">Was passiert bei „vom Server löschen“?</h3>
-            <p class="text-sm text-slate-600 dark:text-slate-400">Die E-Mail wird von deinem IMAP-Server entfernt (das gibt Serverspeicher frei), aber die lokale .eml-Kopie in MailVault bleibt immer erhalten. Über die Zeitkapsel kannst du jede E-Mail jederzeit ansehen oder wiederherstellen.</p>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Löschen entfernt die Serverkopie und erstellt vorher keine Tresorkopie. Verwende Archivieren in der Bereinigung, um eine lokale Kopie zu speichern und zu überprüfen, bevor du sie vom Server entfernst. Die Zeitkapsel kann gespeicherte Verläufe anzeigen, aber keine Nachricht wiederherstellen, die nie gespeichert wurde.</p>
           </div>
           <div>
             <h3 class="font-semibold mb-2">Lernt die KI aus meinen Korrekturen?</h3>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cómo hacer una copia de seguridad de Yahoo Mail en tu ordenador — MailVault</title>
-  <meta name="description" content="Yahoo Mail no admite contraseñas de aplicación, algo que despista a casi todas las guías de copias. Así se copia de verdad una cuenta de Yahoo Mail a tu propio ordenador sin ninguna.">
+  <meta name="description" content="Haz una copia de seguridad de Yahoo Mail con una contraseña de aplicación e IMAP. Guarda un archivo local con MailVault y conserva una segunda copia en otra unidad.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/es/guides/yahoo-mail-backup.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/es/guides/yahoo-mail-backup.html">
   <meta property="og:title" content="Cómo hacer una copia de seguridad de Yahoo Mail en tu ordenador — MailVault">
-  <meta property="og:description" content="Yahoo Mail no admite contraseñas de aplicación, algo que despista a casi todas las guías de copias. Así se copia de verdad una cuenta de Yahoo Mail a tu propio ordenador sin ninguna.">
+  <meta property="og:description" content="Haz una copia de seguridad de Yahoo Mail con una contraseña de aplicación e IMAP. Guarda un archivo local con MailVault y conserva una segunda copia en otra unidad.">
   <meta property="og:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Cómo hacer una copia de seguridad de Yahoo Mail en tu ordenador — MailVault">
-  <meta name="twitter:description" content="Yahoo Mail no admite contraseñas de aplicación, algo que despista a casi todas las guías de copias. Así se copia de verdad una cuenta de Yahoo Mail a tu propio ordenador sin ninguna.">
+  <meta name="twitter:description" content="Haz una copia de seguridad de Yahoo Mail con una contraseña de aplicación e IMAP. Guarda un archivo local con MailVault y conserva una segunda copia en otra unidad.">
   <meta name="twitter:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -35,7 +35,7 @@
   "@context": "https://schema.org",
   "@type": "Article",
   "headline": "Cómo hacer una copia de seguridad de Yahoo Mail en tu ordenador",
-  "description": "Yahoo Mail no admite contraseñas de aplicación, algo que despista a casi todas las guías de copias. Así se copia de verdad una cuenta de Yahoo Mail a tu propio ordenador sin ninguna.",
+  "description": "Haz una copia de seguridad de Yahoo Mail con una contraseña de aplicación e IMAP. Guarda un archivo local con MailVault y conserva una segunda copia en otra unidad.",
   "url": "https://mailvaultapp.com/es/guides/yahoo-mail-backup.html",
   "datePublished": "2026-07-15",
   "dateModified": "2026-07-15",
@@ -218,31 +218,23 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-          <p>
-            Yahoo Mail ha cambiado de dueño y de infraestructura varias veces a lo largo de los años, y sus opciones de seguridad de la cuenta han ido cambiando con ello. Muchos tutoriales antiguos de copia de seguridad te dicen que generes una "contraseña de aplicación" en Yahoo y la uses para conectar un cliente de correo por IMAP. Ese consejo ya no vale &mdash; <strong>Yahoo Mail no admite contraseñas específicas de aplicación</strong> como sí hacen Gmail o iCloud. Si una herramienta te pide que generes una precisamente para Yahoo, está siguiendo un flujo obsoleto que hoy no funcionará en la mayoría de cuentas.
-          </p>
+          <p>Yahoo admite contraseñas de aplicación para clientes de correo de terceros. En Seguridad de la cuenta de Yahoo, abre Conexiones externas y crea una contraseña de aplicación para MailVault. Cópiala en el campo de contraseña al añadir tu cuenta de Yahoo. Consulta las <a href="https://help.yahoo.com/kb/SLN15241.html" target="_blank" rel="noopener">instrucciones de Yahoo sobre contraseñas de aplicación</a>.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Qué funciona de verdad con Yahoo Mail</h3>
 
-          <p>
-            Yahoo sigue admitiendo del todo el acceso IMAP para clientes de correo de terceros: simplemente te conectas con su flujo de inicio de sesión estándar en lugar de con una contraseña de aplicación. En la práctica, eso significa:
-          </p>
+          <p>MailVault se conecta a Yahoo mediante IMAP. Usa estos ajustes:</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Servidor IMAP</strong>: <code>imap.mail.yahoo.com</code>, puerto 993, SSL/TLS.</li>
-            <li><strong>Servidor SMTP</strong> (si también vas a enviar): <code>smtp.mail.yahoo.com</code>, puerto 465 o 587, SSL/TLS.</li>
-            <li><strong>Inicio de sesión</strong>: usa las credenciales normales de tu cuenta de Yahoo con el flujo de conexión habitual del cliente. Según los ajustes de seguridad de tu cuenta, Yahoo puede pedirte que apruebes el nuevo dispositivo o cliente la primera vez.</li>
+            <li><strong>Servidor SMTP</strong>: <code>smtp.mail.yahoo.com</code>, puerto 465 con SSL/TLS o puerto 587 con STARTTLS.</li>
+            <li><strong>Inicio de sesión</strong>: introduce tu dirección de correo de Yahoo completa y una contraseña de aplicación de Yahoo, no la contraseña habitual de tu cuenta.</li>
           </ul>
 
-          <p>
-            Si tu cliente de correo insiste en una contraseña de aplicación y los ajustes de tu cuenta de Yahoo ya no ofrecen forma de generarla, puede que el soporte de Yahoo de ese cliente esté roto o desfasado: no es que tu cuenta tenga nada mal.
-          </p>
+          <p>Si Yahoo no te permite crear una contraseña de aplicación, sigue sus indicaciones de seguridad de la cuenta. No uses tu contraseña habitual en su lugar ni desactives la verificación en dos pasos.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Por qué copiar Yahoo Mail</h3>
 
-          <p>
-            Yahoo da a las cuentas gratuitas 1 TB de almacenamiento, que es generoso, así que quedarse sin espacio rara vez es el motivo para copiar Yahoo Mail. Las razones más habituales son:
-          </p>
+          <p>La cuota de un buzón no es una copia de seguridad. Conserva una copia aparte por estos motivos:</p>
 
           <ul class="list-disc pl-6 space-y-2">
             <li>Yahoo se ha vendido y reestructurado varias veces, y los cambios de producto o los incidentes de seguridad han hecho que quienes llevan mucho tiempo con ella desconfíen, con razón, de dejarla como única copia de su historial de correo.</li>
@@ -252,17 +244,15 @@
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Copiar Yahoo Mail con MailVault</h3>
 
-          <p>
-            MailVault es una app de correo de escritorio gratuita para macOS, Windows y Linux que se conecta a Yahoo Mail mediante su conexión IMAP estándar &mdash; sin contraseña de aplicación ni trucos. Añade tu cuenta de Yahoo, inicia sesión con normalidad y MailVault descarga tu correo como archivos <code>.eml</code> individuales guardados en una estructura Maildir estándar en tu disco. Cada correo es su propio archivo, así que puedes recorrer tu archivo, buscar en él y abrirlo directamente, o apuntar más adelante otro cliente de correo a los mismos archivos si alguna vez quieres.
-          </p>
+          <p>En MailVault, añade una cuenta, elige Yahoo Mail e introduce tu dirección de correo y tu contraseña de aplicación. Archiva las carpetas que quieras conservar y después abre los mensajes y adjuntos guardados sin conexión para comprobar la copia. Maildir, el formato predeterminado de la bóveda, guarda cada mensaje como un archivo <code>.eml</code>. Conserva una segunda copia en otra unidad antes de eliminar nada de Yahoo.</p>
 
           <p>
             El archivado manual de todo tu buzón de Yahoo es gratis e ilimitado en MailVault. Si quieres que tu copia de Yahoo se actualice sola según un horario en lugar de archivar por tandas, eso forma parte de MailVault Premium ($4/mes o $25/año; 14 días de prueba gratis en el plan anual).
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Copia Yahoo Mail sin contraseña de aplicación</p>
-            <p class="text-sm mb-4">MailVault se conecta a Yahoo mediante su inicio de sesión estándar y archiva tu correo como archivos .eml individuales. Gratis, con el código fuente publicado en GitHub.</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Haz una copia de seguridad de Yahoo Mail con una contraseña de aplicación</p>
+            <p class="text-sm mb-4">Conecta Yahoo por IMAP con una contraseña de aplicación y archiva tu correo en local. Las copias de seguridad manuales son gratuitas y el código fuente está en GitHub.</p>
             <div class="flex flex-wrap gap-3">
               <a href="/es/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
                 Descargar MailVault

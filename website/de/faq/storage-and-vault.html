@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Speicherort und dein Vault — MailVault FAQ</title>
-  <meta name="description" content="Wo MailVault deine Mail auf der Festplatte ablegt, warum es .eml und Maildir nutzt und wie du den Vault auf ein anderes Laufwerk verschiebst.">
+  <meta name="description" content="Wo MailVault deine E-Mails speichert, wie sich Maildir- und JMAP-Speicherung unterscheiden und wie du den Tresor verschiebst oder konvertierst.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/de/faq/storage-and-vault.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/de/faq/storage-and-vault.html">
   <meta property="og:title" content="Speicherort und dein Vault — MailVault FAQ">
-  <meta property="og:description" content="Wo MailVault deine Mail auf der Festplatte ablegt, warum es .eml und Maildir nutzt und wie du den Vault auf ein anderes Laufwerk verschiebst.">
+  <meta property="og:description" content="Wo MailVault deine E-Mails speichert, wie sich Maildir- und JMAP-Speicherung unterscheiden und wie du den Tresor verschiebst oder konvertierst.">
   <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Speicherort und dein Vault — MailVault FAQ">
-  <meta name="twitter:description" content="Wo MailVault deine Mail auf der Festplatte ablegt, warum es .eml und Maildir nutzt und wie du den Vault auf ein anderes Laufwerk verschiebst.">
+  <meta name="twitter:description" content="Wo MailVault deine E-Mails speichert, wie sich Maildir- und JMAP-Speicherung unterscheiden und wie du den Tresor verschiebst oder konvertierst.">
   <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -60,7 +60,7 @@
       "name": "Wo werden meine E-Mails gespeichert?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Dein Tresor ist ein Ordner mit normalen .eml-Dateien, organisiert im Maildir-Format — auf deinem Computer — eine Datei pro E-Mail, keine Datenbank nötig. Unter macOS läuft MailVault in einer Sandbox, deshalb liegt der Ordner unter ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ und nicht unter ~/Library/Application Support. Unter Linux ist es ~/.local/share/com.mailvault.app/ beim .deb-Paket oder ~/snap/mailvault/current/.local/share/com.mailvault.app/ beim Snap. ~/Library ist im Finder ausgeblendet und wird von Spotlight nicht indexiert, deshalb findet eine Suche nach com.mailvault.app auf dem Laufwerk nichts: Drücke im Finder Umschalt + Befehl + G und gib ~/Library ein, oder halte die Wahltaste gedrückt, während du im Finder das Menü „Gehe zu“ öffnest, oder drücke in deinem Benutzerordner Befehl + J und aktiviere „Ordner ‚Library‘ anzeigen“. MailVault zeigt den verwendeten Ordner außerdem unter Einstellungen, Sichern & Wiederherstellen, Sicherungseinstellungen, Wo deine Mail gespeichert ist. Deine Daten verlassen nie deinen Computer und werden nie in einen Cloud-Dienst hochgeladen. Weil .eml ein weit verbreitetes E-Mail-Format ist, lassen sich deine E-Mails mit Apple Mail, Thunderbird, Outlook oder anderen Apps öffnen, die EML unterstützen — du bist nie an MailVault gebunden."
+        "text": "Standardmäßig ist dein Tresor ein Ordner mit standardkonformen .eml-Dateien im Maildir-Format — auf deinem Computer — eine Datei pro E-Mail, keine Datenbank erforderlich. Unter macOS läuft MailVault in einer Sandbox. Der Ordner liegt daher unter ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ statt unter ~/Library/Application Support. Unter Linux liegt er für das .deb-Paket unter ~/.local/share/com.mailvault.app/ oder für den Snap unter ~/snap/mailvault/current/.local/share/com.mailvault.app/. ~/Library ist im Finder verborgen und wird von Spotlight nicht indiziert. Deshalb findet eine Suche nach com.mailvault.app auf dem Laufwerk nichts: Drücke im Finder Shift + Command + G und gib ~/Library ein, halte beim Öffnen des Finder-Menüs „Gehe zu“ die Option-Taste gedrückt oder drücke im Benutzerordner Command + J und aktiviere „Ordner Library anzeigen“. MailVault zeigt den verwendeten Ordner auch unter Einstellungen, Sichern &amp; Wiederherstellen, Sicherungseinstellungen, Wo deine Mail gespeichert ist. Deine Daten verlassen deinen Computer nie und werden nie in einen Cloud-Dienst hochgeladen. Weil .eml ein weit verbreitetes E-Mail-Format ist, können deine E-Mails mit Apple Mail, Thunderbird, Outlook oder anderen EML-fähigen Apps geöffnet werden — du bist nie an MailVault gebunden."
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": "Was sind .eml-Dateien und Maildir? Warum ist das wichtig?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": ".eml (RFC 5322) ist das Internet-Standardformat für E-Mail-Nachrichten. Jede E-Mail liegt als einzelne, in sich geschlossene Textdatei vor, die sich mit jedem Mailclient öffnen lässt. Maildir ist eine bewährte Verzeichnisstruktur für die Ablage von E-Mails, seit Jahrzehnten von Mailservern genutzt. Jede E-Mail ist eine Datei, es gibt also keine einzelne Datenbank, die beschädigt werden kann. Zusammen bedeuten .eml + Maildir, dass deine E-Mails zukunftssicher und portabel sind und nie an eine einzelne Anwendung gebunden."
+        "text": ".eml (RFC 5322) ist das Internet-Standardformat für E-Mail-Nachrichten. Bei Maildir-Speicherung wird jede E-Mail als einzelne, eigenständige Textdatei gespeichert, die jedes E-Mail-Programm öffnen kann. Maildir ist eine bewährte Verzeichnisstruktur zur E-Mail-Speicherung, die Mailserver seit Jahrzehnten verwenden. Jede E-Mail ist eine Datei; es gibt also keine einzelne Datenbank, die beschädigt werden könnte. Zusammen machen .eml + Maildir deine E-Mails zukunftssicher, übertragbar und unabhängig von einer einzelnen Anwendung."
       }
     },
     {
@@ -109,6 +109,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "MailVault behält immer eine Arbeitskopie deiner E-Mails im eigenen Speicher der App — daraus liest, sucht und öffnest du Nachrichten. Ein externer Backup-Speicherort fügt auf einem von dir gewählten Laufwerk eine zweite, unabhängige Kopie hinzu: eine externe SSD, eine NAS-Freigabe oder einen synchronisierten Ordner. Sie wird bei Backups gleichzeitig mit der Arbeitskopie im selben .eml- und Maildir-Layout geschrieben, sodass Apps mit EML-Unterstützung die Nachrichtendateien lesen können. Die App liest sie nicht im Alltag, und sie ist kalter Speicher: Auf dem Server gelöschte oder in MailVault entfernte E-Mails bleiben in der externen Kopie. Lege sie unter Einstellungen bei Backup in „Zweite Kopie — externer kalter Speicher“ fest. Unter macOS speichert MailVault für den Ordner ein sicherheitsbezogenes Lesezeichen, damit der Zugriff Neustarts und App-Updates übersteht; das Statusabzeichen zeigt Bereit, Erneute Berechtigung nötig, Nicht verfügbar oder Zugriff verweigert, und die erneute Berechtigung braucht nur einen Klick. Wenn das Laufwerk während eines Backups nicht angeschlossen ist, gelingt die Arbeitskopie trotzdem und MailVault meldet, wie viele Nachrichten die externe Kopie nicht erreicht haben; beim nächsten Durchlauf werden sie kopiert."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Kann ich das Speicherformat des Tresors ändern?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ja. Unter Einstellungen &gt; Speicher kannst du zwischen Maildir- und JMAP-Speicherung konvertieren. Maildir ist der Standard, mit einer .eml-Datei pro Nachricht. JMAP-Speicherung bewahrt die ursprünglichen Nachrichtenbytes plus einen standardkonformen JMAP-JSON-Datensatz auf und speichert identische Nachrichten in mehreren Ordnern nur einmal. Wähle, ob die alten Dateien separat aufbewahrt oder nach der Überprüfung jeder Nachricht gelöscht werden sollen. Die Konvertierung läuft im Hintergrund und wird nach einem Neustart fortgesetzt. Diese Speicherwahl ist unabhängig davon, ob dein Konto IMAP, Microsoft Graph oder JMAP verwendet."
       }
     }
   ]
@@ -217,14 +225,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">Speicherort und dein Vault</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Wo MailVault deine Mail auf der Festplatte ablegt, warum es .eml und Maildir nutzt und wie du den Vault auf ein anderes Laufwerk verschiebst.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Wo MailVault deine E-Mails speichert, wie sich Maildir- und JMAP-Speicherung unterscheiden und wie du den Tresor verschiebst oder konvertierst.</p>
 
       <div class="space-y-4">
 
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Wo werden meine E-Mails gespeichert?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Dein Tresor ist ein Ordner mit normalen <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml-Dateien</a>, organisiert im <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>-Format auf deinem Computer &mdash; eine Datei pro E-Mail, keine Datenbank nötig. Deine Daten verlassen nie deinen Computer und werden nie in einen Cloud-Dienst hochgeladen. Weil .eml ein weit verbreitetes E-Mail-Format ist, lassen sich deine E-Mails mit Apple Mail, Thunderbird, Outlook oder anderen Apps öffnen, die EML unterstützen — du bist nie an MailVault gebunden.</p>
+              <p class="mb-4">Standardmäßig ist dein Tresor ein Ordner mit standardkonformen <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml-Dateien</a> im <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>-Format auf deinem Computer &mdash; eine Datei pro E-Mail, keine Datenbank erforderlich. Deine Daten verlassen deinen Computer nie und werden nie in einen Cloud-Dienst hochgeladen. Weil .eml ein weit verbreitetes E-Mail-Format ist, können deine E-Mails mit Apple Mail, Thunderbird, Outlook oder anderen EML-fähigen Apps geöffnet werden — du bist nie an MailVault gebunden.</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Der genaue Ordner</p>
               <p class="mb-2">MailVault läuft in einer Sandbox, deshalb liegt dein Vault unter macOS im eigenen Container der App &mdash; nicht direkt unter <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code>, wo die meisten zuerst nachsehen:</p>
@@ -289,7 +297,7 @@
               Ja. Sobald deine E-Mails synchronisiert sind, liegen sie lokal, und du kannst sie alle ohne Internetverbindung lesen, durchsuchen und durchblättern. Internet brauchst du nur, um neue E-Mails zu synchronisieren oder Nachrichten zu senden.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/local-vault-720.webp 720w, /screenshots/de/local-vault-1440.webp 1440w, /screenshots/de/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/local-vault-light-1440.webp" srcset="/screenshots/de/local-vault-light-720.webp 720w, /screenshots/de/local-vault-light-1440.webp 1440w, /screenshots/de/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Lokal-Ansicht mit E-Mails, die nach dem Löschen auf dem Server auf der Festplatte geblieben sind" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/local-vault-720.webp 720w, /screenshots/de/local-vault-1440.webp 1440w, /screenshots/de/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/local-vault-light-1440.webp" srcset="/screenshots/de/local-vault-light-720.webp 720w, /screenshots/de/local-vault-light-1440.webp 1440w, /screenshots/de/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Lokal-Ansicht mit E-Mails, die nach dem Löschen auf dem Server auf der Festplatte geblieben sind · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -343,6 +351,11 @@
                 Wird das Laufwerk mitten im Backup abgezogen, wird die Arbeitskopie trotzdem fertig, und MailVault meldet, wie viele Nachrichten die externe Kopie nicht erreicht haben. Der nächste Lauf kopiert sie nach — nichts geht verloren, und der Fehler bleibt nie stumm.
               </p>
             </div>
+        </article>
+
+        <article id="jmap-storage" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Kann ich das Speicherformat des Tresors ändern?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Ja. Unter Einstellungen &gt; Speicher kannst du zwischen Maildir- und JMAP-Speicherung konvertieren. Maildir ist der Standard, mit einer .eml-Datei pro Nachricht. JMAP-Speicherung bewahrt die ursprünglichen Nachrichtenbytes plus einen standardkonformen JMAP-JSON-Datensatz auf und speichert identische Nachrichten in mehreren Ordnern nur einmal. Wähle, ob die alten Dateien separat aufbewahrt oder nach der Überprüfung jeder Nachricht gelöscht werden sollen. Die Konvertierung läuft im Hintergrund und wird nach einem Neustart fortgesetzt. Diese Speicherwahl ist unabhängig davon, ob dein Konto IMAP, Microsoft Graph oder JMAP verwendet.</p></div>
         </article>
 
       </div>

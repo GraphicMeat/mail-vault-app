@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>メールプロバイダ — MailVault FAQ</title>
-  <meta name="description" content="Gmail、Microsoft 365、Outlook.com、Proton Mailの接続と、エイリアスからの送信について。">
+  <meta name="description" content="Gmail、Microsoft 365、Outlook.com、Proton Mail、Fastmail などの JMAP サーバーに接続し、エイリアスから送信します。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ja/faq/providers.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/ja/faq/providers.html">
   <meta property="og:title" content="メールプロバイダ — MailVault FAQ">
-  <meta property="og:description" content="Gmail、Microsoft 365、Outlook.com、Proton Mailの接続と、エイリアスからの送信について。">
+  <meta property="og:description" content="Gmail、Microsoft 365、Outlook.com、Proton Mail、Fastmail などの JMAP サーバーに接続し、エイリアスから送信します。">
   <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="メールプロバイダ — MailVault FAQ">
-  <meta name="twitter:description" content="Gmail、Microsoft 365、Outlook.com、Proton Mailの接続と、エイリアスからの送信について。">
+  <meta name="twitter:description" content="Gmail、Microsoft 365、Outlook.com、Proton Mail、Fastmail などの JMAP サーバーに接続し、エイリアスから送信します。">
   <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -60,7 +60,7 @@
       "name": "MailVaultはGmailやOutlookで使えますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。MailVault は Gmail、Outlook、そのほか IMAP に対応したあらゆるメールサービスで使えます。Gmail では OAuth2 で Google アカウントから直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 Business と Enterprise のアカウントは OAuth2 で Microsoft アカウントから直接サインインできます。個人の Outlook.com、Hotmail、Live.com のアカウントは Microsoft Graph API 経由で接続します。"
+        "text": "はい。MailVault は Gmail、Outlook、Fastmail などの JMAP サーバー、および IMAP 対応のメールサービスで使えます。Gmail には OAuth2 を使って Google アカウントで直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 Business および Enterprise アカウントは、OAuth2 を使って Microsoft アカウントで直接サインインできます。個人用の Outlook.com、Hotmail、Live.com アカウントは Microsoft Graph API 経由で接続します。"
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "ログインに使うアドレスとは別のアドレスから送信できますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。設定 → アカウント → エイリアスでそのアドレスをアカウントのエイリアスとして追加し、メールを書くときに送信者の行で選ぶか、既定にします。ユーザー名とパスワードはそのままで、MailVault は設定したアカウントで IMAP と SMTP にサインインし続け、Reply-To ヘッダーは追加されません。そのアドレスは、そのログインでの送信を提供元が認めているものである必要があります。"
+        "text": "はい。設定 → アカウント → エイリアスで、そのアドレスをアカウントのエイリアスとして追加します。作成時に差出人の行で選ぶか、既定のアドレスに設定してください。ユーザー名とパスワードは変わらず、MailVault は設定済みのアカウントで引き続きサインインし、Reply-To ヘッダーも追加しません。そのログインでの送信をプロバイダーが許可しているアドレスである必要があります。"
       }
     },
     {
@@ -93,6 +93,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "設定 → アカウントを開き、アカウントを選んでエイリアスのセクションに進みます。アカウントが送信に使うすべてのアドレスが、ログインアドレス、続いて各エイリアスの順に並びます。Google でサインインした Google アカウントでは、Gmail で送信が許可されているアドレスを MailVault が取得します。それ以外の提供元では、送信に使ったアドレスやメールが届くアドレスなど、あなた自身のメールで見つかったアドレスを MailVault が提案し、どのアドレスも手動で追加できます。各エイリアスには受信者に表示する名前を付け、新しいメッセージをどのアドレスで始めるかを選びます。確認を押すとエイリアスからテストメッセージを 1 通送り、提供元が受け付けるかどうかを確かめられます。そのアドレスは提供元で許可されている必要があります。Fastmail では先にエイリアスまたは ID として追加し、Gmail では 設定 → アカウントとインポート → Send mail as で追加します。Microsoft 365 と Outlook.com では、エイリアスは Microsoft アカウントで追加します。変わるのは差出人のアドレスと名前だけで、Reply-To ヘッダーは追加されないため、返信はエイリアスに届きます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Fastmail やほかの JMAP アカウントにはどう接続しますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "アカウント追加時に Fastmail を選び、Fastmail の設定で Mail と Submission へのアクセスを許可した API トークンを貼り付けます。ほかのサーバーでは JMAP を選び、そのパスワードまたは API トークンを使います。ドメインがセッション URL を公開していれば、MailVault が検出します。公開していなければ、完全な HTTPS セッション URL を入力してください。検出されたサーバーに見覚えがない場合は、認証情報を送る前に確認してください。新着メールはプッシュで取得し、利用できない場合はポーリングに切り替えます。送信アドレスにはサーバーの差出人情報を使います。Fastmail では IMAP 用のアプリパスワードも利用できます。"
       }
     }
   ]
@@ -201,14 +209,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">メールプロバイダ</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail、Microsoft 365、Outlook.com、Proton Mailの接続と、エイリアスからの送信について。</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail、Microsoft 365、Outlook.com、Proton Mail、Fastmail などの JMAP サーバーに接続し、エイリアスから送信します。</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVaultはGmailやOutlookで使えますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              はい。MailVault は Gmail、Outlook、そのほか IMAP に対応したあらゆるメールサービスで使えます。Gmail では OAuth2 で Google アカウントから直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 Business と Enterprise のアカウントは OAuth2 で Microsoft アカウントから直接サインインでき、2 段階認証ともそのまま使えます。個人の Outlook.com、Hotmail、Live.com のアカウントは <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">Microsoft Graph API 経由で接続します</a>。
+              はい。MailVault は Gmail、Outlook、Fastmail などの JMAP サーバー、および IMAP 対応のメールサービスで使えます。Gmail には OAuth2 を使って Google アカウントで直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 Business および Enterprise アカウントは、OAuth2 を使って Microsoft アカウントで直接サインインでき、2 要素認証にも対応しています。個人用の Outlook.com、Hotmail、Live.com アカウントは<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">Microsoft Graph API 経由で接続します</a>。
             </p>
         </article>
 
@@ -256,10 +264,10 @@
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">ログインに使うアドレスとは別のアドレスから送信できますか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">はい。<a href="#send-from-an-alias" class="text-primary-500 hover:underline">エイリアスから送信するには？</a>の説明どおりにアドレスをアカウントのエイリアスとして追加し、メールを書くときに送信者の行で選ぶか、既定にします。Fastmailや、サインインに使うアドレスと人に伝えるアドレスが違う提供元では、よくあることです。</p>
-              <p>変わるのは、送信するメールの<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code>のアドレスだけです。ユーザー名とパスワードはそのままで、MailVaultは設定したアカウントとしてIMAPとSMTPにサインインし続けます。また、<strong>Reply-Toのヘッダーは追加されません</strong> &mdash; 返信は、送信に使ったアドレスへ届きます。</p>
+              <p>変更されるのは、送信メールの <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> アドレスだけです。ユーザー名とパスワードはそのままで、MailVault は設定済みのアカウントで引き続きサインインします。<strong>Reply-To ヘッダーは追加されません</strong> &mdash; 返信は送信に使ったアドレスに届きます。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/compose-email-720.webp 720w, /screenshots/ja/compose-email-1440.webp 1440w, /screenshots/ja/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/compose-email-light-1440.webp" srcset="/screenshots/ja/compose-email-light-720.webp 720w, /screenshots/ja/compose-email-light-1440.webp 1440w, /screenshots/ja/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="リッチテキスト編集を備えたMailVaultの作成・返信画面" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/compose-email-720.webp 720w, /screenshots/ja/compose-email-1440.webp 1440w, /screenshots/ja/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/compose-email-light-1440.webp" srcset="/screenshots/ja/compose-email-light-720.webp 720w, /screenshots/ja/compose-email-light-1440.webp 1440w, /screenshots/ja/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="リッチテキスト編集を備えたMailVaultの作成・返信画面 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -270,6 +278,7 @@
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">エイリアスの追加と設定:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>Google アカウント</strong>: Google でサインインした場合、Gmail で送信が許可されているアドレスを MailVault が取得して一覧にします。</li>
+                <li><strong>JMAP アカウント</strong>: 送信アドレスには、サーバーで設定した差出人情報を使います。追加や変更はサーバー側で行ってください。</li>
                 <li><strong>その他の提供元</strong>: 送信に使ったアドレスやメールが届くアドレスなど、あなた自身のメールで見つかったアドレスを MailVault が提案します。どのアドレスも手動で追加できます。</li>
                 <li><strong>名前</strong>: 各エイリアスに受信者に表示する名前を付けます。エイリアスから送るメールはその名前で送信されます。</li>
                 <li><strong>既定</strong>: 新しいメッセージをどのアドレスで始めるかを選びます。</li>
@@ -283,6 +292,11 @@
               </ul>
               <p>変わるのは差出人のアドレスと名前だけです。MailVault は設定したアカウントでサインインし続け、<strong>Reply-To ヘッダーは追加されない</strong>ため、返信はエイリアスに届きます。</p>
             </div>
+        </article>
+
+        <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Fastmail やほかの JMAP アカウントにはどう接続しますか？</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>アカウント追加時に Fastmail を選び、Fastmail の設定で Mail と Submission へのアクセスを許可した API トークンを貼り付けます。ほかのサーバーでは JMAP を選び、そのパスワードまたは API トークンを使います。ドメインがセッション URL を公開していれば、MailVault が検出します。公開していなければ、完全な HTTPS セッション URL を入力してください。検出されたサーバーに見覚えがない場合は、認証情報を送る前に確認してください。新着メールはプッシュで取得し、利用できない場合はポーリングに切り替えます。送信アドレスにはサーバーの差出人情報を使います。Fastmail では IMAP 用のアプリパスワードも利用できます。</p></div>
         </article>
 
       </div>

@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quanta memoria usa MailVault su Windows? L'abbiamo misurato - MailVault Blog</title>
-  <meta name="description" content="Abbiamo eseguito su Windows 11 lo stesso test di memoria con 10.000 messaggi che avevamo fatto sul Mac: circa 210 MB all'avvio, un picco breve vicino a 365 MB mentre si apre una casella grande, e circa 23 MB per l'helper in background. Ogni processo, in un grafico.">
+  <meta name="description" content="Abbiamo eseguito su Windows 11 lo stesso test di memoria con 10.000 messaggi che avevamo fatto sul Mac: circa 210 MB all&#39;avvio, un picco breve vicino a 365 MB mentre si apre una casella grande, e circa 23 MB per l&#39;helper in background. Ogni processo, in un grafico.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/it/blog/mailvault-windows-memory-use.html">
   <meta name="theme-color" content="#6366f1">
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/it/blog/mailvault-windows-memory-use.html">
-  <meta property="og:title" content="Quanta memoria usa MailVault su Windows? L'abbiamo misurato">
-  <meta property="og:description" content="Abbiamo eseguito su Windows 11 lo stesso test di memoria con 10.000 messaggi che avevamo fatto sul Mac: circa 210 MB all'avvio, un picco breve vicino a 365 MB mentre si apre una casella grande, e circa 23 MB per l'helper in background. Ogni processo, in un grafico.">
+  <meta property="og:title" content="Quanta memoria usa MailVault su Windows? L&#39;abbiamo misurato">
+  <meta property="og:description" content="Abbiamo eseguito su Windows 11 lo stesso test di memoria con 10.000 messaggi che avevamo fatto sul Mac: circa 210 MB all&#39;avvio, un picco breve vicino a 365 MB mentre si apre una casella grande, e circa 23 MB per l&#39;helper in background. Ogni processo, in un grafico.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare.">
   <meta property="og:image:width" content="1200">
@@ -19,8 +19,8 @@
   <meta property="og:site_name" content="MailVault">
   <meta property="og:locale" content="it_IT">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Quanta memoria usa MailVault su Windows? L'abbiamo misurato">
-  <meta name="twitter:description" content="Circa 210 MB all'avvio, 23 MB per l'helper in background. Lo stesso test da 10.000 messaggi che abbiamo fatto sul Mac, ora su Windows 11.">
+  <meta name="twitter:title" content="Quanta memoria usa MailVault su Windows? L&#39;abbiamo misurato">
+  <meta name="twitter:description" content="Circa 210 MB all&#39;avvio, 23 MB per l&#39;helper in background. Lo stesso test da 10.000 messaggi che abbiamo fatto sul Mac, ora su Windows 11.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare.">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -87,7 +87,7 @@
           <p>Il test usa due account email su un server di posta di prova locale: uno con 58 messaggi nella sua posta in arrivo e uno con 10.000. Un'esecuzione automatizzata guida l'app reale come farebbe una persona. Apre MailVault, apre la piccola posta in arrivo, poi passa all'account grande e aspetta che tutti i 10.000 header dei messaggi siano nell'elenco. Scorre l'intero elenco dall'inizio alla fine, poi lascia l'app inattiva per dieci minuti. A ogni passaggio registra la memoria di ogni processo di proprietà di MailVault.</p>
           <p>Il laptop era un MSI con un Intel Core i7-13620H e 16 GB di memoria, con Windows 11 23H2 e alimentazione da rete elettrica. Non era una macchina pulita: erano aperte altre app, inclusa un'altra copia di MailVault, quindi considera questo come un computer normale e occupato. Abbiamo eseguito l'intero test tre volte, ogni volta con un profilo nuovo e vuoto, e i valori qui sotto sono l'intervallo di quelle tre esecuzioni. La build era una build di release ottimizzata di MailVault 2.16 con gli hook di test attivati, quindi è vicina al download, ma non identica byte per byte.</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault su Windows 11 con la piccola posta in arrivo di prova con 58 email, due account di prova nella barra laterale e un riquadro di lettura vuoto." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault su Windows 11 con la piccola posta in arrivo di prova con 58 email, due account di prova nella barra laterale e un riquadro di lettura vuoto. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Il primo momento che misuriamo: MailVault su Windows 11 con la piccola posta in arrivo di prova aperta, catturato durante l'esecuzione stessa del test.</figcaption>
           </figure>
 
@@ -114,7 +114,7 @@ background helper, 10,000 msgs    22 – 23 MB
 app window                        11 – 13 MB</code></pre>
           <p>La seconda colonna è la dimensione commit: la memoria privata che ogni processo ha riservato, che sia o meno in RAM in questo momento. L'abbiamo aggiunta dopo la prima esecuzione, quindi copre due esecuzioni invece di tre. Conta per l'ultima riga. Dopo qualche minuto senza input, Windows toglie memoria ai processi che non la usano e il numero di Gestione attività scende a circa 110 MB. Quella memoria non viene liberata da MailVault, ma messa da parte da Windows, e la dimensione commit mostra che l'app trattiene ancora circa 310 MB che può recuperare quando torni. Se vuoi un solo numero per quanto costa MailVault su Windows, usa questo: circa 300 MB con una casella grande.</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault su Windows 11 con l'account di prova grande selezionato. L'intestazione della posta in arrivo indica 10.000 email e l'elenco mostra in fondo i messaggi di prova più vecchi." class="rounded-xl border border-slate-200 dark:border-slate-700">
+            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault su Windows 11 con l&#39;account di prova grande selezionato. L&#39;intestazione della posta in arrivo indica 10.000 email e l&#39;elenco mostra in fondo i messaggi di prova più vecchi. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Con tutti i 10.000 header caricati e l'elenco scorso fino alla fine, è il momento della riga «10,000 messages loaded». La posta in arrivo indica 10.000 email, e il contatore del vault segna 0 perché in questo test non era stato archiviato nulla.</figcaption>
           </figure>
 

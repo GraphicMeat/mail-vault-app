@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>存储与你的保险库 — MailVault 常见问题</title>
-  <meta name="description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta name="description" content="MailVault 将邮件保存在哪里，Maildir 和 JMAP 存储有何不同，以及如何移动或转换保险库。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
   <meta property="og:title" content="存储与你的保险库 — MailVault 常见问题">
-  <meta property="og:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta property="og:description" content="MailVault 将邮件保存在哪里，Maildir 和 JMAP 存储有何不同，以及如何移动或转换保险库。">
   <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="存储与你的保险库 — MailVault 常见问题">
-  <meta name="twitter:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta name="twitter:description" content="MailVault 将邮件保存在哪里，Maildir 和 JMAP 存储有何不同，以及如何移动或转换保险库。">
   <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -60,7 +60,7 @@
       "name": "我的邮件存在哪里？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "你的保险库是你电脑上的一个文件夹，里面是按 Maildir 格式整理的标准 .eml 文件 — 每封邮件一个文件，不需要数据库。在 macOS 上，MailVault 运行在沙盒中，所以这个文件夹位于 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而不是 ~/Library/Application Support。在 Linux 上，.deb 安装包的位置是 ~/.local/share/com.mailvault.app/，Snap 版则是 ~/snap/mailvault/current/.local/share/com.mailvault.app/。~/Library 在访达中是隐藏的，聚焦也不会为它建立索引，所以在磁盘上搜索 com.mailvault.app 什么也找不到：在访达中按 Shift + Command + G 并输入 ~/Library，或者按住 Option 键打开访达的「前往」菜单，或者在你的个人文件夹中按 Command + J 并勾选「显示“资源库”文件夹」。MailVault 也会在 设置、备份与恢复、备份设置、你的邮件存放在哪里 中显示它正在使用的文件夹。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是一种受到广泛支持的邮件格式，Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用都能打开你的邮件 — 你永远不会被锁定在 MailVault 上。"
+        "text": "默认情况下，保险库是你电脑上按 Maildir 格式组织的标准 .eml 文件文件夹，每封邮件一个文件，无需数据库。在 macOS 上，MailVault 在沙盒中运行，因此文件夹位于 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而不是 ~/Library/Application Support。在 Linux 上，.deb 软件包使用 ~/.local/share/com.mailvault.app/，Snap 使用 ~/snap/mailvault/current/.local/share/com.mailvault.app/。~/Library 在 Finder 中默认隐藏，Spotlight 也不会为其建立索引，因此在驱动器中搜索 com.mailvault.app 不会找到结果：请在 Finder 中按 Shift + Command + G 并输入 ~/Library，或按住 Option 打开 Finder 的“前往”菜单，或在个人文件夹中按 Command + J 并勾选“显示资源库文件夹”。MailVault 也会在设置、备份与恢复、备份设置、邮件存放位置下显示正在使用的文件夹。数据不会离开你的电脑，也不会上传到任何云服务。.eml 是广泛支持的邮件格式，因此可以使用 Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用打开邮件，不会被绑定在 MailVault 上。"
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": ".eml 文件和 Maildir 是什么？为什么重要？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": ".eml（RFC 5322）是邮件消息的互联网标准格式。每一封邮件都保存为一个独立、自包含的文本文件，任何邮件客户端都能打开。Maildir 是一种经过验证的邮件存储目录结构，邮件服务器已经用了几十年。每封邮件就是一个文件，所以不存在会整体损坏的单一数据库。.eml 和 Maildir 结合在一起，意味着你的邮件面向未来、可迁移，永远不会被任何单一应用锁定。"
+        "text": ".eml（RFC 5322）是邮件消息的互联网标准格式。在 Maildir 存储中，每封邮件保存为一个独立完整的文本文件，可用任何邮件客户端打开。Maildir 是经过验证的邮件存储目录结构，邮件服务器已使用了数十年。每封邮件一个文件，因此不存在一个一旦损坏就影响全部邮件的数据库。.eml + Maildir 让邮件长久可用、便于迁移，也不会被绑定在任何单一应用中。"
       }
     },
     {
@@ -109,6 +109,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "MailVault 始终会在应用自己的存储中保留一份可用的邮件副本——这正是你阅读、搜索和打开的内容。外部备份位置会在你选择的驱动器上增加第二份独立副本：外接 SSD、NAS 共享或同步文件夹。它会在备份运行时与工作副本同时写入，采用相同的 .eml 和 Maildir 布局，因此支持 EML 的应用可以读取邮件文件。应用日常不会读取它，它属于冷存储：服务器上删除的邮件，或在 MailVault 中移除的邮件，都会保留在外部副本中。在“设置 → Backup”中，在“Second copy — external cold storage”下进行设置。在 macOS 上，MailVault 会为该文件夹存储安全范围书签，使访问能跨重启和应用更新保持有效；状态徽章会显示 Ready、Needs reauthorization、Unavailable 或 Access denied，重新授权只需点击一次。若备份时驱动器未连接，工作副本仍会成功，MailVault 会报告有多少邮件未能写入外部副本；下一次运行会将它们复制过去。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "可以更改保险库的存储格式吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以。在设置 &gt; 存储中可在 Maildir 和 JMAP 存储之间转换。默认的 Maildir 为每封邮件保存一个 .eml 文件。JMAP 存储保留邮件的原始字节和标准 JMAP JSON 记录，对跨文件夹的相同邮件只存储一次。你可以选择将旧文件另行保留，或在每封邮件验证通过后删除旧文件。转换在后台进行，重启后会继续。存储格式的选择与账户使用 IMAP、Microsoft Graph 还是 JMAP 无关。"
       }
     }
   ]
@@ -217,14 +225,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">存储与你的保险库</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault 将邮件保存在哪里，Maildir 和 JMAP 存储有何不同，以及如何移动或转换保险库。</p>
 
       <div class="space-y-4">
 
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我的邮件存在哪里？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">你的保险库是你电脑上的一个文件夹，里面是按 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式整理的标准 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a> &mdash; 每封邮件一个文件，不需要数据库。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是一种受到广泛支持的邮件格式，Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用都能打开你的邮件 — 你永远不会被锁定在 MailVault 上。</p>
+              <p class="mb-4">默认情况下，保险库是你电脑上按 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式组织的标准 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a>文件夹 &mdash; 每封邮件一个文件，无需数据库。数据不会离开你的电脑，也不会上传到任何云服务。.eml 是广泛支持的邮件格式，因此可以使用 Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用打开邮件，不会被绑定在 MailVault 上。</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">确切的文件夹</p>
               <p class="mb-2">MailVault 是沙盒应用，因此在 macOS 上保险库位于应用自己的容器内 &mdash; 而不是大多数人首先查看的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> 下：</p>
@@ -289,7 +297,7 @@
               可以。邮件同步之后就保存在本地，你不联网也能阅读、搜索和浏览全部邮件。只有同步新邮件或发送邮件时才需要联网。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/local-vault-720.webp 720w, /screenshots/zh/local-vault-1440.webp 1440w, /screenshots/zh/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/local-vault-light-1440.webp" srcset="/screenshots/zh/local-vault-light-720.webp 720w, /screenshots/zh/local-vault-light-1440.webp 1440w, /screenshots/zh/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 本地视图，显示从服务器删除之后仍留在磁盘上的邮件" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/local-vault-720.webp 720w, /screenshots/zh/local-vault-1440.webp 1440w, /screenshots/zh/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/local-vault-light-1440.webp" srcset="/screenshots/zh/local-vault-light-720.webp 720w, /screenshots/zh/local-vault-light-1440.webp 1440w, /screenshots/zh/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 本地视图，显示从服务器删除之后仍留在磁盘上的邮件 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -343,6 +351,11 @@
                 如果备份过程中拔掉了磁盘，工作副本仍会正常完成，MailVault 会报告有多少封邮件没有写入外部副本。下一次运行会把它们补上——不会丢东西，失败也绝不会悄无声息。
               </p>
             </div>
+        </article>
+
+        <article id="jmap-storage" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">可以更改保险库的存储格式吗？</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>可以。在设置 &gt; 存储中可在 Maildir 和 JMAP 存储之间转换。默认的 Maildir 为每封邮件保存一个 .eml 文件。JMAP 存储保留邮件的原始字节和标准 JMAP JSON 记录，对跨文件夹的相同邮件只存储一次。你可以选择将旧文件另行保留，或在每封邮件验证通过后删除旧文件。转换在后台进行，重启后会继续。存储格式的选择与账户使用 IMAP、Microsoft Graph 还是 JMAP 无关。</p></div>
         </article>
 
       </div>

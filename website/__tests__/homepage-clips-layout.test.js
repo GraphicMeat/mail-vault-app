@@ -526,7 +526,7 @@ describe('clip groups', () => {
     expect(img.getAttribute('loading')).toBe('lazy');
     expect(img.getAttribute('decoding')).toBe('async');
     expect([img.getAttribute('width'), img.getAttribute('height')]).toEqual(['640', '440']);
-    expect(img.getAttribute('alt')).toBe('');
+    expect(img.getAttribute('alt')).toMatch(/.+ · (?:Reviewed for )?MailVault version \d+\.\d+\.\d+$/);
     const video = media.querySelector(':scope > video');
     expect(before(img, video)).toBe(true);
     for (const flag of ['muted', 'loop', 'playsinline']) expect(video.hasAttribute(flag)).toBe(true);

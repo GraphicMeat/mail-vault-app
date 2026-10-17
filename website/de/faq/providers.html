@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>E-Mail-Anbieter — MailVault FAQ</title>
-  <meta name="description" content="Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.">
+  <meta name="description" content="Verbinde Gmail, Microsoft 365, Outlook.com, Proton Mail und JMAP-Server wie Fastmail und sende von einem Alias.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/de/faq/providers.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/de/faq/providers.html">
   <meta property="og:title" content="E-Mail-Anbieter — MailVault FAQ">
-  <meta property="og:description" content="Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.">
+  <meta property="og:description" content="Verbinde Gmail, Microsoft 365, Outlook.com, Proton Mail und JMAP-Server wie Fastmail und sende von einem Alias.">
   <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="E-Mail-Anbieter — MailVault FAQ">
-  <meta name="twitter:description" content="Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.">
+  <meta name="twitter:description" content="Verbinde Gmail, Microsoft 365, Outlook.com, Proton Mail und JMAP-Server wie Fastmail und sende von einem Alias.">
   <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -60,7 +60,7 @@
       "name": "Funktioniert MailVault mit Gmail und Outlook?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Ja. MailVault funktioniert mit Gmail, Outlook und jedem anderen E-Mail-Dienst, der IMAP unterstützt. Bei Gmail meldest du dich direkt mit deinem Google-Konto über OAuth2 an — ohne manuelle IMAP-Einstellungen. Konten von Microsoft 365 Business und Enterprise melden sich direkt mit deinem Microsoft-Konto über OAuth2 an. Private Konten von Outlook.com, Hotmail und Live.com verbinden sich über die Microsoft Graph API."
+        "text": "Ja. MailVault funktioniert mit Gmail, Outlook, JMAP-Servern wie Fastmail und jedem E-Mail-Dienst, der IMAP unterstützt. Bei Gmail meldest du dich direkt mit deinem Google-Konto über OAuth2 an — manuelle IMAP-Einstellungen sind nicht nötig. Microsoft-365-Business- und Enterprise-Konten können sich direkt mit dem Microsoft-Konto über OAuth2 anmelden. Private Outlook.com-, Hotmail- und Live.com-Konten verbinden sich über die Microsoft Graph API."
       }
     },
     {
@@ -84,7 +84,7 @@
       "name": "Kann ich von einer anderen Adresse senden als der, mit der ich mich anmelde?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Ja. Füge die Adresse in Einstellungen → Konten → Aliasse als Alias des Kontos hinzu und wähle sie beim Schreiben in der Zeile „Von“ aus, oder mach sie zum Standard. Benutzername und Passwort bleiben gleich, MailVault meldet sich weiterhin mit dem eingerichteten Konto bei IMAP und SMTP an, und es wird kein Reply-To-Header hinzugefügt. Die Adresse muss eine sein, von der dein Anbieter diese Anmeldung senden lässt."
+        "text": "Ja. Füge die Adresse unter Einstellungen → Konten → Aliasse als Alias des Kontos hinzu. Wähle sie dann beim Schreiben in der Von-Zeile oder lege sie als Standard fest. Dein Benutzername und Passwort bleiben gleich, MailVault meldet sich weiterhin mit dem eingerichteten Konto an, und es wird kein Reply-To-Header hinzugefügt. Dein Anbieter muss das Senden von dieser Adresse mit diesen Anmeldedaten erlauben."
       }
     },
     {
@@ -93,6 +93,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Öffne Einstellungen → Konten, wähle das Konto und gehe zum Abschnitt Aliasse. Dort steht jede Adresse, von der das Konto sendet: zuerst die Anmeldeadresse, dann jeder Alias. Bei einem Google-Konto, das mit Google angemeldet ist, holt MailVault die Adressen, von denen Gmail dich senden lässt. Bei jedem anderen Anbieter schlägt MailVault Adressen vor, die es in deiner eigenen Mail gefunden hat, also die, von denen du gesendet hast, und die, an die deine Mail ankommt, und du kannst jede Adresse von Hand hinzufügen. Gib jedem Alias den Namen, den Empfänger sehen sollen, und wähle, mit welcher Adresse neue Nachrichten beginnen. Prüfen sendet eine Testnachricht von einem Alias, damit du siehst, ob dein Anbieter ihn akzeptiert. Dein Anbieter muss die Adresse erlauben: Bei Fastmail fügst du sie zuerst als Alias oder Identität hinzu, bei Gmail unter Einstellungen → Konten und Import → Senden als, und bei Microsoft 365 und Outlook.com werden Aliasse im Microsoft-Konto hinzugefügt. Nur Absenderadresse und Name ändern sich, und es wird kein Reply-To-Header hinzugefügt, sodass Antworten an den Alias zurückgehen."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Wie verbinde ich Fastmail oder ein anderes JMAP-Konto?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Wähle beim Hinzufügen eines Kontos Fastmail und füge einen API-Token mit Mail- und Submission-Zugriff aus den Fastmail-Einstellungen ein. Für einen anderen Server wählst du JMAP und verwendest dessen Passwort oder API-Token. MailVault ermittelt die Sitzungs-URL, wenn die Domain sie veröffentlicht; andernfalls gibst du die vollständige HTTPS-Sitzungs-URL ein. Bestätige einen unbekannten ermittelten Server, bevor Zugangsdaten gesendet werden. Neue E-Mails kommen per Push mit regelmäßiger Abfrage als Ausweichlösung; Absenderadressen stammen aus den Identitäten des Servers. Fastmail bietet auch eine IMAP-Option mit App-Passwort."
       }
     }
   ]
@@ -201,14 +209,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">E-Mail-Anbieter</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Verbinde Gmail, Microsoft 365, Outlook.com, Proton Mail und JMAP-Server wie Fastmail und sende von einem Alias.</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Funktioniert MailVault mit Gmail und Outlook?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Ja. MailVault funktioniert mit Gmail, Outlook und jedem anderen E-Mail-Dienst, der IMAP unterstützt. Bei Gmail meldest du dich direkt mit deinem Google-Konto über OAuth2 an — ohne manuelle IMAP-Einstellungen. Konten von Microsoft 365 Business und Enterprise melden sich direkt mit deinem Microsoft-Konto über OAuth2 an, und das funktioniert reibungslos mit Zwei-Faktor-Authentifizierung. Private Konten von Outlook.com, Hotmail und Live.com <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">verbinden sich über die Microsoft Graph API</a>.
+              Ja. MailVault funktioniert mit Gmail, Outlook, JMAP-Servern wie Fastmail und jedem E-Mail-Dienst, der IMAP unterstützt. Bei Gmail meldest du dich direkt mit deinem Google-Konto über OAuth2 an — manuelle IMAP-Einstellungen sind nicht nötig. Microsoft-365-Business- und Enterprise-Konten können sich direkt mit dem Microsoft-Konto über OAuth2 anmelden, auch mit Zwei-Faktor-Authentifizierung. Private Outlook.com-, Hotmail- und Live.com-Konten <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">verbinden sich über die Microsoft Graph API</a>.
             </p>
         </article>
 
@@ -256,10 +264,10 @@
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Kann ich von einer anderen Adresse senden als der, mit der ich mich anmelde?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Ja. Füge die Adresse als Alias des Kontos hinzu, wie unter <a href="#send-from-an-alias" class="text-primary-500 hover:underline">Wie sende ich von einem Alias?</a> beschrieben, und wähle sie beim Schreiben in der Zeile „Von“ aus, oder mach sie zum Standard. Das ist bei Fastmail üblich und bei jedem Anbieter, bei dem die Adresse, mit der du dich anmeldest, nicht die Adresse ist, die du herausgibst.</p>
-              <p>Es ändert sich nur die <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code>-Adresse ausgehender Post. Benutzername und Passwort bleiben genau, wie sie sind, MailVault meldet sich bei IMAP und SMTP weiterhin als das eingerichtete Konto an, und <strong>es wird keine Reply-To-Kopfzeile hinzugefügt</strong> &mdash; Antworten gehen an die Adresse, von der du sendest.</p>
+              <p>Nur die <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code>-Adresse ausgehender E-Mails ändert sich. Dein Benutzername und Passwort bleiben unverändert, MailVault meldet sich weiterhin mit dem eingerichteten Konto an, und <strong>es wird kein Reply-To-Header hinzugefügt</strong> &mdash; Antworten gehen an die Adresse, unter der du sendest.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/compose-email-720.webp 720w, /screenshots/de/compose-email-1440.webp 1440w, /screenshots/de/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/compose-email-light-1440.webp" srcset="/screenshots/de/compose-email-light-720.webp 720w, /screenshots/de/compose-email-light-1440.webp 1440w, /screenshots/de/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Verfassen- und Antworten-Fenster mit Textformatierung" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/compose-email-720.webp 720w, /screenshots/de/compose-email-1440.webp 1440w, /screenshots/de/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/compose-email-light-1440.webp" srcset="/screenshots/de/compose-email-light-720.webp 720w, /screenshots/de/compose-email-light-1440.webp 1440w, /screenshots/de/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Verfassen- und Antworten-Fenster mit Textformatierung · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -270,6 +278,7 @@
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Einen Alias hinzufügen und einrichten:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>Google-Konten</strong>: Wenn du dich mit Google angemeldet hast, holt MailVault die Adressen, von denen Gmail dich senden lässt, und listet sie für dich auf.</li>
+                <li><strong>JMAP-Konten</strong>: Absenderadressen stammen aus den auf deinem Server eingerichteten Identitäten. Füge sie dort hinzu oder ändere sie dort.</li>
                 <li><strong>Andere Anbieter</strong>: MailVault schlägt Adressen vor, die es in deiner eigenen Mail gefunden hat, also die, von denen du gesendet hast, und die, an die deine Mail ankommt. Du kannst auch jede Adresse von Hand hinzufügen.</li>
                 <li><strong>Name</strong>: Gib jedem Alias den Namen, den Empfänger sehen sollen. Mail, die vom Alias gesendet wird, geht unter diesem Namen hinaus.</li>
                 <li><strong>Standard</strong>: Wähle, mit welcher Adresse neue Nachrichten beginnen.</li>
@@ -283,6 +292,11 @@
               </ul>
               <p>Nur Absenderadresse und Name ändern sich. MailVault meldet sich weiterhin mit dem eingerichteten Konto an, und <strong>es wird kein Reply-To-Header hinzugefügt</strong>, sodass Antworten an den Alias zurückgehen.</p>
             </div>
+        </article>
+
+        <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Wie verbinde ich Fastmail oder ein anderes JMAP-Konto?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Wähle beim Hinzufügen eines Kontos Fastmail und füge einen API-Token mit Mail- und Submission-Zugriff aus den Fastmail-Einstellungen ein. Für einen anderen Server wählst du JMAP und verwendest dessen Passwort oder API-Token. MailVault ermittelt die Sitzungs-URL, wenn die Domain sie veröffentlicht; andernfalls gibst du die vollständige HTTPS-Sitzungs-URL ein. Bestätige einen unbekannten ermittelten Server, bevor Zugangsdaten gesendet werden. Neue E-Mails kommen per Push mit regelmäßiger Abfrage als Ausweichlösung; Absenderadressen stammen aus den Identitäten des Servers. Fastmail bietet auch eine IMAP-Option mit App-Passwort.</p></div>
         </article>
 
       </div>

@@ -1,0 +1,22 @@
+{
+  "ac3d0cf173e4": "1. Abre Limpieza de correo",
+  "5bbefcb11689": "Abre Limpieza de correo para una cuenta. Usa las cabeceras de correo en caché y no necesita descargar ningún modelo.",
+  "a2ec0590818e": "Las reglas locales, un clasificador Naive Bayes y las heurísticas integradas clasifican el correo en Boletín, Promocional, Transaccional, Personal, Trabajo y Spam.",
+  "3e8c884a2b6c": "Revisa cada categoría antes de actuar. Archivar guarda y verifica una copia en la bóveda antes de quitar la copia del servidor; Eliminar quita el correo del servidor sin archivarlo primero.",
+  "2739a4dc5f3f": "Limpieza de correo clasifica los mensajes en tu ordenador. No envía contenido, metadatos ni direcciones de correo a un servicio de IA. Las herramientas de escritura con IA son independientes y pueden usar el proveedor que elijas.",
+  "9c1313e2e572": "La clasificación se ejecuta en tu ordenador con las cabeceras en caché",
+  "400c068c2e21": "Corrige una categoría para entrenar el clasificador con tu correo",
+  "79e93103fb89": "Sin requisitos adicionales de RAM para un modelo grande",
+  "8529cd91dcca": "Sin descargar modelos de varios gigabytes",
+  "6208dc37e92e": "No hace falta para Limpieza de correo",
+  "e6a3ffcf6395": "Hace falta para sincronizar el correo y modificar las copias del servidor",
+  "60e051643e4f": "¿Limpieza de correo necesita descargar un modelo de IA?",
+  "574c3615ba77": "No. Limpieza de correo usa reglas locales, un clasificador Naive Bayes y heurísticas integradas. Aprende de tus correcciones de categorías sin descargar un LLM.",
+  "3afa38a8833e": "¿Limpieza de correo es lo mismo que la escritura con IA?",
+  "6ecb1a5060dc": "No. La escritura con IA tiene sus propios ajustes de proveedor para Apple Intelligence, un modelo descargado o un endpoint compatible como Ollama. Cambiar ese proveedor no modifica el clasificador de Limpieza de correo.",
+  "eea32a5141b1": "Eliminar quita la copia del servidor sin crear antes una copia en la bóveda. Usa Archivar en Limpieza de correo para guardar y verificar una copia local antes de quitarla del servidor. Cápsula del tiempo puede mostrar el historial guardado, pero no puede recuperar un mensaje que nunca se guardó.",
+  "3e016ad79e11": "Conecta Yahoo con una contraseña de aplicación, archiva tus carpetas y verifica tu copia local.",
+  "6dda9750c924": "¿Dónde está la libreta de direcciones?",
+  "69a1744ca80e": "Limpieza de correo de MailVault usa reglas locales y un clasificador Naive Bayes. No requiere descargar ningún modelo. Revisa las categorías antes de archivar o eliminar las copias del servidor.",
+  "88101e500957": "Clasifica tu correo en local sin descargar un LLM. Revisa las categorías, archiva con seguridad y mantén el control de las copias del servidor."
+}

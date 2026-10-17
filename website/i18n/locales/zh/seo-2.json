@@ -1,5 +1,4 @@
 {
-  "f659950e7604": "可以。MailVault 适用于 Gmail、Outlook 以及任何支持 IMAP 的邮件服务。对于 Gmail，直接用你的 Google 账户通过 OAuth2 登录 — 无需手动填写 IMAP 设置。Microsoft 365 商业版和企业版账户可以直接用你的 Microsoft 账户通过 OAuth2 登录，与双重身份验证也能无缝配合。个人 Outlook.com、Hotmail 和 Live.com 账户<a href=\"#microsoft-outlook-oauth2\" class=\"text-primary-500 hover:underline\">通过 Microsoft Graph API 连接</a>。",
   "149641179cbb": "MailVault 通过 <strong>Microsoft Graph API</strong> 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。",
   "ddd9e381040a": "对已删除邮件使用<strong>恢复到服务器</strong>。「恢复到本地」可以使用，适用于已经在这台电脑上的邮件",
   "db3b0e57e997": "添加账户窗口在连接测试后报告的<strong>收件箱数量</strong>",
@@ -8,10 +7,7 @@
   "d8b695a6bb4c": "Graph 账户暂不支持：",
   "e2b51688f4b0": "稍后提醒",
   "db3d9a0b5360": "把 MBOX 文件恢复到服务器",
-  "5a510a9399ae": "可以。MailVault 适用于 Gmail、Outlook 以及任何支持 IMAP 的邮件服务。对于 Gmail，直接用你的 Google 账户通过 OAuth2 登录 — 无需手动填写 IMAP 设置。Microsoft 365 商业版和企业版账户可以直接用你的 Microsoft 账户通过 OAuth2 登录。个人 Outlook.com、Hotmail 和 Live.com 账户通过 Microsoft Graph API 连接。",
   "cf795413fdca": "MailVault 通过 Microsoft Graph API 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。少数依赖 IMAP 的功能在 Graph 账户上暂不支持：稍后提醒；把 MBOX 文件恢复到服务器；对已删除邮件使用「恢复到服务器」（「恢复到本地」可以使用，适用于已经在这台电脑上的邮件）；以及添加账户时报告收件箱数量的那一行。Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。",
-  "d981f4aa3ca3": "你的保险库是你电脑上的一个文件夹，里面是按 <a href=\"https://en.wikipedia.org/wiki/Maildir\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Maildir</a> 格式整理的标准 <a href=\"https://datatracker.ietf.org/doc/html/rfc5322\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">.eml 文件</a> &mdash; 每封邮件一个文件，不需要数据库。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是一种受到广泛支持的邮件格式，Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用都能打开你的邮件 — 你永远不会被锁定在 MailVault 上。",
-  "f9ab2dfee45d": "你的保险库是你电脑上的一个文件夹，里面是按 Maildir 格式整理的标准 .eml 文件 — 每封邮件一个文件，不需要数据库。在 macOS 上，MailVault 运行在沙盒中，所以这个文件夹位于 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而不是 ~/Library/Application Support。在 Linux 上，.deb 安装包的位置是 ~/.local/share/com.mailvault.app/，Snap 版则是 ~/snap/mailvault/current/.local/share/com.mailvault.app/。~/Library 在访达中是隐藏的，聚焦也不会为它建立索引，所以在磁盘上搜索 com.mailvault.app 什么也找不到：在访达中按 Shift + Command + G 并输入 ~/Library，或者按住 Option 键打开访达的「前往」菜单，或者在你的个人文件夹中按 Command + J 并勾选「显示“资源库”文件夹」。MailVault 也会在 设置、备份与恢复、备份设置、你的邮件存放在哪里 中显示它正在使用的文件夹。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是一种受到广泛支持的邮件格式，Apple Mail、Thunderbird、Outlook 或其他支持 EML 的应用都能打开你的邮件 — 你永远不会被锁定在 MailVault 上。",
   "321514213b7b": "五款邮件客户端。五款 AI 邮件客户端。",
   "7716e142a751": "为你的工作方式找到最合适的邮件客户端",
   "c26ee42725b0": "在这个系列的每一篇评测中，MailVault 都在本地邮件所有权方面胜出。浏览十款替代产品，配有截图、图示和对比，看看每一款适合什么场景。",

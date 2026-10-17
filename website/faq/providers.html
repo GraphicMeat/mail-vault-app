@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Email Providers — MailVault FAQ</title>
-  <meta name="description" content="Connecting Gmail, Microsoft 365, Outlook.com and Proton Mail, and sending from an alias.">
+  <meta name="description" content="Connect Gmail, Microsoft 365, Outlook.com, Proton Mail and JMAP servers such as Fastmail, and send from an alias.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/faq/providers.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/faq/providers.html">
   <meta property="og:title" content="Email Providers — MailVault FAQ">
-  <meta property="og:description" content="Connecting Gmail, Microsoft 365, Outlook.com and Proton Mail, and sending from an alias.">
+  <meta property="og:description" content="Connect Gmail, Microsoft 365, Outlook.com, Proton Mail and JMAP servers such as Fastmail, and send from an alias.">
   <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Email Providers — MailVault FAQ">
-  <meta name="twitter:description" content="Connecting Gmail, Microsoft 365, Outlook.com and Proton Mail, and sending from an alias.">
+  <meta name="twitter:description" content="Connect Gmail, Microsoft 365, Outlook.com, Proton Mail and JMAP servers such as Fastmail, and send from an alias.">
   <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -51,79 +51,87 @@
   </style>
 
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "Does MailVault work with Gmail and Outlook?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com, Hotmail and Live.com accounts connect through the Microsoft Graph API."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How do I connect my Outlook.com account?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the Microsoft Graph API. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter. It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts. A few things that rely on IMAP are not available on Graph accounts yet: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How do I use MailVault with Proton Mail?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I send from a different address than the one I log in with?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. Add the address as an alias of the account in Settings → Accounts → Aliases, then pick it in the From row when you write, or make it the default. Your username and password stay the same, MailVault still signs in to IMAP and SMTP as the account you set up, and no Reply-To header is added. The address must be one your provider lets that login send from."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How do I send from an alias?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Open Settings → Accounts, pick the account and go to its Aliases section, which lists every address the account sends from: its login address first, then each alias. For a Google account signed in with Google, MailVault fetches the addresses Gmail lets you send as. For any other provider, MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at, and you can add any address by hand. Give each alias the name recipients should see, and choose which address new messages start from. Verify sends one test message from an alias so you can see whether your provider accepts it. Your provider has to allow the address: in Fastmail, add it as an alias or identity first; in Gmail, add it under Settings → Accounts and Import → Send mail as; for Microsoft 365 and Outlook.com, aliases are added in the Microsoft account. Only the From address and name change, and no Reply-To header is added, so replies come back to the alias."
-        }
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Does MailVault work with Gmail and Outlook?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com, Hotmail and Live.com accounts connect through the Microsoft Graph API."
       }
-    ]
-  }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I connect my Outlook.com account?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the Microsoft Graph API. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. MailVault recognizes a personal Microsoft account and uses Graph on its own, so there are no IMAP settings to enter. It does not use IMAP for these accounts because of a Microsoft IMAP problem with OAuth2 sign-in that began in late 2024. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts. A few things that rely on IMAP are not available on Graph accounts yet: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I use MailVault with Proton Mail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I send from a different address than the one I log in with?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Add the address as an alias of the account in Settings → Accounts → Aliases, then pick it in the From row when you write, or make it the default. Your username and password stay the same, MailVault still signs in as the account you set up, and no Reply-To header is added. The address must be one your provider lets that login send from."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I send from an alias?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Open Settings → Accounts, pick the account and go to its Aliases section, which lists every address the account sends from: its login address first, then each alias. For a Google account signed in with Google, MailVault fetches the addresses Gmail lets you send as. For any other provider, MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at, and you can add any address by hand. Give each alias the name recipients should see, and choose which address new messages start from. Verify sends one test message from an alias so you can see whether your provider accepts it. Your provider has to allow the address: in Fastmail, add it as an alias or identity first; in Gmail, add it under Settings → Accounts and Import → Send mail as; for Microsoft 365 and Outlook.com, aliases are added in the Microsoft account. Only the From address and name change, and no Reply-To header is added, so replies come back to the alias."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I connect Fastmail or another JMAP account?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Choose Fastmail when adding an account and paste an API token with Mail and Submission access from Fastmail settings. For another server, choose JMAP and use its password or API token. MailVault discovers the session URL when the domain publishes it; otherwise enter the full HTTPS session URL. Confirm an unfamiliar discovered server before credentials are sent. New mail uses push with polling as a fallback, and sending addresses come from the server’s identities. Fastmail also offers an IMAP app-password option."
+      }
+    }
+  ]
+}
   </script>
 
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      {
-        "@type": "ListItem",
-        "position": 1,
-        "name": "Home",
-        "item": "https://mailvaultapp.com/"
-      },
-      {
-        "@type": "ListItem",
-        "position": 2,
-        "name": "FAQ",
-        "item": "https://mailvaultapp.com/faq.html"
-      },
-      {
-        "@type": "ListItem",
-        "position": 3,
-        "name": "Email Providers",
-        "item": "https://mailvaultapp.com/faq/providers.html"
-      }
-    ]
-  }
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://mailvaultapp.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Email Providers",
+      "item": "https://mailvaultapp.com/faq/providers.html"
+    }
+  ]
+}
   </script>
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/providers.html">
@@ -201,14 +209,14 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">Email Providers</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Connecting Gmail, Microsoft 365, Outlook.com and Proton Mail, and sending from an alias.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Connect Gmail, Microsoft 365, Outlook.com, Proton Mail and JMAP servers such as Fastmail, and send from an alias.</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Does MailVault work with Gmail and Outlook?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com, Hotmail and Live.com accounts <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">connect through the Microsoft Graph API</a>.
+              Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com, Hotmail and Live.com accounts <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">connect through the Microsoft Graph API</a>.
             </p>
         </article>
 
@@ -256,10 +264,10 @@
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I send from a different address than the one I log in with?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Yes. Add the address as an alias of the account, as described in <a href="#send-from-an-alias" class="text-primary-500 hover:underline">How do I send from an alias?</a>, then pick it in the From row when you write, or make it the default. This is common on Fastmail and on any provider where the address you sign in with is not the address you hand out.</p>
-              <p>Only the <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> address on outgoing mail changes. Your username and password stay exactly as they are, MailVault still signs in to IMAP and SMTP as the account you set up, and <strong>no Reply-To header is added</strong> &mdash; replies go to the address you send as.</p>
+              <p>Only the <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> address on outgoing mail changes. Your username and password stay exactly as they are, MailVault still signs in as the account you set up, and <strong>no Reply-To header is added</strong> &mdash; replies go to the address you send as.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/compose-email-720.webp 720w, /screenshots/compose-email-1440.webp 1440w, /screenshots/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/compose-email-light-1440.webp" srcset="/screenshots/compose-email-light-720.webp 720w, /screenshots/compose-email-light-1440.webp 1440w, /screenshots/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault compose and reply modal with rich text editing" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/compose-email-720.webp 720w, /screenshots/compose-email-1440.webp 1440w, /screenshots/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/compose-email-light-1440.webp" srcset="/screenshots/compose-email-light-720.webp 720w, /screenshots/compose-email-light-1440.webp 1440w, /screenshots/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault compose and reply modal with rich text editing · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
             </figure>
         </article>
 
@@ -270,6 +278,7 @@
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Adding and setting up an alias:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>Google accounts</strong>: if you signed in with Google, MailVault fetches the addresses Gmail lets you send as and lists them for you.</li>
+                <li><strong>JMAP accounts</strong>: sending addresses come from the identities configured on your server. Add or change them there.</li>
                 <li><strong>Other providers</strong>: MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at. You can also add any address by hand.</li>
                 <li><strong>Name</strong>: give each alias the name recipients should see. Mail sent from the alias goes out under that name.</li>
                 <li><strong>Default</strong>: choose which address new messages start from.</li>
@@ -283,6 +292,11 @@
               </ul>
               <p>Only the From address and name change. MailVault still signs in as the account you set up, and <strong>no Reply-To header is added</strong>, so replies come back to the alias.</p>
             </div>
+        </article>
+
+        <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How do I connect Fastmail or another JMAP account?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Choose Fastmail when adding an account and paste an API token with Mail and Submission access from Fastmail settings. For another server, choose JMAP and use its password or API token. MailVault discovers the session URL when the domain publishes it; otherwise enter the full HTTPS session URL. Confirm an unfamiliar discovered server before credentials are sent. New mail uses push with polling as a fallback, and sending addresses come from the server’s identities. Fastmail also offers an IMAP app-password option.</p></div>
         </article>
 
       </div>

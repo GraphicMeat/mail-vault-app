@@ -2,7 +2,6 @@
   "bea0c401c921": "Discord ↗",
   "5aa2e25d201d": "macOS・Windows・Linux で IMAP のメールをダウンロードし、ローカルにアーカイブする方法を説明します。",
   "a73afebc388e": "Outlook.com のアカウントを接続するには？",
-  "32ee18f6d560": "メールはお使いのマシンに留まります。MailVault は送信者を検証し、認証情報を macOS のキーチェーン、Windows の資格情報マネージャー、または Linux の Secret Service に保存し、サンドボックス内で動作します。クラウドサービスもテレメトリもありません。",
   "f29d4164ac6e": "macOS のキーチェーン、Windows の資格情報マネージャー、Linux の Secret Service による認証情報の保管",
   "248afa77b9ae": "一括でアーカイブ、削除、またはアーカイブして削除（Premium）",
   "497cd03bd776": "クロスプラットフォーム — macOS（Apple Silicon と Intel）、Windows 10/11（64 ビット）、Linux（.deb、Snap）",
