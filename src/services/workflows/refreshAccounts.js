@@ -35,15 +35,30 @@ import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 // every account on every scheduled refresh, and reading whole mailboxes of
 // header rows into the webview to collect their uids was tens of MB a tick.
 // An incomplete cache needs no listing — callers only read `uids` when complete.
+//
+// Complete is a COUNT, and a count does not prove the rows are comparable: a
+// writer that recorded its own row count as the folder total makes a partial
+// cache read complete, a lost row leaves a hole, and a UIDVALIDITY change
+// re-issues the whole uid space. So `arrivals` below also asks what the
+// daemon asks (sync_engine `uid >= cached_uid_next`): a delivery is numbered
+// above everything the cache held.
 async function arrivalBaseline(accountId, mailbox) {
-  const incomplete = { uids: new Set(), complete: false };
+  const incomplete = { uids: new Set(), high: 0, complete: false };
   const meta = await db.getEmailHeadersMeta(accountId, mailbox).catch(() => null);
   const total = meta?.totalEmails ?? 0;
   if (!(total > 0) || (meta.totalCached ?? 0) < total) return incomplete;
   const listing = await db.listCachedUids(accountId, mailbox).catch(() => null);
   if (!listing) return incomplete;
   const uids = new Set(listing.uids);
-  return { uids, complete: uids.size >= total };
+  let high = 0;
+  for (const uid of uids) if (uid > high) high = uid;
+  return { uids, high, complete: uids.size >= total };
+}
+
+// The rows of `rows` that are deliveries since `baseline`, in `rows` order.
+function arrivals(baseline, rows) {
+  if (!baseline.complete) return [];
+  return rows.filter(e => e.uid > baseline.high && !baseline.uids.has(e.uid));
 }
 
 // `from` is an object ({name, address}), and interpolating it into the banner
@@ -157,7 +172,9 @@ export async function refreshAllAccounts(options = {}) {
         // Against the cache, not against the rows on screen: the open list is
         // still filling while this runs, and every row it had yet to drain
         // used to read as an arrival.
-        const openMailbox = get().activeMailbox || 'INBOX';
+        const opened = get();
+        const openMailbox = opened.activeMailbox || 'INBOX';
+        const openScope = opened.mailboxScope;
         const baseline = await arrivalBaseline(account.id, openMailbox);
         // No badge write here. This branch reloads whatever folder is OPEN, and
         // it counted that folder — so a refresh landing while the Bin was on
@@ -166,9 +183,16 @@ export async function refreshAllAccounts(options = {}) {
         // badge now, and it only writes when the open folder really is this
         // account's inbox (see updateSortedEmails).
         await get().loadEmails();
-        const afterEmails = get().emails;
-        const newForAccount = afterEmails.filter(e => !baseline.uids.has(e.uid));
-        if (newForAccount.length > 0 && baseline.complete) {
+        const now = get();
+        // The rows are one folder's only while that folder is still what is
+        // open: a branch listing holds every folder under its root, and a
+        // folder or account the user moved to during the await is not the one
+        // the baseline describes.
+        const stillThere = now.activeAccountId === account.id
+          && (now.activeMailbox || 'INBOX') === openMailbox
+          && !openScope && !now.mailboxScope;
+        const newForAccount = stillThere ? arrivals(baseline, now.emails) : [];
+        if (newForAccount.length > 0) {
           const newest = newForAccount[0];
           perAccountResults.push({
             accountId: account.id,
@@ -201,8 +225,8 @@ export async function refreshAllAccounts(options = {}) {
               if (n !== null) countedUnread[account.id] = n;
             }
 
-            const newHeaders = headers.filter(e => !baseline.uids.has(e.uid));
-            if (newHeaders.length > 0 && baseline.complete) {
+            const newHeaders = arrivals(baseline, headers);
+            if (newHeaders.length > 0) {
               const newest = newHeaders[0];
               perAccountResults.push({
                 accountId: account.id,
@@ -253,8 +277,8 @@ export async function refreshAllAccounts(options = {}) {
             if (n !== null) countedUnread[account.id] = n;
           }
 
-          const newHeaders = allEmails.filter(e => !baseline.uids.has(e.uid));
-          if (newHeaders.length > 0 && baseline.complete) {
+          const newHeaders = arrivals(baseline, allEmails);
+          if (newHeaders.length > 0) {
             const newest = newHeaders[0];
             perAccountResults.push({
               accountId: account.id,

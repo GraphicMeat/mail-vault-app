@@ -13,6 +13,7 @@
 - **The experimental Rust renderer draws mail in more places.** With it turned on in Settings, Appearance, Colors, it now also draws conversations, chat bubbles, the full message view, the quoted original in compose, the Open in window view, the Cleanup preview, image exports and social cards, with no web view inside the message.
 
 ### Fixed
+- **No more "1664 New Emails" banners.** A refresh could announce a whole mailbox as new mail when its cache was out of step with the folder: a uid range the server had re-issued, a folder total that came up short, a message missing from the middle of the cache, or a switch to another folder or a branch listing while the refresh ran. A banner now counts only messages numbered above everything already cached, in the folder you still have open.
 - **One scrollbar in the reading pane.** Some newsletters and notices (anything sized to the window height) showed a second scrollbar inside the message, next to the pane's own. The message now never scrolls on its own, in single messages and in conversations.
 - **Dragged attachments keep their own name.** Dragging an attachment out of an email, into another email or to Finder, gave the file an internal name (account, folder and message numbers before the real name). It now carries the sender's file name. Attachments already sent with such a name keep it.
 - **Long attachment names stay inside the compose window.** An attachment with a long name no longer pushes the compose window wider than its frame; the name is cut short with an ellipsis instead.

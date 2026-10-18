@@ -155,6 +155,85 @@ describe('the active account (the open list)', () => {
   });
 });
 
+// An arrival is a DELIVERY: the server numbers it above every uid the cache
+// held (the daemon's own rule, `uid >= cached_uid_next`). A set difference
+// alone calls anything the cache lacks an arrival, so any comparison between
+// rows that are not one folder's before-and-after reads as a whole mailbox of
+// new mail ("1664 New Emails").
+describe('what is not a delivery is never announced', () => {
+  const backgroundAccount = () => {
+    state.accounts = [{ id: 'acct-2', email: 'other@example.com' }];
+    state.activeAccountId = 'acct-1';
+  };
+  const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+  it('active: a re-issued uid space that restarts low is not 1664 arrivals', async () => {
+    // UIDVALIDITY changed under the refresh: the cache held the old numbers,
+    // the folder now lists 1..1664.
+    cachedByKey['acct-1|INBOX'] = cacheEntry(range(9001, 9010), 10);
+    state.loadEmails = vi.fn(async () => { state.emails = range(1, 1664).reverse().map(u => header(u)); });
+
+    const { perAccountResults } = await refreshAllAccounts();
+
+    expect(perAccountResults).toEqual([]);
+  });
+
+  it('background: a cache whose total was self-reported short announces nothing below its newest uid', async () => {
+    // A writer recorded rows.length as the folder total, so 500 cached rows of
+    // a 1664 folder read as complete.
+    backgroundAccount();
+    cachedByKey['acct-2|INBOX'] = cacheEntry(range(1165, 1664), 500);
+    mockFetchEmails.mockResolvedValue({ emails: range(1, 1664).reverse().map(u => header(u)), total: 1664, hasMore: false });
+
+    const { perAccountResults } = await refreshAllAccounts();
+
+    expect(perAccountResults).toEqual([]);
+  });
+
+  it('background: a uid the cache lost mid-folder is a hole, not an arrival', async () => {
+    backgroundAccount();
+    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2, 4, 5], 4);
+    mockFetchEmails.mockResolvedValue({ emails: range(1, 5).reverse().map(u => header(u)), total: 5, hasMore: false });
+
+    const { perAccountResults } = await refreshAllAccounts();
+
+    expect(perAccountResults).toEqual([]);
+  });
+
+  it('background: a real delivery above the cache still counts, beside a hole', async () => {
+    backgroundAccount();
+    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2, 4, 5], 4);
+    mockFetchEmails.mockResolvedValue({ emails: range(1, 6).reverse().map(u => header(u)), total: 6, hasMore: false });
+
+    const { perAccountResults } = await refreshAllAccounts();
+
+    expect(perAccountResults).toHaveLength(1);
+    expect(perAccountResults[0]).toMatchObject({ newCount: 1, newestUid: 6 });
+  });
+
+  it('active: the user switching folder during the refresh does not diff another folder\'s rows', async () => {
+    cachedByKey['acct-1|INBOX'] = cacheEntry([1, 2, 3], 3);
+    state.loadEmails = vi.fn(async () => {
+      state.activeMailbox = 'Archive';
+      state.emails = range(100, 1763).reverse().map(u => header(u));
+    });
+
+    const { perAccountResults } = await refreshAllAccounts();
+
+    expect(perAccountResults).toEqual([]);
+  });
+
+  it('active: a branch listing holds rows of many folders and is not one folder\'s arrivals', async () => {
+    state.mailboxScope = { root: 'INBOX', paths: ['INBOX', 'INBOX/Sub'] };
+    cachedByKey['acct-1|INBOX'] = cacheEntry([1, 2, 3], 3);
+    state.loadEmails = vi.fn(async () => { state.emails = range(1, 1664).reverse().map(u => header(u)); });
+
+    const { perAccountResults } = await refreshAllAccounts();
+
+    expect(perAccountResults).toEqual([]);
+  });
+});
+
 describe('a background account (the disk cache)', () => {
   const backgroundAccount = () => {
     state.accounts = [{ id: 'acct-2', email: 'other@example.com' }];
