@@ -16,20 +16,15 @@ fn get<'a>(els: &'a [InspectedElement], id: &str) -> &'a InspectedElement {
     els.iter().find(|e| e.mv_id == id).unwrap_or_else(|| panic!("no {id}"))
 }
 
-/// The expected values below were measured in WebKit with Arial or Helvetica installed. An
-/// unknown family falls back to the document font, so a machine without the font (ubuntu CI
-/// has only DejaVu) lays the text out in another one and every width and metric differs. True
-/// when one of `families` is a real font here: its text is wider or narrower than the same
-/// text in a family that does not exist.
+/// The expected values below were measured in WebKit with Arial or Helvetica installed. A
+/// machine without the font (ubuntu CI has only DejaVu) lays the text out in another one and
+/// every width and metric differs. True when one of `families` is a family of the system font
+/// collection the renderer uses. (Comparing a probe's width with an unknown family's stopped
+/// working with parley 0.12, whose fallback for an unknown family is no longer the document
+/// font: every guarded test skipped on a Mac that has both fonts.)
 fn font_present(families: &[&str]) -> bool {
-    const TEXT: &str = "Hamburgefonstiv WWW iii 0123456789";
-    families.iter().any(|family| {
-        let span = |id: &str, fam: &str| format!(r#"<span data-mv-id="{id}" style="font:20px '{fam}';display:inline-block">{TEXT}</span><br>"#);
-        let html = format!(r#"<body style="margin:0">{}{}"#, span("probe", family), span("none", "mv-no-such-font-family"));
-        let els = inspect(&html);
-        let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
-        w("probe") != w("none")
-    })
+    let mut ctx = mailvault_render::fonts::FontLibrary::new(true).context();
+    families.iter().any(|family| ctx.collection.family_id(family).is_some())
 }
 
 /// Test guard: false (with a note on stderr) when none of `families` is installed, and the

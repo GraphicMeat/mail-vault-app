@@ -306,6 +306,9 @@ struct RootLineHeight {
     px: f32,
     normal: bool,
     style: parley::TextStyle<'static, 'static, TextBrush>,
+    /// The rounded `normal` line height (CSS px) of every span with `line-height: normal` in
+    /// another font than the block's, worked out before the tree builder takes the contexts.
+    span_px: std::collections::HashMap<NodeId, f32>,
 }
 
 impl RootLineHeight {
@@ -1254,6 +1257,54 @@ fn has_line_box(nodes: &crate::NodeTree, node: &Node) -> bool {
     })
 }
 
+/// MailVault parity fix (plan B): the inline spans `build_inline_layout_recursive` will push
+/// (inline-flow elements other than inline boxes and `<br>`, through `display: contents`) whose
+/// `line-height` is `normal`, with their text style.
+fn collect_normal_spans(
+    nodes: &crate::NodeTree,
+    node_id: NodeId,
+    out: &mut Vec<(NodeId, parley::TextStyle<'static, 'static, TextBrush>)>,
+) {
+    let node = &nodes[node_id];
+    let Some(element) = node.element_data() else {
+        return;
+    };
+    let Some(styles) = node.primary_styles() else {
+        return;
+    };
+    let display = styles.clone_display();
+    let floats_or_abs =
+        styles.clone_position().is_absolutely_positioned() || styles.clone_float().is_floating();
+    match (display.outside(), display.inside()) {
+        (DisplayOutside::None, DisplayInside::Contents) => {
+            drop(styles);
+            for child_id in node.children.iter().copied() {
+                collect_normal_spans(nodes, child_id, out);
+            }
+        }
+        (DisplayOutside::Inline, DisplayInside::Flow)
+            if !floats_or_abs
+                && !is_inline_box_element(&element.name.local)
+                && element.name.local != local_name!("br") =>
+        {
+            if matches!(styles.clone_line_height(), style::values::computed::font::LineHeight::Normal)
+            {
+                out.push((node_id, stylo_to_parley::style(node_id, &styles)));
+            }
+            drop(styles);
+            for child_id in node
+                .before()
+                .into_iter()
+                .chain(node.children.iter().copied())
+                .chain(node.after())
+            {
+                collect_normal_spans(nodes, child_id, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub(crate) fn build_inline_layout_into(
     nodes: &crate::NodeTree,
     layout_ctx: &mut LayoutContext<TextBrush>,
@@ -1297,11 +1348,28 @@ pub(crate) fn build_inline_layout_into(
     } else {
         0.0
     };
-    let root_line_height = RootLineHeight {
+    let mut root_line_height = RootLineHeight {
         px: root_px,
         normal: root_normal,
         style: parley_style.clone(),
+        span_px: std::collections::HashMap::new(),
     };
+    let mut normal_spans = Vec::new();
+    for child_id in root_node
+        .before()
+        .into_iter()
+        .chain(root_node.children.iter().copied())
+        .chain(root_node.after())
+    {
+        collect_normal_spans(nodes, child_id, &mut normal_spans);
+    }
+    for (span_id, span_style) in normal_spans {
+        if root_line_height.normal && root_line_height.same_font(&span_style) {
+            continue;
+        }
+        let px = normal_line_height(layout_ctx, font_ctx, scale, &span_style);
+        root_line_height.span_px.insert(span_id, px);
+    }
 
     // Create a parley tree builder
     let mut builder = layout_ctx.tree_builder(font_ctx, scale, true, &parley_style);
@@ -1541,16 +1609,20 @@ pub(crate) fn build_inline_layout_into(
                                     ..Default::default()
                                 });
 
-                            // MailVault parity fix (plan B): a span with `line-height: normal` in a
-                            // `normal` block has the block's (rounded) line height when its font is
-                            // the block's or a smaller one (same family assumed), and the font's own
-                            // metrics when it is a larger one.
-                            if root_line_height.normal
-                                && matches!(style.line_height, parley::LineHeight::MetricsRelative(_))
-                                && (root_line_height.same_font(&style)
-                                    || style.font_size < root_line_height.style.font_size)
-                            {
-                                style.line_height = parley::LineHeight::Absolute(root_line_height.px);
+                            // MailVault parity fix (plan B): a span with `line-height: normal` has its
+                            // own font's line height with each metric rounded, as WebKit lays it
+                            // out: the block's when it is in the block's font, else worked out up
+                            // front (`collect_normal_spans`). parley 0.12 unions it with the strut;
+                            // beta.2's parley had no strut, and smaller spans took the block's.
+                            if matches!(style.line_height, parley::LineHeight::MetricsRelative(_)) {
+                                if let Some(px) = root_line_height.span_px.get(&node_id) {
+                                    style.line_height = parley::LineHeight::Absolute(*px);
+                                } else if root_line_height.normal
+                                    && root_line_height.same_font(&style)
+                                {
+                                    style.line_height =
+                                        parley::LineHeight::Absolute(root_line_height.px);
+                                }
                             }
 
                             builder.push_style_span(style);
