@@ -540,6 +540,32 @@ fn a_box_holding_a_float_keeps_its_bottom_padding() {
     let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
     assert_eq!(h("cell"), 10.0 + 20.0 + 10.0 + 43.0 + 10.0, "padding, text, margin, float, padding");
     assert_eq!(h("root"), 10.0 + 20.0 + 43.0 + 7.0 + 3.0, "padding-top, block, float, padding-bottom, border-bottom");
+    // The cell is `vertical-align: middle` (taffy's `align-content: center`) and full: its
+    // content starts at its padding, not half the bottom padding lower.
+    assert_eq!(get(&els, "f").rect.clone().unwrap().y, 10.0 + 20.0 + 10.0, "the float under the text");
+}
+
+/// KNOWN RESIDUE (parley 0.12, unvendored): a line box is the union of the block's strut and its
+/// spans' boxes, each centred on its own font's ascent and descent. WebKit gives Times,
+/// Helvetica and Courier a taller ascent (`webkit_ascent_bonus` in the vendored construct.rs),
+/// which lifts the strut of a Helvetica block until it nearly coincides with an Arial span's
+/// box; parley builds the strut from the font file's ascent, so the Arial box hangs a pixel
+/// below it. postmark inbody in the export (14px/1.5 body, Helvetica cells with Arial spans):
+/// every such row is 25 high in Blitz, 24 in the harness iframe. Fixing it needs a metrics
+/// override in parley. A change flips the first assertion.
+#[cfg(target_os = "macos")]
+#[test]
+fn known_residue_a_span_in_another_font_grows_a_helvetica_line_by_a_pixel() {
+    if !require_font(&["Helvetica"]) || !require_font(&["Arial"]) {
+        return;
+    }
+    let els = inspect(
+        r#"<body style="margin:0"><div data-mv-id="mixed" style="font:16px/24px Helvetica">a <span style="font-family:Arial">b</span></div><div data-mv-id="same" style="font:16px/24px Helvetica">a <span>b</span></div><div data-mv-id="arial" style="font:16px/24px Arial">a <span style="font-family:Arial">b</span></div></body>"#,
+    );
+    let h = |id: &str| get(&els, id).rect.clone().unwrap().h;
+    assert_eq!(h("mixed"), 25.0, "Helvetica block, Arial span (WebKit: 24)");
+    assert_eq!(h("same"), 24.0, "one font: the line-height");
+    assert_eq!(h("arial"), 24.0, "Arial block, Arial span: the line-height");
 }
 
 /// A cell spanning columns only widens them by what they lack, in proportion to their own
@@ -958,8 +984,9 @@ const DDD: [u8; 3] = [221, 221, 221];
 
 /// The usual row-separator table: `td { border-bottom: 1px solid #ddd }` under
 /// `border-collapse: collapse`. Before the fix its first cell's computed top border (3px
-/// `currentcolor`) framed the whole table in black. The inner separators (between the rows)
-/// are `scale` px of #ddd, and nothing on the page is darker than #ddd.
+/// `currentcolor`) framed the whole table in black. The separators between the rows are `scale`
+/// px of #ddd across the table, and nothing on the page is darker than #ddd. (The lines on the
+/// table's edges are pinned by `known_residue_row_separators_outer_lines`.)
 #[test]
 fn collapsed_row_separators_paint_in_their_colour() {
     for scale in [1.0f32, 2.0] {
@@ -969,13 +996,13 @@ fn collapsed_row_separators_paint_in_their_colour() {
         let dark = img.pixels_where(|_, _, p| p.iter().any(|c| *c < 220), 8);
         assert!(dark.is_empty(), "scale {scale}: darker than #ddd {dark:?}");
         let x = x0 + (x1 - x0) / 4;
-        let rows: Vec<u32> = (y0..y1).filter(|y| !near(img.px(x, *y), WHITE)).collect();
+        // Inside the box, away from its first and last `scale` px rows (the edge lines).
+        let rows: Vec<u32> = (y0 + band..y1 - band).filter(|y| !near(img.px(x, *y), WHITE)).collect();
         assert_eq!(rows.len() as u32, 2 * band, "scale {scale}: two separators of {band}px each, at rows {rows:?}");
         assert!(rows.iter().all(|y| near(img.px(x, *y), DDD)), "scale {scale}: separator colour, rows {rows:?}");
         let (first, second) = rows.split_at(band as usize);
         assert!(first.windows(2).all(|w| w[1] == w[0] + 1) && second.windows(2).all(|w| w[1] == w[0] + 1), "scale {scale}: each separator is {band}px thick: {rows:?}");
         assert!(first[0] > y0 + 2 * band && second[second.len() - 1] < y1 - band, "scale {scale}: between the rows {rows:?}");
-        // Each separator runs across the table (it stops short of the far corner, see below).
         for y in [first[0], second[0]] {
             assert!((x0..x1 - 2 * band).all(|x| near(img.px(x, y), DDD)), "scale {scale}: separator at row {y} spans the table");
         }
@@ -1029,21 +1056,22 @@ fn collapsed_table_and_cell_borders_draw_one_line_per_edge() {
     }
 }
 
-/// KNOWN RESIDUE (blitz-paint, unvendored): the painter takes one width for every outer line,
-/// the narrowest used side of the first cell, so the bottom-only borders of a row-separator
-/// table give no outer line at all. The last row's bottom separator (CSS 2.1 17.6.2: the
-/// border-bottom of the last row is a border of the table's edge) and the three other sides
-/// are not drawn. Before the fix this table had a 3px black frame.
+/// KNOWN RESIDUE (blitz-paint, unvendored): blitz-paint beta.4 draws every collapsed line with
+/// the table's track gutters, the outer ones as the table's own border, so a row-separator table
+/// (cells with only `border-bottom`) gets a line on its top edge as well, where WKWebView draws
+/// none. Its bottom line (CSS 2.1 17.6.2: the last row's border-bottom is the table's edge) is
+/// drawn as in WKWebView; beta.2 drew neither. There are no left or right lines (the gutters
+/// have no width). A painter fix drops the top line and flips the first assertion.
 #[test]
-fn known_residue_row_separators_have_no_outer_lines() {
+fn known_residue_row_separators_outer_lines() {
     for scale in [1.0f32, 2.0] {
         let img = paint_table(ROW_SEPARATORS, scale);
         let (x0, y0, x1, y1) = img.rect;
         let b = scale as u32;
-        assert!((x0..x1).all(|x| (0..b).all(|d| near(img.px(x, y1 - b + d), WHITE))), "scale {scale}: no bottom line");
-        assert!((x0..x1).all(|x| (0..b).all(|d| near(img.px(x, y0 + d), WHITE))), "scale {scale}: no top line");
-        // The first row, above the first separator (which crosses the outer columns).
-        let first_row = y0..y0 + 12 * b;
+        assert!((x0..x1).all(|x| (0..b).all(|d| near(img.px(x, y0 + d), DDD))), "scale {scale}: a top line (WKWebView: none)");
+        assert!((x0..x1).all(|x| (0..b).all(|d| near(img.px(x, y1 - b + d), DDD))), "scale {scale}: the bottom line");
+        // The first row, below the top line and above the first separator.
+        let first_row = y0 + b..y0 + 12 * b;
         assert!(first_row.clone().all(|y| (0..b).all(|d| near(img.px(x0 + d, y), WHITE))), "scale {scale}: no left line");
         assert!(first_row.clone().all(|y| (0..b).all(|d| near(img.px(x1 - b + d, y), WHITE))), "scale {scale}: no right line");
     }
