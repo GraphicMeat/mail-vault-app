@@ -254,6 +254,18 @@ describe('createComposeSend', () => {
     expect(sendStaged).not.toHaveBeenCalled();
   });
 
+  /// compose.stage can also refuse without a code (a malformed payload, a
+  /// lost worker): it still reads as compose's own "could not prepare".
+  it('wraps an untagged stage refusal in compose\'s words, once', async () => {
+    stageOutgoing.mockRejectedValueOnce(new Error('Invalid email: missing field `content`'));
+    await expect(createComposeSend({ snapshot, mode: 'new', replyTo: null, account })())
+      .rejects.toThrow(/^Could not prepare the outgoing email: Invalid email: missing field `content`$/);
+    stageOutgoing.mockRejectedValueOnce(new Error('Could not archive the outgoing email locally: disk full'));
+    await expect(createComposeSend({ snapshot, mode: 'new', replyTo: null, account })())
+      .rejects.toThrow(/^Could not archive the outgoing email locally: disk full$/);
+    expect(sendStaged).not.toHaveBeenCalled();
+  });
+
   /// An edited scheduled email sent now instead: the daemon cancels its row
   /// once the mail is really out (src-daemon handlers/compose.rs).
   it('hands the edited scheduled row to the daemon to cancel after the send', async () => {

@@ -137,13 +137,19 @@ function ownAddressesOf(account) {
 const parseAddresses = raw => splitRecipients(raw || '').map(address => ({ address, name: '' }));
 const bareMessageId = id => (id || '').trim().replace(/^</, '').replace(/>$/, '');
 
-// compose.stage refuses with a daemon code; the user reads it in the words
-// compose always used.
+// compose.stage refuses with a daemon code, or with untagged text (a
+// malformed payload, a lost worker, the daemon away); the user reads any of
+// it in the words compose always used. Text already in them stays as it is.
 function stageError(err) {
-  const match = /^E_COMPOSE_(BUILD|STAGE):\s*([\s\S]*)$/.exec(err?.message || String(err));
-  if (!match) return err;
-  const key = match[1] === 'BUILD' ? 'errors.composeBuildOutgoingMime' : 'errors.composeArchiveOutgoing';
-  return new Error(t(key, { error: match[2] }));
+  const message = err?.message || String(err);
+  const match = /^E_COMPOSE_(BUILD|STAGE):\s*([\s\S]*)$/.exec(message);
+  if (match) {
+    const key = match[1] === 'BUILD' ? 'errors.composeBuildOutgoingMime' : 'errors.composeArchiveOutgoing';
+    return new Error(t(key, { error: match[2] }));
+  }
+  const wrapped = ['errors.composeBuildOutgoingMime', 'errors.composeArchiveOutgoing']
+    .some(key => message.startsWith(t(key, { error: '' })));
+  return wrapped ? err : new Error(t('errors.composeBuildOutgoingMime', { error: message }));
 }
 
 // The daemon reports the server's Sent copy within 60 s (the APPEND) plus
