@@ -4833,6 +4833,7 @@ dependencies = [
  "tauri-plugin-sparkle-updater",
  "tauri-plugin-updater",
  "tauri-plugin-webdriver-automation",
+ "tauri-winrt-notification",
  "tempfile",
  "tokio",
  "tracing",

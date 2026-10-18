@@ -63,9 +63,12 @@ pub mod mac {
     use objc2::rc::Retained;
     use objc2::runtime::{AnyObject, Bool, ProtocolObject};
     use objc2::{define_class, msg_send, AllocAnyThread};
-    use objc2_foundation::{NSBundle, NSDictionary, NSError, NSObject, NSObjectProtocol, NSString};
+    use objc2_foundation::{
+        NSArray, NSBundle, NSDictionary, NSError, NSObject, NSObjectProtocol, NSString, NSURL,
+    };
     use objc2_user_notifications::{
-        UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationRequest,
+        UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationAttachment,
+        UNNotificationRequest,
         UNNotificationResponse, UNNotificationSound, UNUserNotificationCenter,
         UNUserNotificationCenterDelegate,
     };
@@ -120,6 +123,7 @@ pub mod mac {
         body: &str,
         sound: Option<&str>,
         target: Option<&NotificationTarget>,
+        thumbnail: Option<std::path::PathBuf>,
     ) -> Result<(), String> {
         let content = UNMutableNotificationContent::new();
         content.setTitle(&NSString::from_str(title));
@@ -136,6 +140,25 @@ pub mod mac {
             let info: &NSDictionary = unsafe { &*(Retained::as_ptr(&info) as *const NSDictionary) };
             unsafe { content.setUserInfo(info) };
         }
+        // The system moves the attached file into its own store once the banner
+        // is added, so a banner that never gets there must delete it itself.
+        let thumbnail = thumbnail.filter(|path| {
+            let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
+            let id = NSString::from_str("icon");
+            match unsafe {
+                UNNotificationAttachment::attachmentWithIdentifier_URL_options_error(&id, &url, None)
+            } {
+                Ok(attachment) => {
+                    content.setAttachments(&NSArray::from_retained_slice(&[attachment]));
+                    true
+                }
+                Err(e) => {
+                    warn!("[notification] icon not attached: {e:?}");
+                    let _ = std::fs::remove_file(path);
+                    false
+                }
+            }
+        });
         let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
             &NSString::from_str(&uuid::Uuid::new_v4().to_string()),
             &content,
@@ -152,6 +175,9 @@ pub mod mac {
                     .addNotificationRequest_withCompletionHandler(&request, None);
             } else {
                 warn!("[notification] not authorized; banner dropped");
+                if let Some(path) = &thumbnail {
+                    let _ = std::fs::remove_file(path);
+                }
             }
         });
         center.requestAuthorizationWithOptions_completionHandler(

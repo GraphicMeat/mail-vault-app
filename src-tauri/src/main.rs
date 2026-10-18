@@ -975,32 +975,94 @@ fn send_notification(
     info!("send_notification called");
     tracing::debug!("send_notification: {} - {}", title, body);
 
+    // The banner shows the icon picked in Settings (`app_icon::SelectedAppIcon`).
+    // The file lives in the app cache dir: a snapped Linux app has a private
+    // /tmp the host notification daemon cannot read.
+    let icon = app_handle.state::<app_icon::SelectedAppIcon>().get();
+    let cache = app_handle.path().app_cache_dir().ok();
+
     // The plugin's banner cannot report a click; this one opens `target`.
     #[cfg(target_os = "macos")]
     if notification_open::mac::available() {
         let sound = notification_sound::sound_name(sound.as_deref());
-        return notification_open::mac::show(&title, &body, sound, target.as_ref());
+        // The banner's own icon is the bundle's and cannot be changed, so a
+        // non-default choice rides along as the attached thumbnail.
+        let thumbnail = cache
+            .as_deref()
+            .filter(|_| icon != "purple")
+            .and_then(|dir| app_icon::icon_file(dir, icon, true).ok());
+        return notification_open::mac::show(&title, &body, sound, target.as_ref(), thumbnail);
     }
     let _ = target;
 
-    use tauri_plugin_notification::NotificationExt;
-    let notification = app_handle
-        .notification()
-        .builder()
-        .title(&title)
-        .body(&body);
-    #[cfg(target_os = "macos")]
-    let notification = match notification_sound::sound_name(sound.as_deref()) {
-        Some(name) => notification.sound(name),
-        None => notification,
-    };
     #[cfg(not(target_os = "macos"))]
-    let _ = sound;
-    notification
-        .show()
-        .map_err(|e| format!("Failed to send notification: {}", e))?;
+    let icon_path = cache.and_then(|dir| match app_icon::icon_file(&dir, icon, false) {
+        Ok(path) => Some(path),
+        Err(e) => {
+            warn!("[notification] icon not written, default icon used: {e}");
+            None
+        }
+    });
 
-    Ok(())
+    #[cfg(windows)]
+    {
+        let _ = sound;
+        windows_toast(&app_handle, &title, &body, icon_path.as_deref())
+    }
+
+    #[cfg(not(windows))]
+    {
+        use tauri_plugin_notification::NotificationExt;
+        let notification = app_handle
+            .notification()
+            .builder()
+            .title(&title)
+            .body(&body);
+        #[cfg(target_os = "macos")]
+        let notification = match notification_sound::sound_name(sound.as_deref()) {
+            Some(name) => notification.sound(name),
+            None => notification,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let _ = sound;
+        #[cfg(not(target_os = "macos"))]
+        let notification = match icon_path {
+            Some(path) => notification.icon(path.to_string_lossy().into_owned()),
+            None => notification,
+        };
+        notification
+            .show()
+            .map_err(|e| format!("Failed to send notification: {}", e))?;
+        Ok(())
+    }
+}
+
+/// notify-rust drops the icon on Windows, so the toast is built here with the
+/// chosen icon as its app logo. Same AppUserModelID rule as the plugin: the
+/// identifier only when installed, or a toast from `target/debug|release`
+/// vanishes.
+#[cfg(windows)]
+fn windows_toast(
+    app: &tauri::AppHandle,
+    title: &str,
+    body: &str,
+    icon: Option<&std::path::Path>,
+) -> Result<(), String> {
+    use tauri_winrt_notification::{IconCrop, Toast};
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe.parent().map(|p| p.display().to_string()).unwrap_or_default();
+    let sep = std::path::MAIN_SEPARATOR;
+    let installed = !(dir.ends_with(&format!("{sep}target{sep}debug"))
+        || dir.ends_with(&format!("{sep}target{sep}release")));
+    let identifier = app.config().identifier.clone();
+    let app_id = if installed { identifier.as_str() } else { Toast::POWERSHELL_APP_ID };
+    let mut toast = Toast::new(app_id).title(title).text1(body);
+    if let Some(icon) = icon {
+        toast = toast.icon(icon, IconCrop::Square, "");
+    }
+    toast
+        .show()
+        .map_err(|e| format!("Failed to send notification: {e:?}"))
 }
 
 // `graph_ledger_path`/`GRAPH_ID_MAP_FILE` are gone (Phase 3 remainder, Task
@@ -3564,7 +3626,8 @@ fn main() {
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
         .manage(mailto::PendingMailto::default())
-        .manage(notification_open::PendingNotificationOpen::default());
+        .manage(notification_open::PendingNotificationOpen::default())
+        .manage(app_icon::SelectedAppIcon::default());
 
     #[cfg(any(target_os = "linux", windows))]
     let builder = builder.manage(PendingUpdate::default());
