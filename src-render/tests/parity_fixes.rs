@@ -27,6 +27,24 @@ fn font_present(families: &[&str]) -> bool {
     families.iter().any(|family| ctx.collection.family_id(family).is_some())
 }
 
+/// A family list none of whose families is installed, with no generic family at its end, is
+/// drawn in the default font, the serif one (WebKit: Times), not in a sans-serif fallback.
+#[test]
+fn an_unknown_family_falls_back_to_the_serif_default() {
+    const TEXT: &str = "Hamburgefonstiv WWW iii 0123456789";
+    let span = |id: &str, fam: &str| format!(r#"<span data-mv-id="{id}" style="font:20px {fam};display:inline-block">{TEXT}</span><br>"#);
+    let html = format!(
+        r#"<body style="margin:0">{}{}{}</body>"#,
+        span("none", "'mv-no-such-font-family'"),
+        span("serif", "serif"),
+        span("sans", "sans-serif")
+    );
+    let els = inspect(&html);
+    let w = |id: &str| get(&els, id).rect.clone().unwrap().w;
+    assert_eq!(w("none"), w("serif"));
+    assert_ne!(w("none"), w("sans"));
+}
+
 /// Test guard: false (with a note on stderr) when none of `families` is installed, and the
 /// test returns early. Never used for what a test checks about the engine, only for numbers
 /// that belong to one font.

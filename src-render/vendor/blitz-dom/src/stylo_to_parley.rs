@@ -538,6 +538,15 @@ pub(crate) fn style(
     };
     let text_wrap_mode = text_wrap_mode(itext_styles.text_wrap_mode);
 
+    // MailVault parity fix (blitz beta.4): a list with no generic family ends in the default
+    // font, which is the serif one (Times in WebKit), as it was with parley 0.11. parley 0.12
+    // falls back to a system sans-serif when no family of the list is installed, so a mail
+    // asking only for a font the machine lacks came out in Helvetica.
+    let mut families = families;
+    if !families.iter().any(|f| matches!(f, parley::FontFamilyName::Generic(_))) {
+        families.push(parley::FontFamilyName::Generic(parley::GenericFamily::Serif));
+    }
+
     parley::TextStyle {
         // font_family: parley::FontFamily::Single(FontFamilyName::Generic(GenericFamily::SystemUi)),
         font_family: parley::FontFamily::List(Cow::Owned(families)),
