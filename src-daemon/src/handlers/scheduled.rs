@@ -62,11 +62,7 @@ fn json_of<T: serde::Serialize>(v: T) -> Result<Value, String> {
 /// app, one row at a time under `with_mailbox_write`, so a linear probe from
 /// "now" is cheap and never races another writer.
 fn allocate_uid(root: &std::path::Path, account_id: &str) -> u32 {
-    let mut uid = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) as u32;
-    while vault_files::exists(root, account_id, MAILBOX, uid) {
-        uid += 1;
-    }
-    uid
+    vault_files::free_local_uid(root, account_id, MAILBOX)
 }
 
 /// What `insert`/the envelope-replace branch of `update` store in the
@@ -263,7 +259,7 @@ fn update(
 /// already cancelled, or gone, is Ok, so a retried cancel is harmless.
 /// Best-effort on the file: a previous cancel that failed midway through
 /// leaves nothing there to remove, and that is not this call's problem.
-fn cancel(state: &Arc<DaemonState>, row_id: &str) -> Result<Value, String> {
+pub(crate) fn cancel(state: &Arc<DaemonState>, row_id: &str) -> Result<Value, String> {
     let Some(_claim) = state.scheduled_send.claim(row_id) else {
         return Err(NOT_EDITABLE.to_string());
     };

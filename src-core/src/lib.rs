@@ -51,6 +51,7 @@ pub mod sender_check;
 pub mod verification_code;
 pub mod unsubscribe;
 pub mod smtp;
+pub mod compose;
 pub mod spellcheck;
 pub mod transfer_limits;
 pub mod transfer_stats;

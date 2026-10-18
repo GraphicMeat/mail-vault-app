@@ -82,7 +82,7 @@ pub struct BuiltMime {
 /// Split a recipient line on commas, but never inside a quoted display name
 /// (`"Doe, John" <j@d.com>`) or inside angle brackets. A naive split turns an
 /// address-book name with a comma into two broken recipients.
-fn split_address_line(raw: &str) -> Vec<String> {
+pub(crate) fn split_address_line(raw: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
     let mut in_quotes = false;
