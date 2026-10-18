@@ -23,9 +23,9 @@ describe('FAQ hub and topic pages', () => {
   it('keeps every one of the 23 original answers, each on exactly one topic page', () => {
     const all = TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus every answer added since
-    // (the latest: #share-screenshots-privately on the Premium page).
-    expect(all.length).toBe(32);
-    expect(new Set(all).size).toBe(32);
+    // (the latest: #contacts, #jmap-storage and #jmap-accounts, each with its hub row).
+    expect(all.length).toBe(35);
+    expect(new Set(all).size).toBe(35);
   });
 
   // Every answer on a topic page has its row in the hub's index, which the
