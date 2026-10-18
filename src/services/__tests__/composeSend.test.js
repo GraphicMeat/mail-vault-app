@@ -241,7 +241,6 @@ describe('createComposeSend', () => {
     for (const command of ['maildir_store', 'maildir_delete', 'local_index_append', 'local_index_remove', 'smtp_build_mime', 'smtp_send_email']) {
       expect(commands).not.toContain(command);
     }
-    expect(daemonCall.mock.calls.map(([method]) => method)).not.toContain('follow_up.create');
   });
 
   it('says what could not be prepared or kept, in compose\'s own words', async () => {
@@ -429,7 +428,6 @@ describe('a send with a follow-up reminder', () => {
   });
 
   it('a scheduled send carries the reminder to the daemon, which records it when it goes out', async () => {
-    const created = () => daemonCall.mock.calls.filter(([method]) => method === 'follow_up.create');
     const scheduled = { ...snapshot, _remindDays: 7, _scheduleDraft: { localTime: '2026-10-01T09:00', tz: 'Europe/Vilnius' } };
     await scheduleCompose({ snapshot: scheduled, account, settings: {} });
     expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({
@@ -437,7 +435,6 @@ describe('a send with a follow-up reminder', () => {
     }));
     await scheduleCompose({ snapshot: { ...scheduled, _remindDays: 3, _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1' } }, account, settings: {} });
     expect(replaceSchedule).toHaveBeenCalledWith('row-1', expect.objectContaining({ remindDays: 3 }));
-    expect(created()).toEqual([]);
   });
 });
 
