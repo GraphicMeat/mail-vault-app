@@ -175,7 +175,7 @@ fn root_runs(doc: &BaseDocument, root: &Node, out: &mut Vec<TextRun>) {
     let fl = root.final_layout();
     let pos = root.absolute_position(0.0, 0.0);
     let ox = pos.x + fl.padding.left + fl.border.left;
-    let oy = pos.y + fl.padding.top + fl.border.top;
+    let oy = pos.y + fl.padding.top + fl.border.top + tl.block_offset;
     let clips = clip_rects(doc, root);
 
     // (run, kept?) in logical order; dropped runs stop gap-filling across them.

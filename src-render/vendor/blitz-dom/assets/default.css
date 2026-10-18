@@ -39,7 +39,8 @@
     display: none;
 }
 
-a {
+/* https://html.spec.whatwg.org/#phrasing-content-3: only links are styled */
+a[href] {
     color: rgb(0, 0, 238);
     text-decoration: underline;
 }
@@ -51,6 +52,11 @@ input[type=tel]:dir(ltr) {
 
 input {
     display: inline-block;
+}
+
+/* https://html.spec.whatwg.org/#hidden-elements */
+input[type="hidden" i] {
+    display: none !important;
 }
 
 input[type="checkbox"] {
@@ -74,6 +80,16 @@ textarea {
     background-color: white;
 }
 
+input,
+select,
+button {
+    font-family: system-ui, sans-serif;
+}
+
+textarea {
+    font-family: monospace;
+}
+
 input:focus,
 textarea:focus {
     outline: 2px solid #4D90FE;
@@ -89,9 +105,7 @@ input[type="button"] {
     color: black;
     background-color: #EFEFEF;
     text-align: center;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    display: inline-block;
 }
 
 /* Button-flavored inputs clip their contents to the border box and never
@@ -368,6 +382,11 @@ table[align="left"] {
 table[align="right"] {
     float: right;
     text-align: start;
+}
+
+td[nowrap],
+th[nowrap] {
+    white-space: nowrap;
 }
 
 

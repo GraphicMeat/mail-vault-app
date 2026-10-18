@@ -3,10 +3,10 @@ use std::collections::HashSet;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
-use crate::document::make_device;
 use crate::layout::damage::ALL_DAMAGE;
 use crate::net::{ImageHandler, ResourceHandler, StylesheetHandler};
 use crate::node::{CanvasData, NodeFlags, SpecialElementData};
+use crate::stylo_device::DeviceChanges;
 use crate::util::ImageType;
 use crate::{
     Attribute, BaseDocument, Document, ElementData, Node, NodeData, QualName, local_name, qual_name,
@@ -161,6 +161,38 @@ impl DocumentMutator<'_> {
         self.doc.deep_clone_node(node_id)
     }
 
+    /// Create (or return the existing) "template contents" fragment node for a
+    /// `<template>` element. The contents node is detached from the tree (so it
+    /// is inert: never styled or rendered) and is exposed to JavaScript as the
+    /// template's `content` DocumentFragment.
+    pub fn template_contents(&mut self, template_id: NodeId) -> NodeId {
+        if let Some(contents_id) = self.try_template_contents(template_id) {
+            return contents_id;
+        }
+        let name = QualName::new(
+            None,
+            markup5ever::ns!(html),
+            markup5ever::LocalName::from("#document-fragment"),
+        );
+        let contents_id = self.create_element(name, Vec::new());
+        if let Some(element) = self
+            .doc
+            .get_node_mut(template_id)
+            .and_then(|node| node.element_data_mut())
+        {
+            element.template_contents = Some(contents_id);
+        }
+        contents_id
+    }
+
+    /// The "template contents" fragment node of a `<template>` element (if any)
+    pub fn try_template_contents(&self, template_id: NodeId) -> Option<NodeId> {
+        self.doc
+            .get_node(template_id)
+            .and_then(|node| node.element_data())
+            .and_then(|element| element.template_contents)
+    }
+
     // Node mutation methods
 
     pub fn set_node_text(&mut self, node_id: NodeId, value: &str) {
@@ -239,7 +271,7 @@ impl DocumentMutator<'_> {
             self.doc.snapshot_node(node_id);
 
             let node = &mut self.doc.nodes[node_id];
-            if let Some(mut data) = node.stylo_element_data_opt_mut().and_then(|s| s.get_mut()) {
+            if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {
                 data.hint |= RestyleHint::restyle_subtree();
                 data.damage.insert(ALL_DAMAGE);
             }
@@ -250,7 +282,7 @@ impl DocumentMutator<'_> {
             if let Some(parent_id) = parent {
                 let parent = &mut self.doc.nodes[parent_id];
                 if let Some(mut data) = parent
-                    .stylo_element_data_opt_mut()
+                    .try_stylo_element_data_mut()
                     .and_then(|s| s.get_mut())
                 {
                     data.hint |= RestyleHint::restyle_subtree();
@@ -329,7 +361,7 @@ impl DocumentMutator<'_> {
 
         if *attr == local_name!("style") {
             element.flush_style_attribute(&self.doc.guard, &self.doc.url.url_extra_data());
-            node.mark_style_attr_updated();
+            node.set_restyle_hint(RestyleHint::RESTYLE_STYLE_ATTRIBUTE);
             return;
         }
 
@@ -344,13 +376,21 @@ impl DocumentMutator<'_> {
             return;
         }
 
+        // Custom widgets replace the element's built-in tag-specific behaviour
+        #[cfg(feature = "custom-widget")]
+        if element.custom_widget_data().is_some() {
+            return;
+        }
+
         if (tag, attr) == tag_and_attr!("input", "checked") {
             set_input_checked_state(element, value.to_string());
         } else if (tag, attr) == tag_and_attr!("img", "src") {
             self.load_image(node_id);
         } else if (tag, attr) == tag_and_attr!("canvas", "src") {
             self.load_custom_paint_src(node_id);
-        } else if (tag, attr) == tag_and_attr!("link", "href") {
+        } else if (tag, attr) == tag_and_attr!("link", "href")
+            || (tag, attr) == tag_and_attr!("link", "rel")
+        {
             self.load_linked_stylesheet(node_id);
         } else if (tag, attr) == tag_and_attr!("iframe", "src")
             || (tag, attr) == tag_and_attr!("iframe", "srcdoc")
@@ -366,7 +406,7 @@ impl DocumentMutator<'_> {
 
             let node = &mut self.doc.nodes[node_id];
 
-            if let Some(mut data) = node.stylo_element_data_opt_mut().and_then(|s| s.get_mut()) {
+            if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {
                 data.hint |= RestyleHint::restyle_subtree();
                 data.damage.insert(ALL_DAMAGE);
             }
@@ -446,7 +486,9 @@ impl DocumentMutator<'_> {
 
         if *attr == local_name!("style") {
             element.flush_style_attribute(&self.doc.guard, &self.doc.url.url_extra_data());
-            node.mark_style_attr_updated();
+            node.set_restyle_hint(RestyleHint::RESTYLE_STYLE_ATTRIBUTE);
+        } else if (tag, attr) == tag_and_attr!("input", "checked") {
+            element.set_checkbox_input_checked(false);
         } else if (tag, attr) == tag_and_attr!("canvas", "src") {
             self.recompute_is_animating = true;
         } else if (tag, attr) == tag_and_attr!("link", "href") {
@@ -543,7 +585,7 @@ impl DocumentMutator<'_> {
             // TODO: make this fine grained / conditional based on ElementSelectorFlags
             if parent_is_in_doc {
                 if let Some(mut data) = parent
-                    .stylo_element_data_opt_mut()
+                    .try_stylo_element_data_mut()
                     .and_then(|s| s.get_mut())
                 {
                     data.hint |= RestyleHint::restyle_subtree();
@@ -566,7 +608,7 @@ impl DocumentMutator<'_> {
         // TODO: make this fine grained / conditional based on ElementSelectorFlags
         if parent_is_in_doc {
             if let Some(mut data) = parent
-                .stylo_element_data_opt_mut()
+                .try_stylo_element_data_mut()
                 .and_then(|s| s.get_mut())
             {
                 data.hint |= RestyleHint::restyle_subtree();
@@ -648,7 +690,7 @@ impl DocumentMutator<'_> {
             // TODO: make this fine grained / conditional based on ElementSelectorFlags
             if child_was_in_doc {
                 if let Some(mut data) = old_parent
-                    .stylo_element_data_opt_mut()
+                    .try_stylo_element_data_mut()
                     .and_then(|s| s.get_mut())
                 {
                     data.hint |= RestyleHint::restyle_subtree();
@@ -667,7 +709,7 @@ impl DocumentMutator<'_> {
         // TODO: make this fine grained / conditional based on ElementSelectorFlags
         if new_parent_is_in_document {
             if let Some(mut data) = new_parent
-                .stylo_element_data_opt_mut()
+                .try_stylo_element_data_mut()
                 .and_then(|s| s.get_mut())
             {
                 data.hint |= RestyleHint::restyle_subtree();
@@ -905,19 +947,26 @@ impl<'doc> DocumentMutator<'doc> {
                 return;
             };
 
+            // Custom widgets replace the element's built-in tag-specific behaviour
+            #[cfg(feature = "custom-widget")]
+            let has_custom_widget = element.custom_widget_data().is_some();
+            #[cfg(not(feature = "custom-widget"))]
+            let has_custom_widget = false;
+
             // Custom post-processing by element tag name
             let tag = element.name.local.as_ref();
             match tag {
                 "title" => self.title_node = Some(node_id),
+                "style" => {
+                    self.style_nodes.insert(node_id);
+                }
+                _ if has_custom_widget => {}
                 "link" => self.eager_op_queue.push(SpecialOp::LoadStylesheet(node_id)),
                 "img" => self.eager_op_queue.push(SpecialOp::LoadImage(node_id)),
                 "iframe" => self.eager_op_queue.push(SpecialOp::LoadIframe(node_id)),
                 "canvas" => self
                     .eager_op_queue
                     .push(SpecialOp::LoadCustomPaintSource(node_id)),
-                "style" => {
-                    self.style_nodes.insert(node_id);
-                }
                 "button" | "fieldset" | "input" | "select" | "textarea" | "object" | "output" => {
                     self.eager_op_queue
                         .push(SpecialOp::ProcessButtonInput(node_id));
@@ -929,8 +978,11 @@ impl<'doc> DocumentMutator<'doc> {
             #[cfg(feature = "autofocus")]
             if node.is_focussable() {
                 if let NodeData::Element(ref element) = node.data {
+                    // `autofocus` is a boolean attribute, so presence alone enables it
+                    // (`<input autofocus>`). "false" is still ignored, because Dioxus
+                    // writes `autofocus: false` as the string "false".
                     if let Some(value) = element.attr(local_name!("autofocus")) {
-                        if value == "true" {
+                        if value != "false" {
                             self.node_to_autofocus = Some(node_id);
                         }
                     }
@@ -1097,6 +1149,7 @@ impl<'doc> DocumentMutator<'doc> {
             .force_stylesheet_origins_dirty(OriginSet::all());
 
         self.doc.nodes_to_stylesheet.remove(&node_id);
+        self.doc.stylesheet_generation += 1;
     }
 
     fn load_image(&mut self, target_id: NodeId) {
@@ -1123,7 +1176,7 @@ impl<'doc> DocumentMutator<'doc> {
                         self.doc.release_image_use(&old);
                     }
                     let node = &mut self.doc.nodes[target_id];
-                    node.cache_mut().clear();
+                    node.clear_layout_cache();
                     node.insert_damage(ALL_DAMAGE);
                     return;
                 }
@@ -1304,25 +1357,15 @@ impl Drop for ViewportMut<'_> {
             return;
         }
 
-        self.doc.set_stylist_device(make_device(
-            &self.doc.viewport,
-            self.doc.media_type.clone(),
-            self.doc.font_ctx.clone(),
-        ));
-        self.doc.scroll_viewport_by(0.0, 0.0); // Clamp scroll offset
-
-        let scale_has_changed =
-            self.doc.viewport().scale_f64() != self.initial_viewport.scale_f64();
-        if scale_has_changed {
-            self.doc.invalidate_inline_contexts();
-            self.doc.shell_provider.request_redraw();
-        }
+        let changes = DeviceChanges::from_viewports(&self.initial_viewport, &self.doc.viewport);
+        self.doc.queue_device_changes(changes);
     }
 }
 
 #[cfg(test)]
 mod test {
     use style::media_queries::MediaType;
+    use style::servo_arc::Arc as ServoArc;
     use style_dom::ElementState;
 
     use std::sync::{
@@ -1701,5 +1744,85 @@ mod test {
                 .x,
             120.0
         );
+    }
+
+    #[test]
+    fn style_property_mutation_copies_blocks_in_rule_tree() {
+        let mut document = BaseDocument::new(DocumentConfig {
+            viewport: Some(Viewport::new(800, 600, 1.0, ColorScheme::Light)),
+            ..Default::default()
+        });
+        let root_id = document.root_node().id;
+
+        let div_id = {
+            let mut mutator = document.mutate();
+            let div_id = mutator.create_element(qual_name!("div"), vec![]);
+            mutator.set_style_property(div_id, "width", "100px");
+            mutator.set_style_property(div_id, "height", "50px");
+            mutator.append_children(root_id, &[div_id]);
+            div_id
+        };
+
+        let style_block = |document: &BaseDocument| {
+            document
+                .get_node(div_id)
+                .unwrap()
+                .element_data()
+                .unwrap()
+                .style_attribute
+                .clone()
+                .unwrap()
+        };
+
+        let before_resolve = style_block(&document);
+        {
+            let mut mutator = document.mutate();
+            mutator.set_style_property(div_id, "height", "60px");
+        }
+        // Not yet in the rule tree: mutated in place.
+        assert!(ServoArc::ptr_eq(&before_resolve, &style_block(&document)));
+
+        document.resolve(0.0);
+        let in_rule_tree = style_block(&document);
+        assert!(
+            in_rule_tree
+                .read_with(&document.guard.read())
+                .immutable
+                .load(Ordering::Relaxed)
+        );
+
+        {
+            let mut mutator = document.mutate();
+            mutator.set_style_property(div_id, "width", "200px");
+        }
+        let after_set = style_block(&document);
+        assert!(!ServoArc::ptr_eq(&in_rule_tree, &after_set));
+        {
+            let guard = document.guard.read();
+            let old = in_rule_tree.read_with(&guard);
+            let new = after_set.read_with(&guard);
+            assert_eq!(old.declarations().len(), 2);
+            assert_eq!(new.declarations().len(), 2);
+            assert_ne!(old, new);
+        }
+
+        document.resolve(0.0);
+        assert_eq!(
+            document.get_node(div_id).unwrap().final_layout().size.width,
+            200.0
+        );
+
+        let in_rule_tree = style_block(&document);
+        {
+            let mut mutator = document.mutate();
+            mutator.remove_style_property(div_id, "height");
+        }
+        let after_remove = style_block(&document);
+        assert!(!ServoArc::ptr_eq(&in_rule_tree, &after_remove));
+        {
+            let guard = document.guard.read();
+            assert_eq!(in_rule_tree.read_with(&guard).declarations().len(), 2);
+            assert_eq!(after_remove.read_with(&guard).declarations().len(), 1);
+        }
     }
 }

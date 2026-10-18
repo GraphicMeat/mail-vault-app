@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use style::color::AbsoluteColor;
 
 #[cfg(target_os = "macos")]
-pub(crate) const ACTION_MOD: Modifiers = Modifiers::SUPER;
+pub(crate) const ACTION_MOD: Modifiers = Modifiers::META;
 #[cfg(not(target_os = "macos"))]
 pub(crate) const ACTION_MOD: Modifiers = Modifiers::CONTROL;
 
@@ -263,6 +263,13 @@ impl ToColorColor for AbsoluteColor {
 #[cfg(all(test, feature = "svg"))]
 mod svg_tests {
     use super::parse_svg_image;
+
+    #[test]
+    fn svg_without_xmlns_parses() {
+        let src = br#"<svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>"#;
+        let svg = parse_svg_image(src).unwrap();
+        assert!(!svg.tree.root().children().is_empty());
+    }
 
     #[test]
     fn missing_height_is_computed_from_width_and_viewbox_ratio() {

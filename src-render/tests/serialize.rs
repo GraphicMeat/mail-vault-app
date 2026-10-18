@@ -12,7 +12,10 @@ fn lib() -> FontLibrary {
     lib
 }
 fn open(body: &str) -> RenderDoc {
-    let html = format!(r#"<body style="margin:0;font:20px/30px 'MV Mono'">{body}</body>"#);
+    // The test font context has no system fonts, and blitz-dom beta.4's UA sheet gives
+    // buttons `font-family: system-ui, sans-serif`, which it cannot resolve: a button's
+    // label would lay out with no glyphs. The buttons here take the test font instead.
+    let html = format!(r#"<head><style>button{{font:inherit}}</style></head><body style="margin:0;font:20px/30px 'MV Mono'">{body}</body>"#);
     RenderDoc::open_with(&html, RenderOptions { css_width: 600, scale: 1.0, ..Default::default() }, None, lib().context()).unwrap()
 }
 /// Endpoint at `needle`'s first byte (or its end) in the run text.
@@ -352,7 +355,7 @@ fn root_id(doc: &RenderDoc, n: usize) -> u64 {
 fn box_offsets(doc: &RenderDoc, n: usize) -> Vec<usize> {
     let id = mailvault_render::text::inline_roots(doc.base())[n];
     let tl = doc.base().get_node(id).unwrap().element_data().unwrap().inline_layout_data.as_ref().unwrap();
-    tl.layout.inline_boxes().iter().map(|b| b.index).collect()
+    tl.layout.inline_boxes().map(|b| b.index).collect()
 }
 fn shift(e: Endpoint, by: usize) -> Endpoint {
     Endpoint { offset: e.offset + by, ..e }

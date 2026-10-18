@@ -18,12 +18,12 @@ thread_local! {
     pub(crate) static LAYOUT_CTX: RefCell<Option<Box<LayoutContext<TextBrush>>>> = const { RefCell::new(None) };
 }
 
-use style::selector_parser::RestyleDamage;
 use taffy::AvailableSpace;
 
 use crate::{
     BaseDocument,
     layout::{
+        LayoutPassState,
         construct::{
             ConstructionTask, ConstructionTaskData, ConstructionTaskResult,
             ConstructionTaskResultData, LayoutChildren, build_inline_layout_into,
@@ -75,18 +75,30 @@ impl BaseDocument {
         let root_node_id = self.root_element().id;
         debug_timer!(timer, feature = "log-phase-times");
 
+        // Apply any device changes (viewport resize, zoom, color-scheme, etc)
+        // accumulated since the last resolve as a single device rebuild.
+        self.flush_pending_device_changes();
+
         // we need to resolve stylist first since it will need to drive our layout bits
         self.resolve_stylist(current_time_for_animations);
         timer.record_time("style");
 
-        // Propagate damage flags (from mutation and restyles) up and down the tree
-        if self.incremental_layout {
-            self.propagate_damage_flags(root_node_id, RestyleDamage::empty());
-            timer.record_time("damage");
+        // Non-incremental mode is "every node is damaged every frame": mark the
+        // whole tree and let the same damage pipeline reconstruct and relayout
+        // everything.
+        if !self.incremental_layout {
+            self.mark_all_damaged();
+            timer.record_time("mark_all");
         }
+
+        // Propagate damage flags (from mutation and restyles) up and down the tree
+        self.propagate_damage_flags(root_node_id);
+        timer.record_time("damage");
 
         // Fix up tree for layout (insert anonymous blocks as necessary, etc)
         self.resolve_layout_children();
+        #[cfg(debug_assertions)]
+        self.assert_layout_parents_consistent();
         timer.record_time("construct");
 
         self.resolve_deferred_tasks();
@@ -96,25 +108,26 @@ impl BaseDocument {
         self.flush_pending_style_images();
         timer.record_time("pconstruct");
 
-        // Merge stylo into taffy
-        self.flush_styles_to_layout(root_node_id);
-        timer.record_time("flush");
-
         // Next we resolve layout with the data resolved by stlist
         self.resolve_layout();
         timer.record_time("layout");
+        self.nodes.bump_geometry_generation();
 
         // Resolve transforms
         self.resolve_transforms(root_node_id);
         timer.record_time("transform");
 
+        // Build paint children / stacking contexts for damaged subtrees. Runs
+        // after layout and transforms so that stacking-context roots created by
+        // this frame's transforms are picked up, and before damage is cleared.
+        self.build_paint_tree(root_node_id);
+        timer.record_time("paint_tree");
+
         // Clear all damage and dirty flags, walking only subtrees which are
         // marked as (potentially) containing damage.
-        if self.incremental_layout {
-            let doc_node_id = self.root_node().id;
-            self.clear_damage_and_dirty_flags(doc_node_id);
-            timer.record_time("c_damage");
-        }
+        let doc_node_id = self.root_node().id;
+        self.clear_damage_and_dirty_flags(doc_node_id);
+        timer.record_time("c_damage");
 
         // Re-resolve the hover node from the pointer position against the fresh
         // layout. This must run *after* the damage/dirty flags are cleared
@@ -160,15 +173,24 @@ impl BaseDocument {
             return Rect::ZERO;
         }
 
+        let scale = self.viewport.scale_f64();
+
         if !self.nodes[node_id]
             .damage()
             .map(|d| d.contains(style::selector_parser::RestyleDamage::RECALCULATE_OVERFLOW))
             .unwrap_or(false)
         {
-            return *self.nodes[node_id].scrollable_overflow();
-        }
+            let node = &self.nodes[node_id];
+            let location = node.final_layout().location.map(|v| v as f64 * scale);
 
-        let scale = self.viewport.scale_f64();
+            let mut transform = Affine::translate((location.x, location.y));
+            if let Some(t) = node.transform().as_deref() {
+                transform *= *t
+            }
+
+            let overflow = *node.scrollable_overflow();
+            return transform.transform_rect_bbox(overflow);
+        }
 
         let transform = self.nodes[node_id].set_transform(scale as f32);
 
@@ -180,16 +202,32 @@ impl BaseDocument {
 
         if let Some(ref children) = layout_children {
             for &child_id in children {
+                // Out-of-flow children are laid out relative to their containing
+                // block, not their DOM parent: they are visited (and their overflow
+                // accounted for) via the containing block's hoisted list below.
+                if self.nodes[child_id].is_out_of_flow() {
+                    continue;
+                }
                 let child_rect_in_self = self.resolve_transforms(child_id);
                 overflow = overflow.union(child_rect_in_self);
             }
         }
-        if let Some(before) = self.nodes[node_id].before() {
-            let child_rect_in_self = self.resolve_transforms(before);
+        let hoisted_children =
+            std::mem::take(&mut *self.nodes[node_id].hoisted_children.borrow_mut());
+        for &child_id in &hoisted_children {
+            if !self.nodes.contains_key(child_id) {
+                continue;
+            }
+            let child_rect_in_self = self.resolve_transforms(child_id);
             overflow = overflow.union(child_rect_in_self);
         }
-        if let Some(after) = self.nodes[node_id].after() {
-            let child_rect_in_self = self.resolve_transforms(after);
+        *self.nodes[node_id].hoisted_children.borrow_mut() = hoisted_children;
+        for pseudo in [self.nodes[node_id].before(), self.nodes[node_id].after()] {
+            let Some(pseudo) = pseudo else { continue };
+            if self.nodes[pseudo].is_out_of_flow() {
+                continue;
+            }
+            let child_rect_in_self = self.resolve_transforms(pseudo);
             overflow = overflow.union(child_rect_in_self);
         }
 
@@ -222,7 +260,7 @@ impl BaseDocument {
             let mut damage = doc.nodes[node_id].damage().unwrap_or(ALL_DAMAGE);
             let _flags = doc.nodes[node_id].flags;
 
-            if !doc.incremental_layout || damage.intersects(CONSTRUCT_FC | CONSTRUCT_BOX) {
+            if damage.intersects(CONSTRUCT_FC | CONSTRUCT_BOX) {
                 //} || flags.contains(NodeFlags::IS_INLINE_ROOT) {
 
                 // Deallocate the anonymous blocks created for this node in the
@@ -244,7 +282,7 @@ impl BaseDocument {
                     resolve_layout_children_recursive(doc, child_id);
                     doc.nodes[child_id].layout_parent.set(Some(node_id));
                     if let Some(mut data) = doc.nodes[child_id]
-                        .stylo_element_data_opt_mut()
+                        .try_stylo_element_data_mut()
                         .and_then(|s| s.get_mut())
                     {
                         data.damage
@@ -279,6 +317,33 @@ impl BaseDocument {
             }
 
             doc.nodes[node_id].set_damage(damage);
+        }
+    }
+
+    /// Every layout child must point back at its container via
+    /// `layout_parent`, which `propagate_damage_flags` relies on to reach
+    /// anonymous boxes.
+    #[cfg(debug_assertions)]
+    fn assert_layout_parents_consistent(&self) {
+        use crate::node::NodeFlags;
+
+        for (parent_id, node) in self.nodes.iter() {
+            if !node.flags.contains(NodeFlags::IS_IN_DOCUMENT) {
+                continue;
+            }
+            let Some(children) = node.layout_children.borrow().clone() else {
+                continue;
+            };
+            for child_id in children {
+                let Some(child) = self.nodes.get(child_id) else {
+                    panic!("layout child {child_id:?} of {parent_id:?} is not in the slab");
+                };
+                debug_assert_eq!(
+                    child.layout_parent.get(),
+                    Some(parent_id),
+                    "layout_parent of {child_id:?} does not point at its layout container {parent_id:?}"
+                );
+            }
         }
     }
 
@@ -349,7 +414,7 @@ impl BaseDocument {
         for result in results {
             match result.data {
                 ConstructionTaskResultData::InlineLayout(layout) => {
-                    self.nodes[result.node_id].cache_mut().clear();
+                    self.nodes[result.node_id].clear_layout_cache();
                     self.nodes[result.node_id]
                         .element_data_mut()
                         .unwrap()
@@ -377,8 +442,21 @@ impl BaseDocument {
 
         // println!("\n\nRESOLVE LAYOUT\n===========\n");
 
-        taffy::compute_root_layout(self, root_element_id, available_space);
-        taffy::round_layout(self, root_element_id);
+        let mut state = LayoutPassState::new(self);
+        #[cfg(feature = "writing-mode")]
+        let available_space = {
+            state.layout_wm = state.layout_wm_of(crate::dom_node_id(root_element_id));
+            if state.layout_wm.is_vertical() {
+                available_space.transpose()
+            } else {
+                available_space
+            }
+        };
+        taffy::compute_root_layout(&mut state, root_element_id, available_space);
+        #[cfg(feature = "writing-mode")]
+        state.physicalise_and_round_layout(root_element_id);
+        #[cfg(not(feature = "writing-mode"))]
+        taffy::round_layout(&mut state, root_element_id);
 
         // println!("\n\n");
         // taffy::print_tree(self, root_node_id)

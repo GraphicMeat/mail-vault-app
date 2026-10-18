@@ -95,8 +95,7 @@ fn media_list_text(doc: &BaseDocument, style: NodeId, attr: &str) -> Option<Stri
         None,
         Default::default(),
     );
-    let mut input = cssparser::ParserInput::new(attr);
-    let list = MediaList::parse(&mut context, &mut cssparser::Parser::new(&mut input));
+    let list = MediaList::parse(&mut context, &mut cssparser::Parser::new(attr));
     let text = list.to_css_string();
     (!text.is_empty()).then_some(text)
 }

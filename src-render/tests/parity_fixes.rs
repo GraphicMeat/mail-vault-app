@@ -921,8 +921,7 @@ fn a_collapsed_table_border_paints_one_css_px_in_its_colour() {
 /// table): nothing darker than #ccc anywhere and nothing outside the table's box. This is a
 /// characterization test: it passes on the code before the border fix too, because a first
 /// cell with a real 1px border already painted a 1px #ccc ring (the 3px dark frame needed a
-/// borderless first cell). It guards the fix against regressing that shape. The painter's
-/// misplaced outer lines are pinned by the KNOWN RESIDUE tests below.
+/// borderless first cell). It guards the fix against regressing that shape.
 #[test]
 fn collapsed_cell_borders_paint_in_their_colour_inside_the_table_box() {
     for scale in [1.0f32, 2.0] {
@@ -935,10 +934,9 @@ fn collapsed_cell_borders_paint_in_their_colour_inside_the_table_box() {
         let outside = img.pixels_where(|x, y, p| !(x >= x0 && x < x1 && y >= y0 && y < y1) && !near(p, WHITE), 8);
         assert!(dark.is_empty(), "scale {scale}: darker than #ccc {dark:?}");
         assert!(outside.is_empty(), "scale {scale}: table box {:?}, pixels outside it {outside:?}", img.rect);
-        // The top and left lines are one CSS px of #ccc. They stop short of the far end (the paint
-        // code measures them from the track area, not the border box): the last column and row
-        // stay white (pinned by the residue test below), and they are solid up to two borders
-        // from that end, which is what is asserted here.
+        // The top and left lines are one CSS px of #ccc, solid at least up to two borders from
+        // the far end (they reach it with blitz-paint beta.4, see
+        // `collapsed_cell_borders_ring_the_table_box_on_its_outermost_pixels`).
         let band = scale as u32;
         assert!((x0..x1 - 2 * band).all(|x| (0..band).all(|d| near(img.px(x, y0 + d), CCC))), "scale {scale}: top line");
         assert!((y0..y1 - 2 * band).all(|y| (0..band).all(|d| near(img.px(x0 + d, y), CCC))), "scale {scale}: left line");
@@ -975,16 +973,13 @@ fn collapsed_row_separators_paint_in_their_colour() {
 
 const ROW_SEPARATORS: &str = r#"<style>td{border-bottom:1px solid #ddd}</style><table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:10px"></td><td></td></tr><tr><td style="height:10px"></td><td></td></tr><tr><td style="height:10px"></td><td></td></tr></table>"#;
 
-/// KNOWN RESIDUE (blitz-paint, unvendored): `draw_table_borders` measures the outer lines from
-/// the track area instead of the table's border box, and draws each of them with the first
-/// cell's values. Today, with `td { border: 1px solid #ccc }` (WKWebView: the ring lies on the
-/// outermost pixels of the box, e.g. columns 0 and 99 of a 100px table):
-///  - the right and bottom lines sit one border width inside the box, leaving the last
-///    `scale` px column and row white;
-///  - the top and left lines stop one border width short of the far end.
-/// A painter fix flips these assertions: move the lines to the box edge and update them.
+/// Collapsed cell borders (`td { border: 1px solid #ccc }`) ring the table on the outermost
+/// pixels of its box, as in WKWebView (columns 0 and 99 of a 100px table). blitz-paint beta.2
+/// measured the outer lines from the track area, so the right and bottom lines sat one border
+/// inside the box and the top and left lines stopped one short of the far end; beta.4 lays the
+/// collapsed outer border out as the table's border and paints it there.
 #[test]
-fn known_residue_cell_borders_outer_lines_are_inset() {
+fn collapsed_cell_borders_ring_the_table_box_on_its_outermost_pixels() {
     for scale in [1.0f32, 2.0] {
         let img = paint_table(
             r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px"><tr><td style="height:20px;border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr></table>"#,
@@ -993,24 +988,21 @@ fn known_residue_cell_borders_outer_lines_are_inset() {
         let (x0, y0, x1, y1) = img.rect;
         let b = scale as u32;
         let (mid_x, mid_y) = (x0 + (x1 - x0) / 4, y0 + (y1 - y0) / 2);
-        // Right line one border inside; the box's last column is white.
-        assert!((0..b).all(|d| near(img.px(x1 - 2 * b + d, mid_y), CCC)), "scale {scale}: right line at [x1 - 2b, x1 - b)");
-        assert!((0..b).all(|d| near(img.px(x1 - b + d, mid_y), WHITE)), "scale {scale}: last column white");
-        // Bottom line one border inside; the box's last row is white.
-        assert!((0..b).all(|d| near(img.px(mid_x, y1 - 2 * b + d), CCC)), "scale {scale}: bottom line at [y1 - 2b, y1 - b)");
-        assert!((0..b).all(|d| near(img.px(mid_x, y1 - b + d), WHITE)), "scale {scale}: last row white");
-        // The top line misses the last column of the box, the left line the last row.
-        assert!(near(img.px(x1 - b, y0), WHITE), "scale {scale}: top line stops short of the last column");
-        assert!(near(img.px(x0, y1 - b), WHITE), "scale {scale}: left line stops short of the last row");
+        assert!((0..b).all(|d| near(img.px(x1 - b + d, mid_y), CCC)), "scale {scale}: right line on the last column");
+        assert!(near(img.px(x1 - b - 1, mid_y), WHITE), "scale {scale}: one line thick on the right");
+        assert!((0..b).all(|d| near(img.px(mid_x, y1 - b + d), CCC)), "scale {scale}: bottom line on the last row");
+        assert!(near(img.px(mid_x, y1 - b - 1), WHITE), "scale {scale}: one line thick at the bottom");
+        assert!(near(img.px(x1 - b, y0), CCC), "scale {scale}: the top line reaches the last column");
+        assert!(near(img.px(x0, y1 - b), CCC), "scale {scale}: the left line reaches the last row");
     }
 }
 
-/// KNOWN RESIDUE (blitz-paint, unvendored): with a table border and cell borders both
-/// (`border: 1px solid #ccc` on the table and on its cells), the table's own box border is
-/// drawn on the box's outermost pixels and the painter's ring a border inside it, so the
-/// right and bottom edges are two `scale` px thick where WKWebView draws one.
+/// A table border and cell borders both (`border: 1px solid #ccc` on the table and on its
+/// cells) under `border-collapse: collapse` draw one line on every edge, as WKWebView does.
+/// blitz-paint beta.2 drew the table's own box border on the box's outermost pixels and the
+/// collapsed ring a border inside it, two lines thick on the right and the bottom.
 #[test]
-fn known_residue_table_plus_cell_borders_draw_a_double_line() {
+fn collapsed_table_and_cell_borders_draw_one_line_per_edge() {
     for scale in [1.0f32, 2.0] {
         let img = paint_table(
             r#"<table data-mv-id="t" style="border-collapse:collapse;width:100px;border:1px solid #ccc"><tr><td style="height:20px;border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr></table>"#,
@@ -1019,9 +1011,8 @@ fn known_residue_table_plus_cell_borders_draw_a_double_line() {
         let (x0, y0, x1, y1) = img.rect;
         let b = scale as u32;
         let (mid_x, mid_y) = (x0 + (x1 - x0) / 4, y0 + (y1 - y0) / 2);
-        assert!((0..2 * b).all(|d| near(img.px(x1 - 2 * b + d, mid_y), CCC)), "scale {scale}: right edge is 2 borders thick");
-        assert!((0..2 * b).all(|d| near(img.px(mid_x, y1 - 2 * b + d), CCC)), "scale {scale}: bottom edge is 2 borders thick");
-        // The left and top edges are single lines.
+        assert!((0..b).all(|d| near(img.px(x1 - b + d, mid_y), CCC)) && near(img.px(x1 - b - 1, mid_y), WHITE), "scale {scale}: right edge");
+        assert!((0..b).all(|d| near(img.px(mid_x, y1 - b + d), CCC)) && near(img.px(mid_x, y1 - b - 1), WHITE), "scale {scale}: bottom edge");
         assert!(near(img.px(x0, mid_y), CCC) && near(img.px(x0 + b, mid_y), WHITE), "scale {scale}: left edge");
         assert!(near(img.px(mid_x, y0), CCC) && near(img.px(mid_x, y0 + b), WHITE), "scale {scale}: top edge");
     }

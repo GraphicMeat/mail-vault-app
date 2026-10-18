@@ -175,10 +175,18 @@ pub fn compute_replaced_layout(
         },
         (None, None) => match intrinsic_ratio {
             Some(ratio) => {
-                if let AvailableSpace::Definite(available_width) = available_space.width {
+                // A ratio-only replaced element stretches to fit the width it is laid out
+                // in: the available width if definite, else (under a max-content constraint)
+                // its containing block, per CSS2 §10.3.2.
+                let stretch_fit_width = match available_space.width {
+                    AvailableSpace::Definite(width) => Some(width),
+                    AvailableSpace::MaxContent => parent_size.width,
+                    AvailableSpace::MinContent => None,
+                };
+                if let Some(width) = stretch_fit_width {
                     Size {
-                        width: available_width,
-                        height: available_width / ratio,
+                        width,
+                        height: width / ratio,
                     }
                 } else {
                     // Contain within the default object size
@@ -193,6 +201,7 @@ pub fn compute_replaced_layout(
         },
     };
 
+    // Percentages are only resolved against zero in the inline axis.
     // See https://www.w3.org/TR/css-sizing-3/#replaced-percentage-min-contribution
     let basis_for_max_and_preferred = Size {
         width: if available_space.width == AvailableSpace::MinContent {
@@ -200,18 +209,43 @@ pub fn compute_replaced_layout(
         } else {
             parent_size.width
         },
-        height: if available_space.height == AvailableSpace::MinContent {
-            Some(0.0)
-        } else {
-            parent_size.height
-        },
+        height: parent_size.height,
+    };
+
+    // `stretch` fills the containing block (less margins) when its size is definite, and
+    // behaves as `auto` otherwise. The content size can't be negative.
+    // See https://drafts.csswg.org/css-sizing-4/#stretch-fit-sizing
+    let margin = style
+        .margin()
+        .resolve_or_zero(parent_size.width, &resolve_calc_value);
+    let stretch_size = Size {
+        width: parent_size
+            .width
+            .filter(|_| available_space.width.is_definite())
+            .map(|width| (width - margin.horizontal_axis_sum() - pb_sum.width).max(0.0)),
+        height: parent_size
+            .height
+            .filter(|_| available_space.height.is_definite())
+            .map(|height| (height - margin.vertical_axis_sum() - pb_sum.height).max(0.0)),
     };
 
     // Resolve sizes
-    let style_size = style
-        .size()
+    let size_style = style.size();
+    let style_size = size_style
         .maybe_resolve(basis_for_max_and_preferred, &resolve_calc_value)
         .maybe_sub(box_sizing_adjustment);
+    let style_size = Size {
+        width: if size_style.width.is_stretch() {
+            stretch_size.width
+        } else {
+            style_size.width
+        },
+        height: if size_style.height.is_stretch() {
+            stretch_size.height
+        } else {
+            style_size.height
+        },
+    };
     let mut min_size = style
         .min_size()
         .maybe_resolve(parent_size, &resolve_calc_value)
@@ -219,8 +253,6 @@ pub fn compute_replaced_layout(
     let max_size = style
         .max_size()
         .maybe_resolve(basis_for_max_and_preferred, &resolve_calc_value)
-        .or(available_space.into_options())
-        .maybe_min(available_space.into_options())
         .maybe_max(min_size)
         .maybe_sub(box_sizing_adjustment);
 
@@ -395,4 +427,13 @@ pub fn compute_replaced_layout(
     };
 
     LayoutOutput::from_sizes(size + pb_sum, overflow_rect_for(size))
+}
+
+/// Inline-level elements that are laid out as atomic inline boxes (with their own
+/// layout box) rather than being flattened into the surrounding text layout.
+pub(crate) fn is_inline_box_element(tag_name: &LocalName) -> bool {
+    is_replaced_element(tag_name)
+        || *tag_name == local_name!("input")
+        || *tag_name == local_name!("textarea")
+        || *tag_name == local_name!("button")
 }

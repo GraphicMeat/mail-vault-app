@@ -10,7 +10,7 @@ use crate::StyleThreading;
 use crate::layout::damage::compute_layout_damage;
 use crate::node::Node;
 use crate::node::NodeData;
-use markup5ever::{LocalName, LocalNameStaticSet, Namespace, NamespaceStaticSet, local_name};
+use markup5ever::{LocalName, LocalNameStaticSet, Namespace, NamespaceStaticSet, local_name, ns};
 use selectors::bloom::BLOOM_HASH_MASK;
 use selectors::{
     Element, OpaqueElement,
@@ -35,12 +35,12 @@ use style::selector_parser::RestyleDamage;
 use style::stylesheets::layer_rule::LayerOrder;
 use style::stylesheets::scope_rule::ImplicitScopeRoot;
 use style::values::AtomString;
-use style::values::specified::NoCalcPercentage;
+use style::values::specified::{NoCalcPercentage, XLang};
 use style::{
     Atom,
     context::{
         QuirksMode, RegisteredSpeculativePainter, RegisteredSpeculativePainters,
-        SharedStyleContext, StyleContext,
+        SharedStyleContext, StyleContext, ThreadLocalStyleContext,
     },
     dom::{LayoutIterator, NodeInfo, OpaqueNode, TDocument, TElement, TNode, TShadowRoot},
     global_style_data::GLOBAL_STYLE_DATA,
@@ -48,8 +48,9 @@ use style::{
     selector_parser::{NonTSPseudoClass, SelectorImpl},
     servo_arc::{Arc, ArcBorrow},
     shared_lock::{Locked, SharedRwLock, StylesheetGuards},
+    stylist::RuleInclusion,
     thread_state::ThreadState,
-    traversal::{DomTraversal, PerLevelTraversalData},
+    traversal::{DomTraversal, resolve_style},
     traversal_flags::TraversalFlags,
     values::{AtomIdent, GenericAtomIdent},
 };
@@ -180,6 +181,50 @@ impl crate::document::BaseDocument {
         self.stylist.rule_tree().maybe_gc();
 
         style::thread_state::exit(ThreadState::LAYOUT);
+    }
+
+    /// Compute the style of an element which the regular style traversal
+    /// skipped because it lives inside a `display: none` subtree.
+    ///
+    /// The style traversal culls `display: none` subtrees, so such elements
+    /// never have styles stored on them, but `getComputedStyle()` must still
+    /// return their computed values. This resolves the style on demand
+    /// (styling any unstyled ancestors along the way) without storing it on the
+    /// node. Returns `None` for non-elements and elements outside the document.
+    pub fn resolve_undisplayed_style(&self, node_id: NodeId) -> Option<Arc<ComputedValues>> {
+        let node = self.nodes.get(node_id)?;
+        if !node.is_element() || !node.flags.is_in_document() {
+            return None;
+        }
+
+        style::thread_state::enter(ThreadState::LAYOUT);
+
+        let guard = &self.guard;
+        let guards = StylesheetGuards {
+            author: &guard.read(),
+            ua_or_user: &guard.read(),
+        };
+        let shared = SharedStyleContext {
+            traversal_flags: TraversalFlags::empty(),
+            stylist: &self.stylist,
+            options: GLOBAL_STYLE_DATA.options.clone(),
+            guards,
+            visited_styles_enabled: false,
+            animations: self.animations.clone(),
+            current_time_for_animations: 0.0,
+            snapshot_map: &self.snapshots,
+            registered_speculative_painters: &RegisteredPaintersImpl,
+        };
+        let mut thread_local = ThreadLocalStyleContext::new();
+        let mut context = StyleContext {
+            shared: &shared,
+            thread_local: &mut thread_local,
+        };
+        let styles = resolve_style(&mut context, node, RuleInclusion::All, None, None);
+
+        style::thread_state::exit(ThreadState::LAYOUT);
+
+        Some(styles.primary().clone())
     }
 }
 
@@ -394,14 +439,21 @@ impl selectors::Element for BlitzNode<'_> {
 
     fn attr_matches(
         &self,
-        _ns: &NamespaceConstraint<&GenericAtomIdent<NamespaceStaticSet>>,
+        ns: &NamespaceConstraint<&GenericAtomIdent<NamespaceStaticSet>>,
         local_name: &GenericAtomIdent<LocalNameStaticSet>,
         operation: &AttrSelectorOperation<&AtomString>,
     ) -> bool {
-        match self.data.attr(local_name.0.clone()) {
-            None => false,
-            Some(attr_value) => operation.eval_str(attr_value),
-        }
+        let Some(attrs) = self.data.attrs() else {
+            return false;
+        };
+        attrs.iter().any(|attr| {
+            attr.name.local == local_name.0
+                && match ns {
+                    NamespaceConstraint::Any => true,
+                    NamespaceConstraint::Specific(ns) => attr.name.ns == ns.0,
+                }
+                && operation.eval_str(&attr.value)
+        })
     }
 
     fn match_non_ts_pseudo_class(
@@ -458,7 +510,7 @@ impl selectors::Element for BlitzNode<'_> {
         pe: &PseudoElement,
         _context: &mut MatchingContext<Self::Impl>,
     ) -> bool {
-        let pseudo = match self.stylo_element_data_opt().and_then(|s| s.get()) {
+        let pseudo = match self.try_stylo_element_data().and_then(|s| s.get()) {
             Some(el) => el
                 .styles
                 .get_primary()
@@ -671,9 +723,14 @@ impl<'a> TElement for BlitzNode<'a> {
         self.snapshot_handled().store(true, Ordering::SeqCst);
     }
 
+    // Stylo calls this on elements it is already traversing (or has already
+    // reached via invalidation), so the ancestor chain must not be re-marked:
+    // ancestors visited earlier in the preorder traversal have had their bits
+    // cleared, and re-flagging them leaves stale `dirty_descendants` bits that
+    // break the early-out invariant of `Node::mark_ancestors_dirty` (a set bit
+    // implies all ancestors are set).
     unsafe fn set_dirty_descendants(&self) {
         Node::set_dirty_descendants(self);
-        Node::mark_ancestors_dirty(self);
     }
 
     unsafe fn unset_dirty_descendants(&self) {
@@ -699,11 +756,11 @@ impl<'a> TElement for BlitzNode<'a> {
     }
 
     fn has_data(&self) -> bool {
-        self.stylo_element_data_opt().is_some_and(|s| s.has_data())
+        self.try_stylo_element_data().is_some_and(|s| s.has_data())
     }
 
     fn borrow_data(&self) -> Option<ElementDataRef<'_>> {
-        self.stylo_element_data_opt().and_then(|s| s.get())
+        self.try_stylo_element_data().and_then(|s| s.get())
     }
 
     fn mutate_data(&self) -> Option<ElementDataMut<'_>> {
@@ -772,10 +829,12 @@ impl<'a> TElement for BlitzNode<'a> {
         None
     }
 
-    fn get_attr(&self, attr: &style::LocalName, _ns: &style::Namespace) -> Option<String> {
-        // TODO: filter by namespace
+    fn get_attr(&self, attr: &style::LocalName, ns: &style::Namespace) -> Option<String> {
         // TODO: case-insensitive matching for HTML-ns attrs
-        self.attr(attr.0.clone()).map(|s| s.to_string())
+        self.attrs()?
+            .iter()
+            .find(|a| a.name.local == attr.0 && a.name.ns == ns.0)
+            .map(|a| a.value.clone())
     }
 
     fn lang_attr(&self) -> Option<style::selector_parser::AttrValue> {
@@ -947,9 +1006,21 @@ impl<'a> TElement for BlitzNode<'a> {
                 attr.name.local == local_name!("type") && attr.value.eq_ignore_ascii_case("image")
             });
 
+        // https://html.spec.whatwg.org/multipage/#the-lang-and-xml:lang-attributes
+        let accepts_lang = elem.name.ns == ns!(html) || elem.name.ns == ns!(svg);
+        let mut lang = None;
+
         for attr in elem.attrs() {
             let name = &attr.name.local;
             let value = attr.value.as_str();
+
+            if *name == local_name!("lang") {
+                if attr.name.ns == ns!(xml) {
+                    lang = Some(value);
+                } else if attr.name.ns == ns!() && accepts_lang {
+                    lang = lang.or(Some(value));
+                }
+            }
 
             if *name == local_name!("align") && *tag == local_name!("table") {
                 // MailVault parity fix (plan B): table[align=center] centres the table
@@ -1263,6 +1334,10 @@ impl<'a> TElement for BlitzNode<'a> {
             }
         }
 
+        if let Some(lang) = lang {
+            push_style(PropertyDeclaration::XLang(XLang(Atom::from(lang))));
+        }
+
         if *tag == local_name!("td") || *tag == local_name!("th") {
             // MailVault parity fix (plan B): a table with a non-zero border attribute
             // gives each of its cells a 1px inset border (unless rules governs them)
@@ -1412,7 +1487,6 @@ impl<'a> RecalcStyle<'a> {
 impl<'dom> DomTraversal<BlitzNode<'dom>> for RecalcStyle<'_> {
     fn process_preorder<F: FnMut(BlitzNode<'dom>)>(
         &self,
-        traversal_data: &PerLevelTraversalData,
         context: &mut StyleContext<BlitzNode<'dom>>,
         node: BlitzNode<'dom>,
         note_child: F,
@@ -1420,7 +1494,7 @@ impl<'dom> DomTraversal<BlitzNode<'dom>> for RecalcStyle<'_> {
         if let Some(el) = node.as_element() {
             // let mut data = el.mutate_data().unwrap();
             let mut data = unsafe { el.ensure_data() };
-            recalc_style_at(self, traversal_data, context, el, &mut data, note_child);
+            recalc_style_at(self, context, el, &mut data, note_child);
 
             sync_pseudo_element_styles(el, &data, &self.nodes_needing_style_image_flush);
 
@@ -1511,7 +1585,7 @@ fn sync_pseudo_element_styles(
             continue;
         };
         let pe_node = el.with(pe_node_id);
-        let Some(stylo_data) = pe_node.stylo_element_data_opt() else {
+        let Some(stylo_data) = pe_node.try_stylo_element_data() else {
             continue;
         };
         let mut pe_data = match unsafe { stylo_data.unsafe_stylo_only_mut() } {

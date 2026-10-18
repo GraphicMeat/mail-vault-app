@@ -1,16 +1,16 @@
 //! Layout-text byte -> DOM position, for one inline root.
 //!
 //! Replays the push order of blitz-dom's `build_inline_layout_into`
-//! (blitz-dom 0.3.0-beta.2 as vendored in src-render/vendor/blitz-dom,
+//! (blitz-dom 0.3.0-beta.4 as vendored in src-render/vendor/blitz-dom,
 //! src/layout/construct.rs, MIT OR Apache-2.0): list marker, ::before, children
 //! (recursing into inline-flow elements and `display: contents`, skipping
 //! display:none, hidden inputs and comments, atomic inline boxes carrying no
-//! text), `<br>` as "\n", ::after; text pushed case-transformed, with plan B's
-//! two vendored changes: the collapsible spaces that end a text right before a
-//! `<br>` are dropped (`precedes_forced_break`), and an edge no-break space gets
-//! a word joiner on its outer side (`push_text_keeping_nbsp`); a joiner maps to
+//! text), `<br>` as "\n" in a preserving span, ::after; text pushed case-transformed,
+//! with plan B's two vendored changes: the collapsible spaces that end a text right
+//! before a `<br>` are dropped (`precedes_forced_break`), and an edge no-break space
+//! gets a word joiner on its outer side (`push_text_keeping_nbsp`); a joiner maps to
 //! the DOM text's edge with no width. The pushes then go through a model of parley
-//! 0.11.1's `TreeStyleBuilder` (src/resolve/tree.rs), which decides what
+//! 0.12's `TreeStyleBuilder` (src/resolve/tree.rs, src/builder.rs), which decides what
 //! whitespace survives into `TextLayout.text`, so the model's output can be
 //! compared char for char with the layout text. A match gives every layout
 //! char its DOM source; any difference makes the root degrade to element
@@ -51,91 +51,113 @@ enum Case {
 
 type Pushed = Vec<(char, Src)>;
 
-/// parley's `TreeStyleBuilder`, reduced to what decides the text it keeps:
-/// text accumulates uncommitted and is committed (whitespace collapsed and
-/// trimmed under the mode current at that moment) whenever a span opens or
-/// closes or an in-flow inline box is pushed.
+/// The white-space-collapse of a span, as blitz-dom hands it to parley.
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Collapse,
+    PreserveBreaks,
+    Preserve,
+}
+
+impl Mode {
+    /// Whitespace this mode collapses (parley's `WhiteSpaceCollapse::is_collapsible`).
+    fn collapsible(self, c: char) -> bool {
+        match self {
+            Mode::Collapse => c.is_ascii_whitespace(),
+            Mode::PreserveBreaks => matches!(c, ' ' | '\t'),
+            Mode::Preserve => false,
+        }
+    }
+}
+
+fn mode_of(s: &ComputedValues) -> Mode {
+    match s.clone_white_space_collapse() {
+        Wsc::Collapse => Mode::Collapse,
+        Wsc::PreserveBreaks => Mode::PreserveBreaks,
+        // parley's Preserve and BreakSpaces process whitespace the same way.
+        Wsc::Preserve | Wsc::BreakSpaces => Mode::Preserve,
+    }
+}
+
+/// A char parley treats as a forced line break when it is preserved.
+fn is_segment_break(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}')
+}
+
+/// parley 0.12's `TreeStyleBuilder`, reduced to what decides the text it keeps:
+/// a run of collapsible whitespace becomes one pending space (attributed to its
+/// first char) that is committed only when content follows it in the same inline
+/// formatting context, across span boundaries; it is dropped at the start of the
+/// context, after a preserved segment break, right before one, and at the end. Only
+/// an in-flow inline box flushes it.
 struct Sim {
-    collapse: bool,
     committed: Pushed,
-    pending: Pushed,
-    span_first: bool,
-    last_was_text: bool,
-    depth: usize,
+    pending: Option<Src>,
+    last_item_is_inline_box: bool,
 }
 
 impl Sim {
-    fn new(collapse: bool) -> Self {
-        Sim { collapse, committed: Vec::new(), pending: Vec::new(), span_first: true, last_was_text: false, depth: 0 }
+    fn new() -> Self {
+        Sim { committed: Vec::new(), pending: None, last_item_is_inline_box: false }
     }
 
-    fn push(&mut self, chars: impl IntoIterator<Item = (char, Src)>) {
-        self.pending.extend(chars);
+    fn commit(&mut self, c: char, src: Src) {
+        self.committed.push((c, src));
+        self.last_item_is_inline_box = false;
     }
 
-    fn commit(&mut self, span_last: bool) {
-        let mut text = std::mem::take(&mut self.pending);
-        if self.collapse {
-            // `str::trim_start` / `trim_end` use Unicode White_Space; the collapse
-            // below is ASCII only, exactly as parley does it.
-            let after_space = self.last_was_text && self.committed.last().is_some_and(|(c, _)| c.is_ascii_whitespace());
-            if self.span_first || after_space {
-                let lead = text.iter().take_while(|(c, _)| c.is_whitespace()).count();
-                text.drain(..lead);
-            }
-            if span_last {
-                while text.last().is_some_and(|(c, _)| c.is_whitespace()) {
-                    text.pop();
-                }
-            }
-            let mut prev_ws = false;
-            text = text
-                .into_iter()
-                .filter_map(|(c, src)| {
-                    let ws = c.is_ascii_whitespace();
-                    let dup = ws && prev_ws;
-                    prev_ws = ws;
-                    match (ws, dup) {
-                        (_, true) => None,
-                        (true, false) => Some((' ', src)),
-                        (false, _) => Some((c, src)),
-                    }
-                })
-                .collect();
-        }
-        if text.is_empty() {
+    fn flush_pending(&mut self) {
+        let Some(src) = self.pending.take() else { return };
+        let at_start = self.committed.is_empty() && !self.last_item_is_inline_box;
+        if at_start || self.committed.last().is_some_and(|(c, _)| is_segment_break(*c)) {
             return;
         }
-        self.committed.extend(text);
-        self.span_first = false;
-        self.last_was_text = true;
+        self.commit(' ', src);
     }
 
-    fn push_span(&mut self) {
-        self.commit(false);
-        self.span_first = true;
-        self.depth += 1;
+    fn push(&mut self, chars: Pushed, mode: Mode) {
+        if chars.is_empty() {
+            return;
+        }
+        if mode == Mode::Preserve {
+            if is_segment_break(chars[0].0) {
+                self.pending = None;
+            }
+            self.flush_pending();
+            for (c, src) in chars {
+                self.commit(c, src);
+            }
+            return;
+        }
+        let mut i = 0;
+        while i < chars.len() {
+            let (c, src) = chars[i];
+            if mode.collapsible(c) {
+                self.pending.get_or_insert(src);
+                i += 1;
+            } else if is_segment_break(c) {
+                self.pending = None;
+                self.commit(c, src);
+                i += 1;
+            } else {
+                self.flush_pending();
+                while i < chars.len() && !mode.collapsible(chars[i].0) && !is_segment_break(chars[i].0) {
+                    self.commit(chars[i].0, chars[i].1);
+                    i += 1;
+                }
+            }
+        }
     }
 
-    fn pop_span(&mut self) {
-        self.commit(true);
-        self.depth = self.depth.saturating_sub(1);
-    }
-
-    /// Only in-flow boxes end a text run; out-of-flow ones leave it open.
+    /// Only in-flow boxes flush pending whitespace; out-of-flow ones leave it pending.
     fn inline_box(&mut self, in_flow: bool) {
         if in_flow {
-            self.commit(false);
-            self.span_first = false;
-            self.last_was_text = false;
+            self.flush_pending();
+            self.last_item_is_inline_box = true;
         }
     }
 
-    fn finish(mut self) -> Pushed {
-        while self.depth > 0 {
-            self.pop_span();
-        }
-        self.commit(true);
+    fn finish(self) -> Pushed {
         self.committed
     }
 }
@@ -153,8 +175,8 @@ pub(crate) fn pseudo_owner(doc: &BaseDocument, id: NodeId) -> Option<(NodeId, bo
     }
 }
 
+/// Whether `s` collapses spaces and newlines alike (`white-space-collapse: collapse`).
 pub(crate) fn collapses(s: &ComputedValues) -> bool {
-    // blitz maps PreserveBreaks and BreakSpaces to parley's Preserve.
     matches!(s.clone_white_space_collapse(), Wsc::Collapse)
 }
 
@@ -261,11 +283,10 @@ fn is_atomic_tag(tag: &str) -> bool {
     matches!(tag, "img" | "svg" | "canvas" | "video" | "embed" | "iframe" | "input" | "textarea" | "button")
 }
 
-fn rec(doc: &BaseDocument, sim: &mut Sim, id: NodeId, collapse_in: bool, case_in: Case, pseudo: Option<(NodeId, bool)>) {
+fn rec(doc: &BaseDocument, sim: &mut Sim, id: NodeId, mode_in: Mode, case_in: Case, pseudo: Option<(NodeId, bool)>) {
     let Some(node) = doc.get_node(id) else { return };
     let style = node.primary_styles();
-    let collapse = style.as_ref().map(|s| collapses(s)).unwrap_or(collapse_in);
-    sim.collapse = collapse;
+    let mode = style.as_ref().map(|s| mode_of(s)).unwrap_or(mode_in);
     let case = style.as_ref().map(|s| case_of(s)).unwrap_or(Case::None);
     match &node.data {
         NodeData::Element(el) | NodeData::AnonymousBlock(el) => {
@@ -279,7 +300,7 @@ fn rec(doc: &BaseDocument, sim: &mut Sim, id: NodeId, collapse_in: bool, case_in
                 (DisplayOutside::None, DisplayInside::None) => {}
                 (DisplayOutside::None, DisplayInside::Contents) => {
                     for c in node.children.iter().copied() {
-                        rec(doc, sim, c, collapse, case, pseudo);
+                        rec(doc, sim, c, mode, case, pseudo);
                     }
                 }
                 (DisplayOutside::Inline, DisplayInside::Flow) => {
@@ -287,29 +308,23 @@ fn rec(doc: &BaseDocument, sim: &mut Sim, id: NodeId, collapse_in: bool, case_in
                     if is_atomic_tag(tag) {
                         sim.inline_box(in_flow);
                     } else if tag == "br" {
-                        sim.push_span();
-                        sim.collapse = false;
-                        sim.push([('\n', Src::Br { node: id })]);
-                        sim.pop_span();
-                        sim.collapse = collapse;
+                        sim.push(vec![('\n', Src::Br { node: id })], Mode::Preserve);
                     } else {
-                        sim.push_span();
                         if let Some(b) = node.before() {
-                            rec(doc, sim, b, collapse, case, Some((id, false)));
+                            rec(doc, sim, b, mode, case, Some((id, false)));
                         }
                         for c in node.children.iter().copied() {
-                            rec(doc, sim, c, collapse, case, pseudo);
+                            rec(doc, sim, c, mode, case, pseudo);
                         }
                         if let Some(a) = node.after() {
-                            rec(doc, sim, a, collapse, case, Some((id, true)));
+                            rec(doc, sim, a, mode, case, Some((id, true)));
                         }
-                        sim.pop_span();
                     }
                 }
                 _ => sim.inline_box(in_flow),
             }
         }
-        NodeData::Text(t) => sim.push(text_pushes(doc, id, &t.content, collapse, case_in, pseudo)),
+        NodeData::Text(t) => sim.push(text_pushes(doc, id, &t.content, mode == Mode::Collapse, case_in, pseudo), mode_in),
         _ => {}
     }
 }
@@ -318,32 +333,28 @@ fn rec(doc: &BaseDocument, sim: &mut Sim, id: NodeId, collapse_in: bool, case_in
 fn simulate(doc: &BaseDocument, root: NodeId) -> Option<Pushed> {
     let r = doc.get_node(root)?;
     let styles = r.primary_styles().or_else(|| r.parent.and_then(|p| doc.get_node(p)).and_then(|p| p.primary_styles()));
-    let collapse = styles.as_ref().map(|s| collapses(s)).unwrap_or(true);
+    let mode = styles.as_ref().map(|s| mode_of(s)).unwrap_or(Mode::Collapse);
     let case = styles.as_ref().map(|s| case_of(s)).unwrap_or(Case::None);
-    let mut sim = Sim::new(collapse);
+    let mut sim = Sim::new();
     if let Some(li) = r.element_data().and_then(|e| e.list_item_data.as_deref()) {
         if matches!(li.position, ListItemLayoutPosition::Inside) {
             let pseudo = Src::Gen { owner: root, after: false };
-            match &li.marker {
-                // The bullet is pushed in a span of its own, which trims its trailing space.
-                Marker::Char(c) => {
-                    sim.push_span();
-                    sim.push(format!("{c} ").chars().map(|ch| (ch, pseudo)));
-                    sim.pop_span();
-                }
-                Marker::String(s) => sim.push(s.chars().map(|ch| (ch, pseudo))),
-            }
+            let marker = match &li.marker {
+                Marker::Char(c) => format!("{c} "),
+                Marker::String(s) => s.to_string(),
+            };
+            sim.push(marker.chars().map(|ch| (ch, pseudo)).collect(), mode);
         }
     }
     let pseudo0 = pseudo_owner(doc, root);
     if let Some(b) = r.before() {
-        rec(doc, &mut sim, b, collapse, case, Some((root, false)));
+        rec(doc, &mut sim, b, mode, case, Some((root, false)));
     }
     for c in r.children.iter().copied() {
-        rec(doc, &mut sim, c, collapse, case, pseudo0);
+        rec(doc, &mut sim, c, mode, case, pseudo0);
     }
     if let Some(a) = r.after() {
-        rec(doc, &mut sim, a, collapse, case, Some((root, true)));
+        rec(doc, &mut sim, a, mode, case, Some((root, true)));
     }
     Some(sim.finish())
 }
@@ -599,53 +610,75 @@ mod tests {
     }
 
     #[test]
-    fn collapse_trims_the_span_edges_and_keeps_inner_single_spaces() {
-        let mut sim = Sim::new(true);
-        sim.push(text("  a \n\t b  "));
+    fn collapse_trims_the_edges_and_keeps_inner_single_spaces() {
+        let mut sim = Sim::new();
+        sim.push(text("  a \n\t b  "), Mode::Collapse);
         assert_eq!(s(&sim.finish()), "a b");
     }
 
     #[test]
-    fn a_space_between_two_spans_survives_but_a_doubled_one_does_not() {
-        let mut sim = Sim::new(true);
-        sim.push(text("a "));
-        sim.push_span();
-        sim.push(text(" b"));
-        sim.pop_span();
-        sim.push(text(" c"));
+    fn whitespace_collapses_across_pushes_into_one_space() {
+        let mut sim = Sim::new();
+        sim.push(text("a "), Mode::Collapse);
+        sim.push(text(" b"), Mode::Collapse);
+        sim.push(text(" c"), Mode::Collapse);
         assert_eq!(s(&sim.finish()), "a b c");
     }
 
     #[test]
     fn preserve_keeps_everything() {
-        let mut sim = Sim::new(false);
-        sim.push(text("  a \n b  "));
+        let mut sim = Sim::new();
+        sim.push(text("  a \n b  "), Mode::Preserve);
         assert_eq!(s(&sim.finish()), "  a \n b  ");
     }
 
     #[test]
-    fn parley_trims_a_leading_nbsp_but_collapses_only_ascii_whitespace() {
-        let mut sim = Sim::new(true);
-        sim.push(text("\u{a0}a\u{a0}\u{a0}b"));
-        assert_eq!(s(&sim.finish()), "a\u{a0}\u{a0}b");
+    fn pre_line_keeps_newlines_and_drops_the_spaces_around_them() {
+        let mut sim = Sim::new();
+        sim.push(text("  a \n  b  "), Mode::PreserveBreaks);
+        assert_eq!(s(&sim.finish()), "a\nb");
     }
 
     #[test]
-    fn an_in_flow_inline_box_ends_the_run_and_stops_leading_trim() {
-        let mut sim = Sim::new(true);
-        sim.push(text("a "));
+    fn a_preserved_break_drops_the_pending_space_before_it() {
+        let mut sim = Sim::new();
+        sim.push(text("a "), Mode::Collapse);
+        sim.push(text("\n"), Mode::Preserve);
+        sim.push(text(" b"), Mode::Collapse);
+        assert_eq!(s(&sim.finish()), "a\nb");
+    }
+
+    #[test]
+    fn parley_keeps_a_no_break_space_and_collapses_only_ascii_whitespace() {
+        let mut sim = Sim::new();
+        sim.push(text("\u{a0}a\u{a0}\u{a0}b"), Mode::Collapse);
+        assert_eq!(s(&sim.finish()), "\u{a0}a\u{a0}\u{a0}b");
+    }
+
+    #[test]
+    fn an_in_flow_inline_box_commits_the_space_before_it_and_keeps_the_one_after() {
+        let mut sim = Sim::new();
+        sim.push(text("a "), Mode::Collapse);
         sim.inline_box(true);
-        sim.push(text(" b"));
+        sim.push(text(" b"), Mode::Collapse);
         assert_eq!(s(&sim.finish()), "a  b");
     }
 
     #[test]
-    fn an_out_of_flow_box_leaves_the_run_open() {
-        let mut sim = Sim::new(true);
-        sim.push(text("a "));
+    fn an_out_of_flow_box_leaves_the_space_pending() {
+        let mut sim = Sim::new();
+        sim.push(text("a "), Mode::Collapse);
         sim.inline_box(false);
-        sim.push(text(" b"));
+        sim.push(text(" b"), Mode::Collapse);
         assert_eq!(s(&sim.finish()), "a b");
+    }
+
+    #[test]
+    fn a_leading_space_after_an_in_flow_box_at_the_start_is_kept() {
+        let mut sim = Sim::new();
+        sim.inline_box(true);
+        sim.push(text(" b"), Mode::Collapse);
+        assert_eq!(s(&sim.finish()), " b");
     }
 
     #[test]

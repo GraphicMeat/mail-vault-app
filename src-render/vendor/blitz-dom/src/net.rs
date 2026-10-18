@@ -60,6 +60,8 @@ pub enum Resource {
     #[cfg(feature = "svg")]
     Svg(ImageType, crate::node::SvgImageData),
     Css(DocumentStyleSheet),
+    /// Stylesheet loaded for an `@import` rule, to be attached to the rule on the document thread
+    ImportedCss(ServoArc<Locked<ImportRule>>, ServoArc<Stylesheet>),
     Font(Bytes, FontFaceOverrides),
     /// HTML fetched for an `<iframe>` element's `src`
     DocumentSrc(String),
@@ -159,6 +161,7 @@ impl NetHandler for ResourceHandler<StylesheetHandler> {
                 net_provider: self.data.net_provider.clone(),
                 shell_provider: self.shell_provider.clone(),
                 abort_signal: self.data.abort_signal.clone(),
+                import_depth: 0,
             }),
             None, // error_reporter
             QuirksMode::NoQuirks,
@@ -172,6 +175,12 @@ impl NetHandler for ResourceHandler<StylesheetHandler> {
     }
 }
 
+/// Maximum depth of nested `@import` rules. Imports nested deeper than this
+/// are refused, preventing unbounded recursion (e.g. a stylesheet whose
+/// resolved `@import` URL yields another stylesheet importing in turn, with
+/// the URL growing geometrically at each level).
+const MAX_IMPORT_DEPTH: usize = 16;
+
 #[derive(Clone)]
 pub(crate) struct StylesheetLoader {
     pub(crate) tx: Sender<DocumentEvent>,
@@ -179,6 +188,9 @@ pub(crate) struct StylesheetLoader {
     pub(crate) net_provider: Arc<dyn NetProvider>,
     pub(crate) shell_provider: Arc<dyn ShellProvider>,
     pub(crate) abort_signal: Option<AbortSignal>,
+    /// Depth of `@import` nesting for the stylesheet this loader is parsing
+    /// (0 for a top-level stylesheet)
+    pub(crate) import_depth: usize,
 }
 impl ServoStylesheetLoader for StylesheetLoader {
     fn request_stylesheet(
@@ -190,7 +202,7 @@ impl ServoStylesheetLoader for StylesheetLoader {
         supports: Option<ImportSupportsCondition>,
         layer: ImportLayer,
     ) -> ServoArc<Locked<ImportRule>> {
-        if !supports.as_ref().is_none_or(|s| s.enabled) {
+        if self.import_depth >= MAX_IMPORT_DEPTH || !supports.as_ref().is_none_or(|s| s.enabled) {
             return ServoArc::new(lock.wrap(ImportRule {
                 url,
                 stylesheet: ImportSheet::new_refused(),
@@ -220,7 +232,10 @@ impl ServoStylesheetLoader for StylesheetLoader {
                 self.shell_provider.clone(),
                 NestedStylesheetHandler {
                     url: url.clone(),
-                    loader: self.clone(),
+                    loader: StylesheetLoader {
+                        import_depth: self.import_depth + 1,
+                        ..self.clone()
+                    },
                     lock: lock.clone(),
                     media,
                     import_rule: import.clone(),
@@ -275,11 +290,8 @@ impl NetHandler for ResourceHandler<NestedStylesheetHandler> {
             self.data.loader.abort_signal.as_ref(),
         );
 
-        let mut guard = self.data.lock.write();
-        self.data.import_rule.write_with(&mut guard).stylesheet = ImportSheet::Sheet(sheet);
-        drop(guard);
-
-        self.respond(resolved_url, Ok(Resource::None))
+        let import_rule = self.data.import_rule.clone();
+        self.respond(resolved_url, Ok(Resource::ImportedCss(import_rule, sheet)))
     }
 }
 
@@ -364,6 +376,7 @@ impl FontFaceHandler {
     }
 }
 
+/// Fetch the fonts of all `@font-face` rules in `sheet`
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn fetch_font_face(
     tx: Sender<DocumentEvent>,
@@ -375,10 +388,31 @@ pub(crate) fn fetch_font_face(
     read_guard: &SharedRwLockReadGuard,
     abort_signal: Option<&AbortSignal>,
 ) {
-    sheet
-        .contents(read_guard)
-        .rules(read_guard)
-        .iter()
+    fetch_font_face_rules(
+        sheet.contents(read_guard).rules(read_guard).iter(),
+        tx,
+        doc_id,
+        node_id,
+        network_provider,
+        shell_provider,
+        read_guard,
+        abort_signal,
+    )
+}
+
+/// Fetch the fonts of the `@font-face` rules among `rules`
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fetch_font_face_rules<'a>(
+    rules: impl Iterator<Item = &'a CssRule>,
+    tx: Sender<DocumentEvent>,
+    doc_id: usize,
+    node_id: Option<NodeId>,
+    network_provider: &Arc<dyn NetProvider>,
+    shell_provider: &Arc<dyn ShellProvider>,
+    read_guard: &SharedRwLockReadGuard,
+    abort_signal: Option<&AbortSignal>,
+) {
+    rules
         .filter_map(|rule| match rule {
             CssRule::FontFace(font_face) => {
                 let descriptor = &font_face.read_with(read_guard).descriptors;
@@ -421,8 +455,11 @@ pub(crate) fn fetch_font_face(
                         },
                         _ => FontFaceSourceFormatKeyword::None,
                     };
-                    if format == FontFaceSourceFormatKeyword::None {
-                        let (_, end) = url_source.url.as_str().rsplit_once('.')?;
+                    // A url with no extension, such as a `data:` url, is
+                    // sniffed from its bytes once fetched.
+                    if format == FontFaceSourceFormatKeyword::None
+                        && let Some((_, end)) = url_source.url.as_str().rsplit_once('.')
+                    {
                         format = match end {
                             "woff2" => FontFaceSourceFormatKeyword::Woff2,
                             "woff" => FontFaceSourceFormatKeyword::Woff,
@@ -538,11 +575,13 @@ impl ImageHandler {
             .decode()
         {
             Ok(image) => {
-                let raw_rgba8_data = image.clone().into_rgba8().into_raw();
+                let width = image.width();
+                let height = image.height();
+                let raw_rgba8_data = image.into_rgba8().into_raw();
                 return Ok(Resource::Image(
                     self.kind,
-                    image.width(),
-                    image.height(),
+                    width,
+                    height,
                     Arc::new(raw_rgba8_data),
                 ));
             }

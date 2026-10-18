@@ -1,6 +1,5 @@
 use crate::NodeTree;
 use crate::events::{DragMode, handle_dom_event};
-use crate::font_metrics::BlitzFontMetricsProvider;
 use crate::layout::construct::ConstructionTask;
 use crate::layout::damage::ALL_DAMAGE;
 use crate::mutator::ViewportMut;
@@ -10,6 +9,7 @@ use crate::net::{
 use crate::node::{ImageData, NodeFlags, RasterImageData, SpecialElementData, Status, TextBrush};
 use crate::scrolling::ScrollAnimationState;
 use crate::selection::TextSelection;
+use crate::stylo_device::{DeviceChanges, make_device};
 use crate::stylo_to_cursor_icon::stylo_to_cursor_icon;
 use crate::traversal::TreeTraverser;
 use crate::url::DocumentUrl;
@@ -24,7 +24,7 @@ use blitz_traits::events::{DomEvent, HitResult, UiEvent};
 use blitz_traits::navigation::{DummyNavigationProvider, NavigationProvider};
 use blitz_traits::net::{AbortSignal, DummyNetProvider, NetProvider, Request};
 use blitz_traits::node_id::NodeId;
-use blitz_traits::shell::{ColorScheme, DummyShellProvider, ShellProvider, Viewport};
+use blitz_traits::shell::{DummyShellProvider, ShellProvider, Viewport};
 use cursor_icon::CursorIcon;
 use linebender_resource_handle::Blob;
 use markup5ever::{LocalName, local_name};
@@ -39,23 +39,22 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock, RwLockReadGuard, RwLockWriteGuard};
 use std::task::{Context as TaskContext, Waker};
 use style::Atom;
 use style::animation::DocumentAnimationSet;
 use style::attr::{AttrIdentifier, AttrValue};
+use style::computed_value_flags::ComputedValueFlags;
 use style::data::{ElementData as StyloElementData, ElementStyles};
+use style::invalidation::element::restyle_hints::RestyleHint;
 use style::media_queries::MediaType;
 use style::properties::ComputedValues;
 use style::properties::style_structs::Font;
-use style::queries::values::PrefersColorScheme;
 use style::selector_parser::ServoElementSnapshot;
-use style::servo::media_features::PointerCapabilities;
 use style::servo_arc::Arc as ServoArc;
 use style::values::GenericAtomIdent;
 use style::values::computed::UserSelect;
 use style::values::computed::ui::CursorKind;
-use style::values::specified::box_::{DisplayInside, DisplayOutside};
 use style::{
     device::Device,
     dom::{TDocument, TNode},
@@ -72,6 +71,42 @@ use web_time::Instant;
 
 #[cfg(feature = "parallel-construct")]
 use thread_local::ThreadLocal;
+
+/// A user-agent stylesheet, parsed with a read-only lock so that it can be shared between documents.
+///
+/// Documents with the same user-agent stylesheets (in the same order) also share Stylo's
+/// cached user-agent cascade data. `@import` rules are ignored.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UserAgentStylesheet(DocumentStyleSheet);
+
+impl UserAgentStylesheet {
+    pub fn parse(css: &str) -> Self {
+        let lock = SharedRwLock::read_only();
+        let data = Stylesheet::from_str(
+            css,
+            DocumentUrl::default().url_extra_data(),
+            Origin::UserAgent,
+            ServoArc::new(lock.wrap(MediaList::empty())),
+            lock,
+            None,
+            None,
+            QuirksMode::NoQuirks,
+            AllowImportRules::No,
+        );
+        Self(DocumentStyleSheet(ServoArc::new(data)))
+    }
+
+    /// The default user-agent stylesheet ([`DEFAULT_CSS`]), parsed once.
+    pub fn default_sheet() -> Self {
+        static SHEET: LazyLock<UserAgentStylesheet> =
+            LazyLock::new(|| UserAgentStylesheet::parse(DEFAULT_CSS));
+        SHEET.clone()
+    }
+
+    pub fn sheet(&self) -> &DocumentStyleSheet {
+        &self.0
+    }
+}
 
 pub enum DocGuard<'a> {
     Ref(&'a BaseDocument),
@@ -201,13 +236,17 @@ pub struct BaseDocument {
     pub(crate) devtool_settings: DevtoolSettings,
     // Viewport details such as the dimensions, HiDPI scale, and zoom factor,
     pub(crate) viewport: Viewport,
-    // Scroll within our viewport
-    pub(crate) viewport_scroll: crate::Point<f64>,
     /// CSS media type used to evaluate `@media` rules.
     pub(crate) media_type: MediaType,
+    /// Changes to the stylist [`Device`] that have been requested since the
+    /// last [`resolve`](Self::resolve), to be applied (coalesced into a single
+    /// device rebuild) at the start of the next resolve.
+    pub(crate) pending_device_changes: DeviceChanges,
     /// Strategy for Stylo's style traversal during `resolve`.
     pub(crate) style_threading: StyleThreading,
-    /// Whether incremental layout is enabled for this document.
+    /// Whether incremental layout is enabled for this document. When disabled,
+    /// every node is treated as damaged on every `resolve`, so the same damage
+    /// pipeline reconstructs and relays out the whole tree.
     pub(crate) incremental_layout: bool,
     /// How deeply this document is nested within other documents
     /// (0 for a root document). Used to limit `<iframe>` nesting depth.
@@ -296,9 +335,10 @@ pub struct BaseDocument {
     pub(crate) nodes_to_id: HashMap<String, SmallVec<[NodeId; 1]>>,
     /// Map of `<style>` and `<link>` node IDs to their associated stylesheet
     pub(crate) nodes_to_stylesheet: BTreeMap<NodeId, DocumentStyleSheet>,
-    /// Stylesheets added by the useragent
-    /// where the key is the hashed CSS
-    pub(crate) ua_stylesheets: HashMap<String, DocumentStyleSheet>,
+    /// Incremented whenever `nodes_to_stylesheet` changes (a stylesheet is
+    /// added, replaced or removed), so that CSSOM wrappers can detect that
+    /// their cached rule data is stale.
+    pub(crate) stylesheet_generation: u64,
     /// Map from form control node ID's to their associated forms node ID's
     pub(crate) controls_to_form: HashMap<NodeId, NodeId>,
     /// Nodes that contain sub documents
@@ -365,34 +405,6 @@ pub struct BaseDocument {
     pub(crate) abort_signal: Option<AbortSignal>,
 }
 
-pub(crate) fn make_device(
-    viewport: &Viewport,
-    media_type: MediaType,
-    font_ctx: Arc<Mutex<FontContext>>,
-) -> Device {
-    let width = viewport.window_size.0 as f32 / viewport.scale();
-    let height = viewport.window_size.1 as f32 / viewport.scale();
-    let viewport_size = euclid::Size2D::new(width, height);
-    let device_size = euclid::Size2D::new(width, height) * viewport.scale();
-    let device_pixel_ratio = euclid::Scale::new(viewport.scale());
-
-    Device::new(
-        media_type,
-        selectors::matching::QuirksMode::NoQuirks,
-        viewport_size,
-        device_size,
-        device_pixel_ratio,
-        Box::new(BlitzFontMetricsProvider { font_ctx }),
-        ComputedValues::initial_values_with_font_override(Font::initial_values()),
-        match viewport.color_scheme {
-            ColorScheme::Light => PrefersColorScheme::Light,
-            ColorScheme::Dark => PrefersColorScheme::Dark,
-        },
-        PointerCapabilities::default(),
-        PointerCapabilities::default(),
-    )
-}
-
 impl BaseDocument {
     /// Create a new (empty) [`BaseDocument`] with the specified configuration
     pub fn new(config: DocumentConfig) -> Self {
@@ -428,9 +440,15 @@ impl BaseDocument {
 
         // Make sure we turn on stylo features *before* creating the Stylist
         style_config::set_pref!("layout.grid.enabled", true);
+        style_config::set_pref!("layout.flexbox.balance", true);
         style_config::set_pref!("layout.unimplemented", true);
         style_config::set_pref!("layout.columns.enabled", true);
         style_config::set_pref!("layout.css.basic-shape-shape.enabled", true);
+        style_config::set_pref!("layout.css.tree-counting-functions.enabled", true);
+        style_config::set_pref!("layout.css.progress-function.enabled", true);
+        style_config::set_pref!("layout.variable_fonts.enabled", true);
+        #[cfg(feature = "writing-mode")]
+        style_config::set_pref!("layout.writing-mode.enabled", true);
         style_config::set_pref!("layout.threads", -1);
 
         let viewport = config.viewport.unwrap_or_default();
@@ -476,14 +494,14 @@ impl BaseDocument {
             nodes_to_id,
             viewport,
             media_type,
+            pending_device_changes: DeviceChanges::empty(),
             style_threading: config.style_threading,
             incremental_layout: config.incremental.unwrap_or(true),
             subdocument_depth: config.subdocument_depth,
             devtool_settings: DevtoolSettings::default(),
-            viewport_scroll: crate::Point::ZERO,
             url: base_url,
-            ua_stylesheets: HashMap::new(),
             nodes_to_stylesheet: BTreeMap::new(),
+            stylesheet_generation: 0,
             font_ctx,
             #[cfg(feature = "parallel-construct")]
             thread_font_contexts: ThreadLocal::new(),
@@ -537,13 +555,8 @@ impl BaseDocument {
         doc.root_node_id = doc.create_node(NodeData::Document(Box::default()));
         doc.root_node_mut().flags.insert(NodeFlags::IS_IN_DOCUMENT);
 
-        match config.ua_stylesheets {
-            Some(stylesheets) => {
-                for ss in &stylesheets {
-                    doc.add_user_agent_stylesheet(ss);
-                }
-            }
-            None => doc.add_user_agent_stylesheet(DEFAULT_CSS),
+        for sheet in config.ua_stylesheets {
+            doc.add_user_agent_stylesheet(sheet);
         }
 
         // Stylo data on the root node container is needed to render the node
@@ -764,7 +777,7 @@ impl BaseDocument {
             self.url.url_extra_data(),
         );
         if did_change {
-            node.mark_style_attr_updated();
+            node.set_restyle_hint(RestyleHint::RESTYLE_STYLE_ATTRIBUTE);
         }
     }
 
@@ -776,7 +789,7 @@ impl BaseDocument {
             self.url.url_extra_data(),
         );
         if did_change {
-            node.mark_style_attr_updated();
+            node.set_restyle_hint(RestyleHint::RESTYLE_STYLE_ATTRIBUTE);
         }
     }
 
@@ -1156,9 +1169,10 @@ impl BaseDocument {
         self.add_stylesheet_for_node(sheet, target_id);
     }
 
-    pub fn remove_user_agent_stylesheet(&mut self, contents: &str) {
-        if let Some(sheet) = self.ua_stylesheets.remove(contents) {
-            self.stylist.remove_stylesheet(sheet, &self.guard.read());
+    pub fn remove_user_agent_stylesheet(&mut self, sheet: &UserAgentStylesheet) {
+        if self.useragent_stylesheets().any(|s| *s == sheet.0) {
+            self.stylist
+                .remove_stylesheet(sheet.0.clone(), &self.guard.read());
         }
     }
 
@@ -1175,13 +1189,16 @@ impl BaseDocument {
 
     /// Iterate over the user-agent stylesheets currently associated with this document
     pub fn useragent_stylesheets(&self) -> impl Iterator<Item = &DocumentStyleSheet> {
-        self.ua_stylesheets.values()
+        (0..self.stylist.sheet_count(Origin::UserAgent))
+            .filter_map(|i| self.stylist.sheet_at(Origin::UserAgent, i))
     }
 
-    pub fn add_user_agent_stylesheet(&mut self, css: &str) {
-        let sheet = self.make_stylesheet(css, Origin::UserAgent);
-        self.ua_stylesheets.insert(css.to_string(), sheet.clone());
-        self.stylist.append_stylesheet(sheet, &self.guard.read());
+    /// Append a user-agent stylesheet. Adding a sheet that is already present is a no-op.
+    pub fn add_user_agent_stylesheet(&mut self, sheet: UserAgentStylesheet) {
+        if self.useragent_stylesheets().any(|s| *s == sheet.0) {
+            return;
+        }
+        self.stylist.append_stylesheet(sheet.0, &self.guard.read());
     }
 
     pub fn make_stylesheet(&self, css: impl AsRef<str>, origin: Origin) -> DocumentStyleSheet {
@@ -1197,6 +1214,7 @@ impl BaseDocument {
                 net_provider: self.net_provider.clone(),
                 shell_provider: self.shell_provider.clone(),
                 abort_signal: self.abort_signal.clone(),
+                import_depth: 0,
             }),
             None,
             QuirksMode::NoQuirks,
@@ -1214,6 +1232,7 @@ impl BaseDocument {
 
     pub fn add_stylesheet_for_node(&mut self, stylesheet: DocumentStyleSheet, node_id: NodeId) {
         let old = self.nodes_to_stylesheet.insert(node_id, stylesheet.clone());
+        self.stylesheet_generation += 1;
 
         if let Some(old) = old {
             self.stylist.remove_stylesheet(old, &self.guard.read())
@@ -1310,6 +1329,14 @@ impl BaseDocument {
             Resource::Css(css) => {
                 let node_id = res.node_id.unwrap();
                 self.add_stylesheet_for_node(css, node_id);
+            }
+            Resource::ImportedCss(import_rule, sheet) => {
+                let mut guard = self.guard.write();
+                import_rule.write_with(&mut guard).stylesheet =
+                    style::stylesheets::import_rule::ImportSheet::Sheet(sheet);
+                drop(guard);
+                self.stylist
+                    .force_stylesheet_origins_dirty(style::stylesheets::OriginSet::all());
             }
             Resource::Image(_kind, width, height, image_data) => {
                 // Create the ImageData and cache it
@@ -1474,6 +1501,12 @@ impl BaseDocument {
 
             match image_type {
                 ImageType::Image => {
+                    #[cfg(feature = "custom-widget")]
+                    if node.element_data().unwrap().custom_widget_data().is_some() {
+                        // MailVault parity fix (plan B): the use charged above is not taken.
+                        self.release_image_use(&image);
+                        continue;
+                    }
                     let old = std::mem::replace(
                         &mut node.element_data_mut().unwrap().special_data,
                         SpecialElementData::Image(Box::new(image.clone())),
@@ -1484,7 +1517,7 @@ impl BaseDocument {
                     let node = self.get_node_mut(node_id).unwrap();
 
                     // Clear layout cache
-                    node.cache_mut().clear();
+                    node.clear_layout_cache();
                     node.insert_damage(ALL_DAMAGE);
                 }
                 ImageType::Background(idx) | ImageType::Mask(idx) => {
@@ -1810,7 +1843,7 @@ impl BaseDocument {
         );
         let active_node_id = Some(hover_node_id);
 
-        let node_path = self.maybe_node_layout_ancestors(active_node_id);
+        let node_path = self.maybe_node_element_ancestors(active_node_id);
         for &id in node_path.iter() {
             self.snapshot_node_and(id, ElementState::ACTIVE, |node| node.active());
         }
@@ -1825,7 +1858,7 @@ impl BaseDocument {
             return false;
         };
 
-        let node_path = self.maybe_node_layout_ancestors(Some(active_node_id));
+        let node_path = self.maybe_node_element_ancestors(Some(active_node_id));
         for &id in node_path.iter() {
             self.snapshot_node_and(id, ElementState::ACTIVE, |node| node.unactive());
         }
@@ -1910,8 +1943,8 @@ impl BaseDocument {
         // that `refresh_hover` can re-resolve hover state after layout or
         // scroll changes.
         self.last_client_pointer_position = Some(taffy::Point {
-            x: x - self.viewport_scroll.x as f32,
-            y: y - self.viewport_scroll.y as f32,
+            x: x - self.viewport_scroll().x as f32,
+            y: y - self.viewport_scroll().y as f32,
         });
 
         let (hit, hovered_scrollbar) = self.hit_with_scrollbar(x, y);
@@ -1943,24 +1976,16 @@ impl BaseDocument {
         let hover_node_id = hit_node_id.and_then(|id| self.nearest_non_anonymous_ancestor(id));
         let new_is_text = hit.map(|hit| hit.is_text).unwrap_or(false);
 
-        let hit_changed =
-            hit_node_id != self.hover_hit_node_id || new_is_text != self.hover_node_is_text;
         self.hover_hit_node_id = hit_node_id;
         self.hover_node_is_text = new_is_text;
 
         // Return early if the new node is the same as the already-hovered node
         if hover_node_id == self.hover_node_id {
-            if hit_changed {
-                // The canonical target is unchanged (so no restyle is needed)
-                // but the precise hit node changed, which can change the cursor
-                // (e.g. moving between text and non-text within one element).
-                self.shell_provider.set_cursor(self.get_cursor());
-            }
             return scrollbar_changed;
         }
 
-        let old_node_path = self.maybe_node_layout_ancestors(self.hover_node_id);
-        let new_node_path = self.maybe_node_layout_ancestors(hover_node_id);
+        let old_node_path = self.maybe_node_element_ancestors(self.hover_node_id);
+        let new_node_path = self.maybe_node_element_ancestors(hover_node_id);
         let same_count = old_node_path
             .iter()
             .zip(&new_node_path)
@@ -1974,9 +1999,6 @@ impl BaseDocument {
         }
 
         self.hover_node_id = hover_node_id;
-
-        // Update the cursor
-        self.shell_provider.set_cursor(self.get_cursor());
 
         // Request redraw
         self.shell_provider.request_redraw();
@@ -1994,16 +2016,13 @@ impl BaseDocument {
             return false;
         };
 
-        let old_node_path = self.maybe_node_layout_ancestors(Some(hover_node_id));
+        let old_node_path = self.maybe_node_element_ancestors(Some(hover_node_id));
         for &id in old_node_path.iter() {
             self.snapshot_node_and(id, ElementState::HOVER, |node| node.unhover());
         }
 
         self.hover_node_id = None;
         self.hover_node_is_text = false;
-
-        // Update the cursor
-        self.shell_provider.set_cursor(self.get_cursor());
 
         // Request redraw
         self.shell_provider.request_redraw();
@@ -2020,9 +2039,32 @@ impl BaseDocument {
         let Some(pos) = self.last_client_pointer_position else {
             return false;
         };
-        let x = pos.x + self.viewport_scroll.x as f32;
-        let y = pos.y + self.viewport_scroll.y as f32;
-        self.set_hover_to(x, y)
+        let x = pos.x + self.viewport_scroll().x as f32;
+        let y = pos.y + self.viewport_scroll().y as f32;
+        let prev_hover = self.hover_state();
+        let changed = self.set_hover_to(x, y);
+        if self.hover_state() != prev_hover {
+            self.update_cursor();
+        }
+        changed
+    }
+
+    /// The hover state that determines the cursor: the hovered node, the precise hit
+    /// node and whether the hit is text
+    pub(crate) fn hover_state(&self) -> (Option<NodeId>, Option<NodeId>, bool) {
+        (
+            self.hover_node_id,
+            self.hover_hit_node_id,
+            self.hover_node_is_text,
+        )
+    }
+
+    /// Send the current cursor to the shell.
+    ///
+    /// Hover updates don't send the cursor themselves: the cursor of a node hosting a
+    /// sub-document is only known once the sub-document has handled the event.
+    pub(crate) fn update_cursor(&self) {
+        self.shell_provider.set_cursor(self.get_cursor());
     }
 
     pub fn get_hover_node_id(&self) -> Option<NodeId> {
@@ -2034,19 +2076,9 @@ impl BaseDocument {
     }
 
     pub fn set_viewport(&mut self, viewport: Viewport) {
-        let scale_has_changed = viewport.scale_f64() != self.viewport.scale_f64();
+        let changes = DeviceChanges::from_viewports(&self.viewport, &viewport);
         self.viewport = viewport;
-        self.set_stylist_device(make_device(
-            &self.viewport,
-            self.media_type.clone(),
-            self.font_ctx.clone(),
-        ));
-        self.scroll_viewport_by(0.0, 0.0); // Clamp scroll offset
-
-        if scale_has_changed {
-            self.invalidate_inline_contexts();
-            self.shell_provider.request_redraw();
-        }
+        self.queue_device_changes(changes);
     }
 
     /// Returns the current CSS media type used to evaluate `@media` rules.
@@ -2055,17 +2087,13 @@ impl BaseDocument {
     }
 
     /// Sets the CSS media type used to evaluate `@media` rules (e.g. `screen` or `print`)
-    /// and rebuilds the stylist device so updated rules apply on the next restyle.
+    /// and queues a stylist device rebuild so updated rules apply on the next restyle.
     pub fn set_media_type(&mut self, media_type: MediaType) {
         if self.media_type == media_type {
             return;
         }
         self.media_type = media_type;
-        self.set_stylist_device(make_device(
-            &self.viewport,
-            self.media_type.clone(),
-            self.font_ctx.clone(),
-        ));
+        self.queue_device_changes(DeviceChanges::MEDIA_TYPE);
     }
 
     pub fn viewport(&self) -> &Viewport {
@@ -2077,13 +2105,11 @@ impl BaseDocument {
     }
 
     pub fn zoom_by(&mut self, increment: f32) {
-        *self.viewport.zoom_mut() += increment;
-        self.set_viewport(self.viewport.clone());
+        *self.viewport_mut().zoom_mut() += increment;
     }
 
     pub fn zoom_to(&mut self, zoom: f32) {
-        *self.viewport.zoom_mut() = zoom;
-        self.set_viewport(self.viewport.clone());
+        *self.viewport_mut().zoom_mut() = zoom;
     }
 
     pub fn get_viewport(&self) -> Viewport {
@@ -2091,11 +2117,20 @@ impl BaseDocument {
     }
 
     /// Returns whether incremental layout is currently enabled for this document.
+    ///
+    /// Both modes run the same style → damage → box construction → layout
+    /// pipeline. In incremental mode only nodes carrying `RestyleDamage` (from
+    /// mutations or restyles) are reconstructed and have their layout caches
+    /// cleared; in non-incremental mode every node is marked damaged at the
+    /// start of each `resolve`, so everything is rebuilt each frame.
     pub fn incremental_layout(&self) -> bool {
         self.incremental_layout
     }
 
     /// Enables or disables incremental layout for this document.
+    ///
+    /// Disabling it does not switch to a separate code path: all nodes are
+    /// simply treated as damaged on every `resolve` (see [`Self::incremental_layout`]).
     pub fn set_incremental_layout(&mut self, enabled: bool) {
         self.incremental_layout = enabled;
     }
@@ -2139,6 +2174,47 @@ impl BaseDocument {
             | self.scrollbars_animating()
     }
 
+    /// Record pending [`DeviceChanges`] and request a redraw so that they are
+    /// flushed (via [`Self::flush_pending_device_changes`]) on the next resolve.
+    pub(crate) fn queue_device_changes(&mut self, changes: DeviceChanges) {
+        if changes.is_empty() {
+            return;
+        }
+        self.pending_device_changes |= changes;
+        self.shell_provider.request_redraw();
+    }
+
+    /// Apply any pending device changes to the stylist, coalescing all changes
+    /// since the last flush into a single device rebuild.
+    pub(crate) fn flush_pending_device_changes(&mut self) {
+        let changes = std::mem::take(&mut self.pending_device_changes);
+        if changes.is_empty() {
+            return;
+        }
+
+        self.set_stylist_device(make_device(
+            &self.viewport,
+            self.media_type.clone(),
+            self.font_ctx.clone(),
+        ));
+        self.scroll_viewport_by(0.0, 0.0); // Clamp scroll offset
+
+        // Text is shaped at a specific scale factor, so cached inline layouts
+        // must be invalidated when the scale changes.
+        if changes.contains(DeviceChanges::SCALE) {
+            self.invalidate_inline_contexts();
+        }
+
+        // Color-scheme changes affect values that are resolved at cascade time
+        // (`light-dark()`, system colors) without necessarily flipping any
+        // media query result, so conservatively recascade the whole tree.
+        if changes.contains(DeviceChanges::COLOR_SCHEME) {
+            if let Some(root_id) = self.try_root_element().map(|el| el.id) {
+                self.nodes[root_id].set_restyle_hint(RestyleHint::recascade_subtree());
+            }
+        }
+    }
+
     /// Update the device and reset the stylist to process the new size
     pub fn set_stylist_device(&mut self, device: Device) {
         // Seed the new device with the root element's current style and font-relative
@@ -2163,6 +2239,10 @@ impl BaseDocument {
         }
         drop(root_styles);
 
+        let old_device = self.stylist.device();
+        let viewport_size_changed = old_device.au_viewport_size() != device.au_viewport_size();
+        let styles_use_viewport_units = old_device.used_viewport_size();
+
         let origins = {
             let guard = &self.guard;
             let guards = StylesheetGuards {
@@ -2171,10 +2251,35 @@ impl BaseDocument {
             };
             self.stylist.set_device(device, &guards)
         };
-        self.stylist.force_stylesheet_origins_dirty(origins);
+
+        // Only fully invalidate element styles when the media query results of
+        // some origin actually changed. `force_stylesheet_origins_dirty` fully
+        // invalidates styles even when `origins` is empty, which would force a
+        // full restyle on every viewport resize.
+        if !origins.is_empty() {
+            self.stylist.force_stylesheet_origins_dirty(origins);
+        }
+
+        // Styles that resolve viewport units (vw/vh/etc) still need recomputing
+        // when the viewport size changes, even if no media query results
+        // changed. Invalidate just the elements whose styles use viewport
+        // units (tracked via per-element computed value flags).
+        if viewport_size_changed && styles_use_viewport_units {
+            if self
+                .stylist
+                .get_custom_property_initial_values_flags()
+                .intersects(ComputedValueFlags::USES_VIEWPORT_UNITS)
+            {
+                self.stylist.rebuild_initial_values_for_custom_properties();
+            }
+            if let Some(root) = self.try_root_element() {
+                style::invalidation::viewport_units::invalidate(root);
+            }
+        }
     }
 
     pub fn stylist_device(&mut self) -> &Device {
+        self.flush_pending_device_changes();
         self.stylist.device()
     }
 
@@ -2189,7 +2294,9 @@ impl BaseDocument {
             .or(self.get_hover_node_id())?;
         let node = &self.nodes[node_id];
 
-        if let Some(subdoc) = node.subdoc().map(|doc| doc.inner()) {
+        if let Some(subdoc) = node.subdoc().map(|doc| doc.inner())
+            && subdoc.get_hover_node_id().is_some()
+        {
             return subdoc.get_cursor();
         }
 
@@ -2223,7 +2330,9 @@ impl BaseDocument {
         // Return text cursor for text nodes
         if self.hover_node_is_text {
             return Some(match user_select {
-                UserSelect::Text | UserSelect::All | UserSelect::Auto => CursorIcon::Text,
+                UserSelect::Text | UserSelect::All | UserSelect::Auto | UserSelect::Contain => {
+                    CursorIcon::Text
+                }
                 UserSelect::None => CursorIcon::Default,
             });
         }
@@ -2233,11 +2342,11 @@ impl BaseDocument {
     }
 
     pub fn viewport_scroll(&self) -> crate::Point<f64> {
-        self.viewport_scroll
+        self.nodes.viewport_scroll()
     }
 
     pub fn set_viewport_scroll(&mut self, scroll: crate::Point<f64>) {
-        self.viewport_scroll = scroll;
+        self.nodes.set_viewport_scroll(scroll);
     }
 
     /// Find the node targeted by a URL fragment (the `#...` part of a URL).
@@ -2257,40 +2366,102 @@ impl BaseDocument {
         })
     }
 
+    /// `node_id`'s document-relative position and unrounded (sub-pixel) layout in physical
+    /// coordinates, for CSSOM geometry APIs such as `getBoundingClientRect`.
+    #[cfg(not(feature = "writing-mode"))]
+    pub(crate) fn physical_unrounded_geometry(
+        &self,
+        node_id: NodeId,
+    ) -> (crate::util::Point<f32>, taffy::Layout) {
+        let mut pos = crate::util::Point { x: 0.0, y: 0.0 };
+        let mut current = Some(node_id);
+        while let Some(id) = current {
+            let node = &self.nodes[id];
+            pos.x += node.unrounded_layout().location.x - node.scroll_offset().x as f32;
+            pos.y += node.unrounded_layout().location.y - node.scroll_offset().y as f32;
+            current = node.containing_block();
+        }
+        (pos, *self.nodes[node_id].unrounded_layout())
+    }
+
     /// Computes the size and position of the `Node` relative to the viewport
     pub fn get_client_bounding_rect(&self, node_id: NodeId) -> Option<BoundingRect> {
         // Non-atomic inline elements have no layout box of their own: return
         // the union of their per-line-box fragment rects.
         if let Some(rects) = self.inline_fragment_rects(node_id) {
-            let x0 = rects.iter().map(|r| r.x).fold(f64::INFINITY, f64::min);
-            let y0 = rects.iter().map(|r| r.y).fold(f64::INFINITY, f64::min);
-            let x1 = rects
-                .iter()
-                .map(|r| r.x + r.width)
-                .fold(f64::NEG_INFINITY, f64::max);
-            let y1 = rects
-                .iter()
-                .map(|r| r.y + r.height)
-                .fold(f64::NEG_INFINITY, f64::max);
-            return match rects.is_empty() {
-                true => None,
-                false => Some(BoundingRect {
-                    x: x0,
-                    y: y0,
-                    width: x1 - x0,
-                    height: y1 - y0,
-                }),
-            };
+            return rects.reduce(BoundingRect::union);
         }
 
-        let node = self.get_node(node_id)?;
-        let pos = node.absolute_position(0.0, 0.0);
+        self.get_node(node_id)?;
+        let (pos, layout) = self.physical_unrounded_geometry(node_id);
+        let size = layout.size;
 
         Some(BoundingRect {
-            x: pos.x as f64 - self.viewport_scroll.x,
-            y: pos.y as f64 - self.viewport_scroll.y,
-            width: node.unrounded_layout().size.width as f64,
-            height: node.unrounded_layout().size.height as f64,
+            x: snap_to_layout_unit(pos.x as f64 - self.viewport_scroll().x),
+            y: snap_to_layout_unit(pos.y as f64 - self.viewport_scroll().y),
+            width: snap_to_layout_unit(size.width as f64),
+            height: snap_to_layout_unit(size.height as f64),
+        })
+    }
+
+    /// CSSOM View's `offsetLeft`/`offsetTop`/`offsetWidth`/`offsetHeight` as a single rect:
+    /// the node's border box, positioned relative to the padding edge of its `offsetParent`
+    /// (or to the initial containing block when the `offsetParent` is a non-positioned
+    /// `body`, or there is none).
+    ///
+    /// Nodes with their own layout box use that box directly. Non-atomic inline elements
+    /// have no layout box: they use the bounding box of their per-line-box fragments, and
+    /// their `offsetParent` is resolved from the containing inline root.
+    pub fn offset_rect(&self, node_id: NodeId) -> Option<BoundingRect> {
+        let node = self.get_node(node_id)?;
+
+        // Nodes with their own layout box: use it directly
+        let Some(rects) = self.inline_fragment_rects(node_id) else {
+            let pos = node.offset_top_left();
+            let size = node.unrounded_layout().size;
+            #[cfg(feature = "writing-mode")]
+            let size = match node.containing_block() {
+                Some(parent) if self.nodes[parent].layout_data().writing_mode.is_vertical() => {
+                    size.transpose()
+                }
+                _ => size,
+            };
+            return Some(BoundingRect {
+                x: pos.x as f64,
+                y: pos.y as f64,
+                width: size.width as f64,
+                height: size.height as f64,
+            });
+        };
+
+        // Union the per-line-box fragments into a single bounding box
+        let bounds = rects.reduce(BoundingRect::union)?;
+
+        // Fragment rects are viewport-relative; convert to document-relative
+        let scroll = self.viewport_scroll();
+        let mut x = bounds.x + scroll.x;
+        let mut y = bounds.y + scroll.y;
+
+        // Resolve the offsetParent from the inline root (the root itself if it is positioned)
+        let inline_root = node.inline_root_ancestor()?;
+        let offset_parent = if inline_root.is_offset_parent() {
+            Some(inline_root)
+        } else {
+            inline_root.offset_parent()
+        };
+        // Make the position relative to the offsetParent's padding edge
+        if let Some(parent) = offset_parent.filter(|parent| !parent.is_static_body()) {
+            let (parent_pos, parent_layout) = self.physical_unrounded_geometry(parent.id);
+            let border = parent_layout.border;
+            x -= (parent_pos.x + border.left) as f64;
+            y -= (parent_pos.y + border.top) as f64;
+        }
+
+        Some(BoundingRect {
+            x,
+            y,
+            width: bounds.width,
+            height: bounds.height,
         })
     }
 
@@ -2300,7 +2471,7 @@ impl BaseDocument {
     /// spans within an inline root's text layout) return one rect per line box.
     pub fn node_client_rects(&self, node_id: NodeId) -> Vec<BoundingRect> {
         match self.inline_fragment_rects(node_id) {
-            Some(rects) => rects,
+            Some(rects) => rects.collect(),
             None => self.get_client_bounding_rect(node_id).into_iter().collect(),
         }
     }
@@ -2308,112 +2479,28 @@ impl BaseDocument {
     /// Computes per-line-box fragment rects for a non-atomic inline element by walking
     /// the containing inline root's text layout. Returns `None` for nodes that have
     /// their own layout box (which should use `get_client_bounding_rect` instead).
-    pub fn inline_fragment_rects(&self, node_id: NodeId) -> Option<Vec<BoundingRect>> {
-        use parley::PositionedLayoutItem;
-
+    pub fn inline_fragment_rects(
+        &self,
+        node_id: NodeId,
+    ) -> Option<impl Iterator<Item = BoundingRect> + '_> {
         let node = self.get_node(node_id)?;
 
         // Only non-atomic inline elements lack their own layout box: they are
         // flattened into the containing inline root's text layout as style spans.
-        if !node.is_element() || node.flags.is_inline_root() {
-            return None;
-        }
-        let display = node.primary_styles()?.clone_display();
-        if !(display.outside() == DisplayOutside::Inline && display.inside() == DisplayInside::Flow)
-        {
-            return None;
-        }
-
+        let fragments = node.inline_fragment_boxes()?;
         let inline_root = node.inline_root_ancestor()?;
-        let inline_layout = inline_root.element_data()?.inline_layout_data.as_ref()?;
-        let layout = &inline_layout.layout;
-        let scale = layout.scale() as f64;
 
-        // Walk up the DOM parent chain from `id` to check whether it is (or is
-        // inside) the target node, stopping at the inline root.
-        let is_in_target = |mut id: NodeId| -> bool {
-            loop {
-                if id == node_id {
-                    return true;
-                }
-                if id == inline_root.id {
-                    return false;
-                }
-                match self.get_node(id).and_then(|n| n.parent) {
-                    Some(parent) => id = parent,
-                    None => return false,
-                }
-            }
-        };
+        // Fragment boxes are relative to the inline root's border box.
+        let (root_pos, _) = self.physical_unrounded_geometry(inline_root.id);
+        let origin_x = root_pos.x as f64 - self.viewport_scroll().x;
+        let origin_y = root_pos.y as f64 - self.viewport_scroll().y;
 
-        // Fragment rects are relative to the inline root's content box.
-        let root_layout = inline_root.final_layout();
-        let root_pos = inline_root.absolute_position(0.0, 0.0);
-        let origin_x = root_pos.x as f64
-            + (root_layout.padding.left + root_layout.border.left) as f64
-            - self.viewport_scroll.x;
-        let origin_y = root_pos.y as f64
-            + (root_layout.padding.top + root_layout.border.top) as f64
-            - self.viewport_scroll.y;
-
-        let mut rects: Vec<BoundingRect> = Vec::new();
-        for line in layout.lines() {
-            let line_metrics = line.metrics();
-            // Union all of the target's fragments on this line into a single rect
-            let mut line_rect: Option<(f64, f64, f64, f64)> = None;
-            let mut add = |x0: f64, y0: f64, x1: f64, y1: f64| {
-                line_rect = Some(match line_rect {
-                    Some((lx0, ly0, lx1, ly1)) => {
-                        (lx0.min(x0), ly0.min(y0), lx1.max(x1), ly1.max(y1))
-                    }
-                    None => (x0, y0, x1, y1),
-                });
-            };
-
-            for item in line.items() {
-                match item {
-                    PositionedLayoutItem::GlyphRun(glyph_run) => {
-                        if !is_in_target(glyph_run.style().brush.id) {
-                            continue;
-                        }
-                        let x0 = glyph_run.offset() as f64;
-                        let x1 = x0 + glyph_run.advance() as f64;
-                        // Use the line box's block extent rather than the
-                        // run's font ascent/descent: fonts with small
-                        // typographic metrics would otherwise produce rects
-                        // that clip the rendered glyphs. This matches the
-                        // geometry used for text selection highlights.
-                        let y0 = line_metrics.block_min_coord as f64;
-                        let y1 = line_metrics.block_max_coord as f64;
-                        add(x0, y0, x1, y1);
-                    }
-                    PositionedLayoutItem::InlineBox(inline_box) => {
-                        if !is_in_target(NodeId::from_u64(inline_box.id)) {
-                            continue;
-                        }
-                        let x0 = inline_box.x as f64;
-                        let y0 = inline_box.y as f64;
-                        add(
-                            x0,
-                            y0,
-                            x0 + inline_box.width as f64,
-                            y0 + inline_box.height as f64,
-                        );
-                    }
-                }
-            }
-
-            if let Some((x0, y0, x1, y1)) = line_rect {
-                rects.push(BoundingRect {
-                    x: origin_x + x0 / scale,
-                    y: origin_y + y0 / scale,
-                    width: (x1 - x0) / scale,
-                    height: (y1 - y0) / scale,
-                });
-            }
-        }
-
-        Some(rects)
+        Some(fragments.map(move |rect| BoundingRect {
+            x: snap_to_layout_unit(origin_x + rect.left as f64),
+            y: snap_to_layout_unit(origin_y + rect.top as f64),
+            width: snap_to_layout_unit((rect.right - rect.left) as f64),
+            height: snap_to_layout_unit((rect.bottom - rect.top) as f64),
+        }))
     }
 
     /// The first element in tree order with the given tag name. The root element and
@@ -2784,6 +2871,27 @@ pub struct BoundingRect {
     pub height: f64,
 }
 
+impl BoundingRect {
+    /// The smallest rect containing both `self` and `other`.
+    pub fn union(self, other: BoundingRect) -> BoundingRect {
+        let x = self.x.min(other.x);
+        let y = self.y.min(other.y);
+        BoundingRect {
+            x,
+            y,
+            width: (self.x + self.width).max(other.x + other.width) - x,
+            height: (self.y + self.height).max(other.y + other.height) - y,
+        }
+    }
+}
+
+/// Snap a CSSOM geometry value to a 1/64px grid (the precision of Blink's `LayoutUnit`).
+/// Layout values are accumulated in `f32`, so e.g. seven `55/7`-wide flex items would
+/// otherwise end at `55.0000005` and appear to overflow their 55px container.
+fn snap_to_layout_unit(value: f64) -> f64 {
+    (value * 64.0).round() / 64.0
+}
+
 impl AsRef<BaseDocument> for BaseDocument {
     fn as_ref(&self) -> &BaseDocument {
         self
@@ -2793,6 +2901,42 @@ impl AsRef<BaseDocument> for BaseDocument {
 impl AsMut<BaseDocument> for BaseDocument {
     fn as_mut(&mut self) -> &mut BaseDocument {
         self
+    }
+}
+
+#[cfg(test)]
+mod zoom_tests {
+    use super::*;
+    use blitz_traits::shell::ColorScheme;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Default)]
+    struct CountingShellProvider {
+        redraw_count: AtomicUsize,
+    }
+    impl ShellProvider for CountingShellProvider {
+        fn request_redraw(&self) {
+            self.redraw_count.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn zoom_requests_redraw() {
+        let shell_provider = Arc::new(CountingShellProvider::default());
+        let mut doc = BaseDocument::new(DocumentConfig {
+            viewport: Some(Viewport::new(400, 300, 1.0, ColorScheme::Light)),
+            shell_provider: Some(shell_provider.clone() as _),
+            ..Default::default()
+        });
+        doc.resolve(0.0);
+
+        let base = shell_provider.redraw_count.load(Ordering::SeqCst);
+        doc.zoom_by(0.5);
+        assert!(shell_provider.redraw_count.load(Ordering::SeqCst) > base);
+
+        let base = shell_provider.redraw_count.load(Ordering::SeqCst);
+        doc.zoom_to(1.0);
+        assert!(shell_provider.redraw_count.load(Ordering::SeqCst) > base);
     }
 }
 
@@ -2900,9 +3044,10 @@ mod hover_invalidation_tests {
             viewport: Some(Viewport::new(400, 300, 1.0, ColorScheme::Light)),
             ..Default::default()
         });
-        doc.add_user_agent_stylesheet(
+        let sheet = UserAgentStylesheet::parse(
             "div:hover { background-color: rgb(255, 0, 0); } div:hover span { color: rgb(0, 255, 0); }",
         );
+        doc.add_user_agent_stylesheet(sheet);
         let root_id = doc.root_node().id;
         let style = |value: &str| Attribute {
             name: qual_name!("style"),
@@ -2987,9 +3132,10 @@ mod hover_invalidation_tests {
             viewport: Some(Viewport::new(400, 300, 1.0, ColorScheme::Light)),
             ..Default::default()
         });
-        doc.add_user_agent_stylesheet(
+        let sheet = UserAgentStylesheet::parse(
             ".promo:link:hover .headline, .promo:visited:hover .headline { color: rgb(184, 0, 0); text-decoration-line: underline; }",
         );
+        doc.add_user_agent_stylesheet(sheet);
         let root_id = doc.root_node().id;
         let attr = |name: QualName, value: &str| Attribute {
             name,
@@ -3056,9 +3202,10 @@ mod hover_invalidation_tests {
             viewport: Some(Viewport::new(400, 300, 1.0, ColorScheme::Light)),
             ..Default::default()
         });
-        doc.add_user_agent_stylesheet(
+        let sheet = UserAgentStylesheet::parse(
             "input:checked { color: rgb(184, 0, 0); } input:checked + label { color: rgb(0, 184, 0); }",
         );
+        doc.add_user_agent_stylesheet(sheet);
         let root_id = doc.root_node().id;
         let attr = |name: QualName, value: &str| Attribute {
             name,
@@ -3135,10 +3282,11 @@ mod hover_invalidation_tests {
             viewport: Some(Viewport::new(400, 300, 1.0, ColorScheme::Light)),
             ..Default::default()
         });
-        doc.add_user_agent_stylesheet(
+        let sheet = UserAgentStylesheet::parse(
             "div::before { content: \"x\"; color: rgb(1, 2, 3); } \
              div:hover::before { color: rgb(0, 0, 255); }",
         );
+        doc.add_user_agent_stylesheet(sheet);
         let root_id = doc.root_node().id;
         let style = |value: &str| Attribute {
             name: qual_name!("style"),
@@ -3191,10 +3339,11 @@ mod hover_invalidation_tests {
             viewport: Some(Viewport::new(400, 300, 1.0, ColorScheme::Light)),
             ..Default::default()
         });
-        doc.add_user_agent_stylesheet(
+        let sheet = UserAgentStylesheet::parse(
             "div { background-image: url(\"https://example.com/a.png\"); } \
              div:hover { background-image: url(\"https://example.com/b.png\"); }",
         );
+        doc.add_user_agent_stylesheet(sheet);
         let root_id = doc.root_node().id;
         let style = |value: &str| Attribute {
             name: qual_name!("style"),

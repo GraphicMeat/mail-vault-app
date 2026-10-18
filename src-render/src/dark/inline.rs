@@ -347,7 +347,7 @@ pub fn override_inline(doc: &BaseDocument, id: NodeId, cx: &mut DarkCx) -> Inlin
     let empty = PropertyDeclarationBlock::new();
     let block = el.style_attribute.as_ref().map_or(&empty, |b| b.read_with(&guard));
     let style = StyleBlock::new(block, String::new());
-    let tag = el.name.local.as_ref();
+    let tag = &*el.name.local;
     let is_svg = el.name.ns == ns!(svg);
     let attr = |n: &str| el.attr(LocalName::from(n)).map(str::to_string);
     let is_root_or_body = !is_svg && (tag == "html" || tag == "body");
@@ -469,7 +469,7 @@ pub fn needs_layout(doc: &BaseDocument) -> bool {
     doc.tree().iter().any(|(_, node)| {
         node.element_data().is_some_and(|e| {
             e.name.ns == ns!(svg)
-                && e.name.local.as_ref() != "text"
+                && &*e.name.local != "text"
                 && e.attr(fill.clone()).is_some_and(|v| v != "none" && v != "currentColor")
         })
     })

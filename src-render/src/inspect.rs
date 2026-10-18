@@ -148,7 +148,9 @@ impl TextIndex {
             let layout = &inline.layout;
             let scale = layout.scale() as f64;
             let fl = root.final_layout();
-            let origin_y = root.absolute_position(0.0, 0.0).y as f64 + (fl.padding.top + fl.border.top) as f64;
+            // The line boxes start `block_offset` below the content box (a cell's
+            // vertical-align, `align-content`).
+            let origin_y = root.absolute_position(0.0, 0.0).y as f64 + (fl.padding.top + fl.border.top + inline.block_offset) as f64;
             for line in layout.lines() {
                 for item in line.items() {
                     if let PositionedLayoutItem::GlyphRun(run) = item {
@@ -163,7 +165,7 @@ impl TextIndex {
                         let Some(at) = self.position(doc, run.style().brush.id) else { continue };
                         // A text fragment's rect, as `Range.getClientRects` gives it: the
                         // rounded ascent and descent around the baseline, not the line box.
-                        let m = run.run().metrics();
+                        let m = run.run().font_metrics();
                         let (top, bottom) = ((run.baseline() - m.ascent.round()) as f64, (run.baseline() + m.descent.round()) as f64);
                         if bottom > top {
                             spans.push((at, origin_y + top / scale, origin_y + bottom / scale));
@@ -302,14 +304,14 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
     let root = node.inline_root_ancestor()?;
     let inline = root.element_data()?.inline_layout_data.as_ref()?;
     let layout = &inline.layout;
-    // The strut blitz-dom adds to the height an image reserves in its line is not part of
-    // the image's box.
-    let strut = inline.strut_below as f64;
+    // The correction blitz-dom makes to the height an image reserves in a line with no
+    // text (WebKit's strut, `TextLayout::strut_adjust`) is not part of the image's box.
+    let strut = inline.strut_adjust as f64;
     let scale = layout.scale() as f64;
     let fl = root.final_layout();
     let pos = root.absolute_position(0.0, 0.0);
     let ox = pos.x as f64 + (fl.padding.left + fl.border.left) as f64;
-    let oy = pos.y as f64 + (fl.padding.top + fl.border.top) as f64;
+    let oy = pos.y as f64 + (fl.padding.top + fl.border.top + inline.block_offset) as f64;
     // One box per line the element has fragments on.
     let mut fragments: Vec<(f64, f64, f64, f64)> = Vec::new();
     for line in layout.lines() {
@@ -326,11 +328,11 @@ fn element_rect(doc: &BaseDocument, id: NodeId) -> Option<InspectRect> {
             match item {
                 PositionedLayoutItem::GlyphRun(run) if is_descendant_or_self(doc, run.style().brush.id, id) => {
                     // WebKit's content area is the rounded ascent plus the rounded descent.
-                    let m = run.run().metrics();
+                    let m = run.run().font_metrics();
                     let x0 = run.offset() as f64;
                     // The collapsible space a line wraps at hangs past its end and is no part of
                     // the text fragment's rect (the run's advance includes it).
-                    let hang = if i == last { line.metrics().trailing_whitespace as f64 } else { 0.0 };
+                    let hang = if i == last { line.metrics().hanging_advance as f64 } else { 0.0 };
                     add(x0, (run.baseline() - m.ascent.round()) as f64, x0 + run.advance() as f64 - hang, (run.baseline() + m.descent.round()) as f64);
                 }
                 PositionedLayoutItem::InlineBox(b) if is_descendant_or_self(doc, NodeId::from_u64(b.id), id) => {

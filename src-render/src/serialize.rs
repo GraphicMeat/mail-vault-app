@@ -133,7 +133,7 @@ impl Nesting {
         let mut by_box: HashMap<NodeId, (NodeId, Step)> = HashMap::new();
         for r in roots {
             let Some(tl) = doc.get_node(*r).and_then(|n| n.element_data()).and_then(|d| d.inline_layout_data.as_deref()) else { continue };
-            for (k, b) in tl.layout.inline_boxes().iter().enumerate() {
+            for (k, b) in tl.layout.inline_boxes().enumerate() {
                 if b.kind == InlineBoxKind::InFlow {
                     // A stale offset past the text puts the box at the end: never dropped.
                     by_box.insert(NodeId::from_u64(b.id), (*r, (b.index.min(tl.text.len()), k + 1)));
@@ -908,7 +908,7 @@ mod tests {
         let mut d = doc(&format!("{CTA}<p>next</p>"));
         let host = inline_roots(&d)[0];
         let tl = d.get_node_mut(host).unwrap().element_data_mut().unwrap().inline_layout_data.as_deref_mut().unwrap();
-        tl.layout.inline_boxes_mut()[1].index = 10_000;
+        tl.layout.inline_boxes_mut().nth(1).unwrap().index = 10_000;
         let roots = inline_roots(&d);
         let nest = Nesting::new(&d, &roots);
         let last = *roots.last().unwrap();

@@ -1,7 +1,7 @@
 use blitz_traits::node_id::NodeId;
 use std::cmp::Ordering;
 
-use style::{dom::TNode as _, values::specified::box_::DisplayInside};
+use style::dom::TNode as _;
 
 use crate::{BaseDocument, Node};
 
@@ -96,31 +96,6 @@ impl Iterator for AncestorTraverser<'_> {
         let current_node = self.doc.get_node(self.current)?;
         self.current = current_node.parent?;
         Some(self.current)
-    }
-}
-
-impl Node {
-    #[allow(dead_code)]
-    pub(crate) fn should_traverse_layout_children(&mut self) -> bool {
-        let prefer_layout_children = match self.display_constructed_as().inside() {
-            DisplayInside::None => return false,
-            DisplayInside::Contents => false,
-            DisplayInside::Flow | DisplayInside::FlowRoot | DisplayInside::TableCell => {
-                // Prefer layout children for "block" but not "inline" contexts
-                self.element_data()
-                    .is_none_or(|el| el.inline_layout_data.is_none())
-            }
-            DisplayInside::Flex | DisplayInside::Grid => true,
-            DisplayInside::Table => false,
-            DisplayInside::TableRowGroup => false,
-            DisplayInside::TableColumn => false,
-            DisplayInside::TableColumnGroup => false,
-            DisplayInside::TableHeaderGroup => false,
-            DisplayInside::TableFooterGroup => false,
-            DisplayInside::TableRow => false,
-        };
-        let has_layout_children = self.layout_children.get_mut().is_some();
-        prefer_layout_children & has_layout_children
     }
 }
 
@@ -306,20 +281,26 @@ impl BaseDocument {
         }
     }
 
-    pub fn node_layout_ancestors(&self, node_id: NodeId) -> Vec<NodeId> {
+    /// `node_id` and its ancestor elements in the DOM, root first. These are
+    /// the elements that match `:hover`/`:active` when `node_id` does.
+    pub fn node_element_ancestors(&self, node_id: NodeId) -> Vec<NodeId> {
         let mut ancestors = Vec::with_capacity(12);
         let mut maybe_id = Some(node_id);
         while let Some(id) = maybe_id {
+            let node = &self.nodes[id];
+            if !node.is_element() {
+                break;
+            }
             ancestors.push(id);
-            maybe_id = self.nodes[id].layout_parent.get();
+            maybe_id = node.parent;
         }
         ancestors.reverse();
         ancestors
     }
 
-    pub fn maybe_node_layout_ancestors(&self, node_id: Option<NodeId>) -> Vec<NodeId> {
+    pub fn maybe_node_element_ancestors(&self, node_id: Option<NodeId>) -> Vec<NodeId> {
         node_id
-            .map(|id| self.node_layout_ancestors(id))
+            .map(|id| self.node_element_ancestors(id))
             .unwrap_or_default()
     }
 

@@ -12,7 +12,7 @@ use style::{
     data::ElementData as StyloElementData,
     shared_lock::StylesheetGuards,
     values::{
-        computed::{Content, ContentItem, Display, Float, TextTransform},
+        computed::{Content, ContentItem, Display, Float},
         specified::box_::{DisplayInside, DisplayOutside},
     },
 };
@@ -20,7 +20,9 @@ use thin_vec::ThinVec;
 
 use crate::{
     BaseDocument, ElementData, Node, NodeData,
-    layout::damage::{CONSTRUCT_BOX, CONSTRUCT_DESCENDENT, CONSTRUCT_FC},
+    layout::damage::{
+        CONSTRUCT_BOX, CONSTRUCT_DESCENDENT, CONSTRUCT_FC, sort_layout_children_by_order,
+    },
     node::{
         ListItemLayout, ListItemLayoutPosition, Marker, NodeFlags, NodeKind, SpecialElementData,
         TextBrush, TextInputData, TextLayout,
@@ -32,8 +34,9 @@ use crate::{
 use super::{
     damage::ALL_DAMAGE,
     list::{BULLET_FONT_FAMILY, collect_list_item_children},
-    replaced::is_replaced_element,
+    replaced::is_inline_box_element,
     table::build_table_context,
+    text_transform::{CaseTransform, TextTransformer},
 };
 
 const DUMMY_NAME: QualName = qual_name!("div", html);
@@ -91,7 +94,7 @@ impl LayoutChildren {
         fn block_is_only_whitespace(doc: &BaseDocument, node_id: NodeId) -> bool {
             for child_id in doc.nodes[node_id].children.iter().copied() {
                 let child = &doc.nodes[child_id];
-                if !child.is_whitespace_node() {
+                if !child.is_collapsible_whitespace_node() {
                     return false;
                 }
             }
@@ -272,7 +275,7 @@ fn push_hoisted_children_and_pseudos(
     let children = std::mem::take(&mut doc.nodes[container_node_id].children);
     for child_id in children.iter().copied() {
         let child = &doc.nodes[child_id];
-        if child.data.kind() == NodeKind::Comment || child.is_whitespace_node() {
+        if child.data.kind() == NodeKind::Comment || child.is_collapsible_whitespace_node() {
             continue;
         }
         push_hoisted_child(doc, child_id, out, wrap);
@@ -338,7 +341,7 @@ fn webkit_ascent_bonus(run: &parley::layout::Run<'_, TextBrush>) -> f32 {
     if !matches!(family.as_str(), "Times" | "Helvetica" | "Courier") {
         return 0.0;
     }
-    let m = run.metrics();
+    let m = run.font_metrics();
     ((m.ascent + m.descent) * 0.15 + 0.5).floor()
 }
 
@@ -362,20 +365,11 @@ fn normal_line_height(
         .lines()
         .next()
         .and_then(|line| line.runs().next().map(|run| {
-            let m = run.metrics();
+            let m = run.font_metrics();
             ((m.ascent + webkit_ascent_bonus(&run)).round() + m.descent.round() + m.leading.round())
                 / scale
         }))
         .unwrap_or(style.font_size * 1.2)
-}
-
-/// Convert a relative line height to an absolute one
-fn resolve_line_height(line_height: parley::LineHeight, font_size: f32) -> f32 {
-    match line_height {
-        parley::LineHeight::FontSizeRelative(relative) => relative * font_size,
-        parley::LineHeight::Absolute(absolute) => absolute,
-        parley::LineHeight::MetricsRelative(relative) => relative * font_size, //unreachable!(),
-    }
 }
 
 /// Result of classifying the in-flow children of a flow container as
@@ -440,9 +434,7 @@ fn classify_flow_children(
         // Unwraps on Text and SVG nodes
         let style = child.primary_styles();
         let style = style.as_ref();
-        let display = style
-            .map(|s| s.clone_display())
-            .unwrap_or(Display::inline());
+        let display = child.display_style().unwrap_or(Display::inline());
         if matches!(display.inside(), DisplayInside::Contents) {
             // Transparent for box generation: the contents node casts
             // no vote itself — its children decide.
@@ -457,8 +449,8 @@ fn classify_flow_children(
                 .unwrap_or(PositionProperty::Static);
             let float = style.map(|s| s.clone_float()).unwrap_or(Float::None);
 
-            // Ignore nodes that are entirely whitespace
-            if child.is_whitespace_node() {
+            // Ignore nodes whose whitespace is entirely collapsed away
+            if child.is_collapsible_whitespace_node() {
                 continue;
             }
 
@@ -509,6 +501,11 @@ fn collect_layout_children_with_wrap(
     out: &mut LayoutChildren,
     wrap: Option<WrapContext>,
 ) {
+    // Record the `display` the box is being constructed with
+    if let Some(display) = doc.nodes[container_node_id].display_style() {
+        *doc.nodes[container_node_id].display_constructed_as_mut() = display;
+    }
+
     // Reset construction flags
     // TODO: make incremental and only remove this if the element is no longer an inline root
     doc.nodes[container_node_id]
@@ -545,14 +542,7 @@ fn collect_layout_children_with_wrap(
 
         #[cfg(feature = "svg")]
         if matches!(tag_name, "svg") {
-            let mut outer_html = doc.get_node(container_node_id).unwrap().outer_html();
-
-            // HACK: usvg fails to parse SVGs that don't have the SVG xmlns set. So inject it
-            // if the generated source doesn't have it.
-            if !outer_html.contains("xmlns") {
-                outer_html =
-                    outer_html.replace("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"");
-            }
+            let outer_html = doc.get_node(container_node_id).unwrap().svg_source();
 
             // Remove contruction damage from subtree
             doc.iter_subtree_mut(container_node_id, |id: NodeId, doc: &mut BaseDocument| {
@@ -609,7 +599,7 @@ fn collect_layout_children_with_wrap(
                 el.attr_parsed(local_name!("reversed")).unwrap_or(false),
             )
         } else {
-            (1, false)
+            (0, false)
         };
         collect_list_item_children(doc, &mut index, reversed, container_node_id);
     }
@@ -657,19 +647,22 @@ fn collect_layout_children_with_wrap(
                 });
 
             if !has_text_node_or_contents {
-                return push_non_whitespace_children_and_pseudos(
+                push_non_whitespace_children_and_pseudos(
                     &mut out.children,
                     &doc.nodes[container_node_id],
                 );
+            } else {
+                collect_complex_layout_children(
+                    doc,
+                    container_node_id,
+                    out,
+                    true,
+                    text_item_needs_wrap,
+                );
             }
 
-            collect_complex_layout_children(
-                doc,
-                container_node_id,
-                out,
-                true,
-                text_item_needs_wrap,
-            );
+            // Flex/grid items are laid out in order-modified document order.
+            sort_layout_children_by_order(&doc.nodes, &mut out.children);
         }
 
         DisplayInside::Table => {
@@ -763,18 +756,22 @@ fn collect_layout_children_with_wrap(
 }
 
 /// Extract the text generated by a pseudo-element's `content` property
-/// (only string content items are currently supported).
-fn pe_content_text(style: &style::properties::ComputedValues) -> Option<&str> {
+/// (only string content items are currently supported; other item types
+/// are skipped).
+fn pe_content_text(style: &style::properties::ComputedValues) -> Option<String> {
     match &style.get_counters().content {
         Content::Items(item_data) => {
             let items = &item_data.items[0..item_data.alt_start];
-            match items.first() {
-                Some(ContentItem::String(owned_str)) => Some(owned_str),
-                _ => {
-                    // TODO: other types of content
-                    None
+            let mut text = String::new();
+            let mut has_string = false;
+            for item in items {
+                // TODO: other types of content
+                if let ContentItem::String(owned_str) = item {
+                    text.push_str(owned_str);
+                    has_string = true;
                 }
             }
+            has_string.then_some(text)
         }
         _ => None,
     }
@@ -788,7 +785,7 @@ fn flush_pseudo_elements(doc: &mut BaseDocument, node_id: NodeId) {
         let after_node_id = node.after();
 
         // Note: yes these are kinda backwards
-        let style_data = node.stylo_element_data_opt().and_then(|s| s.get());
+        let style_data = node.try_stylo_element_data().and_then(|s| s.get());
         let before_style = style_data
             .as_ref()
             .and_then(|d| d.styles.pseudos.as_array()[1].clone());
@@ -827,7 +824,6 @@ fn flush_pseudo_elements(doc: &mut BaseDocument, node_id: NodeId) {
             }
 
             if let Some(text) = pe_content_text(pe_style) {
-                let text = text.to_string();
                 let text_node_id = doc.create_text_node(&text);
                 doc.nodes[text_node_id].parent = Some(new_node_id);
                 doc.nodes[new_node_id].children.push(text_node_id);
@@ -857,7 +853,7 @@ fn flush_pseudo_elements(doc: &mut BaseDocument, node_id: NodeId) {
             // the style-pointer comparison below, as the pseudo-element's style may
             // already have been updated by `sync_pseudo_element_styles` during the
             // style traversal without the text having been updated.
-            let new_text = pe_content_text(&pe_style).map(str::to_string);
+            let new_text = pe_content_text(&pe_style);
             let existing_text_node_id = doc.nodes[pe_node_id]
                 .children
                 .first()
@@ -888,7 +884,7 @@ fn flush_pseudo_elements(doc: &mut BaseDocument, node_id: NodeId) {
             }
 
             let mut node_styles = doc.nodes[pe_node_id]
-                .stylo_element_data_opt_mut()
+                .try_stylo_element_data_mut()
                 .and_then(|s| s.get_mut());
             let node_styles = &mut node_styles.as_mut().unwrap();
             node_styles.damage.insert(ALL_DAMAGE);
@@ -967,12 +963,25 @@ fn create_text_editor(doc: &mut BaseDocument, input_element_id: NodeId, is_multi
         .as_ref()
         .map(|s| stylo_to_parley::style(node.id, s))
         .unwrap_or_default();
+    let alignment = node
+        .primary_styles()
+        .map(|s| stylo_to_parley::text_align(s.clone_text_align()))
+        .unwrap_or(parley::layout::Alignment::Start);
+    let base_direction = node
+        .primary_styles()
+        .map(|s| stylo_to_parley::base_direction(s.clone_direction(), s.clone_unicode_bidi()))
+        .unwrap_or(parley::BaseDirection::Auto);
 
+    let initial_text = if is_multiline {
+        node.text_content()
+    } else {
+        node.attr(local_name!("value")).unwrap_or("").to_string()
+    };
     let element = &mut node.data.downcast_element_mut().unwrap();
     if !matches!(element.special_data, SpecialElementData::TextInput(_)) {
         let mut text_input_data = TextInputData::new(is_multiline);
         let editor = &mut text_input_data.editor;
-        editor.set_text(element.attr(local_name!("value")).unwrap_or(""));
+        editor.set_text(&initial_text);
         element.special_data = SpecialElementData::TextInput(text_input_data);
     }
 
@@ -986,9 +995,25 @@ fn create_text_editor(doc: &mut BaseDocument, input_element_id: NodeId, is_multi
 
     let styles = editor.edit_styles();
     styles.retain(|_| false);
+    styles.insert(StyleProperty::FontFamily(parley_style.font_family));
     styles.insert(StyleProperty::FontSize(parley_style.font_size));
+    styles.insert(StyleProperty::FontWidth(parley_style.font_width));
+    styles.insert(StyleProperty::FontStyle(parley_style.font_style));
+    styles.insert(StyleProperty::FontWeight(parley_style.font_weight));
+    styles.insert(StyleProperty::FontVariations(parley_style.font_variations));
+    styles.insert(StyleProperty::FontFeatures(parley_style.font_features));
     styles.insert(StyleProperty::LineHeight(parley_style.line_height));
+    styles.insert(StyleProperty::WordSpacing(parley_style.word_spacing));
+    styles.insert(StyleProperty::LetterSpacing(parley_style.letter_spacing));
+    styles.insert(StyleProperty::WordBreak(parley_style.word_break));
+    styles.insert(StyleProperty::OverflowWrap(parley_style.overflow_wrap));
+    styles.insert(StyleProperty::TextWrapMode(parley_style.text_wrap_mode));
+    styles.insert(StyleProperty::WhiteSpaceCollapse(
+        parley_style.white_space_collapse,
+    ));
     styles.insert(StyleProperty::Brush(parley_style.brush));
+    editor.set_alignment(alignment);
+    editor.set_base_direction(base_direction);
 
     editor.refresh_layout(&mut doc.font_ctx.lock().unwrap(), &mut doc.layout_ctx);
 }
@@ -1080,11 +1105,7 @@ pub(crate) fn find_inline_layout_embedded_boxes(
                     (DisplayOutside::Inline, DisplayInside::Flow) => {
                         let tag_name = &element_data.name.local;
 
-                        if is_replaced_element(tag_name)
-                            || *tag_name == local_name!("input")
-                            || *tag_name == local_name!("textarea")
-                            || *tag_name == local_name!("button")
-                        {
+                        if is_inline_box_element(tag_name) {
                             layout_children.push(node_id);
                         } else if *tag_name == local_name!("br") {
                             node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
@@ -1114,13 +1135,13 @@ pub(crate) fn find_inline_layout_embedded_boxes(
     }
 }
 
-/// MailVault parity fix (plan B): parley trims a span's text with `str::trim_start` and
-/// `trim_end` (Unicode White_Space, so a no-break space goes), and takes the advance of
-/// a trailing space or nbsp off the content widths as a hanging space. Only collapsible
-/// space is meant to do either (CSS Text 3, 4.1.3 and 4.1.1): `&nbsp;&nbsp;Hi` keeps its
-/// indent and a `<td>&nbsp;</td>` spacer is ~4px wide in WebKit, 0 here. A word joiner
-/// (U+2060: zero width, forbids a break, not White_Space) on the outer side of a leading
-/// or trailing nbsp stands in the way of both.
+/// MailVault parity fix (plan B): parley 0.11 trimmed a span's text with `str::trim_start` and
+/// `trim_end` (Unicode White_Space, so a no-break space went) and hung a trailing nbsp, so a
+/// word joiner (U+2060: zero width, forbids a break, not White_Space) went on the outer side
+/// of a leading or trailing nbsp. parley 0.12 trims and hangs ASCII whitespace only, so the
+/// joiner is no longer needed for the layout; it is kept because the module's DOM map
+/// (src-render/src/dommap.rs, text.rs, serialize.rs) replays it to align layout text with
+/// DOM text.
 /// The spaces CSS collapses: not the no-break space.
 fn is_collapsible_space(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')
@@ -1178,6 +1199,61 @@ fn push_text_keeping_nbsp(builder: &mut TreeBuilder<TextBrush>, text: &str) {
     }
 }
 
+/// MailVault parity fix (plan B): an `inline-block` whose in-flow content has no line
+/// box, only table boxes or nothing at all, so its baseline is its bottom margin edge
+/// (CSS 2.1 10.8.1). WebKit does not take a baseline out of a table inside a block.
+pub(crate) fn inline_block_without_line_box(nodes: &crate::NodeTree, node: &Node) -> bool {
+    let is_inline_block = node.display_style().is_some_and(|d| {
+        d.outside() == DisplayOutside::Inline && d.inside() == DisplayInside::FlowRoot
+    });
+    is_inline_block && !has_line_box(nodes, node)
+}
+
+fn has_line_box(nodes: &crate::NodeTree, node: &Node) -> bool {
+    if node.before().is_some() || node.after().is_some() {
+        return true;
+    }
+    node.children.iter().any(|&child_id| {
+        let child = &nodes[child_id];
+        match &child.data {
+            NodeData::Text(text) => !text
+                .content
+                .chars()
+                .all(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')),
+            NodeData::Element(_) | NodeData::AnonymousBlock(_) => {
+                let Some(style) = child.primary_styles() else {
+                    return true;
+                };
+                if style.clone_position().is_absolutely_positioned()
+                    || style.clone_float().is_floating()
+                {
+                    return false;
+                }
+                let display = style.clone_display();
+                drop(style);
+                match (display.outside(), display.inside()) {
+                    (_, DisplayInside::Contents) => has_line_box(nodes, child),
+                    (DisplayOutside::None, _) | (_, DisplayInside::None) => false,
+                    (DisplayOutside::Block, DisplayInside::Flow | DisplayInside::FlowRoot) => {
+                        has_line_box(nodes, child)
+                    }
+                    (_, DisplayInside::Table)
+                    | (_, DisplayInside::TableRowGroup)
+                    | (_, DisplayInside::TableHeaderGroup)
+                    | (_, DisplayInside::TableFooterGroup)
+                    | (_, DisplayInside::TableRow)
+                    | (_, DisplayInside::TableCell)
+                    | (_, DisplayInside::TableColumn)
+                    | (_, DisplayInside::TableColumnGroup) => false,
+                    // Inline-level content, flex and grid: a line or unknown.
+                    _ => true,
+                }
+            }
+            _ => false,
+        }
+    })
+}
+
 pub(crate) fn build_inline_layout_into(
     nodes: &crate::NodeTree,
     layout_ctx: &mut LayoutContext<TextBrush>,
@@ -1197,21 +1273,23 @@ pub(crate) fn build_inline_layout_into(
     let parley_style = root_node_style
         .as_ref()
         .map(|s| stylo_to_parley::style(inline_context_root_node_id, s))
-        .unwrap_or_default();
+        .unwrap_or_else(|| parley::TextStyle {
+            white_space_collapse: WhiteSpaceCollapse::Collapse,
+            ..Default::default()
+        });
 
-    // MailVault parity fix (plan B): `line-height: normal` is the font's metrics, which only a
-    // laid-out line knows (see `normal_line_height`). A block with it gets the rounded height as
-    // a fixed one, so lines stack on whole pixels like WebKit's.
+    // MailVault parity fix (plan B): `line-height: normal` is the font's metrics with each part
+    // rounded (see `normal_line_height`). A block with it gets that height as a fixed one, so
+    // lines stack on whole pixels like WebKit's.
     let root_normal = matches!(parley_style.line_height, parley::LineHeight::MetricsRelative(_));
-    let root_px = if root_normal {
-        normal_line_height(layout_ctx, font_ctx, scale, &parley_style)
-    } else {
-        resolve_line_height(parley_style.line_height, parley_style.font_size)
-    };
     let mut parley_style = parley_style;
-    if root_normal {
-        parley_style.line_height = parley::LineHeight::Absolute(root_px);
-    }
+    let root_px = if root_normal {
+        let px = normal_line_height(layout_ctx, font_ctx, scale, &parley_style);
+        parley_style.line_height = parley::LineHeight::Absolute(px);
+        px
+    } else {
+        0.0
+    };
     let root_line_height = RootLineHeight {
         px: root_px,
         normal: root_normal,
@@ -1220,19 +1298,17 @@ pub(crate) fn build_inline_layout_into(
 
     // Create a parley tree builder
     let mut builder = layout_ctx.tree_builder(font_ctx, scale, true, &parley_style);
-
-    // Set whitespace collapsing mode
-    let collapse_mode = root_node_style
-        .as_ref()
-        .map(|s| s.get_inherited_text().white_space_collapse)
-        .map(stylo_to_parley::white_space_collapse)
-        .unwrap_or(WhiteSpaceCollapse::Collapse);
-    builder.set_white_space_mode(collapse_mode);
+    if let Some(style) = root_node_style.as_deref() {
+        builder.set_base_direction(stylo_to_parley::base_direction(
+            style.clone_direction(),
+            style.clone_unicode_bidi(),
+        ));
+    }
 
     let text_transform = root_node_style
-        .as_ref()
-        .map(|s| s.clone_text_transform() & TextTransform::CASE_TRANSFORMS)
-        .unwrap_or(TextTransform::NONE);
+        .as_deref()
+        .map(|s| CaseTransform::from_style(s))
+        .unwrap_or(CaseTransform::NONE);
 
     // Render position-inside list items
     if let Some(ListItemLayout {
@@ -1257,55 +1333,53 @@ pub(crate) fn build_inline_layout_into(
             Marker::String(str) => builder.push_text(str),
         }
     };
+    // The marker is a separate box, so words in the content don't continue from it.
+    let mut text_transformer = TextTransformer::default();
+    text_transformer.word_break(&builder);
 
     if let Some(before_id) = root_node.before() {
         build_inline_layout_recursive(
             &mut builder,
+            &mut text_transformer,
             nodes,
-            inline_context_root_node_id,
             before_id,
-            collapse_mode,
-            text_transform,
+            &text_transform,
             &root_line_height,
         );
     }
     for child_id in root_node.children.iter().copied() {
         build_inline_layout_recursive(
             &mut builder,
+            &mut text_transformer,
             nodes,
-            inline_context_root_node_id,
             child_id,
-            collapse_mode,
-            text_transform,
+            &text_transform,
             &root_line_height,
         );
     }
     if let Some(after_id) = root_node.after() {
         build_inline_layout_recursive(
             &mut builder,
+            &mut text_transformer,
             nodes,
-            inline_context_root_node_id,
             after_id,
-            collapse_mode,
-            text_transform,
+            &text_transform,
             &root_line_height,
         );
     }
 
     text_layout.text = builder.build_into(&mut text_layout.layout);
 
-    // MailVault parity fix (plan B): every line box has a strut, an empty inline box
-    // with the block's own font and line-height (CSS 2 10.8.1, standards mode), and a
-    // baseline-aligned image sits above the part of it below the baseline: a cell with
-    // a lone `<img>` is the image's height plus ~6px at `line-height: 1.6`. Parley's
-    // lines carry the strut through their text runs, so a line with only inline boxes
-    // has none. The space is added to the boxes' reserved height instead (the box
-    // itself is placed at the top of it), which gives the same line box.
-    text_layout.strut_below = 0.0;
+    // MailVault parity fix (plan B): parley 0.12 gives a line that holds only inline boxes the
+    // strut of the block's own font (CSS 2 10.8.1), from the font file's ascent. In the
+    // harness iframe Times, Helvetica and Courier have a taller ascent (`webkit_ascent_bonus`),
+    // which leaves less of a fixed line-height below the baseline: a cell with a lone 50px
+    // image under Helvetica 14px/22px is 56 high in WebKit, 57 with parley's strut. The
+    // difference is kept in `strut_adjust` and added to the boxes' reserved heights in
+    // `compute_inline_layout`; a box still sits on the baseline, its top where WebKit's is.
     // Only for boxes whose bottom edge is their baseline: replaced elements, and an
-    // inline-block with no line box of its own (CSS 2.1 10.8.1; a `table` made
-    // `display: inline-block` holds table boxes only). An inline-block with text sits on
-    // its own last text baseline, so it reaches below the strut already.
+    // inline-block with no line box of its own.
+    text_layout.strut_adjust = 0.0;
     let (mut any_in_flow, mut all_replaced) = (false, true);
     for b in text_layout.layout.inline_boxes() {
         if b.kind == InlineBoxKind::InFlow {
@@ -1314,119 +1388,52 @@ pub(crate) fn build_inline_layout_into(
             all_replaced &= node
                 .data
                 .downcast_element()
-                .is_some_and(|el| is_replaced_element(&el.name.local))
+                .is_some_and(|el| super::replaced::is_replaced_element(&el.name.local))
                 || inline_block_without_line_box(nodes, node);
         }
     }
     if text_layout.text.is_empty() && any_in_flow && all_replaced {
-        let mut probe = parley::layout::Layout::<TextBrush>::new();
-        let mut probe_builder = layout_ctx.tree_builder(font_ctx, scale, true, &parley_style);
-        probe_builder.push_text("x");
-        probe_builder.build_into(&mut probe);
-        probe.break_all_lines(None);
-        if let Some(line) = probe.lines().next() {
-            let metrics = line.metrics();
-            text_layout.strut_below = (metrics.block_max_coord - metrics.baseline).max(0.0);
-            // Helvetica and the like: WebKit's taller ascent leaves less of the line-height
-            // below the baseline (split like parley does, the smaller half above).
-            if let (Some(run), parley::LineHeight::Absolute(line_height)) =
-                (line.runs().next(), parley_style.line_height)
-            {
-                let bonus = webkit_ascent_bonus(&run);
-                if bonus > 0.0 {
-                    let m = run.metrics();
-                    let (ascent, descent) = ((m.ascent + bonus).round(), m.descent.round());
-                    let leading = line_height * scale - (ascent + descent);
-                    let above = (leading * 0.5).floor();
-                    text_layout.strut_below = descent + (leading - above).max(0.0);
+        if let parley::LineHeight::Absolute(line_height) = parley_style.line_height {
+            let mut probe = parley::layout::Layout::<TextBrush>::new();
+            let mut probe_builder = layout_ctx.tree_builder(font_ctx, scale, true, &parley_style);
+            probe_builder.push_text("x");
+            probe_builder.build_into(&mut probe);
+            probe.break_all_lines(None);
+            if let Some(line) = probe.lines().next() {
+                let metrics = line.metrics();
+                let parley_below = (metrics.block_max_coord - metrics.baseline).max(0.0);
+                if let Some(run) = line.runs().next() {
+                    let bonus = webkit_ascent_bonus(&run);
+                    if bonus > 0.0 {
+                        let m = run.font_metrics();
+                        let (ascent, descent) = ((m.ascent + bonus).round(), m.descent.round());
+                        let leading = line_height * scale - (ascent + descent);
+                        let above = (leading * 0.5).floor();
+                        let webkit_below = descent + (leading - above).max(0.0);
+                        text_layout.strut_adjust = webkit_below - parley_below;
+                    }
                 }
             }
         }
     }
     return;
 
-    // MailVault parity fix (plan B): an `inline-block` whose in-flow content has no line
-    // box, only table boxes or nothing at all, so its baseline is its bottom margin edge
-    // (CSS 2.1 10.8.1). WebKit does not take a baseline out of a table inside a block.
-    fn inline_block_without_line_box(nodes: &crate::NodeTree, node: &Node) -> bool {
-        let is_inline_block = node.display_style().is_some_and(|d| {
-            d.outside() == DisplayOutside::Inline && d.inside() == DisplayInside::FlowRoot
-        });
-        is_inline_block && !has_line_box(nodes, node)
-    }
-
-    fn has_line_box(nodes: &crate::NodeTree, node: &Node) -> bool {
-        if node.before().is_some() || node.after().is_some() {
-            return true;
-        }
-        node.children.iter().any(|&child_id| {
-            let child = &nodes[child_id];
-            match &child.data {
-                NodeData::Text(text) => !text
-                    .content
-                    .chars()
-                    .all(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')),
-                NodeData::Element(_) | NodeData::AnonymousBlock(_) => {
-                    let Some(style) = child.primary_styles() else {
-                        return true;
-                    };
-                    if style.clone_position().is_absolutely_positioned()
-                        || style.clone_float().is_floating()
-                    {
-                        return false;
-                    }
-                    let display = style.clone_display();
-                    drop(style);
-                    match (display.outside(), display.inside()) {
-                        (_, DisplayInside::Contents) => has_line_box(nodes, child),
-                        (DisplayOutside::None, _) | (_, DisplayInside::None) => false,
-                        (DisplayOutside::Block, DisplayInside::Flow | DisplayInside::FlowRoot) => {
-                            has_line_box(nodes, child)
-                        }
-                        (_, DisplayInside::Table)
-                        | (_, DisplayInside::TableRowGroup)
-                        | (_, DisplayInside::TableHeaderGroup)
-                        | (_, DisplayInside::TableFooterGroup)
-                        | (_, DisplayInside::TableRow)
-                        | (_, DisplayInside::TableCell)
-                        | (_, DisplayInside::TableColumn)
-                        | (_, DisplayInside::TableColumnGroup) => false,
-                        // Inline-level content, flex and grid: a line or unknown.
-                        _ => true,
-                    }
-                }
-                _ => false,
-            }
-        })
-    }
-
     fn build_inline_layout_recursive(
         builder: &mut TreeBuilder<TextBrush>,
+        text_transformer: &mut TextTransformer,
         nodes: &crate::NodeTree,
-        parent_id: NodeId,
         node_id: NodeId,
-        collapse_mode: WhiteSpaceCollapse,
-        parent_text_transform: TextTransform,
+        parent_text_transform: &CaseTransform,
         root_line_height: &RootLineHeight,
     ) {
         let node = &nodes[node_id];
 
-        // Set layout_parent for node.
-        node.layout_parent.set(Some(parent_id));
-
         let style = node.primary_styles();
         let style = style.as_ref();
 
-        // Set whitespace collapsing mode
-        let collapse_mode = style
-            .map(|s| s.clone_white_space_collapse())
-            .map(stylo_to_parley::white_space_collapse)
-            .unwrap_or(collapse_mode);
-        builder.set_white_space_mode(collapse_mode);
-
         let text_transform = style
-            .map(|s| s.clone_text_transform() & TextTransform::CASE_TRANSFORMS)
-            .unwrap_or(TextTransform::NONE);
+            .map(|s| CaseTransform::from_style(s))
+            .unwrap_or(CaseTransform::NONE);
 
         match &node.data {
             NodeData::Element(element_data) | NodeData::AnonymousBlock(element_data) => {
@@ -1455,27 +1462,43 @@ pub(crate) fn build_inline_layout_into(
                         // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
                     }
                     (DisplayOutside::None, DisplayInside::Contents) => {
+                        let whitespace = style.map(|s| {
+                            [
+                                parley::StyleProperty::WhiteSpaceCollapse(
+                                    stylo_to_parley::white_space_collapse(
+                                        s.clone_white_space_collapse(),
+                                    ),
+                                ),
+                                parley::StyleProperty::TextWrapMode(
+                                    stylo_to_parley::text_wrap_mode(s.clone_text_wrap_mode()),
+                                ),
+                            ]
+                        });
+                        builder.push_style_modification_span(
+                            whitespace
+                                .as_ref()
+                                .map_or(&[][..], |styles| styles.as_slice()),
+                        );
                         for child_id in node.children.iter().copied() {
                             // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
                             build_inline_layout_recursive(
                                 builder,
+                                text_transformer,
                                 nodes,
-                                parent_id,
                                 child_id,
-                                collapse_mode,
-                                text_transform,
+                                &text_transform,
                                 root_line_height,
                             );
                         }
+                        builder.pop_style_span();
                     }
                     (DisplayOutside::Inline, DisplayInside::Flow) => {
                         let tag_name = &element_data.name.local;
 
-                        if is_replaced_element(tag_name)
-                            || *tag_name == local_name!("input")
-                            || *tag_name == local_name!("textarea")
-                            || *tag_name == local_name!("button")
-                        {
+                        if is_inline_box_element(tag_name) {
+                            if box_kind == InlineBoxKind::InFlow {
+                                text_transformer.word_break(builder);
+                            }
                             builder.push_inline_box(InlineBox {
                                 id: node_id.as_u64(),
                                 kind: box_kind,
@@ -1484,65 +1507,54 @@ pub(crate) fn build_inline_layout_into(
                                 // Width and height are set during layout
                                 width: 0.0,
                                 height: 0.0,
+                                baseline: None,
+                                vertical_align: node
+                                    .primary_styles()
+                                    .map(|s| stylo_to_parley::vertical_align(&s))
+                                    .unwrap_or_default(),
                             });
                         } else if *tag_name == local_name!("br") {
                             // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
                             // TODO: update span id for br spans
-                            builder.push_style_modification_span(&[]);
-                            builder.set_white_space_mode(WhiteSpaceCollapse::Preserve);
+                            builder.push_style_modification_span(&[
+                                parley::StyleProperty::WhiteSpaceCollapse(
+                                    WhiteSpaceCollapse::Preserve,
+                                ),
+                            ]);
                             builder.push_text("\n");
                             builder.pop_style_span();
-                            builder.set_white_space_mode(collapse_mode);
+                            text_transformer.word_break(builder);
                         } else {
                             // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
                             let mut style = node
                                 .primary_styles()
                                 .map(|s| stylo_to_parley::style(node.id, &s))
-                                .unwrap_or_default();
+                                .unwrap_or_else(|| parley::TextStyle {
+                                    white_space_collapse: WhiteSpaceCollapse::Collapse,
+                                    ..Default::default()
+                                });
 
-                            // dbg!(&style);
-
-                            let font_size = style.font_size;
-
-                            // Floor the line-height of the span by the line-height of the inline context
-                            // See https://www.w3.org/TR/CSS21/visudet.html#line-height
                             // MailVault parity fix (plan B): a span with `line-height: normal` in a
-                            // `normal` block has the block's line height when its font is the block's,
-                            // and the font's own metrics when it is a larger one; a smaller one gets
-                            // the block's strut (same family assumed). Under a fixed line-height it
-                            // is floored like any other span.
-                            style.line_height = match style.line_height {
-                                parley::LineHeight::MetricsRelative(_) if root_line_height.normal => {
-                                    if root_line_height.same_font(&style)
-                                        || font_size < root_line_height.style.font_size
-                                    {
-                                        parley::LineHeight::Absolute(root_line_height.px)
-                                    } else {
-                                        style.line_height
-                                    }
-                                }
-                                lh => parley::LineHeight::Absolute(
-                                    match lh {
-                                        parley::LineHeight::MetricsRelative(_) => font_size * 1.2,
-                                        lh => resolve_line_height(lh, font_size),
-                                    }
-                                    .max(root_line_height.px),
-                                ),
-                            };
-
-                            // dbg!(node_id);
-                            // dbg!(&style);
+                            // `normal` block has the block's (rounded) line height when its font is
+                            // the block's or a smaller one (same family assumed), and the font's own
+                            // metrics when it is a larger one.
+                            if root_line_height.normal
+                                && matches!(style.line_height, parley::LineHeight::MetricsRelative(_))
+                                && (root_line_height.same_font(&style)
+                                    || style.font_size < root_line_height.style.font_size)
+                            {
+                                style.line_height = parley::LineHeight::Absolute(root_line_height.px);
+                            }
 
                             builder.push_style_span(style);
 
                             if let Some(before_id) = node.before() {
                                 build_inline_layout_recursive(
                                     builder,
+                                    text_transformer,
                                     nodes,
-                                    node_id,
                                     before_id,
-                                    collapse_mode,
-                                    text_transform,
+                                    &text_transform,
                                     root_line_height,
                                 );
                             }
@@ -1550,22 +1562,20 @@ pub(crate) fn build_inline_layout_into(
                             for child_id in node.children.iter().copied() {
                                 build_inline_layout_recursive(
                                     builder,
+                                    text_transformer,
                                     nodes,
-                                    node_id,
                                     child_id,
-                                    collapse_mode,
-                                    text_transform,
+                                    &text_transform,
                                     root_line_height,
                                 );
                             }
                             if let Some(after_id) = node.after() {
                                 build_inline_layout_recursive(
                                     builder,
+                                    text_transformer,
                                     nodes,
-                                    node_id,
                                     after_id,
-                                    collapse_mode,
-                                    text_transform,
+                                    &text_transform,
                                     root_line_height,
                                 );
                             }
@@ -1575,6 +1585,9 @@ pub(crate) fn build_inline_layout_into(
                     }
                     // Inline box
                     (_, _) => {
+                        if box_kind == InlineBoxKind::InFlow {
+                            text_transformer.word_break(builder);
+                        }
                         builder.push_inline_box(InlineBox {
                             id: node_id.as_u64(),
                             kind: box_kind,
@@ -1583,6 +1596,11 @@ pub(crate) fn build_inline_layout_into(
                             // Width and height are set during layout
                             width: 0.0,
                             height: 0.0,
+                            baseline: None,
+                            vertical_align: node
+                                .primary_styles()
+                                .map(|s| stylo_to_parley::vertical_align(&s))
+                                .unwrap_or_default(),
                         });
                     }
                 };
@@ -1592,29 +1610,23 @@ pub(crate) fn build_inline_layout_into(
                 // dbg!(&data.content);
 
                 // MailVault parity fix (plan B): collapsible spaces at the end of a line are
-                // removed (CSS Text 3 4.1.3), `text <br>` included. parley keeps the space and,
-                // when the line is exactly as wide as the text, hangs it and breaks again
-                // before the `\n` (an empty extra line), and counts it in max-content.
-                let content = if matches!(collapse_mode, WhiteSpaceCollapse::Collapse)
-                    && precedes_forced_break(nodes, node_id)
-                {
+                // removed (CSS Text 3 4.1.3), `text <br>` included. Kept for the DOM map (see
+                // `is_collapsible_space`); parley 0.12 hangs such a space itself.
+                let collapses = node
+                    .parent
+                    .and_then(|parent| nodes[parent].primary_styles())
+                    .map_or(true, |s| {
+                        stylo_to_parley::white_space_collapse(s.clone_white_space_collapse())
+                            == WhiteSpaceCollapse::Collapse
+                    });
+                let content = if collapses && precedes_forced_break(nodes, node_id) {
                     data.content.trim_end_matches(is_collapsible_space)
                 } else {
                     data.content.as_str()
                 };
-
-                // TODO: optimize case transforms to be non-allocating
-                match parent_text_transform {
-                    TextTransform::UPPERCASE => {
-                        push_text_keeping_nbsp(builder, &content.to_uppercase());
-                    }
-                    TextTransform::LOWERCASE => {
-                        push_text_keeping_nbsp(builder, &content.to_lowercase());
-                    }
-                    _ => {
-                        push_text_keeping_nbsp(builder, content);
-                    }
-                }
+                let text = text_transformer.transform(content, parent_text_transform, builder);
+                // MailVault parity fix (plan B): see `push_text_keeping_nbsp`.
+                push_text_keeping_nbsp(builder, text);
             }
             NodeData::Comment { .. } => {
                 // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);

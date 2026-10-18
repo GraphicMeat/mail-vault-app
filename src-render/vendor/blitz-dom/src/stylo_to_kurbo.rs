@@ -37,6 +37,11 @@ pub fn resolve_2d_transform(
     let rotate = match &box_styles.rotate {
         Rotate::None => None,
         Rotate::Rotate(angle) => Some(angle.radians64()),
+        // A rotation about the z axis stays in the plane; the sign of the
+        // axis component decides the direction, its magnitude cancels out.
+        Rotate::Rotate3D(x, y, z, angle) if *x == 0.0 && *y == 0.0 && *z != 0.0 => {
+            Some(angle.radians64() * z.signum() as f64)
+        }
         // TODO: support 3D transforms
         Rotate::Rotate3D(_, _, _, _) => None,
     };
@@ -99,15 +104,15 @@ pub fn resolve_2d_transform(
     let mut resolved = Affine::IDENTITY;
 
     if let Some(translation) = translate {
-        resolved = resolved.then_translate(translation)
+        resolved *= Affine::translate(translation)
     }
 
     if let Some(rotation) = rotate {
-        resolved = resolved.then_rotate(rotation)
+        resolved *= Affine::rotate(rotation)
     }
 
     if let Some(scale_transform) = scale_transform {
-        resolved = resolved.then_scale_non_uniform(scale_transform.x, scale_transform.y)
+        resolved *= Affine::scale_non_uniform(scale_transform.x, scale_transform.y)
     }
 
     if let Some(transform) = transform {

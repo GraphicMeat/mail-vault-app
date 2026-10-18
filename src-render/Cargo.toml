@@ -6,12 +6,12 @@ publish = false
 description = "MailVault's Blitz email renderer (runs only in the daemon's render worker)"
 
 [dependencies]
-blitz-dom = { version = "=0.3.0-beta.2", features = ["floats"] }
-blitz-html = "=0.3.0-beta.2"
-blitz-paint = "=0.3.0-beta.2"
-blitz-traits = "=0.3.0-beta.2"
-anyrender = "0.13"
-anyrender_vello_cpu = "0.17"
+blitz-dom = { version = "=0.3.0-beta.4", features = ["floats"] }
+blitz-html = "=0.3.0-beta.4"
+blitz-paint = "=0.3.0-beta.4"
+blitz-traits = "=0.3.0-beta.4"
+anyrender = "0.14"
+anyrender_vello_cpu = "0.18"
 png = "0.17"
 data-url = "0.3"
 # Image header sizes, read before any decoder runs. Already in the lock via usvg (MIT).
@@ -24,10 +24,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The same stylo blitz-dom declares, so one copy resolves; fontique is reached through parley.
 # stylo_traits and parley also give the parity inspector computed-style and text-layout access.
-style = { package = "stylo", version = "0.20" }
-style_traits = { package = "stylo_traits", version = "0.20" }
-parley = "0.11"
+style = { package = "stylo", version = "0.22" }
+style_traits = { package = "stylo_traits", version = "0.22" }
+parley = "0.12"
 # Dark Reader's colour regexes use lookaheads (Dark Reader port, src/dark/); 0.13 is the lock's copy.
 fancy-regex = "0.13"
 # Named CSS colours for the port's colour parser (the same table Dark Reader hard-codes).
-cssparser = "0.37"
+cssparser = "0.38"

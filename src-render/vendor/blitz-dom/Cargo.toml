@@ -11,9 +11,9 @@
 
 [package]
 edition = "2024"
-rust-version = "1.89.0"
+rust-version = "1.91.0"
 name = "blitz-dom"
-version = "0.3.0-beta.2"
+version = "0.3.0-beta.4"
 build = false
 autolib = false
 autobins = false
@@ -44,6 +44,7 @@ default = [
     "system-fonts",
     "file-input",
     "custom-widget",
+    "text-transform-icu",
 ]
 file-input = []
 floats = [
@@ -59,19 +60,24 @@ svg = [
     "dep:svgtypes",
 ]
 system-fonts = ["parley/system"]
+text-transform-icu = [
+    "dep:icu_casemap",
+    "dep:writeable",
+]
 tracing = ["dep:tracing"]
 woff = ["dep:wuff"]
+writing-mode = ["stylo_taffy/writing-mode"]
 
 [lib]
 name = "blitz_dom"
 path = "src/lib.rs"
 
 [dependencies.accesskit]
-version = "0.24"
+version = "0.25"
 optional = true
 
 [dependencies.anyrender]
-version = "0.13.0"
+version = "0.14.0"
 optional = true
 
 [dependencies.app_units]
@@ -84,14 +90,14 @@ version = "0.1.13"
 version = "2.8.0"
 
 [dependencies.blitz-traits]
-version = "=0.3.0-beta.2"
+version = "=0.3.0-beta.4"
 default-features = false
 
 [dependencies.color]
 version = "0.3"
 
 [dependencies.cssparser]
-version = "0.37.0"
+version = "0.38.0"
 
 [dependencies.cursor-icon]
 version = "1"
@@ -105,6 +111,26 @@ version = "0.22"
 [dependencies.html-escape]
 version = "0.2.13"
 
+[dependencies.icu_casemap]
+version = "2.3"
+features = ["compiled_data"]
+optional = true
+default-features = false
+
+[dependencies.icu_locale_core]
+version = "2.3"
+default-features = false
+
+[dependencies.icu_properties]
+version = "2.3"
+features = ["compiled_data"]
+default-features = false
+
+[dependencies.icu_segmenter]
+version = "2.3"
+features = ["compiled_data"]
+default-features = false
+
 [dependencies.image]
 version = "0.25.6"
 default-features = false
@@ -115,7 +141,7 @@ version = "0.15"
 optional = true
 
 [dependencies.keyboard-types]
-version = "0.7"
+version = "0.8"
 
 [dependencies.kurbo]
 version = "0.13.1"
@@ -124,10 +150,10 @@ version = "0.13.1"
 version = "0.1"
 
 [dependencies.markup5ever]
-version = "0.39.0"
+version = "0.40.0"
 
 [dependencies.parley]
-version = "0.11.1"
+version = "0.12"
 features = ["std"]
 default-features = false
 
@@ -138,7 +164,7 @@ version = "2.3.1"
 version = "1"
 
 [dependencies.selectors]
-version = "0.40.0"
+version = "0.41.0"
 package = "selectors"
 
 [dependencies.skrifa]
@@ -153,23 +179,23 @@ version = "1.0.7"
 version = "1"
 
 [dependencies.style]
-version = "0.20.0"
+version = "0.22.0"
 package = "stylo"
 
 [dependencies.style_config]
-version = "0.20.0"
+version = "0.22.0"
 package = "stylo_static_prefs"
 
 [dependencies.style_dom]
-version = "0.20.0"
+version = "0.22.0"
 package = "stylo_dom"
 
 [dependencies.style_traits]
-version = "0.20.0"
+version = "0.22.0"
 package = "stylo_traits"
 
 [dependencies.stylo_taffy]
-version = "=0.3.0-beta.2"
+version = "=0.3.0-beta.4"
 features = ["default"]
 default-features = false
 
@@ -178,10 +204,11 @@ version = "0.16.1"
 optional = true
 
 [dependencies.taffy]
-version = "0.14.0"
+version = "0.15"
 features = [
     "std",
     "flexbox",
+    "flexbox_balance",
     "grid",
     "block_layout",
     "content_size",
@@ -209,6 +236,11 @@ optional = true
 
 [dependencies.web-time]
 version = "1"
+
+[dependencies.writeable]
+version = "0.6"
+optional = true
+default-features = false
 
 [dependencies.wuff]
 version = "0.2"

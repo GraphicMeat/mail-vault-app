@@ -3,7 +3,7 @@ use blitz_traits::{
     node_id::NodeId,
     shell::ShellProvider,
 };
-use keyboard_types::{Key, Modifiers};
+use keyboard_types::{Key, Modifiers, NamedKey};
 use parley::{ContentWidths, FontContext, LayoutContext};
 
 use crate::util::ACTION_MOD;
@@ -26,10 +26,17 @@ pub struct TextLayout {
     pub text: String,
     pub content_widths: Option<ContentWidths>,
     pub layout: parley::layout::Layout<TextBrush>,
-    // MailVault parity fix (plan B): how far below the baseline the strut of the
-    // block's own font reaches (device px), for a layout with inline boxes but no
-    // text, whose lines have no text run to carry it. See `build_inline_layout_into`.
-    pub strut_below: f32,
+    /// Block-axis offset (in CSS px) of the line boxes from the top of the container's content
+    /// box, as applied by `align-content`.
+    pub block_offset: f32,
+    /// The out-of-flow positions for which some inline span with an inline box below it is a
+    /// containing block (as `SPAN_*_CB` flags). The inline root claims those boxes in its place.
+    /// Set by each `RunMode::PerformLayout` run of inline layout.
+    pub span_cb_flags: stylo_taffy::StyleFlags,
+    // MailVault parity fix (plan B): device px added to the reserved height of the inline
+    // boxes of a line that holds no text, so parley's strut below the baseline becomes
+    // WebKit's. See `build_inline_layout_into`.
+    pub strut_adjust: f32,
 }
 
 impl TextLayout {
@@ -246,7 +253,7 @@ impl TextInputData {
                 }
                 return Some(GeneratedTextInputEvent::Select);
             }
-            Key::ArrowLeft => {
+            Key::Named(NamedKey::ArrowLeft) => {
                 if action_mod {
                     if shift {
                         driver.select_word_left()
@@ -260,7 +267,7 @@ impl TextInputData {
                 }
                 return Some(GeneratedTextInputEvent::Select);
             }
-            Key::ArrowRight => {
+            Key::Named(NamedKey::ArrowRight) => {
                 if action_mod {
                     if shift {
                         driver.select_word_right()
@@ -274,7 +281,7 @@ impl TextInputData {
                 }
                 return Some(GeneratedTextInputEvent::Select);
             }
-            Key::ArrowUp => {
+            Key::Named(NamedKey::ArrowUp) => {
                 if shift {
                     driver.select_up()
                 } else {
@@ -282,7 +289,7 @@ impl TextInputData {
                 }
                 return Some(GeneratedTextInputEvent::Select);
             }
-            Key::ArrowDown => {
+            Key::Named(NamedKey::ArrowDown) => {
                 if shift {
                     driver.select_down()
                 } else {
@@ -290,7 +297,7 @@ impl TextInputData {
                 }
                 return Some(GeneratedTextInputEvent::Select);
             }
-            Key::Home => {
+            Key::Named(NamedKey::Home) => {
                 if action_mod {
                     if shift {
                         driver.select_to_text_start()
@@ -304,7 +311,7 @@ impl TextInputData {
                 }
                 return Some(GeneratedTextInputEvent::Select);
             }
-            Key::End => {
+            Key::Named(NamedKey::End) => {
                 if action_mod {
                     if shift {
                         driver.select_to_text_end()
@@ -318,7 +325,7 @@ impl TextInputData {
                 }
                 return Some(GeneratedTextInputEvent::Select);
             }
-            Key::Delete => {
+            Key::Named(NamedKey::Delete) => {
                 if action_mod {
                     driver.delete_word()
                 } else {
@@ -329,7 +336,7 @@ impl TextInputData {
 
             // On macOS this is handled by the apple standard keybindings
             #[cfg(not(target_os = "macos"))]
-            Key::Backspace => {
+            Key::Named(NamedKey::Backspace) => {
                 if action_mod {
                     driver.backdelete_word()
                 } else {
@@ -346,7 +353,7 @@ impl TextInputData {
                     return Some(GeneratedTextInputEvent::Submit);
                 }
             }
-            Key::Enter => {
+            Key::Named(NamedKey::Enter) => {
                 if is_multiline {
                     driver.insert_or_replace_selection("\n");
                     return Some(GeneratedTextInputEvent::Input);
@@ -355,7 +362,7 @@ impl TextInputData {
                 }
             }
             Key::Character(s)
-                if !mods.contains(Modifiers::CONTROL) && !mods.contains(Modifiers::SUPER) =>
+                if !mods.contains(Modifiers::CONTROL) && !mods.contains(Modifiers::META) =>
             {
                 driver.insert_or_replace_selection(&s);
                 return Some(GeneratedTextInputEvent::Input);
