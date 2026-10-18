@@ -138,6 +138,33 @@ describe('demo mailbox backend', () => {
     expect(new Date(sent.date).getTime()).toBeGreaterThan(Date.now() - 60_000);
   });
 
+  // Compose sends through the daemon's two RPCs (handlers/compose.rs): the
+  // demo answers them the way the daemon does, so Send works on the website.
+  it('stages a copy, sends it, and drops the copy once Sent holds the message', async () => {
+    const backend = createDemoBackend();
+    const account = backend.snapshot().accounts[0];
+    const appended = [];
+    backend.on('send-server-append-complete', event => appended.push(event.payload));
+    const email = { to: 'nell@smokehouse.design', subject: 'A staged demo reply', text: 'Thanks!' };
+    const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+
+    const staged = await rpc('compose.stage', { accountId: account.id, account, email, mailbox: 'Sent', snippet: 'Thanks!' });
+    expect(staged.messageId).toMatch(/^<.+>$/);
+    expect(staged.entry).toMatchObject({ uid: staged.uid, source: 'local_draft', message_id: staged.messageId, snippet: 'Thanks!' });
+    const stagedRow = () => backend.snapshot().messages.find(m => m.accountId === account.id && m.mailbox === 'Sent' && m.uid === staged.uid);
+    expect(stagedRow()?.vaultPresent).toBe(true);
+
+    const sent = await rpc('compose.send', {
+      accountId: account.id, account, email, mailbox: 'Sent', uid: staged.uid, messageId: staged.messageId, sentMailbox: 'Sent',
+    });
+    expect(sent).toMatchObject({ success: true, entry: { uid: staged.uid, source: 'local_sent', flags: ['archived', 'seen'] } });
+    expect(stagedRow()?.vaultPresent).toBe(false);
+    expect(backend.snapshot().messages.some(m => m.subject === 'A staged demo reply' && m.mailbox === 'Sent' && m.serverPresent)).toBe(true);
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toMatchObject({ accountId: account.id, ok: true });
+    expect(`<${String(appended[0].messageIdHeader).replace(/^<|>$/g, '')}>`).toBe(staged.messageId);
+  });
+
   it('searches server-only mail and returns simulated transfer and classification data', async () => {
     const backend = createDemoBackend();
     const account = backend.snapshot().accounts[0];
