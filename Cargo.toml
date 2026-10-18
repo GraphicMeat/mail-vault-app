@@ -18,3 +18,4 @@ resolver = "2"
 [patch.crates-io]
 imap-proto = { path = "vendor/imap-proto" }
 blitz-dom = { path = "src-render/vendor/blitz-dom" } # blitz-render
+string_cache = { path = "src-render/vendor/string_cache" } # blitz-render
