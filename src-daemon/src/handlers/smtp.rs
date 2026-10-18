@@ -28,7 +28,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tracing::info;
 
-fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
+pub(crate) fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
     params
         .get("account")
         .and_then(|v| serde_json::from_value::<ImapConfig>(v.clone()).ok())
@@ -37,7 +37,7 @@ fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
 
 /// serde's own reason rides along ("missing field `content`"): without it a
 /// malformed payload read only as "Missing or invalid email".
-fn email_arg(id: &Value, params: &Value) -> Result<smtp::OutgoingEmail, RpcResponse> {
+pub(crate) fn email_arg(id: &Value, params: &Value) -> Result<smtp::OutgoingEmail, RpcResponse> {
     let invalid = |why: String| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, why);
     let email = params.get("email").ok_or_else(|| invalid("Missing email".to_string()))?;
     serde_json::from_value::<smtp::OutgoingEmail>(email.clone()).map_err(|e| invalid(format!("Invalid email: {e}")))
@@ -51,14 +51,7 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig, tag: &str) -> V
     use base64::Engine;
     let raw_base64 = base64::engine::general_purpose::STANDARD.encode(&built.raw_rfc2822);
 
-    let message_id = {
-        let text = String::from_utf8_lossy(&built.raw_rfc2822);
-        text.lines()
-            .take_while(|line| !line.is_empty())
-            .find(|line| line.to_lowercase().starts_with("message-id:"))
-            .map(|line| line.splitn(2, ':').nth(1).unwrap_or("").trim().to_string())
-            .filter(|s| !s.is_empty())
-    };
+    let message_id = bracketed_message_id(&built.raw_rfc2822);
 
     // `tag` tells the two callers apart: compose autosaves a draft build (own
     // Message-ID, never sent) on every pause, so one user send logs a
@@ -73,6 +66,17 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig, tag: &str) -> V
         "messageId": message_id,
         "rawSize": built.raw_rfc2822.len(),
     })
+}
+
+/// The Message-ID header of built bytes, angle brackets kept: what a staged
+/// local copy is matched by (see `built_mime_json`).
+pub(crate) fn bracketed_message_id(raw: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    text.lines()
+        .take_while(|line| !line.is_empty())
+        .find(|line| line.to_lowercase().starts_with("message-id:"))
+        .map(|line| line.splitn(2, ':').nth(1).unwrap_or("").trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 /// UID of the message carrying `message_id` (brackets stripped) in the Sent
@@ -176,6 +180,222 @@ const SENT_RECHECK_SECS: u64 = 15;
 /// The wait between two of the re-check's looks.
 const SENT_RECHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
+/// One message the transport took, and the Message-ID header it went out
+/// under (brackets stripped: see `send_logged`).
+pub(crate) struct Sent {
+    pub result: smtp::SendResult,
+    pub message_id_header: Option<String>,
+}
+
+/// `smtp::send_email` (SMTP, Graph or JMAP, by account) with the `[send:*]`
+/// log lines every send writes. `smtp_send_email` and `compose.send` both
+/// come through here, so the log reads the same for either.
+pub(crate) async fn send_logged(account: &ImapConfig, email: &smtp::OutgoingEmail) -> Result<Sent, String> {
+    let account_id_for_log = account.email.clone();
+    info!("[send:smtp_start] account={}", account_id_for_log);
+
+    let result = match smtp::send_email(account, email).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("[send:smtp_fail] account={} error={}", account_id_for_log, e);
+            return Err(e);
+        }
+    };
+
+    info!(
+        "[send:smtp_ok] account={} messageId={} raw_bytes={}",
+        account_id_for_log, result.message_id, result.raw_rfc2822.len()
+    );
+
+    // To/Cc and Subject: Verbose logs only.
+    tracing::debug!("[send:raw_headers]\n{}", header_preview(&result.raw_rfc2822));
+
+    // Message-ID header, brackets stripped (unlike built_mime_json
+    // above): SEARCH HEADER matches a substring of the field value,
+    // so the bare id hits `<id>` on servers that store the brackets
+    // and on those that don't. Verbatim from commands.rs.
+    let message_id_header: Option<String> = {
+        let text = String::from_utf8_lossy(&result.raw_rfc2822);
+        let header_block = match text.find("\r\n\r\n") {
+            Some(idx) => &text[..idx],
+            None => match text.find("\n\n") {
+                Some(idx) => &text[..idx],
+                None => &text,
+            },
+        };
+        header_block
+            .lines()
+            .find(|line| line.to_lowercase().starts_with("message-id"))
+            .and_then(|line| {
+                let after_colon = line.splitn(2, ':').nth(1)?;
+                let stripped: String = after_colon.trim().trim_start_matches('<').trim_end_matches('>').to_string();
+                if stripped.is_empty() { None } else { Some(stripped) }
+            })
+    };
+
+    info!("[send:messageid_header] account={} extracted={:?}", account_id_for_log, message_id_header);
+    Ok(Sent { result, message_id_header })
+}
+
+/// What becomes of the server's Sent copy of a message that went out, and
+/// the `send-server-append-complete` event that reports it. `landed` runs
+/// first, told whether the server holds the copy (compose drops its staged
+/// local copy there); `extra` joins the event's payload.
+///
+/// Microsoft Graph filed its own copy in Sent Items when it took the message
+/// (202), and a JMAP server filed it in Sent when the submission was created
+/// (`onSuccessUpdateEmail`); neither account has IMAP to APPEND over. So the
+/// event comes now, naming this message, before the caller answers. Waiting
+/// to see the copy in Sent Items instead could wait for good: Exchange may
+/// rewrite the Message-ID.
+///
+/// Otherwise a best-effort APPEND to `sent_mailbox` runs in the background
+/// and never holds up the caller: a dedicated no-compress session, never the
+/// daemon's pooled ImapPool (the Hostinger APPEND hang `commands.rs`
+/// documented). No mailbox, no APPEND, no event, and `landed` never runs.
+pub(crate) async fn report_sent_copy<F, Fut>(
+    state: &Arc<DaemonState>,
+    account: &ImapConfig,
+    sent_mailbox: Option<String>,
+    sent: &Sent,
+    extra: Value,
+    landed: F,
+) where
+    F: FnOnce(bool) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    let account_id_for_log = account.email.clone();
+    let result = &sent.result;
+    let with_extra = move |mut payload: Value| {
+        if let (Some(map), Some(more)) = (payload.as_object_mut(), extra.as_object()) {
+            map.extend(more.clone());
+        }
+        payload
+    };
+
+    if result.server_saved_sent {
+        let payload = json!({
+            "accountId": account_id_for_log,
+            "mailbox": sent_mailbox,
+            "messageId": result.message_id,
+            "messageIdHeader": sent.message_id_header,
+            "ok": true,
+            "verify": {"serverSaved": true},
+        });
+        info!("[send:server_saved_sent] account={} the server filed the Sent copy, no APPEND", account_id_for_log);
+        landed(true).await;
+        state.events.emit("send-server-append-complete", with_extra(payload));
+        return;
+    }
+
+    // Two distinct skip reasons, kept apart (not collapsed into one
+    // `filter`) so the `[send:server_append_skip]` log line still says which
+    // one happened: this repo has needed exact `[send:...]` log shapes to
+    // diagnose before.
+    let sent_mailbox_present = sent_mailbox.is_some();
+    if let Some(mailbox) = sent_mailbox.filter(|m| !m.is_empty()) {
+        let raw_bytes: Vec<u8> = result.raw_rfc2822.clone();
+        let account_clone = account.clone();
+        let state_clone = Arc::clone(state);
+        let account_id_bg = account_id_for_log.clone();
+        let message_id_bg = result.message_id.clone();
+        let message_id_header_bg = sent.message_id_header.clone();
+        tokio::spawn(async move {
+            let mailbox_for_log = mailbox.clone();
+            info!(
+                "[send:server_append_start] account={} mailbox={} bytes={} messageId_header={:?}",
+                account_id_bg, mailbox_for_log, raw_bytes.len(), message_id_header_bg
+            );
+            let account_id_inner = account_id_bg.clone();
+            info!("[send:dedicated_session_start] account={} mailbox={} — using fresh no-compress session to avoid Hostinger APPEND hang", account_id_inner, mailbox_for_log);
+            let mid_for_closure = message_id_header_bg.clone();
+            let mailbox_for_closure = mailbox.clone();
+            let verified_result: Result<Result<(u32, u32, Option<u32>), String>, tokio::time::error::Elapsed> = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                async {
+                    let mut session = imap::create_imap_session_no_compress(&account_clone, &state_clone.imap_pool).await
+                        .map_err(|e| format!("dedicated session create failed: {}", e))?;
+                    info!("[send:dedicated_session_ok] account={} — calling append_email_verified", account_id_inner);
+                    let res = imap::append_email_verified(
+                        &mut session,
+                        &mailbox_for_closure,
+                        &raw_bytes,
+                        "\\Seen",
+                        mid_for_closure.as_deref(),
+                        // The Sent copy was written this instant — "now" is its real date.
+                        None,
+                    ).await;
+                    let _ = session.logout().await;
+                    info!("[send:dedicated_session_logout] account={}", account_id_inner);
+                    res
+                },
+            ).await;
+            let (mut ok, mut verify_payload) = match verified_result {
+                Ok(Ok((before, after, found_uid))) => {
+                    let delta = after as i64 - before as i64;
+                    info!(
+                        "[send:server_append_ok] account={} mailbox={} messageId={} messageId_header={:?} exists_before={} exists_after={} delta={} searched_uid={:?}",
+                        account_id_bg, mailbox_for_log, message_id_bg, message_id_header_bg, before, after, delta, found_uid
+                    );
+                    if delta <= 0 {
+                        tracing::warn!(
+                            "[send:server_append_no_delta] account={} mailbox={} server reports no change in EXISTS — APPEND may have been silently rejected or routed elsewhere",
+                            account_id_bg, mailbox_for_log
+                        );
+                    }
+                    if found_uid.is_none() && message_id_header_bg.is_some() {
+                        tracing::warn!(
+                            "[send:server_append_search_miss] account={} mailbox={} Message-ID {:?} not found via UID SEARCH HEADER — server may not index Message-ID or email is in a different folder",
+                            account_id_bg, mailbox_for_log, message_id_header_bg
+                        );
+                    }
+                    (true, json!({"existsBefore": before, "existsAfter": after, "delta": delta, "foundUid": found_uid}))
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("[send:server_append_fail] account={} mailbox={} error={}", account_id_bg, mailbox_for_log, e);
+                    (false, json!({"error": e}))
+                }
+                Err(_) => {
+                    tracing::warn!("[send:server_append_timeout] account={} mailbox={} timeout=60s", account_id_bg, mailbox_for_log);
+                    (false, json!({"error": "timeout"}))
+                }
+            };
+            // A client that gave up is not a server that refused: a
+            // slow server keeps an APPEND the client timed out on
+            // (Hostinger went silent 15s+ and still filed it). Ask it.
+            // A failure reported for a message it holds left the
+            // staged local copy beside the server's for good.
+            if !ok {
+                if let Some(mid) = message_id_header_bg.as_deref() {
+                    if let Some(uid) = sent_copy_uid(&state_clone.imap_pool, &account_clone, &mailbox_for_log, mid).await {
+                        info!(
+                            "[send:server_append_recovered] account={} mailbox={} uid={} — the APPEND reported failure but the server holds the message",
+                            account_id_bg, mailbox_for_log, uid
+                        );
+                        ok = true;
+                        verify_payload = json!({"recovered": true, "error": verify_payload["error"].clone(), "foundUid": uid});
+                    }
+                }
+            }
+            let payload = with_extra(json!({
+                "accountId": account_id_bg,
+                "mailbox": mailbox_for_log,
+                "messageId": message_id_bg,
+                "messageIdHeader": message_id_header_bg,
+                "ok": ok,
+                "verify": verify_payload,
+            }));
+            landed(ok).await;
+            info!("[send:server_append_event_emit] payload={}", payload);
+            state_clone.events.emit("send-server-append-complete", payload);
+        });
+    } else if sent_mailbox_present {
+        tracing::warn!("[send:server_append_skip] account={} reason=empty_sent_mailbox", account_id_for_log);
+    } else {
+        tracing::warn!("[send:server_append_skip] account={} reason=no_sent_mailbox_passed", account_id_for_log);
+    }
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     if let Some(resp) = crate::handlers::jmap_bridge::intercept(state, method, &id, params).await { return Some(resp); }
     Some(match method {
@@ -245,186 +465,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(resp) => return Some(resp),
             };
             let sent_mailbox = params.get("sentMailbox").and_then(Value::as_str).map(str::to_owned);
-
-            let account_id_for_log = account.email.clone();
-            info!("[send:smtp_start] account={}", account_id_for_log);
-
-            let result = match smtp::send_email(&account, &email).await {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!("[send:smtp_fail] account={} error={}", account_id_for_log, e);
-                    return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e));
-                }
+            let sent = match send_logged(&account, &email).await {
+                Ok(sent) => sent,
+                Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
-
-            info!(
-                "[send:smtp_ok] account={} messageId={} raw_bytes={}",
-                account_id_for_log, result.message_id, result.raw_rfc2822.len()
-            );
-
-            // To/Cc and Subject: Verbose logs only.
-            tracing::debug!("[send:raw_headers]\n{}", header_preview(&result.raw_rfc2822));
-
-            let message_id_for_response = result.message_id.clone();
-
-            // Message-ID header, brackets stripped (unlike built_mime_json
-            // above): SEARCH HEADER matches a substring of the field value,
-            // so the bare id hits `<id>` on servers that store the brackets
-            // and on those that don't. Verbatim from commands.rs.
-            let message_id_header: Option<String> = {
-                let text = String::from_utf8_lossy(&result.raw_rfc2822);
-                let header_block = match text.find("\r\n\r\n") {
-                    Some(idx) => &text[..idx],
-                    None => match text.find("\n\n") {
-                        Some(idx) => &text[..idx],
-                        None => &text,
-                    },
-                };
-                header_block
-                    .lines()
-                    .find(|line| line.to_lowercase().starts_with("message-id"))
-                    .and_then(|line| {
-                        let after_colon = line.splitn(2, ':').nth(1)?;
-                        let stripped: String = after_colon.trim().trim_start_matches('<').trim_end_matches('>').to_string();
-                        if stripped.is_empty() { None } else { Some(stripped) }
-                    })
-            };
-
-            info!("[send:messageid_header] account={} extracted={:?}", account_id_for_log, message_id_header);
-
-            // Microsoft Graph filed its own copy in Sent Items when it took
-            // the message (202), and a JMAP server filed it in Sent when the
-            // submission was created (`onSuccessUpdateEmail`); neither
-            // account has IMAP to APPEND over. Compose drops its staged local
-            // copy on this event, so it comes now, naming this message.
-            // Waiting to see the copy in Sent Items instead could wait for
-            // good: Exchange may rewrite the Message-ID.
-            if result.server_saved_sent {
-                let payload = json!({
-                    "accountId": account_id_for_log,
-                    "mailbox": sent_mailbox,
-                    "messageId": result.message_id,
-                    "messageIdHeader": message_id_header,
-                    "ok": true,
-                    "verify": {"serverSaved": true},
-                });
-                info!("[send:server_saved_sent] account={} the server filed the Sent copy, no APPEND", account_id_for_log);
-                state.events.emit("send-server-append-complete", payload);
-                return Some(RpcResponse::success(id, json!({"success": true, "messageId": message_id_for_response})));
-            }
-
-            // Background: best-effort APPEND to the server Sent folder. Never
-            // blocks the RPC response. Uses a dedicated no-compress session,
-            // never the daemon's pooled ImapPool — same reasoning
-            // `commands.rs` documented (Hostinger APPEND hang).
-            //
-            // Two distinct skip reasons, kept apart (not collapsed into one
-            // `filter`) so the `[send:server_append_skip]` log line still
-            // says which one happened — verbatim from `commands.rs`, which
-            // this repo has needed exact `[send:...]` log shapes to diagnose
-            // before.
-            let sent_mailbox_present = sent_mailbox.is_some();
-            if let Some(mailbox) = sent_mailbox.filter(|m| !m.is_empty()) {
-                let raw_bytes: Vec<u8> = result.raw_rfc2822.clone();
-                let account_clone = account.clone();
-                let state_clone = Arc::clone(state);
-                let account_id_bg = account_id_for_log.clone();
-                let message_id_bg = result.message_id.clone();
-                let message_id_header_bg = message_id_header.clone();
-                tokio::spawn(async move {
-                    let mailbox_for_log = mailbox.clone();
-                    info!(
-                        "[send:server_append_start] account={} mailbox={} bytes={} messageId_header={:?}",
-                        account_id_bg, mailbox_for_log, raw_bytes.len(), message_id_header_bg
-                    );
-                    let account_id_inner = account_id_bg.clone();
-                    info!("[send:dedicated_session_start] account={} mailbox={} — using fresh no-compress session to avoid Hostinger APPEND hang", account_id_inner, mailbox_for_log);
-                    let mid_for_closure = message_id_header_bg.clone();
-                    let mailbox_for_closure = mailbox.clone();
-                    let verified_result: Result<Result<(u32, u32, Option<u32>), String>, tokio::time::error::Elapsed> = tokio::time::timeout(
-                        std::time::Duration::from_secs(60),
-                        async {
-                            let mut session = imap::create_imap_session_no_compress(&account_clone, &state_clone.imap_pool).await
-                                .map_err(|e| format!("dedicated session create failed: {}", e))?;
-                            info!("[send:dedicated_session_ok] account={} — calling append_email_verified", account_id_inner);
-                            let res = imap::append_email_verified(
-                                &mut session,
-                                &mailbox_for_closure,
-                                &raw_bytes,
-                                "\\Seen",
-                                mid_for_closure.as_deref(),
-                                // The Sent copy was written this instant — "now" is its real date.
-                                None,
-                            ).await;
-                            let _ = session.logout().await;
-                            info!("[send:dedicated_session_logout] account={}", account_id_inner);
-                            res
-                        },
-                    ).await;
-                    let (mut ok, mut verify_payload) = match verified_result {
-                        Ok(Ok((before, after, found_uid))) => {
-                            let delta = after as i64 - before as i64;
-                            info!(
-                                "[send:server_append_ok] account={} mailbox={} messageId={} messageId_header={:?} exists_before={} exists_after={} delta={} searched_uid={:?}",
-                                account_id_bg, mailbox_for_log, message_id_bg, message_id_header_bg, before, after, delta, found_uid
-                            );
-                            if delta <= 0 {
-                                tracing::warn!(
-                                    "[send:server_append_no_delta] account={} mailbox={} server reports no change in EXISTS — APPEND may have been silently rejected or routed elsewhere",
-                                    account_id_bg, mailbox_for_log
-                                );
-                            }
-                            if found_uid.is_none() && message_id_header_bg.is_some() {
-                                tracing::warn!(
-                                    "[send:server_append_search_miss] account={} mailbox={} Message-ID {:?} not found via UID SEARCH HEADER — server may not index Message-ID or email is in a different folder",
-                                    account_id_bg, mailbox_for_log, message_id_header_bg
-                                );
-                            }
-                            (true, json!({"existsBefore": before, "existsAfter": after, "delta": delta, "foundUid": found_uid}))
-                        }
-                        Ok(Err(e)) => {
-                            tracing::warn!("[send:server_append_fail] account={} mailbox={} error={}", account_id_bg, mailbox_for_log, e);
-                            (false, json!({"error": e}))
-                        }
-                        Err(_) => {
-                            tracing::warn!("[send:server_append_timeout] account={} mailbox={} timeout=60s", account_id_bg, mailbox_for_log);
-                            (false, json!({"error": "timeout"}))
-                        }
-                    };
-                    // A client that gave up is not a server that refused: a
-                    // slow server keeps an APPEND the client timed out on
-                    // (Hostinger went silent 15s+ and still filed it). Ask it.
-                    // A failure reported for a message it holds left the
-                    // staged local copy beside the server's for good.
-                    if !ok {
-                        if let Some(mid) = message_id_header_bg.as_deref() {
-                            if let Some(uid) = sent_copy_uid(&state_clone.imap_pool, &account_clone, &mailbox_for_log, mid).await {
-                                info!(
-                                    "[send:server_append_recovered] account={} mailbox={} uid={} — the APPEND reported failure but the server holds the message",
-                                    account_id_bg, mailbox_for_log, uid
-                                );
-                                ok = true;
-                                verify_payload = json!({"recovered": true, "error": verify_payload["error"].clone(), "foundUid": uid});
-                            }
-                        }
-                    }
-                    let payload = json!({
-                        "accountId": account_id_bg,
-                        "mailbox": mailbox_for_log,
-                        "messageId": message_id_bg,
-                        "messageIdHeader": message_id_header_bg,
-                        "ok": ok,
-                        "verify": verify_payload,
-                    });
-                    info!("[send:server_append_event_emit] payload={}", payload);
-                    state_clone.events.emit("send-server-append-complete", payload);
-                });
-            } else if sent_mailbox_present {
-                tracing::warn!("[send:server_append_skip] account={} reason=empty_sent_mailbox", account_id_for_log);
-            } else {
-                tracing::warn!("[send:server_append_skip] account={} reason=no_sent_mailbox_passed", account_id_for_log);
-            }
-
+            let message_id_for_response = sent.result.message_id.clone();
+            report_sent_copy(state, &account, sent_mailbox, &sent, json!({}), |_| async {}).await;
             RpcResponse::success(id, json!({"success": true, "messageId": message_id_for_response}))
         }
 
