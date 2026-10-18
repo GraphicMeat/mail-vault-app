@@ -519,6 +519,17 @@ fn whitespace_in_a_font_size_zero_cell_adds_no_line() {
     assert_eq!(lines("cell"), Some(2 + lines("p").unwrap()), "two lines in the first column plus the paragraph's");
 }
 
+/// A table cell is `vertical-align: middle` by default, which places the cell's content in the
+/// cell and has no say over the lines inside it. blitz-dom beta.4 put it in the root text
+/// style, and the span each `<br>` is pushed in inherited it, so every line a `<br>` ends was
+/// 1px taller than its line-height (cerberus footer, 12px/15px: 145 high in the harness
+/// iframe, 150 in Blitz).
+#[test]
+fn a_br_in_a_middle_aligned_cell_keeps_the_line_height() {
+    let els = inspect(r#"<body style="margin:0"><table cellspacing="0" cellpadding="0"><tr><td data-mv-id="td" style="font:12px/15px sans-serif">a<br><br>b<br>c</td></tr></table></body>"#);
+    assert_eq!(get(&els, "td").rect.clone().unwrap().h, 4.0 * 15.0);
+}
+
 /// A box that contains its floats (a table cell, `display: flow-root`) is as tall as its lowest
 /// float plus the padding and border below it. Blitz ended it at the float (cerberus responsive,
 /// harness iframe: a cell with `padding: 10px` ending in a `float: left` button table, th 185;

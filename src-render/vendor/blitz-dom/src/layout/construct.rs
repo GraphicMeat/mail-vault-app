@@ -1270,13 +1270,20 @@ pub(crate) fn build_inline_layout_into(
             .and_then(|parent_id| nodes[parent_id].primary_styles())
     });
 
-    let parley_style = root_node_style
+    let mut parley_style = root_node_style
         .as_ref()
         .map(|s| stylo_to_parley::style(inline_context_root_node_id, s))
         .unwrap_or_else(|| parley::TextStyle {
             white_space_collapse: WhiteSpaceCollapse::Collapse,
             ..Default::default()
         });
+    // MailVault parity fix (blitz beta.4): `vertical-align` places an inline box in its line;
+    // on the block that owns the lines (a table cell is `middle` by default) it means nothing
+    // to the lines themselves. beta.4 copied it into the root text style, and every span made
+    // from that style inherited it: a `<br>`'s span (pushed as a modification of the current
+    // style) sat `middle` and made each line it ends 1px taller than the line-height
+    // (cerberus footer, 12px/15px, 150 high where WebKit has 145).
+    parley_style.vertical_align = Default::default();
 
     // MailVault parity fix (plan B): `line-height: normal` is the font's metrics with each part
     // rounded (see `normal_line_height`). A block with it gets that height as a fixed one, so
