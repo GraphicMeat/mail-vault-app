@@ -12,12 +12,17 @@ import React from 'react';
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import { buildThreads } from '../../utils/emailParser';
 
-const { invoke, sendEmail, buildOutgoingMime } = vi.hoisted(() => ({
+const { invoke, sendStaged, stageOutgoing } = vi.hoisted(() => ({
   invoke: vi.fn(),
-  sendEmail: vi.fn().mockResolvedValue({ messageId: '<mine@example.test>' }),
-  buildOutgoingMime: vi.fn().mockResolvedValue({
-    rawBase64: 'AAAA', messageId: '<mine@example.test>', rawSize: 4,
-  }),
+  sendStaged: vi.fn().mockResolvedValue({ messageId: '<mine@example.test>' }),
+  // compose.stage's answer: the staged copy and the row the daemon wrote.
+  stageOutgoing: vi.fn(async (_account, email) => ({
+    uid: 1, mailbox: 'Sent', messageId: '<mine@example.test>',
+    entry: {
+      uid: 1, message_id: '<mine@example.test>', in_reply_to: email.inReplyTo || null,
+      references: email.references ? email.references.split(/\s+/) : null, flags: ['draft', 'seen'], source: 'local_draft',
+    },
+  })),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
@@ -58,8 +63,8 @@ vi.mock('../../services/workflows/messageMutations', () => ({
   markForwarded: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/api', () => ({
-  sendEmail: (...a) => sendEmail(...a),
-  buildOutgoingMime: (...a) => buildOutgoingMime(...a),
+  sendStaged: (...a) => sendStaged(...a),
+  stageOutgoing: (...a) => stageOutgoing(...a),
   appendLocalIndex: vi.fn().mockResolvedValue(undefined),
   ensureSentMailbox: vi.fn().mockResolvedValue('Sent'),
 }));
@@ -124,8 +129,8 @@ beforeEach(() => {
   mail.sentEmails = [];
   mail.emails = [];
   invoke.mockReset();
-  sendEmail.mockClear();
-  buildOutgoingMime.mockClear();
+  sendStaged.mockClear();
+  stageOutgoing.mockClear();
 });
 afterEach(() => cleanup());
 
@@ -135,7 +140,7 @@ async function send(mode, fill, composeProps = {}) {
   if (fill) fireEvent.change(to, { target: { value: fill } });
   const btn = await screen.findByTestId('compose-send');
   btn.click();
-  await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+  await waitFor(() => expect(sendStaged).toHaveBeenCalled());
   await waitFor(() => expect(mail.sentEmails).toHaveLength(1));
   return mail.sentEmails[0];
 }
@@ -154,7 +159,7 @@ describe('the reply the compose window stages for the UI', () => {
   it('starts a reply with the selected template while keeping reply recipients and headers', async () => {
     await send('reply', undefined, { templateBody: 'Thanks for reaching out.' });
 
-    const payload = buildOutgoingMime.mock.calls[0][1];
+    const payload = stageOutgoing.mock.calls[0][1];
     expect(payload.to).toBe('them@example.test');
     expect(payload.inReplyTo).toBe('<parent@example.test>');
     expect(payload.references).toBe('<parent@example.test>');
@@ -186,9 +191,9 @@ describe('the reply the compose window stages for the UI', () => {
 
     await waitFor(() => expect(editor.value).toBe('Edited reply'));
     fireEvent.click(await screen.findByTestId('compose-send'));
-    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+    await waitFor(() => expect(sendStaged).toHaveBeenCalled());
 
-    const payload = buildOutgoingMime.mock.calls[0][1];
+    const payload = stageOutgoing.mock.calls[0][1];
     expect(payload.text).toContain('Edited reply');
     expect(payload.text).not.toContain(templateBody);
     expect(payload.text).toContain('How much?');
@@ -279,8 +284,8 @@ describe('the quote fill-in effect (radial reply)', () => {
     expect(editor.value).toBe('Thanks, will check.');
 
     screen.getByTestId('compose-send').click();
-    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
-    expect(buildOutgoingMime.mock.calls.at(-1)[1].html).toContain('How much?');
+    await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
+    expect(stageOutgoing.mock.calls.at(-1)[1].html).toContain('How much?');
   });
 });
 
@@ -296,9 +301,9 @@ describe('a reply opened on the index snippet', () => {
 
     rerender(<ComposeModal {...props} replyTo={{ ...parent, text: 'How much is the whole order?' }} />);
     fireEvent.click(await screen.findByTestId('compose-send'));
-    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+    await waitFor(() => expect(sendStaged).toHaveBeenCalled());
 
-    const payload = buildOutgoingMime.mock.calls[0][1];
+    const payload = stageOutgoing.mock.calls[0][1];
     expect(payload.text).toContain('How much is the whole order?');
     expect(payload.to).toBe('them@example.test');
   });
@@ -307,7 +312,7 @@ describe('a reply opened on the index snippet', () => {
     const snippet = { ...parent, text: 'Snippet only words', _bodyLoading: true };
     render(<ComposeModal mode="reply" replyTo={snippet} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
     fireEvent.click(await screen.findByTestId('compose-send'));
-    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
-    expect(buildOutgoingMime.mock.calls[0][1].text).not.toContain('Snippet only words');
+    await waitFor(() => expect(sendStaged).toHaveBeenCalled());
+    expect(stageOutgoing.mock.calls[0][1].text).not.toContain('Snippet only words');
   });
 });

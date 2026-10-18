@@ -240,6 +240,11 @@ export const DAEMON_OWNED = new Set([
   // ComposeModal.jsx's listener unchanged, since daemon_channel.rs already
   // re-emits any named daemon event to the frontend.
   'smtp_test_connection', 'smtp_build_mime', 'smtp_build_draft_mime', 'smtp_send_email',
+  // Compose's send: the daemon stages the local copy, sends it, marks it
+  // sent, records the reminder, cancels an edited scheduled row and drops
+  // the copy once the server holds its own (`handlers/compose.rs`). Dotted,
+  // no Tauri twin; `api.stageOutgoing`/`api.sendStaged` are the callers.
+  'compose.stage', 'compose.send',
   // Task 5.6: Graph (list/get/cache messages, read/flag/delete, move, folder
   // management). Their Tauri twins are deleted in this same task — flat
   // names, no rename layer, no Tauri fallback, same reasoning as 5.4a/5.4b/

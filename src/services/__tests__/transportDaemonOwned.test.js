@@ -21,6 +21,20 @@ describe('daemon-owned commands', () => {
     expect(block).toContain("'storage.fetch_mode_changed'");
   });
 
+  // Compose's send (handlers/compose.rs): dotted, no Tauri twin, so it must
+  // reach the daemon under its own name or Send has nowhere to go.
+  it('owns compose.stage and compose.send and routes each to the daemon', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
+    const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
+    for (const n of ['compose.stage', 'compose.send']) {
+      expect(block).toContain(`'${n}'`);
+      DAEMON_OWNED.add(n);
+      daemonCall.mockResolvedValue({ ok: n });
+      await expect(send(n, { accountId: 'a', uid: 7 })).resolves.toEqual({ ok: n });
+      expect(daemonCall).toHaveBeenLastCalledWith(n, { accountId: 'a', uid: 7 });
+    }
+  });
+
   // The Blitz module's ten render RPCs (dotted, so the flat-name list below
   // does not see them). Each one must route to the daemon under its own name.
   it('owns the ten render.* names and routes each to the daemon', async () => {

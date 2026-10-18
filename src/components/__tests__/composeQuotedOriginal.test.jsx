@@ -11,10 +11,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { act, render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
-const { buildOutgoingMime, saveLocalDraft, readAttachments } = vi.hoisted(() => ({
-  buildOutgoingMime: vi.fn().mockResolvedValue({
-    rawBase64: 'AAAA', messageId: '<mine@example.test>', rawSize: 4,
-  }),
+const { stageOutgoing, saveLocalDraft, readAttachments } = vi.hoisted(() => ({
+  // compose.stage's answer: the staged copy and the row the daemon wrote.
+  stageOutgoing: vi.fn(async (_account, email) => ({
+    uid: 1, mailbox: 'Sent', messageId: '<mine@example.test>',
+    entry: {
+      uid: 1, message_id: '<mine@example.test>', in_reply_to: email.inReplyTo || null,
+      references: email.references ? email.references.split(/\s+/) : null, flags: ['draft', 'seen'], source: 'local_draft',
+    },
+  })),
   saveLocalDraft: vi.fn().mockResolvedValue(undefined),
   readAttachments: vi.fn(),
 }));
@@ -79,8 +84,8 @@ vi.mock('../../services/workflows/messageMutations', () => ({
   markForwarded: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/api', () => ({
-  sendEmail: vi.fn().mockResolvedValue({ messageId: '<mine@example.test>' }),
-  buildOutgoingMime: (...a) => buildOutgoingMime(...a),
+  sendStaged: vi.fn().mockResolvedValue({ messageId: '<mine@example.test>' }),
+  stageOutgoing: (...a) => stageOutgoing(...a),
   appendLocalIndex: vi.fn().mockResolvedValue(undefined),
   ensureSentMailbox: vi.fn().mockResolvedValue('Sent'),
 }));
@@ -162,8 +167,8 @@ async function expandQuote() {
 async function sendReplyTo(replyTo) {
   openReply(replyTo);
   (await screen.findByTestId('compose-send')).click();
-  await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
-  return buildOutgoingMime.mock.calls[0][1];
+  await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
+  return stageOutgoing.mock.calls[0][1];
 }
 
 beforeEach(() => {
@@ -186,7 +191,7 @@ beforeEach(() => {
   delete mail.selectedThread;
   delete mail.unifiedFolder;
   mail.activeMailbox = 'INBOX';
-  buildOutgoingMime.mockClear();
+  stageOutgoing.mockClear();
   saveLocalDraft.mockReset();
   saveLocalDraft.mockResolvedValue(undefined);
 });
@@ -216,18 +221,18 @@ describe('the quoted original in a reply', () => {
     expect(screen.getByRole('option', { name: 'Front Desk <desk@example.test>' })).not.toBeNull();
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
     fireEvent.click(screen.getByTestId('compose-send'));
-    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalledTimes(1));
-    expect(buildOutgoingMime.mock.calls[0][0]).toMatchObject({ name: 'Front Desk', fromEmail: 'desk@example.test' });
+    await waitFor(() => expect(stageOutgoing).toHaveBeenCalledTimes(1));
+    expect(stageOutgoing.mock.calls[0][0]).toMatchObject({ name: 'Front Desk', fromEmail: 'desk@example.test' });
     cleanup();
 
-    buildOutgoingMime.mockClear();
+    stageOutgoing.mockClear();
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
     fireEvent.change(await screen.findByTestId('compose-from'), { target: { value: 'acct-1 me@example.test' } });
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
     fireEvent.click(screen.getByTestId('compose-send'));
-    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalledTimes(1));
-    expect(buildOutgoingMime.mock.calls[0][0].name).toBe('Me');
-    expect(buildOutgoingMime.mock.calls[0][0].fromEmail).toBeUndefined();
+    await waitFor(() => expect(stageOutgoing).toHaveBeenCalledTimes(1));
+    expect(stageOutgoing.mock.calls[0][0].name).toBe('Me');
+    expect(stageOutgoing.mock.calls[0][0].fromEmail).toBeUndefined();
   });
 
   // Adding an alias happens in Settings > Accounts > Aliases; the From row
@@ -767,10 +772,10 @@ describe('the quoted original in a reply', () => {
 
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
     fireEvent.click(screen.getByTestId('compose-send'));
-    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
+    await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
 
     expect(readAttachments).toHaveBeenCalledWith({ accountId: 'acct-1', mailbox: 'INBOX', uid: 10, attachmentIndices: [0, 1] });
-    expect(buildOutgoingMime.mock.calls[0][1].attachments.map(a => [a.filename, a.content]))
+    expect(stageOutgoing.mock.calls[0][1].attachments.map(a => [a.filename, a.content]))
       .toEqual([['a.pdf', 'UERGMQ=='], ['b.pdf', 'UERGMg==']]);
     readAttachments.mockReset();
   });
@@ -964,8 +969,8 @@ describe('a forwarded HTML email', () => {
     render(<ComposeModal mode="forward" replyTo={message} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
     fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'friend@example.test' } });
     fireEvent.click(screen.getByTestId('compose-send'));
-    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
-    return buildOutgoingMime.mock.calls[0][1];
+    await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
+    return stageOutgoing.mock.calls[0][1];
   }
 
   it('keeps the original out of the editor and sends it as it arrived', async () => {
@@ -996,8 +1001,8 @@ describe('a forwarded HTML email', () => {
       _quotedHtml: '<p><strong>Original Message</strong></p>' + newsletter.html, _forward: true, _baseline: null,
     }} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
     fireEvent.click(await screen.findByTestId('compose-send'));
-    await waitFor(() => expect(buildOutgoingMime).toHaveBeenCalled());
-    const sent = buildOutgoingMime.mock.calls[0][1];
+    await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
+    const sent = stageOutgoing.mock.calls[0][1];
     expect(sent.html).toContain(newsletter.html);
     expect(sent.html).not.toContain('<blockquote>');
   });

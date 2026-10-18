@@ -53,8 +53,8 @@ vi.mock('../../services/workflows/messageMutations', () => ({
   markForwarded: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/api', () => ({
-  sendEmail: vi.fn(),
-  buildOutgoingMime: vi.fn(),
+  sendStaged: vi.fn(),
+  stageOutgoing: vi.fn(),
   appendLocalIndex: vi.fn().mockResolvedValue(undefined),
   ensureSentMailbox: vi.fn().mockResolvedValue('Sent'),
 }));

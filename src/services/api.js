@@ -377,15 +377,30 @@ export async function ensureSentMailbox(account) {
   throw new Error('ensureSentMailbox: not supported outside Tauri');
 }
 
-// Build RFC2822 MIME bytes without sending. Used by the compose flow to
-// archive outgoing mail locally before SMTP submission so the email is never
-// lost even if SMTP or the server-side Sent APPEND fails.
-// Returns { rawBase64, messageId, rawSize }.
-export async function buildOutgoingMime(account, email) {
+// Compose's send, in the daemon (src-daemon/src/handlers/compose.rs).
+// `compose.stage` builds the MIME and writes the local copy into `mailbox`
+// before anything is sent, so the email is never lost even if the send or the
+// server's Sent APPEND fails. Answers { uid, mailbox, messageId, entry }.
+// Refuses with `E_COMPOSE_BUILD:` or `E_COMPOSE_STAGE:`.
+export async function stageOutgoing(account, email, { accountId, mailbox, snippet, hasAttachments }) {
   if (IS_TAURI) {
-    return tauriInvoke('smtp_build_mime', { account, email });
+    return tauriInvoke('compose.stage', { accountId, account, email, mailbox, snippet, hasAttachments });
   }
-  throw new Error('buildOutgoingMime: not supported outside Tauri');
+  throw new Error('stageOutgoing: not supported outside Tauri');
+}
+
+// `compose.send` sends the staged message under its Message-ID; past that
+// point it never fails. Answers { success, messageId, entry } (the sent row).
+export async function sendStaged(account, email, {
+  accountId, mailbox, uid, messageId, sentMailbox, snippet, hasAttachments, remindDays, ownAddresses, cancelScheduledId,
+}) {
+  if (IS_TAURI) {
+    return tauriInvoke('compose.send', {
+      accountId, account, email, mailbox, uid, messageId, sentMailbox, snippet, hasAttachments,
+      remindDays, ownAddresses, cancelScheduledId,
+    });
+  }
+  throw new Error('sendStaged: not supported outside Tauri');
 }
 
 // Same bytes for a message that is not going anywhere yet — a draft may still

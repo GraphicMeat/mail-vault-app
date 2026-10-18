@@ -12,10 +12,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 
-const { invoke, sendEmail, buildOutgoingMime, appendLocalIndex, listen } = vi.hoisted(() => ({
+const { invoke, sendStaged, stageOutgoing, appendLocalIndex, listen } = vi.hoisted(() => ({
   invoke: vi.fn().mockResolvedValue(undefined),
-  sendEmail: vi.fn(),
-  buildOutgoingMime: vi.fn(),
+  sendStaged: vi.fn(),
+  stageOutgoing: vi.fn(),
   appendLocalIndex: vi.fn().mockResolvedValue(undefined),
   listen: vi.fn(async () => () => {}),
 }));
@@ -60,8 +60,8 @@ vi.mock('../../services/workflows/messageMutations', () => ({
   markForwarded: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/api', () => ({
-  sendEmail: (...a) => sendEmail(...a),
-  buildOutgoingMime: (...a) => buildOutgoingMime(...a),
+  sendStaged: (...a) => sendStaged(...a),
+  stageOutgoing: (...a) => stageOutgoing(...a),
   appendLocalIndex: (...a) => appendLocalIndex(...a),
   ensureSentMailbox: vi.fn().mockResolvedValue('Sent'),
 }));

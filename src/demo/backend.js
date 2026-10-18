@@ -630,6 +630,31 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         if (method === 'abd.status') return { jobs: [], simulated: true };
         if (method === 'abd.set_token' || method === 'abd.pause' || method === 'abd.resume' || method === 'abd.cancel' || method === 'abd.dismiss') return { simulated: true };
         if (method.startsWith('abd.')) throw new DemoUnsupportedError(`daemon:${method}`);
+        // Compose's send (the daemon's handlers/compose.rs): stage the copy in
+        // the vault, then send it and drop the copy once "the server" holds
+        // its own, as the daemon does. Built from the demo's own commands.
+        if (method === 'compose.stage' || method === 'compose.send') {
+          const p = args.params || {};
+          const acct = p.accountId || p.account?.id || ACCOUNT_IDS[0];
+          const email = p.email || {};
+          const composeRow = (uid, messageId, flags, source) => ({
+            uid, from: plain({ name: p.account?.name || '', address: p.account?.fromEmail || p.account?.email || 'demo@mailvault.demo' }),
+            to: String(email.to || '').split(',').map(address => address.trim()).filter(Boolean).map(address => ({ address, name: '' })),
+            subject: email.subject || '', date: new Date().toISOString(), has_attachments: !!p.hasAttachments, message_id: messageId,
+            in_reply_to: email.inReplyTo || null, references: email.references ? String(email.references).split(/\s+/) : null,
+            snippet: p.snippet ?? String(email.text || '').slice(0, 200), flags, source,
+          });
+          if (method === 'compose.stage') {
+            const built = await invoke('smtp_build_mime', { accountId: acct, account: p.account, email });
+            let uid = Math.floor(Date.now() / 1000);
+            while (find({ accountId: acct, mailbox: p.mailbox, uid })) uid += 1;
+            await invoke('maildir_store', { accountId: acct, mailbox: p.mailbox, uid, rawSourceBase64: built.rawBase64, flags: ['draft', 'seen'] });
+            return { uid, mailbox: p.mailbox, messageId: built.messageId, entry: composeRow(uid, built.messageId, ['draft', 'seen'], 'local_draft') };
+          }
+          const sent = await invoke('smtp_send_email', { accountId: acct, account: p.account, email: { ...email, messageId: p.messageId }, sentMailbox: p.sentMailbox });
+          await invoke('maildir_delete', { accountId: acct, mailbox: p.mailbox, uid: p.uid });
+          return { success: true, simulated: true, messageId: sent.messageId, entry: composeRow(p.uid, p.messageId, ['archived', 'seen'], 'local_sent') };
+        }
         // Compose asks when its schedule panel opens; nothing is known here.
         if (method === 'scheduled.suggest_tz') return { headerOffsetMinutes: null, headerDateMs: null, rememberedTz: null };
         // The search bar's typeahead: the demo keeps no search index to read.

@@ -2,27 +2,25 @@
 //
 // What the Sent list is allowed to claim, and when.
 //
-// The compose window archives the outgoing bytes to the vault BEFORE SMTP —
-// that is the safety net and it stays. What it must not do is put a row in
+// The daemon archives the outgoing bytes to the vault BEFORE the send
+// (`compose.stage`) — that is the safety net and it stays. What it must not do is put a row in
 // `sentEmails` before the message has left: a send that fails then leaves a
 // copy sitting in the Sent folder (and, since threading headers were added to
 // it, inside the conversation) claiming to be a message you sent.
 //
-// The retry half of the same story: `retryOutbox` re-runs THIS closure. Rust
-// mints a fresh Message-ID on every `smtp_build_mime` (src-tauri/src/smtp.rs),
-// and the staged uid is a fresh `Date.now()`, so rebuilding per attempt leaves
-// the previous attempt's .eml, index entry and row behind — and puts two copies
-// of one message on the wire that no recipient can pair up.
+// The retry half of the same story: `retryOutbox` re-runs THIS closure. The
+// daemon mints a fresh Message-ID and uid on every `compose.stage`, so staging
+// per attempt leaves the previous attempt's .eml, index entry and row behind —
+// and puts two copies of one message on the wire that no recipient can pair up.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 
-const { invoke, sendEmail, buildOutgoingMime, appendLocalIndex, listen } = vi.hoisted(() => ({
+const { invoke, sendStaged, stageOutgoing, listen } = vi.hoisted(() => ({
   invoke: vi.fn().mockResolvedValue(undefined),
-  sendEmail: vi.fn(),
-  buildOutgoingMime: vi.fn(),
-  appendLocalIndex: vi.fn().mockResolvedValue(undefined),
+  sendStaged: vi.fn(),
+  stageOutgoing: vi.fn(),
   listen: vi.fn(async () => () => {}),
 }));
 
@@ -66,9 +64,8 @@ vi.mock('../../services/workflows/messageMutations', () => ({
   markForwarded: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../services/api', () => ({
-  sendEmail: (...a) => sendEmail(...a),
-  buildOutgoingMime: (...a) => buildOutgoingMime(...a),
-  appendLocalIndex: (...a) => appendLocalIndex(...a),
+  sendStaged: (...a) => sendStaged(...a),
+  stageOutgoing: (...a) => stageOutgoing(...a),
   ensureSentMailbox: vi.fn().mockResolvedValue('Sent'),
 }));
 vi.mock('../../services/db', () => ({
@@ -143,14 +140,18 @@ beforeEach(() => {
   mimeSeq = 0;
   window.__TAURI__ = { core: { invoke } };
   invoke.mockClear();
-  appendLocalIndex.mockClear();
   settings.setLastComposeIdentity.mockClear();
   listen.mockClear();
-  sendEmail.mockReset();
-  buildOutgoingMime.mockReset();
-  buildOutgoingMime.mockImplementation(async () => {
+  sendStaged.mockReset();
+  stageOutgoing.mockReset();
+  stageOutgoing.mockImplementation(async () => {
     mimeSeq += 1;
-    return { rawBase64: 'AAAA', messageId: `<mine-${mimeSeq}@example.test>`, rawSize: 4 };
+    const messageId = `<mine-${mimeSeq}@example.test>`;
+    const uid = 1000 + mimeSeq;
+    return {
+      uid, mailbox: 'Sent', messageId,
+      entry: { uid, message_id: messageId, in_reply_to: '<parent@example.test>', flags: ['draft', 'seen'], source: 'local_draft' },
+    };
   });
 });
 afterEach(() => { cleanup(); delete window.__TAURI__; });
@@ -159,18 +160,16 @@ afterEach(() => { cleanup(); delete window.__TAURI__; });
 async function sendReply() {
   render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
   (await screen.findByTestId('compose-send')).click();
-  await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+  await waitFor(() => expect(sendStaged).toHaveBeenCalled());
   await mail._inFlight;
 }
 
-/** Every uid the vault was asked to write, in order. */
-const storedUids = () => invoke.mock.calls
-  .filter(([cmd]) => cmd === 'maildir_store')
-  .map(([, args]) => args.uid);
+/** The staged uid every send attempt named, in order. */
+const storedUids = () => sendStaged.mock.calls.map(([, , params]) => params.uid);
 
 describe('a send that fails', () => {
   it('puts nothing in the Sent list — the message never left', async () => {
-    sendEmail.mockRejectedValue(new Error('Connection refused'));
+    sendStaged.mockRejectedValue(new Error('Connection refused'));
 
     await sendReply();
 
@@ -180,18 +179,18 @@ describe('a send that fails', () => {
   });
 
   it('still archives the bytes to the vault first — the safety net is untouched', async () => {
-    sendEmail.mockRejectedValue(new Error('Connection refused'));
+    sendStaged.mockRejectedValue(new Error('Connection refused'));
 
     await sendReply();
 
-    expect(storedUids()).toHaveLength(1);
-    expect(appendLocalIndex).toHaveBeenCalledWith('acct-1', 'Sent', [
-      expect.objectContaining({ source: 'local_draft', flags: ['draft', 'seen'] }),
-    ]);
+    expect(stageOutgoing).toHaveBeenCalledTimes(1);
+    expect(stageOutgoing.mock.calls[0][2]).toMatchObject({ accountId: 'acct-1', mailbox: 'Sent' });
+    expect(stageOutgoing.mock.invocationCallOrder[0]).toBeLessThan(sendStaged.mock.invocationCallOrder[0]);
+    expect(storedUids()).toEqual([1001]);
   });
 
   it('does not move the remembered compose identity', async () => {
-    sendEmail.mockRejectedValue(new Error('Connection refused'));
+    sendStaged.mockRejectedValue(new Error('Connection refused'));
 
     await sendReply();
 
@@ -203,7 +202,7 @@ describe('a send that fails', () => {
 
 describe('a send that succeeds', () => {
   it('shows the row once the message is out, not flagged as a draft', async () => {
-    sendEmail.mockResolvedValue({ messageId: '<mine-1@example.test>' });
+    sendStaged.mockResolvedValue({ messageId: '<mine-1@example.test>' });
 
     await sendReply();
 
@@ -215,7 +214,7 @@ describe('a send that succeeds', () => {
   });
 
   it('remembers the identity that sent it', async () => {
-    sendEmail.mockResolvedValue({ messageId: '<mine-1@example.test>' });
+    sendStaged.mockResolvedValue({ messageId: '<mine-1@example.test>' });
 
     await sendReply();
 
@@ -232,7 +231,7 @@ describe('the Sent reconcile', () => {
     // the Sent re-read. Assert the order rather than the effect: the effect is
     // a race and would pass on a slow enough mock.
     let subscribedFirst = null;
-    sendEmail.mockImplementation(async () => {
+    sendStaged.mockImplementation(async () => {
       subscribedFirst = listen.mock.calls.some(([name]) => name === 'send-server-append-complete');
       return { messageId: '<mine-1@example.test>' };
     });
@@ -249,14 +248,14 @@ describe('onSend', () => {
   // the moment Send commits the message to the queue — not on mere open, and
   // not gated on the eventual SMTP result, which lands later via `_inFlight`.
   it('fires once Send has queued the message, whether or not it later succeeds', async () => {
-    sendEmail.mockRejectedValue(new Error('Connection refused'));
+    sendStaged.mockRejectedValue(new Error('Connection refused'));
     const onSend = vi.fn();
     render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onSend={onSend} />);
     (await screen.findByTestId('compose-send')).click();
     // handleSend awaits the draft save chain before queueing, so onSend lands
     // a tick after the click, not synchronously with it.
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+    await waitFor(() => expect(sendStaged).toHaveBeenCalled());
     await mail._inFlight;
     expect(onSend).toHaveBeenCalledTimes(1);
   });
@@ -271,8 +270,8 @@ describe('onSend', () => {
 
 describe('a retry after a failure', () => {
   it('reuses the staged copy instead of leaving the first attempt behind', async () => {
-    sendEmail.mockRejectedValueOnce(new Error('Connection refused'));
-    sendEmail.mockResolvedValueOnce({ messageId: '<mine-1@example.test>' });
+    sendStaged.mockRejectedValueOnce(new Error('Connection refused'));
+    sendStaged.mockResolvedValueOnce({ messageId: '<mine-1@example.test>' });
 
     await sendReply();
     expect(mail.sentEmails).toEqual([]);
@@ -283,7 +282,7 @@ describe('a retry after a failure', () => {
     // One message, one identity: the vault was written under one uid, and the
     // wire carried one Message-ID.
     expect(new Set(storedUids()).size).toBe(1);
-    expect(buildOutgoingMime).toHaveBeenCalledTimes(1);
+    expect(stageOutgoing).toHaveBeenCalledTimes(1);
     expect(mail.sentEmails).toHaveLength(1);
     expect(mail.sentEmails[0].messageId).toBe('<mine-1@example.test>');
   });

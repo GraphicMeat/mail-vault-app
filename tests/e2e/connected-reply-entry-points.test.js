@@ -202,10 +202,11 @@ const installSendProbe = () => browser.execute(() => {
   const real = core.invoke;
   window.__MV_SENDS__ = [];
   const probe = (cmd, args) => {
-    // Daemon-owned: transport hands it over as `daemon_rpc`.
-    if (cmd === 'daemon_rpc' && args?.method === 'smtp_send_email') {
+    // Daemon-owned: transport hands it over as `daemon_rpc`. Compose stages
+    // its copy for real (`compose.stage`) and sends with `compose.send`.
+    if (cmd === 'daemon_rpc' && args?.method === 'compose.send') {
       window.__MV_SENDS__.push(args.params);
-      return Promise.resolve(null);
+      return Promise.resolve({ success: true, simulated: true });
     }
     return real(cmd, args);
   };
@@ -235,7 +236,7 @@ const removeSendProbe = () => browser.execute(() => {
   return true;
 });
 
-/** The text and HTML of the first message handed to smtp_send_email, or null. */
+/** The text and HTML of the first message handed to compose.send, or null. */
 const sentBody = () => browser.execute(() => {
   const email = (window.__MV_SENDS__ || [])[0]?.email;
   return email ? `${email.text || ''}\n${email.html || ''}` : null;
@@ -548,7 +549,7 @@ describe('Reply entry points — header, thread message, row menu', function () 
       const sent = await waitFor(
         sentBody,
         (body) => body !== null,
-        'the reply opened from the row menu was never handed to smtp_send_email',
+        'the reply opened from the row menu was never handed to compose.send',
         30_000,
         300,
       );

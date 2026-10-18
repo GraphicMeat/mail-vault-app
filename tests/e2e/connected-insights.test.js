@@ -81,7 +81,7 @@ describe('Insights with real native mail data', function () {
       }
     }
     assert.ok(calls.includes('insights_begin_snapshot'), 'Read-only assertion requires an observed real native scan');
-    assert.equal(calls.some(name => /^(imap_get_email|imap_get_email_light|maildir_read|prefetch_attachments|smtp_send_email|archive_emails|imap_delete_email|bulk_delete_emails)$/.test(name)), false, `Entering charts only reads headers: ${calls.join(', ')}`);
+    assert.equal(calls.some(name => /^(imap_get_email|imap_get_email_light|maildir_read|prefetch_attachments|smtp_send_email|compose\.send|archive_emails|imap_delete_email|bulk_delete_emails)$/.test(name)), false, `Entering charts only reads headers: ${calls.join(', ')}`);
     console.log('[insights] native scan/model/render frame timing:', JSON.stringify(scanTiming), 'inventory:', LARGE ? 50000 : 700);
     assert.ok(scanTiming.frames > 0, 'Frame callbacks remained responsive during scan');
     assert.ok(scanTiming.maxFrameGap <= 100, `Main-thread frame gap during scan/model/render: ${scanTiming.maxFrameGap}ms`);

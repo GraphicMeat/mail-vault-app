@@ -6,22 +6,17 @@ import * as db from './db';
 import { ensureFreshToken } from './authUtils';
 import { deleteLocalDraft } from './localDrafts';
 import { markAnswered, markForwarded } from './workflows/messageMutations';
-import { send } from './transport';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
 import { withAttachmentBytes } from './attachmentUtils';
-import { parseReferenceList, splitRecipients } from '../utils/emailParser';
+import { splitRecipients } from '../utils/emailParser';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { zonedTimeToEpoch } from '../utils/scheduledTime';
-import { daemonCall } from './daemonClient';
-import { isGraphAccount } from './graphConfig';
 import { serverSavesSent } from './providerKind.js';
 import { ownAddresses } from '../utils/ownAddresses';
 import { t } from '../i18n/index.js';
-
-const isTauri = () => window.__TAURI__?.core?.invoke;
 
 // Sent-folder resolution is shared by immediate and scheduled sends. Keeping
 // it here prevents the detached owner from falling back to a different folder.
@@ -121,67 +116,55 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
   };
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/// The follow-up reminder this send asked for, in days, or 0: Premium, and
-/// never on a Graph account, whose replies the daemon cannot look for.
-function remindDaysFor(snapshot, account) {
+/// The follow-up reminder this send asked for, in days, or 0 without
+/// Premium. The daemon records it once the message is out, and never on a
+/// Graph account, whose replies it cannot look for (compose.send, and the
+/// scheduled worker for a scheduled send).
+function remindDaysFor(snapshot) {
   const days = Number(snapshot._remindDays) || 0;
-  if (days <= 0 || isGraphAccount(account)) return 0;
+  if (days <= 0) return 0;
   return hasPremiumAccess(useSettingsStore.getState().billingProfile) ? days : 0;
 }
 
-/// Every address the message could have been sent as: the From it went out
-/// under, the login, the default From and every alias. A message from any of
-/// them is the user's own, never the reply the reminder waits for.
-function sendersOf(snapshot, account) {
+/// The account's own addresses: the login, the default From and every alias.
+/// A message from any of them is the user's own, never the reply a reminder
+/// waits for. The daemon adds the From the message went out under.
+function ownAddressesOf(account) {
   const { aliases, sendAsAddresses } = useSettingsStore.getState() || {};
-  const own = ownAddresses({ account, aliases: aliases?.[account.id], sendAsAddress: sendAsAddresses?.[account.id] });
-  const from = (snapshot._fromAddress || '').trim();
-  return from && !own.some(a => a.toLowerCase() === from.toLowerCase()) ? [from, ...own] : own;
-}
-
-/// Record "remind me if no reply" for a message that went out. Keyed on the
-/// Message-ID it was built with: that is what a reply names, never the SMTP
-/// reply's queue id. A retried send records nothing twice (the daemon keys
-/// rows on the id). Not awaited by the send: the local archive, the Sent row
-/// and the staged copy's cleanup never wait on it, and a failure is logged,
-/// never the send's.
-function recordFollowUp({ snapshot, account, messageId, sentMailbox, days }) {
-  if (!days || !messageId) return;
-  const sentAt = Date.now();
-  daemonCall('follow_up.create', {
-    accountId: account.id, messageId, subject: snapshot.subject || '', recipients: snapshot.to || '',
-    sentMailbox: sentMailbox || '', sentAt, remindAt: sentAt + days * DAY_MS,
-    ownAddresses: sendersOf(snapshot, account),
-  }).catch(err => console.warn('[composeSend] follow-up reminder not recorded:', err));
+  return ownAddresses({ account, aliases: aliases?.[account.id], sendAsAddress: sendAsAddresses?.[account.id] });
 }
 
 const parseAddresses = raw => splitRecipients(raw || '').map(address => ({ address, name: '' }));
 const bareMessageId = id => (id || '').trim().replace(/^</, '').replace(/>$/, '');
 
-// smtp_send_email answers within 60 s (the APPEND) plus 15 s (asking the
-// server whether a failed APPEND landed anyway). The listener must outlive
-// both, or a slow server's answer lands after it is gone and the staged local
-// copy stays beside the server's.
+// compose.stage refuses with a daemon code; the user reads it in the words
+// compose always used.
+function stageError(err) {
+  const match = /^E_COMPOSE_(BUILD|STAGE):\s*([\s\S]*)$/.exec(err?.message || String(err));
+  if (!match) return err;
+  const key = match[1] === 'BUILD' ? 'errors.composeBuildOutgoingMime' : 'errors.composeArchiveOutgoing';
+  return new Error(t(key, { error: match[2] }));
+}
+
+// The daemon reports the server's Sent copy within 60 s (the APPEND) plus
+// 15 s (asking the server whether a failed APPEND landed anyway). The
+// listener outlives both so the list hears it; the staged copy itself is the
+// daemon's to remove, listener or not.
 const APPEND_LISTEN_MS = 90_000;
 
-function cleanupServerAppend({ freshAccount, sentFolderPath, localMailbox, pseudoUid, builtMime, allowCleanup }) {
+/// The list's side of the server's Sent copy: once the server holds it, the
+/// optimistic row goes (the daemon already removed the staged copy), and the
+/// account's Sent is reloaded either way.
+function refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageId, allowCleanup }) {
   return async (event) => {
     const payload = event.payload || {};
-    if (payload.accountId !== freshAccount.email && payload.accountId !== freshAccount.id) return;
     await allowCleanup;
-    if (payload.ok && isTauri()) {
-      try {
-        await send('maildir_delete', { accountId: freshAccount.id, mailbox: localMailbox, uid: pseudoUid });
-        await send('local_index_remove', { accountId: freshAccount.id, mailbox: localMailbox, uid: pseudoUid });
-      } catch (err) {
-        console.warn('[composeSend] local cleanup failed:', err);
-      }
+    if (payload.ok) {
+      const other = item => !(item.uid === pseudoUid && item._accountId === freshAccount.id);
       useMailStore.setState(state => ({
-        sentEmails: (state.sentEmails || []).filter(item => !(item.uid === pseudoUid && item._accountId === freshAccount.id)),
-        emails: (state.emails || []).filter(item => !(item.uid === pseudoUid && item._accountId === freshAccount.id)),
-        localEmails: (state.localEmails || []).filter(item => !(item.uid === pseudoUid && item._accountId === freshAccount.id)),
+        sentEmails: (state.sentEmails || []).filter(other),
+        emails: (state.emails || []).filter(other),
+        localEmails: (state.localEmails || []).filter(other),
       }));
     }
 
@@ -190,9 +173,9 @@ function cleanupServerAppend({ freshAccount, sentFolderPath, localMailbox, pseud
     if (sentFolderPath && state.activeAccountId === freshAccount.id && state.activeMailbox === sentFolderPath) {
       try { await state.activateAccount?.(freshAccount.id, sentFolderPath, { _backgroundRefresh: true }); } catch (err) { console.warn('[composeSend] refresh active Sent failed:', err); }
     }
-    if (builtMime?.messageId) {
+    if (messageId) {
       const sent = useMailStore.getState().sentEmails || [];
-      console.log('[composeSend] server append reconciled', { messageId: builtMime.messageId, found: sent.some(item => !item._optimistic && item.messageId === builtMime.messageId) });
+      console.log('[composeSend] server append reconciled', { messageId, found: sent.some(item => !item._optimistic && item.messageId === messageId) });
     }
   };
 }
@@ -236,66 +219,40 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
     if (!freshAccount) throw new Error(t('errors.composeRefreshAccount'));
     const { displayName, fromAddress, sendAsEmail, accountForSend, sentMailbox, sentFolderPath, bodyText, outgoingPayload } =
       await buildOutgoingPayload({ snapshot, account: freshAccount, settings });
-    const pseudoUid = staged ? staged.uid : Math.floor(Date.now() / 1000);
-    const localMailbox = sentFolderPath || 'Sent';
-    let builtMime = staged?.mime;
+    const sendAccount = { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined };
+    // What the Sent row says that the bytes do not: the text written, without
+    // the quote, and whether anything was attached (not an inline picture).
+    const rowHints = { snippet: bodyText.slice(0, 200), hasAttachments: (snapshot.attachments || []).length > 0 };
 
-    if (!builtMime) {
+    // The daemon writes the copy before anything goes. Once, so a retry is
+    // the same message under the same uid.
+    if (!staged) {
       try {
-        builtMime = await api.buildOutgoingMime(
-          { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined }, outgoingPayload,
-        );
-      } catch (err) {
-        throw new Error(t('errors.composeBuildOutgoingMime', { error: err?.message || err }));
-      }
-    }
-    staged = { uid: pseudoUid, mime: builtMime };
-
-    if (isTauri() && builtMime?.rawBase64) {
-      try {
-        await send('maildir_store', {
-          accountId: freshAccount.id, mailbox: localMailbox, uid: pseudoUid,
-          rawSourceBase64: builtMime.rawBase64, flags: ['draft', 'seen'],
+        staged = await api.stageOutgoing(sendAccount, outgoingPayload, {
+          accountId: freshAccount.id, mailbox: sentFolderPath || 'Sent', ...rowHints,
         });
       } catch (err) {
-        throw new Error(t('errors.composeArchiveOutgoing', { error: err?.message || err }));
+        throw stageError(err);
       }
     }
+    const { uid: pseudoUid, mailbox: localMailbox, messageId } = staged;
 
-    const indexBase = {
-      uid: pseudoUid,
-      from: { address: fromAddress, name: displayName },
-      to: parseAddresses(snapshot.to),
-      subject: snapshot.subject,
-      date: new Date().toISOString(),
-      has_attachments: (snapshot.attachments || []).length > 0,
-      message_id: builtMime?.messageId || null,
-      in_reply_to: snapshot.inReplyTo || null,
-      references: parseReferenceList(snapshot.references).length ? parseReferenceList(snapshot.references) : null,
-      snippet: bodyText.slice(0, 200),
-    };
-    if (isTauri()) {
-      try {
-        await api.appendLocalIndex(freshAccount.id, localMailbox, [{ ...indexBase, flags: ['draft', 'seen'], source: 'local_draft' }]);
-      } catch (err) {
-        console.warn('[composeSend] draft index failed:', err);
-      }
-    }
-
+    // Subscribed before the send: a Graph or JMAP server files its own Sent
+    // copy, and the daemon says so before compose.send answers.
     let unlistenAppend = null;
     let markLocalStageDone;
     const localStageDone = new Promise(resolve => { markLocalStageDone = resolve; });
     try {
       const { listen } = await import('@tauri-apps/api/event');
       let handled = false;
-      const handler = cleanupServerAppend({ freshAccount, sentFolderPath, localMailbox, pseudoUid, builtMime, allowCleanup: localStageDone });
-      const ownId = bareMessageId(builtMime?.messageId);
+      const handler = refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageId, allowCleanup: localStageDone });
+      const ownId = bareMessageId(messageId);
       unlistenAppend = await listen('send-server-append-complete', async event => {
         if (handled) return;
         const payload = event.payload || {};
         if (payload.accountId !== freshAccount.email && payload.accountId !== freshAccount.id) return;
-        // Only this message's APPEND: another send from the same account (a
-        // scheduled one names no id) says nothing about this staged copy.
+        // Only this message's: another send from the same account (a
+        // scheduled one) says nothing about this copy.
         if (ownId && bareMessageId(payload.messageIdHeader) !== ownId) return;
         handled = true;
         try { await handler(event); } finally { try { unlistenAppend?.(); } catch {} }
@@ -305,24 +262,16 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       setTimeout(() => useMailStore.getState().loadSentHeaders?.(freshAccount.id), 8000);
     }
 
+    let sent;
     try {
-      // Sent under the staged copy's Message-ID, so the server's copy (and
-      // every reply to it) matches the local one.
-      await api.sendEmail(
-        { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
-        { ...outgoingPayload, messageId: builtMime?.messageId || undefined }, sentMailbox,
-      );
-      // An edited scheduled email sent now instead: its row must not fire as
-      // well. It stayed queued until here, so an undo or a failed send still
-      // left it holding the message. Never thrown: the mail is already out,
-      // and an error would offer a Retry that sends it twice.
-      if (snapshot._editScheduledId) {
-        await useScheduledStore.getState().cancel(snapshot._editScheduledId)
-          .catch(err => console.warn('[composeSend] could not cancel the edited scheduled send:', err));
-      }
-      recordFollowUp({
-        snapshot, account: freshAccount, messageId: builtMime?.messageId, sentMailbox,
-        days: remindDaysFor(snapshot, freshAccount),
+      // Sent under the staged copy's Message-ID. The daemon then cancels an
+      // edited scheduled row this replaces, records the reminder, marks the
+      // copy sent and removes it once the server holds its own. None of that
+      // fails a send that went out.
+      sent = await api.sendStaged(sendAccount, outgoingPayload, {
+        accountId: freshAccount.id, mailbox: localMailbox, uid: pseudoUid, messageId, sentMailbox, ...rowHints,
+        remindDays: remindDaysFor(snapshot), ownAddresses: ownAddressesOf(freshAccount),
+        cancelScheduledId: snapshot._editScheduledId || null,
       });
       const original = snapshot._replyTo || replyTo;
       if (mode === 'reply' || mode === 'replyAll') markAnswered(original).catch(err => console.warn('[composeSend] \\Answered not set:', err));
@@ -338,18 +287,8 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       throw err;
     }
 
-    if (isTauri() && builtMime?.rawBase64) {
-      try {
-        await send('maildir_store', {
-          accountId: freshAccount.id, mailbox: localMailbox, uid: pseudoUid,
-          rawSourceBase64: builtMime.rawBase64, flags: ['archived', 'seen'],
-        });
-        await api.appendLocalIndex(freshAccount.id, localMailbox, [{ ...indexBase, flags: ['archived', 'seen'], source: 'local_sent' }]);
-      } catch (err) {
-        console.warn('[composeSend] sent local archive failed:', err);
-      }
-    }
-
+    // eslint-disable-next-line no-unused-vars
+    const { flags: _flags, source: _source, ...indexBase } = sent?.entry || staged.entry || {};
     const optimistic = {
       ...indexBase,
       cc: parseAddresses(snapshot.cc), bcc: parseAddresses(snapshot.bcc),
@@ -400,8 +339,8 @@ export async function scheduleCompose({ snapshot, account, settings = {} }) {
     fireAt: zonedTimeToEpoch(schedule.localTime, schedule.tz),
     sentMailbox,
     // The daemon records the reminder once the frozen message goes out.
-    remindDays: remindDaysFor(snapshot, freshAccount),
-    ownAddresses: sendersOf(snapshot, freshAccount),
+    remindDays: remindDaysFor(snapshot),
+    ownAddresses: ownAddressesOf(freshAccount),
   };
   const store = useScheduledStore.getState();
   const editId = snapshot._editScheduledId;
