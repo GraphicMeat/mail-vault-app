@@ -690,6 +690,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::storage_format::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::learning::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
@@ -778,8 +781,6 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         "classification.override" => handle_classification_override(&state.app_dir, req.params, id),
         "classification.status" => handle_classification_status(&state.classification, id).await,
 
-        "learning.load" => handle_learning_load(&state.app_dir, req.params, id),
-        "learning.save" => handle_learning_save(&state.app_dir, req.params, id),
 
         "contacts_index.get" => handle_contacts_index_get(Arc::clone(&state.contacts), req.params, id),
 
@@ -1076,6 +1077,7 @@ mod tests {
             ("ping", json!({})),
             ("daemon.heartbeat", json!({})),
             ("learning.load", json!({"accountId": "a"})),
+            ("learning.rules", json!({"accountId": "a"})),
             ("classification.summary", json!({"accountId": "a"})),
             // Task 5.4a: flat `imap_*` names have no `.`, so they never match
             // this gate's prefix check — a live IMAP read has nothing to do

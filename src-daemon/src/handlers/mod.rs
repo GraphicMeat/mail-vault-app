@@ -6,7 +6,6 @@ use crate::contacts_index;
 use crate::credentials;
 use crate::inference;
 use crate::ipc::{self, RpcResponse};
-use mailvault_core::learning;
 use crate::llm;
 use crate::server::DaemonState;
 use crate::snapshot;
@@ -36,6 +35,7 @@ pub(crate) mod fonts;
 pub(crate) mod graph;
 pub(crate) mod imap;
 pub(crate) mod jmap_bridge;
+pub(crate) mod learning;
 pub(crate) mod insights;
 pub(crate) mod journal;
 pub(crate) mod mail_search;
@@ -573,31 +573,4 @@ pub(crate) async fn handle_reclassify_all(state: Arc<DaemonState>, params: Value
     tokio::spawn(reclassify_all(state_clone, aid));
 
     RpcResponse::success(id, serde_json::json!({"started": true, "accountId": account_id}))
-}
-
-// ── Learning handlers ──────────────────────────────────────────────────────
-
-pub(crate) fn handle_learning_load(app_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = match params.get("accountId").and_then(|v| v.as_str()) {
-        Some(id) => id,
-        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"),
-    };
-    let feedback = learning::load_feedback(app_dir, account_id);
-    RpcResponse::success(id, serde_json::to_value(feedback).unwrap())
-}
-
-pub(crate) fn handle_learning_save(app_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = match params.get("accountId").and_then(|v| v.as_str()) {
-        Some(id) => id,
-        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"),
-    };
-    let feedback: learning::Feedback = match params.get("feedback").and_then(|v| serde_json::from_value(v.clone()).ok()) {
-        Some(f) => f,
-        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing or invalid feedback"),
-    };
-
-    match learning::save_feedback(app_dir, account_id, &feedback) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"saved": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
 }
