@@ -55,6 +55,16 @@ fn dark_open(html: String) -> Duration {
     within(Duration::from_secs(120), move || RenderDoc::open(&html, opts, None).is_ok()).1
 }
 
+/// The fastest of three dark opens: a runner that stalls one of them (another
+/// job, a page-in) does not make the mail look bigger than it is.
+fn best_dark_open(html: &str) -> Duration {
+    (0..3).map(|_| dark_open(html.to_string())).min().unwrap()
+}
+
+/// The least a small open counts for in a growth ratio. A tiny open is mostly
+/// noise, and a ratio over it measures the noise.
+const MIN_SMALL_OPEN: Duration = Duration::from_millis(250);
+
 /// The dark pass grows with the mail, never faster: the mail at `large` may
 /// cost at most `max` times its dark open at `small`. Each case passes the
 /// sizes and the bound its pass must keep. Measured on WSL2 Ubuntu, debug:
@@ -63,15 +73,15 @@ fn dark_open(html: String) -> Duration {
 /// x1.2. With the walk budget lifted, twice the rules and chain cost x3.5 or
 /// did not finish in 120 s.
 ///
-/// A ratio of two dark opens on one machine, not a budget against a light
-/// open: a slow runner is slow at both sizes. Blitz 0.3.0-beta.4 opened these
-/// mails 2.3 to 4.3 times faster in light mode while the dark pass stayed as it
-/// was, and `dark < 4 * light + 2 s` then failed on CI runners with nothing
-/// growing faster than before.
+/// A ratio of two dark opens on one machine, each the best of three, not a
+/// budget against a light open: a slow runner is slow at both sizes. Blitz
+/// 0.3.0-beta.4 opened these mails 2.3 to 4.3 times faster in light mode
+/// while the dark pass stayed as it was, and `dark < 4 * light + 2 s` then
+/// failed on CI runners with nothing growing faster than before.
 fn assert_dark_grows_at_most(max: f64, mail: impl Fn(usize) -> String, small: usize, large: usize) {
-    let at_small = dark_open(mail(small));
-    let at_large = dark_open(mail(large));
-    let grew = at_large.as_secs_f64() / at_small.as_secs_f64();
+    let at_small = best_dark_open(&mail(small));
+    let at_large = best_dark_open(&mail(large));
+    let grew = at_large.as_secs_f64() / at_small.max(MIN_SMALL_OPEN).as_secs_f64();
     eprintln!("dark {small}: {at_small:?}, {large}: {at_large:?}, x{grew:.2}");
     assert!(grew < max, "dark grew x{grew:.2} (bound x{max}) from {small} to {large}: {at_small:?} -> {at_large:?}");
 }
