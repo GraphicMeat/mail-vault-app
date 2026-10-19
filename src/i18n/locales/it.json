@@ -3308,6 +3308,7 @@
   "util.senderCheck.returnPathDomainDiffersSender": "Il dominio Return-Path ({{returnPathDomain}}) è diverso da quello del mittente",
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Autenticazione del mittente non riuscita ({{failures}}): questa email potrebbe essere falsificata",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Il nome mittente «{{fromName}}» imita un dominio diverso dal mittente reale ({{fromDomain}})",
+  "util.senderCheck.senderNotChecked": "Mittente non verificato: il servizio in background di MailVault non ha risposto. Riapri il messaggio per verificarlo.",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Mittente verificato (SPF e DKIM superati)",
   "util.trackerDetect.blockedExplain": "Pixel di tracciamento rimosso. Avrebbe detto al mittente quando e dove hai aperto questa email.",
   "util.trackerDetect.blockedLabel": "Tracker bloccato",

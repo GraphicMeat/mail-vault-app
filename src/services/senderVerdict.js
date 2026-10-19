@@ -20,6 +20,19 @@ export const NO_VERDICT = Object.freeze({
   dkim: null,
 });
 
+/**
+ * The daemon could not be asked: the sender was not checked. Never `none`,
+ * which reads as "nothing to flag" and would hide a failed check. Not kept,
+ * so the next look asks again.
+ */
+export const UNAVAILABLE = Object.freeze({
+  status: 'unavailable',
+  tooltip: [{ key: 'util.senderCheck.senderNotChecked', params: {} }],
+  issues: [],
+  auth: NO_VERDICT.auth,
+  dkim: null,
+});
+
 const KEPT = 1000;
 const answers = new Map();
 
@@ -45,7 +58,7 @@ export function cachedVerdict(key) {
   return answers.get(key)?.value;
 }
 
-/** The verdict for a message; `NO_VERDICT` when the daemon could not be asked. */
+/** The verdict for a message; `UNAVAILABLE` when the daemon could not be asked. */
 export function verifySender(email) {
   const key = verdictKey(email);
   let entry = answers.get(key);
@@ -56,7 +69,7 @@ export function verifySender(email) {
       (e) => {
         console.warn('[senderVerdict] message.verify_sender failed:', e);
         answers.delete(key);
-        return NO_VERDICT;
+        return UNAVAILABLE;
       },
     );
     answers.set(key, entry);

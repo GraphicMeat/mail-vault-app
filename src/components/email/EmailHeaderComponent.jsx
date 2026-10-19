@@ -10,6 +10,7 @@ import {
   RefreshCw,
   ShieldCheck,
   ShieldAlert,
+  Shield,
   AlertTriangle,
   Info,
 } from 'lucide-react';
@@ -186,7 +187,7 @@ export function AuthDetailPopover({ email, verdict: given = null, onClose, ancho
         </div>
       ) : senderIssues.length === 0 ? (
         <div className="text-xs text-mail-text-muted border-t border-mail-border pt-2">
-          {t('email.header.noAuthenticationDataAvailableEmail')}
+          {verdict.status === 'unavailable' ? t('util.senderCheck.senderNotChecked') : t('email.header.noAuthenticationDataAvailableEmail')}
         </div>
       ) : null}
     </div>
@@ -213,8 +214,10 @@ export function SenderVerificationBadge({ email, size = 14 }) {
   // No shield to click when there is nothing to flag, but a capture still shows the box.
   if (status === 'none' && !captured) return null;
 
-  const colorClass = status === 'verified' ? 'text-mail-success' : status === 'warning' ? 'text-mail-warning' : 'text-mail-danger';
-  const Icon = status === 'verified' ? ShieldCheck : status === 'warning' ? AlertTriangle : ShieldAlert;
+  // 'unavailable': the daemon could not be asked, so nothing was checked.
+  const colorClass = status === 'verified' ? 'text-mail-success' : status === 'warning' ? 'text-mail-warning'
+    : status === 'unavailable' ? 'text-mail-text-muted' : 'text-mail-danger';
+  const Icon = status === 'verified' ? ShieldCheck : status === 'warning' ? AlertTriangle : status === 'unavailable' ? Shield : ShieldAlert;
 
   return (
     <span className="relative inline-flex items-center flex-shrink-0">

@@ -3308,6 +3308,7 @@
   "util.senderCheck.returnPathDomainDiffersSender": "Return-Path 域名（{{returnPathDomain}}）与发件域名不同",
   "util.senderCheck.senderAuthenticationFailedEmailMay": "发件人认证失败（{{failures}}）：这封邮件可能被伪造",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "发件人名称“{{fromName}}”冒充了与实际发件人（{{fromDomain}}）不同的域名",
+  "util.senderCheck.senderNotChecked": "未检查发件人：MailVault 后台服务没有响应。请重新打开邮件以检查。",
   "util.senderCheck.senderVerifiedSpfDkimPass": "发件人已验证（SPF、DKIM 通过）",
   "util.trackerDetect.blockedExplain": "已移除跟踪像素。它会告诉发件人你何时何地打开了这封邮件。",
   "util.trackerDetect.blockedLabel": "已拦截跟踪器",

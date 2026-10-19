@@ -3308,6 +3308,7 @@
   "util.senderCheck.returnPathDomainDiffersSender": "Le domaine Return-Path ({{returnPathDomain}}) diffère du domaine de l'expéditeur",
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Échec de l'authentification de l'expéditeur ({{failures}}) : cet e-mail est peut-être usurpé",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Le nom d'expéditeur « {{fromName}} » imite un domaine différent de l'expéditeur réel ({{fromDomain}})",
+  "util.senderCheck.senderNotChecked": "Expéditeur non vérifié : le service d'arrière-plan de MailVault n'a pas répondu. Rouvrez le message pour vérifier.",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Expéditeur vérifié (SPF, DKIM valides)",
   "util.trackerDetect.blockedExplain": "Pixel de suivi supprimé. Il aurait indiqué à l’expéditeur quand et où vous avez ouvert cet e-mail.",
   "util.trackerDetect.blockedLabel": "Traceur bloqué",

@@ -3308,6 +3308,7 @@
   "util.senderCheck.returnPathDomainDiffersSender": "Die Return-Path-Domain ({{returnPathDomain}}) weicht von der Absenderdomain ab",
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Absender-Authentifizierung fehlgeschlagen ({{failures}}): Diese E-Mail könnte gefälscht sein",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Der Absendername „{{fromName}}“ ahmt eine Domain nach, die vom echten Absender abweicht ({{fromDomain}})",
+  "util.senderCheck.senderNotChecked": "Absender nicht geprüft: Der Hintergrunddienst von MailVault hat nicht geantwortet. Öffne die Nachricht erneut, um zu prüfen.",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Absender verifiziert (SPF, DKIM bestanden)",
   "util.trackerDetect.blockedExplain": "Tracking-Pixel entfernt. Es hätte dem Absender verraten, wann und wo Sie diese E-Mail geöffnet haben.",
   "util.trackerDetect.blockedLabel": "Tracker blockiert",

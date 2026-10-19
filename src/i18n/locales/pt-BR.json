@@ -3308,6 +3308,7 @@
   "util.senderCheck.returnPathDomainDiffersSender": "O domínio do Return-Path ({{returnPathDomain}}) difere do domínio do remetente",
   "util.senderCheck.senderAuthenticationFailedEmailMay": "A autenticação do remetente falhou ({{failures}}): este e-mail pode ser falsificado",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "O nome do remetente \"{{fromName}}\" imita um domínio diferente do remetente real ({{fromDomain}})",
+  "util.senderCheck.senderNotChecked": "Remetente não verificado: o serviço em segundo plano do MailVault não respondeu. Abra a mensagem de novo para verificar.",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Remetente verificado (SPF e DKIM aprovados)",
   "util.trackerDetect.blockedExplain": "Pixel de rastreamento removido. Ele diria ao remetente quando e onde você abriu este e-mail.",
   "util.trackerDetect.blockedLabel": "Rastreador bloqueado",

@@ -3308,6 +3308,7 @@
   "util.senderCheck.returnPathDomainDiffersSender": "Return-Path domain ({{returnPathDomain}}) differs from sender domain",
   "util.senderCheck.senderAuthenticationFailedEmailMay": "Sender authentication failed ({{failures}}): this email may be spoofed",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Sender name \"{{fromName}}\" impersonates domain that differs from actual sender ({{fromDomain}})",
+  "util.senderCheck.senderNotChecked": "Sender not checked: MailVault's background service did not answer. Open the message again to check.",
   "util.senderCheck.senderVerifiedSpfDkimPass": "Sender verified (SPF, DKIM pass)",
   "util.trackerDetect.blockedExplain": "Tracking pixel removed. It would have told the sender when and where you opened this email.",
   "util.trackerDetect.blockedLabel": "Tracker blocked",
