@@ -45,7 +45,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         return None;
     }
     // Checked here so a bad account is `INVALID_PARAMS`, as from the sweep's own route.
-    req!(account_arg(&id, params));
+    let config = req!(account_arg(&id, params));
+    // A Graph account has no IMAP folders, and its token must never reach
+    // `imapHost`: not applicable, never "absent". (A JMAP one is swept over
+    // JMAP by the route below.)
+    if let Err(e) = mailvault_core::imap::pool::refuse_graph(&config) {
+        warn!("[custody.probe_server_copy] {e}");
+        return Some(RpcResponse::success(id, json!({"state": "unknown", "reason": "graph"})));
+    }
     let account = params["account"].clone();
     let account_id = req!(str_arg(&id, params, "accountId"));
     let mailbox = req!(str_arg(&id, params, "mailbox"));
@@ -435,6 +442,23 @@ mod tests {
         assert_eq!(absent["state"], "absent", "{absent}");
         assert_eq!(entry(&s).unwrap()["serverAbsent"], json!(true));
         assert!(trap.accept().is_err(), "nothing dialled IMAP");
+    }
+
+    /// A Graph account (an Outlook.com sign-in with Graph scopes) has no IMAP
+    /// server to sweep: the probe refuses it before any dial, so its Graph
+    /// token never goes to `imapHost`, and writes nothing.
+    #[tokio::test]
+    async fn a_graph_account_is_refused_before_any_imap_dial() {
+        let (_v, s) = st();
+        put(&s, json!({"uid": 7, "message_id": "<kept@x.test>", "serverAbsent": true}));
+        let (trap, port) = crate::jmap_test_support::imap_trap();
+        let graph = json!({"email": "u@outlook.test", "imapHost": "127.0.0.1", "imapPort": port, "authType": "oauth2",
+            "oauth2AccessToken": "graph-token", "oauth2Transport": "graph"});
+        let asked = handle_request_for_test(&s, "custody.probe_server_copy", json!({"account": graph, "accountId": "acc", "mailbox": "INBOX", "uid": 7}));
+        let r = tokio::time::timeout(std::time::Duration::from_secs(5), asked).await.expect("answered without waiting on IMAP");
+        assert_eq!(r.result.unwrap(), json!({"state": "unknown", "reason": "graph"}));
+        assert!(trap.accept().is_err(), "nothing dialled IMAP");
+        assert_eq!(entry(&s).unwrap()["serverAbsent"], json!(true), "nothing written");
     }
 
     #[tokio::test]

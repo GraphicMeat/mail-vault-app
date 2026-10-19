@@ -123,6 +123,17 @@ pub fn refuse_jmap(config: &ImapConfig) -> Result<(), String> {
     Ok(())
 }
 
+/// `Err` for a Graph account (`uses_graph`): its token carries Graph scopes
+/// only and it has no IMAP folders to sweep, so a path that would open an IMAP
+/// session for it fails with a stable code instead of sending the Graph token
+/// to `imapHost`. Checked by the custody probe (`custody.probe_server_copy`).
+pub fn refuse_graph(config: &ImapConfig) -> Result<(), String> {
+    if config.uses_graph() {
+        return Err(format!("E_GRAPH_NOT_IMAP: {} is a Graph account; this path must branch on uses_graph()", config.email));
+    }
+    Ok(())
+}
+
 /// True when the error text says the *connection* died rather than the server
 /// answering. A pooled socket the peer closed while it sat idle produces this
 /// on first use and nothing else, so it is the one failure worth trying again;
