@@ -77,10 +77,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let message_id = req!(str_arg(&id, params, "messageId"));
-            let after = AfterSend {
+            let mut after = AfterSend {
                 account_id,
                 mailbox,
                 uid,
+                own_copy: false,
                 message_id: message_id.clone(),
                 sent_mailbox: opt_str_arg(params, "sentMailbox"),
                 remind_days: params.get("remindDays").and_then(Value::as_i64).unwrap_or(0),
@@ -92,7 +93,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // every reply to it, then matches the local one.
             email.message_id = Some(message_id.clone());
             let (st, id_for_read, mb) = (Arc::clone(state), after.account_id.clone(), after.mailbox.clone());
-            let staged = blocking(move || staged_copy(&st, &id_for_read, &mb, uid, &message_id)).await.ok().flatten();
+            let staged = match blocking(move || staged_copy(&st, &id_for_read, &mb, uid, &message_id)).await {
+                Ok(StagedCopy::Own(raw)) => Some(raw),
+                _ => None,
+            };
+            after.own_copy = staged.is_some();
             let sent = match send_logged(&account, &email, staged).await {
                 Ok(sent) => sent,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
@@ -106,15 +111,27 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
+/// What the vault holds at the staged uid.
+enum StagedCopy {
+    /// The copy staged under this Message-ID: sent as it is, and the uid is
+    /// this message's to mark sent and to remove.
+    Own(Vec<u8>),
+    /// Another message: it is never sent, rewritten, re-flagged or removed.
+    Foreign,
+    /// Nothing the vault can give back. The uid is left alone too.
+    Unreadable,
+}
+
 /// The staged copy's bytes, for `compose.send` to send as they are: every
-/// attempt is then the copy the user keeps, byte for byte. None (and the send
-/// rebuilds under the staged id) when the vault cannot give the copy back, or
-/// the file at `uid` is not the message staged under `message_id`.
-fn staged_copy(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, message_id: &str) -> Option<Vec<u8>> {
+/// attempt is then the copy the user keeps, byte for byte. Anything else
+/// (the send rebuilds under the staged id) when the vault cannot give the
+/// copy back, or the file at `uid` is not the message staged under
+/// `message_id`.
+fn staged_copy(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, message_id: &str) -> StagedCopy {
     let read = crate::handlers::common::vault_root(state)
         .and_then(|root| vault_files::read_eml(&state.vault_registry, &root, account_id, mailbox, uid).map_err(|e| e.to_string()));
     match read {
-        Ok(raw) if bracketed_message_id(&raw).as_deref() == Some(message_id) => Some(raw),
+        Ok(raw) if bracketed_message_id(&raw).as_deref() == Some(message_id) => StagedCopy::Own(raw),
         Ok(raw) => {
             warn!(
                 "[send:staged_copy_other_message] mailbox={} uid={} found={:?} : rebuilding",
@@ -122,11 +139,11 @@ fn staged_copy(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u
                 uid,
                 bracketed_message_id(&raw)
             );
-            None
+            StagedCopy::Foreign
         }
         Err(e) => {
             warn!("[send:staged_copy_unreadable] mailbox={} uid={} error={} : rebuilding", mailbox, uid, e);
-            None
+            StagedCopy::Unreadable
         }
     }
 }
@@ -170,6 +187,9 @@ struct AfterSend {
     account_id: String,
     mailbox: String,
     uid: u32,
+    /// The vault held this message's own copy at `uid`. Otherwise `uid` is
+    /// never written or removed, and the sent copy gets a uid of its own.
+    own_copy: bool,
     message_id: String,
     sent_mailbox: Option<String>,
     remind_days: i64,
@@ -181,7 +201,7 @@ struct AfterSend {
 /// Each step logs its own failure and goes on: the mail is already out.
 /// Answers the sent copy's row.
 async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &OutgoingEmail, sent: &crate::handlers::smtp::Sent, after: AfterSend) -> Value {
-    let AfterSend { account_id, mailbox, uid, message_id, sent_mailbox, remind_days, own_addresses, cancel_scheduled_id, hints } = after;
+    let AfterSend { account_id, mailbox, uid: staged_uid, own_copy, message_id, sent_mailbox, remind_days, own_addresses, cancel_scheduled_id, hints } = after;
 
     // An edited scheduled email sent now instead: its row must not fire as
     // well. It stayed queued until the send was out, so an undo or a failed
@@ -213,38 +233,61 @@ async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &Outg
         }
     }
 
-    // The staged copy becomes the sent one: the staged bytes (what went
-    // out), or the bytes sent when the copy is gone.
-    let row = compose::staged_row(account, email, uid, Some(&message_id), &hints, &compose::now_iso());
-    let entry = compose::with_flags(&row, true);
-    let (st, id, mb, sent_raw, sent_entry) =
-        (Arc::clone(state), account_id.clone(), mailbox.clone(), sent.result.raw_rfc2822.clone(), entry.clone());
-    let archived = blocking(move || -> Result<(), String> {
-        let root = crate::handlers::common::vault_root(&st)?;
-        let raw = vault_files::read_eml(&st.vault_registry, &root, &id, &mb, uid).unwrap_or_else(|e| {
-            warn!("[send:staged_copy_missing] mailbox={} uid={} error={} — keeping the bytes sent", mb, uid, e);
-            sent_raw
-        });
+    // The staged copy becomes the sent one: the staged bytes, which are what
+    // went out. When the staged uid did not hold this message's own copy,
+    // the bytes sent go under a uid of their own and the staged uid is left
+    // as it is: it may hold another message.
+    let row = compose::staged_row(account, email, staged_uid, Some(&message_id), &hints, &compose::now_iso());
+    let mut entry = compose::with_flags(&row, true);
+    let (st, id, mb, sent_raw) = (Arc::clone(state), account_id.clone(), mailbox.clone(), sent.result.raw_rfc2822.clone());
+    let row_template = entry.clone();
+    let archived = blocking(move || -> Result<(u32, Value), String> {
         let flags = compose::SENT_FLAGS.map(String::from);
-        with_mailbox_write(&st, &id, &mb, |root| vault_files::store(&st.vault_registry, root, &id, &mb, uid, &raw, &flags, true))?;
+        let uid = with_mailbox_write(&st, &id, &mb, |root| {
+            if own_copy {
+                let raw = vault_files::read_eml(&st.vault_registry, root, &id, &mb, staged_uid).unwrap_or_else(|e| {
+                    warn!("[send:staged_copy_missing] mailbox={} uid={} error={} : keeping the bytes sent", mb, staged_uid, e);
+                    sent_raw.clone()
+                });
+                vault_files::store(&st.vault_registry, root, &id, &mb, staged_uid, &raw, &flags, true)?;
+                return Ok(staged_uid);
+            }
+            let mut uid = vault_files::free_local_uid(root, &id, &mb);
+            while uid == staged_uid || vault_files::exists(root, &id, &mb, uid) {
+                uid += 1;
+            }
+            vault_files::store(&st.vault_registry, root, &id, &mb, uid, &sent_raw, &flags, true)?;
+            Ok(uid)
+        })?;
+        let mut sent_entry = row_template;
+        sent_entry["uid"] = json!(uid);
         daemon_custody::with_conn(&st, |c| entries::upsert(c, &id, &mb, std::slice::from_ref(&sent_entry)))?;
-        Ok(())
+        Ok((uid, sent_entry))
     })
     .await
     .and_then(|r| r);
-    match archived {
-        Ok(()) => info!("[send:mark_sent_local] account={} mailbox={} uid={}", account.email, mailbox, uid),
-        Err(e) => warn!("[send:mark_sent_local_fail] account={} mailbox={} uid={} error={}", account.email, mailbox, uid, e),
-    }
+    // Where this message's local copy is: the uid the server's copy removes.
+    // With no copy written, the staged uid only when it was this message's.
+    let local_uid = match archived {
+        Ok((uid, sent_entry)) => {
+            info!("[send:mark_sent_local] account={} mailbox={} uid={} staged_uid={}", account.email, mailbox, uid, staged_uid);
+            entry = sent_entry;
+            Some(uid)
+        }
+        Err(e) => {
+            warn!("[send:mark_sent_local_fail] account={} mailbox={} uid={} error={}", account.email, mailbox, staged_uid, e);
+            own_copy.then_some(staged_uid)
+        }
+    };
 
     // The server's Sent copy. Once it holds one, the staged copy goes: the
     // two are one message, and the list would show both.
-    let extra = json!({"vaultAccountId": account_id, "stagedUid": uid, "localMailbox": mailbox});
+    let extra = json!({"vaultAccountId": account_id, "stagedUid": local_uid, "localMailbox": mailbox});
     let st = Arc::clone(state);
     report_sent_copy(state, account, sent_mailbox, sent, extra, move |landed| async move {
-        if !landed {
+        let Some(uid) = local_uid.filter(|_| landed) else {
             return;
-        }
+        };
         let (id, mb) = (account_id, mailbox);
         let removed = blocking(move || -> Result<(), String> {
             with_mailbox_write(&st, &id, &mb, |root| vault_files::delete(&st.vault_registry, root, &id, &mb, uid))?;
@@ -554,27 +597,116 @@ mod tests {
         assert_eq!(String::from_utf8_lossy(&smtp[0]), String::from_utf8_lossy(&staged_raw), "the retry sends the staged bytes");
     }
 
-    /// The file at the staged uid holds another message: that message is
-    /// never sent in this one's place. The send rebuilds under its own id.
+    /// The staged uid now holds another message B: A is staged at `uid`,
+    /// B's bytes, flags and row are put there in its place. Answers B's raw
+    /// bytes and row.
+    fn put_foreign_message_at(s: &Arc<DaemonState>, uid: u32, b: &Value) -> (Vec<u8>, Value) {
+        let foreign = raw_of(s, b["uid"].as_u64().unwrap() as u32);
+        vault_files::store(&s.vault_registry, &s.data_dir, "acct-1", "Sent", uid, &foreign, &["seen".to_string()], true).unwrap();
+        let mut row = b["entry"].clone();
+        row["uid"] = json!(uid);
+        row["flags"] = json!(["seen"]);
+        daemon_custody::with_conn(s, |c| entries::upsert(c, "acct-1", "Sent", std::slice::from_ref(&row))).unwrap();
+        (foreign, row)
+    }
+
+    /// The Sent copies of `message_id` on disk, other than at `uid`.
+    fn copies_elsewhere(s: &Arc<DaemonState>, uid: u32, message_id: &str) -> Vec<u32> {
+        vault_files::list_on_disk(&s.data_dir, "acct-1", "Sent", None)
+            .expect("the Sent folder lists")
+            .into_iter()
+            .map(|m| m.uid)
+            .filter(|&u| u != uid && bracketed_message_id(&raw_of(s, u)).as_deref() == Some(message_id))
+            .collect()
+    }
+
+    /// `raw` is the message staged as "Mine" under `id`.
+    fn assert_is_mine(raw: &[u8], id: &str) {
+        let raw = String::from_utf8_lossy(raw).to_string();
+        assert!(raw.contains(&format!("Message-ID: {id}\r\n")), "{raw}");
+        assert!(raw.contains("Subject: Mine\r\n"), "{raw}");
+    }
+
+    /// The staged uid holds another message: that message is never sent in
+    /// this one's place, and never rewritten, re-flagged or removed. The
+    /// copy of what went out lives under a uid of its own.
     #[tokio::test]
-    async fn a_staged_uid_that_holds_another_message_is_not_sent() {
+    async fn a_staged_uid_that_holds_another_message_keeps_it() {
         plaintext();
         let server = MockImap::start(Scenario::new());
         let s = st(true);
         let (a, send_a) = stage_with_subject(&s, &server, "Mine").await;
         let (b, _) = stage_with_subject(&s, &server, "Someone else's").await;
-        let uid_a = a["uid"].as_u64().unwrap() as u32;
-        let other = raw_of(&s, b["uid"].as_u64().unwrap() as u32);
-        let flags = compose::STAGED_FLAGS.map(String::from);
-        vault_files::store(&s.vault_registry, &s.data_dir, "acct-1", "Sent", uid_a, &other, &flags, true).unwrap();
+        let uid = a["uid"].as_u64().unwrap() as u32;
+        let id_a = a["messageId"].as_str().unwrap();
+        let (foreign, foreign_row) = put_foreign_message_at(&s, uid, &b);
 
-        ok(&s, "compose.send", send_a).await;
+        let sent = ok(&s, "compose.send", send_a).await;
 
         let smtp = server.sent_messages();
         assert_eq!(smtp.len(), 1);
-        let raw = String::from_utf8_lossy(&smtp[0]).to_string();
-        assert!(raw.contains(&format!("Message-ID: {}\r\n", a["messageId"].as_str().unwrap())), "{raw}");
-        assert!(raw.contains("Subject: Mine\r\n"), "{raw}");
+        assert_is_mine(&smtp[0], id_a);
+        assert_eq!(raw_of(&s, uid), foreign, "the other message's bytes stay");
+        assert_eq!(flags_of(&s, uid), Some(vec!["seen".to_string()]), "and its flags");
+        assert_eq!(row_of(&s, uid), Some(foreign_row), "and its row");
+        let elsewhere = copies_elsewhere(&s, uid, id_a);
+        assert_eq!(elsewhere.len(), 1, "the sent copy is kept under a uid of its own");
+        assert_eq!(raw_of(&s, elsewhere[0]), smtp[0], "as the bytes that went out");
+        assert_eq!(sent["entry"]["uid"], json!(elsewhere[0]));
+        assert_eq!(row_of(&s, elsewhere[0]).unwrap()["message_id"], json!(id_a));
+    }
+
+    /// The same, when the server's Sent copy lands and the local one goes:
+    /// what goes is this message's copy, never the message at the staged uid.
+    #[tokio::test]
+    async fn a_landed_sent_copy_never_removes_another_message_at_the_staged_uid() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+        let (a, mut send_a) = stage_with_subject(&s, &server, "Mine").await;
+        send_a["sentMailbox"] = json!("Sent");
+        let (b, _) = stage_with_subject(&s, &server, "Someone else's").await;
+        let uid = a["uid"].as_u64().unwrap() as u32;
+        let id_a = a["messageId"].as_str().unwrap();
+        let (foreign, foreign_row) = put_foreign_message_at(&s, uid, &b);
+
+        let sent = ok(&s, "compose.send", send_a).await;
+        let payload = next_event(&mut rx, "send-server-append-complete").await;
+
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_is_mine(&server.sent_messages()[0], id_a);
+        assert_eq!(raw_of(&s, uid), foreign, "the other message's bytes stay");
+        assert_eq!(flags_of(&s, uid), Some(vec!["seen".to_string()]), "and its flags");
+        assert_eq!(row_of(&s, uid), Some(foreign_row), "and its row");
+        let own = sent["entry"]["uid"].as_u64().unwrap() as u32;
+        assert_ne!(own, uid);
+        assert_eq!(payload["stagedUid"], json!(own), "the event names the copy that went");
+        assert!(copies_elsewhere(&s, uid, id_a).is_empty(), "this message's local copy went");
+    }
+
+    /// The staged copy is gone from the vault: the send rebuilds under the
+    /// staged id, and the copy of what went out gets a uid of its own.
+    #[tokio::test]
+    async fn a_staged_copy_that_is_gone_is_rebuilt_and_kept_under_a_new_uid() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let (a, send_a) = stage_with_subject(&s, &server, "Mine").await;
+        let uid = a["uid"].as_u64().unwrap() as u32;
+        let id_a = a["messageId"].as_str().unwrap();
+        vault_files::delete(&s.vault_registry, &s.data_dir, "acct-1", "Sent", uid).unwrap();
+
+        let sent = ok(&s, "compose.send", send_a).await;
+
+        let smtp = server.sent_messages();
+        assert_eq!(smtp.len(), 1);
+        assert_is_mine(&smtp[0], id_a);
+        assert!(!vault_files::exists(&s.data_dir, "acct-1", "Sent", uid), "nothing is written at the staged uid");
+        let elsewhere = copies_elsewhere(&s, uid, id_a);
+        assert_eq!(elsewhere.len(), 1, "the sent copy is kept under a uid of its own");
+        assert_eq!(raw_of(&s, elsewhere[0]), smtp[0]);
+        assert_eq!(sent["entry"]["uid"], json!(elsewhere[0]));
     }
 
     /// No Sent folder to APPEND to: the copy that went out stays, as sent.
