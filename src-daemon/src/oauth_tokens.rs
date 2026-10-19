@@ -456,9 +456,39 @@ async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>
     Some(token)
 }
 
+/// The daemon's token into one account a request carries (`slot`, an object
+/// or its JSON text), identified by its own `id` or else `fallback_id`.
+async fn inject_account(state: &DaemonState, slot: &mut Value, fallback_id: Option<&str>) -> Option<Injected> {
+    let as_text = slot.is_string();
+    let mut account = match &*slot {
+        Value::String(text) => serde_json::from_str::<Value>(text).ok()?,
+        other => other.clone(),
+    };
+    if account.get("authType").and_then(Value::as_str) != Some("oauth2") {
+        return None;
+    }
+    let own_id = account.get("id").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
+    let account_id = own_id.or_else(|| fallback_id.map(str::to_owned))?;
+    let email = account.get("email").and_then(Value::as_str).map(str::to_owned);
+    let token = daemon_token(state, &account_id, email.as_deref()).await?;
+    // A sign-in that just happened (Reconnect testing its new token before
+    // saving it) carries a later expiry than anything held: it is newer than
+    // the daemon's, the same rule `reconcile` applies to the store.
+    let sent = account.get("oauth2AccessToken").and_then(Value::as_str).filter(|t| !t.is_empty());
+    let sent_expiry = account.get("oauth2ExpiresAt").and_then(Value::as_f64).map(|v| v as i64);
+    let held_expiry = state.tokens.expires_at(&account_id);
+    if sent.is_some() && matches!((sent_expiry, held_expiry), (Some(sent), Some(held)) if sent > held) {
+        return None;
+    }
+    account["oauth2AccessToken"] = json!(token);
+    *slot = if as_text { Value::String(account.to_string()) } else { account };
+    Some(Injected { account_id, token })
+}
+
 /// Put the daemon's own token into a request, over any the app sent: in each
 /// OAuth2 account the params carry (`account` and the other `ACCOUNT_PARAMS`,
 /// as an object or as JSON text, identified by its `id` or the request's
+/// `accountId`; and `targets[].account`, a mail search's, by the target's
 /// `accountId`), and as `accessToken` in a `graph_*` call naming `accountId`.
 /// A token the app sent is kept only when the daemon has none for that
 /// account (one being added, not stored yet). Old callers keep working.
@@ -467,35 +497,19 @@ pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value
     let Some(obj) = params.as_object_mut() else { return injected };
     let request_account = obj.get("accountId").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
     for key in ACCOUNT_PARAMS {
-        let Some(slot) = obj.get_mut(key) else { continue };
-        let as_text = slot.is_string();
-        let mut account = match &*slot {
-            Value::String(text) => match serde_json::from_str::<Value>(text) {
-                Ok(v) => v,
-                Err(_) => continue,
-            },
-            other => other.clone(),
-        };
-        if account.get("authType").and_then(Value::as_str) != Some("oauth2") {
-            continue;
-        }
-        let own_id = account.get("id").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
         let names_request_account = key == "account" || key == "accountJson";
-        let Some(account_id) = own_id.or_else(|| request_account.clone().filter(|_| names_request_account)) else { continue };
-        let email = account.get("email").and_then(Value::as_str).map(str::to_owned);
-        let Some(token) = daemon_token(state, &account_id, email.as_deref()).await else { continue };
-        // A sign-in that just happened (Reconnect testing its new token before
-        // saving it) carries a later expiry than anything held: it is newer
-        // than the daemon's, the same rule `reconcile` applies to the store.
-        let sent = account.get("oauth2AccessToken").and_then(Value::as_str).filter(|t| !t.is_empty());
-        let sent_expiry = account.get("oauth2ExpiresAt").and_then(Value::as_f64).map(|v| v as i64);
-        let held_expiry = state.tokens.expires_at(&account_id);
-        if sent.is_some() && matches!((sent_expiry, held_expiry), (Some(sent), Some(held)) if sent > held) {
-            continue;
+        let fallback = request_account.as_deref().filter(|_| names_request_account);
+        if let Some(slot) = obj.get_mut(key) {
+            injected.extend(inject_account(state, slot, fallback).await);
         }
-        account["oauth2AccessToken"] = json!(token);
-        *slot = if as_text { Value::String(account.to_string()) } else { account };
-        injected.push(Injected { account_id, token });
+    }
+    if let Some(Value::Array(targets)) = obj.get_mut("targets") {
+        for target in targets.iter_mut() {
+            let target_account = target.get("accountId").and_then(Value::as_str).map(str::to_owned);
+            if let Some(slot) = target.get_mut("account") {
+                injected.extend(inject_account(state, slot, target_account.as_deref()).await);
+            }
+        }
     }
     if method.starts_with("graph_") {
         if let Some(account_id) = request_account {
@@ -871,6 +885,30 @@ mod tests {
         assert_eq!(password_account["account"]["password"], json!("pw"));
         assert!(no_id["sourceAccount"].as_str().unwrap().contains("from-the-app"));
         assert_eq!(not_graph["accessToken"], json!("from-the-app"));
+    }
+
+    /// A mail search carries one account per target, named by the target's
+    /// `accountId`: each gets its own account's token.
+    #[tokio::test]
+    async fn every_mail_search_target_carries_its_own_accounts_token() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(vec![granted("at-search-0012", None)]);
+        let s = st();
+        let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
+        store(&s, &[("g1", &gmail(json!({}))), ("p1", &password)]);
+        let mut params = json!({"searchId": "s1", "targets": [
+            {"accountId": "g1", "account": {"email": "me@gmail.test", "authType": "oauth2", "oauth2AccessToken": "from-the-app"}},
+            {"accountId": "p1", "account": {"email": "p@x.test", "authType": "password", "password": "pw"}},
+            {"accountId": "g1", "account": null},
+        ]});
+
+        let injected = inject(&s, "mail_search_start", &mut params).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(injected.len(), 1);
+        assert_eq!(params["targets"][0]["account"]["oauth2AccessToken"], json!("at-search-0012"));
+        assert_eq!(params["targets"][1]["account"]["password"], json!("pw"));
+        assert!(params["targets"][2]["account"].is_null());
     }
 
     /// Reconnect tests the token it just got before saving it: that one is
