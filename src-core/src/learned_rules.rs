@@ -97,6 +97,17 @@ pub fn is_shared_mail_domain(domain: &str) -> bool {
     }
 }
 
+/// Why a rule is refused at save or import: its domain is a shared provider's.
+pub const KEY_SHARED_DOMAIN: &str = "svc.learning.sharedDomainRule";
+
+/// The shared provider domain a stored or incoming rule names, if any. Such
+/// a rule would never match, so `learning.save_rule` and `learning.import`
+/// refuse it rather than list a rule that does nothing.
+pub fn shared_domain_of(rule: &Value) -> Option<String> {
+    let domain = rule.get("pattern")?.get(FROM_DOMAIN)?.as_str()?;
+    is_shared_mail_domain(domain).then(|| normalize(domain))
+}
+
 /// The classifier's own categories, spelled as it writes them.
 pub const BUILT_IN_CATEGORIES: &[&str] =
     &["newsletter", "promotional", "notification", "transactional", "personal", "work", "spam-likely"];

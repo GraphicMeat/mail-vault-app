@@ -3163,6 +3163,7 @@
   "svc.messageMutations.couldCopyEmailIntoVault": "Impossibile copiare quell'email nella cassaforte. Nulla è stato rimosso dal server. ({{error}})",
   "svc.retryKeychainAccess.couldAccessKeychainPleaseRe": "Impossibile accedere al portachiavi. Reinserisci la password in Impostazioni.",
   "svc.retryKeychainAccess.noAccountsFoundPleaseAdd": "Nessun account trovato. Aggiungi il tuo account in Impostazioni.",
+  "svc.learning.sharedDomainRule": "{{domain}} è usato da molte persone senza legami tra loro, quindi una regola non può valere per tutto il dominio. Usa invece l'indirizzo del mittente.",
   "svc.ruleExporter.invalidFormatMissingVersionRules": "Formato non valido: manca la versione o l'array delle regole",
   "svc.ruleExporter.parseError": "Errore di analisi: {{e}}",
   "svc.ruleExporter.unsupportedFormatVersionAppSupports": "Versione di formato non supportata {{data}} (questa app supporta la v{{EXPORT_VERSION}})",

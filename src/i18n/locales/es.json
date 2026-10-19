@@ -3163,6 +3163,7 @@
   "svc.messageMutations.couldCopyEmailIntoVault": "No se pudo copiar ese correo a tu bóveda. No se quitó nada del servidor. ({{error}})",
   "svc.retryKeychainAccess.couldAccessKeychainPleaseRe": "No se pudo acceder al llavero. Vuelve a introducir la contraseña en Ajustes.",
   "svc.retryKeychainAccess.noAccountsFoundPleaseAdd": "No se encontraron cuentas. Añade tu cuenta en Ajustes.",
+  "svc.learning.sharedDomainRule": "{{domain}} lo usan muchas personas sin relación entre sí, así que una regla no puede abarcar todo el dominio. Usa la dirección del remitente.",
   "svc.ruleExporter.invalidFormatMissingVersionRules": "Formato no válido: falta la versión o el array de reglas",
   "svc.ruleExporter.parseError": "Error de análisis: {{e}}",
   "svc.ruleExporter.unsupportedFormatVersionAppSupports": "Versión de formato no compatible {{data}} (esta app admite la v{{EXPORT_VERSION}})",

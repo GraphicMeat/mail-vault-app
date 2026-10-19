@@ -3163,6 +3163,7 @@
   "svc.messageMutations.couldCopyEmailIntoVault": "Diese E-Mail ließ sich nicht in den Tresor kopieren. Vom Server wurde nichts entfernt. ({{error}})",
   "svc.retryKeychainAccess.couldAccessKeychainPleaseRe": "Kein Zugriff auf den Schlüsselbund. Gib dein Passwort in den Einstellungen neu ein.",
   "svc.retryKeychainAccess.noAccountsFoundPleaseAdd": "Keine Konten gefunden. Füge dein Konto in den Einstellungen hinzu.",
+  "svc.learning.sharedDomainRule": "{{domain}} wird von vielen Personen genutzt, die nichts miteinander zu tun haben, daher kann eine Regel nicht die ganze Domain erfassen. Nutze stattdessen die Adresse des Absenders.",
   "svc.ruleExporter.invalidFormatMissingVersionRules": "Ungültiges Format: Version oder Regel-Array fehlt",
   "svc.ruleExporter.parseError": "Analysefehler: {{e}}",
   "svc.ruleExporter.unsupportedFormatVersionAppSupports": "Nicht unterstützte Formatversion {{data}} (diese App unterstützt v{{EXPORT_VERSION}})",

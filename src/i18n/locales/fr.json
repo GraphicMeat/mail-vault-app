@@ -3163,6 +3163,7 @@
   "svc.messageMutations.couldCopyEmailIntoVault": "Impossible de copier cet e-mail dans votre coffre. Rien n'a été retiré du serveur. ({{error}})",
   "svc.retryKeychainAccess.couldAccessKeychainPleaseRe": "Impossible d'accéder au trousseau. Ressaisissez votre mot de passe dans Paramètres.",
   "svc.retryKeychainAccess.noAccountsFoundPleaseAdd": "Aucun compte trouvé. Ajoutez votre compte dans Paramètres.",
+  "svc.learning.sharedDomainRule": "{{domain}} est utilisé par de nombreuses personnes sans lien entre elles : une règle ne peut pas couvrir tout le domaine. Utilisez plutôt l'adresse de l'expéditeur.",
   "svc.ruleExporter.invalidFormatMissingVersionRules": "Format invalide : version ou tableau de règles manquant",
   "svc.ruleExporter.parseError": "Erreur d'analyse : {{e}}",
   "svc.ruleExporter.unsupportedFormatVersionAppSupports": "Version de format non prise en charge {{data}} (cette app gère la v{{EXPORT_VERSION}})",

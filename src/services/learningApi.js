@@ -35,9 +35,17 @@ export async function getStats(accountId) {
   }
 }
 
-/** Add a rule, or update the one with the same `id`. */
-export function saveRule(accountId, rule) {
-  return send('learning.save_rule', { accountId, rule });
+/**
+ * Add a rule, or update the one with the same `id`. The daemon refuses a
+ * domain rule for a shared provider such as gmail.com.
+ * @returns {Promise<{ saved: boolean, error: string|null }>}
+ */
+export async function saveRule(accountId, rule) {
+  const reply = await send('learning.save_rule', { accountId, rule });
+  if (reply?.saved === false) {
+    return { saved: false, error: t(reply.errorKey, reply.errorParams ?? undefined) };
+  }
+  return { saved: true, error: null };
 }
 
 export function deleteRule(accountId, ruleId) {
@@ -56,6 +64,7 @@ export function exportRules(accountId) {
  * Import a rules file the user picked. The app parses the text; the daemon
  * checks it and adds the rules the account does not already have.
  * @returns {Promise<{ valid: boolean, imported: number, error: string|null }>}
+ *   `error` can be set on a valid file too: rules it left out.
  */
 export async function importRulesFile(accountId, text) {
   let data;
@@ -68,5 +77,7 @@ export async function importRulesFile(accountId, text) {
   if (!reply?.valid) {
     return { valid: false, imported: 0, error: t(reply?.errorKey, reply?.errorParams ?? undefined) };
   }
-  return { valid: true, imported: reply.imported, error: null };
+  // Valid, but some rules were left out (a shared provider's domain).
+  const error = reply.errorKey ? t(reply.errorKey, reply.errorParams ?? undefined) : null;
+  return { valid: true, imported: reply.imported, error };
 }

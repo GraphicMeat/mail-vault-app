@@ -9,7 +9,10 @@
 //! - `learning.rules {accountId}` the rules; `learning.stats {accountId}` the
 //!   stored stats plus `rulesCount` and `correctionsCount`.
 //! - `learning.save_rule {accountId, rule}` adds a rule or merges it into the
-//!   one with its `id`; `learning.delete_rule {accountId, ruleId}` removes it.
+//!   one with its `id`, answering `{saved: true}`, or `{saved: false,
+//!   errorKey, errorParams}` for a domain rule on a shared provider such as
+//!   gmail.com (import leaves those out and names one the same way).
+//!   `learning.delete_rule {accountId, ruleId}` removes a rule.
 //! - `learning.export {accountId}` the anonymized rules, as `payload` and as
 //!   the file text (`json`) the app saves.
 //! - `learning.import {accountId, data}` checks a parsed rules file and adds
@@ -21,7 +24,7 @@
 use crate::handlers::common::str_arg;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
-use mailvault_core::learning;
+use mailvault_core::{learned_rules, learning};
 use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -53,6 +56,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let Some(rule) = object_arg(params, "rule") else {
                 return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing rule"));
             };
+            if let Some(domain) = learned_rules::shared_domain_of(&rule) {
+                return Some(RpcResponse::success(
+                    id,
+                    json!({ "saved": false, "errorKey": learned_rules::KEY_SHARED_DOMAIN, "errorParams": { "domain": domain } }),
+                ));
+            }
             update(state, params, id, |fb| {
                 learning::save_rule(fb, rule);
                 Some(json!({ "saved": true }))
@@ -119,6 +128,9 @@ fn import(state: &DaemonState, params: &Value, id: Value) -> RpcResponse {
             return RpcResponse::success(id, json!({ "valid": false, "errorKey": e.key, "errorParams": e.params }));
         }
     };
+    // A shared provider's domain rule would never match: leave it out and say so.
+    let refused = rules.iter().find_map(learned_rules::shared_domain_of);
+    let rules: Vec<Value> = rules.into_iter().filter(|r| learned_rules::shared_domain_of(r).is_none()).collect();
     let mut imported = 0;
     let resp = update(state, params, id.clone(), |fb| {
         imported = learning::import_rules(fb, &rules, now_ms());
@@ -128,7 +140,12 @@ fn import(state: &DaemonState, params: &Value, id: Value) -> RpcResponse {
     if resp.error.is_some() {
         return resp;
     }
-    RpcResponse::success(id, json!({ "valid": true, "imported": imported }))
+    let mut answer = json!({ "valid": true, "imported": imported });
+    if let Some(domain) = refused {
+        answer["errorKey"] = json!(learned_rules::KEY_SHARED_DOMAIN);
+        answer["errorParams"] = json!({ "domain": domain });
+    }
+    RpcResponse::success(id, answer)
 }
 
 #[cfg(test)]
@@ -251,6 +268,41 @@ mod tests {
             let msg = resp.error.map(|e| e.message).unwrap_or_default();
             assert_eq!(msg, "Missing accountId", "{method}");
         }
+    }
+
+    /// A domain rule for a shared provider would never match (the classifier
+    /// refuses it), so saving one is refused out loud instead of listing a
+    /// rule that silently does nothing.
+    #[tokio::test]
+    async fn a_domain_rule_for_a_shared_provider_is_refused_at_save() {
+        let (_dir, s) = state();
+        let rule = |domain: &str| json!({"id": domain, "type": "sender-action", "pattern": {"fromDomain": domain}, "category": "personal", "action": "keep", "confidence": 0.95});
+        let out = ok(&s, "learning.save_rule", json!({"accountId": "acc1", "rule": rule("Gmail.com")})).await;
+        assert_eq!(out["saved"], false);
+        assert_eq!(out["errorKey"], "svc.learning.sharedDomainRule");
+        assert_eq!(out["errorParams"], json!({"domain": "gmail.com"}));
+        assert_eq!(ok(&s, "learning.rules", json!({"accountId": "acc1"})).await, json!([]));
+
+        let out = ok(&s, "learning.save_rule", json!({"accountId": "acc1", "rule": rule("acme-corp.test")})).await;
+        assert_eq!(out, json!({"saved": true}));
+        assert_eq!(ok(&s, "learning.rules", json!({"accountId": "acc1"})).await.as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn import_leaves_out_shared_provider_domain_rules_and_says_so() {
+        let (_dir, s) = state();
+        let file = json!({"version": 1, "rules": [
+            {"type": "sender-action", "pattern": {"fromDomain": "gmail.com"}, "category": "personal", "action": "keep"},
+            {"type": "sender-action", "pattern": {"fromDomain": "acme-corp.test"}, "category": "work", "action": "keep"},
+        ]});
+        let out = ok(&s, "learning.import", json!({"accountId": "acc1", "data": file})).await;
+        assert_eq!(out["valid"], true);
+        assert_eq!(out["imported"], 1);
+        assert_eq!(out["errorKey"], "svc.learning.sharedDomainRule");
+        assert_eq!(out["errorParams"], json!({"domain": "gmail.com"}));
+        let rules = ok(&s, "learning.rules", json!({"accountId": "acc1"})).await;
+        assert_eq!(rules.as_array().unwrap().len(), 1);
+        assert_eq!(rules[0]["pattern"], json!({"fromDomain": "acme-corp.test"}));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

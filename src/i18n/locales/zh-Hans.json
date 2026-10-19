@@ -3163,6 +3163,7 @@
   "svc.messageMutations.couldCopyEmailIntoVault": "无法将该邮件复制到保险库。服务器上未删除任何内容。（{{error}}）",
   "svc.retryKeychainAccess.couldAccessKeychainPleaseRe": "无法访问钥匙串。请在设置中重新输入密码。",
   "svc.retryKeychainAccess.noAccountsFoundPleaseAdd": "未找到账户。请在设置中添加你的账户。",
+  "svc.learning.sharedDomainRule": "{{domain}} 被许多互不相关的人使用，因此规则不能覆盖整个域名。请改用发件人地址。",
   "svc.ruleExporter.invalidFormatMissingVersionRules": "格式无效：缺少版本号或规则数组",
   "svc.ruleExporter.parseError": "解析错误：{{e}}",
   "svc.ruleExporter.unsupportedFormatVersionAppSupports": "不支持的格式版本 {{data}}（本应用支持 v{{EXPORT_VERSION}}）",

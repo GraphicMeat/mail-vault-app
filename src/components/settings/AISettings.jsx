@@ -63,7 +63,7 @@ export function AISettings() {
         const result = await importRulesFile(activeAccountId, text);
         if (!result.valid) { setError(result.error); return; }
         if (activeAccountId) loadRules(activeAccountId);
-        setError(null);
+        setError(result.error);
       } catch (e) { setError(e.message); }
     };
     input.click();
@@ -248,7 +248,8 @@ export function AISettings() {
                           category: editForm.category || rule.category,
                           action: editForm.action || rule.action,
                         };
-                        await saveRule(activeAccountId, updated);
+                        const result = await saveRule(activeAccountId, updated);
+                        if (result?.error) { setError(result.error); return; }
                         setEditingRuleId(null);
                       }}
                       className="flex items-center gap-1 px-3 py-1 text-[11px] rounded-lg bg-mail-accent-fill text-white hover:bg-mail-accent/90 transition-colors"
@@ -316,8 +317,9 @@ export function AISettings() {
               source: 'manual',
               createdAt: new Date().toISOString(),
             };
-            await saveRule(activeAccountId, rule);
-            classificationService.reclassifyAll(activeAccountId).catch(() => {});
+            const result = await saveRule(activeAccountId, rule);
+            if (result?.error) setError(result.error);
+            else if (result?.saved) classificationService.reclassifyAll(activeAccountId).catch(() => {});
           }
 
           input.value = '';

@@ -45,14 +45,17 @@ export const useLearningStore = create((set, get) => ({
   },
 
   /**
-   * Save (add or update) a rule and refresh.
+   * Save (add or update) a rule and refresh. Answers `{ saved, error }`;
+   * `error` is the daemon's refusal, worded for the user.
    */
   saveRule: async (accountId, rule) => {
     try {
-      await learningService.saveRule(accountId, rule);
-      await get().loadRules(accountId);
+      const result = await learningService.saveRule(accountId, rule);
+      if (result?.saved !== false) await get().loadRules(accountId);
+      return result;
     } catch (e) {
       set({ error: e.message });
+      return { saved: false, error: null };
     }
   },
 

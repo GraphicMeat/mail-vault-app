@@ -24,6 +24,7 @@ function answer(command) {
     case 'learning.rules': return [RULE];
     case 'learning.stats': return { total_classified: 0, total_corrected: 0, accuracy_rate: 0, rulesCount: 1, correctionsCount: 3 };
     case 'learning.export': return { payload: { version: 1 }, json: FILE_TEXT };
+    case 'learning.save_rule': return { saved: false, errorKey: 'svc.learning.sharedDomainRule', errorParams: { domain: 'gmail.com' } };
     case 'learning.import': return { valid: false, errorKey: 'svc.ruleExporter.unsupportedFormatVersionAppSupports', errorParams: { data: 2, EXPORT_VERSION: 1 } };
     default: return undefined;
   }
@@ -69,6 +70,15 @@ describe('AISettings learned rules', () => {
     expect(mockSend).toHaveBeenCalledWith('learning.export', { accountId: ACCOUNT.id });
     const blob = createObjectURL.mock.calls[0][0];
     expect(await blob.text()).toBe(FILE_TEXT);
+  });
+
+  it('shows why the daemon refused an edited rule', async () => {
+    render(<AISettings />);
+    fireEvent.click(await screen.findByText('shop.example'));
+    fireEvent.change(screen.getByLabelText(t('settings.ai.domain')), { target: { value: 'gmail.com' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: new RegExp(t('common.save')) })); });
+    expect(mockSend).toHaveBeenCalledWith('learning.save_rule', expect.objectContaining({ accountId: ACCOUNT.id }));
+    expect(await screen.findByText(t('svc.learning.sharedDomainRule', { domain: 'gmail.com' }))).toBeTruthy();
   });
 
   it('sends a picked file to learning.import and shows a refusal in the catalog wording', async () => {

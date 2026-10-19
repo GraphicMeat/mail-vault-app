@@ -40,6 +40,22 @@ describe('learningApi', () => {
     await expect(api.deleteRule('acc', 'r')).rejects.toThrow('boom');
   });
 
+  it('reports a rule the daemon refused to save in the catalog wording', async () => {
+    send.mockResolvedValue({ saved: false, errorKey: 'svc.learning.sharedDomainRule', errorParams: { domain: 'gmail.com' } });
+    const r = await api.saveRule('acc', { id: 'r1', pattern: { fromDomain: 'gmail.com' } });
+    expect(r).toEqual({ saved: false, error: t('svc.learning.sharedDomainRule', { domain: 'gmail.com' }) });
+    expect(r.error).toContain('gmail.com');
+    expect(r.error).not.toBe('svc.learning.sharedDomainRule');
+    send.mockResolvedValue({ saved: true });
+    await expect(api.saveRule('acc', { id: 'r2' })).resolves.toEqual({ saved: true, error: null });
+  });
+
+  it('says which rules an import left out', async () => {
+    send.mockResolvedValue({ valid: true, imported: 1, errorKey: 'svc.learning.sharedDomainRule', errorParams: { domain: 'gmail.com' } });
+    const r = await api.importRulesFile('acc', '{"version":1,"rules":[]}');
+    expect(r).toEqual({ valid: true, imported: 1, error: t('svc.learning.sharedDomainRule', { domain: 'gmail.com' }) });
+  });
+
   it('imports a parsed file and reports the count', async () => {
     send.mockResolvedValue({ valid: true, imported: 2 });
     const r = await api.importRulesFile('acc', '{"version":1,"rules":[]}');

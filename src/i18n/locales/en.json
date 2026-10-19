@@ -3163,6 +3163,7 @@
   "svc.messageMutations.couldCopyEmailIntoVault": "Could not copy that email into your vault. Nothing was removed from the server. ({{error}})",
   "svc.retryKeychainAccess.couldAccessKeychainPleaseRe": "Could not access Keychain. Please re-enter your password in Settings.",
   "svc.retryKeychainAccess.noAccountsFoundPleaseAdd": "No accounts found. Please add your account in Settings.",
+  "svc.learning.sharedDomainRule": "{{domain}} is used by many unrelated people, so a rule can't cover the whole domain. Use the sender's address instead.",
   "svc.ruleExporter.invalidFormatMissingVersionRules": "Invalid format: missing version or rules array",
   "svc.ruleExporter.parseError": "Parse error: {{e}}",
   "svc.ruleExporter.unsupportedFormatVersionAppSupports": "Unsupported format version {{data}} (this app supports v{{EXPORT_VERSION}})",

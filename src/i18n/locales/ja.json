@@ -3163,6 +3163,7 @@
   "svc.messageMutations.couldCopyEmailIntoVault": "そのメールを保管庫にコピーできませんでした。サーバーからは何も削除していません。({{error}})",
   "svc.retryKeychainAccess.couldAccessKeychainPleaseRe": "キーチェーンにアクセスできませんでした。設定でパスワードを再入力してください。",
   "svc.retryKeychainAccess.noAccountsFoundPleaseAdd": "アカウントが見つかりません。設定でアカウントを追加してください。",
+  "svc.learning.sharedDomainRule": "{{domain}} は互いに関係のない多くの人が使っているため、ドメイン全体にはルールを適用できません。代わりに送信者のアドレスを使ってください。",
   "svc.ruleExporter.invalidFormatMissingVersionRules": "形式が不正です: version または rules 配列がありません",
   "svc.ruleExporter.parseError": "解析エラー: {{e}}",
   "svc.ruleExporter.unsupportedFormatVersionAppSupports": "未対応の形式バージョン {{data}}（このアプリは v{{EXPORT_VERSION}} に対応）",
