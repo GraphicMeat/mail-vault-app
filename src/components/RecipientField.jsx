@@ -329,7 +329,9 @@ export function RecipientField({ name, label, placeholder, value, setValue, test
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             onBlur={() => {
-              if (draft.trim()) commit(draft);
+              // Out of the field nothing is being typed, so the committed value
+              // needs no trailing comma to stay chips: it reads like a list.
+              if (draft.trim()) setValue(addRecipients(chipsValue, draft).replace(/,\s*$/, ''));
               setTyping(false);
             }}
             placeholder={chips.length ? undefined : placeholder}

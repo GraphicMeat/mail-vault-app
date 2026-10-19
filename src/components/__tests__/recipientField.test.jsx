@@ -101,7 +101,8 @@ describe('RecipientField chips', () => {
     type('a@b.de');
     fireEvent.blur(input());
     expect(chips()).toEqual(['a@b.de']);
-    expect(latest).toBe('a@b.de, ');
+    // Left the field: the value reads as a plain list, no trailing comma.
+    expect(latest).toBe('a@b.de');
   });
 
   it('leaves Enter alone when there is nothing to commit', () => {
