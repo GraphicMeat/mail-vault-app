@@ -58,13 +58,16 @@ pub(crate) async fn reclassify_all(state: Arc<DaemonState>, account_id: String) 
     info!("[reclassify] Enqueued {} emails for reclassification ({})", count, account_id);
 }
 
-/// Retrain the Naive Bayes model using user overrides and local rules applied to cached emails.
+/// Retrain the Naive Bayes model from the user's overrides (bootstrap labels
+/// when there are none). Rule results are not labels: one rule's output would
+/// teach the model to repeat that rule for every message. Too little evidence
+/// (see `classification::train_checked`) leaves the existing model as it is.
 fn retrain_model(state: &Arc<DaemonState>, account_id: &str) {
     let app_dir = &state.app_dir;
     let classifications = classification::load_classifications(app_dir, account_id);
     let emails = load_emails_all_mailboxes(state, account_id);
 
-    // Build labeled data from user overrides and local rules
+    // Build labeled data from user overrides
     let mut labeled: Vec<(classification::EmailForClassification, String)> = Vec::new();
 
     // Map emails by message_id for lookup
@@ -74,10 +77,7 @@ fn retrain_model(state: &Arc<DaemonState>, account_id: &str) {
         .collect();
 
     for (mid, cls) in &classifications {
-        // Only use high-quality labels: user overrides and local rules
-        if cls.source != classification::ClassificationSource::UserOverride
-            && cls.source != classification::ClassificationSource::LocalRule
-        {
+        if cls.source != classification::ClassificationSource::UserOverride {
             continue;
         }
         if let Some(email) = email_map.get(mid) {
@@ -94,12 +94,10 @@ fn retrain_model(state: &Arc<DaemonState>, account_id: &str) {
         }
     }
 
-    if labeled.len() < 5 {
-        info!("[retrain] Not enough labeled data ({}) to train model for {}", labeled.len(), account_id);
+    let Some(model) = classification::train_checked(&labeled) else {
+        info!("[retrain] Not enough labeled data ({}) across categories to train model for {}", labeled.len(), account_id);
         return;
-    }
-
-    let model = classification::NaiveBayesModel::train(&labeled);
+    };
     info!(
         "[retrain] Trained NB model for {} with {} examples, {} vocab",
         account_id, model.training_count, model.vocab_size
@@ -920,6 +918,53 @@ mod tests {
         let _ = std::fs::remove_dir_all(&app_dir);
     }
 
+    /// Five results a single rule produced, no overrides: training on them
+    /// made a one-category model that then called EVERY message that
+    /// category at 0.95, ahead of bootstrap and heuristics.
+    #[test]
+    fn rule_results_never_train_a_one_category_model() {
+        let mail_dir = scratch("poison-mail");
+        let app_dir = scratch("poison-app");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        let emails: Vec<_> = (1..=5u64)
+            .map(|uid| json!({
+                "uid": uid, "messageId": format!("<m{uid}@t>"), "subject": format!("Deals {uid}"),
+                "from": {"name": "Shop", "address": "news@shop.com"},
+                "date": format!("2026-08-0{uid}T00:00:00Z"), "to": [{"address": "me@t"}], "hasAttachments": false,
+            }))
+            .collect();
+        crate::custody::with_conn(&state, |c| {
+            mailvault_core::custody::cache::save_headers(c, "acc1", "INBOX", &json!({"emails": emails}).to_string())
+        })
+        .unwrap();
+        let mut results = HashMap::new();
+        for uid in 1..=5u64 {
+            let mut c = classification::classify_single(&header(uid), &[]);
+            c.category = "promotional".into();
+            c.source = classification::ClassificationSource::LocalRule;
+            results.insert(format!("<m{uid}@t>"), c);
+        }
+        classification::save_classifications(&app_dir, "acc1", &results).unwrap();
+
+        retrain_model(&state, "acc1");
+
+        let model = classification::load_model(&app_dir, "acc1");
+        assert!(
+            model.as_ref().map_or(true, |m| m.category_priors.len() >= 2),
+            "rule results must not become a one-category model: {:?}",
+            model.map(|m| m.category_priors.keys().cloned().collect::<Vec<_>>())
+        );
+
+        // A model already saved stays as it is when there is too little to retrain on.
+        let labeled: Vec<_> = (1..=6u64).map(|uid| (header(uid), if uid <= 3 { "work" } else { "personal" }.to_string())).collect();
+        let kept = classification::train_checked(&labeled).expect("two categories of three train");
+        classification::save_model(&app_dir, "acc1", &kept).unwrap();
+        retrain_model(&state, "acc1");
+        assert_eq!(classification::load_model(&app_dir, "acc1").map(|m| m.trained_at), Some(kept.trained_at));
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
     // ── Reclassify with a relocated vault ──────────────────────────────
 
     #[tokio::test]
@@ -950,14 +995,15 @@ mod tests {
         })
         .unwrap();
 
-        // Five user overrides in the APP dir — both the label source for the
-        // retrain and the set that must survive the reclassify.
+        // Five user overrides in the APP dir: both the label source for the
+        // retrain and the set that must survive the reclassify. Two
+        // categories: a model of one is never trained.
         let mut overrides = HashMap::new();
         for uid in 1..=5u64 {
             overrides.insert(
                 format!("<m{uid}@t>"),
                 classification::EmailClassification {
-                    category: "work".into(),
+                    category: if uid <= 3 { "work" } else { "personal" }.into(),
                     importance: "normal".into(),
                     action: "read".into(),
                     confidence: 1.0,

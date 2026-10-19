@@ -579,7 +579,7 @@ pub fn classify_single_with_model(
 
     // 2. Naive Bayes model (if trained)
     if let Some(nb) = model {
-        if nb.training_count > 0 {
+        if nb.is_usable() {
             let tokens = tokenize(email);
             let (category, confidence) = nb.predict(&tokens);
             let action = default_action_for_category(&category).to_string();
@@ -981,7 +981,43 @@ fn default_importance_for_category(category: &str) -> &'static str {
     }
 }
 
+/// Fewest labelled messages a model is trained from.
+pub const MIN_TRAINING_EXAMPLES: usize = 5;
+/// Fewest categories a model must tell apart. A one-category model answers
+/// that category for every message, at high confidence.
+pub const MIN_MODEL_CATEGORIES: usize = 2;
+/// A category with fewer labelled messages than this is left out of training.
+pub const MIN_EXAMPLES_PER_CATEGORY: usize = 2;
+
+/// Train only from enough evidence: categories with fewer than
+/// [`MIN_EXAMPLES_PER_CATEGORY`] labels are dropped, and nothing is trained
+/// when fewer than [`MIN_MODEL_CATEGORIES`] categories or
+/// [`MIN_TRAINING_EXAMPLES`] labels remain.
+pub fn train_checked(labeled: &[(EmailForClassification, String)]) -> Option<NaiveBayesModel> {
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for (_, category) in labeled {
+        *counts.entry(category.as_str()).or_default() += 1;
+    }
+    let kept: Vec<(EmailForClassification, String)> = labeled
+        .iter()
+        .filter(|(_, c)| counts[c.as_str()] >= MIN_EXAMPLES_PER_CATEGORY)
+        .cloned()
+        .collect();
+    let categories = counts.values().filter(|&&n| n >= MIN_EXAMPLES_PER_CATEGORY).count();
+    if categories < MIN_MODEL_CATEGORIES || kept.len() < MIN_TRAINING_EXAMPLES {
+        return None;
+    }
+    Some(NaiveBayesModel::train(&kept))
+}
+
 impl NaiveBayesModel {
+    /// Whether this model can tell categories apart: trained, on at least
+    /// [`MIN_MODEL_CATEGORIES`]. A one-category model on disk from before
+    /// that rule is ignored.
+    pub fn is_usable(&self) -> bool {
+        self.training_count > 0 && self.category_priors.len() >= MIN_MODEL_CATEGORIES
+    }
+
     /// Train a Naive Bayes model from labeled examples.
     pub fn train(labeled: &[(EmailForClassification, String)]) -> Self {
         let mut category_counts: HashMap<String, usize> = HashMap::new();
@@ -1268,6 +1304,31 @@ mod tests {
     fn test_rule_no_match() {
         let rules = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "newsletter", None, "archive")];
         assert!(apply_rules(&from("alice@other.com", "Hello"), &rules).is_none());
+    }
+
+    #[test]
+    fn a_one_category_model_is_not_used() {
+        let labeled: Vec<_> = (0..6).map(|i| (from("news@shop.com", &format!("Deals {i}")), "promotional".to_string())).collect();
+        let model = NaiveBayesModel::train(&labeled);
+        assert_eq!(model.category_priors.len(), 1);
+        let email = EmailForClassification {
+            in_reply_to: Some("<x@y>".into()), to_count: 1,
+            ..from("friend@example.org", "Re: dinner")
+        };
+        let got = classify_single_with_model(&email, &[], Some(&model));
+        assert_ne!(got.model_used, "naive-bayes", "a one-category model answers the same for everything");
+        assert_eq!((got.model_used.as_str(), got.category.as_str()), ("bootstrap", "personal"));
+    }
+
+    #[test]
+    fn train_checked_needs_two_categories_with_two_examples_each() {
+        let label = |n: usize, cat: &str| (0..n).map(|i| (from("a@b.test", &format!("Note {i}")), cat.to_string())).collect::<Vec<_>>();
+        assert!(train_checked(&label(6, "promotional")).is_none(), "one category");
+        assert!(train_checked(&[label(6, "promotional"), label(1, "work")].concat()).is_none(), "a lone label is not a category");
+        assert!(train_checked(&[label(2, "promotional"), label(2, "work")].concat()).is_none(), "fewer than five labels");
+        let model = train_checked(&[label(4, "promotional"), label(2, "work"), label(1, "personal")].concat()).unwrap();
+        assert_eq!(model.category_priors.len(), 2);
+        assert_eq!(model.training_count, 6);
     }
 
     #[test]
