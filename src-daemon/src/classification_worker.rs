@@ -802,6 +802,18 @@ mod tests {
         assert_eq!((got.source, got.category.as_str()), (classification::ClassificationSource::LocalRule, "invoices"));
         let other = classification::classify_single(&mail(2, "Acme <billing@acme.test>", "Welcome"), &rules);
         assert_ne!(other.source, classification::ClassificationSource::LocalRule, "the subject word is required too");
+
+        // Edited under Learned Rules: the form saves the whole rule back with
+        // the new pattern (emptied fields dropped) and the merge replaces it.
+        let mut fb = learning::load_feedback(&app_dir, "acc1");
+        let mut edited = fb.rules[0].clone();
+        edited["pattern"] = json!({ "fromDomain": "acme.test" });
+        edited["category"] = json!("billing");
+        learning::save_rule(&mut fb, edited);
+        learning::save_feedback(&app_dir, "acc1", &fb).unwrap();
+        let rules = rules_loader(app_dir.clone())("acc1");
+        let got = classification::classify_single(&mail(3, "Acme Sales <sales@acme.test>", "Welcome"), &rules);
+        assert_eq!((got.source, got.category.as_str()), (classification::ClassificationSource::LocalRule, "billing"));
         let _ = std::fs::remove_dir_all(&app_dir);
     }
 
@@ -858,6 +870,50 @@ mod tests {
         assert_eq!(after["<r1@t>"].source, before.source);
         assert_eq!(after["<r2@t>"].source, classification::ClassificationSource::LocalRule, "new mail follows the rule");
         assert_eq!(state.classification.queue_depth().await, 0, "learning a rule queues nothing by itself");
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// Settings' "add a category with a rule" saves the rule and then calls
+    /// `classification.reclassify_all`, meant to reach mail sorted before it.
+    /// It does not: `reclassify_all` force-queues the mail, but the worker
+    /// skips every message `is_classified` already holds, so nothing already
+    /// sorted changes. Kept as the reproducer; fixing it makes that Settings
+    /// flow a real mass reclassify, the owner's call.
+    #[tokio::test]
+    #[ignore = "reclassify_all is a no-op for mail already classified (worker skips is_classified)"]
+    async fn a_reclassify_after_a_rule_lands_re_sorts_mail_already_classified() {
+        let mail_dir = scratch("learned-reclassify-mail");
+        let app_dir = scratch("learned-reclassify-app");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        crate::custody::with_conn(&state, |c| {
+            mailvault_core::custody::cache::save_headers(
+                c,
+                "acc1",
+                "INBOX",
+                &json!({"emails": [{
+                    "uid": 1, "messageId": "<r1@t>", "subject": "Hi",
+                    "from": {"name": "Shop", "address": "news@shop.com"},
+                    "date": "2026-08-01T00:00:00Z", "to": [{"address": "me@t"}], "hasAttachments": false,
+                }]})
+                .to_string(),
+            )
+        })
+        .unwrap();
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), rules_loader(app_dir.clone())));
+
+        enqueue_for_classification(Arc::clone(&state), "acc1", classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 1 && p.status == classification::PipelineStatus::Complete).await;
+        assert_ne!(classification::load_classifications(&app_dir, "acc1")["<r1@t>"].source, classification::ClassificationSource::LocalRule);
+
+        correct(&app_dir, "acc1", "news@shop.com", "Weekly deals", "promotional", "archive");
+        reclassify_all(Arc::clone(&state), "acc1".to_string()).await;
+        wait_for(&state, |p| p.classified == 2 && p.status == classification::PipelineStatus::Complete).await;
+
+        let after = &classification::load_classifications(&app_dir, "acc1")["<r1@t>"];
+        assert_eq!((after.source.clone(), after.category.as_str()), (classification::ClassificationSource::LocalRule, "promotional"));
 
         worker.abort();
         let _ = std::fs::remove_dir_all(&mail_dir);
