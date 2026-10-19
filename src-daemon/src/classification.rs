@@ -1101,28 +1101,9 @@ pub fn bootstrap_label(email: &EmailForClassification) -> Option<(&'static str, 
 
 // ── Learned Rules ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LearnedRule {
-    pub id: String,
-    pub rule_type: String, // "sender-action", "category-override"
-    pub pattern: RulePattern,
-    pub category: Option<String>,
-    pub importance: Option<String>,
-    pub action: Option<String>,
-    pub confidence: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RulePattern {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub from_domain: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub from_address: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub subject_contains: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub body_contains: Option<String>,
-}
+/// A rule as `learning.*` stores it, read by `mailvault_core::learned_rules`
+/// (what a rule matches and which of several wins is documented there).
+pub use mailvault_core::learned_rules::LearnedRule;
 
 struct RuleResult {
     category: String,
@@ -1131,66 +1112,34 @@ struct RuleResult {
     confidence: f64,
 }
 
-/// Compute specificity score for rule ordering.
-/// Higher = more specific = higher priority.
-fn rule_specificity(pattern: &RulePattern) -> u8 {
-    let mut score = 0u8;
-    if pattern.from_address.is_some() { score += 4; }
-    if pattern.from_domain.is_some() { score += 2; }
-    if pattern.subject_contains.is_some() { score += 1; }
-    if pattern.body_contains.is_some() { score += 1; }
-    score
-}
+const IMPORTANCES: [&str; 4] = ["high", "medium", "low", "irrelevant"];
+const ACTIONS: [&str; 4] = ["keep", "archive", "delete-from-server", "review"];
 
+/// The rule's category, with its importance and action when they are ones the
+/// app knows, else the category's defaults. A rule never suggests deleting
+/// from the server unless its category does (spam): a correction stores the
+/// action the message showed BEFORE it was corrected, so "spam-likely" fixed
+/// to "work" would otherwise mark that sender's mail for deletion.
 fn apply_rules(email: &EmailForClassification, rules: &[LearnedRule]) -> Option<RuleResult> {
-    // Sort by specificity (most specific first) for deterministic matching
-    let mut sorted: Vec<&LearnedRule> = rules.iter().collect();
-    sorted.sort_by(|a, b| rule_specificity(&b.pattern).cmp(&rule_specificity(&a.pattern)));
-
-    for rule in sorted {
-        if match_pattern(&rule.pattern, email) {
-            return Some(RuleResult {
-                category: rule.category.clone().unwrap_or_else(|| "notification".into()),
-                importance: rule.importance.clone().unwrap_or_else(|| "medium".into()),
-                action: rule.action.clone().unwrap_or_else(|| "review".into()),
-                confidence: rule.confidence,
-            });
-        }
-    }
-    None
-}
-
-fn match_pattern(pattern: &RulePattern, email: &EmailForClassification) -> bool {
-    if let Some(ref domain) = pattern.from_domain {
-        let email_domain = email.from.split('@').nth(1).unwrap_or("").split('>').next().unwrap_or("");
-        if !email_domain.eq_ignore_ascii_case(domain) {
-            return false;
-        }
-    }
-    if let Some(ref addr) = pattern.from_address {
-        // Extract just the address from "Name <addr>" format
-        let email_addr = if let Some(start) = email.from.find('<') {
-            email.from[start + 1..].trim_end_matches('>').trim()
-        } else {
-            email.from.trim()
-        };
-        if !email_addr.eq_ignore_ascii_case(addr) {
-            return false;
-        }
-    }
-    if let Some(ref substr) = pattern.subject_contains {
-        if !email.subject.to_lowercase().contains(&substr.to_lowercase()) {
-            return false;
-        }
-    }
-    if let Some(ref substr) = pattern.body_contains {
-        if !email.body_preview.to_lowercase().contains(&substr.to_lowercase()) {
-            return false;
-        }
-    }
-    // At least one pattern field must be set
-    pattern.from_domain.is_some() || pattern.from_address.is_some()
-        || pattern.subject_contains.is_some() || pattern.body_contains.is_some()
+    let rule = mailvault_core::learned_rules::best_match(rules, &email.from, &email.subject, &email.body_preview)?;
+    let category = rule.category.clone();
+    let importance = rule
+        .importance
+        .as_deref()
+        .filter(|i| IMPORTANCES.contains(i))
+        .unwrap_or_else(|| default_importance_for_category(&category));
+    let default_action = default_action_for_category(&category);
+    let action = match rule.action.as_deref() {
+        Some("delete-from-server") if default_action != "delete-from-server" => default_action,
+        Some(a) if ACTIONS.contains(&a) => a,
+        _ => default_action,
+    };
+    Some(RuleResult {
+        importance: importance.to_string(),
+        action: action.to_string(),
+        confidence: rule.confidence,
+        category,
+    })
 }
 
 #[cfg(test)]
@@ -1290,45 +1239,70 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn test_rule_matching() {
-        let email = EmailForClassification {
+    fn stored_rule(pattern: serde_json::Value, category: &str, importance: Option<&str>, action: &str) -> LearnedRule {
+        LearnedRule::from_stored(&serde_json::json!({
+            "id": "r1", "type": "sender-action", "pattern": pattern,
+            "category": category, "importance": importance, "action": action, "confidence": 0.95,
+        }))
+        .expect("a usable rule")
+    }
+
+    fn from(from: &str, subject: &str) -> EmailForClassification {
+        EmailForClassification {
             uid: 1, message_id: Some("<m@test>".into()),
-            subject: "Weekly newsletter".into(),
-            from: "news@example.com".into(),
+            subject: subject.into(), from: from.into(),
             date: "2026-04-01".into(), body_preview: String::new(), mailbox: String::new(),
             ..Default::default()
-        };
+        }
+    }
 
-        let rules = vec![LearnedRule {
-            id: "r1".into(), rule_type: "sender-action".into(),
-            pattern: RulePattern { from_domain: Some("example.com".into()), from_address: None, subject_contains: None, body_contains: None },
-            category: Some("newsletter".into()), importance: Some("low".into()),
-            action: Some("delete-from-server".into()), confidence: 0.95,
-        }];
-
-        let result = apply_rules(&email, &rules);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().category, "newsletter");
+    #[test]
+    fn test_rule_matching() {
+        let rules = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "newsletter", Some("low"), "archive")];
+        let result = apply_rules(&from("news@example.com", "Weekly newsletter"), &rules).expect("the rule matches");
+        assert_eq!((result.category.as_str(), result.importance.as_str(), result.action.as_str()), ("newsletter", "low", "archive"));
+        assert_eq!(result.confidence, 0.95);
     }
 
     #[test]
     fn test_rule_no_match() {
+        let rules = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "newsletter", None, "archive")];
+        assert!(apply_rules(&from("alice@other.com", "Hello"), &rules).is_none());
+    }
+
+    #[test]
+    fn a_learned_rule_beats_the_built_in_classifiers() {
+        // Header cues alone would call this a newsletter.
         let email = EmailForClassification {
-            uid: 1, message_id: Some("<m@test>".into()),
-            subject: "Hello".into(), from: "alice@other.com".into(),
-            date: "2026-04-01".into(), body_preview: String::new(), mailbox: String::new(),
-            ..Default::default()
+            list_unsubscribe: true, list_id: Some("<l.example.com>".into()),
+            ..from("news@example.com", "Weekly newsletter")
         };
+        assert_eq!(classify_single(&email, &[]).category, "newsletter");
+        let rules = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "work", None, "keep")];
+        let got = classify_single(&email, &rules);
+        assert_eq!((got.category.as_str(), got.source), ("work", ClassificationSource::LocalRule));
+        assert_eq!(got.model_used, "local-rule");
+    }
 
-        let rules = vec![LearnedRule {
-            id: "r1".into(), rule_type: "sender-action".into(),
-            pattern: RulePattern { from_domain: Some("example.com".into()), from_address: None, subject_contains: None, body_contains: None },
-            category: Some("newsletter".into()), importance: None,
-            action: Some("delete-from-server".into()), confidence: 0.95,
-        }];
+    /// Learned rules store `importance: null`; the category's default fills it.
+    #[test]
+    fn a_rule_without_importance_or_with_an_unknown_action_takes_the_category_defaults() {
+        let rules = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "promotional", None, "shred")];
+        let r = apply_rules(&from("a@example.com", ""), &rules).unwrap();
+        assert_eq!((r.importance.as_str(), r.action.as_str()), ("low", "archive"));
+        let custom = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "invoices", Some("urgent"), "review")];
+        let r = apply_rules(&from("a@example.com", ""), &custom).unwrap();
+        assert_eq!((r.importance.as_str(), r.action.as_str()), ("medium", "review"));
+    }
 
-        assert!(apply_rules(&email, &rules).is_none());
+    /// Cleanup records the action the row showed before the correction, so a
+    /// spam-likely message corrected to work learns `delete-from-server`.
+    #[test]
+    fn a_rule_suggests_deleting_from_the_server_only_for_spam() {
+        let work = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "work", None, "delete-from-server")];
+        assert_eq!(apply_rules(&from("a@example.com", ""), &work).unwrap().action, "keep");
+        let spam = vec![stored_rule(serde_json::json!({"fromDomain": "example.com"}), "spam-likely", None, "delete-from-server")];
+        assert_eq!(apply_rules(&from("a@example.com", ""), &spam).unwrap().action, "delete-from-server");
     }
 
     #[test]

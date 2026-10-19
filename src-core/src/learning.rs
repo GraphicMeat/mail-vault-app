@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use crate::learned_rules::{FROM_ADDRESS, FROM_DOMAIN, SUBJECT_CONTAINS};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
@@ -185,11 +186,11 @@ pub fn record_correction(fb: &mut Feedback, email: &Value, correction: &Value, n
             // Senders of one domain corrected to different categories: learn the address.
             let address_value = Value::String(address);
             let existing = fb.rules.iter_mut().find(|r| {
-                js::strict_eq(pattern_field(r, "fromAddress"), Some(&address_value)) && js::strict_eq(r.get("category"), category)
+                js::strict_eq(pattern_field(r, FROM_ADDRESS), Some(&address_value)) && js::strict_eq(r.get("category"), category)
             });
             match existing {
                 None => {
-                    new_rule = learned_rule(format!("r-{now_ms}"), json!({ "fromAddress": address_value }), category, action, 0.95, 1, now_ms);
+                    new_rule = learned_rule(format!("r-{now_ms}"), json!({ FROM_ADDRESS: address_value }), category, action, 0.95, 1, now_ms);
                     fb.rules.push(new_rule.clone());
                     rule_generated = true;
                 }
@@ -204,11 +205,11 @@ pub fn record_correction(fb: &mut Feedback, email: &Value, correction: &Value, n
             }
         } else if !domain_corrections.is_empty() {
             let existing = fb.rules.iter_mut().find(|r| {
-                js::strict_eq(pattern_field(r, "fromDomain"), Some(&domain_value)) && js::strict_eq(r.get("category"), category)
+                js::strict_eq(pattern_field(r, FROM_DOMAIN), Some(&domain_value)) && js::strict_eq(r.get("category"), category)
             });
             match existing {
                 None => {
-                    new_rule = learned_rule(format!("r-{now_ms}"), json!({ "fromDomain": domain_value }), category, action, 0.95, domain_corrections.len(), now_ms);
+                    new_rule = learned_rule(format!("r-{now_ms}"), json!({ FROM_DOMAIN: domain_value }), category, action, 0.95, domain_corrections.len(), now_ms);
                     fb.rules.push(new_rule.clone());
                     rule_generated = true;
                 }
@@ -230,14 +231,14 @@ pub fn record_correction(fb: &mut Feedback, email: &Value, correction: &Value, n
             if let Some(word) = find_shared_subject_word(&domain_corrections) {
                 let word_value = Value::String(word);
                 let known = fb.rules.iter().any(|r| {
-                    js::strict_eq(pattern_field(r, "fromDomain"), Some(&domain_value))
-                        && js::strict_eq(pattern_field(r, "subjectContains"), Some(&word_value))
+                    js::strict_eq(pattern_field(r, FROM_DOMAIN), Some(&domain_value))
+                        && js::strict_eq(pattern_field(r, SUBJECT_CONTAINS), Some(&word_value))
                         && js::strict_eq(r.get("category"), category)
                 });
                 if !known {
                     let rule = learned_rule(
                         format!("r-{now_ms}-subj"),
-                        json!({ "fromDomain": domain_value, "subjectContains": word_value }),
+                        json!({ FROM_DOMAIN: domain_value, SUBJECT_CONTAINS: word_value }),
                         category,
                         action,
                         0.90,
@@ -253,10 +254,21 @@ pub fn record_correction(fb: &mut Feedback, email: &Value, correction: &Value, n
     json!({ "correctionSaved": true, "ruleGenerated": rule_generated, "rule": new_rule })
 }
 
-/// The part after the last `@`, `>` removed, lowercased. `None` when there is
-/// no `@` past the first character.
 fn extract_domain(from: Option<&Value>) -> Option<String> {
-    let from = from?.as_str().filter(|s| !s.is_empty())?;
+    sender_domain(from?.as_str()?)
+}
+
+fn extract_address(from: Option<&Value>) -> Option<String> {
+    sender_address(from?.as_str()?)
+}
+
+/// The domain a rule is learned from, and the one the classifier compares
+/// against (`learned_rules`): the part after the last `@`, `>` removed,
+/// lowercased. `None` when there is no `@` past the first character.
+pub fn sender_domain(from: &str) -> Option<String> {
+    if from.is_empty() {
+        return None;
+    }
     let at = from.rfind('@')?;
     if at == 0 {
         return None;
@@ -264,9 +276,12 @@ fn extract_domain(from: Option<&Value>) -> Option<String> {
     Some(from[at + 1..].replace('>', "").to_lowercase())
 }
 
-/// The address inside the first `<...>`, else the whole string when it holds an `@`.
-fn extract_address(from: Option<&Value>) -> Option<String> {
-    let from = from?.as_str().filter(|s| !s.is_empty())?;
+/// The address a rule is learned from and compared against: the one inside
+/// the first `<...>`, else the whole string when it holds an `@`.
+pub fn sender_address(from: &str) -> Option<String> {
+    if from.is_empty() {
+        return None;
+    }
     for (i, _) in from.match_indices('<') {
         let rest = &from[i + 1..];
         if let Some(end) = rest.find('>') {
@@ -381,8 +396,8 @@ pub fn export_rules(fb: &Feedback, now_ms: i64) -> RulesExport {
         .map(|rule| ExportRule {
             rule_type: rule.get("type").cloned(),
             pattern: ExportPattern {
-                from_domain: truthy_field(rule, "fromDomain"),
-                subject_contains: truthy_field(rule, "subjectContains"),
+                from_domain: truthy_field(rule, FROM_DOMAIN),
+                subject_contains: truthy_field(rule, SUBJECT_CONTAINS),
             },
             category: rule.get("category").cloned(),
             importance: rule.get("importance").cloned(),
@@ -448,7 +463,7 @@ pub fn import_rules(fb: &mut Feedback, rules: &[Value], now_ms: i64) -> usize {
     let mut imported = 0;
     for rule in rules {
         let exists = fb.rules.iter().any(|r| {
-            js::strict_eq(pattern_field(r, "fromDomain"), pattern_field(rule, "fromDomain"))
+            js::strict_eq(pattern_field(r, FROM_DOMAIN), pattern_field(rule, FROM_DOMAIN))
                 && js::strict_eq(r.get("category"), rule.get("category"))
                 && js::strict_eq(r.get("action"), rule.get("action"))
         });

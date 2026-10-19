@@ -232,15 +232,13 @@ pub(crate) fn start_classification_worker(state: Arc<DaemonState>) {
 }
 
 /// The worker's view of an account's learned rules, read from
-/// `<app_dir>/ai-feedback/<accountId>.json` (what `learning.*` writes).
+/// `<app_dir>/ai-feedback/<accountId>.json` (what `learning.*` writes). Only
+/// that account's file: a rule learned on one account never sorts another's
+/// mail. A rule that cannot be applied safely is skipped without a log line
+/// (this runs once per queued message).
 fn rules_loader(data_dir: std::path::PathBuf) -> Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> {
     Arc::new(move |account_id: &str| {
-        let feedback = learning::load_feedback(&data_dir, account_id);
-        feedback
-            .rules
-            .iter()
-            .filter_map(|v| serde_json::from_value(v.clone()).ok())
-            .collect()
+        mailvault_core::learned_rules::parse_all(&learning::load_feedback(&data_dir, account_id).rules)
     })
 }
 
@@ -731,6 +729,135 @@ mod tests {
             "a flush must not write the worker's stale copy of an override over the newer one"
         );
         assert_eq!(saved.len(), 3);
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    // ── Learned rules ──────────────────────────────────────────────────
+
+    /// Store a correction exactly as `learning.record_correction` does.
+    fn correct(app_dir: &std::path::Path, account: &str, from: &str, subject: &str, category: &str, action: &str) -> serde_json::Value {
+        let mut fb = learning::load_feedback(app_dir, account);
+        let out = learning::record_correction(
+            &mut fb,
+            &json!({ "messageId": format!("<{subject}@x>"), "from": from, "subject": subject }),
+            &json!({ "originalCategory": "personal", "correctedCategory": category, "correctedAction": action }),
+            1_760_000_000_000,
+        );
+        learning::save_feedback(app_dir, account, &fb).unwrap();
+        out
+    }
+
+    fn mail(uid: u64, from: &str, subject: &str) -> classification::EmailForClassification {
+        classification::EmailForClassification {
+            uid,
+            message_id: Some(format!("<r{uid}@t>")),
+            subject: subject.into(),
+            from: from.into(),
+            date: "2026-08-01T00:00:00Z".into(),
+            ..Default::default()
+        }
+    }
+
+    /// The bug: the classifier read rules as `{rule_type, pattern: {from_domain}}`
+    /// while `learning.*` stores `{type, pattern: {fromDomain}}`, so every
+    /// stored rule failed to parse and no correction ever changed a result.
+    #[test]
+    fn a_rule_learned_from_a_correction_reaches_the_classifier_and_wins() {
+        let app_dir = scratch("learned-domain");
+        let out = correct(&app_dir, "acc1", "Shop <news@shop.com>", "Weekly deals", "promotional", "archive");
+        assert_eq!(out["ruleGenerated"], true);
+
+        let rules = rules_loader(app_dir.clone())("acc1");
+        assert_eq!(rules.len(), 1, "the stored rule must reach the classifier");
+
+        let got = classification::classify_single(&mail(1, "Shop Team <offers@shop.com>", "Hello there"), &rules);
+        assert_eq!(got.source, classification::ClassificationSource::LocalRule);
+        assert_eq!(got.category, "promotional");
+        assert_eq!(got.action, "archive");
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// The rule the Settings form builds, as JSON.stringify sends it (the
+    /// `undefined` pattern fields are gone), saved through `learning.save_rule`.
+    #[test]
+    fn a_manual_rule_from_settings_reaches_the_classifier() {
+        let app_dir = scratch("learned-manual");
+        let mut fb = learning::Feedback::default();
+        learning::save_rule(
+            &mut fb,
+            json!({
+                "id": "r-1760000000000", "type": "sender-action",
+                "pattern": { "fromAddress": "billing@acme.test", "subjectContains": "invoice" },
+                "category": "invoices", "action": "review", "confidence": 0.95,
+                "source": "manual", "createdAt": "2026-10-19T00:00:00.000Z",
+            }),
+        );
+        learning::save_feedback(&app_dir, "acc1", &fb).unwrap();
+
+        let rules = rules_loader(app_dir.clone())("acc1");
+        let got = classification::classify_single(&mail(1, "Acme <billing@acme.test>", "Your Invoice for October"), &rules);
+        assert_eq!((got.source, got.category.as_str()), (classification::ClassificationSource::LocalRule, "invoices"));
+        let other = classification::classify_single(&mail(2, "Acme <billing@acme.test>", "Welcome"), &rules);
+        assert_ne!(other.source, classification::ClassificationSource::LocalRule, "the subject word is required too");
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// Through the worker loop: a rule learned on acc1 sorts acc1's mail and
+    /// leaves acc2's alone (each account's rules are its own file).
+    #[tokio::test]
+    async fn the_worker_applies_an_accounts_rules_to_that_account_only() {
+        let mail_dir = scratch("learned-worker-mail");
+        let app_dir = scratch("learned-worker-app");
+        correct(&app_dir, "acc1", "news@shop.com", "Weekly deals", "promotional", "archive");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), rules_loader(app_dir.clone())));
+
+        // Two Message-IDs: the queue's "already queued" set is keyed by
+        // Message-ID alone, across accounts.
+        state.classification.enqueue("acc1", vec![mail(1, "Shop <hello@shop.com>", "Hi")], classification::QueueTier::New).await;
+        state.classification.enqueue("acc2", vec![mail(2, "Shop <hello@shop.com>", "Hi")], classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 2 && p.status == classification::PipelineStatus::Complete).await;
+
+        let acc1 = classification::load_classifications(&app_dir, "acc1");
+        assert_eq!(acc1["<r1@t>"].source, classification::ClassificationSource::LocalRule);
+        assert_eq!(acc1["<r1@t>"].category, "promotional");
+        let acc2 = classification::load_classifications(&app_dir, "acc2");
+        assert_ne!(acc2["<r2@t>"].source, classification::ClassificationSource::LocalRule, "acc1's rule must not sort acc2's mail");
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// A rule that lands after a message was classified does not change that
+    /// message on its own: only new mail, or a reclassify the user starts.
+    #[tokio::test]
+    async fn a_new_rule_does_not_reclassify_mail_already_sorted() {
+        let mail_dir = scratch("learned-late-mail");
+        let app_dir = scratch("learned-late-app");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), rules_loader(app_dir.clone())));
+
+        state.classification.enqueue("acc1", vec![mail(1, "news@shop.com", "Hi")], classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 1 && p.status == classification::PipelineStatus::Complete).await;
+        let before = classification::load_classifications(&app_dir, "acc1")["<r1@t>"].clone();
+        assert_ne!(before.source, classification::ClassificationSource::LocalRule);
+
+        correct(&app_dir, "acc1", "news@shop.com", "Weekly deals", "promotional", "archive");
+        state
+            .classification
+            .enqueue("acc1", vec![mail(1, "news@shop.com", "Hi"), mail(2, "news@shop.com", "Hi again")], classification::QueueTier::New)
+            .await;
+        wait_for(&state, |p| p.classified >= 2 && p.status == classification::PipelineStatus::Complete).await;
+
+        let after = classification::load_classifications(&app_dir, "acc1");
+        assert_eq!(after["<r1@t>"].category, before.category, "already-sorted mail keeps its result");
+        assert_eq!(after["<r1@t>"].source, before.source);
+        assert_eq!(after["<r2@t>"].source, classification::ClassificationSource::LocalRule, "new mail follows the rule");
+        assert_eq!(state.classification.queue_depth().await, 0, "learning a rule queues nothing by itself");
 
         worker.abort();
         let _ = std::fs::remove_dir_all(&mail_dir);
