@@ -448,6 +448,7 @@
   "compose.noTemplatesYet": "まだテンプレートがありません",
   "compose.originalMessage": "元のメッセージ",
   "compose.pleaseEnterLeastOneRecipient": "宛先を 1 件以上入力してください",
+  "compose.invalidRecipient": "「{{address}}」はメールアドレスではありません",
   "compose.re": "Re: {{originalSubject}}",
   "compose.recipientExampleCom": "recipient@example.com",
   "compose.removeAttachment": "添付を削除",

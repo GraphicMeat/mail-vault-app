@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseRecipientText, splitRecipientField, addRecipients, removeRecipient,
-  isValidRecipient, recipientAddress,
+  parseRecipientText, parseRecipientPaste, splitRecipientField, addRecipients, removeRecipient,
+  removeRecipients, removeRecipientToken, replaceRecipient, isValidRecipient, recipientAddress,
+  recipientDisplay, invalidRecipients, withoutRecipients,
 } from '../recipientTokens';
 
 describe('parseRecipientText', () => {
@@ -123,5 +124,96 @@ describe('recipientAddress / isValidRecipient', () => {
     expect(isValidRecipient('John Doe')).toBe(false);
     expect(isValidRecipient('a@b')).toBe(false);
     expect(isValidRecipient('a b@c.de')).toBe(false);
+  });
+});
+
+describe('mailto links with several headers', () => {
+  it('keeps a comma inside the ?query from splitting the address list', () => {
+    expect(parseRecipientText('mailto:a@b.de?cc=c@d.de,e@f.de&subject=x')).toEqual(['a@b.de']);
+  });
+
+  it('routes ?cc= and ?bcc= to their own lists', () => {
+    expect(parseRecipientPaste('mailto:a@b.de?cc=c@d.de&bcc=e@f.de,g@h.de&subject=x')).toEqual({
+      to: ['a@b.de'], cc: ['c@d.de'], bcc: ['e@f.de', 'g@h.de'],
+    });
+  });
+
+  it('adds a ?to= address to To and decodes escapes', () => {
+    expect(parseRecipientPaste('mailto:a@b.de?to=c%40d.de&cc=e%40f.de')).toEqual({
+      to: ['a@b.de', 'c@d.de'], cc: ['e@f.de'], bcc: [],
+    });
+  });
+
+  it('puts a plain list in To', () => {
+    expect(parseRecipientPaste('a@b.de, c@d.de')).toEqual({ to: ['a@b.de', 'c@d.de'], cc: [], bcc: [] });
+    expect(parseRecipientPaste('')).toEqual({ to: [], cc: [], bcc: [] });
+  });
+});
+
+describe('recipientDisplay', () => {
+  it('shows the name, keeps the address for the tooltip', () => {
+    expect(recipientDisplay('Ann <A@b.de>')).toEqual({ label: 'Ann', address: 'A@b.de' });
+    expect(recipientDisplay('"Doe, John" <j@d.com>')).toEqual({ label: 'Doe, John', address: 'j@d.com' });
+    expect(recipientDisplay('"Say \\"hi\\"" <j@d.com>').label).toBe('Say "hi"');
+  });
+
+  it('shows a bare address or non-address as it is', () => {
+    expect(recipientDisplay('a@b.de')).toEqual({ label: 'a@b.de', address: 'a@b.de' });
+    expect(recipientDisplay('<a@b.de>')).toEqual({ label: 'a@b.de', address: 'a@b.de' });
+    expect(recipientDisplay('John Doe')).toEqual({ label: 'John Doe', address: '' });
+  });
+});
+
+describe('replaceRecipient', () => {
+  it('swaps one chip for what was typed', () => {
+    expect(replaceRecipient('a@b.de, c@d.de, ', 0, 'x@y.de')).toBe('x@y.de, c@d.de, ');
+  });
+
+  it('cleans and splits the edit; an empty edit removes the chip', () => {
+    expect(replaceRecipient('a@b.de, c@d.de, ', 1, 'mailto:x@y.de; z@w.de')).toBe('a@b.de, x@y.de, z@w.de, ');
+    expect(replaceRecipient('a@b.de, c@d.de, ', 0, '  ')).toBe('c@d.de, ');
+  });
+
+  it('skips an edit that repeats another chip', () => {
+    expect(replaceRecipient('a@b.de, c@d.de, ', 0, 'C@D.de')).toBe('c@d.de, ');
+  });
+
+  it('keeps the draft when asked', () => {
+    expect(replaceRecipient('a@b.de, c@d.de, dra', 0, 'x@y.de', { keepDraft: true })).toBe('x@y.de, c@d.de, dra');
+  });
+});
+
+describe('removeRecipients / removeRecipientToken', () => {
+  it('removes several chips by index', () => {
+    expect(removeRecipients('a@b.de, c@d.de, e@f.de, ', [0, 2])).toBe('c@d.de, ');
+  });
+
+  it('removes a chip by the address it holds, any case or name', () => {
+    expect(removeRecipientToken('Ann <a@b.de>, c@d.de, ', 'A@B.de')).toBe('c@d.de, ');
+    expect(removeRecipientToken('a@b.de, c@d.de, dra', 'a@b.de')).toBe('c@d.de, dra');
+  });
+
+  it('removes a prefilled value that has no trailing comma', () => {
+    expect(removeRecipientToken('a@b.de', 'a@b.de')).toBe('');
+  });
+
+  it('leaves the value alone when the address is not there', () => {
+    expect(removeRecipientToken('a@b.de, ', 'x@y.de')).toBe('a@b.de, ');
+  });
+});
+
+describe('invalidRecipients', () => {
+  it('lists the entries that are not addresses', () => {
+    expect(invalidRecipients('a@b.de, John Doe, x@y')).toEqual(['John Doe', 'x@y']);
+    expect(invalidRecipients('')).toEqual([]);
+    expect(invalidRecipients('"Doe, John" <j@d.com>, ')).toEqual([]);
+  });
+});
+
+describe('withoutRecipients', () => {
+  it('drops contacts whose address is already a chip', () => {
+    const contacts = [{ address: 'A@b.de' }, { address: 'c@d.de' }];
+    expect(withoutRecipients(contacts, ['Ann <a@b.de>'])).toEqual([{ address: 'c@d.de' }]);
+    expect(withoutRecipients(contacts, [])).toEqual(contacts);
   });
 });

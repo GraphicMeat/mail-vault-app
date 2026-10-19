@@ -3,6 +3,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/settingsStore';
 import { ownAddresses } from '../utils/ownAddresses';
+import { withoutRecipients } from '../utils/recipientTokens';
 import { Users, Clock, Star } from 'lucide-react';
 import {
   buildContactsIndex,
@@ -85,7 +86,7 @@ function getTrailingToken(value) {
 // and re-syncs when the compose user switches From, so the listing defaults
 // to the sender's contacts. Users can still tap "All" or another chip to
 // override within the current compose session.
-export function ContactsPickerButton({ value, onChange, fieldName, boostAccountId = null }) {
+export function ContactsPickerButton({ value, onChange, fieldName, boostAccountId = null, exclude = null }) {
   const t = useT();
   const pa = usePrivateAttr();
   const index = useContactsIndex();
@@ -122,7 +123,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
     () => getContactsForAccount(index, effectiveFilterId),
     [index, effectiveFilterId],
   );
-  const list = tab === 'latest' ? filtered.latest : filtered.popular;
+  const list = withoutRecipients(tab === 'latest' ? filtered.latest : filtered.popular, exclude);
 
   const handlePick = (c) => {
     onChange(appendRecipient(value, formatContact(c), false));
@@ -245,8 +246,8 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
 // from the full index as the user types. Contacts tied to the currently-
 // active account (or the compose From account, via `boostAccountId`) are
 // ranked first so the user's primary correspondents surface ahead of cross-
-// account hits.
-export function ContactsAutocomplete({ value, onChange, inputRef, boostAccountId = null }) {
+// account hits. `exclude` (the field's chips) are never offered again.
+export function ContactsAutocomplete({ value, onChange, inputRef, boostAccountId = null, exclude = null }) {
   const index = useContactsIndex();
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const [highlight, setHighlight] = useState(0);
@@ -254,9 +255,13 @@ export function ContactsAutocomplete({ value, onChange, inputRef, boostAccountId
 
   const effectiveBoost = boostAccountId || activeAccountId;
   const partial = getTrailingToken(value);
+  // Contacts already in the field are not offered again: ask for enough extra
+  // to still fill the list after they are dropped.
   const matches = useMemo(
-    () => (partial.length >= 1 ? searchContacts(index, partial, 6, effectiveBoost) : []),
-    [partial, index, effectiveBoost],
+    () => (partial.length >= 1
+      ? withoutRecipients(searchContacts(index, partial, 6 + (exclude?.length || 0), effectiveBoost), exclude).slice(0, 6)
+      : []),
+    [partial, index, effectiveBoost, exclude],
   );
 
   useEffect(() => { setHighlight(0); }, [partial]);

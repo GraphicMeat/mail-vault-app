@@ -77,7 +77,8 @@ const identity = (token) => recipientAddress(token) || token.toLowerCase();
 
 /// Everything a paste or a typed separator commits: split, cleaned, deduped.
 export function parseRecipientText(text) {
-  const { segments, open } = scan(text);
+  // A mailto: link's ?cc=a,b&subject=… would split on its own commas.
+  const { segments, open } = scan((text || '').replace(/(mailto:[^?\s]*)\?\S*/gi, '$1'));
   const seen = new Set();
   const out = [];
   for (const segment of [...segments, open]) {
@@ -118,9 +119,77 @@ export function addRecipients(value, text) {
 
 /// Drops chip `index`. By default the whole value is chips; `keepDraft` keeps
 /// the text after the last separator as the draft instead.
-export function removeRecipient(value, index, { keepDraft = false } = {}) {
+export function removeRecipient(value, index, options) {
+  return removeRecipients(value, [index], options);
+}
+
+/// A pasted mailto: link can carry Cc, Bcc and further To addresses in its
+/// ?query: those come back under their own header.
+export function parseRecipientPaste(text) {
+  const extra = { to: [], cc: [], bcc: [] };
+  for (const m of (text || '').matchAll(/mailto:[^?\s]*\?(\S*)/gi)) {
+    for (const pair of m[1].split('&')) {
+      const eq = pair.indexOf('=');
+      if (eq === -1) continue;
+      const key = decode(pair.slice(0, eq)).toLowerCase();
+      if (key in extra) extra[key].push(decode(pair.slice(eq + 1)));
+    }
+  }
+  return {
+    to: parseRecipientText([text || '', ...extra.to].join('\n')),
+    cc: parseRecipientText(extra.cc.join('\n')),
+    bcc: parseRecipientText(extra.bcc.join('\n')),
+  };
+}
+
+/// What a chip shows: the display name when there is one, else the address.
+/// `address` is for the tooltip ('' when the token holds none).
+export function recipientDisplay(token) {
+  const m = /^([\s\S]*?)<([^<>]*)>\s*$/.exec(token || '');
+  if (!m) return { label: token, address: recipientAddress(token) ? token.trim() : '' };
+  const address = m[2].trim();
+  let name = m[1].trim();
+  if (name.length > 1 && name.startsWith('"') && name.endsWith('"')) name = name.slice(1, -1).replace(/\\(.)/g, '$1');
+  return { label: name || address || token, address };
+}
+
+const chipList = (value, keepDraft) => {
   const { chips, draft } = splitRecipientField(value);
-  const list = keepDraft ? chips : [...chips, draft.trim()].filter(Boolean);
-  list.splice(index, 1);
+  return { list: keepDraft ? chips : [...chips, draft.trim()].filter(Boolean), draft };
+};
+
+/// Swaps chip `index` for what the user typed in its place: cleaned, split,
+/// repeats of other chips dropped; an empty edit removes the chip.
+export function replaceRecipient(value, index, text, { keepDraft = false } = {}) {
+  const { list, draft } = chipList(value, keepDraft);
+  const others = new Set(list.filter((_, i) => i !== index).map(identity));
+  list.splice(index, 1, ...parseRecipientText(text).filter(token => !others.has(identity(token))));
   return joinRecipients(list) + (keepDraft ? draft : '');
+}
+
+export function removeRecipients(value, indices, { keepDraft = false } = {}) {
+  const { list, draft } = chipList(value, keepDraft);
+  for (const index of [...indices].sort((a, b) => b - a)) list.splice(index, 1);
+  return joinRecipients(list) + (keepDraft ? draft : '');
+}
+
+/// Removes the chip holding `token`'s address (any case, any display name).
+export function removeRecipientToken(value, token) {
+  const id = identity(token);
+  const { chips, draft } = splitRecipientField(value);
+  const index = chips.findIndex(chip => identity(chip) === id);
+  if (index >= 0) return removeRecipients(value, [index], { keepDraft: true });
+  return draft.trim() && identity(draft.trim()) === id ? joinRecipients(chips) : value;
+}
+
+/// The entries of a field value that are not addresses.
+export function invalidRecipients(value) {
+  const { segments, open } = scan(value);
+  return [...segments, open].map(s => s.trim()).filter(Boolean).filter(token => !isValidRecipient(token));
+}
+
+/// Contacts whose address is already one of the field's chips.
+export function withoutRecipients(contacts, tokens) {
+  const taken = new Set((tokens || []).map(recipientAddress).filter(Boolean));
+  return taken.size ? contacts.filter(c => !taken.has((c.address || '').toLowerCase())) : contacts;
 }

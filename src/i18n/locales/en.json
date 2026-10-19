@@ -448,6 +448,7 @@
   "compose.noTemplatesYet": "No templates yet",
   "compose.originalMessage": "Original Message",
   "compose.pleaseEnterLeastOneRecipient": "Please enter at least one recipient",
+  "compose.invalidRecipient": "\"{{address}}\" is not an email address",
   "compose.re": "Re: {{originalSubject}}",
   "compose.recipientExampleCom": "recipient@example.com",
   "compose.removeAttachment": "Remove attachment",

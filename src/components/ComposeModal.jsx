@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { RecipientField } from './RecipientField';
+import { addRecipients, invalidRecipients, removeRecipientToken } from '../utils/recipientTokens';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
@@ -614,6 +615,24 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     setError(null);
   };
 
+  // A pasted mailto: link's ?cc= / ?bcc= land in those fields.
+  const routeRecipients = (field, text) => {
+    if (detaching) return;
+    setFormData(prev => ({ ...prev, [field]: addRecipients(prev[field] || '', text) }));
+    setError(null);
+  };
+
+  // A chip dragged from one recipient field to another.
+  const moveRecipient = (from, to, token) => {
+    if (detaching) return;
+    setFormData(prev => ({
+      ...prev,
+      [from]: removeRecipientToken(prev[from] || '', token),
+      [to]: addRecipients(prev[to] || '', token),
+    }));
+    setError(null);
+  };
+
   const handleChange = (e) => {
     if (detaching) return;
     const { name, value } = e.target;
@@ -834,6 +853,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     event?.preventDefault();
     if (detaching) return;
     if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
+    // A chip outlined red is not an address: say which, instead of letting
+    // the server bounce the whole message.
+    const notAddress = [formData.to, formData.cc, formData.bcc].flatMap(v => invalidRecipients(v || ''))[0];
+    if (notAddress) { setError(t('compose.invalidRecipient', { address: notAddress })); return; }
     if (!selectedAccount) { setError(t("compose.noAccountSelected")); return; }
     // Premium is read last: the cheap text check rules most sends out first.
     // A reply draft restored as a new window still has the original's subject.
@@ -1464,6 +1487,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               placeholder={t('compose.recipientExampleCom')}
               value={formData.to}
               setValue={setRecipients('to')}
+              onRoute={routeRecipients}
+              onMove={moveRecipient}
               testid="compose-to"
               boostAccountId={selectedAccountId}
               // Reply/replyAll already have a recipient — the caret belongs in
@@ -1479,6 +1504,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               placeholder={t('compose.ccExampleCom')}
               value={formData.cc}
               setValue={setRecipients('cc')}
+              onRoute={routeRecipients}
+              onMove={moveRecipient}
               testid="compose-cc"
               boostAccountId={selectedAccountId}
             />
@@ -1490,6 +1517,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               placeholder={t('compose.bccExampleCom')}
               value={formData.bcc}
               setValue={setRecipients('bcc')}
+              onRoute={routeRecipients}
+              onMove={moveRecipient}
               testid="compose-bcc"
               boostAccountId={selectedAccountId}
             />

@@ -448,6 +448,7 @@
   "compose.noTemplatesYet": "Noch keine Vorlagen",
   "compose.originalMessage": "Ursprüngliche Nachricht",
   "compose.pleaseEnterLeastOneRecipient": "Gib mindestens einen Empfänger an",
+  "compose.invalidRecipient": "„{{address}}“ ist keine E-Mail-Adresse",
   "compose.re": "Re: {{originalSubject}}",
   "compose.recipientExampleCom": "empfaenger@beispiel.de",
   "compose.removeAttachment": "Anhang entfernen",

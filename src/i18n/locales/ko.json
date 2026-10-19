@@ -448,6 +448,7 @@
   "compose.noTemplatesYet": "아직 템플릿이 없습니다",
   "compose.originalMessage": "원본 메시지",
   "compose.pleaseEnterLeastOneRecipient": "받는 사람을 한 명 이상 입력하세요",
+  "compose.invalidRecipient": "\"{{address}}\"은(는) 이메일 주소가 아닙니다",
   "compose.re": "Re: {{originalSubject}}",
   "compose.recipientExampleCom": "recipient@example.com",
   "compose.removeAttachment": "첨부 삭제",

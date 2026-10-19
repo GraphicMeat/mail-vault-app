@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React, { useState, useEffect } from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
@@ -19,11 +19,13 @@ vi.mock('lucide-react', () => {
 // Stand-in for the contacts list. The real autocomplete listens for keydown on
 // the input itself and claims Enter with preventDefault; this one does the
 // same with one fixed suggestion, so a chip must not be added twice.
+const seen = vi.hoisted(() => ({ exclude: null }));
 vi.mock('../ContactsPicker', async () => {
   const React = await import('react');
   return {
     ContactsPickerButton: () => null,
-    ContactsAutocomplete: ({ value, onChange, inputRef }) => {
+    ContactsAutocomplete: ({ value, onChange, inputRef, exclude }) => {
+      seen.exclude = exclude;
       React.useEffect(() => {
         const el = inputRef.current;
         const onKey = (e) => {
@@ -41,6 +43,7 @@ vi.mock('../ContactsPicker', async () => {
 });
 
 import { RecipientField } from '../RecipientField';
+import { addRecipients, removeRecipientToken } from '../../utils/recipientTokens';
 
 let latest = '';
 function Harness({ initial = '' }) {
@@ -64,7 +67,7 @@ afterEach(() => { cleanup(); latest = ''; });
 describe('RecipientField chips', () => {
   it('shows a prefilled value as chips with an empty input', () => {
     render(<Harness initial="a@b.de, Ann <c@d.de>" />);
-    expect(chips()).toEqual(['a@b.de', 'Ann <c@d.de>']);
+    expect(chips()).toEqual(['a@b.de', 'Ann']);
     expect(input().value).toBe('');
   });
 
@@ -158,7 +161,7 @@ describe('RecipientField paste', () => {
   it('separates a pasted list into chips and a comma-joined value', () => {
     render(<Harness />);
     paste('a@b.de; "Doe, John" <j@d.com>\nmailto:e@f.de?subject=Hi\ng@h.de');
-    expect(chips()).toEqual(['a@b.de', '"Doe, John" <j@d.com>', 'e@f.de', 'g@h.de']);
+    expect(chips()).toEqual(['a@b.de', 'Doe, John', 'e@f.de', 'g@h.de']);
     expect(latest).toBe('a@b.de, "Doe, John" <j@d.com>, e@f.de, g@h.de, ');
   });
 
@@ -189,5 +192,201 @@ describe('RecipientField chips are checked', () => {
     const [ok, bad] = screen.getAllByTestId('recipient-chip');
     expect(ok.dataset.invalid).toBeUndefined();
     expect(bad.dataset.invalid).toBe('true');
+  });
+});
+
+// ── Trio: To / Cc / Bcc wired the way ComposeModal wires them ────────────────
+
+let all = {};
+function Trio({ initial = {} }) {
+  const [v, setV] = useState({ to: '', cc: '', bcc: '', ...initial });
+  useEffect(() => { all = v; }, [v]);
+  const set = f => val => setV(p => ({ ...p, [f]: val }));
+  const route = (f, text) => setV(p => ({ ...p, [f]: addRecipients(p[f], text) }));
+  const move = (from, to, token) => setV(p => ({
+    ...p, [from]: removeRecipientToken(p[from], token), [to]: addRecipients(p[to], token),
+  }));
+  return ['to', 'cc', 'bcc'].map(f => (
+    <RecipientField key={f} name={f} label={`${f}:`} testid={`compose-${f}`}
+      value={v[f]} setValue={set(f)} onRoute={route} onMove={move} />
+  ));
+}
+const row = f => document.querySelector(`[data-recipient-field="${f}"]`);
+const rowChips = f => within(row(f)).queryAllByTestId('recipient-chip').map(c => c.textContent);
+const rowInput = f => within(row(f)).getByTestId(`compose-${f}`);
+
+describe('mailto paste with cc and bcc', () => {
+  it('sends ?cc= and ?bcc= to their own fields', () => {
+    render(<Trio />);
+    fireEvent.paste(rowInput('to'), { clipboardData: { getData: () => 'mailto:a@b.de?cc=c@d.de&bcc=e@f.de&subject=Hi' } });
+    expect(rowChips('to')).toEqual(['a@b.de']);
+    expect(rowChips('cc')).toEqual(['c@d.de']);
+    expect(rowChips('bcc')).toEqual(['e@f.de']);
+  });
+
+  it('pasting into Cc keeps the To address and ?cc= in Cc', () => {
+    render(<Trio />);
+    fireEvent.paste(rowInput('cc'), { clipboardData: { getData: () => 'mailto:a@b.de?cc=c@d.de' } });
+    expect(rowChips('cc')).toEqual(['a@b.de', 'c@d.de']);
+    expect(rowChips('to')).toEqual([]);
+  });
+});
+
+describe('chip display', () => {
+  it('shows the name and keeps the address in the tooltip', () => {
+    render(<Harness initial="Ann <ann@b.de>" />);
+    const text = screen.getByTestId('recipient-chip-text');
+    expect(text.textContent).toBe('Ann');
+    expect(text.getAttribute('title')).toBe('ann@b.de');
+  });
+});
+
+describe('editing a chip', () => {
+  const edit = () => screen.getByTestId('recipient-chip-edit');
+
+  it('opens the chip in an input on click, Enter replaces it', () => {
+    render(<Harness initial="a@b.de, c@d.de, " />);
+    fireEvent.click(screen.getAllByTestId('recipient-chip-text')[0]);
+    expect(edit().value).toBe('a@b.de');
+    fireEvent.change(edit(), { target: { value: 'x@y.de' } });
+    fireEvent.keyDown(edit(), { key: 'Enter' });
+    expect(chips()).toEqual(['x@y.de', 'c@d.de']);
+    expect(latest).toBe('x@y.de, c@d.de, ');
+  });
+
+  it('edits the full address of a named chip', () => {
+    render(<Harness initial="Ann <ann@b.de>, " />);
+    fireEvent.click(screen.getByTestId('recipient-chip-text'));
+    expect(edit().value).toBe('Ann <ann@b.de>');
+  });
+
+  it('commits on blur, cancels on Escape, removes on an empty edit', () => {
+    render(<Harness initial="a@b.de, c@d.de, " />);
+    fireEvent.click(screen.getAllByTestId('recipient-chip-text')[0]);
+    fireEvent.change(edit(), { target: { value: 'x@y.de' } });
+    fireEvent.blur(edit());
+    expect(chips()).toEqual(['x@y.de', 'c@d.de']);
+
+    fireEvent.click(screen.getAllByTestId('recipient-chip-text')[1]);
+    fireEvent.change(edit(), { target: { value: 'zzz@y.de' } });
+    fireEvent.keyDown(edit(), { key: 'Escape' });
+    expect(chips()).toEqual(['x@y.de', 'c@d.de']);
+
+    fireEvent.click(screen.getAllByTestId('recipient-chip-text')[0]);
+    fireEvent.change(edit(), { target: { value: '' } });
+    fireEvent.keyDown(edit(), { key: 'Enter' });
+    expect(chips()).toEqual(['c@d.de']);
+  });
+
+  it('keeps the draft being typed', () => {
+    render(<Harness initial="a@b.de, " />);
+    type('dra');
+    fireEvent.click(screen.getByTestId('recipient-chip-text'));
+    fireEvent.change(edit(), { target: { value: 'x@y.de' } });
+    fireEvent.keyDown(edit(), { key: 'Enter' });
+    expect(chips()).toEqual(['x@y.de']);
+    expect(input().value).toBe('dra');
+  });
+});
+
+describe('dragging a chip to another field', () => {
+  const drag = (chip, toRow, dx = 40) => {
+    document.elementFromPoint = () => toRow;
+    fireEvent.mouseDown(chip, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(document, { clientX: dx, clientY: 0 });
+    fireEvent.mouseUp(document, { clientX: dx, clientY: 0 });
+  };
+
+  it('moves it, leaving the other chips', () => {
+    render(<Trio initial={{ to: 'a@b.de, c@d.de, ' }} />);
+    drag(within(row('to')).getAllByTestId('recipient-chip-text')[0], row('cc'));
+    expect(rowChips('to')).toEqual(['c@d.de']);
+    expect(rowChips('cc')).toEqual(['a@b.de']);
+    expect(all.to).toBe('c@d.de, ');
+  });
+
+  it('does nothing when dropped on its own field or on nothing', () => {
+    render(<Trio initial={{ to: 'a@b.de, ' }} />);
+    drag(within(row('to')).getByTestId('recipient-chip-text'), row('to'));
+    drag(within(row('to')).getByTestId('recipient-chip-text'), null);
+    expect(rowChips('to')).toEqual(['a@b.de']);
+  });
+
+  it('a click that barely moves still edits the chip', () => {
+    render(<Trio initial={{ to: 'a@b.de, ' }} />);
+    const chip = within(row('to')).getByTestId('recipient-chip-text');
+    document.elementFromPoint = () => row('cc');
+    fireEvent.mouseDown(chip, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(document, { clientX: 2, clientY: 0 });
+    fireEvent.mouseUp(document, { clientX: 2, clientY: 0 });
+    fireEvent.click(chip);
+    expect(screen.getByTestId('recipient-chip-edit')).toBeTruthy();
+  });
+
+  it('a drag does not open the editor afterwards', () => {
+    render(<Trio initial={{ to: 'a@b.de, c@d.de, ' }} />);
+    const chip = within(row('to')).getAllByTestId('recipient-chip-text')[0];
+    drag(chip, row('to'));
+    fireEvent.click(chip);
+    expect(screen.queryByTestId('recipient-chip-edit')).toBeNull();
+  });
+});
+
+describe('copying and cutting chips', () => {
+  const clip = () => ({ setData: vi.fn() });
+
+  it('copies the selected chips as a comma string, quoted names intact', () => {
+    render(<Harness initial={'"Doe, John" <j@d.com>, c@d.de, e@f.de, '} />);
+    const [one, two] = screen.getAllByTestId('recipient-chip-text');
+    fireEvent.click(one, { shiftKey: true });
+    fireEvent.click(two, { shiftKey: true });
+    const clipboardData = clip();
+    fireEvent.copy(one, { clipboardData });
+    expect(clipboardData.setData).toHaveBeenCalledWith('text/plain', '"Doe, John" <j@d.com>, c@d.de');
+    expect(chips()).toHaveLength(3);
+  });
+
+  it('copies the focused chip when none is selected', () => {
+    render(<Harness initial="a@b.de, c@d.de, " />);
+    const two = screen.getAllByTestId('recipient-chip-text')[1];
+    two.focus();
+    const clipboardData = clip();
+    fireEvent.copy(two, { clipboardData });
+    expect(clipboardData.setData).toHaveBeenCalledWith('text/plain', 'c@d.de');
+  });
+
+  it('Ctrl/Cmd+A in the empty input selects every chip; cut copies and removes them', () => {
+    render(<Harness initial="a@b.de, c@d.de, " />);
+    fireEvent.keyDown(input(), { key: 'a', metaKey: true });
+    const clipboardData = clip();
+    fireEvent.cut(screen.getAllByTestId('recipient-chip-text')[0], { clipboardData });
+    expect(clipboardData.setData).toHaveBeenCalledWith('text/plain', 'a@b.de, c@d.de');
+    expect(chips()).toEqual([]);
+    expect(latest).toBe('');
+  });
+
+  it('Backspace on a selected chip removes the whole selection', () => {
+    render(<Harness initial="a@b.de, c@d.de, e@f.de, " />);
+    const [one, two] = screen.getAllByTestId('recipient-chip-text');
+    fireEvent.click(one, { shiftKey: true });
+    fireEvent.click(two, { shiftKey: true });
+    fireEvent.keyDown(two, { key: 'Backspace' });
+    expect(chips()).toEqual(['e@f.de']);
+  });
+
+  it('typing clears the selection', () => {
+    render(<Harness initial="a@b.de, c@d.de, " />);
+    fireEvent.click(screen.getAllByTestId('recipient-chip-text')[0], { shiftKey: true });
+    type('x');
+    const clipboardData = clip();
+    fireEvent.copy(input(), { clipboardData });
+    expect(clipboardData.setData).not.toHaveBeenCalled();
+  });
+});
+
+describe('contacts list leaves out chips', () => {
+  it('hands the autocomplete the addresses already in the field', () => {
+    render(<Harness initial="a@b.de, Ann <c@d.de>, " />);
+    expect(seen.exclude).toEqual(['a@b.de', 'Ann <c@d.de>']);
   });
 });

@@ -448,6 +448,7 @@
   "compose.noTemplatesYet": "暂无模板",
   "compose.originalMessage": "原始邮件",
   "compose.pleaseEnterLeastOneRecipient": "请至少填写一位收件人",
+  "compose.invalidRecipient": "“{{address}}”不是有效的电子邮件地址",
   "compose.re": "回复: {{originalSubject}}",
   "compose.recipientExampleCom": "recipient@example.com",
   "compose.removeAttachment": "移除附件",
