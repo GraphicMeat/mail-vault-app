@@ -21,7 +21,7 @@
 //! and an IMAP one by its pool. It only SELECTs and SEARCHes; the custody
 //! connection is never held across it.
 use crate::custody as daemon_custody;
-use crate::handlers::common::{blocking, opt_str_arg, str_arg, u32_arg};
+use crate::handlers::common::{blocking, opt_str_arg, str_arg, u32_arg, vault_root};
 use crate::handlers::custody::repair_generation_for;
 use crate::handlers::imap::account_arg;
 use crate::ipc::RpcResponse;
@@ -73,11 +73,25 @@ async fn read_entry(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, u
     .unwrap_or(None)
 }
 
-/// Merge `extra` into the entry as it stands now (or the app's fallback for a
-/// message with none). False when there was nothing to stamp or the write failed.
+/// Whether the vault still holds a file for the uid. A vault that cannot be
+/// read answers no: nothing is claimed about a copy that cannot be seen.
+fn vault_holds(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> bool {
+    let Ok(root) = vault_root(state) else {
+        return false;
+    };
+    state.vault_registry.with_resolved(&root, account_id, mailbox, uid, |p| std::fs::metadata(p).map(|_| ())).is_ok()
+}
+
+/// Merge `extra` into the entry as it stands now. With no entry, the app's
+/// fallback row is written only while the vault still holds the message's
+/// file, checked here, just before the write: the app offered it before the
+/// sweep, and a message deleted since must not come back as a custody row
+/// with nothing behind it. False when there was nothing to stamp or the
+/// write failed.
 async fn write_stamp(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, fallback: Option<Value>, extra: Value) -> bool {
     let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
     blocking(move || {
+        let fallback = fallback.filter(|_| vault_holds(&state, &account_id, &mailbox, uid));
         daemon_custody::with_conn(&state, |c| {
             let current = entries::get(c, &account_id, &mailbox, uid)?;
             let Some(entry) = probe::stamp(current.as_ref(), fallback.as_ref(), uid, &extra) else {
@@ -177,6 +191,65 @@ mod tests {
 
     fn entry(s: &Arc<DaemonState>) -> Option<Value> {
         daemon_custody::with_conn(s, |c| entries::get(c, "acc", "INBOX", 7)).unwrap()
+    }
+
+    /// The vault holds uid 7's file.
+    fn seed_vault(v: &tempfile::TempDir) {
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(mailvault_core::vault_files::build_maildir_filename(7, &[])), message("<gone@x.test>")).unwrap();
+    }
+
+    /// INBOX and Archive, the INBOX SELECT held for a while so the custody
+    /// entry can go while the sweep runs.
+    fn slow_two_folders(holding: Option<&str>) -> MockImap {
+        let inbox = Mailbox::new("INBOX").push(message("<other@x.test>"));
+        let archive = match holding {
+            Some(id) => Mailbox::new("Archive").push(message(id)),
+            None => Mailbox::new("Archive"),
+        };
+        let hold = Action::Delay(std::time::Duration::from_millis(1500));
+        MockImap::start(Scenario::new().mailbox(inbox).mailbox(archive).fault(Trigger::with("SELECT", "INBOX"), hold))
+    }
+
+    /// Ask, and remove uid 7's entry (and so the message) while the sweep is held.
+    async fn ask_while_it_leaves(s: &Arc<DaemonState>, server: &MockImap, extra: Value) -> Value {
+        let mut params = json!({"account": account(server), "accountId": "acc", "mailbox": "INBOX", "uid": 7});
+        for (k, v) in extra.as_object().unwrap() {
+            params[k] = v.clone();
+        }
+        let asking = Arc::clone(s);
+        let task = tokio::spawn(async move { handle_request_for_test(&asking, "custody.probe_server_copy", params).await });
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        daemon_custody::with_conn(s, |c| entries::remove(c, "acc", "INBOX", &[7])).unwrap();
+        task.await.unwrap().result.expect("answered")
+    }
+
+    /// The app offers its row for a message the vault held when it asked. One
+    /// that left the vault during the sweep must not come back as a custody
+    /// row with no file behind it: a gold "your only copy" row for nothing.
+    #[tokio::test]
+    async fn a_message_that_left_the_vault_mid_sweep_is_not_stamped_absent() {
+        plaintext();
+        let (_v, s) = st();
+        put(&s, json!({"uid": 7, "message_id": "<gone@x.test>"}));
+        let server = slow_two_folders(None);
+        let row = json!({"uid": 7, "subject": "Aruodas", "message_id": "<gone@x.test>", "source": "local"});
+        let r = ask_while_it_leaves(&s, &server, json!({"fallbackEntry": row})).await;
+        assert_eq!(r, json!({"state": "unknown", "reason": "not-in-vault"}));
+        assert_eq!(entry(&s), None, "no row written for a message the vault no longer holds");
+    }
+
+    #[tokio::test]
+    async fn a_message_that_left_the_vault_mid_sweep_is_not_recreated_by_a_found_copy() {
+        plaintext();
+        let (_v, s) = st();
+        put(&s, json!({"uid": 7, "message_id": "<kept@x.test>", "serverAbsent": true}));
+        let server = slow_two_folders(Some("<kept@x.test>"));
+        let row = json!({"uid": 7, "subject": "Aruodas", "message_id": "<kept@x.test>", "source": "local"});
+        let r = ask_while_it_leaves(&s, &server, json!({"fallbackEntry": row})).await;
+        assert_eq!(r["state"], "present");
+        assert_eq!(entry(&s), None, "no row written for a message the vault no longer holds");
     }
 
     async fn ask(s: &Arc<DaemonState>, server: &MockImap, extra: Value) -> Value {
@@ -291,7 +364,8 @@ mod tests {
     #[tokio::test]
     async fn absent_with_no_entry_writes_the_apps_row_for_a_vault_copy() {
         plaintext();
-        let (_v, s) = st();
+        let (v, s) = st();
+        seed_vault(&v);
         let server = two_folders(None);
         let row = json!({"uid": 7, "subject": "Aruodas", "message_id": "<gone@x.test>", "source": "local"});
         let r = ask(&s, &server, json!({"messageId": "<gone@x.test>", "fallbackEntry": row})).await;
