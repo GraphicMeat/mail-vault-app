@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use crate::learned_rules::{FROM_ADDRESS, FROM_DOMAIN, SUBJECT_CONTAINS};
+use crate::learned_rules::{is_shared_mail_domain, FROM_ADDRESS, FROM_DOMAIN, SUBJECT_CONTAINS};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
@@ -181,9 +181,14 @@ pub fn record_correction(fb: &mut Feedback, email: &Value, correction: &Value, n
             .corrections
             .iter()
             .any(|c| same_domain(c) && !js::strict_eq(c.get("correctedCategory"), category));
+        // A domain thousands of strangers share (gmail.com, outlook.com, ...)
+        // never gets a domain rule: one friend's correction would sort them
+        // all. Not in the JS, which learned `{fromDomain: "gmail.com"}`.
+        let shared = is_shared_mail_domain(&domain);
 
-        if let (true, Some(address)) = (conflicting, address) {
-            // Senders of one domain corrected to different categories: learn the address.
+        if let (true, Some(address)) = (conflicting || shared, address) {
+            // Senders of one domain corrected to different categories, or a
+            // shared provider's domain: learn the address.
             let address_value = Value::String(address);
             let existing = fb.rules.iter_mut().find(|r| {
                 js::strict_eq(pattern_field(r, FROM_ADDRESS), Some(&address_value)) && js::strict_eq(r.get("category"), category)
@@ -203,7 +208,7 @@ pub fn record_correction(fb: &mut Feedback, email: &Value, correction: &Value, n
                     }
                 }
             }
-        } else if !domain_corrections.is_empty() {
+        } else if !shared && !domain_corrections.is_empty() {
             let existing = fb.rules.iter_mut().find(|r| {
                 js::strict_eq(pattern_field(r, FROM_DOMAIN), Some(&domain_value)) && js::strict_eq(r.get("category"), category)
             });
@@ -227,7 +232,7 @@ pub fn record_correction(fb: &mut Feedback, email: &Value, correction: &Value, n
         }
 
         // Two or more corrections from the domain sharing a subject word: learn the word too.
-        if domain_corrections.len() >= 2 {
+        if !shared && domain_corrections.len() >= 2 {
             if let Some(word) = find_shared_subject_word(&domain_corrections) {
                 let word_value = Value::String(word);
                 let known = fb.rules.iter().any(|r| {

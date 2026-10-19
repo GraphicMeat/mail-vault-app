@@ -12,6 +12,10 @@
 //! - `fromAddress`: the sender's address, exactly.
 //! - `subjectContains` / `bodyContains`: a substring of the subject / body.
 //!
+//! A `fromDomain` of a shared mailbox provider (gmail.com, outlook.com, ...;
+//! [`is_shared_mail_domain`]) never matches: it would sort every stranger
+//! there.
+//!
 //! Every field a rule sets must match. A rule that sets none, or sets one it
 //! cannot use (empty, blank, not text, or subject/body text shorter than
 //! [`MIN_TEXT_CHARS`]), never matches: dropping just the bad field would make
@@ -60,6 +64,39 @@ pub struct LearnedRule {
     pub confidence: f64,
 }
 
+/// Mailbox providers whose domain thousands of unrelated people share.
+const SHARED_DOMAINS: &[&str] = &[
+    "gmail.com", "googlemail.com", "msn.com", "icloud.com", "me.com", "mac.com", "aol.com",
+    "proton.me", "pm.me", "protonmail.com", "protonmail.ch", "web.de", "mail.com", "mail.ru",
+    "qq.com", "163.com", "126.com", "zoho.com", "hey.com", "ymail.com", "rocketmail.com",
+];
+
+/// Providers with a domain per country: `<name>.<tld>`, `<name>.co.<cc>`,
+/// `<name>.com.<cc>` (yahoo.co.uk, hotmail.fr, gmx.de, yandex.ru, ...).
+const SHARED_DOMAIN_FAMILIES: &[&str] = &["yahoo", "hotmail", "outlook", "live", "gmx", "yandex", "fastmail"];
+
+/// Whether `domain` belongs to a shared mailbox provider, where a domain rule
+/// would sort every stranger with an address there. Learning makes an
+/// address rule for these instead, and a stored domain rule for one never
+/// matches.
+pub fn is_shared_mail_domain(domain: &str) -> bool {
+    let d = normalize(domain);
+    let d = d.trim_end_matches('.');
+    if SHARED_DOMAINS.contains(&d) {
+        return true;
+    }
+    let Some((name, rest)) = d.split_once('.') else { return false };
+    if !SHARED_DOMAIN_FAMILIES.contains(&name) {
+        return false;
+    }
+    let labels: Vec<&str> = rest.split('.').collect();
+    match labels.as_slice() {
+        [tld] => !tld.is_empty(),
+        [second, cc] => matches!(*second, "co" | "com" | "ne" | "or") && !cc.is_empty(),
+        _ => false,
+    }
+}
+
 /// Trim, NFKC, lowercase: how both a rule and a message are compared.
 pub fn normalize(s: &str) -> String {
     s.trim().nfkc().collect::<String>().to_lowercase()
@@ -91,7 +128,7 @@ impl LearnedRule {
             subject_contains: field(SUBJECT_CONTAINS, MIN_TEXT_CHARS).ok()?,
             body_contains: field(BODY_CONTAINS, MIN_TEXT_CHARS).ok()?,
         };
-        if pattern == RulePattern::default() {
+        if pattern == RulePattern::default() || pattern.from_domain.as_deref().is_some_and(is_shared_mail_domain) {
             return None;
         }
         let confidence = rule
@@ -285,6 +322,48 @@ mod tests {
             make(json!({ "fromDomain": "shop.com" }), "newer", 0.95),
         ];
         assert_eq!(best_match(&stronger, "a@shop.com", "", "").unwrap().category, "strengthened");
+    }
+
+    fn correct_once(fb: &mut Feedback, from: &str, category: &str) {
+        record_correction(
+            fb,
+            &json!({ "messageId": "<m@x>", "from": from, "subject": "Lunch on Friday" }),
+            &json!({ "correctedCategory": category, "correctedAction": "keep" }),
+            0,
+        );
+    }
+
+    /// One friend's gmail.com message corrected to personal must not sort
+    /// every gmail.com sender as personal: learn the address instead.
+    #[test]
+    fn a_correction_from_a_freemail_sender_learns_the_address_not_the_domain() {
+        for from in ["Pal <pal@gmail.com>", "pal@Hotmail.co.uk", "pal@yahoo.fr", "pal@gmx.de", "pal@outlook.com"] {
+            let mut fb = Feedback::default();
+            correct_once(&mut fb, from, "personal");
+            correct_once(&mut fb, from, "personal");
+            assert!(fb.rules.iter().all(|r| r["pattern"].get(FROM_DOMAIN).is_none()), "{from}: {:?}", fb.rules);
+            assert!(fb.rules.iter().any(|r| r["pattern"].get(FROM_ADDRESS).is_some()), "{from}: {:?}", fb.rules);
+        }
+    }
+
+    #[test]
+    fn a_company_domain_still_learns_a_domain_rule() {
+        let mut fb = Feedback::default();
+        correct_once(&mut fb, "Billing <billing@acme-corp.test>", "transactional");
+        assert_eq!(fb.rules.len(), 1);
+        assert_eq!(fb.rules[0]["pattern"], json!({ FROM_DOMAIN: "acme-corp.test" }));
+    }
+
+    /// Rules already on disk from before the guard.
+    #[test]
+    fn a_stored_freemail_domain_rule_never_matches() {
+        for domain in ["gmail.com", "GMAIL.COM ", "yahoo.co.jp", "icloud.com", "proton.me", "yandex.ru"] {
+            assert_eq!(parsed(json!({ "fromDomain": domain })), None, "{domain}");
+            assert_eq!(parsed(json!({ "fromDomain": domain, "subjectContains": "lunch" })), None, "{domain}");
+        }
+        assert!(parsed(json!({ "fromAddress": "pal@gmail.com" })).is_some(), "an address at a freemail domain is fine");
+        assert!(parsed(json!({ "fromDomain": "gmail.company.test" })).is_some());
+        assert!(parsed(json!({ "fromDomain": "mygmail.com" })).is_some());
     }
 
     /// The drift guard: every rule `record_correction` writes reads back as a
