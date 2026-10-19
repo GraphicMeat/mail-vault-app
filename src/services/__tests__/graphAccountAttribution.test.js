@@ -56,4 +56,8 @@ describe('Graph calls name their account and carry no token', () => {
     await api.graphProbeSignIn('fresh.sign-in.token', 'padme@outlook.test');
     expect(mockSend).toHaveBeenCalledWith('graph_list_folders', { accessToken: 'fresh.sign-in.token', accountEmail: 'padme@outlook.test' });
   });
+
+  it('the app has no token refresh to call', () => {
+    expect(api.refreshOAuth2Token).toBeUndefined();
+  });
 });

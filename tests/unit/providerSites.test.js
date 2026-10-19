@@ -20,7 +20,6 @@ const ALLOWED = {
   'src/hooks/useEmailScheduler.js': IMAP_PATH,
   'src/services/AccountPipeline.js': IMAP_PATH,
   'src/services/EmailPipelineManager.js': IMAP_PATH,
-  'src/services/authUtils.js': IMAP_PATH,
   'src/services/codeBubble.js': IMAP_PATH,
   'src/services/db/accounts.js': IMAP_PATH,
   'src/services/export/bodyResolver.js': IMAP_PATH,

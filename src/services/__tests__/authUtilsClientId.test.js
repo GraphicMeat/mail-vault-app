@@ -1,30 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // A Google refresh token only works with the OAuth client that issued it, so
 // the account records that client (`oauth2ClientId`): a finished sign-in
 // stamps it next to the new refresh token, and every refresh sends it back.
 
-const mockUpdateOAuth2Tokens = vi.fn();
-vi.mock('../db', () => ({
-  getAccount: vi.fn(),
-  updateOAuth2Tokens: (...a) => mockUpdateOAuth2Tokens(...a),
-}));
-
-let mockAccounts = [];
-vi.mock('../../stores/mailStore', () => ({
-  useMailStore: {
-    getState: () => ({ accounts: mockAccounts }),
-    setState: (fn) => { mockAccounts = fn({ accounts: mockAccounts }).accounts; },
-    subscribe: () => () => {},
-  },
-}));
-
-const mockRefreshOAuth2Token = vi.fn();
-vi.mock('../api', () => ({
-  refreshOAuth2Token: (...a) => mockRefreshOAuth2Token(...a),
-}));
-
-const { withOAuth2Exchange, ensureFreshToken, resolveServerAccount } = await import('../authUtils');
+const { withOAuth2Exchange } = await import('../authUtils');
 
 const OLD = 'thunderbird.apps.googleusercontent.com';
 const NEW = 'own.apps.googleusercontent.com';
@@ -68,54 +48,5 @@ describe('withOAuth2Exchange', () => {
   });
 });
 
-describe('refresh callers pass account.oauth2ClientId', () => {
-  beforeEach(() => {
-    mockRefreshOAuth2Token.mockReset().mockResolvedValue({
-      accessToken: 'new-at', refreshToken: 'new-rt', expiresAt: Date.now() + 3600_000,
-    });
-    mockUpdateOAuth2Tokens.mockReset();
-  });
-
-  function googleAccount(extra = {}) {
-    const a = {
-      id: 'g1', email: 'u@gmail.com', authType: 'oauth2', oauth2Provider: 'google',
-      oauth2AccessToken: 'old-at', oauth2RefreshToken: 'old-rt', oauth2ExpiresAt: Date.now() - 1000,
-      ...extra,
-    };
-    mockAccounts = [a];
-    return a;
-  }
-
-  it('the expiry refresh sends the stamped client as the last argument', async () => {
-    await ensureFreshToken(googleAccount({ oauth2ClientId: NEW }));
-    expect(mockRefreshOAuth2Token).toHaveBeenCalledTimes(1);
-    const args = mockRefreshOAuth2Token.mock.calls[0];
-    expect(args[0]).toBe('old-rt');
-    expect(args[1]).toBe('google');
-    expect(args[6]).toBe(NEW);
-  });
-
-  it('the expiry refresh sends nothing for a legacy account, which the daemon reads as Thunderbird', async () => {
-    await ensureFreshToken(googleAccount());
-    expect(mockRefreshOAuth2Token).toHaveBeenCalledTimes(1);
-    expect(mockRefreshOAuth2Token.mock.calls[0][6]).toBeUndefined();
-  });
-
-  it('the forced refresh of a malformed Graph token sends the account stamp too', async () => {
-    const account = {
-      id: 'm1', email: 'u@outlook.com', authType: 'oauth2', oauth2Provider: 'microsoft',
-      oauth2Transport: 'graph', oauth2AccessToken: 'not-a-jwt', oauth2RefreshToken: 'old-rt',
-      oauth2ExpiresAt: Date.now() + 3600_000, oauth2ClientId: OLD,
-    };
-    mockAccounts = [account];
-    mockRefreshOAuth2Token.mockResolvedValue({ accessToken: 'a.b.c', refreshToken: 'new-rt', expiresAt: Date.now() + 3600_000 });
-    await resolveServerAccount('m1', account);
-    expect(mockRefreshOAuth2Token).toHaveBeenCalled();
-    expect(mockRefreshOAuth2Token.mock.calls[0][6]).toBe(OLD);
-  });
-
-  it('a refresh never rewrites the stamp on the account', async () => {
-    await ensureFreshToken(googleAccount({ oauth2ClientId: OLD }));
-    expect(mockAccounts[0].oauth2ClientId).toBe(OLD);
-  });
-});
+// The refresh side of the stamp is the daemon's now (src-daemon/src/oauth_tokens.rs:
+// a refresh posts the record's own client and never writes the stamp back).
