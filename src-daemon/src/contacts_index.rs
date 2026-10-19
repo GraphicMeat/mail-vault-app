@@ -100,6 +100,9 @@ struct InnerState {
     dirty: HashSet<String>,
     loaded_accounts: HashSet<String>,
     cold_built_accounts: HashSet<String>,
+    /// Accounts whose map covers their whole header cache: the store held
+    /// their contacts, or the seed read it. Only these are persisted.
+    seeded: HashSet<String>,
 }
 
 pub struct ContactsState {
@@ -116,6 +119,7 @@ impl ContactsState {
                 dirty: HashSet::new(),
                 loaded_accounts: HashSet::new(),
                 cold_built_accounts: HashSet::new(),
+                seeded: HashSet::new(),
             }),
             data_dir,
             db: Mutex::new(None),
@@ -167,8 +171,13 @@ impl ContactsState {
         });
 
         let mut g = self.inner.lock().unwrap();
-        g.per_account.insert(account_id.to_string(), entries);
-        g.loaded_accounts.insert(account_id.to_string());
+        // Another thread may have loaded it, and observed into it, meanwhile.
+        if g.loaded_accounts.insert(account_id.to_string()) {
+            if !entries.is_empty() {
+                g.seeded.insert(account_id.to_string());
+            }
+            g.per_account.insert(account_id.to_string(), entries);
+        }
     }
 
     /// Update the in-memory index with a batch of new email headers. System
@@ -205,19 +214,10 @@ impl ContactsState {
     }
 
     /// Header rows the app cached itself (`save_email_cache`), each new to the
-    /// header cache. An account not seeded yet leaves them to its seed, which
-    /// reads the header cache and would otherwise count them twice.
+    /// header cache. Before an account is seeded the seed replaces them.
     pub fn observe_saved_rows(&self, account_id: &str, mailbox: &str, rows: &[serde_json::Value]) {
         if is_excluded_mailbox(mailbox) || rows.is_empty() {
             return;
-        }
-        self.load_account(account_id);
-        {
-            let g = self.inner.lock().unwrap();
-            let empty = g.per_account.get(account_id).is_none_or(|m| m.is_empty());
-            if empty && !g.cold_built_accounts.contains(account_id) {
-                return;
-            }
         }
         let headers: Vec<CachedHeader> = rows.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect();
         self.observe_cached_headers(account_id, mailbox, &headers);
@@ -228,15 +228,11 @@ impl ContactsState {
         // Load + cold-build on first request per account (lazy).
         for aid in account_ids {
             self.load_account(aid);
+            // Rows a sync or an app save observed first do not count as a
+            // seed: the rest of the header cache would never be read.
             let needs_cold_build = {
                 let g = self.inner.lock().unwrap();
-                let empty = g
-                    .per_account
-                    .get(aid)
-                    .map(|m| m.is_empty())
-                    .unwrap_or(true);
-                let not_yet = !g.cold_built_accounts.contains(aid);
-                empty && not_yet
+                !g.seeded.contains(aid) && !g.cold_built_accounts.contains(aid)
             };
             if needs_cold_build {
                 self.cold_build_account(aid);
@@ -260,11 +256,14 @@ impl ContactsState {
     /// background task.
     pub fn flush_dirty(&self) {
         let to_write: Vec<(String, Vec<ContactEntry>)> = {
-            let mut g = self.inner.lock().unwrap();
+            let mut guard = self.inner.lock().unwrap();
+            let g = &mut *guard;
             if g.dirty.is_empty() {
                 return;
             }
-            let accounts: Vec<String> = g.dirty.drain().collect();
+            // An account not seeded yet holds only what was observed so far;
+            // stored, it would pass for a seed after a restart.
+            let accounts: Vec<String> = g.dirty.drain().filter(|a| g.seeded.contains(a)).collect();
             accounts
                 .into_iter()
                 .filter_map(|aid| {
@@ -298,12 +297,20 @@ impl ContactsState {
     /// account lifetime — gated by `cold_built_accounts`. Reads `custody.db`;
     /// it used to walk `email_cache/<account>_*` and open every `<uid>.json`.
     pub fn cold_build_account(&self, account_id: &str) {
+        let attached = self.db.lock().unwrap_or_else(|p| p.into_inner()).is_some();
         {
             let mut g = self.inner.lock().unwrap();
-            if g.cold_built_accounts.contains(account_id) {
+            if !g.cold_built_accounts.insert(account_id.to_string()) {
                 return;
             }
-            g.cold_built_accounts.insert(account_id.to_string());
+            // What was observed before the seed is in the header cache the
+            // seed reads. A row written between this and the read counts
+            // twice, never zero times.
+            if attached {
+                if let Some(m) = g.per_account.get_mut(account_id) {
+                    m.clear();
+                }
+            }
         }
 
         let mut total = 0usize;
@@ -330,6 +337,7 @@ impl ContactsState {
                     total += headers.len();
                     self.observe_cached_headers(account_id, &mailbox, &headers);
                 }
+                self.inner.lock().unwrap().seeded.insert(account_id.to_string());
             }
             Some(Err(e)) => warn!("[contacts_index] cold-build read failed for {}: {}", account_id, e),
             None => return,
@@ -385,6 +393,7 @@ impl ContactsState {
             },
         );
         g.dirty.insert(account_id.to_string());
+        g.seeded.insert(account_id.to_string());
     }
 }
 
@@ -540,6 +549,8 @@ mod tests {
         {
             let state = ContactsState::new(tmp.clone());
             state.attach_db(Arc::clone(&db));
+            // seeded first (an empty header cache): only a seeded account is stored
+            state.get_snapshot(&["acc1".to_string()]);
             let h = header(1, addr("Alice", "alice@ex.com"), vec![]);
             state.observe_headers("acc1", "INBOX", &[h]);
             state.flush_dirty();
@@ -550,6 +561,43 @@ mod tests {
         let snap = state2.get_snapshot(&["acc1".to_string()]);
         assert_eq!(snap["acc1"].len(), 1);
         assert_eq!(snap["acc1"][0].address, "alice@ex.com");
+    }
+
+    /// The seed from the header cache runs for every account the store holds
+    /// no contacts for, however many rows a sync or an app save observed
+    /// first: those rows are in the header cache too, and the rest of it must
+    /// not be lost (a lost name is one privacy mode does not mask).
+    #[test]
+    fn rows_observed_before_the_first_snapshot_never_block_the_seed() {
+        let tmp = tempdir();
+        let db: Arc<mailvault_core::custody::SharedConn> = Arc::new(std::sync::Mutex::new(Some(
+            mailvault_core::custody::db::open(&tmp).unwrap(),
+        )));
+        let cache = r#"{"emails":[
+            {"uid":1,"date":"2026-04-20T12:00:00Z","from":{"name":"Alice","address":"alice@ex.com"},"to":[],"cc":[],"bcc":[]},
+            {"uid":2,"date":"2026-04-21T12:00:00Z","from":{"name":"Bob","address":"bob@ex.com"},"to":[],"cc":[],"bcc":[]}]}"#;
+        {
+            let g = db.lock().unwrap();
+            mailvault_core::custody::cache::save_headers(g.as_ref().unwrap(), "acc1", "INBOX", cache).unwrap();
+        }
+        let names = |snap: &HashMap<String, Vec<ContactEntry>>| {
+            let mut v: Vec<(String, u64)> = snap["acc1"].iter().map(|e| (e.name.clone(), e.count)).collect();
+            v.sort();
+            v
+        };
+        let want = vec![("Alice".to_string(), 1), ("Bob".to_string(), 1)];
+        {
+            let state = ContactsState::new(tmp.clone());
+            state.attach_db(Arc::clone(&db));
+            // the sync observed uid 2 before anyone asked for a snapshot
+            state.observe_headers("acc1", "INBOX", &[header(2, addr("Bob", "bob@ex.com"), vec![])]);
+            state.flush_dirty();
+            // a restart: what the store kept must not stand in for the seed
+            let restarted = ContactsState::new(tmp.clone());
+            restarted.attach_db(Arc::clone(&db));
+            assert_eq!(names(&restarted.get_snapshot(&["acc1".to_string()])), want);
+            assert_eq!(names(&state.get_snapshot(&["acc1".to_string()])), want);
+        }
     }
 
     /// With no store attached the index still works in memory — it just does
