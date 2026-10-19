@@ -223,23 +223,25 @@ fn email_from_header(val: &serde_json::Value) -> classification::EmailForClassif
 /// Start the background classification worker. Call once after DaemonState is created.
 pub(crate) fn start_classification_worker(state: Arc<DaemonState>) {
     // Learned rules, models and classification results are app state, not mail.
-    let data_dir = state.app_dir.clone();
+    let load_rules = rules_loader(state.app_dir.clone());
     let state_clone = Arc::clone(&state);
-
-    let load_rules: Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> = {
-        Arc::new(move |account_id: &str| {
-            let feedback = learning::load_feedback(&data_dir, account_id);
-            feedback
-                .rules
-                .iter()
-                .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                .collect()
-        })
-    };
 
     tokio::spawn(async move {
         run_classification_worker(state_clone, load_rules).await;
     });
+}
+
+/// The worker's view of an account's learned rules, read from
+/// `<app_dir>/ai-feedback/<accountId>.json` (what `learning.*` writes).
+fn rules_loader(data_dir: std::path::PathBuf) -> Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> {
+    Arc::new(move |account_id: &str| {
+        let feedback = learning::load_feedback(&data_dir, account_id);
+        feedback
+            .rules
+            .iter()
+            .filter_map(|v| serde_json::from_value(v.clone()).ok())
+            .collect()
+    })
 }
 
 /// Flush a classification batch once it reaches this many messages.
