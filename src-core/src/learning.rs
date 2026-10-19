@@ -39,7 +39,7 @@ pub fn load_feedback(data_dir: &Path, account_id: &str) -> Feedback {
 
     match fs::read_to_string(&path) {
         Ok(json) => serde_json::from_str(&json).unwrap_or_else(|e| {
-            // The file exists but does not parse — a truncated write. Saying so
+            // The file exists but does not parse: a truncated write. Saying so
             // is the only warning before the next save persists this default
             // over the user's rules.
             warn!("Feedback for {} is unreadable ({}), starting from empty: {}", account_id, e, path.display());
