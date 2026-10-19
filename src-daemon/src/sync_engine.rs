@@ -1397,11 +1397,15 @@ impl CacheCtx {
     pub(crate) fn write_headers(&self, headers: &[ImapEmailHeader]) -> Result<(), String> {
         self.vault_open()?;
         let value = serde_json::json!({"emails": headers});
-        self.require_db(|conn| {
-            mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())
+        let now = mailvault_core::people::model::now_ms();
+        let added = self.require_db(|conn| {
+            mailvault_core::custody::cache::save_headers_reporting_new(conn, &self.account, &self.mailbox, &value.to_string(), now)
         })?;
         info!("[sync] Cache written: {} headers", headers.len());
-        self.contacts.observe_headers(&self.account, &self.mailbox, headers);
+        // Only rows new to the cache: a delta fetch from the daemon's UIDNEXT
+        // can repeat uids the app already cached and counted.
+        let written: Vec<ImapEmailHeader> = headers.iter().filter(|h| added.contains(&h.uid)).cloned().collect();
+        self.contacts.observe_headers(&self.account, &self.mailbox, &written);
         Ok(())
     }
 
@@ -1671,6 +1675,20 @@ mod tests {
             db: Some(Arc::new(std::sync::Mutex::new(Some(conn)))),
             app_dir: dir.to_path_buf(),
         }
+    }
+
+    /// A header reaches the contacts index once, the first time it is
+    /// cached: a delta fetch from the daemon's UIDNEXT can hand back uids the
+    /// app already cached (and fed to the index through `save_email_cache`).
+    #[test]
+    fn a_header_already_cached_is_not_counted_again() {
+        let dir = scratch_dir("contacts-once");
+        let c = ctx(&dir, false);
+        c.write_headers(&[test_header(1)]).unwrap();
+        c.write_headers(&[test_header(1), test_header(2)]).unwrap();
+        let snap = c.contacts.get_snapshot(&["acc1".to_string()]);
+        let a = snap["acc1"].iter().find(|e| e.address == "a@b.test").unwrap();
+        assert_eq!(a.count, 2, "uid 1 and uid 2, each once");
     }
 
     /// H3b round 3: the app's own removals never move the expunge gate's
