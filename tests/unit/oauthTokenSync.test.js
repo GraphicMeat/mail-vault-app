@@ -12,10 +12,14 @@ const h = vi.hoisted(() => ({
   update: vi.fn(),
   listeners: new Map(),
   accounts: [],
+  stored: {},
 }));
 
 vi.mock('../../src/services/transport.js', () => ({ send: (...args) => h.send(...args) }));
-vi.mock('../../src/services/db', () => ({ updateOAuth2Tokens: (...args) => h.update(...args) }));
+vi.mock('../../src/services/db', () => ({
+  updateOAuth2Tokens: (...args) => h.update(...args),
+  getAccount: async (id) => h.stored[id],
+}));
 vi.mock('@tauri-apps/api/event', () => ({
   listen: async (name, cb) => {
     h.listeners.set(name, cb);
@@ -42,6 +46,7 @@ beforeEach(() => {
   h.accounts = [{ id: 'g1', email: 'me@gmail.test', authType: 'oauth2', oauth2AccessToken: 'old', oauth2RefreshToken: 'old-rt' }];
   h.send = vi.fn(async (method) => (method === 'oauth2.take_refreshed' ? { tokens: [PAIR] } : { ok: true }));
   h.update = vi.fn(async (id) => ({ id }));
+  h.stored = { g1: { id: 'g1', oauth2AccessToken: 'old', oauth2ExpiresAt: 1 } };
   sync.__resetForTests();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -71,6 +76,12 @@ describe('saving what the daemon refreshed', () => {
     for (const spy of logs) {
       expect(JSON.stringify(spy.mock.calls)).not.toContain('SECRET');
     }
+  });
+
+  it('never writes over a sign-in saved since the refresh (the later expiry wins)', async () => {
+    h.stored = { g1: { id: 'g1', oauth2AccessToken: 'from-reconnect', oauth2ExpiresAt: PAIR.expiresAt + 60_000 } };
+    expect(await sync.saveRefreshedTokens()).toBe(0);
+    expect(h.update).not.toHaveBeenCalled();
   });
 
   it('an account the store no longer has is not written', async () => {

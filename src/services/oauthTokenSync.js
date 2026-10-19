@@ -33,11 +33,16 @@ async function takeAndSave() {
   }
   const pairs = Array.isArray(reply?.tokens) ? reply.tokens : [];
   if (!pairs.length) return 0;
-  const [{ updateOAuth2Tokens }, { useMailStore }] = await Promise.all([import('./db'), import('../stores/mailStore')]);
+  const [{ updateOAuth2Tokens, getAccount }, { useMailStore }] = await Promise.all([import('./db'), import('../stores/mailStore')]);
   let saved = 0;
   for (const { accountId, accessToken, refreshToken, expiresAt } of pairs) {
     if (!accountId || !accessToken) continue;
     try {
+      // A sign-in saved since the daemon refreshed (Reconnect) is newer:
+      // the later expiry wins, as it does in the daemon.
+      const current = await getAccount(accountId);
+      if (current?.oauth2AccessToken && current.oauth2AccessToken !== accessToken
+        && Number(current.oauth2ExpiresAt) > Number(expiresAt)) continue;
       // Undefined: the keychain holds no such account any more.
       const stored = await updateOAuth2Tokens(accountId, { accessToken, refreshToken, expiresAt });
       if (!stored) continue;
