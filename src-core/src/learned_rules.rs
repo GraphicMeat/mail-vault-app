@@ -18,7 +18,7 @@
 //!
 //! Every field a rule sets must match. A rule that sets none, or sets one it
 //! cannot use (empty, blank, not text, or subject/body text shorter than
-//! [`MIN_TEXT_CHARS`]), never matches: dropping just the bad field would make
+//! [`MIN_TEXT_CHARS`] after NFKC or with no letter or digit), never matches: dropping just the bad field would make
 //! the rule broader than the one the user saved, and an empty text field
 //! would match every message.
 //!
@@ -111,13 +111,15 @@ impl LearnedRule {
     /// category, no usable pattern field, or a pattern field it cannot use.
     pub fn from_stored(rule: &Value) -> Option<LearnedRule> {
         let pattern = rule.get("pattern")?.as_object()?;
-        // Absent or null: not set. Anything else must be usable text.
+        // Absent or null: not set. Anything else must be usable text; subject
+        // and body text also needs a letter or digit ("!!!" is not a keyword).
         let field = |key: &str, min_chars: usize| -> Result<Option<String>, ()> {
             match pattern.get(key) {
                 None | Some(Value::Null) => Ok(None),
                 Some(Value::String(s)) => {
                     let n = normalize(s);
-                    if n.is_empty() || n.chars().count() < min_chars { Err(()) } else { Ok(Some(n)) }
+                    let words = min_chars < MIN_TEXT_CHARS || n.chars().any(char::is_alphanumeric);
+                    if n.is_empty() || n.chars().count() < min_chars || !words { Err(()) } else { Ok(Some(n)) }
                 }
                 Some(_) => Err(()),
             }
@@ -139,7 +141,8 @@ impl LearnedRule {
         Some(LearnedRule {
             id: text(rule.get("id")),
             pattern,
-            category: text(rule.get("category"))?,
+            // "Promotional" is the built-in "promotional".
+            category: text(rule.get("category"))?.to_lowercase(),
             importance: text(rule.get("importance")),
             action: text(rule.get("action")),
             confidence,
@@ -390,6 +393,16 @@ mod tests {
         assert!(parsed(json!({ "fromAddress": "pal@gmail.com" })).is_some(), "an address at a freemail domain is fine");
         assert!(parsed(json!({ "fromDomain": "gmail.company.test" })).is_some());
         assert!(parsed(json!({ "fromDomain": "mygmail.com" })).is_some());
+    }
+
+    #[test]
+    fn categories_are_trimmed_and_lowercased_and_punctuation_is_not_a_keyword() {
+        let mut r = rule(json!({ "fromDomain": "shop.com" }));
+        r["category"] = json!(" Promotional ");
+        assert_eq!(LearnedRule::from_stored(&r).unwrap().category, "promotional");
+        assert_eq!(parsed(json!({ "subjectContains": "!!!" })), None);
+        assert_eq!(parsed(json!({ "subjectContains": "- - -" })), None);
+        assert!(parsed(json!({ "subjectContains": "re:" })).is_some(), "letters plus punctuation is still text");
     }
 
     /// The drift guard: every rule `record_correction` writes reads back as a
