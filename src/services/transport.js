@@ -279,6 +279,9 @@ export const DAEMON_OWNED = new Set([
   // the module is the only caller.
   'render.open', 'render.tile', 'render.hit', 'render.close', 'render.fonts',
   'render.textRuns', 'render.serialize', 'render.fold', 'render.image', 'render.inspect',
+  // "Is the server copy gone?": the daemon reads the custody entry, sweeps
+  // every folder for the Message-ID and stamps the answer.
+  'custody.probe_server_copy',
 ]);
 
 async function sendToDaemon(command, args) {

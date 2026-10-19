@@ -58,7 +58,7 @@ pub(crate) const BODY_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::
 /// pool instead of a `tauri::State`. On success the session goes back to the
 /// pool with its last-selected mailbox; on error the guard is dropped (permit
 /// released, pool creates fresh next time).
-async fn with_background<F, Fut, T>(pool: &ImapPool, account: &ImapConfig, f: F) -> Result<T, String>
+pub(crate) async fn with_background<F, Fut, T>(pool: &ImapPool, account: &ImapConfig, f: F) -> Result<T, String>
 where
     F: FnOnce(imap::pool::ImapSession) -> Fut,
     Fut: std::future::Future<Output = Result<(T, imap::pool::ImapSession, Option<String>), String>>,
@@ -315,7 +315,7 @@ fn conn_lost_message(err: &str, account: &ImapConfig, uid: u32) -> String {
     }
 }
 
-fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
+pub(crate) fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
     params
         .get("account")
         .and_then(|v| serde_json::from_value::<ImapConfig>(v.clone()).ok())

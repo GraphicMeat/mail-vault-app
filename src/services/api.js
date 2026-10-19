@@ -444,6 +444,14 @@ export async function findMessageId(account, messageId, { stopOnFirst = true } =
   return tauriInvoke('imap_find_message_id', { account, messageId, stopOnFirst });
 }
 
+// "Is the server copy gone?" for one vault message: the daemon reads its
+// custody entry, sweeps every folder for the Message-ID and stamps the answer
+// (`custody.probe_server_copy`). `messageId` and `fallbackEntry` are what the
+// app's own row knows, for a message the custody store has no entry for.
+export async function probeServerCopy(account, { accountId, mailbox, uid, messageId = null, fallbackEntry = null }) {
+  return tauriInvoke('custody.probe_server_copy', { account, accountId, mailbox, uid, messageId, fallbackEntry });
+}
+
 // ── OAuth2 API functions ────────────────────────────────────────────────────
 
 // `googleClient` ("thunderbird" | "mailvault") picks the Google app a new

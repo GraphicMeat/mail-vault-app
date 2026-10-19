@@ -38,6 +38,17 @@ pub fn read(conn: &Connection, account_id: &str, mailbox: &str) -> Result<Option
     Ok(Some(format!("[{}]", rows.join(","))))
 }
 
+/// One uid's entry, parsed. `None` when it has none.
+pub fn get(conn: &Connection, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<Value>, String> {
+    let text: Option<String> = conn
+        .prepare_cached("SELECT entry_json FROM vault_entries WHERE account_id = ?1 AND mailbox_path = ?2 AND uid = ?3")
+        .map_err(err)?
+        .query_row(params![account_id, mailbox, uid], |r| r.get(0))
+        .optional()
+        .map_err(err)?;
+    text.map(|t| serde_json::from_str(&t).map_err(|e| e.to_string())).transpose()
+}
+
 /// Replace-by-uid, one transaction. `(written, skipped)`: entries without a
 /// usable uid are skipped and counted.
 pub fn upsert(conn: &Connection, account_id: &str, mailbox: &str, entries: &[Value]) -> Result<(usize, usize), String> {

@@ -1,26 +1,18 @@
-// The sweep that decides whether "your only copy" is sayable.
-//
-// Everything the app knew before this was scoped to ONE mailbox, and a uid
-// missing from one mailbox is the everyday result of an archive, a filter, or
-// a delete-to-Bin. So the loudest claim in the product — someone else deleted
-// your mail and the vault is what is left — was unmakeable. This asks the
-// server about every folder instead, and these tests pin the boundary between
-// the two answers it may write down and the four it may not.
+// The app's side of "is the server copy gone?". The daemon reads the custody
+// entry, sweeps every folder and stamps the answer (`custody.probe_server_copy`,
+// tested in src-daemon/src/handlers/custody_probe.rs). What is left here: which
+// message is meant, what this app's own row knows about it, and repainting the
+// rows in memory from the answer without touching a row that merely shares
+// the uid.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const mockFindMessageId = vi.fn();
-const mockGetLocalIndexEntry = vi.fn();
-const mockStampVaultEntry = vi.fn().mockResolvedValue(true);
+const mockProbe = vi.fn();
 const mockApplyServerRemoval = vi.fn().mockResolvedValue(undefined);
 const mockUpdateSortedEmails = vi.fn();
 
 vi.mock('../../api', () => ({
-  findMessageId: (...a) => mockFindMessageId(...a),
-}));
-
-vi.mock('../../db', () => ({
-  getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
+  probeServerCopy: (...a) => mockProbe(...a),
 }));
 
 vi.mock('../../authUtils', () => ({
@@ -29,29 +21,28 @@ vi.mock('../../authUtils', () => ({
 }));
 
 vi.mock('../messageMutations', () => ({
-  stampVaultEntry: (...a) => mockStampVaultEntry(...a),
   applyServerRemoval: (...a) => mockApplyServerRemoval(...a),
+  indexEntryFor: (row) => ({ uid: row.uid, subject: row.subject, message_id: row.messageId || null, source: 'local' }),
 }));
 
 let storeState;
-const setState = vi.fn((patch) => { storeState = { ...storeState, ...patch }; });
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: {
     getState: () => storeState,
-    setState: (...a) => setState(...a),
+    setState: (patch) => { storeState = { ...storeState, ...patch }; },
   },
 }));
 
 const { probeServerCopy } = await import('../probeServerCopy');
 
 const ACCOUNT = { id: 'acc1', email: 'luke@mock.test', password: 'x' };
-const VAULT_ROW = { uid: 7, _accountId: 'acc1', _mailbox: 'INBOX', isArchived: true, subject: 'Aruodas' };
+const VAULT_ROW = { uid: 7, _accountId: 'acc1', _mailbox: 'INBOX', isArchived: true, subject: 'Aruodas', messageId: '<kept@example.com>' };
+const ABSENT = { state: 'absent', checkedAt: '2026-10-19T10:00:00.000Z', searched: ['INBOX', 'Archive'] };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockStampVaultEntry.mockResolvedValue(true);
   mockApplyServerRemoval.mockResolvedValue(undefined);
-  mockGetLocalIndexEntry.mockResolvedValue({ uid: 7, message_id: '<kept@example.com>' });
+  mockProbe.mockResolvedValue(ABSENT);
   storeState = {
     activeAccountId: 'acc1',
     activeMailbox: 'INBOX',
@@ -59,245 +50,178 @@ beforeEach(() => {
     localEmails: [VAULT_ROW],
     emails: [],
     sortedEmails: [],
+    archivedEmailIds: new Set(['acc1:INBOX:7']),
     updateSortedEmails: mockUpdateSortedEmails,
   };
 });
 
-describe('a completed sweep that finds nothing', () => {
-  it('writes the absence to the vault entry so it survives a reload', async () => {
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX', 'Archive'], failed: [], complete: true });
-
-    const result = await probeServerCopy(7);
-
-    expect(result.state).toBe('absent');
-    expect(mockStampVaultEntry).toHaveBeenCalledWith('acc1', 'INBOX', 7, expect.objectContaining({
-      serverAbsent: true,
-    }));
-    // A stamp that only lives in the store dies with the session, and the row
-    // goes quiet again on the next launch — the same silence the bug produced.
-    expect(mockStampVaultEntry.mock.calls[0][3].serverAbsentAt).toEqual(expect.any(String));
-  });
-
-  it('repaints the rows already in memory rather than waiting for a disk read', async () => {
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
-
+describe('the question it hands the daemon', () => {
+  it('names the account, folder, uid and what its own row knows', async () => {
     await probeServerCopy(7);
-
-    expect(storeState.localEmails[0].serverAbsent).toBe(true);
-    expect(mockUpdateSortedEmails).toHaveBeenCalled();
+    expect(mockProbe).toHaveBeenCalledWith(ACCOUNT, {
+      accountId: 'acc1', mailbox: 'INBOX', uid: 7,
+      messageId: '<kept@example.com>',
+      fallbackEntry: { uid: 7, subject: 'Aruodas', message_id: '<kept@example.com>', source: 'local' },
+    });
   });
 
-  it('takes down a stale server row, which would otherwise shadow the vault row', async () => {
-    // A server row from an older enumeration duplicates the vault row and wins
-    // the derivation, so the stamp would be written and the row would stay
-    // quiet. The server has just answered a stronger version of the question a
-    // failed body fetch asks — route it through the same path.
-    storeState.emails = [{ uid: 7, _accountId: 'acc1', _mailbox: 'INBOX' }];
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
-
+  it('offers no row to stamp for a message the vault does not hold', async () => {
+    storeState.archivedEmailIds = new Set();
     await probeServerCopy(7);
-
-    expect(mockApplyServerRemoval).toHaveBeenCalledWith(7, expect.objectContaining({
-      accountId: 'acc1', mailbox: 'INBOX', clearSelection: false,
-    }));
-    // NOT a delete: this app did not remove anything, and stamping that it did
-    // would put the wrong sentence under the gold row.
-    expect(mockApplyServerRemoval.mock.calls[0][1].deletedByUs).toBeUndefined();
+    expect(mockProbe.mock.calls[0][1].fallbackEntry).toBeNull();
   });
 
-  it('leaves the list alone when no server row is shadowing anything', async () => {
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
-
+  it('offers no row to stamp when the row has no header to write', async () => {
+    storeState.localEmails = [{ ...VAULT_ROW, subject: '' }];
     await probeServerCopy(7);
-
-    expect(mockApplyServerRemoval).not.toHaveBeenCalled();
+    expect(mockProbe.mock.calls[0][1].fallbackEntry).toBeNull();
   });
 
-  it('refuses to claim anything about a message the vault does not hold', async () => {
-    // Gold says "the vault is what you have left". Nothing is left if there is
-    // no vault copy, so there is no claim to make — stampVaultEntry declines
-    // to invent an entry, and the verdict has to follow it.
-    mockStampVaultEntry.mockResolvedValue(false);
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
-
-    expect((await probeServerCopy(7)).state).toBe('unknown');
-    expect(storeState.localEmails[0].serverAbsent).toBeUndefined();
-  });
-});
-
-describe('a sweep answered after the user changed folders', () => {
-  // The sweep is a network round trip. When it lands the screen may show ANOTHER
-  // folder of the same account, whose rows carry no folder of their own and
-  // whose uid 7 is a different message: it must not go gold, and its row is not
-  // the "stale server row" this sweep is about.
-  it('stamps and removes only the message it asked about, never the open folder\'s uid 7', async () => {
-    const archiveRow = { uid: 7, subject: 'Something else' };
-    const archiveVaultRow = { uid: 7, isArchived: true, subject: 'Something else' };
-    storeState.activeMailbox = 'Archive';
-    storeState.emails = [archiveRow];
-    storeState.localEmails = [VAULT_ROW, archiveVaultRow];
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
-
-    const result = await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' });
-
-    expect(result.state).toBe('absent');
-    expect(storeState.localEmails[0].serverAbsent).toBe(true);
-    expect(storeState.localEmails[1].serverAbsent).toBeUndefined();
-    expect(mockApplyServerRemoval).not.toHaveBeenCalled();
-  });
-});
-
-describe('an incomplete sweep', () => {
-  it('is unknown, not absent — the folder that would not open could be holding it', async () => {
-    mockFindMessageId.mockResolvedValue({
-      found: [], searched: ['INBOX', 'Archive'], failed: ['[Gmail]/Spam'], complete: false,
-    });
-
-    const result = await probeServerCopy(7);
-
-    expect(result.state).toBe('unknown');
-    expect(result.failed).toEqual(['[Gmail]/Spam']);
-    expect(mockStampVaultEntry).not.toHaveBeenCalled();
-  });
-});
-
-describe('a sweep that finds the message', () => {
-  it('reports where, and writes nothing', async () => {
-    mockFindMessageId.mockResolvedValue({
-      found: [{ mailbox: 'Archive', uid: 42 }], searched: ['INBOX', 'Archive'], failed: [], complete: false,
-    });
-
-    const result = await probeServerCopy(7);
-
-    expect(result.state).toBe('present');
-    expect(result.locations).toEqual([{ mailbox: 'Archive', uid: 42 }]);
-    expect(mockStampVaultEntry).not.toHaveBeenCalled();
-  });
-
-  it('tears up an earlier absence stamp instead of leaving a lie on disk', async () => {
-    // A message can come back: restored from the Bin, re-delivered, moved back
-    // by whoever moved it out. The stamp outlives the sweep that wrote it, so
-    // the sweep that disproves it has to clear it.
-    mockGetLocalIndexEntry.mockResolvedValue({ uid: 7, message_id: '<kept@example.com>', serverAbsent: true });
-    mockFindMessageId.mockResolvedValue({
-      found: [{ mailbox: 'INBOX', uid: 7 }], searched: ['INBOX'], failed: [], complete: false,
-    });
-
-    expect((await probeServerCopy(7)).state).toBe('present');
-    expect(mockStampVaultEntry).toHaveBeenCalledWith('acc1', 'INBOX', 7, {
-      serverAbsent: false, serverAbsentAt: null,
-    });
-    expect(storeState.localEmails[0].serverAbsent).toBe(false);
-  });
-});
-
-describe('questions the probe cannot ask', () => {
-  it('never reaches the server for an account it has no credentials for', async () => {
-    storeState.accounts = [{ id: 'acc1', email: 'luke@mock.test' }];
-
-    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'offline' });
-    expect(mockFindMessageId).not.toHaveBeenCalled();
-  });
-
-  it('skips Graph accounts as not-applicable rather than answering absent', async () => {
-    // A fail-closed guard that inherits the failure branch is how Delete
-    // Everywhere became a permanent no-op for every Microsoft account.
-    storeState.accounts = [{ ...ACCOUNT, oauth2Transport: 'graph' }];
-
-    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'graph' });
-    expect(mockFindMessageId).not.toHaveBeenCalled();
-  });
-
-  it('cannot look up a message with no Message-ID', async () => {
-    mockGetLocalIndexEntry.mockResolvedValue({ uid: 7, message_id: null });
-
-    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'no-message-id' });
-    expect(mockFindMessageId).not.toHaveBeenCalled();
-  });
-
-  it('reads the Message-ID off the vault entry, which outlives the row', async () => {
-    // The vanished-message path calls this straight after pruning the row, so
-    // the in-memory copy is already gone by then.
-    storeState.localEmails = [];
-    storeState.sortedEmails = [];
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
-
-    expect((await probeServerCopy(7)).state).toBe('absent');
-    expect(mockFindMessageId).toHaveBeenCalledWith(ACCOUNT, '<kept@example.com>', { stopOnFirst: true });
-  });
-
-  it('says nothing about the server when the sweep itself errored', async () => {
-    mockFindMessageId.mockRejectedValue(new Error('connection reset'));
-
-    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'error' });
-    expect(mockStampVaultEntry).not.toHaveBeenCalled();
+  it('resolves the UNIFIED view to a real folder before asking', async () => {
+    // 'UNIFIED' is a view, not a mailbox: there is no custody entry under it.
+    storeState.activeMailbox = 'UNIFIED';
+    await probeServerCopy(7, { accountId: 'acc1', mailbox: 'UNIFIED' });
+    expect(mockProbe.mock.calls[0][1].mailbox).toBe('INBOX');
   });
 });
 
 describe('the Message-ID of the message asked about', () => {
-  // No durable entry: the row in memory is the only place the Message-ID can
-  // come from, and it has to be THIS message's row. A sweep for another
-  // message's Message-ID that finds nothing stamps the wrong one "deleted by
-  // someone else", the loudest claim in the product.
+  // The daemon prefers the custody entry's; the row's is for a message with
+  // none, and it has to be THIS message's row. A sweep for another message's
+  // Message-ID that finds nothing stamps the wrong one "deleted by someone
+  // else", the loudest claim in the product.
   const OTHER = { id: 'acc2', email: 'leia@mock.test', password: 'x' };
 
   beforeEach(() => {
-    mockGetLocalIndexEntry.mockResolvedValue(null);
     storeState.accounts = [ACCOUNT, OTHER];
     storeState.localEmails = [];
   });
 
   it("never takes another account's row with the same uid", async () => {
     storeState.localEmails = [{ uid: 7, _accountId: 'acc2', _mailbox: 'INBOX', messageId: '<theirs@example.com>', isArchived: true }];
-
-    expect(await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' }))
-      .toEqual({ state: 'unknown', reason: 'no-message-id' });
-    expect(mockFindMessageId).not.toHaveBeenCalled();
+    await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' });
+    expect(mockProbe.mock.calls[0][1].messageId).toBeNull();
   });
 
   it("never takes the folder on screen's unstamped row for another folder's message", async () => {
     storeState.activeMailbox = 'Archive';
     storeState.emails = [{ uid: 7, messageId: '<archive-7@example.com>' }];
-
-    expect(await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' }))
-      .toEqual({ state: 'unknown', reason: 'no-message-id' });
-    expect(mockFindMessageId).not.toHaveBeenCalled();
+    await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' });
+    expect(mockProbe.mock.calls[0][1].messageId).toBeNull();
   });
 
-  it('reads it off its own row when there is no vault entry', async () => {
+  it('reads it off its own row', async () => {
     storeState.localEmails = [
       { uid: 7, _accountId: 'acc2', _mailbox: 'INBOX', messageId: '<theirs@example.com>', isArchived: true },
       { uid: 7, _accountId: 'acc1', _mailbox: 'INBOX', messageId: '<mine@example.com>', isArchived: true },
     ];
-    mockFindMessageId.mockResolvedValue({ found: [{ mailbox: 'INBOX', uid: 7 }], searched: ['INBOX'], failed: [], complete: false });
+    await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' });
+    expect(mockProbe.mock.calls[0][1].messageId).toBe('<mine@example.com>');
+  });
 
-    expect((await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' })).state).toBe('present');
-    expect(mockFindMessageId).toHaveBeenCalledWith(ACCOUNT, '<mine@example.com>', { stopOnFirst: true });
+  it('passes the daemon\'s "no Message-ID" answer through', async () => {
+    mockProbe.mockResolvedValue({ state: 'unknown', reason: 'no-message-id' });
+    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'no-message-id' });
   });
 });
 
-describe('scope', () => {
+describe('an absent answer', () => {
+  it('is returned as the daemon gave it', async () => {
+    expect(await probeServerCopy(7)).toEqual(ABSENT);
+  });
+
+  it('repaints the rows already in memory rather than waiting for a disk read', async () => {
+    await probeServerCopy(7);
+    expect(storeState.localEmails[0].serverAbsent).toBe(true);
+    expect(storeState.localEmails[0].serverAbsentAt).toBe(ABSENT.checkedAt);
+    expect(mockUpdateSortedEmails).toHaveBeenCalled();
+  });
+
+  it('takes down a stale server row, which would otherwise shadow the vault row', async () => {
+    storeState.emails = [{ uid: 7, _accountId: 'acc1', _mailbox: 'INBOX' }];
+    await probeServerCopy(7);
+    expect(mockApplyServerRemoval).toHaveBeenCalledWith(7, expect.objectContaining({
+      accountId: 'acc1', mailbox: 'INBOX', clearSelection: false,
+    }));
+    // NOT a delete: this app did not remove anything.
+    expect(mockApplyServerRemoval.mock.calls[0][1].deletedByUs).toBeUndefined();
+  });
+
+  it('leaves the list alone when no server row is shadowing anything', async () => {
+    await probeServerCopy(7);
+    expect(mockApplyServerRemoval).not.toHaveBeenCalled();
+  });
+
+  it('stamps and removes only the message it asked about, never the open folder\'s uid 7', async () => {
+    // The sweep is a round trip: the screen may show ANOTHER folder by now,
+    // whose rows carry no folder of their own and whose uid 7 is another message.
+    const archiveRow = { uid: 7, subject: 'Something else' };
+    const archiveVaultRow = { uid: 7, isArchived: true, subject: 'Something else' };
+    storeState.activeMailbox = 'Archive';
+    storeState.emails = [archiveRow];
+    storeState.localEmails = [VAULT_ROW, archiveVaultRow];
+
+    expect((await probeServerCopy(7, { accountId: 'acc1', mailbox: 'INBOX' })).state).toBe('absent');
+    expect(storeState.localEmails[0].serverAbsent).toBe(true);
+    expect(storeState.localEmails[1].serverAbsent).toBeUndefined();
+    expect(mockApplyServerRemoval).not.toHaveBeenCalled();
+  });
+
   it('does not restamp a row that merely shares the uid', async () => {
-    // A uid names a message only inside one (account, mailbox): Sent uid 7 is
-    // not INBOX uid 7, and account B's uid 7 is neither.
     const otherFolder = { uid: 7, _accountId: 'acc1', _mailbox: 'Sent', isArchived: true };
     const otherAccount = { uid: 7, _accountId: 'acc2', _mailbox: 'INBOX', isArchived: true };
     storeState.localEmails = [VAULT_ROW, otherFolder, otherAccount];
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
-
     await probeServerCopy(7);
-
     expect(storeState.localEmails.map(e => e.serverAbsent)).toEqual([true, undefined, undefined]);
   });
+});
 
-  it('resolves the UNIFIED view to a real folder before touching the vault', async () => {
-    // 'UNIFIED' is a view, not a mailbox — there is no local-index.json under
-    // that name to read a Message-ID out of.
-    storeState.activeMailbox = 'UNIFIED';
-    mockFindMessageId.mockResolvedValue({ found: [], searched: ['INBOX'], failed: [], complete: true });
+describe('answers that paint nothing', () => {
+  it.each([
+    [{ state: 'unknown', reason: 'not-in-vault' }],
+    [{ state: 'unknown', reason: 'incomplete', failed: ['[Gmail]/Spam'] }],
+    [{ state: 'unknown', reason: 'error' }],
+  ])('%j is returned as given and leaves every row alone', async (answer) => {
+    mockProbe.mockResolvedValue(answer);
+    expect(await probeServerCopy(7)).toEqual(answer);
+    expect(storeState.localEmails[0].serverAbsent).toBeUndefined();
+    expect(mockUpdateSortedEmails).not.toHaveBeenCalled();
+  });
+});
 
-    await probeServerCopy(7, { accountId: 'acc1', mailbox: 'UNIFIED' });
+describe('a present answer', () => {
+  it('reports where, and repaints nothing when no stamp was torn up', async () => {
+    mockProbe.mockResolvedValue({ state: 'present', locations: [{ mailbox: 'Archive', uid: 42 }], cleared: false });
+    expect(await probeServerCopy(7)).toEqual({ state: 'present', locations: [{ mailbox: 'Archive', uid: 42 }] });
+    expect(mockUpdateSortedEmails).not.toHaveBeenCalled();
+  });
 
-    expect(mockGetLocalIndexEntry).toHaveBeenCalledWith('acc1', 'INBOX', 7);
+  it('repaints the rows when the daemon tore up an earlier absence stamp', async () => {
+    storeState.localEmails = [{ ...VAULT_ROW, serverAbsent: true }];
+    mockProbe.mockResolvedValue({ state: 'present', locations: [{ mailbox: 'INBOX', uid: 7 }], cleared: true });
+    expect((await probeServerCopy(7)).state).toBe('present');
+    expect(storeState.localEmails[0].serverAbsent).toBe(false);
+  });
+});
+
+describe('questions the probe cannot ask', () => {
+  it('never reaches the daemon for an account it has no credentials for', async () => {
+    storeState.accounts = [{ id: 'acc1', email: 'luke@mock.test' }];
+    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'offline' });
+    expect(mockProbe).not.toHaveBeenCalled();
+  });
+
+  it('skips Graph accounts as not-applicable rather than answering absent', async () => {
+    // A fail-closed guard that inherits the failure branch is how Delete
+    // Everywhere became a permanent no-op for every Microsoft account.
+    storeState.accounts = [{ ...ACCOUNT, oauth2Transport: 'graph' }];
+    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'graph' });
+    expect(mockProbe).not.toHaveBeenCalled();
+  });
+
+  it('says nothing about the server when the call itself failed', async () => {
+    mockProbe.mockRejectedValue(new Error('daemon unavailable'));
+    expect(await probeServerCopy(7)).toEqual({ state: 'unknown', reason: 'error' });
+    expect(storeState.localEmails[0].serverAbsent).toBeUndefined();
   });
 });

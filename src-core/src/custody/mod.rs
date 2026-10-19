@@ -11,6 +11,7 @@ pub mod cache;
 pub mod contacts;
 pub mod entries;
 pub mod import;
+pub mod probe;
 
 pub use crate::search_index::{lock, SharedConn};
 pub use rusqlite::Connection;

@@ -620,6 +620,17 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           return { provider: { status: 'unsupported', aliases: [] }, detected };
         }
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
+        // "Is the server copy gone?": the demo's own server rows answer, and
+        // nothing is stamped (its custody lives on the rows themselves).
+        if (method === 'custody.probe_server_copy') {
+          const p = args.params || {};
+          const own = find({ accountId: p.accountId, mailbox: p.mailbox, uid: p.uid });
+          const messageId = own?.messageId || p.messageId;
+          if (!messageId) return { state: 'unknown', reason: 'no-message-id' };
+          const sweep = await invoke('imap_find_message_id', { account: p.account, accountId: p.accountId, messageId });
+          if (sweep.found.length) return { state: 'present', locations: sweep.found, cleared: false };
+          return { state: 'unknown', reason: 'not-in-vault', simulated: true };
+        }
         if (method === 'sync.events') {
           const timeoutMs = Math.min(25000, Math.max(1, Number(args.params?.timeoutMs ?? args.timeoutMs ?? 25000)));
           // Keep the scheduler's long poll asynchronous. Resolving synchronously
