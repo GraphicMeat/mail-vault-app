@@ -7,8 +7,10 @@
 //! hands it to every attempt of `compose.send`, so a retried send is the same
 //! message under the same uid.
 //!
-//! `compose.send` sends under the staged Message-ID (`smtp::send_email`, by
-//! SMTP, Graph or JMAP as the account says). Once the transport took it,
+//! `compose.send` sends the staged copy's bytes as they are, read back from
+//! the vault by uid (`smtp::send_staged`, by SMTP, Graph or JMAP as the
+//! account says), so every attempt is the copy the user keeps. Only a copy
+//! the vault cannot give back is rebuilt, under the staged Message-ID. Once the transport took it,
 //! nothing fails the call, or the outbox would offer a Retry that sends it
 //! twice: an edited scheduled row it replaces is cancelled, the follow-up
 //! reminder is recorded, the staged copy is rewritten as sent
@@ -88,8 +90,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             // Under the id the copy was staged with: the server's copy, and
             // every reply to it, then matches the local one.
-            email.message_id = Some(message_id);
-            let sent = match send_logged(&account, &email).await {
+            email.message_id = Some(message_id.clone());
+            let (st, id_for_read, mb) = (Arc::clone(state), after.account_id.clone(), after.mailbox.clone());
+            let staged = blocking(move || staged_copy(&st, &id_for_read, &mb, uid, &message_id)).await.ok().flatten();
+            let sent = match send_logged(&account, &email, staged).await {
                 Ok(sent) => sent,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
@@ -102,9 +106,33 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
-/// Build the MIME, write the copy, index it. The MIME build is kept for the
-/// send that follows (`smtp::build_mime_staged`), so a first attempt sends
-/// these very bytes.
+/// The staged copy's bytes, for `compose.send` to send as they are: every
+/// attempt is then the copy the user keeps, byte for byte. None (and the send
+/// rebuilds under the staged id) when the vault cannot give the copy back, or
+/// the file at `uid` is not the message staged under `message_id`.
+fn staged_copy(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, message_id: &str) -> Option<Vec<u8>> {
+    let read = crate::handlers::common::vault_root(state)
+        .and_then(|root| vault_files::read_eml(&state.vault_registry, &root, account_id, mailbox, uid).map_err(|e| e.to_string()));
+    match read {
+        Ok(raw) if bracketed_message_id(&raw).as_deref() == Some(message_id) => Some(raw),
+        Ok(raw) => {
+            warn!(
+                "[send:staged_copy_other_message] mailbox={} uid={} found={:?} : rebuilding",
+                mailbox,
+                uid,
+                bracketed_message_id(&raw)
+            );
+            None
+        }
+        Err(e) => {
+            warn!("[send:staged_copy_unreadable] mailbox={} uid={} error={} : rebuilding", mailbox, uid, e);
+            None
+        }
+    }
+}
+
+/// Build the MIME, write the copy, index it. `compose.send` sends the copy's
+/// bytes (`staged_copy`), so every attempt sends these very bytes.
 fn stage(
     state: &Arc<DaemonState>,
     account_id: &str,
@@ -113,7 +141,7 @@ fn stage(
     mailbox: &str,
     hints: &RowHints,
 ) -> Result<Value, String> {
-    let built = smtp::build_mime_staged(account, email).map_err(|e| format!("E_COMPOSE_BUILD: {e}"))?;
+    let built = smtp::build_mime(account, email).map_err(|e| format!("E_COMPOSE_BUILD: {e}"))?;
     let raw = built.raw_rfc2822;
     let message_id = bracketed_message_id(&raw);
     info!("[send:build_mime] account={} bytes={} messageId={:?}", account.email, raw.len(), message_id);
@@ -185,8 +213,8 @@ async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &Outg
         }
     }
 
-    // The staged copy becomes the sent one: the staged bytes (what went out
-    // on a first attempt), or the bytes sent when the copy is gone.
+    // The staged copy becomes the sent one: the staged bytes (what went
+    // out), or the bytes sent when the copy is gone.
     let row = compose::staged_row(account, email, uid, Some(&message_id), &hints, &compose::now_iso());
     let entry = compose::with_flags(&row, true);
     let (st, id, mb, sent_raw, sent_entry) =
@@ -450,6 +478,103 @@ mod tests {
         assert_eq!(flags_of(&s, uid), None, "the staged copy is gone once the server holds one");
         assert_eq!(row_of(&s, uid), None, "and so is its row");
         assert_eq!(server.state().find("Sent").unwrap().messages.len(), 1);
+    }
+
+    /// `stage_params` and the matching `send_params` email under `subject`.
+    async fn stage_with_subject(s: &Arc<DaemonState>, server: &MockImap, subject: &str) -> (Value, Value) {
+        let mut stage = stage_params(account_json(server));
+        stage["email"]["subject"] = json!(subject);
+        let staged = ok(s, "compose.stage", stage).await;
+        let mut send = send_params(account_json(server), &staged, json!({}));
+        send["email"]["subject"] = json!(subject);
+        (staged, send)
+    }
+
+    /// Several sends staged before the first goes (an outbox of queued
+    /// sends): each one still sends the bytes of its own staged copy, not a
+    /// rebuild with another Date and MIME boundary.
+    #[tokio::test]
+    async fn a_send_sends_its_own_staged_copy_while_more_are_staged() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let mut staged = Vec::new();
+        for i in 0..4 {
+            staged.push(stage_with_subject(&s, &server, &format!("Queued {i}")).await);
+        }
+        let (first, send) = &staged[0];
+        let uid = first["uid"].as_u64().unwrap() as u32;
+        let staged_raw = raw_of(&s, uid);
+
+        ok(&s, "compose.send", send.clone()).await;
+
+        let smtp = server.sent_messages();
+        assert_eq!(smtp.len(), 1);
+        assert_eq!(String::from_utf8_lossy(&smtp[0]), String::from_utf8_lossy(&staged_raw), "SMTP got the staged bytes");
+    }
+
+    /// The same email staged twice (sent again before the first went): the
+    /// first send still goes out as its own staged copy.
+    #[tokio::test]
+    async fn the_same_email_staged_twice_sends_each_staged_copy() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let (a, send_a) = stage_with_subject(&s, &server, "Twice").await;
+        let (b, send_b) = stage_with_subject(&s, &server, "Twice").await;
+        let (raw_a, raw_b) = (raw_of(&s, a["uid"].as_u64().unwrap() as u32), raw_of(&s, b["uid"].as_u64().unwrap() as u32));
+
+        ok(&s, "compose.send", send_a).await;
+        ok(&s, "compose.send", send_b).await;
+
+        let smtp = server.sent_messages();
+        assert_eq!(smtp.len(), 2);
+        assert_eq!(String::from_utf8_lossy(&smtp[0]), String::from_utf8_lossy(&raw_a), "the first send is the first copy");
+        assert_eq!(String::from_utf8_lossy(&smtp[1]), String::from_utf8_lossy(&raw_b), "the second send is the second copy");
+    }
+
+    /// A retry after a refused send is the same message: the bytes of the
+    /// staged copy again, not a rebuild with a new Date and boundary.
+    #[tokio::test]
+    async fn a_retried_send_sends_the_staged_copy_again() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().smtp_refuse("partner@example.com"));
+        let s = st(true);
+        let (staged, send) = stage_with_subject(&s, &server, "Retried").await;
+        let staged_raw = raw_of(&s, staged["uid"].as_u64().unwrap() as u32);
+        assert!(rpc(&s, "compose.send", send.clone()).await.result.is_none(), "the first attempt is refused");
+
+        let retry = MockImap::start(Scenario::new());
+        let mut send = send;
+        send["account"] = account_json(&retry);
+        ok(&s, "compose.send", send).await;
+
+        let smtp = retry.sent_messages();
+        assert_eq!(smtp.len(), 1);
+        assert_eq!(String::from_utf8_lossy(&smtp[0]), String::from_utf8_lossy(&staged_raw), "the retry sends the staged bytes");
+    }
+
+    /// The file at the staged uid holds another message: that message is
+    /// never sent in this one's place. The send rebuilds under its own id.
+    #[tokio::test]
+    async fn a_staged_uid_that_holds_another_message_is_not_sent() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let (a, send_a) = stage_with_subject(&s, &server, "Mine").await;
+        let (b, _) = stage_with_subject(&s, &server, "Someone else's").await;
+        let uid_a = a["uid"].as_u64().unwrap() as u32;
+        let other = raw_of(&s, b["uid"].as_u64().unwrap() as u32);
+        let flags = compose::STAGED_FLAGS.map(String::from);
+        vault_files::store(&s.vault_registry, &s.data_dir, "acct-1", "Sent", uid_a, &other, &flags, true).unwrap();
+
+        ok(&s, "compose.send", send_a).await;
+
+        let smtp = server.sent_messages();
+        assert_eq!(smtp.len(), 1);
+        let raw = String::from_utf8_lossy(&smtp[0]).to_string();
+        assert!(raw.contains(&format!("Message-ID: {}\r\n", a["messageId"].as_str().unwrap())), "{raw}");
+        assert!(raw.contains("Subject: Mine\r\n"), "{raw}");
     }
 
     /// No Sent folder to APPEND to: the copy that went out stays, as sent.

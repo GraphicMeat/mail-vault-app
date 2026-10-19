@@ -23,6 +23,7 @@
 - **One scrollbar in the reading pane.** Some newsletters and notices (anything sized to the window height) showed a second scrollbar inside the message, next to the pane's own. The message now never scrolls on its own, in single messages and in conversations.
 - **Dragged attachments keep their own name.** Dragging an attachment out of an email, into another email or to Finder, gave the file an internal name (account, folder and message numbers before the real name). It now carries the sender's file name. Attachments already sent with such a name keep it.
 - **Long attachment names stay inside the compose window.** An attachment with a long name no longer pushes the compose window wider than its frame; the name is cut short with an ellipsis instead.
+- **Every email goes out exactly as saved.** The copy of a sent email kept on this computer and the email that went out could differ in their date line and internal layout when several emails were sending at once, when the same email was sent twice in a row, or when a failed send was retried. Each send now transmits the saved copy itself, so the two are always the same message.
 
 ## [2.20.0] - 2026-10-13
 

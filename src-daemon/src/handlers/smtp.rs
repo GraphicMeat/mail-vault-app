@@ -188,13 +188,18 @@ pub(crate) struct Sent {
 }
 
 /// `smtp::send_email` (SMTP, Graph or JMAP, by account) with the `[send:*]`
-/// log lines every send writes. `smtp_send_email` and `compose.send` both
+/// log lines every send writes, or `smtp::send_staged` when the caller holds
+/// the message's bytes already. `smtp_send_email` and `compose.send` both
 /// come through here, so the log reads the same for either.
-pub(crate) async fn send_logged(account: &ImapConfig, email: &smtp::OutgoingEmail) -> Result<Sent, String> {
+pub(crate) async fn send_logged(account: &ImapConfig, email: &smtp::OutgoingEmail, staged: Option<Vec<u8>>) -> Result<Sent, String> {
     let account_id_for_log = account.email.clone();
-    info!("[send:smtp_start] account={}", account_id_for_log);
+    info!("[send:smtp_start] account={} staged={}", account_id_for_log, staged.is_some());
 
-    let result = match smtp::send_email(account, email).await {
+    let sent = match staged {
+        Some(raw) => smtp::send_staged(account, email, raw).await,
+        None => smtp::send_email(account, email).await,
+    };
+    let result = match sent {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("[send:smtp_fail] account={} error={}", account_id_for_log, e);
@@ -434,7 +439,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Ok(e) => e,
                 Err(resp) => return Some(resp),
             };
-            match smtp::build_mime_staged(&account, &email) {
+            match smtp::build_mime(&account, &email) {
                 Ok(built) => RpcResponse::success(id, built_mime_json(built, &account, "build_mime")),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
@@ -465,7 +470,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(resp) => return Some(resp),
             };
             let sent_mailbox = params.get("sentMailbox").and_then(Value::as_str).map(str::to_owned);
-            let sent = match send_logged(&account, &email).await {
+            let sent = match send_logged(&account, &email, None).await {
                 Ok(sent) => sent,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
