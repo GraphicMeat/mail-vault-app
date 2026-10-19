@@ -300,8 +300,9 @@ async fn run_classification_worker(
     info!("[queue-worker] Classification worker started");
     let mut batches: PendingBatches = HashMap::new();
     // Each account's rules, read once per pass (until the queue drains), not
-    // once per message. A rule learned mid-pass applies from the next pass.
+    // once per message, and read again as soon as `learning.*` changes them.
     let mut rule_cache: HashMap<String, Arc<Vec<classification::LearnedRule>>> = HashMap::new();
+    let mut rules_seen = state.classification.rules_generation.load(std::sync::atomic::Ordering::SeqCst);
 
     loop {
         // Wait for items
@@ -367,6 +368,11 @@ async fn run_classification_worker(
             continue;
         }
 
+        let generation = state.classification.rules_generation.load(std::sync::atomic::Ordering::SeqCst);
+        if generation != rules_seen {
+            rule_cache.clear();
+            rules_seen = generation;
+        }
         let rules = Arc::clone(
             rule_cache
                 .entry(item.account_id.clone())
@@ -960,6 +966,92 @@ mod tests {
         wait_for(&state, |p| p.classified == 7 && p.status == classification::PipelineStatus::Complete).await;
         assert_eq!(loads.load(std::sync::atomic::Ordering::SeqCst), 2);
         assert_eq!(classification::load_classifications(&app_dir, "acc1")["<r7@t>"].category, "transactional");
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// A loader that, the first time it is asked, runs one `learning.*` call
+    /// as the app would, after reading the rules: the change lands while the
+    /// pass is under way.
+    fn loader_that_changes_rules_once(
+        state: &Arc<DaemonState>,
+        method: &'static str,
+        params: serde_json::Value,
+    ) -> Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> {
+        let inner = rules_loader(state.app_dir.clone());
+        let state = Arc::clone(state);
+        let first = std::sync::atomic::AtomicBool::new(true);
+        Arc::new(move |account: &str| {
+            let rules = inner(account);
+            if first.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                let resp = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current()
+                        .block_on(crate::server::handle_request_for_test(&state, method, params.clone()))
+                });
+                assert!(resp.error.is_none(), "{method}: {:?}", resp.error.map(|e| e.message));
+            }
+            rules
+        })
+    }
+
+    fn rule_sorted(app_dir: &std::path::Path) -> usize {
+        classification::load_classifications(app_dir, "acc1")
+            .values()
+            .filter(|c| c.source == classification::ClassificationSource::LocalRule)
+            .count()
+    }
+
+    /// A correction made while a long first pass runs applies to the rest of
+    /// that pass: messages classified without it are never looked at again.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_rule_saved_mid_pass_applies_to_the_rest_of_the_pass() {
+        let mail_dir = scratch("mid-pass-save-mail");
+        let app_dir = scratch("mid-pass-save-app");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        state
+            .classification
+            .enqueue("acc1", (1..=4u64).map(|uid| mail(uid, "news@shop.com", "Hi")).collect(), classification::QueueTier::New)
+            .await;
+        let loader = loader_that_changes_rules_once(
+            &state,
+            "learning.record_correction",
+            json!({
+                "accountId": "acc1",
+                "email": { "messageId": "<c@x>", "from": "news@shop.com", "subject": "Weekly deals" },
+                "correction": { "originalCategory": "personal", "correctedCategory": "promotional", "correctedAction": "archive" },
+            }),
+        );
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), loader));
+        wait_for(&state, |p| p.classified == 4 && p.status == classification::PipelineStatus::Complete).await;
+
+        assert_eq!(rule_sorted(&app_dir), 3, "only the message classified before the correction misses it");
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_rule_deleted_mid_pass_stops_applying_in_that_pass() {
+        let mail_dir = scratch("mid-pass-delete-mail");
+        let app_dir = scratch("mid-pass-delete-app");
+        let out = correct(&app_dir, "acc1", "news@shop.com", "Weekly deals", "promotional", "archive");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        state
+            .classification
+            .enqueue("acc1", (1..=4u64).map(|uid| mail(uid, "news@shop.com", "Hi")).collect(), classification::QueueTier::New)
+            .await;
+        let loader = loader_that_changes_rules_once(
+            &state,
+            "learning.delete_rule",
+            json!({ "accountId": "acc1", "ruleId": out["rule"]["id"] }),
+        );
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), loader));
+        wait_for(&state, |p| p.classified == 4 && p.status == classification::PipelineStatus::Complete).await;
+
+        assert_eq!(rule_sorted(&app_dir), 1, "only the message classified before the delete follows the rule");
 
         worker.abort();
         let _ = std::fs::remove_dir_all(&mail_dir);

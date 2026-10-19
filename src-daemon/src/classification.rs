@@ -330,6 +330,10 @@ pub struct ClassificationState {
     pub notify: Notify,
     /// Data directory for queue persistence and classification storage.
     data_dir: PathBuf,
+    /// Bumped by every `learning.*` write. The worker keeps each account's
+    /// parsed rules for a pass and drops them when this moves, so a rule
+    /// saved or deleted mid-pass applies to the next message.
+    pub rules_generation: std::sync::atomic::AtomicU64,
 }
 
 impl ClassificationState {
@@ -362,7 +366,13 @@ impl ClassificationState {
             queued_ids: Mutex::new(ids),
             notify: Notify::new(),
             data_dir,
+            rules_generation: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    /// The account rules `learning.*` keeps have changed.
+    pub fn rules_changed(&self) {
+        self.rules_generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Enqueue emails for classification, deduplicating against the queue and

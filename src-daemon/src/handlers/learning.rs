@@ -44,7 +44,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let (Some(email), Some(correction)) = (object_arg(params, "email"), object_arg(params, "correction")) else {
                 return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing email or correction"));
             };
-            update(app_dir, params, id, |fb| Some(learning::record_correction(fb, &email, &correction, now_ms())))
+            update(state, params, id, |fb| Some(learning::record_correction(fb, &email, &correction, now_ms())))
         }
         "learning.save_rule" => {
             if let Err(resp) = str_arg(&id, params, "accountId") {
@@ -53,16 +53,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let Some(rule) = object_arg(params, "rule") else {
                 return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing rule"));
             };
-            update(app_dir, params, id, |fb| {
+            update(state, params, id, |fb| {
                 learning::save_rule(fb, rule);
                 Some(json!({ "saved": true }))
             })
         }
-        "learning.delete_rule" => update(app_dir, params, id.clone(), |fb| {
+        "learning.delete_rule" => update(state, params, id.clone(), |fb| {
             learning::delete_rule(fb, params.get("ruleId"));
             Some(json!({ "deleted": true }))
         }),
-        "learning.import" => import(app_dir, params, id),
+        "learning.import" => import(state, params, id),
         _ => return None,
     };
     Some(resp)
@@ -86,8 +86,10 @@ fn read(app_dir: &Path, params: &Value, id: Value, answer: impl FnOnce(learning:
 }
 
 /// Load, change and save the account's feedback under `WRITE`. `change`
-/// answers the reply, or `None` to answer `{}` without saving.
-fn update(app_dir: &Path, params: &Value, id: Value, change: impl FnOnce(&mut learning::Feedback) -> Option<Value>) -> RpcResponse {
+/// answers the reply, or `None` to answer `{}` without saving. A save tells
+/// the classification worker its cached rules are stale.
+fn update(state: &DaemonState, params: &Value, id: Value, change: impl FnOnce(&mut learning::Feedback) -> Option<Value>) -> RpcResponse {
+    let app_dir = state.app_dir.as_path();
     let account_id = match str_arg(&id, params, "accountId") {
         Ok(a) => a,
         Err(resp) => return resp,
@@ -98,12 +100,15 @@ fn update(app_dir: &Path, params: &Value, id: Value, change: impl FnOnce(&mut le
         return RpcResponse::success(id, json!({}));
     };
     match learning::save_feedback(app_dir, &account_id, &feedback) {
-        Ok(()) => RpcResponse::success(id, answer),
+        Ok(()) => {
+            state.classification.rules_changed();
+            RpcResponse::success(id, answer)
+        }
         Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
     }
 }
 
-fn import(app_dir: &Path, params: &Value, id: Value) -> RpcResponse {
+fn import(state: &DaemonState, params: &Value, id: Value) -> RpcResponse {
     if let Err(resp) = str_arg(&id, params, "accountId") {
         return resp;
     }
@@ -115,7 +120,7 @@ fn import(app_dir: &Path, params: &Value, id: Value) -> RpcResponse {
         }
     };
     let mut imported = 0;
-    let resp = update(app_dir, params, id.clone(), |fb| {
+    let resp = update(state, params, id.clone(), |fb| {
         imported = learning::import_rules(fb, &rules, now_ms());
         // Nothing new: the file stays as it was.
         (imported > 0).then(|| json!({}))
