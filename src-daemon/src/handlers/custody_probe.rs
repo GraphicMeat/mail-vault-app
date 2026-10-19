@@ -16,13 +16,14 @@
 //!   failed), `incomplete` (with `failed`, the folders that would not open)
 //!   or `not-in-vault` (nothing to stamp). Nothing is written for any of them.
 //!
-//! The sweep only SELECTs and SEARCHes; the custody connection is never held
-//! across it.
+//! The sweep is `imap_find_message_id` as the app asked it before, through
+//! `handlers::imap::route`, so a JMAP account is answered by the JMAP bridge
+//! and an IMAP one by its pool. It only SELECTs and SEARCHes; the custody
+//! connection is never held across it.
 use crate::custody as daemon_custody;
 use crate::handlers::common::{blocking, opt_str_arg, str_arg, u32_arg};
 use crate::handlers::custody::repair_generation_for;
-use crate::handlers::imap::{account_arg, with_background};
-use crate::imap;
+use crate::handlers::imap::account_arg;
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::custody::{entries, probe};
@@ -43,13 +44,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     if method != "custody.probe_server_copy" {
         return None;
     }
-    let account = req!(account_arg(&id, params));
+    // Checked here so a bad account is `INVALID_PARAMS`, as from the sweep's own route.
+    req!(account_arg(&id, params));
+    let account = params["account"].clone();
     let account_id = req!(str_arg(&id, params, "accountId"));
     let mailbox = req!(str_arg(&id, params, "mailbox"));
     let uid = req!(u32_arg(&id, params, "uid"));
     let hint = opt_str_arg(params, "messageId");
     let fallback = params.get("fallbackEntry").filter(|v| v.is_object()).cloned();
-    Some(RpcResponse::success(id, probe_server_copy(state, &account, account_id, mailbox, uid, hint, fallback).await))
+    Some(RpcResponse::success(id, probe_server_copy(state, account, account_id, mailbox, uid, hint, fallback).await))
 }
 
 /// The entry for `uid` after the mailbox's uid generation is checked: a uid
@@ -93,7 +96,7 @@ async fn write_stamp(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
 
 async fn probe_server_copy(
     state: &Arc<DaemonState>,
-    account: &imap::ImapConfig,
+    account: Value,
     account_id: String,
     mailbox: String,
     uid: u32,
@@ -107,30 +110,29 @@ async fn probe_server_copy(
 
     // Presence needs one hit, absence needs every folder: the common answer
     // (it is still there) costs one round trip.
-    let swept = with_background(&state.imap_pool, account, |mut session| async move {
-        let result = imap::find_message_id(&mut session, &message_id, true).await?;
-        Ok((result, session, None))
-    })
-    .await;
-    let sweep = match swept {
-        Ok(sweep) => sweep,
-        Err(e) => {
+    let ask = json!({"account": account, "messageId": message_id, "stopOnFirst": true});
+    let swept = crate::handlers::imap::route(state, "imap_find_message_id", &ask, json!(0)).await;
+    let sweep = match swept.map(|r| (r.result, r.error)) {
+        Some((Some(sweep), None)) => sweep,
+        other => {
             // A sweep that errored says nothing about the server's contents.
-            warn!("[custody.probe_server_copy] sweep for {account_id}/{mailbox}/{uid} failed: {e}");
+            let why = other.and_then(|(_, e)| e).map(|e| e.message).unwrap_or_else(|| "no answer".into());
+            warn!("[custody.probe_server_copy] sweep for {account_id}/{mailbox}/{uid} failed: {why}");
             return json!({"state": "unknown", "reason": "error"});
         }
     };
+    let found = sweep["found"].as_array().cloned().unwrap_or_default();
 
-    if !sweep.found.is_empty() {
+    if !found.is_empty() {
         // On the server after all: an earlier absence stamp is now a lie on disk.
         let cleared = probe::stamped_absent(entry.as_ref());
         if cleared {
             write_stamp(state, &account_id, &mailbox, uid, fallback, probe::present_fields()).await;
         }
-        return json!({"state": "present", "locations": sweep.found, "cleared": cleared});
+        return json!({"state": "present", "locations": found, "cleared": cleared});
     }
-    if !sweep.complete {
-        return json!({"state": "unknown", "reason": "incomplete", "failed": sweep.failed});
+    if sweep["complete"] != Value::Bool(true) {
+        return json!({"state": "unknown", "reason": "incomplete", "failed": sweep["failed"].clone()});
     }
 
     // Every selectable folder answered and none of them has it. No vault
@@ -139,7 +141,7 @@ async fn probe_server_copy(
     if !write_stamp(state, &account_id, &mailbox, uid, fallback, probe::absent_fields(&checked_at)).await {
         return json!({"state": "unknown", "reason": "not-in-vault"});
     }
-    json!({"state": "absent", "checkedAt": checked_at, "searched": sweep.searched})
+    json!({"state": "absent", "checkedAt": checked_at, "searched": sweep["searched"].clone()})
 }
 
 #[cfg(test)]
@@ -327,6 +329,38 @@ mod tests {
         let r = handle_request_for_test(&s, "custody.probe_server_copy", params).await.result.unwrap();
         assert_eq!(r, json!({"state": "unknown", "reason": "error"}));
         assert_eq!(entry(&s).unwrap(), stored);
+    }
+
+    /// A JMAP account is swept through the JMAP bridge, as `imap_find_message_id`
+    /// always was, and never dials IMAP.
+    #[tokio::test]
+    async fn a_jmap_account_is_swept_over_jmap() {
+        use crate::jmap_test_support::{account_json, imap_trap, scenario};
+        let (_v, s) = st();
+        let m = mock_jmap::MockJmap::start(scenario());
+        let (trap, port) = imap_trap();
+        put(&s, json!({"uid": 7, "message_id": "<e1@x>"}));
+        let present = handle_request_for_test(
+            &s,
+            "custody.probe_server_copy",
+            json!({"account": account_json(&m, port), "accountId": "acc", "mailbox": "INBOX", "uid": 7}),
+        )
+        .await
+        .result
+        .unwrap();
+        assert_eq!(present["state"], "present", "{present}");
+        put(&s, json!({"uid": 7, "message_id": "<gone@x>"}));
+        let absent = handle_request_for_test(
+            &s,
+            "custody.probe_server_copy",
+            json!({"account": account_json(&m, port), "accountId": "acc", "mailbox": "INBOX", "uid": 7}),
+        )
+        .await
+        .result
+        .unwrap();
+        assert_eq!(absent["state"], "absent", "{absent}");
+        assert_eq!(entry(&s).unwrap()["serverAbsent"], json!(true));
+        assert!(trap.accept().is_err(), "nothing dialled IMAP");
     }
 
     #[tokio::test]
