@@ -1071,6 +1071,9 @@ mod tests {
             ("snapshot.list", json!({"accountId": "a"})),
             ("contacts_index.get", json!({"accountIds": ["a"]})),
             ("people.list", json!({})),
+            ("people.contacts.top", json!({"accountIds": ["a"]})),
+            ("people.contacts.search", json!({"accountIds": ["a"], "query": "a"})),
+            ("people.contacts.names", json!({"accountIds": ["a"]})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
             assert!(msg.contains("Mail storage folder"), "{method} was not refused, got: {msg:?}");

@@ -46,6 +46,7 @@ pub fn is_foreground_method(method: &str) -> bool {
             | "archive_emails" | "bulk_delete_emails" | "search.suggest" | "views.evaluate"
             | "views.keywords" | "views.keyword_detail"
             | "people.list" | "people.get" | "people.stats" | "people.messages" | "people.suggest" | "people.review.list"
+            | "people.contacts.top" | "people.contacts.search"
     )
 }
 

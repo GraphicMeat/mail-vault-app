@@ -3,7 +3,7 @@
 use super::common::done;
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
-use mailvault_core::people::{correspondence as corr, journal, merge, review, store, suggest};
+use mailvault_core::people::{correspondence as corr, journal, merge, review, seen, store, suggest};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -82,6 +82,25 @@ async fn all_proposals(state: &Arc<DaemonState>) -> Result<Vec<mailvault_core::p
         crate::search_index::wait_foreground_quiet(&state.search_index).await;
     }
     Ok(dedupe::propose_from(&people))
+}
+
+/// The daemon's contacts index for these accounts, in their order. The first
+/// call for an account may seed it from the header cache, so it runs off the
+/// async workers.
+async fn seen_contacts(state: &Arc<DaemonState>, ids: Vec<String>) -> Result<Vec<(String, Vec<seen::Entry>)>, String> {
+    let contacts = Arc::clone(&state.contacts);
+    tokio::task::spawn_blocking(move || {
+        let mut snap = contacts.get_snapshot(&ids);
+        ids.into_iter()
+            .map(|id| {
+                let entries = snap.remove(&id).unwrap_or_default().into_iter();
+                let entries = entries.map(|e| seen::Entry { address: e.address, name: e.name, count: e.count, last_seen: e.last_seen }).collect();
+                (id, entries)
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))
 }
 
 pub(crate) fn str_param(p: &Value, k: &str) -> Result<String, String> {
@@ -174,6 +193,25 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let (q, own, acct, limit) = (opt_str(&p, "query").unwrap_or_default(), own(&p), opt_str(&p, "fromAccountId"), num(&p, "limit", 8).min(50));
             db(state, move |c| suggest::suggest(c, &q, &own, acct.as_deref(), limit, now_ms())).await
         }
+        "people.contacts.top" => {
+            let (ids, own, acct, limit) = (strings(&p, "accountIds"), own(&p), opt_str(&p, "accountId"), num(&p, "limit", 50).min(200));
+            seen_contacts(state, ids).await.and_then(|per| {
+                let all = seen::merge(&per, &own);
+                serde_json::to_value(seen::top(&all, acct.as_deref(), limit)).map_err(|e| e.to_string())
+            })
+        }
+        "people.contacts.search" => {
+            let (ids, own, limit) = (strings(&p, "accountIds"), own(&p), num(&p, "limit", 8).min(50));
+            let (q, boost) = (opt_str(&p, "query").unwrap_or_default(), opt_str(&p, "boostAccountId"));
+            seen_contacts(state, ids).await.and_then(|per| {
+                let all = seen::merge(&per, &own);
+                serde_json::to_value(seen::search(&all, &q, boost.as_deref(), limit)).map_err(|e| e.to_string())
+            })
+        }
+        "people.contacts.names" => {
+            let ids = strings(&p, "accountIds");
+            seen_contacts(state, ids).await.and_then(|per| serde_json::to_value(seen::names(&per)).map_err(|e| e.to_string()))
+        }
         "people.review.list" => {
             let (own, limit) = (own(&p), num(&p, "limit", 100).min(500));
             review_candidates(state, own, limit).await.and_then(|v| serde_json::to_value(v).map_err(|e| e.to_string()))
@@ -254,5 +292,64 @@ mod tests {
         let (_d, state) = state(false);
         let v = call(&state, "people.list", json!({})).await;
         assert!(v.to_string().contains("Mail storage folder is not available"), "{v}");
+    }
+
+    async fn save(state: &Arc<DaemonState>, account: &str, mailbox: &str, emails: Value) {
+        let data = json!({ "emails": emails }).to_string();
+        let v = call(state, "save_email_cache", json!({"accountId": account, "mailbox": mailbox, "data": data})).await;
+        assert!(v.get("error").is_none(), "{v}");
+    }
+    fn mail(uid: u32, date: &str, from: (&str, &str), to: (&str, &str)) -> Value {
+        json!({"uid": uid, "date": date, "from": {"name": from.0, "address": from.1}, "to": [{"name": to.0, "address": to.1}], "cc": [], "bcc": []})
+    }
+    fn addresses(v: &Value) -> Vec<String> {
+        v.as_array().unwrap_or(&vec![]).iter().map(|c| c["address"].as_str().unwrap().to_string()).collect()
+    }
+
+    #[tokio::test]
+    async fn contacts_search_finds_a_sender_by_name_and_never_the_user() {
+        let (_d, state) = state(true);
+        save(&state, "a1", "INBOX", json!([
+            mail(1, "2026-10-18T09:00:00Z", ("Anna Smith", "anna@x.io"), ("", "me@h.io")),
+            mail(2, "2026-10-01T09:00:00Z", ("Joanna Doe", "jo@d.io"), ("", "me@h.io")),
+        ]))
+        .await;
+        save(&state, "a2", "Sent", json!([mail(3, "2026-10-10T09:00:00Z", ("", "me@work.io"), ("Ann Lee", "ann.lee@y.io"))])).await;
+        let params = |q: &str, boost: &str| json!({"accountIds": ["a1", "a2"], "ownAddresses": ["me@h.io", "me@work.io"], "query": q, "boostAccountId": boost});
+        let v = call(&state, "people.contacts.search", params("ann", "")).await;
+        assert_eq!(addresses(&v["result"]), ["anna@x.io", "ann.lee@y.io", "jo@d.io"], "{v}");
+        let v = call(&state, "people.contacts.search", params("ann", "a2")).await;
+        assert_eq!(addresses(&v["result"]), ["ann.lee@y.io", "anna@x.io", "jo@d.io"], "{v}");
+        assert_eq!(v["result"][0]["accountIds"], json!(["a2"]));
+        assert_eq!(v["result"][0]["name"], "Ann Lee");
+        let v = call(&state, "people.contacts.search", params("me", "")).await;
+        assert_eq!(addresses(&v["result"]), Vec::<String>::new(), "{v}");
+    }
+
+    #[tokio::test]
+    async fn contacts_top_lists_one_account_latest_and_popular() {
+        let (_d, state) = state(true);
+        save(&state, "a1", "INBOX", json!([
+            mail(1, "2026-10-18T09:00:00Z", ("Anna Smith", "anna@x.io"), ("", "me@h.io")),
+            mail(2, "2026-10-01T09:00:00Z", ("Bo", "bo@b.io"), ("", "me@h.io")),
+            mail(3, "2026-10-02T09:00:00Z", ("Bo", "bo@b.io"), ("", "me@h.io")),
+        ]))
+        .await;
+        save(&state, "a2", "INBOX", json!([mail(4, "2026-10-19T09:00:00Z", ("Cy", "cy@c.io"), ("", "me@work.io"))])).await;
+        let own = json!(["me@h.io", "me@work.io"]);
+        let v = call(&state, "people.contacts.top", json!({"accountIds": ["a1", "a2"], "ownAddresses": own, "accountId": "a1"})).await;
+        assert_eq!(addresses(&v["result"]["latest"]), ["anna@x.io", "bo@b.io"], "{v}");
+        assert_eq!(addresses(&v["result"]["popular"]), ["bo@b.io", "anna@x.io"], "{v}");
+        assert_eq!(v["result"]["popular"][0]["count"], 2);
+        let v = call(&state, "people.contacts.top", json!({"accountIds": ["a1", "a2"], "ownAddresses": own})).await;
+        assert_eq!(addresses(&v["result"]["latest"]), ["cy@c.io", "anna@x.io", "bo@b.io"], "{v}");
+    }
+
+    #[tokio::test]
+    async fn contacts_names_hold_every_name_the_index_saw() {
+        let (_d, state) = state(true);
+        save(&state, "a1", "INBOX", json!([mail(1, "2026-10-18T09:00:00Z", ("Anna Smith", "anna@x.io"), ("Rokas Me", "me@h.io"))])).await;
+        let v = call(&state, "people.contacts.names", json!({"accountIds": ["a1"]})).await;
+        assert_eq!(v["result"], json!(["Anna Smith", "Rokas Me"]), "{v}");
     }
 }
