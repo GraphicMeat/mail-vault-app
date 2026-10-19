@@ -69,6 +69,13 @@ const SHARED_DOMAINS: &[&str] = &[
     "gmail.com", "googlemail.com", "msn.com", "icloud.com", "me.com", "mac.com", "aol.com",
     "proton.me", "pm.me", "protonmail.com", "protonmail.ch", "web.de", "mail.com", "mail.ru",
     "qq.com", "163.com", "126.com", "zoho.com", "hey.com", "ymail.com", "rocketmail.com",
+    // Internet providers' and privacy mailboxes.
+    "comcast.net", "verizon.net", "att.net", "sbcglobal.net", "bellsouth.net", "cox.net",
+    "charter.net", "t-online.de", "freenet.de", "orange.fr", "wanadoo.fr", "free.fr", "sfr.fr",
+    "laposte.net", "libero.it", "virgilio.it", "tiscali.it", "seznam.cz", "wp.pl", "o2.pl",
+    "interia.pl", "onet.pl", "naver.com", "daum.net", "tutanota.com", "tuta.com", "posteo.de",
+    "mailbox.org", "runbox.com", "btinternet.com", "sky.com", "talktalk.net", "rogers.com",
+    "shaw.ca", "bell.net", "telus.net", "optusnet.com.au", "bigpond.com", "rediffmail.com",
 ];
 
 /// Providers with a domain per country: `<name>.<tld>`, `<name>.co.<cc>`,
@@ -391,7 +398,10 @@ mod tests {
     /// every gmail.com sender as personal: learn the address instead.
     #[test]
     fn a_correction_from_a_freemail_sender_learns_the_address_not_the_domain() {
-        for from in ["Pal <pal@gmail.com>", "pal@Hotmail.co.uk", "pal@yahoo.fr", "pal@gmx.de", "pal@outlook.com"] {
+        for from in [
+            "Pal <pal@gmail.com>", "pal@Hotmail.co.uk", "pal@yahoo.fr", "pal@gmx.de", "pal@outlook.com",
+            "pal@comcast.net", "pal@t-online.de", "pal@tutanota.com", "pal@bigpond.com",
+        ] {
             let mut fb = Feedback::default();
             correct_once(&mut fb, from, "personal");
             correct_once(&mut fb, from, "personal");
@@ -411,13 +421,19 @@ mod tests {
     /// Rules already on disk from before the guard.
     #[test]
     fn a_stored_freemail_domain_rule_never_matches() {
-        for domain in ["gmail.com", "GMAIL.COM ", "yahoo.co.jp", "icloud.com", "proton.me", "yandex.ru"] {
+        for domain in [
+            "gmail.com", "GMAIL.COM ", "yahoo.co.jp", "icloud.com", "proton.me", "yandex.ru",
+            "comcast.net", "t-online.de", "orange.fr", "libero.it", "wp.pl", "naver.com", "tuta.com",
+            "posteo.de", "btinternet.com", "shaw.ca", "optusnet.com.au", "bigpond.com", "rediffmail.com",
+        ] {
             assert_eq!(parsed(json!({ "fromDomain": domain })), None, "{domain}");
             assert_eq!(parsed(json!({ "fromDomain": domain, "subjectContains": "lunch" })), None, "{domain}");
         }
         assert!(parsed(json!({ "fromAddress": "pal@gmail.com" })).is_some(), "an address at a freemail domain is fine");
         assert!(parsed(json!({ "fromDomain": "gmail.company.test" })).is_some());
         assert!(parsed(json!({ "fromDomain": "mygmail.com" })).is_some());
+        assert!(parsed(json!({ "fromDomain": "orange-business.fr" })).is_some());
+        assert!(parsed(json!({ "fromDomain": "news.comcast.net" })).is_some(), "a provider's own subdomain is a sender, not mailboxes");
     }
 
     #[test]
