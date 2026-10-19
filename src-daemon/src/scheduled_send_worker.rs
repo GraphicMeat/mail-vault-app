@@ -329,86 +329,33 @@ async fn resolve_credentials(account_id: &str) -> Result<(ImapConfig, serde_json
     crate::credentials::resolve_account_with_record_guarded(account_id).await
 }
 
-/// Refresh this long before the stored expiry, as the app's
-/// `ensureFreshToken` does (`REFRESH_BUFFER_MS`).
-const TOKEN_REFRESH_MARGIN_MS: i64 = 5 * 60 * 1000;
-
-/// The account with an OAuth2 token good for the send.
-///
-/// The keychain holds whatever token the app last stored, and the app only
-/// refreshes while it is open: a row due after a night with the app closed
-/// found one that expired hours ago. A token within the margin of its expiry
-/// is refreshed here, with the record's own provider, client and scopes (a
-/// Graph account's Graph scopes, `use_graph`), the way `oauth2_refresh` does
-/// for the app. The new token is used for this send only and not written
-/// back: the app rewrites the whole credentials blob from its own copy, so a
-/// daemon write would race it, and the refresh token stays valid either way.
-/// No expiry on record means no refresh, as in the app.
+/// The account with an OAuth2 token good for the send, from the daemon's one
+/// token source (`oauth_tokens`): the keychain holds whatever token the app
+/// last stored, and a row due after a night with the app closed found one
+/// that expired hours ago. Refreshed with the record's own provider, client
+/// and scopes; no expiry on record means no refresh, as in the app.
 ///
 /// A refresh that fails while the stored token is still valid leaves the
 /// stored one, so a send that worked before this refresh existed still works.
 /// Once it has expired there is nothing to send with, and `Err` says why: a
 /// refusal (the provider said no, or a client this build cannot pair) asks
 /// for a new sign-in (`smtp::SIGN_IN_AGAIN`, which ends the row); no usable
-/// answer at all (`renewal_unanswered`) goes to the network probe: offline
-/// waits for the network, online takes the retry ladder.
+/// answer at all goes to the network probe: offline waits for the network,
+/// online takes the retry ladder.
 async fn with_fresh_token(
     state: &Arc<DaemonState>,
-    mut account: ImapConfig,
+    account_id: &str,
+    account: ImapConfig,
     record: &serde_json::Value,
 ) -> Result<ImapConfig, String> {
-    if !account.is_oauth2() {
-        return Ok(account);
-    }
-    let text = |k: &str| record.get(k).and_then(serde_json::Value::as_str).filter(|v| !v.is_empty()).map(str::to_owned);
-    let Some(refresh) = text("oauth2RefreshToken") else { return Ok(account) };
-    let Some(expires_at) = record.get("oauth2ExpiresAt").and_then(serde_json::Value::as_f64).map(|v| v as i64) else {
-        return Ok(account);
-    };
-    if now_ms() < expires_at - TOKEN_REFRESH_MARGIN_MS {
-        return Ok(account);
-    }
-    let refreshed = state
-        .oauth2
-        .refresh_token(
-            &refresh,
-            text("oauth2Provider"),
-            text("oauth2CustomClientId"),
-            text("oauth2TenantId"),
-            account.uses_graph(),
-            text("oauth2ClientId"),
-        )
-        .await;
-    let failure = match refreshed {
-        Ok(tokens) if !tokens.access_token.is_empty() => {
-            info!("[scheduled-send] refreshed the expiring token for {}", account.email);
-            account.access_token = Some(tokens.access_token);
-            return Ok(account);
+    let email = account.email.clone();
+    match crate::oauth_tokens::fresh_config(state, account_id, account, record).await {
+        Ok(account) => Ok(account),
+        Err(e) if e.kind == crate::oauth_tokens::FailKind::Refused => {
+            Err(format!("The sign-in for {} has expired and could not be renewed. {}", email, smtp::SIGN_IN_AGAIN))
         }
-        Ok(_) => "the refresh returned no token".to_string(),
-        Err(e) => e,
-    };
-    if now_ms() < expires_at {
-        warn!("[scheduled-send] could not refresh the token for {}: {failure}; sending with the stored one, still valid", account.email);
-        return Ok(account);
+        Err(e) => Err(format!("Could not renew the sign-in for {}: {}", email, e.message)),
     }
-    warn!("[scheduled-send] the token for {} has expired and could not be refreshed: {failure}", account.email);
-    if renewal_unanswered(&failure) {
-        // The provider's text can carry an em dash; ours does not.
-        let failure = failure.replace(" \u{2014} ", ": ");
-        return Err(format!("Could not renew the sign-in for {}: {}", account.email, failure));
-    }
-    Err(format!("The sign-in for {} has expired and could not be renewed. {}", account.email, smtp::SIGN_IN_AGAIN))
-}
-
-/// A refresh that got no usable answer, as `oauth2::refresh_token` words it:
-/// the request failed, the reply was not a token response, or the provider
-/// said it is down for now. Anything else is a refusal no retry will change.
-fn renewal_unanswered(failure: &str) -> bool {
-    failure.starts_with("Refresh request failed")
-        || failure.starts_with("Refresh response parse failed")
-        || failure.contains("temporarily_unavailable")
-        || failure.contains("server_error")
 }
 
 async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> Outcome {
@@ -428,7 +375,7 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
             return if within_credential_grace() { Outcome::Transient(msg) } else { Outcome::Terminal(msg) };
         }
     };
-    let account = match with_fresh_token(state, account, &record).await {
+    let account = match with_fresh_token(state, &row.account_id, account, &record).await {
         Ok(a) => a,
         Err(e) if is_terminal_smtp_error(&e) => return Outcome::Terminal(e),
         // A renewal that got no answer always asks the probe, not
@@ -607,7 +554,7 @@ mod tests {
         };
 
         let (account, record) = google(thunderbird);
-        let _ = with_fresh_token(&s, account, &record).await;
+        let _ = with_fresh_token(&s, "g-thunderbird", account, &record).await;
         let posts = crate::handlers::oauth2::test_token_posts();
         assert_eq!(posts.len(), 1, "{posts:?}");
         assert_eq!(field(&posts[0], "grant_type").as_deref(), Some("refresh_token"));
@@ -619,7 +566,7 @@ mod tests {
         // one this build cannot pair, which must not fall back to Thunderbird's.
         let other = mailvault_core::oauth2::own_google_client_id().unwrap_or("someone-else.apps.googleusercontent.com");
         let (account, record) = google(other);
-        let _ = with_fresh_token(&s, account, &record).await;
+        let _ = with_fresh_token(&s, "g-other", account, &record).await;
         let posts = crate::handlers::oauth2::test_token_posts();
         assert!(posts.iter().all(|p| field(p, "client_id").as_deref() != Some(thunderbird)), "{posts:?}");
         if mailvault_core::oauth2::own_google_client_id().is_some() {
@@ -650,10 +597,10 @@ mod tests {
 
         let (account, record) = microsoft(None);
         assert!(!account.uses_graph());
-        let _ = with_fresh_token(&s, account, &record).await;
+        let _ = with_fresh_token(&s, "ms-imap", account, &record).await;
         let (graph_account, graph_record) = microsoft(Some("graph"));
         assert!(graph_account.uses_graph());
-        let _ = with_fresh_token(&s, graph_account, &graph_record).await;
+        let _ = with_fresh_token(&s, "ms-graph", graph_account, &graph_record).await;
 
         let posts = crate::handlers::oauth2::test_token_posts();
         assert_eq!(posts.len(), 2, "{posts:?}");

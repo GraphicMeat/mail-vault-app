@@ -184,6 +184,9 @@ pub struct DaemonState {
     /// (create/reschedule/cancel), same shape `classification`'s `notify`
     /// wakes its own worker.
     pub scheduled_send: crate::scheduled_send_worker::ScheduledSendState,
+    /// The OAuth2 access tokens this daemon refreshed and holds
+    /// (`oauth_tokens`): every RPC and worker that needs one asks there.
+    pub tokens: crate::oauth_tokens::TokenStore,
     /// Snooze's wake signal and pass lock — `handlers::snooze` pokes it on
     /// create/reschedule and holds the lock for an immediate unsnooze.
     pub snooze: crate::snooze_worker::SnoozeState,
@@ -932,6 +935,7 @@ impl DaemonState {
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
+            tokens: crate::oauth_tokens::TokenStore::default(),
             snooze: crate::snooze_worker::SnoozeState::default(),
             follow_up: crate::follow_up_worker::FollowUpState::default(),
             auto_tag_worker,

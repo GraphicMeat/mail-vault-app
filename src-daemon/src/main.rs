@@ -43,6 +43,7 @@ mod mbox_upload;
 mod mbox_upload_job;
 mod migration;
 mod netgate;
+mod oauth_tokens;
 mod people_index;
 mod people_snapshot;
 mod raw_message;
@@ -541,6 +542,7 @@ async fn daemon_main() {
         backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         insights: insights::InsightsSnapshots::default(),
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
+        tokens: oauth_tokens::TokenStore::default(),
         snooze: snooze_worker::SnoozeState::default(),
         follow_up: follow_up_worker::FollowUpState::default(),
         auto_tag_worker,

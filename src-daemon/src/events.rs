@@ -32,6 +32,40 @@ pub fn event_line(name: &str, payload: Value) -> String {
 }
 
 #[cfg(test)]
+struct LogWriter(Arc<std::sync::Mutex<Vec<u8>>>);
+
+#[cfg(test)]
+impl std::io::Write for LogWriter {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap_or_else(|p| p.into_inner()).extend_from_slice(b);
+        Ok(b.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Everything logged at INFO and above from now on, if this process has no
+/// subscriber of its own yet (the check is then a smaller one, never a wrong
+/// one). One per process: every test that checks a secret never reaches a log
+/// shares it.
+#[cfg(test)]
+pub(crate) fn captured_logs() -> Arc<std::sync::Mutex<Vec<u8>>> {
+    static LOGS: std::sync::OnceLock<Arc<std::sync::Mutex<Vec<u8>>>> = std::sync::OnceLock::new();
+    Arc::clone(LOGS.get_or_init(|| {
+        let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let writer = Arc::clone(&buf);
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .with_ansi(false)
+            .with_writer(move || LogWriter(Arc::clone(&writer)))
+            .finish();
+        let _ = tracing::subscriber::set_global_default(subscriber);
+        buf
+    }))
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

@@ -296,6 +296,16 @@ pub async fn resolve_account_with_record_guarded(account_id: &str) -> Result<(Im
     Ok((account, record))
 }
 
+/// `resolve_account_with_record_guarded` that never raises the keychain prompt
+/// (see `resolve_account_credentials_quiet`). The record holds secrets: never
+/// log it.
+pub async fn resolve_account_with_record_quiet(account_id: &str) -> Result<(ImapConfig, Value), String> {
+    let blob = guarded(CREDENTIALS_KEY, blob_read(false), AI_KEY_TIMEOUT).await?;
+    let account = account_from_blob(&blob, account_id)?;
+    let record = blob.get(account_id).and_then(|raw| serde_json::from_str(raw).ok()).unwrap_or(Value::Null);
+    Ok((account, record))
+}
+
 /// `resolve_account_credentials_guarded` for background work that must never
 /// be what raises the keychain prompt (the eviction worker's daily pass):
 /// the read runs with interaction off, so a locked keychain answers an error
