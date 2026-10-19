@@ -1,7 +1,7 @@
 //! Background classification worker and the cached-header readers it feeds on.
 
 use crate::classification;
-use crate::learning;
+use mailvault_core::learning;
 use crate::server::DaemonState;
 use mailvault_core::custody::cache;
 use std::collections::HashMap;

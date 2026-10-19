@@ -38,7 +38,6 @@ mod jmap_push;
 mod jmap_sessions;
 #[cfg(test)]
 mod jmap_test_support;
-mod learning;
 mod mbox;
 mod mbox_upload;
 mod mbox_upload_job;

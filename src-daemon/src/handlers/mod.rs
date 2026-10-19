@@ -6,7 +6,7 @@ use crate::contacts_index;
 use crate::credentials;
 use crate::inference;
 use crate::ipc::{self, RpcResponse};
-use crate::learning;
+use mailvault_core::learning;
 use crate::llm;
 use crate::server::DaemonState;
 use crate::snapshot;

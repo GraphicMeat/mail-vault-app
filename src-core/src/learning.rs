@@ -64,7 +64,7 @@ pub fn save_feedback(
         .map_err(|e| format!("Failed to serialize: {}", e))?;
 
     let path = feedback_path(data_dir, account_id);
-    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
+    crate::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
 
     info!(
         "Saved feedback for {} ({} rules, {} corrections)",
