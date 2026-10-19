@@ -8,6 +8,7 @@ pub mod merge;
 pub mod message_addr;
 pub mod model;
 pub mod review;
+pub mod seen;
 pub mod store;
 pub mod suggest;
 pub mod vcard;

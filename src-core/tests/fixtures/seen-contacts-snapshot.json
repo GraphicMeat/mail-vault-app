@@ -1,0 +1,144 @@
+{
+ "a2": [
+  {
+   "address": "me@work.io",
+   "name": "",
+   "count": 3,
+   "lastSeen": 1791795600000,
+   "folders": [
+    "INBOX",
+    "Sent"
+   ]
+  },
+  {
+   "address": "andrea@w.io",
+   "name": "Andrea Work",
+   "count": 2,
+   "lastSeen": 1772355600000,
+   "folders": [
+    "INBOX",
+    "Sent"
+   ]
+  },
+  {
+   "address": "ann.lee@y.io",
+   "name": "Ann Lee",
+   "count": 1,
+   "lastSeen": 1791795600000,
+   "folders": [
+    "INBOX"
+   ]
+  }
+ ],
+ "a1": [
+  {
+   "address": "bob@b.io",
+   "name": "Bob Annberg",
+   "count": 1,
+   "lastSeen": 1786784400000,
+   "folders": [
+    "Sent"
+   ]
+  },
+  {
+   "address": "annabel@old.io",
+   "name": "Annabel Old",
+   "count": 1,
+   "lastSeen": 1641027600000,
+   "folders": [
+    "Sent"
+   ]
+  },
+  {
+   "address": "me+alias@h.io",
+   "name": "",
+   "count": 1,
+   "lastSeen": 1788253200000,
+   "folders": [
+    "INBOX"
+   ]
+  },
+  {
+   "address": "zoe@z.io",
+   "name": "Zoë Ångström",
+   "count": 1,
+   "lastSeen": 1777626000000,
+   "folders": [
+    "INBOX"
+   ]
+  },
+  {
+   "address": "carl@c.io",
+   "name": "Carl Cc",
+   "count": 1,
+   "lastSeen": 1780304400000,
+   "folders": [
+    "INBOX"
+   ]
+  },
+  {
+   "address": "anders@q.io",
+   "name": "",
+   "count": 1,
+   "lastSeen": 1792227600000,
+   "folders": [
+    "Sent"
+   ]
+  },
+  {
+   "address": "jo@d.io",
+   "name": "Joanna Doe",
+   "count": 1,
+   "lastSeen": 1780304400000,
+   "folders": [
+    "INBOX"
+   ]
+  },
+  {
+   "address": "john.doe@d.io",
+   "name": "Doe, John",
+   "count": 1,
+   "lastSeen": 1775034000000,
+   "folders": [
+    "INBOX"
+   ]
+  },
+  {
+   "address": "me@h.io",
+   "name": "",
+   "count": 14,
+   "lastSeen": 1792317600000,
+   "folders": [
+    "INBOX",
+    "Sent"
+   ]
+  },
+  {
+   "address": "ann.lee@y.io",
+   "name": "Ann Lee",
+   "count": 2,
+   "lastSeen": 1792054800000,
+   "folders": [
+    "Sent"
+   ]
+  },
+  {
+   "address": "annoying@news.io",
+   "name": "",
+   "count": 5,
+   "lastSeen": 1792317600000,
+   "folders": [
+    "INBOX"
+   ]
+  },
+  {
+   "address": "anna@x.io",
+   "name": "Anna Smith",
+   "count": 3,
+   "lastSeen": 1792314000000,
+   "folders": [
+    "INBOX"
+   ]
+  }
+ ]
+}
