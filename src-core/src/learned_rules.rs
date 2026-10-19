@@ -156,12 +156,34 @@ impl LearnedRule {
 
     /// Whether a message with this `From`, subject and body matches.
     pub fn matches(&self, from: &str, subject: &str, body: &str) -> bool {
+        self.matches_message(&Message::new(from, subject, body))
+    }
+
+    fn matches_message(&self, m: &Message) -> bool {
         let p = &self.pattern;
-        let sender = |found: Option<String>, want: &String| found.is_some_and(|f| normalize(&f) == *want);
-        p.from_domain.as_ref().map_or(true, |d| sender(sender_domain(from), d))
-            && p.from_address.as_ref().map_or(true, |a| sender(sender_address(from), a))
-            && p.subject_contains.as_ref().map_or(true, |w| normalize(subject).contains(w.as_str()))
-            && p.body_contains.as_ref().map_or(true, |w| normalize(body).contains(w.as_str()))
+        p.from_domain.as_ref().map_or(true, |d| m.domain.as_ref() == Some(d))
+            && p.from_address.as_ref().map_or(true, |a| m.address.as_ref() == Some(a))
+            && p.subject_contains.as_ref().map_or(true, |w| m.subject.contains(w.as_str()))
+            && p.body_contains.as_ref().map_or(true, |w| m.body.contains(w.as_str()))
+    }
+}
+
+/// A message's sender, subject and body, normalized once for every rule.
+struct Message {
+    domain: Option<String>,
+    address: Option<String>,
+    subject: String,
+    body: String,
+}
+
+impl Message {
+    fn new(from: &str, subject: &str, body: &str) -> Message {
+        Message {
+            domain: sender_domain(from).map(|d| normalize(&d)),
+            address: sender_address(from).map(|a| normalize(&a)),
+            subject: normalize(subject),
+            body: normalize(body),
+        }
     }
 }
 
@@ -173,10 +195,14 @@ pub fn parse_all(stored: &[Value]) -> Vec<LearnedRule> {
 /// The rule that decides a message: the most specific match, then the most
 /// confident, then the one saved later.
 pub fn best_match<'a>(rules: &'a [LearnedRule], from: &str, subject: &str, body: &str) -> Option<&'a LearnedRule> {
+    if rules.is_empty() {
+        return None;
+    }
+    let message = Message::new(from, subject, body);
     rules
         .iter()
         .enumerate()
-        .filter(|(_, r)| r.matches(from, subject, body))
+        .filter(|(_, r)| r.matches_message(&message))
         .max_by(|(ia, a), (ib, b)| {
             a.specificity()
                 .cmp(&b.specificity())

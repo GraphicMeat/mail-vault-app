@@ -232,8 +232,8 @@ pub(crate) fn start_classification_worker(state: Arc<DaemonState>) {
 /// The worker's view of an account's learned rules, read from
 /// `<app_dir>/ai-feedback/<accountId>.json` (what `learning.*` writes). Only
 /// that account's file: a rule learned on one account never sorts another's
-/// mail. A rule that cannot be applied safely is skipped without a log line
-/// (this runs once per queued message).
+/// mail. A rule that cannot be applied safely is skipped without a log line.
+/// The worker calls it once per account per pass and keeps the parsed rules.
 fn rules_loader(data_dir: std::path::PathBuf) -> Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> {
     Arc::new(move |account_id: &str| {
         mailvault_core::learned_rules::parse_all(&learning::load_feedback(&data_dir, account_id).rules)
@@ -299,10 +299,14 @@ async fn run_classification_worker(
 ) {
     info!("[queue-worker] Classification worker started");
     let mut batches: PendingBatches = HashMap::new();
+    // Each account's rules, read once per pass (until the queue drains), not
+    // once per message. A rule learned mid-pass applies from the next pass.
+    let mut rule_cache: HashMap<String, Arc<Vec<classification::LearnedRule>>> = HashMap::new();
 
     loop {
         // Wait for items
         if state.classification.queue_depth().await == 0 {
+            rule_cache.clear();
             flush_all(&state, &mut batches).await;
             {
                 let mut progress = state.classification.progress.lock().await;
@@ -363,7 +367,11 @@ async fn run_classification_worker(
             continue;
         }
 
-        let rules = load_rules(&item.account_id);
+        let rules = Arc::clone(
+            rule_cache
+                .entry(item.account_id.clone())
+                .or_insert_with(|| Arc::new(load_rules(&item.account_id))),
+        );
         let model = classification::load_model(&state.app_dir, &item.account_id);
         let result = classification::classify_single_with_model(&item.email, &rules, model.as_ref());
         let was_rule = result.source == classification::ClassificationSource::LocalRule;
@@ -912,6 +920,46 @@ mod tests {
 
         let after = &classification::load_classifications(&app_dir, "acc1")["<r1@t>"];
         assert_eq!((after.source.clone(), after.category.as_str()), (classification::ClassificationSource::LocalRule, "promotional"));
+
+        worker.abort();
+        let _ = std::fs::remove_dir_all(&mail_dir);
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    /// The worker reads and parses an account's rules once per pass, not once
+    /// per message.
+    #[tokio::test]
+    async fn rules_are_loaded_once_per_account_per_pass() {
+        let mail_dir = scratch("rules-once-mail");
+        let app_dir = scratch("rules-once-app");
+        correct(&app_dir, "acc1", "news@shop.com", "Weekly deals", "promotional", "archive");
+        let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
+        let loads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let inner = rules_loader(app_dir.clone());
+        let counting: Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> = {
+            let loads = Arc::clone(&loads);
+            Arc::new(move |account: &str| {
+                loads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                inner(account)
+            })
+        };
+        state
+            .classification
+            .enqueue("acc1", (1..=6u64).map(|uid| mail(uid, "news@shop.com", "Hi")).collect(), classification::QueueTier::New)
+            .await;
+        let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), counting));
+        wait_for(&state, |p| p.classified == 6 && p.status == classification::PipelineStatus::Complete).await;
+
+        assert_eq!(loads.load(std::sync::atomic::Ordering::SeqCst), 1, "one load for six messages of one account");
+        let saved = classification::load_classifications(&app_dir, "acc1");
+        assert!(saved.values().all(|c| c.source == classification::ClassificationSource::LocalRule), "every message still follows the rule");
+
+        // A later pass reads the file again, so a rule learned in between applies.
+        correct(&app_dir, "acc1", "a@other-shop.test", "Receipt", "transactional", "keep");
+        state.classification.enqueue("acc1", vec![mail(7, "a@other-shop.test", "Hi")], classification::QueueTier::New).await;
+        wait_for(&state, |p| p.classified == 7 && p.status == classification::PipelineStatus::Complete).await;
+        assert_eq!(loads.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(classification::load_classifications(&app_dir, "acc1")["<r7@t>"].category, "transactional");
 
         worker.abort();
         let _ = std::fs::remove_dir_all(&mail_dir);
