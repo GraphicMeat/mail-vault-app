@@ -204,6 +204,25 @@ impl ContactsState {
         g.dirty.insert(account_id.to_string());
     }
 
+    /// Header rows the app cached itself (`save_email_cache`), each new to the
+    /// header cache. An account not seeded yet leaves them to its seed, which
+    /// reads the header cache and would otherwise count them twice.
+    pub fn observe_saved_rows(&self, account_id: &str, mailbox: &str, rows: &[serde_json::Value]) {
+        if is_excluded_mailbox(mailbox) || rows.is_empty() {
+            return;
+        }
+        self.load_account(account_id);
+        {
+            let g = self.inner.lock().unwrap();
+            let empty = g.per_account.get(account_id).is_none_or(|m| m.is_empty());
+            if empty && !g.cold_built_accounts.contains(account_id) {
+                return;
+            }
+        }
+        let headers: Vec<CachedHeader> = rows.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect();
+        self.observe_cached_headers(account_id, mailbox, &headers);
+    }
+
     /// Returns `{account_id → Vec<ContactEntry>}` for the requested accounts.
     pub fn get_snapshot(&self, account_ids: &[String]) -> HashMap<String, Vec<ContactEntry>> {
         // Load + cold-build on first request per account (lazy).

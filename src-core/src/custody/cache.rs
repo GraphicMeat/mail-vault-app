@@ -26,6 +26,12 @@ pub fn save_headers(conn: &Connection, account: &str, mailbox: &str, data: &str)
 }
 
 pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &str, written_at: i64) -> Result<(), String> {
+    save_headers_reporting_new(conn, account, mailbox, data, written_at).map(|_| ())
+}
+
+/// `save_headers_at`, returning the uids that had no row before this write.
+pub fn save_headers_reporting_new(conn: &Connection, account: &str, mailbox: &str, data: &str, written_at: i64) -> Result<Vec<u32>, String> {
+    let mut added = Vec::new();
     let value: Value = serde_json::from_str(data).map_err(|e| format!("Failed to parse cache JSON: {e}"))?;
     let object = value.as_object().ok_or("cache JSON must be an object")?;
     let tx = conn.unchecked_transaction().map_err(err)?;
@@ -72,6 +78,9 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
                 params![account, mailbox, uid], |r| r.get(0),
             ).ok();
             stmt.execute(params![account, mailbox, uid, sort_ms(row), written_at, json]).map_err(err)?;
+            if stored.is_none() {
+                added.push(uid);
+            }
             if stored.as_deref() != Some(json.as_str()) {
                 crate::people::message_addr::index_row(&tx, account, mailbox, uid, sort_ms(row), row)?;
             }
@@ -95,7 +104,8 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
         "INSERT OR REPLACE INTO header_cache_meta(account_id,mailbox_path,meta_json) VALUES (?1,?2,?3)",
         params![account, mailbox, serde_json::to_string(&meta).map_err(|e| e.to_string())?],
     ).map_err(err)?;
-    tx.commit().map_err(err)
+    tx.commit().map_err(err)?;
+    Ok(added)
 }
 
 /// Header-cache meta key: rows the app's own writes took off a mailbox's list

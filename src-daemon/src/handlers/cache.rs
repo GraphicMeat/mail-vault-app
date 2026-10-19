@@ -80,6 +80,14 @@ fn without_preview_text(data: String) -> String {
     serde_json::to_string(&entry).unwrap_or(data)
 }
 
+/// The payload's header rows whose uid is in `uids`.
+fn rows_with_uids(data: &str, uids: &[u32]) -> Vec<Value> {
+    let Ok(Value::Object(mut v)) = serde_json::from_str::<Value>(data) else { return Vec::new() };
+    let Some(Value::Array(rows)) = v.remove("emails") else { return Vec::new() };
+    let uids: std::collections::HashSet<u64> = uids.iter().map(|u| u64::from(*u)).collect();
+    rows.into_iter().filter(|r| r.get("uid").and_then(Value::as_u64).is_some_and(|u| uids.contains(&u))).collect()
+}
+
 /// The uids a `save_email_cache` payload takes off the list.
 fn removed_uids(data: &str) -> Vec<u32> {
     if !data.contains("\"removedUids\"") {
@@ -120,9 +128,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let data = without_preview_text(data);
-                    with_vault_write(&state, |_root| {
-                        daemon_custody::with_conn(&state, |c| sql_cache::save_headers(c, &account_id, &mailbox, &data))
+                    let now = mailvault_core::people::model::now_ms();
+                    let added = with_vault_write(&state, |_root| {
+                        daemon_custody::with_conn(&state, |c| sql_cache::save_headers_reporting_new(c, &account_id, &mailbox, &data, now))
                     })?;
+                    // Mail the app fetched itself reaches the contacts index
+                    // once, the first time it is cached, as the sync's does.
+                    if !added.is_empty() {
+                        state.contacts.observe_saved_rows(&account_id, &mailbox, &rows_with_uids(&data, &added));
+                    }
                     // The search index keeps an evicted message's row while
                     // this list holds its uid: reconcile the folder once it does not.
                     // The app's delete, move or re-key took them off the server

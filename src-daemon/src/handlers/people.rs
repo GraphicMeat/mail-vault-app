@@ -352,4 +352,27 @@ mod tests {
         let v = call(&state, "people.contacts.names", json!({"accountIds": ["a1"]})).await;
         assert_eq!(v["result"], json!(["Anna Smith", "Rokas Me"]), "{v}");
     }
+
+    /// The app's own header writes reach the index once each: the JS used to
+    /// add the loaded rows itself because only the sync engine fed it.
+    #[tokio::test]
+    async fn mail_the_app_caches_reaches_the_index_once() {
+        let (_d, state) = state(true);
+        let first = json!([mail(1, "2026-10-18T09:00:00Z", ("Anna Smith", "anna@x.io"), ("", "me@h.io"))]);
+        save(&state, "a1", "INBOX", first.clone()).await;
+        let top = |state: Arc<DaemonState>| async move {
+            call(&state, "people.contacts.top", json!({"accountIds": ["a1"], "ownAddresses": ["me@h.io"]})).await
+        };
+        assert_eq!(top(Arc::clone(&state)).await["result"]["popular"][0]["count"], 1);
+        // the same folder saved again, and once more with a new message
+        save(&state, "a1", "INBOX", first.clone()).await;
+        let mut both = first.as_array().unwrap().clone();
+        both.push(mail(2, "2026-10-19T09:00:00Z", ("Anna Smith", "anna@x.io"), ("", "me@h.io")));
+        save(&state, "a1", "INBOX", Value::Array(both.clone())).await;
+        save(&state, "a1", "INBOX", Value::Array(both)).await;
+        save(&state, "a1", "Trash", json!([mail(9, "2026-10-19T10:00:00Z", ("Spam Ann", "spam@t.io"), ("", "me@h.io"))])).await;
+        let v = top(Arc::clone(&state)).await;
+        assert_eq!(addresses(&v["result"]["popular"]), ["anna@x.io"], "{v}");
+        assert_eq!(v["result"]["popular"][0]["count"], 2, "{v}");
+    }
 }
