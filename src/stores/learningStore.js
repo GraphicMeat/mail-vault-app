@@ -3,7 +3,7 @@
  */
 
 import { create } from 'zustand';
-import * as learningService from '../services/learningService.js';
+import * as learningService from '../services/learningApi.js';
 
 export const useLearningStore = create((set, get) => ({
   rules: [],

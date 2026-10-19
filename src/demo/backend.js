@@ -654,6 +654,59 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         }
         if (method === 'learning.load') return clone(learning.get(paramsAccountId(args)) || { rules: [], corrections: [], stats: { totalClassified: messages.length, totalCorrected: 0, accuracyRate: 1 } });
         if (method === 'learning.save') { learning.set(paramsAccountId(args), clone(args.params?.feedback || args.feedback || { rules: [], corrections: [], stats: {} })); emit('demo:state', { type: 'learning' }); return { success: true, simulated: true }; }
+        // Learned rules: the daemon's learning.* with a domain rule per
+        // correction (no address or subject rules) and the demo's accuracy stats.
+        if (method.startsWith('learning.')) {
+          const id = paramsAccountId(args);
+          const p = args.params || {};
+          const fb = clone(learning.get(id) || { rules: [], corrections: [], stats: { totalClassified: messages.length, totalCorrected: 0, accuracyRate: 1 } });
+          const keep = () => { learning.set(id, fb); emit('demo:state', { type: 'learning' }); };
+          const nowIso = new Date().toISOString();
+          if (method === 'learning.rules') return fb.rules;
+          if (method === 'learning.stats') return { ...fb.stats, rulesCount: fb.rules.length, correctionsCount: fb.corrections.length };
+          if (method === 'learning.record_correction') {
+            const { email = {}, correction = {} } = p;
+            fb.corrections.push({ ...email, ...correction, timestamp: nowIso });
+            fb.stats.totalCorrected = (fb.stats.totalCorrected || 0) + 1;
+            if (fb.stats.totalClassified > 0) fb.stats.accuracyRate = 1 - fb.stats.totalCorrected / fb.stats.totalClassified;
+            const at = (email.from || '').lastIndexOf('@');
+            const domain = at > 0 ? email.from.slice(at + 1).replace(/>/g, '').toLowerCase() : null;
+            const existing = domain && fb.rules.find(r => r.pattern?.fromDomain === domain && r.category === correction.correctedCategory);
+            let rule = null;
+            if (existing) existing.confidence = Math.min(0.99, (existing.confidence || 0.95) + 0.01);
+            else if (domain) {
+              rule = { id: `r-${Date.now()}`, type: 'sender-action', pattern: { fromDomain: domain }, category: correction.correctedCategory, importance: null, action: correction.correctedAction, confidence: 0.95, learnedFrom: 1, createdAt: nowIso, source: 'learned' };
+              fb.rules.push(rule);
+            }
+            keep();
+            return { correctionSaved: true, ruleGenerated: !!rule, rule };
+          }
+          if (method === 'learning.save_rule') {
+            const at = fb.rules.findIndex(r => r.id === p.rule?.id);
+            if (at >= 0) fb.rules[at] = { ...fb.rules[at], ...p.rule }; else fb.rules.push(p.rule);
+            keep();
+            return { saved: true };
+          }
+          if (method === 'learning.delete_rule') { fb.rules = fb.rules.filter(r => r.id !== p.ruleId); keep(); return { deleted: true }; }
+          if (method === 'learning.export') {
+            const rules = fb.rules.map(r => ({ type: r.type, pattern: { ...(r.pattern?.fromDomain ? { fromDomain: r.pattern.fromDomain } : {}), ...(r.pattern?.subjectContains ? { subjectContains: r.pattern.subjectContains } : {}) }, category: r.category, importance: r.importance, action: r.action, confidence: r.confidence }));
+            const payload = { version: 1, exportedAt: nowIso, rulesCount: rules.length, rules };
+            return { payload, json: JSON.stringify(payload, null, 2) };
+          }
+          if (method === 'learning.import') {
+            const data = p.data;
+            if (!data?.version || !Array.isArray(data.rules)) return { valid: false, errorKey: 'svc.ruleExporter.invalidFormatMissingVersionRules', errorParams: null };
+            if (data.version > 1) return { valid: false, errorKey: 'svc.ruleExporter.unsupportedFormatVersionAppSupports', errorParams: { data: data.version, EXPORT_VERSION: 1 } };
+            let imported = 0;
+            for (const r of data.rules.filter(r => r?.pattern && r?.type)) {
+              if (fb.rules.some(x => x.pattern?.fromDomain === r.pattern.fromDomain && x.category === (r.category || null) && x.action === (r.action || null))) continue;
+              fb.rules.push({ id: `r-imp-${Date.now()}-${imported}`, type: r.type, pattern: r.pattern, category: r.category || null, importance: r.importance || null, action: r.action || null, confidence: r.confidence || 0.8, learnedFrom: 0, createdAt: nowIso, source: 'imported' });
+              imported += 1;
+            }
+            if (imported > 0) keep();
+            return { valid: true, imported };
+          }
+        }
         if (method.startsWith('snapshot.')) {
           const snapshotAccountId = args.params?.accountId || ACCOUNT_IDS[0];
           const snapshotManifest = (requestedMailboxes = null) => {

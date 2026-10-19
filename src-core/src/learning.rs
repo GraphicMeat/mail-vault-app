@@ -647,7 +647,8 @@ mod js {
 
 #[cfg(test)]
 mod fixture_tests {
-    //! The golden table the JS produced (src/services/__tests__/learningCharacterization.test.js).
+    //! The golden table the JS produced before it was deleted (its harness was
+    //! src/services/__tests__/learningCharacterization.test.js, commit 752041bb7).
     use super::*;
     use serde::Deserialize;
 

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useLearningStore } from '../../stores/learningStore';
 import { useAccountStore } from '../../stores/accountStore';
-import { exportRules, previewImport, importRules } from '../../services/ruleExporter';
+import { exportRules, importRulesFile } from '../../services/learningApi';
 import * as classificationService from '../../services/classificationService';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import {
@@ -40,8 +40,7 @@ export function AISettings() {
   const handleExportRules = async () => {
     if (!activeAccountId) return;
     try {
-      const payload = await exportRules(activeAccountId);
-      const json = JSON.stringify(payload, null, 2);
+      const { json } = await exportRules(activeAccountId);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -60,21 +59,9 @@ export function AISettings() {
       const file = e.target.files?.[0];
       if (!file) return;
       const text = await file.text();
-      const preview = previewImport(text);
-      if (!preview.valid) { setError(preview.error); return; }
       try {
-        await importRules(
-          activeAccountId,
-          preview.rules,
-          async (aid) => {
-            const { daemonCall } = await import('../../services/daemonClient');
-            return daemonCall('learning.load', { accountId: aid });
-          },
-          async (aid, feedback) => {
-            const { daemonCall } = await import('../../services/daemonClient');
-            return daemonCall('learning.save', { accountId: aid, feedback });
-          },
-        );
+        const result = await importRulesFile(activeAccountId, text);
+        if (!result.valid) { setError(result.error); return; }
         if (activeAccountId) loadRules(activeAccountId);
         setError(null);
       } catch (e) { setError(e.message); }

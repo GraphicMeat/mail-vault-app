@@ -173,6 +173,28 @@ describe('demo mailbox backend', () => {
     expect(Object.keys(stats.accounts[account.id].days)).toHaveLength(7);
   });
 
+  it('learns a rule from a correction and exports and imports rules like the daemon', async () => {
+    const backend = createDemoBackend();
+    const account = backend.accounts[0];
+    const rpc = (method, params = {}) => backend.invoke('daemon_rpc', { method, params: { accountId: account.id, ...params } });
+    const learned = await rpc('learning.record_correction', {
+      email: { messageId: '<d1@shop.example>', from: 'Shop <news@shop.example>', subject: 'Deals' },
+      correction: { originalCategory: 'personal', correctedCategory: 'promotional', correctedAction: 'archive' },
+    });
+    expect(learned).toMatchObject({ correctionSaved: true, ruleGenerated: true, rule: { pattern: { fromDomain: 'shop.example' }, category: 'promotional' } });
+    const stats = await rpc('learning.stats');
+    expect(stats).toMatchObject({ rulesCount: 1, correctionsCount: 1, totalCorrected: 1 });
+    expect(stats.accuracyRate).toBeLessThan(1);
+    await rpc('learning.save_rule', { rule: { ...learned.rule, action: 'keep' } });
+    expect((await rpc('learning.rules'))[0].action).toBe('keep');
+    const { payload, json } = await rpc('learning.export');
+    expect(JSON.parse(json)).toEqual(payload);
+    expect(await rpc('learning.import', { data: payload })).toEqual({ valid: true, imported: 0 });
+    expect(await rpc('learning.import', { data: { rules: [] } })).toMatchObject({ valid: false, errorKey: 'svc.ruleExporter.invalidFormatMissingVersionRules' });
+    await rpc('learning.delete_rule', { ruleId: learned.rule.id });
+    expect(await rpc('learning.rules')).toEqual([]);
+  });
+
   it('persists staged local drafts, keeps immutable capsules, and updates moved mailbox identity', async () => {
     const backend = createDemoBackend();
     const account = backend.snapshot().accounts[0];

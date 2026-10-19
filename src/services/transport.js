@@ -165,6 +165,10 @@ export const DAEMON_OWNED = new Set([
   // Send-as aliases: what the provider lists (Gmail over OAuth) and what the
   // mail of the account proves, both found by the daemon.
   'aliases.discover',
+  // Learned classification rules: the daemon records corrections, learns,
+  // stores, exports and imports them (handlers/learning.rs).
+  'learning.record_correction', 'learning.rules', 'learning.stats', 'learning.save_rule',
+  'learning.delete_rule', 'learning.export', 'learning.import',
   // Track H: the app saved a new download mode or window; the daemon's
   // eviction (and, with Premium, Hoarder) worker re-derives its work now.
   'storage.fetch_mode_changed',
