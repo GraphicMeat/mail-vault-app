@@ -90,9 +90,6 @@ const DAEMON_COMMANDS = {
   'classification_override': 'classification.override',
   'classification_status': 'classification.status',
 
-  // Learning
-  'learning_load': 'learning.load',
-  'learning_save': 'learning.save',
 };
 
 // ── Arg mapping ─────────────────────────────────────────────────────────────

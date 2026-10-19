@@ -15,7 +15,6 @@
 //! - `learning.import {accountId, data}` checks a parsed rules file and adds
 //!   the rules no existing one covers: `{valid: true, imported}`, or
 //!   `{valid: false, errorKey, errorParams}` with an i18n catalog key.
-//! - `learning.load` / `learning.save` the whole feedback file (older callers).
 //!
 //! A read-modify-write holds `WRITE` so two corrections cannot drop each other.
 
@@ -32,8 +31,6 @@ static WRITE: Mutex<()> = Mutex::new(());
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     let app_dir = state.app_dir.as_path();
     let resp = match method {
-        "learning.load" => load(app_dir, params, id),
-        "learning.save" => save(app_dir, params, id),
         "learning.rules" => read(app_dir, params, id, |fb| Value::Array(fb.rules)),
         "learning.stats" => read(app_dir, params, id, |fb| learning::stats(&fb)),
         "learning.export" => read(app_dir, params, id, |fb| {
@@ -127,31 +124,6 @@ fn import(app_dir: &Path, params: &Value, id: Value) -> RpcResponse {
         return resp;
     }
     RpcResponse::success(id, json!({ "valid": true, "imported": imported }))
-}
-
-fn load(app_dir: &Path, params: &Value, id: Value) -> RpcResponse {
-    let account_id = match str_arg(&id, params, "accountId") {
-        Ok(a) => a,
-        Err(resp) => return resp,
-    };
-    let feedback = learning::load_feedback(app_dir, &account_id);
-    RpcResponse::success(id, serde_json::to_value(feedback).unwrap_or(Value::Null))
-}
-
-fn save(app_dir: &Path, params: &Value, id: Value) -> RpcResponse {
-    let account_id = match str_arg(&id, params, "accountId") {
-        Ok(a) => a,
-        Err(resp) => return resp,
-    };
-    let feedback: learning::Feedback = match params.get("feedback").and_then(|v| serde_json::from_value(v.clone()).ok()) {
-        Some(f) => f,
-        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing or invalid feedback"),
-    };
-    let _guard = WRITE.lock().unwrap_or_else(|e| e.into_inner());
-    match learning::save_feedback(app_dir, &account_id, &feedback) {
-        Ok(()) => RpcResponse::success(id, json!({"saved": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
 }
 
 #[cfg(test)]
@@ -268,7 +240,7 @@ mod tests {
         let (_dir, s) = state();
         for method in [
             "learning.record_correction", "learning.rules", "learning.stats", "learning.save_rule",
-            "learning.delete_rule", "learning.export", "learning.import", "learning.load", "learning.save",
+            "learning.delete_rule", "learning.export", "learning.import",
         ] {
             let resp = handle_request_for_test(&s, method, json!({})).await;
             let msg = resp.error.map(|e| e.message).unwrap_or_default();

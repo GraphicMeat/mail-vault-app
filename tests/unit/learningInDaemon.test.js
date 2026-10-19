@@ -55,12 +55,12 @@ describe('the learning logic lives in the daemon', () => {
     expect(server).toContain('crate::handlers::learning::route(');
   });
 
-  it('no app source learns rules', () => {
+  it('no app source learns rules or reads the whole feedback file', () => {
     const hits = [];
     for (const file of sourceFiles('src')) {
       if (file === join('src', 'demo', 'backend.js')) continue;
       readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
-        if (/findSharedSubjectWords|anonymizePattern|RULE_THRESHOLD|r-imp-/.test(line)) hits.push(`${file}:${i + 1}: ${line.trim()}`);
+        if (/learning[._](load|save)\b|findSharedSubjectWords|anonymizePattern|RULE_THRESHOLD|r-imp-/.test(line)) hits.push(`${file}:${i + 1}: ${line.trim()}`);
       });
     }
     expect(hits).toEqual([]);

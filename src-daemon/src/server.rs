@@ -1076,7 +1076,6 @@ mod tests {
         for (method, params) in [
             ("ping", json!({})),
             ("daemon.heartbeat", json!({})),
-            ("learning.load", json!({"accountId": "a"})),
             ("learning.rules", json!({"accountId": "a"})),
             ("classification.summary", json!({"accountId": "a"})),
             // Task 5.4a: flat `imap_*` names have no `.`, so they never match

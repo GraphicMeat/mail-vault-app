@@ -652,8 +652,6 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           emit('demo:state', { type: 'classification' });
           return { messageId: args.params?.messageId, ...override, simulated: true };
         }
-        if (method === 'learning.load') return clone(learning.get(paramsAccountId(args)) || { rules: [], corrections: [], stats: { totalClassified: messages.length, totalCorrected: 0, accuracyRate: 1 } });
-        if (method === 'learning.save') { learning.set(paramsAccountId(args), clone(args.params?.feedback || args.feedback || { rules: [], corrections: [], stats: {} })); emit('demo:state', { type: 'learning' }); return { success: true, simulated: true }; }
         // Learned rules: the daemon's learning.* with a domain rule per
         // correction (no address or subject rules) and the demo's accuracy stats.
         if (method.startsWith('learning.')) {
