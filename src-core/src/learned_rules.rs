@@ -97,6 +97,21 @@ pub fn is_shared_mail_domain(domain: &str) -> bool {
     }
 }
 
+/// The classifier's own categories, spelled as it writes them.
+pub const BUILT_IN_CATEGORIES: &[&str] =
+    &["newsletter", "promotional", "notification", "transactional", "personal", "work", "spam-likely"];
+
+/// A built-in category in any case ("Promotional") is the built-in one;
+/// any other keeps the user's spelling, since Cleanup's tabs for custom
+/// categories match it exactly ("Invoices").
+pub fn canonical_category(category: &str) -> String {
+    let folded = category.to_lowercase();
+    match BUILT_IN_CATEGORIES.iter().find(|c| **c == folded) {
+        Some(c) => (*c).to_string(),
+        None => category.to_string(),
+    }
+}
+
 /// Trim, NFKC, lowercase: how both a rule and a message are compared.
 pub fn normalize(s: &str) -> String {
     s.trim().nfkc().collect::<String>().to_lowercase()
@@ -141,8 +156,7 @@ impl LearnedRule {
         Some(LearnedRule {
             id: text(rule.get("id")),
             pattern,
-            // "Promotional" is the built-in "promotional".
-            category: text(rule.get("category"))?.to_lowercase(),
+            category: canonical_category(&text(rule.get("category"))?),
             importance: text(rule.get("importance")),
             action: text(rule.get("action")),
             confidence,
@@ -396,10 +410,16 @@ mod tests {
     }
 
     #[test]
-    fn categories_are_trimmed_and_lowercased_and_punctuation_is_not_a_keyword() {
+    fn built_in_categories_fold_case_custom_ones_keep_it_and_punctuation_is_not_a_keyword() {
         let mut r = rule(json!({ "fromDomain": "shop.com" }));
         r["category"] = json!(" Promotional ");
         assert_eq!(LearnedRule::from_stored(&r).unwrap().category, "promotional");
+        r["category"] = json!("SPAM-Likely");
+        assert_eq!(LearnedRule::from_stored(&r).unwrap().category, "spam-likely");
+        // A custom category keeps the spelling the user gave it: Cleanup's
+        // tabs match it exactly ("Invoices").
+        r["category"] = json!(" Invoices ");
+        assert_eq!(LearnedRule::from_stored(&r).unwrap().category, "Invoices");
         assert_eq!(parsed(json!({ "subjectContains": "!!!" })), None);
         assert_eq!(parsed(json!({ "subjectContains": "- - -" })), None);
         assert!(parsed(json!({ "subjectContains": "re:" })).is_some(), "letters plus punctuation is still text");
