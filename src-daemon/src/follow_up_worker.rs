@@ -354,7 +354,7 @@ pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowU
 /// `cached`, and failing that for its Sent copy.
 pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::FollowUp, cached: CacheAnswer) -> follow_up::Outcome {
     use follow_up::Outcome::*;
-    let account = match credentials::resolve_account_credentials_guarded(&row.account_id).await {
+    let account = match crate::oauth_tokens::resolve(state, &row.account_id, crate::oauth_tokens::Read::Guarded).await {
         Ok(a) => a,
         Err(e) => {
             let msg = format!("Could not load this account's credentials: {e}");

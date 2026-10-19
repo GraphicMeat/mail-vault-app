@@ -714,8 +714,8 @@ pub(crate) fn background_qos() {
 /// app refreshed since): quietly, a background job never raises the
 /// keychain's prompt.
 #[cfg(not(test))]
-async fn quiet_config(_state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
-    crate::credentials::resolve_account_credentials_quiet(account_id).await
+async fn quiet_config(state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
+    crate::oauth_tokens::resolve(state, account_id, crate::oauth_tokens::Read::Quiet).await
 }
 
 #[cfg(test)]

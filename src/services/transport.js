@@ -269,6 +269,9 @@ export const DAEMON_OWNED = new Set([
   // Which Google apps a new sign-in can use (whether MailVault's own is in
   // this build, and the default).
   'oauth2_google_clients',
+  // Phase 1 step 0c: the daemon refreshes OAuth2 tokens itself; the app
+  // saves the pairs it refreshed and says when it wrote credentials.
+  'oauth2.take_refreshed', 'oauth2.credentials_changed',
   // Task 5.8: DNS (autodiscover email server settings, post-server-change
   // health probe). Tauri twins deleted in this same task — flat names, no
   // rename layer, no Tauri fallback, same reasoning as every other Phase 5

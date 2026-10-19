@@ -244,7 +244,8 @@ impl IdleWatchers {
             }
 
             // Read at every connect: the credentials may have been refreshed
-            // since the last one (`watch`).
+            // since the last one (`watch`, or the daemon's own token source).
+            self.renew_token(&slot).await;
             let account = slot.lock().unwrap().clone();
             let config = &account.imap_config;
 
@@ -348,7 +349,29 @@ impl IdleWatchers {
     /// something, so the app hears about it even when the sync counts nothing
     /// (an expunge is pruned by the reconcile, not counted). A catch-up after
     /// a connect or a timeout stays silent unless it found mail or flags.
+    /// An OAuth2 account's token from the daemon's token source
+    /// (`oauth_tokens`), refreshed when it is about to expire: the watcher
+    /// lives for days and its token for an hour. Quiet: a background watcher
+    /// never raises the keychain prompt. A failure keeps what the slot has.
+    async fn renew_token(&self, slot: &Mutex<SyncAccount>) {
+        let (account_id, oauth) = {
+            let account = slot.lock().unwrap();
+            (account.id.clone(), account.imap_config.is_oauth2())
+        };
+        let Some(daemon) = self.daemon.get().and_then(Weak::upgrade).filter(|_| oauth) else { return };
+        let token = match crate::oauth_tokens::access_token(&daemon, &account_id, crate::oauth_tokens::Read::Quiet).await {
+            Ok(Some(token)) => token,
+            Ok(None) => return,
+            Err(e) => match e.fallback {
+                Some(token) => token,
+                None => return,
+            },
+        };
+        slot.lock().unwrap().imap_config.access_token = Some(token);
+    }
+
     async fn sync_inbox(&self, slot: &Mutex<SyncAccount>, woken: bool) {
+        self.renew_token(slot).await;
         let account = slot.lock().unwrap().clone();
         // `announcing`: new headers are published the moment they are cached,
         // before the flag step and the reconcile, which on a large mailbox

@@ -111,6 +111,22 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             }
         }
 
+        // The token pairs the daemon refreshed (`oauth_tokens`) that the
+        // stored credentials do not show yet, for the app to save through its
+        // own writer: `{tokens: [{accountId, accessToken, refreshToken,
+        // expiresAt}]}`. Offered again until a read shows them saved.
+        "oauth2.take_refreshed" => RpcResponse::success(id, json!({ "tokens": state.tokens.unsaved() })),
+
+        // The app wrote the credentials blob: no held token is trusted before
+        // the stored record is read again (a new sign-in, a removed account),
+        // and the pairs it just saved stop being offered.
+        "oauth2.credentials_changed" => {
+            state.tokens.credentials_changed();
+            let st = Arc::clone(state);
+            tokio::spawn(async move { crate::oauth_tokens::recheck_unsaved(&st).await });
+            RpcResponse::success(id, json!({ "ok": true }))
+        }
+
         _ => return None,
     })
 }

@@ -1383,6 +1383,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'pgp.import_key': case 'pgp.remove_key': return unsupported(command);
       case 'open_file': case 'open_email_window': return unsupported(command);
       case 'oauth2_google_clients': return { mailvault: false, default: 'thunderbird' };
+      case 'oauth2.take_refreshed': return { tokens: [] };
+      case 'oauth2.credentials_changed': return { ok: true };
       case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': case 'store_password': case 'store_credentials': return unsupported(command);
       // The browser demo has no index: searchLocalEmails falls back to its scan.
       case 'vault_search': return { available: false };

@@ -16,9 +16,8 @@
 //! is. That sync sees no arrival, so the app raises the notification itself
 //! off the `snooze` event's `woke`.
 //!
-//! Graph accounts are not handled here: the daemon never refreshes an OAuth
-//! token (the app does), so a background Graph move cannot be relied on.
-//! The app does not offer Snooze on a Graph account.
+//! Graph accounts are not handled here: the wake moves over IMAP only. The
+//! app does not offer Snooze on a Graph account.
 //!
 //! A JMAP account's wake (`wake_row_jmap`) never reaches the IMAP pool: the
 //! message is found by its exact Message-ID in the holder, `$seen` comes off,
@@ -155,7 +154,7 @@ where
 /// unsnooze the user asked for stays on the priority lane.
 pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, background: bool) -> snooze::WakeOutcome {
     use snooze::WakeOutcome::*;
-    let account = match credentials::resolve_account_credentials_guarded(&row.account_id).await {
+    let account = match crate::oauth_tokens::resolve(state, &row.account_id, crate::oauth_tokens::Read::Guarded).await {
         Ok(a) => a,
         Err(e) => {
             let msg = format!("Could not load this account's credentials: {e}");

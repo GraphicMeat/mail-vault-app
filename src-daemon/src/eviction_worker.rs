@@ -19,8 +19,8 @@
 //! Any error (settings unreadable, listing failed, header cache unreadable,
 //! vault unlistable) evicts nothing in that scope and logs once. Hoarder,
 //! Keep Recent with window 0 and hidden accounts evict nothing. Graph
-//! accounts are skipped: the daemon cannot list a Graph folder on its own
-//! (it never refreshes an OAuth token), so their copies stay.
+//! accounts are skipped: no Graph listing is built here, so their copies
+//! stay.
 //!
 //! A JMAP account's listing (`jmap_listing`) is the folder's ids from
 //! `Email/query` read against its JMAP ledger, never the IMAP pool: a uid is
@@ -152,7 +152,7 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) {
         }
         // Interaction off: a daily background pass must never be what
         // raises the keychain prompt. A locked keychain skips the account.
-        let config = match credentials::resolve_account_credentials_quiet(&account_id).await {
+        let config = match crate::oauth_tokens::resolve(state, &account_id, crate::oauth_tokens::Read::Quiet).await {
             Ok(c) => c,
             Err(e) => {
                 warn!("[evict] {account_id}: nothing evicted, credentials unavailable: {e}");

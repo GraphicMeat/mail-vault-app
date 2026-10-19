@@ -63,6 +63,9 @@ const VAULT_RETRY: Duration = Duration::from_secs(15);
 const DRIVE_PROBE: Duration = Duration::from_secs(30);
 /// A password IMAP account refused at sign-in is tried again this rarely.
 const SIGN_IN_RETRY: Duration = Duration::from_secs(10 * 60);
+/// A Graph job whose token could not be renewed tries the daemon's renewal
+/// again this often (`oauth_tokens` keeps its own cooldown under it).
+const TOKEN_RETRY: Duration = Duration::from_secs(2 * 60);
 /// The keychain (locked) and a removed account are looked at this often.
 const CREDENTIAL_POLL: Duration = Duration::from_secs(60);
 
@@ -230,8 +233,35 @@ impl LeaseStore for AccountLease {
         self.state.abd.tokens.get(&self.account_id)
     }
     fn drop_lease(&self) {
+        // Graph refused it: the daemon's token source must not hand it out again.
+        if let Some(lease) = self.state.abd.tokens.get(&self.account_id) {
+            self.state.tokens.rejected(&self.account_id, &lease.token);
+        }
         self.state.abd.tokens.drop_lease(&self.account_id);
     }
+}
+
+/// When a token comes with no expiry on record, how long a lease built from
+/// it is trusted.
+const UNKNOWN_EXPIRY_LEASE_MS: i64 = 10 * 60 * 1000;
+
+/// Lease the daemon's own token (`oauth_tokens`) to an OAuth job, refreshing
+/// it first when it is about to expire. `true` when a lease with a token
+/// other than `stale` is now in place. The app's `abd.set_token` push is only
+/// a fallback for a refresh that failed.
+async fn lease_daemon_token(state: &Arc<DaemonState>, account_id: &str, stale: Option<&str>) -> bool {
+    let Ok(Some(token)) = crate::oauth_tokens::access_token(state, account_id, crate::oauth_tokens::Read::Quiet).await else {
+        return false;
+    };
+    if stale == Some(token.as_str()) {
+        return false;
+    }
+    let held = state.tokens.expires_at(account_id).filter(|e| *e > 0);
+    let expires_at_ms = held.unwrap_or_else(|| state.clock.now_ms() + UNKNOWN_EXPIRY_LEASE_MS);
+    if state.abd.tokens.get(account_id).map_or(true, |l| l.token != token || l.expires_at_ms != expires_at_ms) {
+        state.abd.tokens.set(account_id, TokenLease { token, expires_at_ms });
+    }
+    true
 }
 
 /// The dry-run listing of one account, and the local counts worked out for it.
@@ -710,7 +740,13 @@ struct Rt {
     kind: Kind,
     /// The token generation the current connection config was built with.
     used_seq: Cell<u64>,
+    /// When the daemon last renewed the token for a sign-in pause.
+    renewed_at: Cell<Option<Instant>>,
 }
+
+/// How often a sign-in pause may be answered by the daemon's own renewal
+/// before it waits for the app instead.
+const DAEMON_RENEWAL_EVERY: Duration = Duration::from_secs(60);
 
 async fn job_main(state: Arc<DaemonState>, handle: Arc<JobHandle>, mut job: JobFile, preview: Option<Arc<PreviewListing>>) {
     let account_id = job.account_id.clone();
@@ -741,7 +777,7 @@ async fn job_main(state: Arc<DaemonState>, handle: Arc<JobHandle>, mut job: JobF
     let kind = kind_of(&cfg);
     let env = DaemonEnv { graph: kind == Kind::Graph, ..env };
     let local = DaemonLocal::new(Arc::clone(&state), &account_id, &job.account_email).with_jmap(kind == Kind::Jmap);
-    let rt = Rt { state: Arc::clone(&state), handle: Arc::clone(&handle), env, local, kind, used_seq: Cell::new(0) };
+    let rt = Rt { state: Arc::clone(&state), handle: Arc::clone(&handle), env, local, kind, used_seq: Cell::new(0), renewed_at: Cell::new(None) };
     if kind == Kind::Graph {
         let mut ops = new_graph_ops(&state, &cfg.email, &account_id);
         rt.drive(&mut job, &mut plans, &mut ops, preview, &cfg).await;
@@ -768,7 +804,7 @@ async fn resolve_config(
         if handle.ctl.cancel.load(SeqCst) {
             return None;
         }
-        match credentials::resolve_account_credentials_quiet(&job.account_id).await {
+        match crate::oauth_tokens::resolve(state, &job.account_id, crate::oauth_tokens::Read::Quiet).await {
             Ok(c) => return Some(c),
             Err(_) => {
                 job.status = if credentials::GATE.is_blocked() {
@@ -819,7 +855,7 @@ impl Rt {
 
     /// The config for the next run: the keychain's latest, with the lease over it.
     async fn next_config(&self, fallback: &ImapConfig) -> ImapConfig {
-        let base = match credentials::resolve_account_credentials_quiet(&self.env.account_id).await {
+        let base = match crate::oauth_tokens::resolve(&self.state, &self.env.account_id, crate::oauth_tokens::Read::Quiet).await {
             Ok(c) => c,
             Err(_) => fallback.clone(),
         };
@@ -841,6 +877,10 @@ impl Rt {
         let mut planned = preview.is_none();
         let mut first = true;
         loop {
+            // The lease is what `with_lease` and `GraphOps` read.
+            if matches!(self.kind, Kind::Graph | Kind::ImapOauth) {
+                lease_daemon_token(&self.state, &self.env.account_id, None).await;
+            }
             let effective = if first { with_lease(&self.state, cfg.clone(), &self.env.account_id).0 } else { self.next_config(cfg).await };
             first = false;
             if let Some(m) = self.state.abd.mirror(&job.account_id) {
@@ -930,16 +970,32 @@ impl Rt {
         let st = &self.state;
         match reason {
             PauseReason::SignInNeeded => {
-                // A token the app can push: Graph and OAuth IMAP. Password and
-                // JMAP accounts sign in with what the keychain holds.
+                // The daemon renews the token itself first; only a refresh
+                // that failed asks the app (Graph and OAuth IMAP). Password
+                // and JMAP accounts sign in with what the keychain holds.
                 if matches!(self.kind, Kind::Graph | Kind::ImapOauth) {
+                    let refused = st.abd.tokens.get(&account).map(|l| l.token);
+                    if let Some(token) = refused.as_deref() {
+                        st.tokens.rejected(&account, token);
+                    }
+                    // At most once a minute: a token the server refuses
+                    // right after every renewal must not spin the job.
+                    let recent = self.renewed_at.get().is_some_and(|t| t.elapsed() < DAEMON_RENEWAL_EVERY);
+                    if !recent && lease_daemon_token(st, &account, refused.as_deref()).await {
+                        self.renewed_at.set(Some(Instant::now()));
+                        *lock(&self.handle.parked) = None;
+                        return;
+                    }
+
                     let provider = if self.kind == Kind::Graph { "graph" } else { "imap_oauth" };
                     st.events.emit(TOKEN_EVENT, json!({"accountId": account, "jobId": job.job_id, "provider": provider}));
                 }
                 let used = self.used_seq.get();
                 match self.kind {
+                    // Back to the top of `drive` now and then, which renews the
+                    // token itself: nobody pushes one any more.
                     Kind::Graph => {
-                        self.wait_until(min, None, || st.abd.tokens.fresh(&account, st.clock.now_ms()).is_some()).await
+                        self.wait_until(min, Some(TOKEN_RETRY), || st.abd.tokens.fresh(&account, st.clock.now_ms()).is_some()).await
                     }
                     Kind::ImapOauth => {
                         self.wait_until(min, Some(SIGN_IN_RETRY), || {
@@ -996,7 +1052,7 @@ pub(crate) fn finish_unsaved_for_test(state: &Arc<DaemonState>, account: &str, e
     let env = DaemonEnv::new(state, &handle, &job, false).expect("job dir");
     env.save(&job).expect("the last good save");
     let local = DaemonLocal::new(Arc::clone(state), account, email);
-    let rt = Rt { state: Arc::clone(state), handle, env, local, kind: Kind::Password, used_seq: Cell::new(0) };
+    let rt = Rt { state: Arc::clone(state), handle, env, local, kind: Kind::Password, used_seq: Cell::new(0), renewed_at: Cell::new(None) };
     rt.finish(&mut job, RunExit::Failed("could not save the job: disk full".to_string()));
     let dir = jobfile::job_dir(&state.app_dir, account).expect("job dir");
     jobfile::load_job(&dir).expect("readable").expect("still there")
@@ -1034,7 +1090,7 @@ async fn do_preview(state: Arc<DaemonState>, account_id: String, preview_id: Str
 
 async fn preview_inner(state: &Arc<DaemonState>, account_id: &str, preview_id: &str) -> Result<Arc<PreviewEntry>, String> {
     jobfile::job_dir(&state.app_dir, account_id)?;
-    let cfg = credentials::resolve_account_credentials_quiet(account_id).await?;
+    let cfg = crate::oauth_tokens::resolve(state, account_id, crate::oauth_tokens::Read::Quiet).await?;
     let (email, host) = (cfg.email.clone(), cfg.host.clone());
     let now = state.clock.now_ms();
     let listing = {

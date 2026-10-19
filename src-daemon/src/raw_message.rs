@@ -326,8 +326,8 @@ pub(crate) async fn prune_attachment_cache(state: &Arc<DaemonState>, older_than:
 }
 
 #[cfg(not(test))]
-pub(crate) async fn account_config(_state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
-    crate::credentials::resolve_account_credentials_guarded(account_id).await
+pub(crate) async fn account_config(state: &DaemonState, account_id: &str) -> Result<ImapConfig, String> {
+    crate::oauth_tokens::resolve(state, account_id, crate::oauth_tokens::Read::Guarded).await
 }
 
 #[cfg(test)]

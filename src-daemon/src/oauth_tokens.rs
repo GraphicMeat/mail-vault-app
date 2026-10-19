@@ -156,6 +156,14 @@ fn grant_of(record: &Value) -> Option<(Grant, String, i64)> {
     Some((grant, text("oauth2AccessToken").unwrap_or_default(), expires_at))
 }
 
+/// The stored token of an OAuth2 record with no refresh token: used as it
+/// is, nothing can renew it.
+fn unrefreshable_token(record: &Value) -> Option<String> {
+    (record.get("authType").and_then(Value::as_str) == Some("oauth2"))
+        .then(|| record.get("oauth2AccessToken").and_then(Value::as_str).filter(|t| !t.is_empty()).map(str::to_owned))
+        .flatten()
+}
+
 /// A refresh that got no usable answer, as `oauth2::refresh_token` words it:
 /// the request failed, the reply was not a token response, or the provider
 /// said it is down for now. Anything else is a refusal no retry will change.
@@ -251,6 +259,16 @@ impl TokenStore {
             .collect()
     }
 
+    /// The held token's expiry, epoch ms (0: the record never said).
+    pub(crate) fn expires_at(&self, account_id: &str) -> Option<i64> {
+        self.entries().get(account_id).map(|e| e.expires_at)
+    }
+
+    /// The address the held token was issued for.
+    fn email(&self, account_id: &str) -> Option<String> {
+        self.entries().get(account_id).map(|e| e.grant.email.clone())
+    }
+
     fn unsaved_ids(&self) -> Vec<String> {
         self.entries().iter().filter(|(_, e)| e.unsaved).map(|(id, _)| id.clone()).collect()
     }
@@ -289,10 +307,10 @@ async fn read_record(account_id: &str, read: Read) -> Result<(ImapConfig, Value)
 /// The ONE function: a valid access token for `account_id`, refreshed first
 /// when it is expired or within `REFRESH_MARGIN_MS` of it.
 ///
-/// `Ok(None)`: the daemon does not manage this account's token (a password or
-/// JMAP account, an OAuth2 one with no refresh token). `Err`: the token has
+/// `Ok(None)`: not an OAuth2 account (a password or JMAP one). An OAuth2 one
+/// with no refresh token gets its stored token, never refreshed. `Err`: the token has
 /// expired and could not be renewed, or the record could not be read.
-pub(crate) async fn access_token(state: &Arc<DaemonState>, account_id: &str, read: Read) -> Result<Option<String>, TokenError> {
+pub(crate) async fn access_token(state: &DaemonState, account_id: &str, read: Read) -> Result<Option<String>, TokenError> {
     if let Some(token) = state.tokens.cached(account_id, now_ms()) {
         return Ok(Some(token));
     }
@@ -303,12 +321,12 @@ pub(crate) async fn access_token(state: &Arc<DaemonState>, account_id: &str, rea
 }
 
 /// `access_token` for a caller that has just read the record itself.
-pub(crate) async fn for_record(state: &Arc<DaemonState>, account_id: &str, record: &Value) -> Result<Option<String>, TokenError> {
+pub(crate) async fn for_record(state: &DaemonState, account_id: &str, record: &Value) -> Result<Option<String>, TokenError> {
     let flight = state.tokens.flight(account_id);
     let _one_refresh = flight.lock().await;
     // A refresh that finished while this caller waited wins here: its expiry
     // is later than the record this caller read.
-    let Some(entry) = state.tokens.reconcile(account_id, record) else { return Ok(None) };
+    let Some(entry) = state.tokens.reconcile(account_id, record) else { return Ok(unrefreshable_token(record)) };
     let now = now_ms();
     if !entry.needs_refresh(now) {
         return Ok(Some(entry.access_token));
@@ -320,19 +338,18 @@ pub(crate) async fn for_record(state: &Arc<DaemonState>, account_id: &str, recor
     refresh(state, account_id, entry, now).await
 }
 
-async fn refresh(state: &Arc<DaemonState>, account_id: &str, entry: Entry, now: i64) -> Result<Option<String>, TokenError> {
+async fn refresh(state: &DaemonState, account_id: &str, entry: Entry, now: i64) -> Result<Option<String>, TokenError> {
     let grant = &entry.grant;
-    let result = state
-        .oauth2
-        .refresh_token(
-            &grant.refresh_token,
-            grant.provider.clone(),
-            grant.custom_client_id.clone(),
-            grant.tenant_id.clone(),
-            grant.use_graph,
-            grant.client_id.clone(),
-        )
-        .await;
+    // Network Activity shows the refresh as the account's, from a worker too.
+    let request = state.oauth2.refresh_token(
+        &grant.refresh_token,
+        grant.provider.clone(),
+        grant.custom_client_id.clone(),
+        grant.tenant_id.clone(),
+        grant.use_graph,
+        grant.client_id.clone(),
+    );
+    let result = mailvault_core::net_activity::with_account(grant.email.clone(), request).await;
     let failure = match result {
         Ok(tokens) if !tokens.access_token.is_empty() => {
             let token = tokens.access_token.clone();
@@ -358,7 +375,7 @@ async fn refresh(state: &Arc<DaemonState>, account_id: &str, entry: Entry, now: 
 /// `config` (read with `record`) with the daemon's token in it. A failure
 /// is the caller's to judge; its `fallback` is the expired token.
 pub(crate) async fn fresh_config(
-    state: &Arc<DaemonState>,
+    state: &DaemonState,
     account_id: &str,
     mut config: ImapConfig,
     record: &Value,
@@ -376,7 +393,7 @@ pub(crate) async fn fresh_config(
 /// `credentials::resolve_account_*` readers return, for a caller that sends
 /// with it. A refresh that failed leaves the newest token held in it, as the
 /// app did: the server's refusal is what the caller reports.
-pub(crate) async fn resolve(state: &Arc<DaemonState>, account_id: &str, read: Read) -> Result<ImapConfig, String> {
+pub(crate) async fn resolve(state: &DaemonState, account_id: &str, read: Read) -> Result<ImapConfig, String> {
     let (config, record) = read_record(account_id, read).await?;
     Ok(match fresh_config(state, account_id, config.clone(), &record).await {
         Ok(fresh) => fresh,
@@ -393,12 +410,112 @@ pub(crate) async fn resolve(state: &Arc<DaemonState>, account_id: &str, read: Re
 /// After the app wrote credentials: read the record of every account with a
 /// refreshed pair not yet seen stored, quietly, so `unsaved` stops offering
 /// what was saved.
-pub(crate) async fn recheck_unsaved(state: &Arc<DaemonState>) {
+pub(crate) async fn recheck_unsaved(state: &DaemonState) {
     for account_id in state.tokens.unsaved_ids() {
         if let Ok((_, record)) = read_record(&account_id, Read::Quiet).await {
             let flight = state.tokens.flight(&account_id);
             let _held = flight.lock().await;
             state.tokens.reconcile(&account_id, &record);
+        }
+    }
+}
+
+// ── Requests: the daemon's token over whatever the app sent ─────────────────
+
+/// Params that carry a whole account, as an object or as its JSON text.
+const ACCOUNT_PARAMS: [&str; 4] = ["account", "accountJson", "sourceAccount", "destAccount"];
+
+/// A token `inject` put in a request, so a server refusing it can be noted.
+pub(crate) struct Injected {
+    account_id: String,
+    token: String,
+}
+
+/// The daemon's token for `account_id`, when it holds one issued for `email`
+/// (a request may name an id the store holds for another address).
+async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>) -> Option<String> {
+    let token = match access_token(state, account_id, Read::Guarded).await {
+        Ok(Some(token)) => token,
+        Ok(None) => return None,
+        Err(e) => e.fallback?,
+    };
+    if let Some(email) = email.filter(|e| !e.is_empty()) {
+        let held = state.tokens.email(account_id);
+        // An entry exists for every refreshable account; a record without a
+        // refresh token is checked against the record's own address below.
+        let matches = match held {
+            Some(held) => held.eq_ignore_ascii_case(email),
+            None => read_record(account_id, Read::Quiet)
+                .await
+                .is_ok_and(|(config, _)| config.email.eq_ignore_ascii_case(email)),
+        };
+        if !matches {
+            return None;
+        }
+    }
+    Some(token)
+}
+
+/// Put the daemon's own token into a request, over any the app sent: in each
+/// OAuth2 account the params carry (`account` and the other `ACCOUNT_PARAMS`,
+/// as an object or as JSON text, identified by its `id` or the request's
+/// `accountId`), and as `accessToken` in a `graph_*` call naming `accountId`.
+/// A token the app sent is kept only when the daemon has none for that
+/// account (one being added, not stored yet). Old callers keep working.
+pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value) -> Vec<Injected> {
+    let mut injected = Vec::new();
+    let Some(obj) = params.as_object_mut() else { return injected };
+    let request_account = obj.get("accountId").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
+    for key in ACCOUNT_PARAMS {
+        let Some(slot) = obj.get_mut(key) else { continue };
+        let as_text = slot.is_string();
+        let mut account = match &*slot {
+            Value::String(text) => match serde_json::from_str::<Value>(text) {
+                Ok(v) => v,
+                Err(_) => continue,
+            },
+            other => other.clone(),
+        };
+        if account.get("authType").and_then(Value::as_str) != Some("oauth2") {
+            continue;
+        }
+        let own_id = account.get("id").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
+        let names_request_account = key == "account" || key == "accountJson";
+        let Some(account_id) = own_id.or_else(|| request_account.clone().filter(|_| names_request_account)) else { continue };
+        let email = account.get("email").and_then(Value::as_str).map(str::to_owned);
+        let Some(token) = daemon_token(state, &account_id, email.as_deref()).await else { continue };
+        // A sign-in that just happened (Reconnect testing its new token before
+        // saving it) carries a later expiry than anything held: it is newer
+        // than the daemon's, the same rule `reconcile` applies to the store.
+        let sent = account.get("oauth2AccessToken").and_then(Value::as_str).filter(|t| !t.is_empty());
+        let sent_expiry = account.get("oauth2ExpiresAt").and_then(Value::as_f64).map(|v| v as i64);
+        let held_expiry = state.tokens.expires_at(&account_id);
+        if sent.is_some() && matches!((sent_expiry, held_expiry), (Some(sent), Some(held)) if sent > held) {
+            continue;
+        }
+        account["oauth2AccessToken"] = json!(token);
+        *slot = if as_text { Value::String(account.to_string()) } else { account };
+        injected.push(Injected { account_id, token });
+    }
+    if method.starts_with("graph_") {
+        if let Some(account_id) = request_account {
+            let email = obj.get("accountEmail").and_then(Value::as_str).map(str::to_owned);
+            if let Some(token) = daemon_token(state, &account_id, email.as_deref()).await {
+                obj.insert("accessToken".to_string(), json!(token));
+                injected.push(Injected { account_id, token });
+            }
+        }
+    }
+    injected
+}
+
+/// A request answered with a sign-in refusal: the tokens it carried are not
+/// handed out again, the next use refreshes first.
+pub(crate) fn note_refusal(state: &DaemonState, injected: &[Injected], error: &str) {
+    let refused = error.contains("XOAUTH2 auth failed") || mailvault_core::graph::GraphClient::is_token_expired(error);
+    if refused {
+        for i in injected {
+            state.tokens.rejected(&i.account_id, &i.token);
         }
     }
 }
@@ -516,7 +633,8 @@ mod tests {
     }
 
     /// As the app: a password account, an OAuth2 one without a refresh token
-    /// and one whose record never gave an expiry are not refreshed.
+    /// and one whose record never gave an expiry are not refreshed. The two
+    /// OAuth2 ones get their stored token.
     #[tokio::test]
     async fn accounts_the_daemon_does_not_manage_are_left_alone() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
@@ -534,7 +652,7 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         assert!(matches!(p, Ok(None)), "password account");
-        assert!(matches!(n, Ok(None)), "no refresh token");
+        assert_eq!(n.ok().flatten().as_deref(), Some("at-stored-0001"), "no refresh token");
         assert_eq!(e.ok().flatten().as_deref(), Some("at-stored-0001"), "no expiry on record");
         assert!(test_token_posts().is_empty());
     }
@@ -686,5 +804,152 @@ mod tests {
         assert_eq!(offered[0]["refreshToken"], json!("rt-rotated-0008"));
         assert_eq!(after_failed_save.len(), 1, "the record does not show it yet");
         assert!(after_save.is_empty(), "{after_save:?}");
+    }
+
+    // ── requests ────────────────────────────────────────────────────────────
+
+    /// Every place a request carries an OAuth2 token for a stored account
+    /// gets the daemon's: an account object, an account as JSON text, and a
+    /// Graph call's `accessToken` (added when the app sent none).
+    #[tokio::test]
+    async fn a_request_carries_the_daemons_token_not_the_one_the_app_sent() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(vec![granted("at-fresh-0009", None)]);
+        let s = st();
+        store(&s, &[("g1", &gmail(json!({})))]);
+        let account = json!({"id": "g1", "email": "me@gmail.test", "authType": "oauth2", "oauth2AccessToken": "from-the-app"});
+
+        let mut object = json!({"account": account, "mailbox": "INBOX"});
+        let mut text = json!({"accountId": "g1", "accountJson": account.to_string()});
+        let mut graph = json!({"accountId": "g1", "folderId": "f"});
+        let mut graph_old = json!({"accountId": "g1", "accessToken": "from-the-app"});
+        inject(&s, "imap_get_emails", &mut object).await;
+        inject(&s, "backup_run_account", &mut text).await;
+        inject(&s, "graph_list_messages", &mut graph).await;
+        inject(&s, "graph_list_folders", &mut graph_old).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(object["account"]["oauth2AccessToken"], json!("at-fresh-0009"));
+        assert_eq!(object["mailbox"], json!("INBOX"), "nothing else touched");
+        let parsed: Value = serde_json::from_str(text["accountJson"].as_str().unwrap()).unwrap();
+        assert_eq!(parsed["oauth2AccessToken"], json!("at-fresh-0009"));
+        assert_eq!(graph["accessToken"], json!("at-fresh-0009"));
+        assert_eq!(graph_old["accessToken"], json!("at-fresh-0009"));
+        assert_eq!(test_token_posts().len(), 1);
+    }
+
+    /// The app's token stays where the daemon has none of its own: an
+    /// account being added (not stored yet), a stored id that belongs to
+    /// another address, a password account, a migration account with no id,
+    /// and a non-Graph call's bare `accessToken`.
+    #[tokio::test]
+    async fn the_apps_token_is_kept_only_where_the_daemon_has_none() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(Vec::new());
+        let s = st();
+        let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
+        store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000}))), ("p1", &password)]);
+        let oauth = |id: Value, email: &str| json!({"id": id, "email": email, "authType": "oauth2", "oauth2AccessToken": "from-the-app"});
+
+        let mut new_account = json!({"account": oauth(json!("not-stored"), "new@gmail.test")});
+        let mut other_address = json!({"account": oauth(json!("g1"), "someone-else@gmail.test")});
+        let mut password_account = json!({"account": {"id": "p1", "email": "p@x.test", "authType": "password", "password": "pw"}});
+        let mut no_id = json!({"sourceAccount": oauth(Value::Null, "me@gmail.test").to_string()});
+        let mut not_graph = json!({"accountId": "g1", "accessToken": "from-the-app"});
+        let injected = [
+            inject(&s, "imap_test_connection", &mut new_account).await.len(),
+            inject(&s, "imap_get_mailboxes", &mut other_address).await.len(),
+            inject(&s, "imap_get_mailboxes", &mut password_account).await.len(),
+            inject(&s, "start_migration", &mut no_id).await.len(),
+            inject(&s, "abd.set_token", &mut not_graph).await.len(),
+        ];
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(injected, [0, 0, 0, 0, 0]);
+        assert_eq!(new_account["account"]["oauth2AccessToken"], json!("from-the-app"));
+        assert_eq!(other_address["account"]["oauth2AccessToken"], json!("from-the-app"));
+        assert_eq!(password_account["account"]["password"], json!("pw"));
+        assert!(no_id["sourceAccount"].as_str().unwrap().contains("from-the-app"));
+        assert_eq!(not_graph["accessToken"], json!("from-the-app"));
+    }
+
+    /// Reconnect tests the token it just got before saving it: that one is
+    /// newer than the daemon's (a later expiry) and goes out as sent.
+    #[tokio::test]
+    async fn a_new_sign_in_still_being_tested_keeps_its_own_token() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(Vec::new());
+        let s = st();
+        store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_000_000})))]);
+        let account = |token: &str, expires: i64| json!({"account": {
+            "id": "g1", "email": "me@gmail.test", "authType": "oauth2", "oauth2AccessToken": token, "oauth2ExpiresAt": expires,
+        }});
+
+        let mut reconnect = account("at-just-signed-in", now_ms() + 3_600_000);
+        let mut stale = account("at-older-copy", now_ms() + 1_000_000);
+        inject(&s, "imap_test_connection", &mut reconnect).await;
+        inject(&s, "imap_get_mailboxes", &mut stale).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(reconnect["account"]["oauth2AccessToken"], json!("at-just-signed-in"));
+        assert_eq!(stale["account"]["oauth2AccessToken"], json!("at-stored-0001"));
+    }
+
+    /// A server that refuses the daemon's token: the next request refreshes
+    /// first instead of sending the refused token again.
+    #[tokio::test]
+    async fn a_token_a_server_refused_is_refreshed_before_the_next_request() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(vec![granted("at-renewed-0010", None)]);
+        let s = st();
+        store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000})))]);
+        let request = || json!({"account": {"id": "g1", "email": "me@gmail.test", "authType": "oauth2"}});
+
+        let mut first = request();
+        let injected = inject(&s, "imap_get_mailboxes", &mut first).await;
+        note_refusal(&s, &injected, "Login failed for me@gmail.test: something else");
+        let mut unrelated = request();
+        inject(&s, "imap_get_mailboxes", &mut unrelated).await;
+        note_refusal(&s, &injected, "XOAUTH2 auth failed for me@gmail.test: [AUTHENTICATIONFAILED]");
+        let mut second = request();
+        inject(&s, "imap_get_mailboxes", &mut second).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(first["account"]["oauth2AccessToken"], json!("at-stored-0001"));
+        assert_eq!(unrelated["account"]["oauth2AccessToken"], json!("at-stored-0001"), "only a sign-in refusal counts");
+        assert_eq!(second["account"]["oauth2AccessToken"], json!("at-renewed-0010"));
+        assert_eq!(test_token_posts().len(), 1);
+    }
+
+    /// Through the RPC layer: a Graph call that names only its account goes
+    /// out with the daemon's fresh token, and the app can take the new pair
+    /// to save and say it saved it.
+    #[tokio::test]
+    async fn a_graph_call_naming_only_its_account_is_sent_with_a_fresh_token() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(200, "{}".to_string())]);
+        let _mock = test_token_mock(vec![granted("at-graph-0011", Some("rt-graph-0011"))]);
+        let s = st();
+        let outlook = json!({
+            "id": "o1", "email": "me@outlook.test", "imapHost": "outlook.office365.com", "authType": "oauth2",
+            "oauth2Provider": "microsoft", "oauth2Transport": "graph",
+            "oauth2AccessToken": "at-old-0011", "oauth2RefreshToken": "rt-old-0011", "oauth2ExpiresAt": 1_000_000_000_000i64,
+        });
+        store(&s, &[("o1", &outlook)]);
+
+        let listed = crate::server::handle_request_for_test(&s, "graph_set_read", json!({"accountId": "o1", "messageId": "m1", "isRead": true})).await;
+        let taken = crate::server::handle_request_for_test(&s, "oauth2.take_refreshed", json!({})).await;
+        let changed = crate::server::handle_request_for_test(&s, "oauth2.credentials_changed", json!({})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let requests = crate::handlers::graph::test_graph_requests();
+        let posts = test_token_posts();
+
+        assert!(listed.error.is_none(), "{:?}", listed.error);
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer at-graph-0011"));
+        assert!(field(&posts[0], "scope").is_some_and(|sc| sc.contains("Mail.ReadWrite")), "Graph scopes: {posts:?}");
+        let tokens = taken.result.expect("take_refreshed")["tokens"].clone();
+        assert_eq!(tokens, json!([{"accountId": "o1", "accessToken": "at-graph-0011", "refreshToken": "rt-graph-0011", "expiresAt": tokens[0]["expiresAt"]}]));
+        assert_eq!(changed.result, Some(json!({"ok": true})));
     }
 }

@@ -493,14 +493,21 @@ where
 /// Route a parsed RPC request, every connection it makes shown on Network
 /// Activity as the account it names (`accountEmail`): Graph, a token refresh,
 /// an unsubscribe, a sender logo, an export's remote content.
-async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse {
+///
+/// Every OAuth2 token a request carries is first replaced by the daemon's own
+/// (`oauth_tokens::inject`), so no handler ever sends the app's copy.
+async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcResponse {
     let method = req.method.clone();
+    let injected = crate::oauth_tokens::inject(state, &method, &mut req.params).await;
     let resp = match req.params.get("accountEmail").and_then(Value::as_str).filter(|e| !e.is_empty()).map(str::to_owned) {
         Some(email) => mailvault_core::net_activity::with_account(email, route_request(state, req)).await,
         None => route_request(state, req).await,
     };
     if let Some(line) = jmap_refusal_log_line(&method, &resp) {
         warn!("{line}");
+    }
+    if let Some(error) = resp.error.as_ref().filter(|_| !injected.is_empty()) {
+        crate::oauth_tokens::note_refusal(state, &injected, &error.message);
     }
     resp
 }
