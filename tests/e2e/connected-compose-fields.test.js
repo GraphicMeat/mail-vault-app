@@ -216,7 +216,7 @@ describe('Connected Compose Fields', function () {
     }, {
       timeout: 20_000,
       interval: 500,
-      timeoutMsg: 'No contact suggestions for "sender" — the contacts index (src/utils/contactsIndex.js) produced no match from the loaded mailbox headers',
+      timeoutMsg: 'No contact suggestions for "sender": the daemon contacts index (people.contacts.search) produced no match from the cached mailbox headers',
     });
 
     // The mock fixtures send from `Sender N <senderN@example.com>` and one
@@ -247,7 +247,7 @@ describe('Connected Compose Fields', function () {
     }, {
       timeout: 20_000,
       interval: 500,
-      timeoutMsg: 'The TO contacts popover listed no contacts — the contacts index (src/utils/contactsIndex.js) is empty for the compose From account',
+      timeoutMsg: 'The TO contacts popover listed no contacts: the daemon contacts index (people.contacts.top) is empty for the compose From account',
     });
 
     const pick = contacts[0];

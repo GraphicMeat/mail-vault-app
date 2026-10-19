@@ -9,6 +9,7 @@ import { PrivacyDictionaryHost } from '../PrivacyDictionaryHost';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useMailStore } from '../../../stores/mailStore';
 import { getPrivacyDictionary, usePrivacyDictStore } from '../../../utils/privacy/privacyDictionary';
+import { daemonCall } from '../../../services/daemonClient';
 
 const mail = (name) => ({ uid: 1, from: { name, address: 'a@x.com' }, to: [], cc: [], bcc: [] });
 
@@ -16,6 +17,7 @@ afterEach(cleanup);
 beforeEach(() => {
   usePrivacyStore.setState({ enabled: false, peek: false, captureMask: false, dictWanted: false });
   useMailStore.setState({ emails: [], sentEmails: [], selectedEmail: null, accounts: [] });
+  usePrivacyDictStore.setState({ ready: false });
 });
 
 describe('PrivacyDictionaryHost', () => {
@@ -56,6 +58,35 @@ describe('PrivacyDictionaryHost', () => {
     await act(async () => { usePrivacyStore.setState({ dictWanted: true }); });
     expect(usePrivacyDictStore.getState().version).toBe(v + 1);
     expect(getPrivacyDictionary().tokens.has('fern')).toBe(true);
+  });
+
+  it('masks every name in the daemon contacts index, and is ready only once the daemon answered', async () => {
+    let answer;
+    vi.mocked(daemonCall).mockImplementationOnce((method, params) => new Promise((resolve) => { answer = { method, params, resolve }; }));
+    useMailStore.setState({ accounts: [{ id: 'a2', email: 'me@work.io' }, { id: 'a1', email: 'me@h.io' }] });
+    usePrivacyStore.setState({ enabled: true });
+    render(<PrivacyDictionaryHost />);
+    await act(async () => {});
+    expect(answer.method).toBe('people.contacts.names');
+    expect(answer.params).toEqual({ accountIds: ['a1', 'a2'] });
+    expect(usePrivacyDictStore.getState().ready).toBe(false);
+    // The nine names contactsIndex.js gave the dictionary for the parity fixture.
+    const names = ['Andrea Work', 'Ann Lee', 'Anna Smith', 'Annabel Old', 'Bob Annberg', 'Carl Cc', 'Doe, John', 'Joanna Doe', 'Zoë Ångström'];
+    await act(async () => { answer.resolve(names); });
+    expect(usePrivacyDictStore.getState().ready).toBe(true);
+    for (const token of ['andrea', 'annabel', 'annberg', 'carl', 'john', 'joanna', 'smith', 'lee']) {
+      expect(getPrivacyDictionary().tokens.has(token), token).toBe(true);
+    }
+  });
+
+  it('a failed contacts call still masks loaded headers but is never ready', async () => {
+    vi.mocked(daemonCall).mockImplementationOnce(async () => { throw new Error('daemon offline'); });
+    useMailStore.setState({ accounts: [{ id: 'a1', email: 'me@h.io' }] });
+    usePrivacyStore.setState({ enabled: true });
+    render(<PrivacyDictionaryHost />);
+    await act(async () => { useMailStore.setState({ emails: [mail('Gwen Hart')] }); });
+    expect(getPrivacyDictionary().tokens.has('gwen')).toBe(true);
+    expect(usePrivacyDictStore.getState().ready).toBe(false);
   });
 
   it('never forgets a name this session: a folder switch must not unmask the open message', async () => {

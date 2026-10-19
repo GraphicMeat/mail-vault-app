@@ -166,6 +166,9 @@ export const DAEMON_OWNED = new Set([
   // stores, exports and imports them (handlers/learning.rs).
   'learning.record_correction', 'learning.rules', 'learning.stats', 'learning.save_rule',
   'learning.delete_rule', 'learning.export', 'learning.import',
+  // Every address seen in mail, ranked for the compose pickers, and its names
+  // for the privacy dictionary (was src/utils/contactsIndex.js).
+  'people.contacts.top', 'people.contacts.search', 'people.contacts.names',
   // Track H: the app saved a new download mode or window; the daemon's
   // eviction (and, with Premium, Hoarder) worker re-derives its work now.
   'storage.fetch_mode_changed',

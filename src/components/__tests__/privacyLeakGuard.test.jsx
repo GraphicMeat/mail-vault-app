@@ -25,6 +25,14 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
   return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: bodies }, registerListener: () => () => {} }) };
 });
 vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: () => null }));
+// The compose picker's contacts come from the daemon; everything else keeps
+// the real client (no Tauri here, so it fails as before).
+vi.mock('../../services/daemonClient', async importOriginal => {
+  const real = await importOriginal();
+  const { PEOPLE } = await import('../../test/privacyFixtures');
+  const contact = { name: PEOPLE.names[0], address: PEOPLE.emails[0], count: 1, lastSeen: 1, accountIds: ['own'] };
+  return { ...real, daemonCall: (method, params) => (method === 'people.contacts.top' ? Promise.resolve({ latest: [contact], popular: [contact] }) : real.daemonCall(method, params)) };
+});
 vi.mock('../../services/workflows/threadReadTimer', () => ({
   startThreadReadTimer: vi.fn(async () => {}), stopThreadReadTimer: vi.fn(() => false), forgetThreadReadTimer: vi.fn(),
   cancelThreadReadTimers: vi.fn(),
@@ -221,9 +229,9 @@ describe('privacy leak guard', () => {
     expectNoLeak(document.body);
   });
 
-  it('compose contacts picker', () => {
+  it('compose contacts picker', async () => {
     render(<ContactsPickerButton value="" onChange={vi.fn()} fieldName="TO" />);
-    fireEvent.click(document.querySelector('button'));
+    await act(async () => { fireEvent.click(document.querySelector('button')); });
     expect(document.body.textContent).toContain(MASKED_JOANNA);
     expectNoLeak(document.body);
   });

@@ -579,6 +579,36 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
             return [id, [...counts.values()].sort((a, b) => b.count - a.count)];
           }));
         }
+        // The compose pickers and the privacy dictionary, over the snapshot above.
+        if (method?.startsWith('people.contacts.')) {
+          const p = args.params || {};
+          const ids = Array.isArray(p.accountIds) && p.accountIds.length ? p.accountIds : ACCOUNT_IDS;
+          const snap = await invoke('daemon_rpc', { method: 'contacts_index.get', params: { accountIds: ids } });
+          if (method === 'people.contacts.names') return [...new Set(ids.flatMap(id => (snap[id] || []).map(e => e.name).filter(Boolean)))].sort();
+          const own = new Set((p.ownAddresses || []).map(a => String(a).toLowerCase()));
+          const merged = new Map();
+          for (const id of ids) {
+            for (const e of snap[id] || []) {
+              const address = e.address.toLowerCase();
+              if (own.has(address)) continue;
+              const c = merged.get(address) || { address, name: '', count: 0, lastSeen: 0, accountIds: [] };
+              if (e.name && (!c.name || e.lastSeen >= c.lastSeen)) c.name = e.name;
+              c.count += e.count; c.lastSeen = Math.max(c.lastSeen, e.lastSeen); c.accountIds.push(id);
+              merged.set(address, c);
+            }
+          }
+          const recent = (a, b) => b.lastSeen - a.lastSeen;
+          if (method === 'people.contacts.top') {
+            const list = [...merged.values()].filter(c => !p.accountId || c.accountIds.includes(p.accountId));
+            const n = p.limit || 50;
+            return { latest: [...list].sort(recent).slice(0, n), popular: [...list].sort((a, b) => b.count - a.count || recent(a, b)).slice(0, n) };
+          }
+          if (method === 'people.contacts.search') {
+            const q = String(p.query || '').trim().toLowerCase();
+            const tier = c => (p.boostAccountId && c.accountIds.includes(p.boostAccountId) ? 0 : 1);
+            return q ? [...merged.values()].filter(c => c.address.startsWith(q) || c.name.toLowerCase().includes(q)).sort((a, b) => tier(a) - tier(b) || recent(a, b)).slice(0, p.limit || 8) : [];
+          }
+        }
         if (method === 'sync.now') {
           const syncParams = args.params || {};
           const syncAccountId = syncParams.account?.id || syncParams.accountId || ACCOUNT_IDS[0];

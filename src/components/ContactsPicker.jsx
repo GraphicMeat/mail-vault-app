@@ -5,60 +5,43 @@ import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/
 import { ownAddresses } from '../utils/ownAddresses';
 import { withoutRecipients } from '../utils/recipientTokens';
 import { Users, Clock, Star } from 'lucide-react';
-import {
-  buildContactsIndex,
-  searchContacts,
-  formatContact,
-  hydrateContactsIndex,
-  getHydratedAccountSources,
-  getContactsForAccount,
-  subscribeContactsIndex,
-} from '../utils/contactsIndex';
+import { daemonCall } from '../services/daemonClient';
+import { formatContact } from '../utils/formatContact';
 import { useT } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr } from '../hooks/usePrivacy';
 
-// All inboxes puts every account's rows in these lists, so each row is credited
-// to its own account; an unstamped row belongs to the active one.
-function byRowAccount(rows, activeAccountId) {
-  const groups = new Map();
-  for (const row of rows || []) {
-    const accountId = row._accountId || activeAccountId;
-    if (!groups.has(accountId)) groups.set(accountId, []);
-    groups.get(accountId).push(row);
-  }
-  return [...groups].map(([accountId, list]) => ({ accountId, emails: list }));
-}
+const NO_LISTS = { latest: [], popular: [] };
+const NO_MATCHES = [];
 
-function useContactsIndex() {
-  const emails = useMailStore(s => s.emails);
-  const sentEmails = useMailStore(s => s.sentEmails);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
+// The daemon ranks every address seen in mail (`people.contacts.*`); the
+// picker only says whose mail to look in and which addresses are the user.
+function useContactScope() {
   const accounts = useAccountStore(s => s.accounts);
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
   const aliases = useSettingsStore(s => s.aliases);
   // Your own aliases are never offered as contacts, like your logins.
-  const own = useMemo(
-    () => (accounts || []).flatMap(account => ownAddresses({ account, sendAsAddress: sendAsAddresses?.[account.id], aliases: aliases?.[account.id] })),
-    [sendAsAddresses, aliases, accounts],
-  );
-  const [hydrationTick, setHydrationTick] = useState(0);
+  return useMemo(() => ({
+    accountIds: (accounts || []).map(a => a.id),
+    ownAddresses: (accounts || []).flatMap(account => ownAddresses({ account, sendAsAddress: sendAsAddresses?.[account.id], aliases: aliases?.[account.id] })),
+  }), [sendAsAddresses, aliases, accounts]);
+}
 
+// The daemon's answer for the current params. A reply to an older request
+// (the user typed on) never replaces a newer one; a failure shows nothing.
+function useDaemonAnswer(method, params, enabled, empty) {
+  const [answer, setAnswer] = useState(empty);
+  const key = enabled ? JSON.stringify(params) : '';
   useEffect(() => {
-    const unsub = subscribeContactsIndex(() => setHydrationTick(t => t + 1));
-    hydrateContactsIndex(accounts || []);
-    return unsub;
-  }, [accounts]);
-
-  return useMemo(() => {
-    const sources = [
-      ...getHydratedAccountSources(),
-      ...byRowAccount(emails, activeAccountId),
-      ...byRowAccount(sentEmails, activeAccountId),
-    ];
-    return buildContactsIndex(sources, accounts || [], own);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emails, sentEmails, accounts, activeAccountId, hydrationTick, own]);
+    if (!key) { setAnswer(empty); return undefined; }
+    let current = true;
+    daemonCall(method, JSON.parse(key)).then(
+      r => { if (current) setAnswer(r || empty); },
+      () => { if (current) setAnswer(empty); },
+    );
+    return () => { current = false; };
+  }, [method, key, empty]);
+  return answer;
 }
 
 // Appends a contact address to a comma-separated recipient string. If the
@@ -89,7 +72,7 @@ function getTrailingToken(value) {
 export function ContactsPickerButton({ value, onChange, fieldName, boostAccountId = null, exclude = null }) {
   const t = useT();
   const pa = usePrivateAttr();
-  const index = useContactsIndex();
+  const scope = useContactScope();
   const accounts = useAccountStore(s => s.accounts) || [];
   const accountColors = useSettingsStore(s => s.accountColors);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
@@ -119,9 +102,11 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const filtered = useMemo(
-    () => getContactsForAccount(index, effectiveFilterId),
-    [index, effectiveFilterId],
+  const filtered = useDaemonAnswer(
+    'people.contacts.top',
+    { ...scope, accountId: effectiveFilterId, limit: 50 },
+    open,
+    NO_LISTS,
   );
   const list = withoutRecipients(tab === 'latest' ? filtered.latest : filtered.popular, exclude);
 
@@ -248,7 +233,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
 // ranked first so the user's primary correspondents surface ahead of cross-
 // account hits. `exclude` (the field's chips) are never offered again.
 export function ContactsAutocomplete({ value, onChange, inputRef, boostAccountId = null, exclude = null }) {
-  const index = useContactsIndex();
+  const scope = useContactScope();
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const [highlight, setHighlight] = useState(0);
   const [focused, setFocused] = useState(false);
@@ -257,11 +242,15 @@ export function ContactsAutocomplete({ value, onChange, inputRef, boostAccountId
   const partial = getTrailingToken(value);
   // Contacts already in the field are not offered again: ask for enough extra
   // to still fill the list after they are dropped.
+  const found = useDaemonAnswer(
+    'people.contacts.search',
+    { ...scope, query: partial, boostAccountId: effectiveBoost || null, limit: 6 + (exclude?.length || 0) },
+    focused && partial.length >= 1,
+    NO_MATCHES,
+  );
   const matches = useMemo(
-    () => (partial.length >= 1
-      ? withoutRecipients(searchContacts(index, partial, 6 + (exclude?.length || 0), effectiveBoost), exclude).slice(0, 6)
-      : []),
-    [partial, index, effectiveBoost, exclude],
+    () => withoutRecipients(found, exclude).slice(0, 6),
+    [found, exclude],
   );
 
   useEffect(() => { setHighlight(0); }, [partial]);
