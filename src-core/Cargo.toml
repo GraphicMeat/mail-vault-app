@@ -17,6 +17,8 @@ dirs = "5"
 tracing = "0.1"
 sha2 = "0.10"
 regex = "1"
+# NFKC for the one-time code detector (src/verification_code.rs), as the app's JS read it.
+unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v4"] }
 # Transport/protocol deps for shared imap/graph/oauth2/dns modules.
 tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "macros"] }

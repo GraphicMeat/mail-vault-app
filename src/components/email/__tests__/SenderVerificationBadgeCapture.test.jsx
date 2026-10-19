@@ -7,6 +7,21 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
+
+// The daemon's verdict on the fixture below: Reply-To on another domain, SPF failed.
+vi.mock('../../../services/senderVerdict', async (importOriginal) => {
+  const { stubSenderVerdicts, verdict, issue } = await import('../../../test/senderVerdicts');
+  return stubSenderVerdicts(importOriginal, (fields) => (fields.authenticationResults
+    ? verdict({
+      status: 'danger',
+      issues: [
+        issue('warning', 'replyAddressDiffersSender', { replyToAddr: 'collect@elsewhere.example' }),
+        issue('danger', 'senderAuthenticationFailedEmailMay', { failures: 'SPF' }),
+      ],
+      auth: { spf: 'fail', dkim: 'pass', dmarc: 'pass' },
+    })
+    : verdict()));
+});
 import { SenderVerificationBadge } from '../EmailHeaderComponent';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { setPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';

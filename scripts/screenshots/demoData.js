@@ -260,7 +260,7 @@ function threadInbox(uidBase) {
       from: CAST.ana, to: OWNER,
       subject: THREAD_SUBJECT,
       messageId: THREAD_ROOT,
-      // SPF+DKIM pass gives `checkSenderVerification` (senderCheck.js) a
+      // SPF+DKIM pass gives `message.verify_sender` (sender_check.rs) a
       // 'verified' status — the sender-verification badge (thread-view's
       // second DETAILS crop) renders nothing at all without it, since no
       // other fixture message carries an Authentication-Results header.
@@ -673,7 +673,7 @@ function replyToMismatchMessage(uid) {
 
 /**
  * Display-name impersonation: the name IS an email address, on a domain
- * unrelated to the real sender. `checkSenderVerification` (senderCheck.js
+ * unrelated to the real sender. `message.verify_sender` (sender_check.rs
  * "Layer 0") raises `level: 'danger'` for exactly this shape, which is what
  * `SenderAlertIcon` renders as "Sender impersonation detected".
  *

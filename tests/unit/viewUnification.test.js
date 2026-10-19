@@ -28,9 +28,10 @@ vi.mock('../../src/stores/mailStore', () => {
   return { useMailStore: hook };
 });
 
-vi.mock('../../src/utils/senderCheck', () => ({
-  checkSenderVerification: () => ({ status: 'none', tooltip: '', issues: [] }),
-  parseAuthResults: () => ({ spf: null, dkim: null, dmarc: null }),
+vi.mock('../../src/services/senderVerdict', async (importOriginal) => ({
+  ...await importOriginal(),
+  cachedVerdict: () => undefined,
+  verifySender: async () => ({ status: 'none', tooltip: [], issues: [], auth: { spf: null, dkim: null, dmarc: null }, dkim: null }),
 }));
 
 vi.mock('../../src/utils/emailParser', () => ({

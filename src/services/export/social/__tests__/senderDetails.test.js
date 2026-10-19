@@ -1,16 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import { senderDetailsModel, maskSenderDetails, senderDetailsHtml } from '../senderDetails';
 import { buildNameDictionary } from '../../../../utils/privacy/piiDetector';
+import { verdict, issue } from '../../../../test/senderVerdicts';
+
+// The model is the daemon's verdict (message.verify_sender) laid out for the
+// card; these are the answers it gives for the messages below.
 
 const spoof = {
   from: { name: 'Prize Desk', address: 'win@prize.example' },
   replyTo: [{ address: 'collect@elsewhere.example' }],
   authenticationResults: 'mx.example; spf=softfail; dkim=pass; dmarc=fail',
 };
+const spoofVerdict = verdict({
+  status: 'danger',
+  issues: [
+    issue('warning', 'replyAddressDiffersSender', { replyToAddr: 'collect@elsewhere.example' }),
+    issue('danger', 'senderAuthenticationFailedEmailMay', { failures: 'SPF, DMARC' }),
+  ],
+  auth: { spf: 'softfail', dkim: 'pass', dmarc: 'fail' },
+});
 
 describe('senderDetailsModel', () => {
   it('reads the address, the name, the issues, the results and the Reply-To as the popover does', () => {
-    const m = senderDetailsModel(spoof);
+    const m = senderDetailsModel(spoof, spoofVerdict);
     expect(m.address).toBe('win@prize.example');
     expect(m.name).toBe('Prize Desk');
     expect(m.auth).toEqual({ spf: 'softfail', dkim: 'pass', dmarc: 'fail' });
@@ -29,7 +41,7 @@ describe('senderDetailsModel', () => {
   });
 
   it('a Reply-To on the sender\'s domain matches; a lone object is read like an array', () => {
-    const m = senderDetailsModel({ from: { address: 'a@x.example' }, replyTo: { address: 'b@X.example' }, authenticationResults: 'spf=pass' });
+    const m = senderDetailsModel({ from: { address: 'a@x.example' }, replyTo: { address: 'b@X.example' }, authenticationResults: 'spf=pass' }, verdict({ auth: { spf: 'pass' } }));
     expect(m.replyTo).toEqual({ address: 'b@X.example', matches: true });
     expect(m.issues).toEqual([]);
   });
@@ -40,11 +52,13 @@ describe('senderDetailsModel', () => {
   });
 
   it('results with no failure keep the box without issues; an info-level issue never counts', () => {
-    const m = senderDetailsModel({ from: { address: 'a@x.example' }, returnPath: 'bounce@other.example', authenticationResults: 'spf=pass dkim=pass' });
+    const info = issue('info', 'returnPathDomainDiffersSender', { returnPathDomain: 'other.example' });
+    const m = senderDetailsModel({ from: { address: 'a@x.example' }, returnPath: 'bounce@other.example', authenticationResults: 'spf=pass dkim=pass' },
+      verdict({ status: 'verified', auth: { spf: 'pass', dkim: 'pass' } }));
     expect(m.issues).toEqual([]);
     expect(m.auth).toEqual({ spf: 'pass', dkim: 'pass', dmarc: null });
     // Only an info issue and no results: still "no data" (the popover filters to danger/warning too).
-    expect(senderDetailsModel({ from: { address: 'a@x.example' }, returnPath: 'bounce@other.example' }).noData).toBe(true);
+    expect(senderDetailsModel({ from: { address: 'a@x.example' }, returnPath: 'bounce@other.example' }, verdict({ issues: [info] })).noData).toBe(true);
   });
 
   it('a message with no sender does not throw', () => {
@@ -57,7 +71,7 @@ describe('maskSenderDetails', () => {
   // Issue lines as senderCheck builds them: catalog text around the From name,
   // the addresses and the From domain. Nothing else in them names anyone.
   const model = {
-    ...senderDetailsModel(spoof),
+    ...senderDetailsModel(spoof, spoofVerdict),
     issues: [
       { level: 'warning', text: 'Reply-To address (collect@elsewhere.example) differs from sender' },
       { level: 'danger', text: 'Display name "Prize Desk" but sent from win@prize.example via prize.example' },
@@ -98,7 +112,7 @@ describe('maskSenderDetails', () => {
 
 describe('senderDetailsHtml', () => {
   it('renders the popover\'s sections with its labels, colours and the Reply-To row', () => {
-    const html = senderDetailsHtml(senderDetailsModel(spoof));
+    const html = senderDetailsHtml(senderDetailsModel(spoof, spoofVerdict));
     expect(html).toContain('Sender Details');
     expect(html).toContain('>From<');
     expect(html).toContain('>Name<');
@@ -115,7 +129,7 @@ describe('senderDetailsHtml', () => {
   });
 
   it('a matching Reply-To says so instead of the address', () => {
-    const html = senderDetailsHtml(senderDetailsModel({ from: { address: 'a@x.example' }, replyTo: [{ address: 'b@x.example' }], authenticationResults: 'spf=pass' }));
+    const html = senderDetailsHtml(senderDetailsModel({ from: { address: 'a@x.example' }, replyTo: [{ address: 'b@x.example' }], authenticationResults: 'spf=pass' }, verdict({ auth: { spf: 'pass' } })));
     expect(html).toContain('matches sender');
     expect(html).not.toContain('b@x.example');
   });
@@ -140,20 +154,23 @@ describe('senderDetailsHtml', () => {
 
 describe('DKIM algorithm on the social card', () => {
   const msg = { from: { address: 'a@x.example' }, authenticationResults: 'mx; spf=pass; dkim=pass; dmarc=pass', dkimSignature: 'a=rsa-sha256; d=x.example; s=k1' };
+  const passed = (dkim) => verdict({ status: 'verified', auth: { spf: 'pass', dkim: 'pass', dmarc: 'pass' }, dkim });
+  const signed = passed({ algorithm: 'rsa-sha256', domain: 'x.example', selector: 'k1' });
 
   it('the model carries it, outside the results object', () => {
-    const m = senderDetailsModel(msg);
+    const m = senderDetailsModel(msg, signed);
     expect(m.dkimAlgorithm).toBe('rsa-sha256');
     expect(m.auth).toEqual({ spf: 'pass', dkim: 'pass', dmarc: 'pass' });
-    expect(senderDetailsModel({ ...msg, dkimSignature: undefined }).dkimAlgorithm).toBeNull();
+    expect(senderDetailsModel({ ...msg, dkimSignature: undefined }, passed(null)).dkimAlgorithm).toBeNull();
   });
 
   it('the box prints it beside the DKIM verdict', () => {
-    expect(senderDetailsHtml(senderDetailsModel(msg))).toContain('pass</span><span class="mv-alg">rsa-sha256</span>');
+    expect(senderDetailsHtml(senderDetailsModel(msg, signed))).toContain('pass</span><span class="mv-alg">rsa-sha256</span>');
   });
 
+  // The daemon drops a value that is not an algorithm token (sender_check.rs).
   it('a value that is not an algorithm token is never printed', () => {
-    const html = senderDetailsHtml(senderDetailsModel({ ...msg, dkimSignature: 'a=<b>' }));
+    const html = senderDetailsHtml(senderDetailsModel({ ...msg, dkimSignature: 'a=<b>' }, passed(null)));
     expect(html).not.toContain('<b>');
     expect(html).not.toContain('mv-alg');
   });

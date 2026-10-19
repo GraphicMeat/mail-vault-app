@@ -1,4 +1,3 @@
-import { findVerificationCode, looksLikeCodeMail } from '../utils/verificationCode';
 import { htmlToPlainText } from '../utils/emailParser';
 import { useCodeBubbleStore } from '../stores/codeBubbleStore';
 import { isGraphAccount, graphMessageToEmail } from './graphConfig';
@@ -27,6 +26,12 @@ export async function fetchArrivalBody(accountId, uid, mailbox) {
   return graphMessageToEmail(await api.graphGetMessage(fresh.oauth2AccessToken, graphId), uid);
 }
 
+// The daemon reads the code (`message.code`, src-core/src/verification_code.rs).
+async function codeIn(subject, text) {
+  const api = await import('./api');
+  return api.messageCode(subject, text);
+}
+
 /**
  * An arrival's newest header, from the change feed: offer its one-time code
  * in the corner bubble. A code in the subject costs nothing; a subject that
@@ -36,16 +41,23 @@ export async function fetchArrivalBody(accountId, uid, mailbox) {
 export async function offerCodeFromArrival(accountId, mailbox, header, { fetchBody = fetchArrivalBody } = {}) {
   if (!header || header.uid == null || mailbox !== 'INBOX') return;
   const subject = header.subject || '';
-  let code = findVerificationCode({ subject, text: header.snippet || '' });
-  if (!code && looksLikeCodeMail({ subject })) {
-    let body;
-    try {
-      body = await fetchBody(accountId, header.uid, mailbox);
-    } catch (e) {
-      console.warn('[codeBubble] Could not read the body for a code:', e);
-      return;
+  let code;
+  try {
+    const first = await codeIn(subject, header.snippet || '');
+    code = first?.code || null;
+    if (!code && first?.needsBody) {
+      let body;
+      try {
+        body = await fetchBody(accountId, header.uid, mailbox);
+      } catch (e) {
+        console.warn('[codeBubble] Could not read the body for a code:', e);
+        return;
+      }
+      code = (await codeIn(subject, body?.text || htmlToPlainText(body?.html || '')))?.code || null;
     }
-    code = findVerificationCode({ subject, text: body?.text || htmlToPlainText(body?.html || '') });
+  } catch (e) {
+    console.warn('[codeBubble] Could not read the mail for a code:', e);
+    return;
   }
   if (!code) return;
   const from = typeof header.from === 'string' ? { address: header.from } : (header.from || {});

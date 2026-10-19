@@ -87,9 +87,14 @@ for (const [name, renderRow] of variants) {
       expect(logo.getAttribute('src')).toBe(LOGO);
     });
 
-    it('asks nothing for a message without a DMARC pass', () => {
+    // The daemon decides whether the DMARC result earns a lookup: without a
+    // pass for this From domain it answers no logo and looks nothing up.
+    it('draws nothing for a message without a DMARC pass, as the daemon answers', async () => {
+      daemonCall.mockResolvedValue({ logo: null });
       render(renderRow(email({ authenticationResults: 'mx.test; dmarc=fail' })));
-      expect(daemonCall).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(daemonCall).toHaveBeenCalledWith('bimi_logo', expect.objectContaining({
+        domain: 'blurb.test', authenticationResults: 'mx.test; dmarc=fail',
+      })));
       expect(screen.queryByTestId('bimi-logo')).toBeNull();
     });
 

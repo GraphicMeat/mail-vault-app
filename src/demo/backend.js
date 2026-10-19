@@ -620,6 +620,9 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           return { provider: { status: 'unsupported', aliases: [] }, detected };
         }
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
+        // The demo's mail carries no authentication results and no codes to read.
+        if (method === 'message.verify_sender') return { status: 'none', tooltip: [], issues: [], auth: { spf: null, dkim: null, dmarc: null }, dkim: null, simulated: true };
+        if (method === 'message.code') return { code: null, needsBody: false, simulated: true };
         // "Is the server copy gone?": the demo's own server rows answer, and
         // nothing is stamped (its custody lives on the rows themselves).
         if (method === 'custody.probe_server_copy') {

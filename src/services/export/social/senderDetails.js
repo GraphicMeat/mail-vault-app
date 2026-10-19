@@ -1,37 +1,36 @@
-import { checkSenderVerification, parseAuthResults, parseDkimSignature } from '../../../utils/senderCheck';
+import { NO_VERDICT, shownIssues } from '../../senderVerdict';
 import { maskText, findPii, EMPTY_DICTIONARY } from '../../../utils/privacy/piiDetector';
 import { t } from '../../../i18n/index.js';
 import { esc } from '../exportDocument';
 
 /**
  * The sender-details box of a social card: the in-app AuthDetailPopover's
- * content as a model, a redaction step and card HTML. The model is computed
- * from the hydrated, UNREDACTED message with the popover's own rules (it reads
- * the address, the name only when it differs, the danger and warning issues,
- * the SPF/DKIM/DMARC results and a Reply-To domain check); the mask comes
- * after, so what the verdicts say is never worked out from masked text.
+ * content as a model, a redaction step and card HTML. The model is built
+ * from the hydrated, UNREDACTED message and the daemon's verdict on it
+ * (`message.verify_sender`, the popover's own answer): the address, the name
+ * only when it differs, the danger and warning issues, the SPF/DKIM/DMARC
+ * results and a Reply-To domain check. The mask comes after, so what the
+ * verdicts say is never worked out from masked text.
  */
 
 const domainOf = (address) => address?.split('@')[1]?.toLowerCase() || '';
 
-export function senderDetailsModel(message) {
+export function senderDetailsModel(message, verdict = NO_VERDICT) {
   const from = message?.from;
   const address = from?.address || 'unknown';
   const name = from?.name && from.name !== from.address ? from.name : null;
-  const issues = (checkSenderVerification(message).issues || [])
-    .filter(i => i.level === 'danger' || i.level === 'warning')
-    .map(({ level, text }) => ({ level, text }));
-  const parsed = parseAuthResults(message?.authenticationResults);
+  const issues = shownIssues(verdict, t);
+  const parsed = verdict?.auth || NO_VERDICT.auth;
   const hasAuth = parsed.spf !== null || parsed.dkim !== null || parsed.dmarc !== null;
   // The popover's read: an object or the first of an array.
   const replyToAddress = Array.isArray(message?.replyTo) ? message.replyTo[0]?.address : message?.replyTo?.address;
   const replyTo = replyToAddress
     ? { address: replyToAddress, matches: domainOf(replyToAddress) === domainOf(from?.address) }
     : null;
-  return { address, name, issues, auth: hasAuth ? parsed : null, dkimAlgorithm: parseDkimSignature(message)?.algorithm ?? null, replyTo, noData: !hasAuth && issues.length === 0 };
+  return { address, name, issues, auth: hasAuth ? parsed : null, dkimAlgorithm: verdict?.dkim?.algorithm ?? null, replyTo, noData: !hasAuth && issues.length === 0 };
 }
 
-// senderCheck's own clean-up of a display name before it quotes it.
+// The verdict's own clean-up of a display name before it quotes it (sender_check.rs).
 const quotedName = (name) => String(name).replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
 const replaceAll = (text, value, by) => (value ? text.split(value).join(by) : text);
 

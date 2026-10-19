@@ -30,6 +30,17 @@ vi.mock('../../services/workflows/threadReadTimer', () => ({
   cancelThreadReadTimers: vi.fn(),
 }));
 vi.mock('../../services/workflows/loadSubtree', () => ({ openFolder: vi.fn() }));
+// The daemon's sender verdict on the fixture: its Reply-To (a fixture person)
+// is on another domain, so the shield warns and the popover quotes that address.
+vi.mock('../../services/senderVerdict', async (importOriginal) => {
+  const { stubSenderVerdicts, verdict, issue } = await import('../../test/senderVerdicts');
+  return stubSenderVerdicts(importOriginal, (fields) => {
+    const replyToAddr = Array.isArray(fields.replyTo) ? fields.replyTo[0]?.address : fields.replyTo?.address;
+    return replyToAddr
+      ? verdict({ status: 'warning', issues: [issue('warning', 'replyAddressDiffersSender', { replyToAddr })] })
+      : verdict();
+  });
+});
 vi.mock('../../services/db', async importOriginal => ({
   ...await importOriginal(),
   readLocalEmailIndex: async () => [],

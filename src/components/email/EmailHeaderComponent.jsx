@@ -13,7 +13,8 @@ import {
   AlertTriangle,
   Info,
 } from 'lucide-react';
-import { checkSenderVerification, parseAuthResults, parseDkimSignature, formatDkimKey } from '../../utils/senderCheck';
+import { NO_VERDICT, shownIssues, verdictTooltip } from '../../services/senderVerdict';
+import { useSenderVerdict } from '../../hooks/useSenderVerdict';
 import { daemonCall } from '../../services/daemonClient';
 import { useMailStore } from '../../stores/mailStore';
 import { accountEmailOf } from '../../stores/slices/unifiedHelpers';
@@ -25,6 +26,15 @@ import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { useCaptureSenderDetails } from '../../hooks/useCaptureSenderDetails';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
+
+const KEY_TYPE_NAMES = { rsa: 'RSA', ed25519: 'Ed25519', ed448: 'Ed448' };
+
+/** A `dkim_key` answer as the popover prints it: `RSA 2048-bit`, `Ed25519 256-bit`. Empty for none or a revoked key. */
+export function formatDkimKey(key) {
+  if (!key || key.revoked) return '';
+  const name = KEY_TYPE_NAMES[key.keyType] || key.keyType;
+  return key.bits ? `${name} ${key.bits}-bit` : name;
+}
 
 // DKIM key lookups for this session: one DNS ask per selector and domain, however
 // many messages and popovers share them. A miss or a failure is not kept, so a
@@ -58,13 +68,16 @@ function useDkimKey(email, signature, passed) {
   return key;
 }
 
-export function AuthDetailPopover({ email, onClose, anchorRect }) {
+// `verdict`: the badge's answer, handed over so the popover paints in one
+// pass; without one the popover asks for its own.
+export function AuthDetailPopover({ email, verdict: given = null, onClose, anchorRect }) {
   const t = useT();
   const popoverRef = useRef(null);
-  const auth = useMemo(() => parseAuthResults(email?.authenticationResults), [email?.authenticationResults]);
-  const verification = useMemo(() => checkSenderVerification(email), [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]);
+  const asked = useSenderVerdict(given ? null : email);
+  const verdict = given || asked || NO_VERDICT;
+  const auth = verdict.auth || NO_VERDICT.auth;
   const hasAuth = auth.spf !== null || auth.dkim !== null || auth.dmarc !== null;
-  const dkimSignature = useMemo(() => parseDkimSignature(email), [email?.dkimSignature, email?.authenticationResults]);
+  const dkimSignature = verdict.dkim;
   const dkimKey = formatDkimKey(useDkimKey(email, dkimSignature, auth.dkim === 'pass'));
 
   // Check reply-to match
@@ -87,7 +100,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
     return <span className="inline-block w-2 h-2 rounded-full bg-mail-text-muted" />;
   };
 
-  const senderIssues = verification.issues?.filter(i => i.level === 'danger' || i.level === 'warning') || [];
+  const senderIssues = shownIssues(verdict, t);
 
   // Fixed position from the anchor, with viewport edge detection. Rendered via
   // portal — an inline absolute popover gets clipped/overlapped inside
@@ -192,10 +205,10 @@ export function SenderVerificationBadge({ email, size = 14 }) {
   // A social capture of the app window asks this message for its popover, open
   // inline (no anchor: it hangs under the badge, where the shot can see it).
   const captured = useCaptureSenderDetails(email);
-  const { status, tooltip } = useMemo(
-    () => checkSenderVerification(email),
-    [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]
-  );
+  const t = useT();
+  const verdict = useSenderVerdict(email);
+  const status = verdict?.status || 'none';
+  const tooltip = verdictTooltip(verdict, t);
 
   // No shield to click when there is nothing to flag, but a capture still shows the box.
   if (status === 'none' && !captured) return null;
@@ -217,9 +230,9 @@ export function SenderVerificationBadge({ email, size = 14 }) {
         <Icon size={size} />
       </button>}
       {captured ? (
-        <AuthDetailPopover email={email} anchorRect={null} onClose={noop} />
+        <AuthDetailPopover email={email} verdict={verdict} anchorRect={null} onClose={noop} />
       ) : popoverAnchor && (
-        <AuthDetailPopover email={email} anchorRect={popoverAnchor} onClose={() => setPopoverAnchor(null)} />
+        <AuthDetailPopover email={email} verdict={verdict} anchorRect={popoverAnchor} onClose={() => setPopoverAnchor(null)} />
       )}
     </span>
   );

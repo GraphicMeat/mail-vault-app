@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useT } from '../../i18n/index.js';
-import { parseAuthResults } from '../../utils/senderCheck';
 import { daemonCall } from '../../services/daemonClient';
 import { useMailStore } from '../../stores/mailStore';
 import { accountEmailOf } from '../../stores/slices/unifiedHelpers';
@@ -17,16 +16,17 @@ export function _resetBimiLookups() { bimiLookups.clear(); }
 
 /**
  * The sender's BIMI logo: beside the SPF/DKIM/DMARC shield in the reader, after
- * the sender's name on a list row. Only asked for when the receiving server
- * says the message passed DMARC; the daemon (`bimi_logo`) checks that the pass
- * is for this From domain and that the domain's policy enforces, and returns an
- * SVG data URI. An `<img>` never runs an SVG's scripts.
+ * the sender's name on a list row. Asked for a message that carries
+ * Authentication-Results at all; the daemon (`bimi_logo`) decides: it answers
+ * no logo, without any lookup, unless the receiving server says the message
+ * passed DMARC for this From domain, then checks that the domain's policy
+ * enforces and returns an SVG data URI. An `<img>` never runs an SVG's scripts.
  */
 export function BimiLogo({ email, size = 20 }) {
   const t = useT();
   const domain = (email?.from?.address || '').split('@')[1]?.trim().toLowerCase() || '';
   const auth = email?.authenticationResults || '';
-  const pass = !!domain && parseAuthResults(auth).dmarc === 'pass';
+  const pass = !!domain && !!auth;
   const [logo, setLogo] = useState(null);
   useEffect(() => {
     setLogo(null);

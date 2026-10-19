@@ -452,6 +452,13 @@ export async function probeServerCopy(account, { accountId, mailbox, uid, messag
   return tauriInvoke('custody.probe_server_copy', { account, accountId, mailbox, uid, messageId, fallbackEntry });
 }
 
+// The one-time code in a mail's subject and text (`message.code`):
+// `{code, needsBody}`, `needsBody` when the subject talks about a code that
+// neither held, so the body is worth reading for it.
+export async function messageCode(subject, text) {
+  return tauriInvoke('message.code', { subject: subject || '', text: text || '' });
+}
+
 // ── OAuth2 API functions ────────────────────────────────────────────────────
 
 // `googleClient` ("thunderbird" | "mailvault") picks the Google app a new

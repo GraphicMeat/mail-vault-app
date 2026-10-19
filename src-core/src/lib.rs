@@ -47,6 +47,8 @@ pub mod snap_keyring;
 pub mod oauth2;
 pub mod dns;
 pub mod dkim;
+pub mod sender_check;
+pub mod verification_code;
 pub mod unsubscribe;
 pub mod smtp;
 pub mod spellcheck;

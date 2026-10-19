@@ -3,11 +3,19 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // The default body read, behind the store and the API: an IMAP message comes
 // through the daemon's light fetch, an Outlook message signed in with
 // Microsoft through Graph with a fresh token.
-const { accounts, mockLight, mockGraphGet } = vi.hoisted(() => ({ accounts: [], mockLight: vi.fn(), mockGraphGet: vi.fn() }));
+const { accounts, mockLight, mockGraphGet, mockCode } = vi.hoisted(() => ({ accounts: [], mockLight: vi.fn(), mockGraphGet: vi.fn(), mockCode: vi.fn() }));
+// What the daemon's `message.code` answers for these mails (its rules are
+// src-core/src/verification_code.rs): a six-digit code if one is there, else
+// whether the subject talks about a code.
+const daemonCode = async (subject, text) => {
+  const code = `${subject}\n${text}`.match(/\b\d{6}\b/)?.[0] ?? null;
+  return { code, needsBody: !code && /sign in|code/i.test(subject) };
+};
 vi.mock('../../stores/mailStore', () => ({ useMailStore: { getState: () => ({ accounts }) } }));
 vi.mock('../api', () => ({
   fetchEmailLight: (...a) => mockLight(...a),
   graphGetMessage: (...a) => mockGraphGet(...a),
+  messageCode: (...a) => mockCode(...a),
 }));
 vi.mock('../authUtils', () => ({ ensureFreshToken: async (account) => ({ ...account, oauth2AccessToken: 'fresh' }) }));
 vi.mock('../cacheManager', () => ({ getGraphMessageId: (accountId, mailbox, uid) => (uid === 42 ? 'graph-42' : null) }));
@@ -26,6 +34,22 @@ describe('offerCodeFromArrival', () => {
   beforeEach(() => {
     useCodeBubbleStore.getState().clear();
     fetchBody = vi.fn().mockResolvedValue({ text: 'Your one-time passcode is 775421.' });
+    mockCode.mockReset().mockImplementation(daemonCode);
+  });
+
+  it('asks the daemon about the subject and snippet, then about the body', async () => {
+    await offerCodeFromArrival('a1', 'INBOX', header('Sign in to Acme', { snippet: 'Hello' }), { fetchBody });
+    expect(mockCode.mock.calls).toEqual([
+      ['Sign in to Acme', 'Hello'],
+      ['Sign in to Acme', 'Your one-time passcode is 775421.'],
+    ]);
+  });
+
+  it('offers nothing when the daemon cannot be asked', async () => {
+    mockCode.mockRejectedValue(new Error('daemon unavailable'));
+    await expect(offerCodeFromArrival('a1', 'INBOX', header('Your code is 364758'), { fetchBody })).resolves.toBeUndefined();
+    expect(fetchBody).not.toHaveBeenCalled();
+    expect(bubbles()).toEqual([]);
   });
 
   it('offers the code from the subject without reading the body', async () => {

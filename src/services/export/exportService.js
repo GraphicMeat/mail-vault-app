@@ -16,6 +16,7 @@ import { plainTextBodyHtml } from '../../utils/mailto';
 import { send } from '../transport';
 import { redactMessageForExport, redactBodyForExport, redactLabel, barText } from './exportRedact';
 import { senderDetailsModel, maskSenderDetails } from './social/senderDetails';
+import { verifySender } from '../senderVerdict';
 import { collectSocialLinks } from './social/socialLinks';
 import { buildNameDictionary, unionDictionaries, maskText } from '../../utils/privacy/piiDetector';
 import { collectPrivacyNames } from '../../utils/privacy/privacyDictionary';
@@ -189,7 +190,7 @@ export async function prepareSocialMessage(message, { mirror = true, redact = nu
     returnPath: full.returnPath ?? dated.returnPath,
     authenticationResults: full.authenticationResults ?? dated.authenticationResults,
   };
-  const model = details ? senderDetailsModel(sender) : null;
+  const model = details ? senderDetailsModel(sender, await verifySender(sender)) : null;
   const rawBody = links ? rawBodyHtml(full) : '';
   if (!redact) return { message: full, body, details: model, links: links ? collectSocialLinks(rawBody) : null };
   const dict = unionDictionaries(redact.dict, buildNameDictionary({ names: collectPrivacyNames({ emails: [full] }) }));

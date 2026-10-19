@@ -282,6 +282,9 @@ export const DAEMON_OWNED = new Set([
   // "Is the server copy gone?": the daemon reads the custody entry, sweeps
   // every folder for the Message-ID and stamps the answer.
   'custody.probe_server_copy',
+  // The sender shield's verdict and the one-time code in a mail, decided by
+  // the daemon from the header fields and text the app hands over.
+  'message.verify_sender', 'message.code',
 ]);
 
 async function sendToDaemon(command, args) {

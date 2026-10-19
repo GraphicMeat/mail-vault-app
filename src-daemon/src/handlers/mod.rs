@@ -41,6 +41,7 @@ pub(crate) mod insights;
 pub(crate) mod journal;
 pub(crate) mod mail_search;
 pub(crate) mod mbox;
+pub(crate) mod message;
 pub(crate) mod migration;
 pub(crate) mod net_activity;
 pub(crate) mod notes;

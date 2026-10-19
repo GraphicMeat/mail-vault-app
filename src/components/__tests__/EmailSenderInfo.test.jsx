@@ -209,10 +209,13 @@ describe('EmailSenderInfo BIMI logo', () => {
     expect(screen.queryByTestId('bimi-logo')).toBeNull();
   });
 
-  it('never asks without a DMARC pass', () => {
-    daemonCall.mockClear();
-    render(<EmailSenderInfo email={brand('mx.test; dkim=pass; dmarc=fail header.from=brand.test')} variant="single" />);
-    expect(daemonCall).not.toHaveBeenCalled();
+  // The daemon decides: without a DMARC pass it answers no logo and looks nothing up.
+  it('draws nothing without a DMARC pass, as the daemon answers', async () => {
+    daemonCall.mockReset();
+    daemonCall.mockResolvedValue({ logo: null });
+    const failed = 'mx.test; dkim=pass; dmarc=fail header.from=brand.test';
+    render(<EmailSenderInfo email={brand(failed)} variant="single" />);
+    await vi.waitFor(() => expect(daemonCall).toHaveBeenCalledWith('bimi_logo', { domain: 'brand.test', authenticationResults: failed }));
     expect(screen.queryByTestId('bimi-logo')).toBeNull();
   });
 });

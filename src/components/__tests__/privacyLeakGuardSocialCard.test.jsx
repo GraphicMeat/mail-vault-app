@@ -16,6 +16,28 @@ vi.mock('../../stores/settingsStore', () => ({
 vi.mock('../../stores/mailStore', () => ({
   useMailStore: { getState: () => ({ accounts: [], activeAccountId: 'acct-1', activeMailbox: 'INBOX' }) },
 }));
+// What the daemon answers for the fixtures below (src-core/src/sender_check.rs
+// decides it): a display name that is another address, a Reply-To on another
+// domain and failed checks each come back as an issue quoting those values.
+vi.mock('../../services/senderVerdict', async (importOriginal) => {
+  const { stubSenderVerdicts, verdict, issue } = await import('../../test/senderVerdicts');
+  const domain = (a) => (a || '').split('@')[1]?.toLowerCase() || '';
+  return stubSenderVerdicts(importOriginal, ({ from, replyTo, authenticationResults }) => {
+    const issues = [];
+    const name = from?.name || '';
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) && name.toLowerCase() !== from.address && domain(name) !== domain(from.address)) {
+      issues.push(issue('danger', 'displayNameShowsButActual', { fromName: name, email: from.address }));
+    }
+    const replyToAddr = Array.isArray(replyTo) ? replyTo[0]?.address : replyTo?.address;
+    if (replyToAddr && domain(replyToAddr) !== domain(from?.address)) {
+      issues.push(issue('warning', 'replyAddressDiffersSender', { replyToAddr }));
+    }
+    const failed = /fail/.test(authenticationResults || '');
+    if (failed) issues.push(issue('danger', 'senderAuthenticationFailedEmailMay', { failures: 'SPF, DKIM, DMARC' }));
+    const status = issues.some(i => i.level === 'danger') ? 'danger' : issues.length ? 'warning' : 'none';
+    return verdict({ status, issues, auth: failed ? { spf: 'fail', dkim: 'fail', dmarc: 'fail' } : {} });
+  });
+});
 
 const { prepareSocialMessage } = await import('../../services/export/exportService');
 const { buildMessageDocument } = await import('../../services/export/exportDocument');

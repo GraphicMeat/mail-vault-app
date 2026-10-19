@@ -9,6 +9,18 @@ vi.mock('../../../stores/settingsStore', () => ({
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: { getState: () => ({ accounts: [], activeAccountId: 'acct-1', activeMailbox: 'INBOX' }) },
 }));
+// The daemon's verdict on `spam` below: Reply-To on another domain, SPF and DMARC failed.
+vi.mock('../../senderVerdict', async (importOriginal) => {
+  const { stubSenderVerdicts, verdict, issue } = await import('../../../test/senderVerdicts');
+  return stubSenderVerdicts(importOriginal, () => verdict({
+    status: 'danger',
+    issues: [
+      issue('warning', 'replyAddressDiffersSender', { replyToAddr: 'collect@elsewhere.example' }),
+      issue('danger', 'senderAuthenticationFailedEmailMay', { failures: 'SPF, DMARC' }),
+    ],
+    auth: { spf: 'fail', dkim: 'none', dmarc: 'fail' },
+  }));
+});
 
 const { prepareSocialMessage } = await import('../exportService');
 const { buildNameDictionary } = await import('../../../utils/privacy/piiDetector');
