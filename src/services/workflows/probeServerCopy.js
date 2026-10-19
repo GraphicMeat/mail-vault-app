@@ -14,12 +14,12 @@
  *   anything else              -> 'unknown', and nothing is written
  *
  * This side resolves which message is meant (the open view, its own row),
- * keeps the account's token fresh, and repaints the rows in memory from the
+ * and repaints the rows in memory from the
  * answer.
  */
 
 import * as api from '../api';
-import { ensureFreshToken, hasValidCredentials } from '../authUtils';
+import { hasValidCredentials } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { applyServerRemoval, indexEntryFor } from './messageMutations';
 import { _resolveUnifiedContext, spansMailboxes, sameMessage, vaultKey } from '../../stores/slices/unifiedHelpers';
@@ -68,8 +68,7 @@ export async function probeServerCopy(uid, scope = {}) {
 
   let result;
   try {
-    const fresh = await ensureFreshToken(account);
-    result = await api.probeServerCopy(fresh || account, {
+    result = await api.probeServerCopy(account, {
       accountId, mailbox, uid,
       messageId: row?.messageId || null,
       fallbackEntry: vaultRow?.subject ? indexEntryFor(vaultRow) : null,

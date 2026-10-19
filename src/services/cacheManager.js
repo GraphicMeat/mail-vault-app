@@ -132,12 +132,12 @@ export function getGraphMessageId(accountId, mailbox, uid) {
  * failure: doing the operation anyway is how a delete reports success while
  * the message stays on the server.
  */
-export async function resolveGraphMessageId(accountId, mailbox, uid, { row, token } = {}) {
+export async function resolveGraphMessageId(accountId, mailbox, uid, { row, account } = {}) {
   if (row?._graphId) return row._graphId;
 
   const known = getGraphMessageId(accountId, mailbox, uid);
   if (known) return known;
-  if (!token) return null;
+  if (!account) return null;
 
   // One relist per folder, not per message. A bulk delete walks its uids in a
   // loop, and a uid genuinely absent from the folder misses the refreshed map
@@ -153,7 +153,7 @@ export async function resolveGraphMessageId(accountId, mailbox, uid, { row, toke
       import('./api.js'),
       import('./graphConfig.js'),
     ]);
-    const folders = await api.graphListFolders(token);
+    const folders = await api.graphListFolders(account);
     // No adoptGraphFolderKeysFromListing here, deliberately: this relist has
     // only an accountId, and it cannot run before one of the listing paths
     // above it (activateAccount, loadEmails, the pipeline) has already listed
@@ -163,7 +163,7 @@ export async function resolveGraphMessageId(accountId, mailbox, uid, { row, toke
     const folder = folders.find(f => storageKeyOf(f) === mailbox);
     if (!folder) return null;
 
-    await listGraphMessages(accountId, mailbox, token, folder.id);
+    await listGraphMessages(accountId, mailbox, account, folder.id);
     return getGraphMessageId(accountId, mailbox, uid);
   } catch (e) {
     console.warn('[graphIdMap] Rebuild failed for %s:%s', accountId, mailbox, e);
@@ -212,9 +212,9 @@ export async function restoreGraphIdMap(accountId, mailbox) {
  * saved/archived sets) must go through here or they file today's mail under
  * yesterday's numbers.
  */
-export async function listGraphMessages(accountId, mailbox, token, folderId, { top = 200, skip = 0 } = {}) {
+export async function listGraphMessages(accountId, mailbox, account, folderId, { top = 200, skip = 0 } = {}) {
   const api = await import('./api.js');
-  const result = await api.graphListMessages(token, folderId, top, skip);
+  const result = await api.graphListMessages(account, folderId, top, skip);
   const headers = await _allocateGraphUids(
     accountId, mailbox, result.headers || [], result.graphMessageIds || []
   );

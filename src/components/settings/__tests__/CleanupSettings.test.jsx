@@ -10,7 +10,6 @@ vi.mock('../../../services/classificationService', () => ({
 vi.mock('../../../services/BulkOperationManager', () => ({
   bulkOperationManager: { start: vi.fn() },
 }));
-vi.mock('../../../services/authUtils', () => ({ ensureFreshToken: vi.fn() }));
 vi.mock('../../../hooks/usePremiumPricing.js', () => ({ usePremiumPriceBlurb: () => '' }));
 vi.mock('../../../services/attachmentUtils', () => ({ getRealAttachments: () => [], replaceCidUrls: html => html, hydrateInlineImages: email => email }));
 // The preview resolves bodies through the shared resolver (vault, then the
@@ -38,7 +37,6 @@ import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import * as classification from '../../../services/classificationService';
 import { bulkOperationManager } from '../../../services/BulkOperationManager';
-import { ensureFreshToken } from '../../../services/authUtils';
 import * as api from '../../../services/api';
 import * as db from '../../../services/db';
 
@@ -56,7 +54,6 @@ beforeEach(() => {
   classification.getSummary.mockResolvedValue({ total: 1 });
   classification.getResults.mockResolvedValue([item]);
   classification.getStatus.mockResolvedValue({ status: 'Idle' });
-  ensureFreshToken.mockImplementation(async a => ({ ...a, accessToken: 'refreshed-token' }));
   db.getLocalEmailLight.mockResolvedValue(undefined);
   api.fetchEmailLight.mockResolvedValue({ uid: 42, subject: item.subject, textBody: 'Fetched preview body' });
   bulkOperationManager.start.mockResolvedValue(undefined);
@@ -85,19 +82,17 @@ describe('Cleanup account reads', () => {
     fireEvent.click(row);
     expect(await screen.findByText('Fetched preview body')).toBeTruthy();
     expect(db.getLocalEmailLight).toHaveBeenCalledWith(account.id, 'INBOX', 42);
-    expect(ensureFreshToken).toHaveBeenCalledWith(updatedAccount);
-    expect(api.fetchEmailLight).toHaveBeenCalledWith({ ...updatedAccount, accessToken: 'refreshed-token' }, 42, 'INBOX', account.id, { intent: 'export' });
+    expect(api.fetchEmailLight).toHaveBeenCalledWith(updatedAccount, 42, 'INBOX', account.id, { intent: 'export' });
   });
 
-  // The reading pane refreshes an OAuth token before it fetches; the preview
-  // sent the store's copy as-is and swallowed the auth failure, so every
-  // uncached message on a Gmail/Outlook OAuth account previewed as a blank body.
-  it('refreshes an OAuth token before fetching an uncached preview', async () => {
+  // The daemon sends an OAuth account's own token, refreshed when due
+  // (src-daemon/src/oauth_tokens.rs): the preview asks with the account as
+  // the store has it and still shows the body of an uncached message.
+  it('fetches an uncached OAuth preview with the stored account, the daemon minding its token', async () => {
     const oauth = { ...account, authType: 'oauth2', oauth2RefreshToken: 'refresh', oauth2AccessToken: 'stale-token' };
     useMailStore.setState({ accounts: [oauth] });
-    ensureFreshToken.mockImplementation(async a => ({ ...a, oauth2AccessToken: 'fresh-token' }));
     const fetchAs = async acct => {
-      if (acct.oauth2AccessToken !== 'fresh-token') throw new Error('AUTHENTICATIONFAILED');
+      if (acct.id !== oauth.id) throw new Error('wrong account');
       return { uid: 42, subject: item.subject, html: '<p>OAuth preview body</p>' };
     };
     api.fetchEmailLight.mockImplementation(fetchAs);
@@ -155,10 +150,9 @@ describe('Cleanup account reads', () => {
     fireEvent.click(within(confirmation).getByRole('button', { name: action, exact: true }));
     await waitFor(() => expect(bulkOperationManager.start).toHaveBeenCalledWith({
       type, accountId: account.id,
-      account: { ...account, accessToken: 'refreshed-token' },
+      account,
       mailbox: 'INBOX', uids: [42], onProgress: expect.any(Function),
     }));
-    expect(ensureFreshToken).toHaveBeenCalledWith(account);
     expect(screen.getByText(phase)).toBeTruthy();
   });
 });

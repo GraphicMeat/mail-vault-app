@@ -8,7 +8,6 @@
 // per full path (sanitized), not nested, so a child that gets no pair of its
 // own never moves.
 import * as api from '../api';
-import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
 import { isLocalMailbox } from './mailboxTree';
@@ -46,7 +45,7 @@ function validName(name, d) {
 async function _ctx(accountId) {
   const { useMailStore } = await import('../../stores/mailStore');
   const s = useMailStore.getState();
-  const account = await ensureFreshToken(s.accounts.find(a => a.id === accountId));
+  const account = s.accounts.find(a => a.id === accountId);
   return { s, account, mailboxes: s.mailboxes || [], d: folderDelimiter(s.mailboxes), email: account?.email || null };
 }
 
@@ -155,7 +154,7 @@ export async function createFolder(accountId, parentPath, displayName) {
   // folder is never well-known) — never the IMAP-shaped `parent + delimiter + leaf`.
   const path = graph ? displayName.trim() : (parentPath ? `${parentPath}${d}${leaf}` : leaf);
   if (graph) {
-    await api.graphCreateFolder(account.oauth2AccessToken, displayName.trim(), parentPath ? graphIdOf(mailboxes, parentPath) || null : null);
+    await api.graphCreateFolder(account, displayName.trim(), parentPath ? graphIdOf(mailboxes, parentPath) || null : null);
   } else {
     await api.createMailbox(account, path);
   }
@@ -176,7 +175,7 @@ export async function renameFolder(accountId, path, displayName) {
     ? displayName.trim()
     : (path.includes(d) ? path.slice(0, path.lastIndexOf(d) + 1) : '') + leaf;
   if (graph) {
-    await api.graphRenameFolder(account.oauth2AccessToken, graphIdOf(mailboxes, path), displayName.trim());
+    await api.graphRenameFolder(account, graphIdOf(mailboxes, path), displayName.trim());
   } else {
     await api.renameMailbox(account, path, to);
   }
@@ -202,7 +201,7 @@ export async function deleteFolder(accountId, path) {
     const paths = [path, ...descendantsOf(mailboxes, path, d)];
     if (graph) {
       for (const p of paths.slice().reverse()) {
-        await api.graphDeleteFolder(account.oauth2AccessToken, graphIdOf(mailboxes, p));
+        await api.graphDeleteFolder(account, graphIdOf(mailboxes, p));
       }
     } else {
       await api.deleteMailbox(account, paths);
@@ -216,7 +215,7 @@ export async function deleteFolder(accountId, path) {
     // display name, and the vault directory that matches it, never change.
     // Moving the vault directory to an IMAP-shaped Trash path here would
     // orphan it: nothing on the server ever produces that path.
-    await api.graphMoveFolder(account.oauth2AccessToken, graphIdOf(mailboxes, path), 'deleteditems');
+    await api.graphMoveFolder(account, graphIdOf(mailboxes, path), 'deleteditems');
     await _settle(s, accountId, next);
     return { movedTo: path };
   }

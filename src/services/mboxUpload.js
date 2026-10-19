@@ -12,30 +12,11 @@ import { forceMailboxRefetch } from './workflows/helpers/mailboxRefetch';
  */
 
 /**
- * The daemon never refreshes an OAuth token itself (a job held for a refused
- * sign-in re-reads the stored credentials and nothing more), so before a start
- * or a resume the app resolves the account the way the backup and the
- * vault-gap save do: resolveServerAccount rehydrates it from the keychain when
- * the store's copy has no credentials, then refreshes the token and writes it
- * where the daemon reads it (a password account and a fresh token are left
- * alone). One that cannot be resolved is the daemon's to report, as a refused
- * sign-in: the daemon reads the keychain itself.
+ * The job reads the account's credentials itself, its OAuth token refreshed by
+ * the daemon when due (src-daemon/src/oauth_tokens.rs); a sign-in it is
+ * refused is the daemon's to report.
  */
-async function freshToken(accountId) {
-  if (!accountId) return;
-  try {
-    const { useMailStore } = await import('../stores/mailStore');
-    const account = (useMailStore.getState().accounts || []).find((a) => a.id === accountId);
-    const { resolveServerAccount } = await import('./authUtils');
-    const resolved = await resolveServerAccount(accountId, account);
-    if (!resolved?.ok) console.warn('[mboxUpload] account not resolved:', resolved?.reason);
-  } catch (e) {
-    console.warn('[mboxUpload] account resolve failed:', e?.message || e);
-  }
-}
-
 export async function start(params) {
-  await freshToken(params.accountId);
   return send('import_mbox', params);
 }
 /** Every job the daemon holds or has a journal of. Rejects when it cannot say. */
@@ -98,8 +79,7 @@ const UNREADABLE = 'Failed to read mbox file';
  * server, which cannot be undone. Resolves null when the pick is cancelled. A
  * caller that just picked the file passes it along instead.
  */
-export async function resume({ jobId, accountId, sourcePath, fileName }) {
-  await freshToken(accountId);
+export async function resume({ jobId, sourcePath, fileName }) {
   try {
     return await send('mbox_upload_resume', sourcePath ? { jobId, sourcePath } : { jobId });
   } catch (e) {

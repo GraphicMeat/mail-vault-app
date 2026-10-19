@@ -309,7 +309,7 @@ it('caches Graph MIME only after the explicit body passes identity validation', 
   mockIsGraphAccount.mockReturnValue(true);
   mockGraphGetMessage.mockResolvedValue(body());
   await openInsightsMessage(match(copy()));
-  expect(mockGraphCacheMime).toHaveBeenCalledWith(undefined, 'graph-message-id', 'a2', 'Archive/2026', 7);
+  expect(mockGraphCacheMime).toHaveBeenCalledWith(expect.objectContaining({ id: 'a2' }), 'graph-message-id', 'Archive/2026', 7);
   mockGraphCacheMime.mockClear();
   useMailStore.setState({ emailCache: new Map() });
   mockGraphGetMessage.mockResolvedValue(body({ subject: 'Another subject' }));

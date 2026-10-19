@@ -194,12 +194,12 @@ class EmailPipelineManager {
         // Pre-fetch mailbox list for instant account switching
         if (!pipeline._destroyed) {
           try {
-            const freshAccount = await import('./authUtils').then(m => m.ensureFreshToken(account));
+            const freshAccount = account;
             const apiMod = await import('./api');
             let mailboxes;
             if (isGraphAccount(freshAccount)) {
               // Graph API: fetch folders and convert to app's mailbox format
-              const graphFolders = await apiMod.graphListFolders(freshAccount.oauth2AccessToken);
+              const graphFolders = await apiMod.graphListFolders(freshAccount);
               await adoptGraphFolderKeysFromListing(freshAccount, graphFolders);
               mailboxes = graphFoldersToMailboxes(graphFolders);
             } else {

@@ -13,13 +13,12 @@
 // out of its folder until the row wakes (deriveDisplayRows), and the wake
 // marks it unread where it is. Other clients still show it in the inbox.
 //
-// Not on a Graph account: the daemon never refreshes an OAuth token, so a
-// background Graph move would fail at wake time. Not offline either: the move
+// Not on a Graph account: the daemon's snooze worker moves over IMAP only, so
+// a Graph account has nothing to wake with. Not offline either: the move
 // would be journalled for later while the row already exists, and a wake that
 // ran first would find nothing and let the replayed move strand the message.
 import * as api from '../api';
 import { daemonCall } from '../daemonClient';
-import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { moveEmails, reloadListInView } from './messageMutations';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
@@ -74,7 +73,7 @@ export async function snoozeEmails(keys, wakeAt) {
   let movedAny = false;
   try {
     for (const [accountId, groupKeys] of groups) {
-      const account = await ensureFreshToken(state.accounts.find(a => a.id === accountId));
+      const account = state.accounts.find(a => a.id === accountId);
       const folder = await daemonCall('snooze.ensure_folder', { account }).catch((e) => {
         const reason = String(e?.message || e);
         if (reason.startsWith(FOLDER_REFUSED)) {

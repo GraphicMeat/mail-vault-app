@@ -223,11 +223,11 @@ describe('Graph', () => {
   it('create/rename/delete go through the Graph commands with folder ids', async () => {
     store(GRAPH_BOXES, 'Inbox', GRAPH_ACCOUNT);
     expect(await createFolder('a1', 'Projects', 'Kunden')).toBe('Kunden');
-    expect(api.graphCreateFolder).toHaveBeenCalledWith('tok', 'Kunden', 'id-projects');
+    expect(api.graphCreateFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'Kunden', 'id-projects');
     expect(api.createMailbox).not.toHaveBeenCalled();
 
     await renameFolder('a1', 'Projects', 'Work');
-    expect(api.graphRenameFolder).toHaveBeenCalledWith('tok', 'id-projects', 'Work');
+    expect(api.graphRenameFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'id-projects', 'Work');
     // The local directories still move, whatever moved them on the server.
     expect(api.vaultRenameMailbox).toHaveBeenCalledWith('a1', 'a1@x', [
       { from: 'Projects', to: 'Work' },
@@ -235,7 +235,7 @@ describe('Graph', () => {
 
     api.vaultRenameMailbox.mockClear();
     await deleteFolder('a1', 'Projects');
-    expect(api.graphMoveFolder).toHaveBeenCalledWith('tok', 'id-projects', 'deleteditems');
+    expect(api.graphMoveFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'id-projects', 'deleteditems');
     expect(api.graphDeleteFolder).not.toHaveBeenCalled();
     // Graph's move doesn't rename the folder, so no local directory follows it.
     expect(api.vaultRenameMailbox).not.toHaveBeenCalled();
@@ -244,7 +244,7 @@ describe('Graph', () => {
   it('deletes a folder already in Deleted Items for real', async () => {
     store([...GRAPH_BOXES, box('Deleted Items/Old', { _graphFolderId: 'id-old' })], 'Inbox', GRAPH_ACCOUNT);
     expect(await deleteFolder('a1', 'Deleted Items/Old')).toEqual({ deleted: 1 });
-    expect(api.graphDeleteFolder).toHaveBeenCalledWith('tok', 'id-old');
+    expect(api.graphDeleteFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'id-old');
     expect(api.vaultRenameMailbox).not.toHaveBeenCalled();
   });
 
@@ -254,7 +254,7 @@ describe('Graph', () => {
     // a path Graph's own refetch never produces, orphaning it.
     store(GRAPH_BOXES, 'Inbox', GRAPH_ACCOUNT);
     const to = await renameFolder('a1', 'Projects', 'Wörk');
-    expect(api.graphRenameFolder).toHaveBeenCalledWith('tok', 'id-projects', 'Wörk');
+    expect(api.graphRenameFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'id-projects', 'Wörk');
     expect(api.vaultRenameMailbox).toHaveBeenCalledWith('a1', 'a1@x', [
       { from: 'Projects', to: 'Wörk' },
     ]);

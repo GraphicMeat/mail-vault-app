@@ -2,7 +2,6 @@
 
 import * as db from '../db';
 import * as api from '../api';
-import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { markServerDeleted } from './messageMutations';
 import { useConnectivityStore } from '../../stores/connectivityStore';
@@ -126,14 +125,8 @@ export async function replayOps({ reason = 'launch' } = {}) {
       continue;
     }
 
-    let fresh;
-    try {
-      fresh = await ensureFreshToken(account);
-    } catch (e) {
-      kept += uids.length;
-      log(`[replayOps] ${account.email}: cannot authenticate, keeping ${uids.length} queued:`, String(e?.message || e));
-      continue;
-    }
+    // The daemon sends the account's token, refreshed when due.
+    const fresh = account;
 
     // `answered` is "dealt with, one way or another" — cleared from the journal.
     // A credentials failure is not an answer, so those uids stay.

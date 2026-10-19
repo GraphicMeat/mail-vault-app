@@ -361,7 +361,8 @@ it('a file whose upload stopped partway is offered to resume in the dialog, with
   fireEvent.click(within(dialog).getByRole('button', { name: 'Resume upload' }));
   // The fresh pick is what a sandboxed daemon may read now, so it goes along.
   await waitFor(() => expect(calls('mbox_upload_resume')).toEqual([{ jobId: 'job-7', sourcePath: SOURCE }]), { timeout: 5000 });
-  expect(resolveServerAccount).toHaveBeenCalledWith(GMAIL.id, GMAIL);
+  // The daemon minds the OAuth token: the app resolves nothing first.
+  expect(resolveServerAccount).not.toHaveBeenCalled();
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(calls('mbox_upload_discard')).toEqual([]);
   expect(importCalls()).toHaveLength(1);

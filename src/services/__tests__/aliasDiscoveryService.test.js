@@ -1,14 +1,13 @@
-// The alias discovery service: token, daemon call, merge into settings. It
+// The alias discovery service: daemon call, merge into settings. The daemon
+// puts in the account's own OAuth token (src-daemon/src/oauth_tokens.rs). It
 // never throws, and one account never has two lookups running at once.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const discoverAliases = vi.fn();
-const ensureFreshToken = vi.fn();
 const applyDiscovery = vi.fn();
 const mail = { accounts: [] };
 
 vi.mock('../api', () => ({ discoverAliases: (...a) => discoverAliases(...a) }));
-vi.mock('../authUtils', () => ({ ensureFreshToken: (...a) => ensureFreshToken(...a) }));
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => ({ applyDiscovery: (...a) => applyDiscovery(...a) }) },
 }));
@@ -17,7 +16,6 @@ vi.mock('../../stores/mailStore', () => ({ useMailStore: { getState: () => mail 
 const { refreshAliases, scheduleAliasRefresh, _resetAliasDiscovery } = await import('../aliasDiscovery');
 
 const ACCOUNT = { id: 'a1', email: 'me@example.test', authType: 'oauth2', oauth2AccessToken: 'test-old' };
-const FRESH = { ...ACCOUNT, oauth2AccessToken: 'test-fresh' };
 const ANSWER = { provider: { status: 'ok', aliases: [] }, detected: [] };
 const MERGED = { added: [{ address: 'desk@example.test', name: '', source: 'provider' }], suggestions: [], providerStatus: 'ok' };
 const FAILED = { added: [], suggestions: [], providerStatus: 'error' };
@@ -25,7 +23,6 @@ const FAILED = { added: [], suggestions: [], providerStatus: 'error' };
 beforeEach(() => {
   _resetAliasDiscovery();
   discoverAliases.mockReset().mockResolvedValue(ANSWER);
-  ensureFreshToken.mockReset().mockImplementation(async () => FRESH);
   applyDiscovery.mockReset().mockReturnValue(MERGED);
   mail.accounts = [ACCOUNT];
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -36,10 +33,9 @@ afterEach(() => {
 });
 
 describe('refreshAliases', () => {
-  it('refreshes the token, asks the daemon with the full account, and merges the answer', async () => {
+  it('asks the daemon with the full account as stored, and merges the answer', async () => {
     await expect(refreshAliases(ACCOUNT)).resolves.toEqual(MERGED);
-    expect(ensureFreshToken).toHaveBeenCalledWith(ACCOUNT);
-    expect(discoverAliases).toHaveBeenCalledWith(FRESH, 'a1');
+    expect(discoverAliases).toHaveBeenCalledWith(ACCOUNT, 'a1');
     expect(applyDiscovery).toHaveBeenCalledWith('a1', 'me@example.test', ANSWER);
   });
 
@@ -47,12 +43,6 @@ describe('refreshAliases', () => {
     discoverAliases.mockRejectedValue(new Error('daemon down'));
     await expect(refreshAliases(ACCOUNT)).resolves.toEqual(FAILED);
     expect(applyDiscovery).not.toHaveBeenCalled();
-  });
-
-  it('answers an error instead of throwing when the token refresh fails', async () => {
-    ensureFreshToken.mockRejectedValue(new Error('offline'));
-    await expect(refreshAliases(ACCOUNT)).resolves.toEqual(FAILED);
-    expect(discoverAliases).not.toHaveBeenCalled();
   });
 
   it('asks nothing for no account', async () => {
@@ -89,7 +79,7 @@ describe('scheduleAliasRefresh', () => {
     mail.accounts = [renewed];
     await vi.advanceTimersByTimeAsync(1);
     await vi.waitFor(() => expect(discoverAliases).toHaveBeenCalledTimes(1));
-    expect(ensureFreshToken).toHaveBeenCalledWith(renewed);
+    expect(discoverAliases).toHaveBeenCalledWith(renewed, 'a1');
 
     scheduleAliasRefresh(ACCOUNT, { delayMs: 0 });
     await vi.advanceTimersByTimeAsync(10);
@@ -123,12 +113,9 @@ describe('scheduleAliasRefresh', () => {
 
 // The daemon asks a JMAP server for its identities with the account JSON it
 // is handed, and looks up no keychain entry: without the password or token
-// in it, the answer would be `denied`. The real ensureFreshToken hands a
-// password account back as it is.
+// in it, the answer would be `denied`.
 describe('a JMAP account', () => {
   it('reaches the daemon with its secret, session URL and id', async () => {
-    const { ensureFreshToken: real } = await vi.importActual('../authUtils');
-    ensureFreshToken.mockImplementation(real);
     const jmap = {
       id: 'j1', email: 'me@fastmail.com', authType: 'password', password: 'fmu1-tok',
       imapHost: 'api.fastmail.com', jmapSessionUrl: 'https://api.fastmail.com/jmap/session', jmapAuth: 'bearer',

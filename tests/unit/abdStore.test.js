@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The app's side of Archive & delete jobs (`services/abd.js` + `stores/abdStore.js`):
- * the launch/reconnect protocol, the drive re-attach, and the OAuth token
- * lease the daemon can not refresh for itself (part-d design 6.4).
+ * the launch/reconnect protocol and the drive re-attach. OAuth tokens are the
+ * daemon's own (src-daemon/src/oauth_tokens.rs): the app hands it none.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,7 +92,7 @@ describe('launch and reconnect', () => {
     await abd.initAbd();
     const ask = h.order.indexOf('call:abd.status');
     expect(ask).toBeGreaterThan(-1);
-    for (const name of ['abd-progress', 'abd-preview', 'abd-token-needed', 'daemon-reconnected', 'daemon-events-lagged']) {
+    for (const name of ['abd-progress', 'abd-preview', 'daemon-reconnected', 'daemon-events-lagged']) {
       const at = h.order.indexOf(`listen:${name}`);
       expect(at, name).toBeGreaterThan(-1);
       expect(at, name).toBeLessThan(ask);
@@ -143,79 +143,33 @@ describe('launch and reconnect', () => {
   });
 });
 
-describe('the OAuth token lease', () => {
-  it('hands the daemon a token at launch and every 10 minutes while an OAuth job is unfinished', async () => {
+describe("OAuth tokens are the daemon's own", () => {
+  it('never hands the daemon a token: not at launch, on a timer, at start, at resume or for a preview', async () => {
     h.status = { jobs: [frame()] };
     await abd.initAbd();
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+    await abd.startJob({ accountId: OAUTH.id, previewId: 'p1', mode: 'archive_delete', confirmed: true });
+    await abd.resume(OAUTH.id);
+    await abd.beginPreview(OAUTH.id);
     await flush();
-    expect(calls('abd.set_token')).toHaveLength(1);
-    expect(calls('abd.set_token')[0]).toEqual({ accountId: OAUTH.id, accessToken: TOKEN, expiresAtMs: 4_000_000_000_000 });
-
-    await vi.advanceTimersByTimeAsync(abd.TOKEN_REFRESH_MS - 1);
-    expect(calls('abd.set_token')).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(calls('abd.set_token')).toHaveLength(2);
-    await vi.advanceTimersByTimeAsync(abd.TOKEN_REFRESH_MS);
-    expect(calls('abd.set_token')).toHaveLength(3);
-  });
-
-  it('never pushes a token for a password account, and runs no timer for it', async () => {
-    h.status = { jobs: [frame({ jobId: 'p', accountId: PASSWORD.id, provider: 'gmail' })] };
-    await abd.initAbd();
-    await vi.advanceTimersByTimeAsync(abd.TOKEN_REFRESH_MS * 3);
     expect(calls('abd.set_token')).toHaveLength(0);
     expect(h.resolve).not.toHaveBeenCalled();
+    expect(JSON.stringify(h.daemon.mock.calls)).not.toContain(TOKEN);
   });
 
-  it('answers abd-token-needed at once, without waiting for the timer', async () => {
-    h.status = { jobs: [frame()] };
+  it('does not listen for abd-token-needed: the daemon renews the token itself', async () => {
     await abd.initAbd();
-    await flush();
-    expect(calls('abd.set_token')).toHaveLength(1);
-    h.listeners.get('abd-token-needed')({ payload: { accountId: OAUTH.id, jobId: 'abd-acc-1', provider: 'graph' } });
-    await flush();
-    expect(calls('abd.set_token')).toHaveLength(2);
-  });
-
-  it('stops handing over tokens once the job ends', async () => {
-    h.status = { jobs: [frame()] };
-    await abd.initAbd();
-    await flush();
-    expect(calls('abd.set_token')).toHaveLength(1);
-    h.listeners.get('abd-progress')({ payload: frame({ finished: true, outcome: 'completed', status: { state: 'completed' }, updatedMs: 2000 }) });
-    await vi.advanceTimersByTimeAsync(abd.TOKEN_REFRESH_MS * 3);
-    expect(calls('abd.set_token')).toHaveLength(1);
-  });
-
-  it('keeps the token out of the store and out of every log line', async () => {
-    const logs = ['log', 'info', 'warn', 'error', 'debug'].map(level => vi.spyOn(console, level).mockImplementation(() => {}));
-    h.status = { jobs: [frame()] };
-    await abd.initAbd();
-    await flush();
-    await abd.startJob({ accountId: OAUTH.id, previewId: 'p1', mode: 'archive_delete' });
-    // A failing push logs too; it must not print the token either.
-    h.daemon.mockImplementationOnce(async () => { throw Object.assign(new Error(`bad request ${TOKEN}`), { code: 'RPC_ERROR' }); });
-    await abd.pushToken(OAUTH.id);
-    await flush();
-
-    expect(JSON.stringify(useAbdStore.getState())).not.toContain(TOKEN);
-    for (const spy of logs) expect(JSON.stringify(spy.mock.calls)).not.toContain(TOKEN);
-  });
-
-  it('tells a failed sign-in apart from a push: nothing is sent for it', async () => {
-    h.resolve = vi.fn(async () => ({ ok: false, reason: 'refresh_failed', message: 'x' }));
-    expect(await abd.pushToken(OAUTH.id)).toBe(false);
-    expect(calls('abd.set_token')).toHaveLength(0);
+    expect(h.listeners.has('abd-token-needed')).toBe(false);
   });
 });
 
 describe('start, pause, resume, cancel, dismiss', () => {
-  it('pushes the token before the shell starts the job, then opens the panel', async () => {
+  it('has the shell start the job, then opens the panel', async () => {
     const order = [];
     h.daemon = vi.fn(async (m) => { order.push(m); return m === 'abd.status' ? h.status : {}; });
     h.start = vi.fn(async () => { order.push('abd_start'); return { jobId: 'j' }; });
     await abd.startJob({ accountId: OAUTH.id, previewId: 'p1', mode: 'archive_delete', confirmed: true });
-    expect(order.indexOf('abd.set_token')).toBeLessThan(order.indexOf('abd_start'));
+    expect(order).not.toContain('abd.set_token');
     expect(h.start).toHaveBeenCalledWith({ accountId: OAUTH.id, previewId: 'p1', mode: 'archive_delete', confirmed: true });
     expect(useAbdStore.getState().panel).toEqual({ accountId: OAUTH.id, minimized: false });
   });
@@ -284,13 +238,13 @@ describe('start, pause, resume, cancel, dismiss', () => {
     expect(calls('abd.cancel')).toEqual([{ accountId: OAUTH.id }]);
   });
 
-  it('resume of a backup-mode job re-attaches the drive and refreshes the token first', async () => {
+  it('resume of a backup-mode job re-attaches the drive first', async () => {
     const order = [];
     h.daemon = vi.fn(async (m) => { order.push(m); return { status: { state: 'running', phase: 'download' } }; });
     h.attach = vi.fn(async () => { order.push('attach'); return { attached: true }; });
     useAbdStore.getState().applyFrame(frame({ mode: 'archive_backup_delete', status: { state: 'paused', reason: 'drive_unavailable' } }));
     await abd.resume(OAUTH.id);
-    expect(order).toEqual(['attach', 'abd.set_token', 'abd.resume']);
+    expect(order).toEqual(['attach', 'abd.resume']);
     expect(useAbdStore.getState().jobs[OAUTH.id].status.state).toBe('running');
   });
 
@@ -329,10 +283,10 @@ describe('the backup drive poll', () => {
 });
 
 describe('the setup preview', () => {
-  it('lists through the daemon after the token, and reports a failed ask on the preview', async () => {
+  it('lists through the daemon, and reports a failed ask on the preview', async () => {
     const id = await abd.beginPreview(OAUTH.id);
     expect(calls('abd.preview')).toEqual([{ accountId: OAUTH.id, previewId: id }]);
-    expect(h.order.indexOf('call:abd.set_token')).toBeLessThan(h.order.indexOf('call:abd.preview'));
+    expect(calls('abd.set_token')).toHaveLength(0);
     expect(useAbdStore.getState().previews[OAUTH.id]).toMatchObject({ previewId: id, state: 'listing' });
 
     h.daemon = vi.fn(async () => { throw new Error('not running'); });

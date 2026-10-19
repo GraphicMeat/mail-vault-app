@@ -1,6 +1,6 @@
 import * as api from './api';
 import * as db from './db';
-import { hasValidCredentials, ensureFreshToken } from './authUtils';
+import { hasValidCredentials } from './authUtils';
 import { syncNow, waitForSync, toSyncAccount } from './syncService';
 import { getDaemonHealth } from './transport';
 import { useMailStore } from '../stores/mailStore';
@@ -122,7 +122,6 @@ export class AccountPipeline {
     let total = 0;
 
     while (hasMore && !this._destroyed && !this._paused) {
-      this.account = await ensureFreshToken(this.account);
       const result = await api.fetchEmails(this.account, mailbox, page);
       allEmails.push(...result.emails);
       total = result.total;
@@ -155,8 +154,7 @@ export class AccountPipeline {
     if (!getDaemonHealth().alive || this._destroyed) return false;
 
     try {
-      const account = await ensureFreshToken(this.account);
-      this.account = account;
+      const account = this.account;
 
       // One builder for the account shape the daemon deserializes — this was a
       // third hand-written copy of it, and it carried the same omission the
@@ -226,11 +224,9 @@ export class AccountPipeline {
   async _loadHeadersGraph(mailbox) {
     console.log(`[Pipeline:${this.account.email}] Loading Graph headers for ${mailbox}...`);
 
-    this.account = await ensureFreshToken(this.account);
-    const token = this.account.oauth2AccessToken;
-
-    // 1. Fetch folder list to find the Graph folder ID
-    const graphFolders = await api.graphListFolders(token);
+    // 1. Fetch folder list to find the Graph folder ID (the daemon sends the
+    // account's token, refreshed when due)
+    const graphFolders = await api.graphListFolders(this.account);
     await adoptGraphFolderKeysFromListing(this.account, graphFolders);
     const targetFolder = graphFolders.find(f => storageKeyOf(f) === mailbox);
 
@@ -246,9 +242,8 @@ export class AccountPipeline {
     let hasMore = true;
 
     while (hasMore && !this._destroyed && !this._paused) {
-      this.account = await ensureFreshToken(this.account);
       const result = await listGraphMessages(
-        this.accountId, mailbox, this.account.oauth2AccessToken, targetFolder.id,
+        this.accountId, mailbox, this.account, targetFolder.id,
         { top: PAGE_SIZE, skip }
       );
 
@@ -335,14 +330,6 @@ export class AccountPipeline {
   async _workerLoop(slotIndex, mailbox) {
     this._activeSlots++;
 
-    // Ensure OAuth2 token is fresh once before the loop starts
-    try {
-      const freshAccount = await ensureFreshToken(this.account);
-      if (freshAccount !== this.account) this.account = freshAccount;
-    } catch (e) {
-      console.warn(`[Pipeline:${this.account.email}] Token refresh failed before worker loop:`, e.message);
-    }
-
     const isGraph = isGraphAccount(this.account);
 
     while (!this._destroyed && !this._paused && !this._limitTimer) {
@@ -362,9 +349,7 @@ export class AccountPipeline {
             continue;
           }
           // 'backfill': the download mode's window decides what stays on disk.
-          email = await api.graphCacheMime(
-            this.account.oauth2AccessToken, graphId, this.accountId, mailbox, uid, 'backfill'
-          );
+          email = await api.graphCacheMime(this.account, graphId, mailbox, uid, 'backfill');
         } else {
           // IMAP: light fetch auto-persists .eml to Maildir in Rust, returns metadata only.
           // Background lane: the pipeline runs for the whole mailbox and must never
@@ -416,15 +401,8 @@ export class AccountPipeline {
           continue;
         }
 
+        // A refused token is the daemon's to renew before the retry.
         console.error(`[Pipeline:${this.account.email}] Failed UID ${uid}:`, error.message || error);
-        // Re-refresh token on auth errors before retrying
-        const msg = String(error.message || error).toLowerCase();
-        if (msg.includes('auth') || msg.includes('token') || msg.includes('expired')) {
-          try {
-            const freshAccount = await ensureFreshToken(this.account);
-            if (freshAccount !== this.account) this.account = freshAccount;
-          } catch (_) {}
-        }
         this._retryQueue.push(uid);
       }
 

@@ -5,76 +5,28 @@
 //   - forwards the RPCs (`abd.*` straight to the daemon through `daemonCall`,
 //     the three that need the backup drive's bookmark through the shell:
 //     `abd_summarize`, `abd_start`, `abd_attach`),
-//   - keeps the store in step with the `abd-progress` frames,
-//   - and, for OAuth accounts (Outlook and Google), keeps handing the daemon a
-//     fresh access token, because the daemon can not refresh one itself.
+//   - and keeps the store in step with the `abd-progress` frames.
 //
-// Tokens go daemon-ward only. They never enter the store, a frame, or a log.
+// OAuth accounts (Outlook and Google) need nothing more: the daemon refreshes
+// their tokens itself (src-daemon/src/oauth_tokens.rs).
 import { daemonCall } from './daemonClient';
 import * as api from './api';
-import { resolveServerAccount } from './authUtils';
 import { getAccounts } from '../stores/accountStore';
 import { useAbdStore } from '../stores/abdStore';
 import { isFinished, isUnfinished, isBackupMode, isDrivePaused } from '../utils/abdFrame';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { t, tErr } from '../i18n/index.js';
 
-/** How often a running OAuth job gets a fresh token (access tokens live about an hour). */
-export const TOKEN_REFRESH_MS = 10 * 60 * 1000;
 /** How often a job paused for its backup drive asks the shell to attach it again. */
 export const DRIVE_POLL_MS = 30 * 1000;
-/** When an account's token comes without an expiry, promise the daemon only this much. */
-const UNKNOWN_EXPIRY_MS = 30 * 60 * 1000;
 
 const noop = () => {};
 const store = () => useAbdStore.getState();
-const accountOf = (accountId) => getAccounts().find(a => a.id === accountId);
 
 /** Google and Outlook accounts sign in with OAuth; an app password (even on Gmail) needs no token. */
 export const isOAuthAccount = (account) => account?.authType === 'oauth2';
 
 const newPreviewId = () => `abd-preview-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-
-// ── Tokens ──────────────────────────────────────────────────────────────────
-
-const tokenFlights = new Map();
-
-/**
- * Give the daemon a fresh access token for an OAuth account (`abd.set_token`).
- * `resolveServerAccount` refreshes it when it is near expiry and writes the
- * refreshed one back to the keychain, the same path every other caller uses.
- * A password account, an account whose sign-in fails, or a refused push all
- * answer false; the job then pauses `sign_in_needed` on its own.
- */
-export function pushToken(accountId) {
-  const stored = accountOf(accountId);
-  // A password account (Gmail with an app password included) needs no token.
-  // One the store has not loaded yet is looked up, not assumed.
-  if (stored && !isOAuthAccount(stored)) return Promise.resolve(false);
-  // A timer tick, a token-needed event and a start can coincide: one refresh serves all.
-  if (tokenFlights.has(accountId)) return tokenFlights.get(accountId);
-  const flight = (async () => {
-    try {
-      const resolved = await resolveServerAccount(accountId, stored);
-      const account = resolved?.ok ? resolved.account : null;
-      if (!isOAuthAccount(account) || !account.oauth2AccessToken) return false;
-      await daemonCall('abd.set_token', {
-        accountId,
-        accessToken: account.oauth2AccessToken,
-        expiresAtMs: Number(account.oauth2ExpiresAt) || Date.now() + UNKNOWN_EXPIRY_MS,
-      });
-      return true;
-    } catch (error) {
-      // The code only: nothing about this call's arguments belongs in a log.
-      console.warn('[abd] could not hand the daemon a sign-in token:', error?.code || error?.name || 'error');
-      return false;
-    } finally {
-      tokenFlights.delete(accountId);
-    }
-  })();
-  tokenFlights.set(accountId, flight);
-  return flight;
-}
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
 
@@ -87,9 +39,7 @@ export async function beginPreview(accountId) {
   const previewId = newPreviewId();
   store().beginPreview(accountId, previewId);
   try {
-    // The daemon reads the mailbox with the account's own credentials, but an
-    // OAuth token expires with the app closed: hand it a fresh one first.
-    await pushToken(accountId);
+    // The daemon reads the mailbox with the account's own credentials.
     await daemonCall('abd.preview', { accountId, previewId });
   } catch (error) {
     store().failPreview(accountId, previewId, tErr(error));
@@ -103,7 +53,7 @@ export const summarize = (params) => api.abdSummarize(params);
 /**
  * Start the job. Premium is checked here too, below the screens (a job that is
  * already running is not stopped when Premium lapses: it was paid for at start).
- * The token goes first, so the very first Graph call has one. Rejects with the
+ * Rejects with the
  * daemon's `E_ABD_*: ` message; the caller shows it with `tErr`.
  */
 export async function startJob(params) {
@@ -115,7 +65,6 @@ export async function startJob(params) {
   // here: a start that is refused leaves the old result where it was.
   const previous = store().jobs[params.accountId];
   const finishedJobId = isFinished(previous) ? previous.jobId : null;
-  await pushToken(params.accountId);
   const started = await api.abdStart(params);
   // Started: the old result is gone on the daemon's side too. The panel waits
   // for the new job's first frame rather than showing it. Only while the old
@@ -145,13 +94,12 @@ export const cancel = async (accountId) => applyReplyStatus(accountId, await dae
 
 /**
  * Resume a paused job. What paused it may be something only the app can put
- * right, so try that first: the backup drive (the shell re-resolves it) and
- * the OAuth token. Both are harmless when nothing was wrong.
+ * right, so try that first: the backup drive (the shell re-resolves it).
+ * Harmless when nothing was wrong.
  */
 export async function resume(accountId) {
   const frame = store().jobs[accountId];
   if (isBackupMode(frame)) await api.abdAttach(accountId).catch(noop);
-  await pushToken(accountId);
   return applyReplyStatus(accountId, await daemonCall('abd.resume', { accountId }));
 }
 
@@ -173,43 +121,25 @@ let watchAttach = null;
 let watchStop = null;
 let unlisteners = [];
 let unsubscribe = null;
-let tokenTimer = null;
 let driveTimer = null;
 
 const unfinishedFrames = () => Object.values(store().jobs).filter(isUnfinished);
 
 /**
  * The daemon dropped what was said while the app was away (a restart, a lagging
- * event stream): ask again. For each job still going, the backup drive and the
- * token are what a fresh app instance has to hand over.
+ * event stream): ask again. For each job still going, the backup drive is what
+ * a fresh app instance has to hand over.
  */
 async function reask() {
   const jobs = await refreshStatus();
   for (const frame of jobs.filter(isUnfinished)) {
     if (isBackupMode(frame)) api.abdAttach(frame.accountId).catch(noop);
-    pushToken(frame.accountId);
   }
 }
 
-/** The daemon's `token-needed` event: its lease is missing or about to lapse. */
-function onTokenNeeded(payload) {
-  if (payload?.accountId) pushToken(payload.accountId);
-}
-
-/** Start or stop the two timers to match the jobs in the store. */
+/** Start or stop the drive timer to match the jobs in the store. */
 function syncTimers() {
   const frames = unfinishedFrames();
-  // An account the store has not loaded yet counts: the tick itself skips password accounts.
-  const wantToken = frames.some(f => { const a = accountOf(f.accountId); return !a || isOAuthAccount(a); });
-  if (wantToken && !tokenTimer) {
-    tokenTimer = setInterval(() => {
-      for (const frame of unfinishedFrames()) pushToken(frame.accountId);
-    }, TOKEN_REFRESH_MS);
-  } else if (!wantToken && tokenTimer) {
-    clearInterval(tokenTimer);
-    tokenTimer = null;
-  }
-
   const wantDrive = frames.some(f => isBackupMode(f) && isDrivePaused(f));
   if (wantDrive && !driveTimer) {
     driveTimer = setInterval(() => {
@@ -236,7 +166,6 @@ export async function initAbd() {
     const { listen } = await import('@tauri-apps/api/event');
     unlisteners.push(await listen('abd-progress', e => store().applyFrame(e.payload)));
     unlisteners.push(await listen('abd-preview', e => store().applyPreview(e.payload)));
-    unlisteners.push(await listen('abd-token-needed', e => onTokenNeeded(e.payload)));
     unlisteners.push(await listen('daemon-reconnected', () => { reask().catch(noop); }));
     unlisteners.push(await listen('daemon-events-lagged', () => { reask().catch(noop); }));
   } catch { /* web dev mode: no Tauri events */ }
@@ -303,10 +232,7 @@ export function __resetAbdForTests() {
   unlisteners = [];
   unsubscribe?.();
   unsubscribe = null;
-  if (tokenTimer) clearInterval(tokenTimer);
   if (driveTimer) clearInterval(driveTimer);
-  tokenTimer = null;
   driveTimer = null;
-  tokenFlights.clear();
   useAbdStore.setState({ jobs: {}, previews: {}, panel: null, focusPill: false });
 }

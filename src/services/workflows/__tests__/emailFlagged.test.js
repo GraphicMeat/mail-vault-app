@@ -353,7 +353,7 @@ describe('toggleFlagged', () => {
 
     await toggleFlagged(7);
 
-    expect(mockGraphSetFlagged).toHaveBeenCalledWith('tok', 'gid', true);
+    expect(mockGraphSetFlagged).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'gid', true);
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
     // Graph is not an IMAP op — replayOps would only throw it away again.
     expect(mockQueueOp).not.toHaveBeenCalled();

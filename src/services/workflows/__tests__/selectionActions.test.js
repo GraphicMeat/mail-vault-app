@@ -292,7 +292,7 @@ describe('markSelectedAsRead', () => {
 
     await useMailStore.getState().markSelectedAsRead();
 
-    expect(mockGraphSetRead).toHaveBeenCalledWith(undefined, 'graph-1', true);
+    expect(mockGraphSetRead).toHaveBeenCalledWith(expect.objectContaining({ id: 'acct1' }), 'graph-1', true);
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
     expect(seenOf(1)).toBe(true);
   });

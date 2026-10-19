@@ -6,7 +6,6 @@ import { send } from '../transport';
 import { daemonCall } from '../daemonClient';
 import { binCaptureError } from '../../utils/binCapture';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { isJmapAccount } from '../providerKind.js';
 import { resolveGraphMessageId } from '../cacheManager';
@@ -303,7 +302,6 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
     tally.errors += uids.length;
     return;
   }
-  account = await ensureFreshToken(account);
 
   const base = { completed: tally.completed, errors: tally.errors };
   const paint = (completed, errors) => {
@@ -1013,17 +1011,16 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
       console.log(`[deleteEmail] offline — UID ${realUid} journalled, replayOps will finish it`);
       return undefined;
     }
-    account = await ensureFreshToken(account);
     // `realUid`, not the argument: in a spanning view the caller hands us a
     // whole selection key ("acct:INBOX:7"), and the server takes a uid.
     console.log(`[deleteEmail] Deleting UID ${realUid} from mailbox "${mailbox}" (account: ${account.email}, isGraph: ${isGraphAccount(account)}, override: ${mailboxOverride})`);
     try {
       if (isGraphAccount(account)) {
         const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, {
-          row: candidate, token: account.oauth2AccessToken,
+          row: candidate, account,
         });
         if (!graphId) throw new Error(tr('errors.noGraphIdDelete'));
-        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId, { accountId, mailbox, uid: realUid }), { delayMs: SERVER_RETRY_MS });
+        await retryOnce(() => api.graphDeleteMessage(account, graphId, { accountId, mailbox, uid: realUid }), { delayMs: SERVER_RETRY_MS });
       } else {
         const res = await retryOnce(() => api.deleteEmail(account, realUid, mailbox), { delayMs: SERVER_RETRY_MS });
         // Where it went, so a caller can offer an undo instead of a SEARCH:
@@ -1161,8 +1158,7 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
 // (account, Trash, source folder), not one per message.
 //
 // The rows go back on screen FIRST, before any round trip: the user pressed
-// Undo, and a list that stays empty through a token refresh, a MOVE and a
-// reload reads as an undo that did nothing. The server follows. A move that
+// Undo, and a list that stays empty through a MOVE and a reload reads as an undo that did nothing. The server follows. A move that
 // throws takes its rows back out, and runUndo says "Undo failed".
 async function _restoreFromTrash(outcomes) {
   const { useMailStore } = await import('../../stores/mailStore');
@@ -1190,7 +1186,7 @@ async function _restoreFromTrash(outcomes) {
   const kept = new Set();
   try {
     for (const g of groups.values()) {
-      const account = await ensureFreshToken(g.account);
+      const account = g.account;
       // Without UIDPLUS the server named no destination uid, so find the copy
       // by Message-ID in the folder it was moved to — never a guessed uid,
       // which would move somebody else's message back.
@@ -1738,14 +1734,14 @@ function _flagRow(row, map) {
 export async function _setFlagOnServer(account, accountId, mailbox, uid, flags, action, row = null) {
   if (isGraphAccount(account)) {
     // The row's own `_graphId` first (cacheManager's ladder), then the map.
-    const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row, token: account.oauth2AccessToken });
+    const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row, account });
     if (!graphId) {
       console.warn('[setFlagOnServer] No Graph message ID for UID', uid);
       return;
     }
     const on = action === 'add';
-    if (flags.includes('\\Seen')) await api.graphSetRead(account.oauth2AccessToken, graphId, on);
-    if (flags.includes('\\Flagged')) await api.graphSetFlagged(account.oauth2AccessToken, graphId, on);
+    if (flags.includes('\\Seen')) await api.graphSetRead(account, graphId, on);
+    if (flags.includes('\\Flagged')) await api.graphSetFlagged(account, graphId, on);
     const rest = flags.filter(f => f !== '\\Seen' && f !== '\\Flagged');
     if (rest.length) console.log('[setFlagOnServer] Graph has no equivalent for', rest);
     return;
@@ -1961,8 +1957,8 @@ export async function exportEmail(uid, subject) {
  * flags the user sets deliberately, and only over the rows this call actually
  * changes. The reverse itself passes false, or Cmd+Z would ping-pong.
  * `detachTail` is for a mark nobody asked for (the auto mark-read on open): the
- * call settles once the rows are painted, and the vault write, the journal, the
- * token check, the server and the journal clear run as a detached task behind
+ * call settles once the rows are painted, and the vault write, the journal,
+ * the server and the journal clear run as a detached task behind
  * it, off the click path that is waiting to show a body. Nothing in that task
  * raises into the caller or into the error banner: a failure is logged, and the
  * journal entry it leaves behind is what finishes the change (replayOps).
@@ -2071,7 +2067,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
           // The id the caller already resolved rides on the row, so the write
           // does not look it up (and relist the folder) a second time.
           const row = t.graphId ? { ...t.emailObj, _graphId: t.graphId } : t.emailObj;
-          await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action, row);
+          await _setFlagOnServer(t.account, t.accountId, t.mailbox, t.uid, [flag], action, row);
         } catch (e) {
           // The one branch with no journal behind it — replayOps cannot replay a
           // Graph op — so a failure here is the end of the road and has to say so.
@@ -2083,7 +2079,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
       await db.queueOp({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
       if (!useConnectivityStore.getState().online) continue;   // replayOps finishes it
       try {
-        const account = await ensureFreshToken(t.account);
+        const account = t.account;
         await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action, t.emailObj);
         await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
       } catch (e) {
@@ -2395,7 +2391,7 @@ export async function deleteSelectedFromServer() {
         continue;
       }
 
-      const account = await ensureFreshToken(ctxAccount);
+      const account = ctxAccount;
 
       if (isGraphAccount(account)) {
         // Not "skipping" — a Graph id we cannot establish means the delete did
@@ -2405,10 +2401,10 @@ export async function deleteSelectedFromServer() {
         // Throw into the catch, which lifts the tombstone and lets the
         // reconcile restore the row — the same contract as any failed delete.
         const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, {
-          row: emailObj, token: account.oauth2AccessToken,
+          row: emailObj, account,
         });
         if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: realUid }));
-        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId, { accountId, mailbox, uid: realUid }), { delayMs: SERVER_RETRY_MS });
+        await retryOnce(() => api.graphDeleteMessage(account, graphId, { accountId, mailbox, uid: realUid }), { delayMs: SERVER_RETRY_MS });
       } else {
         const res = await retryOnce(() => api.deleteEmail(account, realUid, mailbox), { delayMs: SERVER_RETRY_MS });
         const shown = hidden.removed.find(r => _targetId(r) === tombstone);
@@ -2675,7 +2671,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     if (isGraphAccount(g.account)) return; // no UID space to poison — trusted without a STATUS call
     let trusted = false;
     try {
-      const account = g.account ? await ensureFreshToken(g.account) : null;
+      const account = g.account || null;
       const [meta, status] = await Promise.all([
         db.getEmailHeadersMeta(g.accountId, g.mailbox),
         account ? api.checkMailboxStatus(account, g.mailbox) : Promise.resolve(null),
@@ -2711,13 +2707,13 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
       purgeable.push(t);
     } else {
       try {
-        const account = await ensureFreshToken(t.account);
+        const account = t.account;
         if (isGraphAccount(account)) {
           const graphId = await resolveGraphMessageId(t.accountId, t.mailbox, t.uid, {
-            row: t.row, token: account.oauth2AccessToken,
+            row: t.row, account,
           });
           if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: t.uid }));
-          await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+          await api.graphDeleteMessage(account, graphId);
         } else {
           // Every copy, by request: none kept in the deleted-mail bin either.
           // `permanent: true` — the default (null) moves an INBOX message to
@@ -2918,7 +2914,7 @@ export async function moveEmails(keys, targetMailbox) {
   if (groups.size) paintMove(true);
   try {
     for (const group of groups.values()) {
-      const account = await ensureFreshToken(group.account);
+      const account = group.account;
       const record = (dstUids, extra) => ({
         account, accountId: group.accountId, from: group.mailbox, to: targetMailbox,
         srcUids: group.uids, dstUids, messageIds: group.rows.map(r => r?.messageId || null),
@@ -3082,7 +3078,7 @@ async function _resolveDestinationUids(account, mailbox, messageIds) {
 // to a Graph message id, and the target must be a folder Graph knows.
 async function _graphMoveGroup(state, account, { accountId, mailbox, uids, rows }, targetMailbox) {
   const messageIds = (await Promise.all(uids.map((uid, i) => resolveGraphMessageId(
-    accountId, mailbox, uid, { row: rows[i], token: account.oauth2AccessToken },
+    accountId, mailbox, uid, { row: rows[i], account },
   )))).filter(Boolean);
   if (messageIds.length !== uids.length) {
     throw new Error(tr('errors.noGraphIdMove'));
@@ -3091,5 +3087,5 @@ async function _graphMoveGroup(state, account, { accountId, mailbox, uids, rows 
   if (!targetFolder || !targetFolder._graphFolderId) {
     throw new Error(tr('errors.moveTargetNotFound', { folder: targetMailbox }));
   }
-  await api.graphMoveEmails(account.oauth2AccessToken, messageIds, targetFolder._graphFolderId);
+  await api.graphMoveEmails(account, messageIds, targetFolder._graphFolderId);
 }

@@ -11,7 +11,6 @@ import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess 
 import { useMailStore } from '../../stores/mailStore.js';
 import { useAccountStore } from '../../stores/accountStore.js';
 import * as api from '../../services/api.js';
-import { ensureFreshToken } from '../../services/authUtils.js';
 import { migrationManager } from '../../services/migrationManager.js';
 import { formatDateTime } from '../../utils/dateFormat.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
@@ -206,14 +205,7 @@ export default function MigrationSettings({ onUpgrade }) {
     setStarting(true);
     setError(null);
     useSettingsStore.getState().clearMigrationLogEntries();
-    try {
-      await ensureFreshToken(sourceAccount);
-      await ensureFreshToken(destAccount);
-    } catch (err) {
-      setError(t('settings.migration.failedRefreshAuthenticationPleaseRe', { err: err.account?.email || 'an account' }));
-      setStarting(false);
-      return;
-    }
+    // Both accounts' tokens are the daemon's to send, refreshed when due.
     try {
       await api.startMigration(
         sourceAccount, destAccount,
@@ -278,13 +270,6 @@ export default function MigrationSettings({ onUpgrade }) {
 
   const handleResume = useCallback(async (srcAccount, dstAccount) => {
     setError(null);
-    try {
-      await ensureFreshToken(srcAccount);
-      await ensureFreshToken(dstAccount);
-    } catch (err) {
-      setError(t('settings.migration.failedRefreshAuthenticationPleaseRe2'));
-      return;
-    }
     try {
       await api.resumeMigration(srcAccount, dstAccount, getTransport(srcAccount), getTransport(dstAccount));
     } catch (err) {

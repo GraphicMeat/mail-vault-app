@@ -11,7 +11,7 @@
 // app that a row's location has to be read off the row (spansMailboxes).
 
 import * as api from '../api';
-import { hasValidCredentials, ensureFreshToken } from '../authUtils';
+import { hasValidCredentials } from '../authUtils';
 import { mailboxDescendants } from './mailboxTree';
 import { vaultKey, rebaseFlags } from '../../stores/slices/unifiedHelpers';
 
@@ -65,8 +65,7 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
     subtreeProgress: { done: 0, total: paths.length },
   });
 
-  const fresh = await ensureFreshToken(account);
-  if (isStale()) return;
+  const fresh = account;
 
   // The true size of the branch, before a single header is fetched: STATUS is
   // one cheap round trip per folder, and the count a reader wants is the

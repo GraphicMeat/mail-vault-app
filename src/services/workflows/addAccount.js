@@ -3,7 +3,6 @@
 import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
-import { ensureFreshToken } from '../authUtils';
 import { t } from '../../i18n/index.js';
 
 
@@ -36,10 +35,11 @@ export async function addAccount(accountData) {
   let connectionCheck = null;
   try {
     if (isGraphAccount(account)) {
-      const freshAccount = await ensureFreshToken(account);
-      // A connectivity probe: the listing is discarded, and a new account has
-      // no directories, so no folder-key adoption pass belongs here.
-      await api.graphListFolders(freshAccount.oauth2AccessToken);
+      // A connectivity probe with the token the sign-in just returned (the
+      // account is not saved yet, so the daemon holds none): the listing is
+      // discarded, and a new account has no directories, so no folder-key
+      // adoption pass belongs here.
+      await api.graphProbeSignIn(account.oauth2AccessToken, account.email);
     } else {
       const result = await api.testConnection(account);
       if (result?.host) {

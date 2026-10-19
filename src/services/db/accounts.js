@@ -380,6 +380,8 @@ export async function getAccounts() {
         credentials[a.id] = JSON.stringify(a);
       }
       await invoke('store_credentials', { credentials });
+      const { credentialsChanged } = await import('../oauthTokenSync.js');
+      credentialsChanged();
       console.log('[db.js] Persisted auto-repaired account transports to keychain');
     } catch (e) {
       console.warn('[db.js] Failed to persist transport repair:', e);

@@ -3,7 +3,6 @@ import { Check, AlertTriangle, Send } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import * as api from '../../services/api';
-import { ensureFreshToken } from '../../services/authUtils';
 import { t, useT  } from '../../i18n/index.js';
 import { T } from '../../i18n/T.jsx';
 import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
@@ -36,8 +35,7 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
     setStatus('sending');
     setMessage('');
     try {
-      const fresh = await ensureFreshToken(account);
-      if (!fresh) throw new Error('Could not refresh account credentials');
+      const fresh = account;
       await api.sendEmail(
         { ...fresh, name: displayName || fresh.name || undefined, fromEmail: sendAsAddress },
         {

@@ -137,9 +137,7 @@ describe('FullViewEmailModal initial fetch, spanning vs. single-folder', () => {
   it('clears loading for its own pending body fetch on close', async () => {
     const api = await import('../../../services/api');
     const db = await import('../../../services/db');
-    const auth = await import('../../../services/authUtils');
     let release;
-    vi.spyOn(auth, 'ensureFreshToken').mockImplementation(async account => account);
     vi.spyOn(db, 'getLocalEmailLight').mockResolvedValue(null);
     vi.spyOn(api, 'fetchEmailLight').mockImplementation(() => new Promise(resolve => { release = resolve; }));
     useMailStore.setState({ activeMailbox: 'Sent', mailboxScope: null, emailCache: new Map() });
@@ -154,16 +152,16 @@ describe('FullViewEmailModal initial fetch, spanning vs. single-folder', () => {
   });
 
   it('closes its own selection before the body request publishes an ID', async () => {
-    const auth = await import('../../../services/authUtils');
-    let releaseToken;
-    vi.spyOn(auth, 'ensureFreshToken').mockImplementation(() => new Promise(resolve => { releaseToken = resolve; }));
+    const db = await import('../../../services/db');
+    let releaseLocal;
+    vi.spyOn(db, 'getLocalEmailLight').mockImplementation(() => new Promise(resolve => { releaseLocal = resolve; }));
     useMailStore.setState({ activeMailbox: 'Sent', mailboxScope: null, emailCache: new Map() });
     const view = renderModal(realSelectEmail);
-    await waitFor(() => expect(releaseToken).toBeTypeOf('function'));
+    await waitFor(() => expect(releaseLocal).toBeTypeOf('function'));
 
     fireEvent.click(view.getByRole('button', { name: 'Close', exact: true }));
     expect(useMailStore.getState().loadingEmail).toBe(false);
-    releaseToken({ id: 'acct-1', email: 'sender@example.test' });
+    releaseLocal(null);
     await Promise.resolve();
     expect(useMailStore.getState().selectedEmailId).toBeNull();
   });

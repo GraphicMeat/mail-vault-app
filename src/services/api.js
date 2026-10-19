@@ -5,7 +5,6 @@
 import { send as transportSend } from './transport.js';
 import { t } from '../i18n/index.js';
 import { binCaptureError } from '../utils/binCapture.js';
-import { tokenOwner } from './tokenOwners.js';
 
 const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI__;
 
@@ -278,8 +277,8 @@ export async function pgpRemoveKey(fingerprint) {
  * Send-as aliases for one account (`src-daemon/src/handlers/aliases.rs`):
  * `{ provider: { status: 'ok'|'unsupported'|'denied'|'error', aliases: [{ address, name, isPrimary, verified }] },
  *    detected: [{ address, name, count, source: 'sent_from'|'delivered_to' }] }`.
- * `account` is the account as every other daemon call carries it; an OAuth
- * token must be fresh (`ensureFreshToken`) or Gmail answers `denied`.
+ * `account` is the account as every other daemon call carries it; the
+ * daemon puts in the account's own OAuth token, refreshed when due.
  */
 export async function discoverAliases(account, accountId) {
   return transportSend('aliases.discover', { account, accountId });
@@ -605,15 +604,29 @@ export async function vaultAdoptMailboxDirs(accountId, accountEmail, pairs) {
 }
 
 // ── Graph API functions (personal Microsoft accounts) ─────────────────────
-// Each names the account its token is for (`accountEmail`), so Network
-// Activity shows the request as that account's.
+// Each takes the account (anything with its `id` and `email`) and names it to
+// the daemon, which sends the account's own access token, refreshed when due
+// (src-daemon/src/oauth_tokens.rs): the app never handles the token. The
+// address lets Network Activity show the request as that account's.
 
-export async function graphListFolders(accessToken) {
-  return await tauriInvoke('graph_list_folders', { accessToken, accountEmail: tokenOwner(accessToken) });
+const graphAccount = (account) => ({ accountId: account?.id, accountEmail: account?.email });
+
+export async function graphListFolders(account) {
+  return await tauriInvoke('graph_list_folders', { ...graphAccount(account) });
 }
 
-export async function graphListMessages(accessToken, folderId, top, skip) {
-  return await tauriInvoke('graph_list_messages', { accessToken, folderId, top, skip: skip || 0, accountEmail: tokenOwner(accessToken) });
+/**
+ * Add Account and Reconnect check a token the sign-in just returned, before
+ * the account is saved: the daemon holds nothing for it yet, so this one
+ * call carries the token (part of the interactive sign-in, like the code
+ * exchange that produced it).
+ */
+export async function graphProbeSignIn(accessToken, accountEmail) {
+  return await tauriInvoke('graph_list_folders', { accessToken, accountEmail });
+}
+
+export async function graphListMessages(account, folderId, top, skip) {
+  return await tauriInvoke('graph_list_messages', { ...graphAccount(account), folderId, top, skip: skip || 0 });
 }
 
 /** One uid per [graphId, internetMessageId] entry, from the ledger the backup shares. */
@@ -621,50 +634,48 @@ export async function graphAllocateUids(accountId, mailbox, entries) {
   return await tauriInvoke('graph_allocate_uids', { accountId, mailbox, entries });
 }
 
-export async function graphGetMessage(accessToken, messageId) {
-  return await tauriInvoke('graph_get_message', { accessToken, messageId, accountEmail: tokenOwner(accessToken) });
+export async function graphGetMessage(account, messageId) {
+  return await tauriInvoke('graph_get_message', { ...graphAccount(account), messageId });
 }
 
 // `intent` as in fetchEmailLight: 'open' (default), 'backfill' or 'export'.
-export async function graphCacheMime(accessToken, messageId, accountId, mailbox, uid, intent = 'open') {
-  const data = await tauriInvoke('graph_cache_mime', {
-    accessToken, messageId, accountId, mailbox, uid, intent, accountEmail: tokenOwner(accessToken),
-  });
+export async function graphCacheMime(account, messageId, mailbox, uid, intent = 'open') {
+  const data = await tauriInvoke('graph_cache_mime', { ...graphAccount(account), messageId, mailbox, uid, intent });
   return data.email;
 }
 
-export async function graphSetRead(accessToken, messageId, isRead) {
-  return await tauriInvoke('graph_set_read', { accessToken, messageId, isRead, accountEmail: tokenOwner(accessToken) });
+export async function graphSetRead(account, messageId, isRead) {
+  return await tauriInvoke('graph_set_read', { ...graphAccount(account), messageId, isRead });
 }
 
-export async function graphSetFlagged(accessToken, messageId, flagged) {
-  return await tauriInvoke('graph_set_flagged', { accessToken, messageId, flagged, accountEmail: tokenOwner(accessToken) });
+export async function graphSetFlagged(account, messageId, flagged) {
+  return await tauriInvoke('graph_set_flagged', { ...graphAccount(account), messageId, flagged });
 }
 
-// `where` ({ accountId, mailbox, uid }) lets the daemon keep a copy in the
-// deleted-mail bin first; without it nothing is kept.
-export async function graphDeleteMessage(accessToken, messageId, where = {}) {
-  return await tauriInvoke('graph_delete_message', { accessToken, messageId, ...where, accountEmail: tokenOwner(accessToken) });
+// `where` ({ mailbox, uid }) lets the daemon keep a copy in the deleted-mail
+// bin first; without it nothing is kept.
+export async function graphDeleteMessage(account, messageId, where = {}) {
+  return await tauriInvoke('graph_delete_message', { ...where, ...graphAccount(account), messageId });
 }
 
-export async function graphMoveEmails(accessToken, messageIds, targetFolderId) {
-  return await tauriInvoke('graph_move_emails', { accessToken, messageIds, targetFolderId, accountEmail: tokenOwner(accessToken) });
+export async function graphMoveEmails(account, messageIds, targetFolderId) {
+  return await tauriInvoke('graph_move_emails', { ...graphAccount(account), messageIds, targetFolderId });
 }
 
-export async function graphCreateFolder(accessToken, displayName, parentFolderId = null) {
-  return tauriInvoke('graph_create_folder', { accessToken, displayName, parentFolderId, accountEmail: tokenOwner(accessToken) });
+export async function graphCreateFolder(account, displayName, parentFolderId = null) {
+  return tauriInvoke('graph_create_folder', { ...graphAccount(account), displayName, parentFolderId });
 }
 
-export async function graphRenameFolder(accessToken, folderId, displayName) {
-  return tauriInvoke('graph_rename_folder', { accessToken, folderId, displayName, accountEmail: tokenOwner(accessToken) });
+export async function graphRenameFolder(account, folderId, displayName) {
+  return tauriInvoke('graph_rename_folder', { ...graphAccount(account), folderId, displayName });
 }
 
-export async function graphMoveFolder(accessToken, folderId, destinationId) {
-  return tauriInvoke('graph_move_folder', { accessToken, folderId, destinationId, accountEmail: tokenOwner(accessToken) });
+export async function graphMoveFolder(account, folderId, destinationId) {
+  return tauriInvoke('graph_move_folder', { ...graphAccount(account), folderId, destinationId });
 }
 
-export async function graphDeleteFolder(accessToken, folderId) {
-  return tauriInvoke('graph_delete_folder', { accessToken, folderId, accountEmail: tokenOwner(accessToken) });
+export async function graphDeleteFolder(account, folderId) {
+  return tauriInvoke('graph_delete_folder', { ...graphAccount(account), folderId });
 }
 
 export async function resolveEmailSettings(domain) {

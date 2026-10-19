@@ -3,7 +3,6 @@
 
 import * as api from './api';
 import * as db from './db';
-import { ensureFreshToken } from './authUtils';
 import { deleteLocalDraft } from './localDrafts';
 import { markAnswered, markForwarded } from './workflows/messageMutations';
 import { useMailStore } from '../stores/mailStore';
@@ -221,7 +220,7 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
   }
 
   return async function sendCompose() {
-    const freshAccount = await ensureFreshToken(account);
+    const freshAccount = account;
     if (!freshAccount) throw new Error(t('errors.composeRefreshAccount'));
     const { displayName, fromAddress, sendAsEmail, accountForSend, sentMailbox, sentFolderPath, bodyText, outgoingPayload } =
       await buildOutgoingPayload({ snapshot, account: freshAccount, settings });
@@ -333,7 +332,7 @@ export async function scheduleCompose({ snapshot, account, settings = {} }) {
   if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) throw new Error(t('errors.composeSchedulePremium'));
   const schedule = snapshot._scheduleDraft;
   if (!schedule?.localTime || !schedule?.tz) throw new Error(t('errors.composeMissingSchedule'));
-  const freshAccount = await ensureFreshToken(account);
+  const freshAccount = account;
   if (!freshAccount) throw new Error(t('errors.composeRefreshAccount'));
   const { displayName, sendAsEmail, accountForSend, sentMailbox, outgoingPayload } =
     await buildOutgoingPayload({ snapshot, account: freshAccount, settings });

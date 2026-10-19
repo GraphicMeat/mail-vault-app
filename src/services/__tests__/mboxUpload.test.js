@@ -156,46 +156,24 @@ describe('resume', () => {
   });
 });
 
-// The daemon never refreshes an OAuth token: a job held for a refused sign-in
-// re-reads the stored credentials and holds again on the same expired token.
-// So the app resolves the account first, as the backup and the vault-gap save
-// do (keychain rehydration when the store's copy has no credentials, then the
-// token refresh, written where the daemon reads it).
+// The daemon refreshes an OAuth token itself (src-daemon/src/oauth_tokens.rs),
+// so a start or a resume goes straight to it: no account resolve, no token
+// refresh in the app.
 describe('the account\'s sign-in, before a start or a resume', () => {
   const GMAIL = { id: 'acct-a', email: 'me@gmail.test', authType: 'oauth2', oauth2RefreshToken: 'r', oauth2ExpiresAt: 1 };
   const order = [];
   beforeEach(() => {
     order.length = 0;
     store.state = { accounts: [GMAIL, { id: 'acct-b', email: 'me@plain.test' }] };
-    resolveServerAccount.mockImplementation(async (id, a) => { order.push(`resolve ${id}`); return { ok: true, account: a }; });
     send.mockImplementation(async (cmd) => { order.push(cmd); return {}; });
   });
 
-  it('refreshes the token of the job\'s account before the resume goes to the daemon', async () => {
+  it('sends the resume and the start to the daemon with nothing resolved first', async () => {
     await upload.resume({ jobId: 'j1', accountId: 'acct-a' });
-    expect(resolveServerAccount).toHaveBeenCalledWith('acct-a', GMAIL);
-    expect(order).toEqual(['resolve acct-a', 'mbox_upload_resume']);
-  });
-
-  it('refreshes it before a start too, with the store\'s account', async () => {
     await upload.start({ sourcePath: '/x.mbox', accountId: 'acct-a', mode: 'server', mailbox: 'INBOX', useLabels: false });
-    expect(resolveServerAccount).toHaveBeenCalledWith('acct-a', GMAIL);
-    expect(order).toEqual(['resolve acct-a', 'import_mbox']);
+    expect(order).toEqual(['mbox_upload_resume', 'import_mbox']);
+    expect(resolveServerAccount).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledWith('import_mbox', { sourcePath: '/x.mbox', accountId: 'acct-a', mode: 'server', mailbox: 'INBOX', useLabels: false });
-  });
-
-  it('a resolve that fails, or throws, still sends the resume: the daemon says what is wrong', async () => {
-    resolveServerAccount.mockImplementationOnce(async () => { order.push('resolve refused'); return { ok: false, reason: 'refresh_failed' }; });
-    await upload.resume({ jobId: 'j1', accountId: 'acct-a' });
-    resolveServerAccount.mockImplementationOnce(async () => { order.push('resolve threw'); throw new Error('invalid_grant'); });
-    await upload.resume({ jobId: 'j1', accountId: 'acct-a' });
-    expect(order).toEqual(['resolve refused', 'mbox_upload_resume', 'resolve threw', 'mbox_upload_resume']);
-  });
-
-  it('an account the store does not know is still resolved, from the keychain', async () => {
-    await upload.resume({ jobId: 'j1', accountId: 'gone' });
-    expect(resolveServerAccount).toHaveBeenCalledWith('gone', undefined);
-    expect(order).toEqual(['resolve gone', 'mbox_upload_resume']);
   });
 });
 

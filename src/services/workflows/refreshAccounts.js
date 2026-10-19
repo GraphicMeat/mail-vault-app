@@ -4,7 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { inboxCount, applyRecounts, selectTotalUnread } from '../../stores/unreadCounts';
-import { hasValidCredentials, ensureFreshToken } from '../authUtils';
+import { hasValidCredentials } from '../authUtils';
 import { isGraphAccount, storageKeyOf } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, listGraphMessages } from '../cacheManager';
@@ -165,8 +165,6 @@ export async function refreshAllAccounts(options = {}) {
       failed.add(account.id);
       continue;
     }
-    account = await ensureFreshToken(account);
-
     try {
       if (account.id === activeAccountId && !refreshingUnifiedView) {
         // Against the cache, not against the rows on screen: the open list is
@@ -207,15 +205,14 @@ export async function refreshAllAccounts(options = {}) {
         }
       } else if (isGraphAccount(account)) {
         try {
-          const token = account.oauth2AccessToken;
-          const folders = await api.graphListFolders(token);
+          const folders = await api.graphListFolders(account);
           await adoptGraphFolderKeysFromListing(account, folders);
           const targetFolder = folders.find(f => storageKeyOf(f) === targetMailbox);
           if (targetFolder) {
             const normalizedMailbox = storageKeyOf(targetFolder);
             const baseline = await arrivalBaseline(account.id, normalizedMailbox);
 
-            const { headers } = await listGraphMessages(account.id, normalizedMailbox, token, targetFolder.id);
+            const { headers } = await listGraphMessages(account.id, normalizedMailbox, account, targetFolder.id);
             if (headers.length > 0) {
               await db.saveEmailHeaders(account.id, normalizedMailbox, headers, targetFolder.totalItemCount);
               console.log(`[mailStore] Graph: cached ${headers.length} ${normalizedMailbox} headers for ${account.email}`);

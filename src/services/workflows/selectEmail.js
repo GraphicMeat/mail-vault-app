@@ -3,7 +3,6 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
@@ -233,8 +232,7 @@ export async function _prefetchAdjacentEmails(currentUid) {
         // body loads on click instead.
         const graphId = nextEmail._graphId || getGraphMessageId(prefetchAccountId, prefetchMailbox, uid);
         if (!graphId) continue;
-        const freshAccount = await ensureFreshToken(account);
-        const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
+        const graphMsg = await api.graphGetMessage(account, graphId);
         const email = graphMessageToEmail(graphMsg, uid);
         get().addToCache(cacheKey, email, cacheLimitMB, { prefetch: true });
       } else {
@@ -343,19 +341,17 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
       if (!isCurrent()) return false;
       if (email) actualSource = localOnly ? 'local-only' : 'local';
     }
-    let freshAccount = account;
+    const freshAccount = account;
     let graphId = null;
     if (!email) {
       if (localOnly) throw new Error(t('insights.messageUnavailable'));
       _snippetWhileLoading({ get, publish, selectedEmailId, accountId, mailbox, row: header,
         build: text => stamp({ text, _bodyLoading: true }) });
-      freshAccount = await ensureFreshToken(account);
-      if (!isCurrent()) return false;
       if (isGraphAccount(freshAccount)) {
-        graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row: header, token: freshAccount.oauth2AccessToken });
+        graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row: header, account: freshAccount });
         if (!isCurrent()) return false;
         if (!graphId) throw new Error(t('insights.messageUnavailable'));
-        const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
+        const graphMsg = await api.graphGetMessage(freshAccount, graphId);
         email = graphMessageToEmail(graphMsg, uid);
       } else {
         email = await api.fetchEmailLight(freshAccount, uid, mailbox, accountId);
@@ -367,7 +363,7 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
       throw new Error(t('insights.messageChanged'));
     }
     if (graphId && isCurrent()) {
-      api.graphCacheMime(freshAccount.oauth2AccessToken, graphId, accountId, mailbox, uid)
+      api.graphCacheMime(freshAccount, graphId, mailbox, uid)
         .catch(error => console.warn('[selectEmail] Background MIME cache failed:', error));
     }
     email = await hydrateInlineImages(email, accountId, mailbox);
@@ -382,8 +378,8 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
     // message. Delayed marks are cancelled when the Insights detail closes.
     email = await _autoMarkRead(useMailStore, {
       email, accountId, mailbox, uid, isCurrent,
-      // The token the body was read with; a Graph message resolves its id from
-      // the header row's own `_graphId` first.
+      // The account the body was read for; a Graph message resolves its id
+      // from the header row's own `_graphId` first.
       account: freshAccount, row: header,
       // A note or a vault-only copy has no server to write to; its folder is
       // named by the vault itself, so the vault copy needs no row to prove it.
@@ -480,7 +476,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     if (!isCurrent()) return;
   }
   // A draft the user wrote here reopens in compose, not the viewer — before
-  // the token refresh below, because continuing a local draft needs no server
+  // any server work below, because continuing a local draft needs no server
   // at all. The index read that proves provenance is gated on the flag the
   // autosave writes (bare 'draft'; an IMAP draft carries '\Draft'), so
   // opening an ordinary message costs nothing extra. Imported here rather than
@@ -495,9 +491,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     if (!isCurrent()) return;
   }
 
-  let account = unified?.account || state.accounts.find(a => a.id === accountId);
-  account = await ensureFreshToken(account);
-  if (!isCurrent()) return;
+  const account = unified?.account || state.accounts.find(a => a.id === accountId);
   const cacheKey = `${accountId}-${mailbox}-${realUid}`;
   const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
@@ -620,24 +614,22 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       throw new Error(t('errors.noLocalCopyUidMismatch'));
     } else if (account && isGraphAccount(account)) {
       // 3a. Graph API: fetch full message by Graph message ID
-      const freshAccount = await ensureFreshToken(account);
-      if (!isCurrent()) return;
-      const token = freshAccount.oauth2AccessToken;
+      const freshAccount = account;
 
       // Row `_graphId` first, then the positional map, then a relist — the
       // ladder now lives in cacheManager and is shared with the delete, move
       // and mark-read paths, which used to read the map raw.
-      const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, { row: headerRow, token });
+      const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, { row: headerRow, account: freshAccount });
       if (!isCurrent()) return;
 
       if (graphId) {
-        const graphMsg = await api.graphGetMessage(token, graphId);
+        const graphMsg = await api.graphGetMessage(freshAccount, graphId);
         if (!isCurrent()) return;
         email = graphMessageToEmail(graphMsg, realUid);
         actualSource = 'server';
         get().addToCache(cacheKey, email, cacheLimitMB);
 
-        api.graphCacheMime(token, graphId, accountId, mailbox, realUid)
+        api.graphCacheMime(freshAccount, graphId, mailbox, realUid)
           .catch(e => console.warn('[selectEmail] Background MIME cache failed:', e));
 
         email = await _autoMarkRead(useMailStore, {

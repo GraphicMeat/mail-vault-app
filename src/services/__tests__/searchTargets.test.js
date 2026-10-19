@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const auth = vi.hoisted(() => ({
-  ensureFreshToken: vi.fn(async account => account),
   hasValidCredentials: vi.fn(account => !!(account?.password || account?.oauth2AccessToken)),
   getAccountCacheMailboxes: vi.fn(() => null),
 }));
 
 vi.mock('../authUtils.js', () => ({
-  ensureFreshToken: auth.ensureFreshToken,
   hasValidCredentials: auth.hasValidCredentials,
 }));
 vi.mock('../cacheManager.js', () => ({
@@ -41,7 +39,6 @@ describe('serverSearchTargets', () => {
 
 describe('buildSearchTargets', () => {
   beforeEach(() => {
-    auth.ensureFreshToken.mockReset().mockImplementation(async value => value);
     auth.hasValidCredentials.mockReset().mockImplementation(value => !!(value?.password || value?.oauth2AccessToken));
     auth.getAccountCacheMailboxes.mockReset().mockReturnValue(null);
   });
@@ -69,7 +66,7 @@ describe('buildSearchTargets', () => {
       ['c', ['Sent'], ['Sent']],
     ]);
     expect(targets[0].knownMailboxes).toEqual(['Sent Items']);
-    expect(auth.ensureFreshToken).toHaveBeenCalledTimes(2);
+    expect(targets.every(target => target.account?.id === target.accountId)).toBe(true);
   });
 
   it('in:spam resolves each account\'s own Junk by special-use in a unified view', async () => {
@@ -133,7 +130,6 @@ describe('buildSearchTargets', () => {
     expect(target.account).toBeNull();
     expect(target.serverMailboxes).toEqual([]);
     expect(target.localMailboxes).toBeNull();
-    expect(auth.ensureFreshToken).not.toHaveBeenCalled();
   });
 
   // The daemon answers a JMAP account's server lane with `Email/query` over
@@ -152,7 +148,6 @@ describe('buildSearchTargets', () => {
 
     expect(target.account).toEqual(jmap);
     expect(target.serverMailboxes).toEqual(['INBOX']);
-    expect(auth.ensureFreshToken).toHaveBeenCalledTimes(1);
   });
 
   it('keeps local-only targets token-free even when server credentials exist', async () => {
@@ -169,7 +164,6 @@ describe('buildSearchTargets', () => {
     expect(target.account).toBeNull();
     expect(target.serverMailboxes).toEqual([]);
     expect(target.localMailboxes).toEqual(['INBOX']);
-    expect(auth.ensureFreshToken).not.toHaveBeenCalled();
   });
 
   it('keeps a named-folder search scoped to the active account in unified mode', async () => {

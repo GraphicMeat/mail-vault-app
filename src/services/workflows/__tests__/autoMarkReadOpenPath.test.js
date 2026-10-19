@@ -351,7 +351,7 @@ describe('a Graph mark that is not the user\'s own action stays out of the error
     await useMailStore.getState().selectEmail(42, 'server');
     await vi.waitFor(() => expect(mockGraphSetRead).toHaveBeenCalled());
 
-    expect(mockGraphSetRead).toHaveBeenCalledWith('tok', 'graph-id-42', true);
+    expect(mockGraphSetRead).toHaveBeenCalledWith(expect.objectContaining({ oauth2AccessToken: 'tok' }), 'graph-id-42', true);
     expect(relists).toBe(1); // the open's own lookup, and nothing after it
   });
 });

@@ -5,9 +5,9 @@
 // "Password missing". See .superpowers/sdd/2026-09-14-daemon-shell-phase0-
 // foundations/regression-71779b49-rootcause.md.
 //
-// fetchAccountMailboxes must resolve credentials (resolveServerAccount, with
-// an ensureFreshToken fallback) before calling out, the same way
-// loadServerEmails already does.
+// fetchAccountMailboxes must resolve credentials (resolveServerAccount) before
+// calling out, the same way loadServerEmails already does. An OAuth2 token is
+// the daemon's to send (src-daemon/src/oauth_tokens.rs).
 import { describe, it, expect, vi } from 'vitest';
 
 if (!globalThis.window) {
@@ -26,10 +26,8 @@ vi.mock('../../api', () => ({
 
 const mockResolveServerAccount = vi.fn(async (id, account) =>
   ({ ok: true, account: { ...account, password: 'pw' } }));
-const mockEnsureFreshToken = vi.fn(async (account) => account);
 vi.mock('../../authUtils', () => ({
   resolveServerAccount: (...a) => mockResolveServerAccount(...a),
-  ensureFreshToken: (...a) => mockEnsureFreshToken(...a),
   hasValidCredentials: (a) => !!(a?.password || a?.oauth2AccessToken),
 }));
 
@@ -76,15 +74,12 @@ describe('fetchAccountMailboxes resolves credentials before the server call', ()
     expect(mailboxes).toHaveLength(12);
   });
 
-  it('falls back to ensureFreshToken when resolveServerAccount cannot recover credentials', async () => {
+  it('asks with the account as given when resolveServerAccount cannot recover credentials', async () => {
     mockResolveServerAccount.mockResolvedValueOnce({ ok: false, reason: 'missing_credentials' });
     const account = { id: 'luke', email: 'luke@mock.test', imapHost: '127.0.0.1' };
-    mockEnsureFreshToken.mockResolvedValueOnce({ ...account, password: 'from-fallback' });
 
-    const mailboxes = await fetchAccountMailboxes(account);
+    await expect(fetchAccountMailboxes(account)).rejects.toThrow('Password missing');
 
-    expect(mockEnsureFreshToken).toHaveBeenCalledWith(account);
-    expect(mockFetchMailboxes).toHaveBeenCalledWith(expect.objectContaining({ password: 'from-fallback' }));
-    expect(mailboxes).toHaveLength(12);
+    expect(mockFetchMailboxes).toHaveBeenCalledWith(account);
   });
 });

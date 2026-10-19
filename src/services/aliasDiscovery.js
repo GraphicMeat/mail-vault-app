@@ -3,12 +3,11 @@
 // The daemon's `aliases.discover` does the work (the provider's send-as list,
 // and the account's own Sent and delivery headers, read at background QoS);
 // the rules for keeping its answer are utils/aliasDiscovery.js, applied by the
-// settings store. This module only gets a fresh token, asks, and hands the
-// answer over. A lookup can take ~12s under load, so callers show a spinner
+// settings store. This module only asks (the daemon sends the account's own
+// token, refreshed when due) and hands the answer over. A lookup can take ~12s under load, so callers show a spinner
 // and never wait on it for anything else.
 
 import * as api from './api';
-import { ensureFreshToken } from './authUtils';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const FAILED = () => ({ added: [], suggestions: [], providerStatus: 'error' });
@@ -32,9 +31,7 @@ export function refreshAliases(account) {
   if (current) return current;
   const lookup = (async () => {
     try {
-      // Gmail answers `denied` to a stale token, so it is refreshed first.
-      const fresh = await ensureFreshToken(account);
-      const result = await api.discoverAliases(fresh || account, account.id);
+      const result = await api.discoverAliases(account, account.id);
       return useSettingsStore.getState().applyDiscovery(account.id, account.email, result);
     } catch (err) {
       console.warn('[aliasDiscovery] lookup failed:', err?.message || err);
@@ -50,7 +47,7 @@ export function refreshAliases(account) {
 /**
  * The automatic lookup: once per account per app session, `delayMs` after
  * it is asked for, fire-and-forget. It reads the account again when its turn
- * comes (a token refreshed meanwhile, or the account removed).
+ * comes (credentials loaded meanwhile, or the account removed).
  */
 export function scheduleAliasRefresh(account, { delayMs = AUTO_DELAY_MS } = {}) {
   if (!account?.id || scheduled.has(account.id)) return;

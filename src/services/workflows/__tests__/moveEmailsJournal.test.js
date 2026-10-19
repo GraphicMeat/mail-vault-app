@@ -287,7 +287,7 @@ describe('moveEmails', () => {
 
     const result = await useMailStore.getState().moveEmails([7], 'Archive');
 
-    expect(mockGraphMoveEmails).toHaveBeenCalledWith('tok', ['gid'], 'gfolder');
+    expect(mockGraphMoveEmails).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), ['gid'], 'gfolder');
     // Graph is addressed by a per-session message id, not a replayable uid —
     // replayOps would only throw the entry away again.
     expect(mockQueueOp).not.toHaveBeenCalled();

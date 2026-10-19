@@ -8,7 +8,6 @@ import { useLearningStore } from '../../stores/learningStore';
 import * as classificationService from '../../services/classificationService';
 import { bulkOperationManager } from '../../services/BulkOperationManager';
 import { PHASE_LABELS } from '../BulkOperationProgress';
-import { ensureFreshToken } from '../../services/authUtils';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { EmailPreviewFrame } from '../email/EmailPreviewFrame';
@@ -387,7 +386,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
     setBulkProgress({ total: uids.length, completed: 0, phase: action === 'delete' ? 'delete' : 'archive' });
 
     try {
-      const freshAccount = await ensureFreshToken(account);
+      const freshAccount = account;
       await bulkOperationManager.start({
         // Cleanup clears the server: Archive keeps a verified vault copy and
         // then deletes the server one, so the message leaves this list.

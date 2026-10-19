@@ -3,7 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useConnectivityStore } from '../../stores/connectivityStore';
-import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../authUtils';
+import { hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
@@ -195,8 +195,6 @@ export async function loadEmails({ rereadFlags = false } = {}) {
   }, 20000);
 
   try {
-    account = await ensureFreshToken(account);
-    if (isStale()) return;
     loadTrace.mark('token-ready', { email: account.email });
 
     // ── Graph API path ──
@@ -927,7 +925,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     const shouldRefreshMailboxes = takeForcedMailboxRefetch(activeAccountId) || !shouldUseFreshMailboxCacheLocal(cachedMailboxEntry) || !cachedTarget;
 
     if (shouldRefreshMailboxes) {
-      const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
+      const graphFolders = await api.graphListFolders(account);
       await adoptGraphFolderKeysFromListing(account, graphFolders);
       if (isStale()) return;
       mailboxes = graphFoldersToMailboxes(graphFolders);
@@ -945,7 +943,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     }
 
     const result = await _listGraphMessages(
-      activeAccountId, activeMailbox, account.oauth2AccessToken, targetFolder._graphFolderId
+      activeAccountId, activeMailbox, account, targetFolder._graphFolderId
     );
     if (isStale()) return;
 
@@ -1188,10 +1186,9 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     if (isGraphAccount(account)) {
       const sentFolder = (isActive() ? get().mailboxes : folderList).find(m => m.path === sentPath);
       if (sentFolder?._graphFolderId) {
-        const freshAccount = await ensureFreshToken(account);
         console.log('[loadSentHeaders:graph_fetch_start]', { accountId, folderId: sentFolder._graphFolderId });
         const result = await _listGraphMessages(
-          accountId, sentPath, freshAccount.oauth2AccessToken, sentFolder._graphFolderId
+          accountId, sentPath, account, sentFolder._graphFolderId
         );
         if (!wanted()) return;
         const sentHeaders = result.headers || [];

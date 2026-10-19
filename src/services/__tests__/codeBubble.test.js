@@ -17,7 +17,6 @@ vi.mock('../api', () => ({
   graphGetMessage: (...a) => mockGraphGet(...a),
   messageCode: (...a) => mockCode(...a),
 }));
-vi.mock('../authUtils', () => ({ ensureFreshToken: async (account) => ({ ...account, oauth2AccessToken: 'fresh' }) }));
 vi.mock('../cacheManager', () => ({ getGraphMessageId: (accountId, mailbox, uid) => (uid === 42 ? 'graph-42' : null) }));
 
 import { offerCodeFromArrival, fetchArrivalBody } from '../codeBubble';
@@ -130,11 +129,13 @@ describe('fetchArrivalBody', () => {
     expect(mockGraphGet).not.toHaveBeenCalled();
   });
 
-  it('reads an Outlook message signed in with Microsoft through Graph, with a fresh token', async () => {
-    accounts.push({ id: 'g1', email: 'g@ms.com', authType: 'oauth2', oauth2Transport: 'graph', oauth2AccessToken: 'stale' });
+  // The daemon sends the account's own token, refreshed when due.
+  it('reads an Outlook message signed in with Microsoft through Graph, naming the account', async () => {
+    const outlook = { id: 'g1', email: 'g@ms.com', authType: 'oauth2', oauth2Transport: 'graph', oauth2AccessToken: 'stale' };
+    accounts.push(outlook);
     mockGraphGet.mockResolvedValue({ subject: 'Sign in', body: { contentType: 'html', content: '<p>Your code is <b>775421</b></p>' } });
     const body = await fetchArrivalBody('g1', 42, 'INBOX');
-    expect(mockGraphGet).toHaveBeenCalledWith('fresh', 'graph-42');
+    expect(mockGraphGet).toHaveBeenCalledWith(outlook, 'graph-42');
     expect(mockLight).not.toHaveBeenCalled();
     expect(body.html).toContain('775421');
   });

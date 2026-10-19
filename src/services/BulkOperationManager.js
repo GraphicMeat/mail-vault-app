@@ -1,6 +1,5 @@
 import * as api from './api';
 import { send } from './transport.js';
-import { ensureFreshToken } from './authUtils';
 import { t } from '../i18n/index.js';
 import { _parseSelKey } from '../stores/slices/unifiedHelpers.js';
 import { isLocalMailbox } from './workflows/mailboxTree.js';
@@ -243,7 +242,7 @@ class BulkOperationManager {
       if (!uids.length) continue;
       this._current = g;
       this._base = { completed: done, errors: this._operation.errors };
-      await run(g, await ensureFreshToken(g.account));
+      await run(g, g.account);
       done += uids.length;
       if (this._cancelled) return;
     }

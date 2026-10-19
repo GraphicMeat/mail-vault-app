@@ -1,7 +1,6 @@
 import { htmlToPlainText } from '../utils/emailParser';
 import { useCodeBubbleStore } from '../stores/codeBubbleStore';
 import { isGraphAccount, graphMessageToEmail } from './graphConfig';
-import { ensureFreshToken } from './authUtils';
 
 /**
  * The message's body, read the way the reader's prefetch reads it: an IMAP
@@ -22,8 +21,7 @@ export async function fetchArrivalBody(accountId, uid, mailbox) {
   const { getGraphMessageId } = await import('./cacheManager');
   const graphId = getGraphMessageId(accountId, mailbox, uid);
   if (!graphId) return null;
-  const fresh = await ensureFreshToken(account);
-  return graphMessageToEmail(await api.graphGetMessage(fresh.oauth2AccessToken, graphId), uid);
+  return graphMessageToEmail(await api.graphGetMessage(account, graphId), uid);
 }
 
 // The daemon reads the code (`message.code`, src-core/src/verification_code.rs).

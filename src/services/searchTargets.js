@@ -1,4 +1,4 @@
-import { ensureFreshToken, hasValidCredentials } from './authUtils.js';
+import { hasValidCredentials } from './authUtils.js';
 import { getAccountCacheMailboxes } from './cacheManager.js';
 import { mailboxDescendants, SUBTREE_PREFIX, isLocalMailbox } from './workflows/mailboxTree.js';
 import { _resolveMailboxPath, flattenMailboxes } from '../stores/slices/unifiedHelpers.js';
@@ -82,7 +82,7 @@ export async function buildSearchTargets(mail, settings, searchFilters) {
       && hasValidCredentials(account);
     return {
       accountId: account.id,
-      account: canSearchServer ? await ensureFreshToken(account) : null,
+      account: canSearchServer ? account : null,
       localMailboxes: resolveLocalScope(tree, mail, folder),
       // The account's local folders by display name too: the daemon names a
       // hit by the known mailbox its vault dir belongs to, and a local folder

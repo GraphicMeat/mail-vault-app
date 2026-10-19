@@ -3,6 +3,7 @@
 import { parseKeychainValue, getAccountsFromKeychain } from '../keychainUtils.js';
 import * as keychainSession from '../keychainSession.js';
 import { send as transportSend } from '../transport.js';
+import { credentialsChanged } from '../oauthTokenSync.js';
 
 // Re-export for any consumers that import from db.js
 export { parseKeychainValue, getAccountsFromKeychain };
@@ -125,6 +126,9 @@ async function _processKeychainQueue() {
       try {
         await invoke('store_credentials', { credentials: latest.data });
         keychainCache = latest.data;
+        // The daemon reads the store again before trusting a token it holds
+        // (a new sign-in, a removed account, the pair it refreshed now saved).
+        credentialsChanged();
         console.log('[db.js] Keychain saved for', Object.keys(latest.data).length, 'account(s)');
         latest.resolve();
         collapsed.forEach(w => w.resolve());

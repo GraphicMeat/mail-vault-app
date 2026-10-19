@@ -243,22 +243,19 @@ describe('MboxUploadProgress', () => {
     await settled('mbox_upload_resume', [{ jobId: JOB }]);
   });
 
-  // The daemon never refreshes an OAuth token; a resume on the expired one
-  // would only hold the job again. Resolved as the backup resolves it.
-  it('resuming an upload held for a refused sign-in resolves the account (token refresh) first', async () => {
+  // The daemon refreshes the OAuth token itself (src-daemon/src/oauth_tokens.rs):
+  // a resume after a refused sign-in goes straight to the daemon, with no
+  // account resolve or token refresh in the app.
+  it('resuming an upload held for a refused sign-in goes straight to the daemon', async () => {
     const original = useMailStore.getState().accounts;
     const account = { id: ACCT, email: 'me@gmail.test', authType: 'oauth2', oauth2RefreshToken: 'r', oauth2ExpiresAt: 1 };
     useMailStore.setState({ accounts: [account] });
-    const order = [];
-    resolveMock.mockImplementation(async (id, a) => { order.push(`resolve ${id}`); return { ok: true, account: a }; });
-    controlReply = (cmd) => { order.push(cmd); return Promise.resolve({ jobId: JOB, resumed: true, restarted: false }); };
     try {
       await mount({ onOpenAccounts: vi.fn() });
       fire(ev({ state: 'needsSignIn', paused: true, needsSignIn: true }));
       fireEvent.click(button('resume'));
       await settled('mbox_upload_resume', [{ jobId: JOB }]);
-      expect(resolveMock).toHaveBeenCalledWith(ACCT, account);
-      expect(order).toEqual([`resolve ${ACCT}`, 'mbox_upload_resume']);
+      expect(resolveMock).not.toHaveBeenCalled();
     } finally {
       useMailStore.setState({ accounts: original });
     }

@@ -5,7 +5,7 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { recountInbox } from '../../stores/unreadCounts';
-import { ensureFreshToken, resolveServerAccount, hasValidCredentials } from '../authUtils';
+import { resolveServerAccount, hasValidCredentials } from '../authUtils';
 import { buildThreads } from '../../utils/emailParser';
 import { describeConnectionError } from '../../utils/connectionError';
 import { UidMap } from '../UidMap';
@@ -58,12 +58,11 @@ function shouldUseFreshMailboxCache(entry) {
 async function fetchAccountMailboxes(account) {
   // Activation hands us the accounts.json copy, which never carries a
   // password (regression 71779b49): resolve credentials first, the way
-  // loadServerEmails already does, with ensureFreshToken as a fallback for
-  // when resolveServerAccount can't recover them.
+  // loadServerEmails already does. An OAuth2 token is the daemon's to send.
   const resolved = await resolveServerAccount(account.id, account);
-  const freshAccount = resolved.ok ? resolved.account : await ensureFreshToken(account);
+  const freshAccount = resolved.ok ? resolved.account : account;
   if (isGraphAccount(freshAccount)) {
-    const graphFolders = await api.graphListFolders(freshAccount.oauth2AccessToken);
+    const graphFolders = await api.graphListFolders(freshAccount);
     await adoptGraphFolderKeysFromListing(freshAccount, graphFolders);
     return graphFoldersToMailboxes(graphFolders);
   }
@@ -250,7 +249,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   let targetFolder = mailboxes.find(m => m.path === activeMailbox && m._graphFolderId);
 
   if (!targetFolder) {
-    const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
+    const graphFolders = await api.graphListFolders(account);
     await adoptGraphFolderKeysFromListing(account, graphFolders);
     if (signal.aborted) return;
     mailboxes = graphFoldersToMailboxes(graphFolders);
@@ -266,7 +265,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   }
 
   const result = await _listGraphMessages(
-    accountId, activeMailbox, account.oauth2AccessToken, targetFolder._graphFolderId
+    accountId, activeMailbox, account, targetFolder._graphFolderId
   );
   if (signal.aborted) return;
 

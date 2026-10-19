@@ -3,7 +3,6 @@
 import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
-import { ensureFreshToken } from '../authUtils';
 import { t } from '../../i18n/index.js';
 
 
@@ -31,10 +30,12 @@ export async function updateAccount(accountId, patch) {
   console.log('[mailStore] updateAccount — testing connection to new server...');
   try {
     if (isGraphAccount(updated)) {
-      const freshAccount = await ensureFreshToken(updated);
       // A connectivity probe: the listing is discarded, so no folder-key
       // adoption pass here — the listing on the next activation runs it.
-      await api.graphListFolders(freshAccount.oauth2AccessToken);
+      // A Reconnect checks the token its sign-in just returned (not saved
+      // yet); otherwise the daemon sends the account's own.
+      if (patch.oauth2AccessToken) await api.graphProbeSignIn(patch.oauth2AccessToken, updated.email);
+      else await api.graphListFolders(updated);
     } else {
       await api.testConnection(updated);
     }

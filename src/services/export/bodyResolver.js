@@ -1,6 +1,5 @@
 import * as db from '../db';
 import * as api from '../api';
-import { ensureFreshToken } from '../authUtils';
 import { hydrateInlineImages } from '../attachmentUtils';
 import { getGraphMessageId, graphMessageToEmail } from '../../stores/mailStore';
 import { resolveEmailLocation, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
@@ -52,8 +51,7 @@ export async function resolveMessageBody(header, store, { onVaultMiss } = {}) {
   const account = store.accounts.find(a => a.id === accountId) || null;
   if (!account) return { ok: false, reason: t('svc.bodyResolver.accountUnavailable') };
 
-  let fresh = account;
-  try { fresh = await ensureFreshToken(account); } catch (_) { /* stale token still worth a try */ }
+  const fresh = account;
 
   let remote = null;
   try {
@@ -62,9 +60,9 @@ export async function resolveMessageBody(header, store, { onVaultMiss } = {}) {
     if (fresh.oauth2Transport === 'graph') {
       const graphId = getGraphMessageId(accountId, mailbox, header.uid);
       if (graphId) {
-        const message = await api.graphGetMessage(fresh.oauth2AccessToken, graphId);
+        const message = await api.graphGetMessage(fresh, graphId);
         remote = graphMessageToEmail(message, header.uid);
-        api.graphCacheMime(fresh.oauth2AccessToken, graphId, accountId, mailbox, header.uid, 'export').catch(() => {});
+        api.graphCacheMime(fresh, graphId, mailbox, header.uid, 'export').catch(() => {});
       }
     } else {
       remote = await api.fetchEmailLight(fresh, header.uid, mailbox, accountId, { intent: 'export' });

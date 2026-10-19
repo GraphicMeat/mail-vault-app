@@ -11,7 +11,6 @@
 
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useMailStore } from '../stores/mailStore';
-import { ensureFreshToken } from './authUtils';
 import { send } from './transport.js';
 import * as api from './api';
 import * as db from './db';
@@ -245,8 +244,8 @@ async function executeRule(rule, { dryRun = false } = {}) {
           continue;
         }
 
-        // Refresh token before IMAP operations - once per account, not per folder
-        if (!freshAccount) freshAccount = await ensureFreshToken(account);
+        // The daemon sends the account's token, refreshed when due.
+        if (!freshAccount) freshAccount = account;
 
         const counts = await cleanFolder(rule, account, freshAccount, box, staleEmails, mailboxes);
         totals.archived += counts.archived;
