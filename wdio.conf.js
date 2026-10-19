@@ -435,6 +435,10 @@ export const config = {
     // The thread and chat perf gate: it is a debug-build timing gate, so it
     // stays out of the battery. wdio.blitz.conf.js selects it by name.
     './tests/e2e/connected-blitz-perf.test.js',
+    // Process memory with the iframe and with Blitz, one mode per run (MV_MEM_MODE),
+    // read through `ps`: a measurement on the mini, and it needs the Blitz fixture
+    // folder. src-render/tools/memory-job.sh runs it through wdio.blitz.conf.js.
+    './tests/e2e/connected-blitz-memory.test.js',
   ],
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state
