@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// The Mac App Store shell is built without the render feature (no mvrender
-// scheme), so a registered Blitz there would offer a setting whose every tile
-// fails. The module registers nothing in that build.
+// The Mac App Store shell is built with the render feature (mvrender scheme), so
+// the module registers there like everywhere else; the setting stays off by default.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const register = vi.hoisted(() => vi.fn());
@@ -33,10 +32,11 @@ describe('blitz module registration', () => {
     expect(typeof impl.SettingsRow).toBe('function');
   });
 
-  it('registers nothing in a Mac App Store build: no body, no settings row', async () => {
+  it('registers the renderer in a Mac App Store build too, as an opt-in setting', async () => {
     vi.stubEnv('VITE_MV_APPSTORE', '1');
     await load();
-    expect(register).not.toHaveBeenCalled();
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register.mock.calls[0][0]).toBe('blitz');
   });
 
   describe('the close handler of an original-* window (Review Focus 5)', () => {

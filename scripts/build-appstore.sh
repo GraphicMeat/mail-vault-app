@@ -174,12 +174,13 @@ export TAURI_APPLE_SIGNING_IDENTITY="$APP_SIGNING_IDENTITY"
 #   - --no-default-features drops the `sparkle` feature so tauri-plugin-sparkle-updater
 #     never enters the Cargo graph.
 #   - `appstore` enables the StoreKit IAP bridge (objc2-store-kit).
+#   - `blitz-render` adds the mvrender tile scheme (off by default in Settings).
 #   - The appstore overlay config strips Sparkle.framework and the dmg target.
 export VITE_MV_APPSTORE=1
 npx tauri build \
     --config src-tauri/tauri.appstore.conf.json \
     --no-default-features \
-    --features custom-protocol,appstore
+    --features custom-protocol,appstore,blitz-render
 
 # Paths
 APP_PATH="src-tauri/target/release/bundle/macos/${APP_NAME}.app"

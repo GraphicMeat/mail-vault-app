@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **The experimental Rust email renderer is in the Mac App Store build.** Settings, Appearance has the same switch as the direct download. It stays off until you turn it on.
 - **View builder.** See an email's distinctive words, who else writes about them, and turn them into a view. Click Make a view from this email (the wand beside Sender insights) in the reading pane, pick words, then add them to a saved view or make a new view for that account, or for that folder only. Point at a word to see its top senders and subjects.
 - **Hide view mail.** A list button keeps mail your views already hold out of your folders. The first click opens a list of your views: pick the ones whose mail should go and press OK. From then on the button has two halves, one that turns the hiding on and off and one that reopens the list; with no view picked, the on/off half is greyed out.
 
