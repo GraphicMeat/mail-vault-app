@@ -269,13 +269,13 @@ describe('the quoted original in a reply', () => {
     const to = screen.getByTestId('compose-to');
     fireEvent.change(to, { target: { value: 'after@example.test' } });
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(to.value).toBe('before@example.test');
+    expect(to.dataset.value).toBe('before@example.test');
     expect(onClose).not.toHaveBeenCalled();
 
     rejectDetach(new Error('Native window unavailable'));
     await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Native window unavailable'));
     expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(false);
-    expect(to.value).toBe('before@example.test');
+    expect(to.dataset.value).toBe('before@example.test');
   });
 
   it('hands an initialized reply straight to its own window when set to always open one', async () => {
@@ -380,7 +380,7 @@ describe('the quoted original in a reply', () => {
     fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'typed@example.test' } });
     fireEvent.click(screen.getByTestId('compose-attach'));
     await waitFor(() => expect(onAttach).toHaveBeenCalledTimes(1));
-    expect(onAttach.mock.calls[0][0]).toMatchObject({ to: 'typed@example.test', subject: 'Kept' });
+    expect(onAttach.mock.calls[0][0]).toMatchObject({ to: 'before@example.test, typed@example.test', subject: 'Kept' });
     expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(true);
     fireEvent.click(screen.getByTestId('compose-attach'));
     expect(onAttach).toHaveBeenCalledTimes(1);
@@ -394,7 +394,7 @@ describe('the quoted original in a reply', () => {
     fireEvent.click(await screen.findByTestId('compose-attach'));
     await waitFor(() => expect(screen.getByTestId('compose-error').textContent).toContain('Main window busy'));
     expect(screen.getByTestId('compose-modal').hasAttribute('inert')).toBe(false);
-    expect(screen.getByTestId('compose-to').value).toBe('before@example.test');
+    expect(screen.getByTestId('compose-to').dataset.value).toBe('before@example.test');
   });
 
   it('does not publish an autosave snapshot after unmount', async () => {

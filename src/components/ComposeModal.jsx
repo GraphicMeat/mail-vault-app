@@ -9,7 +9,7 @@ import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
-import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
+import { RecipientField } from './RecipientField';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
@@ -48,33 +48,6 @@ import { missingAttachment } from '../utils/missingAttachment';
 // the Tauri webview's own viewport either way — the detached window's is the
 // OS window's client area.
 const viewportBounds = () => ({ width: window.innerWidth - 32, height: window.innerHeight - 32 });
-
-// Recipient input row with inline autocomplete + contacts-popover button.
-function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId, autoFocus = false }) {
-  const inputRef = useRef(null);
-  const privateInput = usePrivateInputClass();
-  return (
-    <div className="flex items-center gap-2 relative">
-      <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{label}</label>
-      <div className="flex-1 flex items-center gap-1">
-        <input aria-label={label}
-          ref={inputRef}
-          type="text"
-          name={name}
-          data-testid={testid}
-          data-autofocus={autoFocus ? true : undefined}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          className={`${privateInput} flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
-                    outline-none text-sm py-1`}
-        />
-        <ContactsPickerButton value={value} onChange={setValue} fieldName={label} boostAccountId={boostAccountId} />
-      </div>
-      <ContactsAutocomplete value={value} onChange={setValue} inputRef={inputRef} boostAccountId={boostAccountId} />
-    </div>
-  );
-}
 
 function AttachmentPreview({ attachment, onRemove }) {
   const t = useT();
@@ -633,6 +606,13 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       return { ...prev, body };
     });
   }, [selectedAccountId, composeFrom]);
+
+  // A recipient chip field hands over its whole comma-joined string.
+  const setRecipients = (field) => (value) => {
+    if (detaching) return;
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setError(null);
+  };
 
   const handleChange = (e) => {
     if (detaching) return;
@@ -1483,8 +1463,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               label={t('compose.to')}
               placeholder={t('compose.recipientExampleCom')}
               value={formData.to}
-              onChange={handleChange}
-              setValue={(v) => setFormData(prev => ({ ...prev, to: v }))}
+              setValue={setRecipients('to')}
               testid="compose-to"
               boostAccountId={selectedAccountId}
               // Reply/replyAll already have a recipient — the caret belongs in
@@ -1499,8 +1478,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               label={t('compose.cc')}
               placeholder={t('compose.ccExampleCom')}
               value={formData.cc}
-              onChange={handleChange}
-              setValue={(v) => setFormData(prev => ({ ...prev, cc: v }))}
+              setValue={setRecipients('cc')}
               testid="compose-cc"
               boostAccountId={selectedAccountId}
             />
@@ -1511,8 +1489,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               label={t('compose.bcc')}
               placeholder={t('compose.bccExampleCom')}
               value={formData.bcc}
-              onChange={handleChange}
-              setValue={(v) => setFormData(prev => ({ ...prev, bcc: v }))}
+              setValue={setRecipients('bcc')}
               testid="compose-bcc"
               boostAccountId={selectedAccountId}
             />

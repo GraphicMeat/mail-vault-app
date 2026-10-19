@@ -296,8 +296,12 @@ export async function setField(testid, value) {
   return ok;
 }
 
-export const fieldValue = (testid) => browser.execute((id) =>
-  document.querySelector(`[data-testid="${id}"]`)?.value ?? null, testid);
+// A recipient field (chips) keeps its whole comma-joined string in data-value;
+// its input only holds the draft being typed.
+export const fieldValue = (testid) => browser.execute((id) => {
+  const el = document.querySelector(`[data-testid="${id}"]`);
+  return el?.dataset?.value ?? el?.value ?? null;
+}, testid);
 
 /** Press a key inside a field (keydown only — enough for the form's Enter/Shift+Enter handling). */
 export async function keyInField(testid, key, init = {}) {
