@@ -51,6 +51,12 @@
 - [Local Email Storage vs Cloud Email: Which Copy Do You Control?](https://mailvaultapp.com/blog/local-email-storage-vs-cloud-email.html): Compare local email storage and cloud mail by access, privacy, recovery and maintenance. Learn how a MailVault archive can complement your existing provider.
 - [Best Email Backup Software for Mac: Choose by Recovery](https://mailvaultapp.com/blog/best-email-backup-software-for-mac.html): Choose email backup software for Mac by testing message coverage, independent copies and recovery. Compare manual exports, Mac backups and MailVault workflows.
 
+## Everyday email workflows
+
+- [How to Organize Invoice Emails Automatically](https://mailvaultapp.com/blog/organize-invoice-emails-automatically.html): Organize invoice emails with tags and a tested Auto Tags rule. Preview matches, sort older mail, and build a monthly view without moving messages.
+- [Email Templates for Client Replies: Three Reusable Examples](https://mailvaultapp.com/blog/email-templates-for-client-replies.html): Save reusable email templates for client replies in MailVault. Try three examples, insert them into a draft, and personalize the details before sending.
+- [How to Find Emails You Haven’t Replied To](https://mailvaultapp.com/blog/find-emails-you-havent-replied-to.html): Find emails you have not replied to with MailVault’s Needs reply view. Understand its 30-day scope, check reply flags, and keep a separate follow-up list.
+
 ## Email guides and research
 
 - [Does Archiving Gmail Free Up Space?](https://mailvaultapp.com/blog/does-archiving-gmail-free-up-space.html): Gmail Archive clears your inbox, not your storage. Learn the difference between archiving in Gmail and keeping an independent copy before deleting mail.

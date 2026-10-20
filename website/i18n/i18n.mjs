@@ -55,6 +55,10 @@ const EXCLUDE = new Set([
   'terms.html',
   'download-stats.html',
   'oauth/yahoo/callback.html',
+  // English workflow articles; add translations before including in sourcePages.
+  'blog/organize-invoice-emails-automatically.html',
+  'blog/email-templates-for-client-replies.html',
+  'blog/find-emails-you-havent-replied-to.html',
 ]);
 
 const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
@@ -961,7 +965,12 @@ export function missing(spec) {
 const SITEMAP = path.join(ROOT, 'sitemap.xml');
 
 // English-only pages that are still worth indexing (EXCLUDE keeps them out of translation).
-const SITEMAP_EXTRA = ['changelog.html', 'privacy.html', 'terms.html'];
+const SITEMAP_EXTRA = [
+  'changelog.html', 'privacy.html', 'terms.html',
+  'blog/organize-invoice-emails-automatically.html',
+  'blog/email-templates-for-client-replies.html',
+  'blog/find-emails-you-havent-replied-to.html',
+];
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 // The deploy checks out one commit, where every page would get that commit's date,
