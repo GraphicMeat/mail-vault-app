@@ -238,18 +238,16 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
     }
 }
 
-/// The persisted `mailvault-settings.state` object of `frontend-settings.json`
-/// (the daemon has no settings push; it reads the file fresh). `Err` when the
+/// The persisted `mailvault-settings.state` object of `frontend-settings.json`,
+/// read fresh through the daemon's one reader (`settings_doc`). `Err` when the
 /// file is missing, unreadable, mid-write garbage, or holds no state object:
 /// a caller that DELETES on the answer (the eviction worker) must stop there,
 /// because `FetchPolicy::from_settings` over an empty state is an evicting
 /// Keep Recent, which would clear a Hoarder account's copies.
 pub(crate) fn read_settings_state(app_dir: &std::path::Path) -> Result<Value, String> {
-    let raw = std::fs::read_to_string(app_dir.join("frontend-settings.json"))
-        .map_err(|e| format!("settings unreadable: {e}"))?;
-    let mut settings: Value = serde_json::from_str(&raw).map_err(|e| format!("settings unparseable: {e}"))?;
-    match settings.get_mut("mailvault-settings").and_then(|s| s.get_mut("state")) {
-        Some(state) if state.is_object() => Ok(state.take()),
+    let settings = mailvault_core::settings_doc::SettingsDoc::shared(app_dir).read()?;
+    match settings.get("mailvault-settings").and_then(|s| s.get("state")) {
+        Some(state) if state.is_object() => Ok(state.clone()),
         _ => Err("settings hold no mailvault-settings.state object".to_string()),
     }
 }

@@ -72,9 +72,15 @@ pub fn max_level() -> tracing::Level {
 /// `mailvault-settings.state.logVerbosity == "verbose"` in the app's
 /// `frontend-settings.json`. Anything else, unreadable included, is Standard.
 pub fn verbose_from_settings(raw: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(raw)
-        .ok()
-        .and_then(|s| s.get("mailvault-settings")?.get("state")?.get("logVerbosity")?.as_str().map(|v| v == "verbose"))
+    serde_json::from_str::<serde_json::Value>(raw).ok().is_some_and(|s| verbose_from_document(&s))
+}
+
+/// `verbose_from_settings` over the parsed document
+/// (`settings_doc::SettingsDoc::read`).
+pub fn verbose_from_document(settings: &serde_json::Value) -> bool {
+    settings
+        .get("mailvault-settings")
+        .and_then(|s| s.get("state")?.get("logVerbosity")?.as_str().map(|v| v == "verbose"))
         .unwrap_or(false)
 }
 

@@ -189,8 +189,8 @@ fn setup_logging(data_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGu
 
     // Standard (INFO, addresses masked) unless the app's settings ask for
     // Verbose; `logs.set_verbosity` switches it while running.
-    let settings = std::fs::read_to_string(data_dir.join("frontend-settings.json")).unwrap_or_default();
-    log_redact::set_verbose(log_redact::verbose_from_settings(&settings));
+    let settings = mailvault_core::settings_doc::SettingsDoc::shared(data_dir).read();
+    log_redact::set_verbose(settings.is_ok_and(|s| log_redact::verbose_from_document(&s)));
     let salt = log_redact::load_or_create_salt(data_dir);
     // Network Activity masks an address in a result with the token the logs use.
     mailvault_core::net_activity::set_salt(salt);

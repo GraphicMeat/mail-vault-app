@@ -3,9 +3,8 @@
 //! Settings > Data usage keeps one `transferLimits[accountId]` entry per
 //! account in the persisted frontend settings blob
 //! (`<app_data_dir>/frontend-settings.json`,
-//! `["mailvault-settings"].state.transferLimits`). The app already writes that
-//! file on every settings change, so the daemon reads it fresh instead of
-//! being pushed anything.
+//! `["mailvault-settings"].state.transferLimits`). The daemon owns that file
+//! (`settings_doc`) and reads it through its one reader, fresh on every call.
 //!
 //! What the limit governs (decided 2026-09-29): the downloaders nobody is
 //! waiting on. A backup run, the Hoarder worker and the app's download-ahead
@@ -64,8 +63,7 @@ fn default_true() -> bool {
 /// `None` when the settings file, the map, or this account's entry is missing
 /// or unreadable: the cap is off, which is the default.
 pub fn read_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimits> {
-    let raw = std::fs::read_to_string(app_dir.join("frontend-settings.json")).ok()?;
-    let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let settings = crate::settings_doc::SettingsDoc::shared(app_dir).read().ok()?;
     let entry = settings
         .get("mailvault-settings")?
         .get("state")?
