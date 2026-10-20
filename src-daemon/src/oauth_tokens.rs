@@ -93,9 +93,45 @@ struct Grant {
     client_id: Option<String>,
 }
 
+impl Grant {
+    /// The same sign-in as `other` (a record read back), refresh token
+    /// rotations aside: same address, provider, Google client, custom client,
+    /// tenant and transport, and `other`'s refresh token is one this chain
+    /// has held. Anything else is a new grant (a Reconnect, a switch of the
+    /// Google sign-in app, IMAP to Graph), which replaces the held entry
+    /// whatever the expiries say.
+    fn same_grant(&self, lineage: &[String], other: &Grant) -> bool {
+        self.email.eq_ignore_ascii_case(&other.email)
+            && self.provider == other.provider
+            && self.client_id == other.client_id
+            && self.custom_client_id == other.custom_client_id
+            && self.tenant_id == other.tenant_id
+            && self.use_graph == other.use_graph
+            && lineage.iter().any(|rt| *rt == other.refresh_token)
+    }
+
+    /// One refresh token of this grant, named without the token itself: the
+    /// app computes the same over a stored record (`grantFingerprint`) and
+    /// never writes this grant's pair over another grant's sign-in.
+    fn fingerprint(&self, refresh_token: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let named = json!([
+            refresh_token,
+            self.client_id.as_deref().unwrap_or(""),
+            if self.use_graph { "graph" } else { "" },
+            self.tenant_id.as_deref().unwrap_or(""),
+            self.custom_client_id.as_deref().unwrap_or(""),
+        ]);
+        Sha256::digest(named.to_string().as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+    }
+}
+
 #[derive(Clone)]
 struct Entry {
     grant: Grant,
+    /// Every refresh token this grant has had here, the record's first: a
+    /// stale write of the record still names one of them.
+    lineage: Vec<String>,
     access_token: String,
     /// Epoch ms; 0 when the record never said (no refresh then, as the app).
     expires_at: i64,
@@ -208,9 +244,9 @@ impl TokenStore {
             return None;
         };
         if let Some(held) = entries.get_mut(account_id) {
-            let same_address = held.grant.email.eq_ignore_ascii_case(&grant.email);
+            let same_grant = held.grant.same_grant(&held.lineage, &grant);
             let saved = held.access_token == access_token && held.expires_at == expires_at;
-            if same_address && (saved || held.expires_at > expires_at) {
+            if same_grant && (saved || held.expires_at > expires_at) {
                 if saved {
                     held.unsaved = false;
                 }
@@ -218,7 +254,10 @@ impl TokenStore {
                 return Some(held.clone());
             }
         }
-        let entry = Entry { grant, access_token, expires_at, unsaved: false, checked: true, rejected: false, cooldown: None };
+        // A new grant (or none held): the record's pair, and nothing of the
+        // old grant's, unsaved pair included, survives.
+        let lineage = vec![grant.refresh_token.clone()];
+        let entry = Entry { grant, lineage, access_token, expires_at, unsaved: false, checked: true, rejected: false, cooldown: None };
         entries.insert(account_id.to_string(), entry.clone());
         Some(entry)
     }
@@ -241,7 +280,9 @@ impl TokenStore {
     }
 
     /// The pairs refreshed here that the stored record does not show yet, for
-    /// the app to save: `{accountId, accessToken, refreshToken, expiresAt}`.
+    /// the app to save: `{accountId, accessToken, refreshToken, expiresAt,
+    /// chain}`, `chain` being the fingerprints of the refresh tokens this
+    /// grant has had (the app writes only over a record of the same grant).
     /// Kept until a read of the record shows them, so a save that failed is
     /// offered again.
     pub(crate) fn unsaved(&self) -> Vec<Value> {
@@ -254,6 +295,7 @@ impl TokenStore {
                     "accessToken": e.access_token,
                     "refreshToken": e.grant.refresh_token,
                     "expiresAt": e.expires_at,
+                    "chain": e.lineage.iter().map(|rt| e.grant.fingerprint(rt)).collect::<Vec<_>>(),
                 })
             })
             .collect()
@@ -280,6 +322,9 @@ impl TokenStore {
         // the token itself rotates.
         entry.grant = grant.clone();
         if let Some(rt) = refresh_token.filter(|rt| !rt.is_empty()) {
+            if !entry.lineage.contains(&rt) {
+                entry.lineage.push(rt.clone());
+            }
             entry.grant.refresh_token = rt;
         }
         entry.access_token = access_token;
@@ -812,7 +857,7 @@ mod tests {
         assert_eq!(offered.len(), 1, "{offered:?}");
         let mut keys: Vec<&String> = offered[0].as_object().unwrap().keys().collect();
         keys.sort();
-        assert_eq!(keys, vec!["accessToken", "accountId", "expiresAt", "refreshToken"], "never the client id");
+        assert_eq!(keys, vec!["accessToken", "accountId", "chain", "expiresAt", "refreshToken"], "never the client id");
         assert_eq!(offered[0]["accountId"], json!("g1"));
         assert_eq!(offered[0]["accessToken"], json!("at-fresh-0008"));
         assert_eq!(offered[0]["refreshToken"], json!("rt-rotated-0008"));
@@ -987,7 +1032,127 @@ mod tests {
         assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer at-graph-0011"));
         assert!(field(&posts[0], "scope").is_some_and(|sc| sc.contains("Mail.ReadWrite")), "Graph scopes: {posts:?}");
         let tokens = taken.result.expect("take_refreshed")["tokens"].clone();
-        assert_eq!(tokens, json!([{"accountId": "o1", "accessToken": "at-graph-0011", "refreshToken": "rt-graph-0011", "expiresAt": tokens[0]["expiresAt"]}]));
+        assert_eq!(tokens, json!([{
+            "accountId": "o1", "accessToken": "at-graph-0011", "refreshToken": "rt-graph-0011",
+            "expiresAt": tokens[0]["expiresAt"], "chain": tokens[0]["chain"],
+        }]));
+        assert_eq!(tokens[0]["chain"].as_array().map(Vec::len), Some(2), "the record's refresh token and the rotated one");
         assert_eq!(changed.result, Some(json!({"ok": true})));
+    }
+
+    // ── review fixes ────────────────────────────────────────────────────────
+
+    /// A Reconnect is a new grant: it replaces the held entry even when its
+    /// token expires before the held one (Microsoft's lifetimes vary), the
+    /// held pair of the old grant is no longer offered, and the next refresh
+    /// posts the new refresh token with the new grant's client.
+    #[tokio::test]
+    async fn a_new_grant_replaces_the_held_entry_even_with_an_earlier_expiry() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(vec![granted("at-a-fresh-0013", Some("rt-a-rotated-0013")), granted("at-b-fresh-0013", None)]);
+        let s = st();
+        store(&s, &[("g1", &gmail(json!({})))]);
+        let _ = access_token(&s, "g1", Read::Quiet).await;
+
+        let reconnect = gmail(json!({
+            "oauth2AccessToken": "at-b-signin-0013",
+            "oauth2RefreshToken": "rt-b-0013",
+            "oauth2ExpiresAt": now_ms() + 1_800_000,
+        }));
+        store(&s, &[("g1", &reconnect)]);
+        s.tokens.credentials_changed();
+        let signed_in = access_token(&s, "g1", Read::Quiet).await;
+        let offered = s.tokens.unsaved();
+        s.tokens.rejected("g1", "at-b-signin-0013");
+        let renewed = access_token(&s, "g1", Read::Quiet).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let posts = test_token_posts();
+
+        assert_eq!(signed_in.ok().flatten().as_deref(), Some("at-b-signin-0013"));
+        assert!(offered.is_empty(), "the old grant's pair must not be saved over the sign-in: {}", offered.len());
+        assert_eq!(renewed.ok().flatten().as_deref(), Some("at-b-fresh-0013"));
+        assert_eq!(posts.len(), 2, "{}", posts.len());
+        assert_eq!(field(&posts[1], "refresh_token").as_deref(), Some("rt-b-0013"));
+        assert_eq!(field(&posts[1], "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
+    }
+
+    /// A Reconnect that moves an Outlook account from IMAP to Graph refreshes
+    /// with Graph's scopes from then on, though its token expires first.
+    #[tokio::test]
+    async fn a_reconnect_from_imap_to_graph_refreshes_with_graph_scopes() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(vec![granted("at-imap-0014", None), granted("at-graph-0014", None)]);
+        let s = st();
+        let outlook = |extra: Value| {
+            let mut r = json!({
+                "id": "o1", "email": "me@outlook.test", "imapHost": "outlook.office365.com", "authType": "oauth2",
+                "oauth2Provider": "microsoft", "oauth2AccessToken": "at-old-0014", "oauth2RefreshToken": "rt-old-0014",
+                "oauth2ExpiresAt": now_ms() - 60_000,
+            });
+            for (k, v) in extra.as_object().cloned().unwrap_or_default() {
+                r[k] = v;
+            }
+            r
+        };
+        store(&s, &[("o1", &outlook(json!({})))]);
+        let _ = access_token(&s, "o1", Read::Quiet).await;
+        store(&s, &[("o1", &outlook(json!({
+            "oauth2Transport": "graph", "oauth2AccessToken": "at-graph-signin-0014",
+            "oauth2RefreshToken": "rt-graph-0014", "oauth2ExpiresAt": now_ms() + 1_800_000,
+        })))]);
+        s.tokens.credentials_changed();
+        let signed_in = access_token(&s, "o1", Read::Quiet).await;
+        s.tokens.rejected("o1", "at-graph-signin-0014");
+        let _ = access_token(&s, "o1", Read::Quiet).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let posts = test_token_posts();
+
+        assert_eq!(signed_in.ok().flatten().as_deref(), Some("at-graph-signin-0014"));
+        assert_eq!(posts.len(), 2, "{}", posts.len());
+        let scope = field(&posts[1], "scope").unwrap_or_default();
+        assert!(scope.contains("Mail.ReadWrite") && !scope.contains("IMAP"), "{scope}");
+        assert_eq!(field(&posts[1], "refresh_token").as_deref(), Some("rt-graph-0014"));
+    }
+
+    /// The app's stale write after a refresh that rotated the refresh token is
+    /// still the same grant: the held, newer pair stays.
+    #[tokio::test]
+    async fn a_stale_write_after_a_rotation_keeps_the_held_pair() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(vec![granted("at-rotated-0015", Some("rt-rotated-0015")), granted("at-wrong-0015", None)]);
+        let s = st();
+        store(&s, &[("g1", &gmail(json!({})))]);
+        let _ = access_token(&s, "g1", Read::Quiet).await;
+        s.tokens.credentials_changed();
+        let after_write = access_token(&s, "g1", Read::Quiet).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        assert_eq!(after_write.ok().flatten().as_deref(), Some("at-rotated-0015"));
+        assert_eq!(test_token_posts().len(), 1);
+        assert_eq!(s.tokens.unsaved().len(), 1, "still offered for the app to save");
+    }
+
+    /// The pairs offered to the app name the grants they belong to, by a
+    /// fingerprint the app computes the same way (`grantFingerprint`), so it
+    /// never writes one grant's pair over another's sign-in.
+    #[tokio::test]
+    async fn an_offered_pair_names_its_grant_by_fingerprint() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(vec![granted("at-fp-0016", Some("rt-fp-rotated-0016"))]);
+        let s = st();
+        let record = json!({
+            "id": "o1", "email": "me@outlook.test", "imapHost": "outlook.office365.com", "authType": "oauth2",
+            "oauth2Provider": "microsoft", "oauth2Transport": "graph", "oauth2ClientId": "cid-x", "oauth2TenantId": "tid-x",
+            "oauth2AccessToken": "at-old-0016", "oauth2RefreshToken": "rt-x", "oauth2ExpiresAt": now_ms() - 60_000,
+        });
+        store(&s, &[("o1", &record)]);
+        let _ = access_token(&s, "o1", Read::Quiet).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let offered = s.tokens.unsaved();
+        assert_eq!(offered.len(), 1);
+        let chain = offered[0]["chain"].as_array().cloned().unwrap_or_default();
+        assert!(chain.contains(&json!("7cb5dadde1643c0110dc129996d0d6278fb0844eb6b2e801d1db96af59d65734")), "{chain:?}");
+        assert!(!offered[0].to_string().contains("cid-x"), "no client id is handed over");
     }
 }

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment node
 /**
  * The app's side of daemon-owned OAuth2 tokens (`services/oauthTokenSync.js`):
  * the daemon refreshes, the app saves what it refreshed through its one
@@ -38,7 +38,13 @@ vi.mock('../../src/stores/mailStore', () => {
 
 const sync = await import('../../src/services/oauthTokenSync.js');
 
-const PAIR = { accountId: 'g1', accessToken: 'ya29.SECRET-NEW', refreshToken: '1//SECRET-RT', expiresAt: 4_000_000_000_000 };
+// The grant the stored record was signed in with: the daemon names the
+// grants a refreshed pair belongs to by fingerprint (`chain`), never by token.
+const GRANT_A = { oauth2RefreshToken: 'old-rt', oauth2ClientId: 'cid-a' };
+const PAIR = {
+  accountId: 'g1', accessToken: 'ya29.SECRET-NEW', refreshToken: '1//SECRET-RT', expiresAt: 4_000_000_000_000,
+  chain: [await sync.grantFingerprint(GRANT_A)],
+};
 const calls = (method) => h.send.mock.calls.filter(([m]) => m === method);
 
 beforeEach(() => {
@@ -46,7 +52,7 @@ beforeEach(() => {
   h.accounts = [{ id: 'g1', email: 'me@gmail.test', authType: 'oauth2', oauth2AccessToken: 'old', oauth2RefreshToken: 'old-rt' }];
   h.send = vi.fn(async (method) => (method === 'oauth2.take_refreshed' ? { tokens: [PAIR] } : { ok: true }));
   h.update = vi.fn(async (id) => ({ id }));
-  h.stored = { g1: { id: 'g1', oauth2AccessToken: 'old', oauth2ExpiresAt: 1 } };
+  h.stored = { g1: { id: 'g1', oauth2AccessToken: 'old', oauth2ExpiresAt: 1, ...GRANT_A } };
   sync.__resetForTests();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -82,6 +88,22 @@ describe('saving what the daemon refreshed', () => {
     h.stored = { g1: { id: 'g1', oauth2AccessToken: 'from-reconnect', oauth2ExpiresAt: PAIR.expiresAt + 60_000 } };
     expect(await sync.saveRefreshedTokens()).toBe(0);
     expect(h.update).not.toHaveBeenCalled();
+  });
+
+  it('never writes an older grant over a sign-in saved since, whatever the expiries', async () => {
+    // Reconnect: a new refresh token whose access token expires BEFORE the pair's.
+    h.stored = { g1: { id: 'g1', oauth2AccessToken: 'from-reconnect', oauth2ExpiresAt: 2, oauth2RefreshToken: 'rt-b', oauth2ClientId: 'cid-a' } };
+    expect(await sync.saveRefreshedTokens()).toBe(0);
+    expect(h.update).not.toHaveBeenCalled();
+    // A transport switch is a new grant too.
+    h.stored = { g1: { id: 'g1', oauth2AccessToken: 'from-reconnect', oauth2ExpiresAt: 2, ...GRANT_A, oauth2Transport: 'graph' } };
+    expect(await sync.saveRefreshedTokens()).toBe(0);
+    expect(h.update).not.toHaveBeenCalled();
+  });
+
+  it('names a grant the way the daemon does', async () => {
+    expect(await sync.grantFingerprint({ oauth2RefreshToken: 'rt-x', oauth2ClientId: 'cid-x', oauth2Transport: 'graph', oauth2TenantId: 'tid-x' }))
+      .toBe('7cb5dadde1643c0110dc129996d0d6278fb0844eb6b2e801d1db96af59d65734');
   });
 
   it('an account the store no longer has is not written', async () => {

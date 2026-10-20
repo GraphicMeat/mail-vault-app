@@ -23,6 +23,24 @@ let again = false;
 
 const code = (error) => error?.code || error?.name || 'error';
 
+/**
+ * A stored record's grant, named the way the daemon names the grants of a
+ * pair it offers (`chain`, `Grant::fingerprint` in oauth_tokens.rs): SHA-256
+ * of the refresh token with the client, transport, tenant and custom client
+ * it belongs to. No token leaves this function.
+ */
+export async function grantFingerprint(record) {
+  const named = JSON.stringify([
+    record?.oauth2RefreshToken || '',
+    record?.oauth2ClientId || '',
+    record?.oauth2Transport === 'graph' ? 'graph' : '',
+    record?.oauth2TenantId || '',
+    record?.oauth2CustomClientId || '',
+  ]);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(named));
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function takeAndSave() {
   let reply;
   try {
@@ -35,13 +53,17 @@ async function takeAndSave() {
   if (!pairs.length) return 0;
   const [{ updateOAuth2Tokens, getAccount }, { useMailStore }] = await Promise.all([import('./db'), import('../stores/mailStore')]);
   let saved = 0;
-  for (const { accountId, accessToken, refreshToken, expiresAt } of pairs) {
+  for (const { accountId, accessToken, refreshToken, expiresAt, chain } of pairs) {
     if (!accountId || !accessToken) continue;
     try {
-      // A sign-in saved since the daemon refreshed (Reconnect) is newer:
-      // the later expiry wins, as it does in the daemon.
+      // A sign-in saved since the daemon refreshed (Reconnect, a switch of
+      // the Google sign-in app or of transport) is another grant: its record
+      // is never written over with this one's pair, whatever the expiries.
+      // Within one grant the later expiry wins, as it does in the daemon.
       const current = await getAccount(accountId);
-      if (current?.oauth2AccessToken && current.oauth2AccessToken !== accessToken
+      if (!current?.oauth2RefreshToken) continue;
+      if (Array.isArray(chain) && !chain.includes(await grantFingerprint(current))) continue;
+      if (current.oauth2AccessToken && current.oauth2AccessToken !== accessToken
         && Number(current.oauth2ExpiresAt) > Number(expiresAt)) continue;
       // Undefined: the keychain holds no such account any more.
       const stored = await updateOAuth2Tokens(accountId, { accessToken, refreshToken, expiresAt });
