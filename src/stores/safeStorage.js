@@ -12,10 +12,11 @@
 // Fallbacks (one release, for an update that pairs this app with an older
 // daemon): a daemon without `settings.*` (errors.daemonOutdated, or any reply
 // that is not a snapshot) switches this window to the shell's
-// read/write_settings_json for good. A daemon that is unreachable at startup
-// gets the file read through the shell once; a write while it is unreachable
-// goes through the shell too. A shell write lays only the changed keys over
-// what is on disk now, so it never undoes another writer's keys.
+// read/write_settings_json for good. A daemon that is unreachable or failing
+// at startup gets the file read through the shell once, and the window keeps
+// asking the daemon (backoff, every write, every reconnect). A write while it
+// is unreachable goes through the shell. A shell write lays only the changed
+// keys over what is on disk now, so it never undoes another writer's keys.
 //
 // Nothing is written before this window has seen the document: a store that
 // hydrated from nothing holds its defaults, and those must never replace the
@@ -33,6 +34,9 @@ const UNAVAILABLE = 'errors.daemonUnavailable';
 const OUTDATED = 'errors.daemonOutdated';
 // Refused because this window never saw the document (catalog key).
 const NOT_LOADED = 'errors.settingsNotLoaded';
+// The daemon's own settings errors (`settings_doc::SettingsError`): a daemon
+// that knows settings.* answered, and failed this time.
+const isSettingsError = text => text.startsWith('errors.settings');
 // How long a window waits for its first settings.get before reading the file
 // through the shell instead. A warm daemon answers in milliseconds; a cold
 // one is still starting, and the UI paints defaults until hydration, so the
@@ -57,8 +61,9 @@ const early = new Set();
 let settledLoad = false;
 
 // 'daemon' once settings.get answered with a snapshot; 'pending' while the
-// daemon was unreachable at startup (writes still try it first); 'shell' for
-// a daemon without settings.* (and every test that mocks invoke without it).
+// daemon was unreachable or failing at startup (writes still try it first);
+// 'shell' for a daemon without settings.* (and every test that mocks invoke
+// without it).
 let mode = 'shell';
 let lastVersion = null;
 // The first read put the document into the cache.
@@ -109,8 +114,9 @@ function fill(values) {
   if (overruled.length) console.warn('[safeStorage] Kept the saved settings over a write made before they loaded:', overruled.join(', '));
 }
 
-// `snapshot`, or why not: `lacks` (no settings.* here: the shell for good)
-// or `transient` (unreachable).
+// `snapshot`, or why not: `lacks` (an older daemon: the shell for good) or
+// `transient` (unreachable, timed out, or the daemon's own read failed:
+// keep asking it).
 async function readThroughDaemon() {
   const started = Date.now();
   let transient = false;
@@ -121,7 +127,8 @@ async function readThroughDaemon() {
       return { snapshot: reply };
     } catch (e) {
       const text = errText(e);
-      if (text !== UNAVAILABLE) return { lacks: true };
+      if (text === OUTDATED) return { lacks: true };
+      if (text !== UNAVAILABLE) return { transient: isSettingsError(text) ? 'retry' : 'once' };
       transient = 'retry';
       // `daemon_rpc` already spawned and waited for the daemon; one more try
       // covers a daemon that was restarting, inside the same budget.
@@ -153,7 +160,7 @@ function ensureLoaded() {
   }
   loadPromise = (async () => {
     const started = Date.now();
-    const { snapshot, lacks } = await readThroughDaemon();
+    const { snapshot, lacks, transient } = await readThroughDaemon();
     if (snapshot) {
       mode = 'daemon';
       noteVersion(snapshot.version);
@@ -170,6 +177,7 @@ function ensureLoaded() {
         loaded = true;
         console.log('[safeStorage] Loaded settings from disk:', Object.keys(values).join(', '));
       }
+      if (transient === 'retry') scheduleProbe();
     }
     if (mode !== 'shell') listenForChanges();
   })().finally(() => { settledLoad = true; early.clear(); });
@@ -265,6 +273,22 @@ function readLate() {
   return lateRead;
 }
 
+// While the daemon was failing at startup: ask it again with backoff until it
+// answers, so this window follows changes and writes through it again.
+let probeTimer = null;
+let probeDelay = 0;
+function scheduleProbe() {
+  if (probeTimer) return;
+  probeDelay = Math.min(probeDelay ? probeDelay * 2 : RETRY_FIRST_MS, RETRY_MAX_MS);
+  probeTimer = setTimeout(async () => {
+    probeTimer = null;
+    if (!loaded) await readLate();
+    else if (mode === 'pending') await refresh(null);
+    if (mode === 'pending' || !loaded) scheduleProbe();
+  }, probeDelay);
+  probeTimer?.unref?.();
+}
+
 // ── Writing ─────────────────────────────────────────────────────────────────
 
 // The changed keys laid over the file as it is now, through the shell.
@@ -303,8 +327,9 @@ async function send(names) {
       if (text === OUTDATED) mode = 'shell';
       // A daemon that answered with an error of its own (the write failed,
       // the file is intact): keep the change queued and try again later.
-      else if (text !== UNAVAILABLE) throw e;
-      // Unreachable: through the shell this time, so nothing waits on it.
+      else if (isSettingsError(text)) throw e;
+      // Unreachable, or not a settings answer: through the shell this time,
+      // so nothing waits on it.
     }
   }
   await writeThroughShell(names);
@@ -441,6 +466,7 @@ async function refresh(keys) {
     return; // the next event or reconnect catches up
   }
   if (!isSnapshot(reply)) return;
+  if (mode === 'pending') mode = 'daemon';
   noteVersion(reply.version);
   const names = keys || [...new Set([...cache.keys(), ...Object.keys(reply.values)])];
   for (const name of names) {

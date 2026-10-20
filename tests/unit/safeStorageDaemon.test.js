@@ -450,3 +450,24 @@ describe('safeStorage never writes before it has seen the document', () => {
   }, 10000);
 });
 
+describe('a transient first-read error does not pin the window to the shell', () => {
+  beforeEach(() => { vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('hydrates through the shell, then writes and follows through the daemon', async () => {
+    const h = host({ disk: { [SETTINGS]: blob({ a: 1 }), [THEME]: blob({ theme: 'dark' }, 0) } });
+    h.get = 'errors.settingsWriteFailed';
+    const { safeStorage, flushSafeStorage, registerPersistedStore } = await load();
+    const theme = { persist: { getOptions: () => ({ name: THEME, version: 0 }) }, setState: vi.fn() };
+    registerPersistedStore(theme);
+    expect(JSON.parse(await safeStorage.getItem(SETTINGS)).state.a).toBe(1);
+    h.get = 'ok';
+    safeStorage.setItem(SETTINGS, JSON.stringify(blob({ a: 2 })));
+    await flushSafeStorage();
+    expect(h.calls).toContain('daemon_rpc:settings.replace');
+    expect(h.calls).not.toContain('write_settings_json');
+    h.externalWrite(THEME, blob({ theme: 'light' }, 0));
+    await vi.waitFor(() => expect(theme.setState).toHaveBeenCalledWith({ theme: 'light' }));
+  });
+});
+

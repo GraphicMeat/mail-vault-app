@@ -344,10 +344,25 @@ impl SettingsDoc {
         };
         if changed {
             inner.version += 1;
+            // Recorded at once, not at the next write: a daemon that restarts
+            // before writing would otherwise read the old version back and
+            // hand out this number again for other content.
+            let hash = sha_hex(&bytes);
+            self.record_version(inner.version, &hash);
+            inner.sidecar_hash = Some(hash);
         }
         inner.observed = true;
         inner.bytes = Some(bytes);
         inner.doc = Some(Arc::new(value));
+    }
+
+    /// The version sidecar: small, atomic, no fsync (a lost one only costs a
+    /// spurious bump on the next start).
+    fn record_version(&self, version: u64, hash: &str) {
+        let sidecar = serde_json::to_vec(&Sidecar { version, sha256: hash.to_string() }).unwrap_or_default();
+        if let Err(e) = crate::fsx::write_atomic(&self.dir.join(VERSION_NAME), &sidecar) {
+            warn!("settings: could not record version {version}: {e}");
+        }
     }
 
     fn observe_missing(&self, inner: &mut Inner) {
@@ -506,10 +521,7 @@ impl SettingsDoc {
 
         inner.version += 1;
         let hash = sha_hex(&bytes);
-        let sidecar = serde_json::to_vec(&Sidecar { version: inner.version, sha256: hash.clone() }).unwrap_or_default();
-        if let Err(e) = crate::fsx::write_atomic(&self.dir.join(VERSION_NAME), &sidecar) {
-            warn!("settings: could not record version {}: {e}", inner.version);
-        }
+        self.record_version(inner.version, &hash);
         inner.sidecar_hash = Some(hash);
         inner.bytes = Some(bytes);
         inner.doc = Some(Arc::new(next));

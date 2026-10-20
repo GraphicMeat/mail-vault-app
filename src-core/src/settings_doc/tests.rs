@@ -145,6 +145,27 @@ fn a_change_made_by_another_writer_bumps_the_version_and_is_kept() {
 }
 
 #[test]
+fn a_version_never_repeats_across_a_restart_after_another_writer() {
+    for through_reader in [false, true] {
+        let d = dir();
+        let a = SettingsDoc::open(d.path());
+        a.patch(&json!({"k": 1}), None).unwrap();
+        write_document(d.path(), r#"{"k":2}"#).unwrap();
+        // The daemon notices the other writer, through a reader or a get.
+        if through_reader {
+            a.read().unwrap();
+        }
+        let seen = a.get(None).unwrap().version;
+        drop(a);
+        // The daemon restarts; the other writer wrote again meanwhile.
+        write_document(d.path(), r#"{"k":3}"#).unwrap();
+        let b = SettingsDoc::open(d.path());
+        let next = b.get(None).unwrap().version;
+        assert!(next > seen, "version {next} repeats {seen} for different content (through_reader={through_reader})");
+    }
+}
+
+#[test]
 fn a_missing_file_reads_as_empty_for_get_and_as_an_error_for_readers() {
     let d = dir();
     let doc = SettingsDoc::open(d.path());
