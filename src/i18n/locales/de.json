@@ -715,6 +715,8 @@
   "emailActionBar.star": "Markieren",
   "emailActionBar.unstar": "Markierung entfernen",
   "errors.E_CONN_LOST": "Die Verbindung zum Mailserver wurde unterbrochen",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "Der Schlüsselbund konnte für die Anmeldung dieses Kontos nicht gelesen werden. Entsperre ihn und versuche es erneut.",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "Melde dich bei diesem Konto unter Einstellungen, Konten erneut an.",
   "errors.E_IAP_PAYMENT": "Der Kauf konnte nicht gestartet werden",
   "errors.E_IAP_RESTORE": "Die Wiederherstellung konnte nicht gestartet werden",
   "errors.E_MAILBOX_EMPTY": "In diesem Ordner wurden keine Nachrichten gefunden",

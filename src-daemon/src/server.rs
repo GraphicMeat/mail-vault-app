@@ -498,7 +498,10 @@ where
 /// (`oauth_tokens::inject`), so no handler ever sends the app's copy.
 async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcResponse {
     let method = req.method.clone();
-    let injected = crate::oauth_tokens::inject(state, &method, &mut req.params).await;
+    let crate::oauth_tokens::Injection { injected, refusal } = crate::oauth_tokens::inject(state, &method, &mut req.params).await;
+    if let Some(message) = refusal {
+        return RpcResponse::error(req.id.unwrap_or(Value::Null), ipc::INTERNAL_ERROR, message);
+    }
     let resp = match req.params.get("accountEmail").and_then(Value::as_str).filter(|e| !e.is_empty()).map(str::to_owned) {
         Some(email) => mailvault_core::net_activity::with_account(email, route_request(state, req)).await,
         None => route_request(state, req).await,

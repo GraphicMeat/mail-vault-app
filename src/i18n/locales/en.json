@@ -715,6 +715,8 @@
   "emailActionBar.star": "Star",
   "emailActionBar.unstar": "Remove star",
   "errors.E_CONN_LOST": "The connection to the mail server dropped",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "The keychain could not be read for this account's sign-in. Unlock it, then try again.",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "Sign in to this account again under Settings, Accounts.",
   "errors.E_IAP_PAYMENT": "The purchase could not be started",
   "errors.E_IAP_RESTORE": "The restore could not be started",
   "errors.E_MAILBOX_EMPTY": "No messages found in that folder",

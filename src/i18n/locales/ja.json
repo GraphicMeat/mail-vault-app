@@ -715,6 +715,8 @@
   "emailActionBar.star": "スターを付ける",
   "emailActionBar.unstar": "スターを外す",
   "errors.E_CONN_LOST": "メールサーバーとの接続が切断されました",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "このアカウントのサインイン用にキーチェーンを読み取れませんでした。ロックを解除してから、もう一度お試しください。",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "「設定」の「アカウント」でこのアカウントに再度サインインしてください。",
   "errors.E_IAP_PAYMENT": "購入を開始できませんでした",
   "errors.E_IAP_RESTORE": "復元を開始できませんでした",
   "errors.E_MAILBOX_EMPTY": "そのフォルダにメッセージが見つかりません",

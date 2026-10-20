@@ -715,6 +715,8 @@
   "emailActionBar.star": "Destacar",
   "emailActionBar.unstar": "Quitar destacado",
   "errors.E_CONN_LOST": "Se perdió la conexión con el servidor de correo",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "No se pudo leer el llavero para el inicio de sesión de esta cuenta. Desbloquéalo y vuelve a intentarlo.",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "Vuelve a iniciar sesión en esta cuenta en Ajustes, Cuentas.",
   "errors.E_IAP_PAYMENT": "No se pudo iniciar la compra",
   "errors.E_IAP_RESTORE": "No se pudo iniciar la restauración",
   "errors.E_MAILBOX_EMPTY": "No se encontraron mensajes en esa carpeta",

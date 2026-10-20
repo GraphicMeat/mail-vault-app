@@ -715,6 +715,8 @@
   "emailActionBar.star": "Aggiungi a speciali",
   "emailActionBar.unstar": "Togli da speciali",
   "errors.E_CONN_LOST": "La connessione al server di posta è caduta",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "Non è stato possibile leggere il portachiavi per l'accesso a questo account. Sbloccalo e riprova.",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "Accedi di nuovo a questo account in Impostazioni, Account.",
   "errors.E_IAP_PAYMENT": "Non è stato possibile avviare l'acquisto",
   "errors.E_IAP_RESTORE": "Non è stato possibile avviare il ripristino",
   "errors.E_MAILBOX_EMPTY": "Nessun messaggio trovato in quella cartella",

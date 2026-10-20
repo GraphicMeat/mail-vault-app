@@ -715,6 +715,8 @@
   "emailActionBar.star": "Suivre",
   "emailActionBar.unstar": "Ne plus suivre",
   "errors.E_CONN_LOST": "La connexion au serveur de messagerie a été perdue",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "Le trousseau n'a pas pu être lu pour la connexion de ce compte. Déverrouillez-le, puis réessayez.",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "Reconnectez-vous à ce compte dans Réglages, Comptes.",
   "errors.E_IAP_PAYMENT": "L'achat n'a pas pu être lancé",
   "errors.E_IAP_RESTORE": "La restauration n'a pas pu être lancée",
   "errors.E_MAILBOX_EMPTY": "Aucun message trouvé dans ce dossier",

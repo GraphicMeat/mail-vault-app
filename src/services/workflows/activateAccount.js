@@ -5,7 +5,7 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { recountInbox } from '../../stores/unreadCounts';
-import { resolveServerAccount, hasValidCredentials } from '../authUtils';
+import { resolveServerAccount, hasValidCredentials, oauthErrorState } from '../authUtils';
 import { buildThreads } from '../../utils/emailParser';
 import { describeConnectionError } from '../../utils/connectionError';
 import { UidMap } from '../UidMap';
@@ -1318,8 +1318,11 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
       let errorType = 'serverError';
       let errorMessage = error.message;
+      const oauthState = oauthErrorState(error);
 
-      if (error.message?.includes('authenticated but not connected') || error.message?.includes('Command Error. 12')) {
+      if (oauthState) {
+        ({ errorType, errorMessage } = oauthState);
+      } else if (error.message?.includes('authenticated but not connected') || error.message?.includes('Command Error. 12')) {
         errorType = 'outlookOAuth';
         errorMessage = 'Microsoft IMAP connection failed. This is a known Microsoft server issue affecting personal Outlook.com accounts with OAuth2. See FAQ for details.';
       } else if (error.message?.includes('XOAUTH2 auth failed')) {

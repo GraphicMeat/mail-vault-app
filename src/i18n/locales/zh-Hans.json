@@ -715,6 +715,8 @@
   "emailActionBar.star": "加星标",
   "emailActionBar.unstar": "取消星标",
   "errors.E_CONN_LOST": "与邮件服务器的连接已断开",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "无法读取此账户登录所需的钥匙串。请解锁后重试。",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "请在“设置”的“账户”中重新登录此账户。",
   "errors.E_IAP_PAYMENT": "无法开始购买",
   "errors.E_IAP_RESTORE": "无法开始恢复",
   "errors.E_MAILBOX_EMPTY": "该文件夹中未找到邮件",

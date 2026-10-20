@@ -74,6 +74,8 @@ pub(crate) enum FailKind {
     Unanswered,
     /// The stored record could not be read.
     Unreadable,
+    /// The store holds no record for the account.
+    NoRecord,
 }
 
 #[derive(Clone, Debug)]
@@ -400,7 +402,11 @@ pub(crate) async fn access_token(state: &DaemonState, account_id: &str, read: Re
     }
     let (_, record) = read_record(account_id, read)
         .await
-        .map_err(|e| TokenError { kind: FailKind::Unreadable, message: e, fallback: None })?;
+        .map_err(|e| {
+            // `account_from_blob`'s words for an account the store does not hold.
+            let kind = if e.starts_with("no credentials found") { FailKind::NoRecord } else { FailKind::Unreadable };
+            TokenError { kind, message: e, fallback: None }
+        })?;
     for_record(state, account_id, &record).await
 }
 
@@ -517,11 +523,13 @@ pub(crate) struct Injected {
 
 /// The daemon's token for `account_id`, when it holds one issued for `email`
 /// (a request may name an id the store holds for another address).
-async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>) -> Option<String> {
+async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>) -> Result<String, NoToken> {
     let token = match access_token(state, account_id, Read::Guarded).await {
         Ok(Some(token)) => token,
-        Ok(None) => return None,
-        Err(e) => e.fallback?,
+        Ok(None) => return Err(NoToken::SignIn),
+        Err(TokenError { fallback: Some(token), .. }) => token,
+        Err(TokenError { kind: FailKind::Unreadable, .. }) => return Err(NoToken::Keychain),
+        Err(_) => return Err(NoToken::SignIn),
     };
     if let Some(email) = email.filter(|e| !e.is_empty()) {
         let held = state.tokens.email(account_id);
@@ -534,10 +542,34 @@ async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>
                 .is_ok_and(|(config, _)| config.email.eq_ignore_ascii_case(email)),
         };
         if !matches {
-            return None;
+            return Err(NoToken::SignIn);
         }
     }
-    Some(token)
+    Ok(token)
+}
+
+/// Why the daemon has no token for a request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NoToken {
+    /// No stored OAuth2 sign-in for this account and address (or one that
+    /// was refused and has expired): the user signs in again.
+    SignIn,
+    /// The keychain did not answer (locked, a prompt nobody answered).
+    Keychain,
+}
+
+impl NoToken {
+    /// The error a request that needs a token gets: a stable code the app
+    /// maps to its sign-in or keychain state (`oauthErrorState`), a catalog key
+    /// (`errors.E_OAUTH_*`).
+    fn message(self) -> &'static str {
+        match self {
+            NoToken::SignIn => "E_OAUTH_SIGN_IN_NEEDED: Sign in to this account again under Settings, Accounts.",
+            NoToken::Keychain => {
+                "E_OAUTH_KEYCHAIN_UNAVAILABLE: The keychain could not be read for this account's sign-in. Unlock it, then try again."
+            }
+        }
+    }
 }
 
 /// The daemon's token into one account a request carries (`slot`, an object
@@ -554,7 +586,7 @@ async fn inject_account(state: &DaemonState, slot: &mut Value, fallback_id: Opti
     let own_id = account.get("id").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
     let account_id = own_id.or_else(|| fallback_id.map(str::to_owned))?;
     let email = account.get("email").and_then(Value::as_str).map(str::to_owned);
-    let token = daemon_token(state, &account_id, email.as_deref()).await?;
+    let token = daemon_token(state, &account_id, email.as_deref()).await.ok()?;
     // A sign-in that just happened (Reconnect testing its new token before
     // saving it) carries a later expiry than anything held: it is newer than
     // the daemon's, the same rule `reconcile` applies to the store.
@@ -576,9 +608,13 @@ async fn inject_account(state: &DaemonState, slot: &mut Value, fallback_id: Opti
 /// `accountId`), and as `accessToken` in a `graph_*` call naming `accountId`.
 /// A token the app sent is kept only when the daemon has none for that
 /// account (one being added, not stored yet). Old callers keep working.
-pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value) -> Vec<Injected> {
+///
+/// A `graph_*` call that names its account and carries no token at all, when
+/// the daemon has none either, is answered with why (`refusal`) instead of
+/// going on to a bare "Missing accessToken".
+pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value) -> Injection {
     let mut injected = Vec::new();
-    let Some(obj) = params.as_object_mut() else { return injected };
+    let Some(obj) = params.as_object_mut() else { return Injection { injected, refusal: None } };
     let request_account = obj.get("accountId").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
     for key in ACCOUNT_PARAMS {
         let names_request_account = key == "account" || key == "accountJson";
@@ -595,16 +631,32 @@ pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value
             }
         }
     }
-    if method.starts_with("graph_") {
+    let mut refusal = None;
+    // `graph_allocate_uids` is the vault's uid ledger: no network, no token.
+    if method.starts_with("graph_") && method != "graph_allocate_uids" {
         if let Some(account_id) = request_account {
             let email = obj.get("accountEmail").and_then(Value::as_str).map(str::to_owned);
-            if let Some(token) = daemon_token(state, &account_id, email.as_deref()).await {
-                obj.insert("accessToken".to_string(), json!(token));
-                injected.push(Injected { account_id, token });
+            match daemon_token(state, &account_id, email.as_deref()).await {
+                Ok(token) => {
+                    obj.insert("accessToken".to_string(), json!(token));
+                    injected.push(Injected { account_id, token });
+                }
+                Err(why) if obj.get("accessToken").and_then(Value::as_str).map_or(true, str::is_empty) => {
+                    refusal = Some(why.message().to_string());
+                }
+                Err(_) => {}
             }
         }
     }
-    injected
+    Injection { injected, refusal }
+}
+
+/// What `inject` did to a request.
+pub(crate) struct Injection {
+    /// The tokens it put in, for `note_refusal` / `note_accepted`.
+    pub(crate) injected: Vec<Injected>,
+    /// Set when the request needs a token nobody has: the error to answer.
+    pub(crate) refusal: Option<String>,
 }
 
 /// A request answered with a sign-in refusal: the tokens it carried are not
@@ -962,11 +1014,11 @@ mod tests {
         let mut no_id = json!({"sourceAccount": oauth(Value::Null, "me@gmail.test").to_string()});
         let mut not_graph = json!({"accountId": "g1", "accessToken": "from-the-app"});
         let injected = [
-            inject(&s, "imap_test_connection", &mut new_account).await.len(),
-            inject(&s, "imap_get_mailboxes", &mut other_address).await.len(),
-            inject(&s, "imap_get_mailboxes", &mut password_account).await.len(),
-            inject(&s, "start_migration", &mut no_id).await.len(),
-            inject(&s, "abd.set_token", &mut not_graph).await.len(),
+            inject(&s, "imap_test_connection", &mut new_account).await.injected.len(),
+            inject(&s, "imap_get_mailboxes", &mut other_address).await.injected.len(),
+            inject(&s, "imap_get_mailboxes", &mut password_account).await.injected.len(),
+            inject(&s, "start_migration", &mut no_id).await.injected.len(),
+            inject(&s, "abd.set_token", &mut not_graph).await.injected.len(),
         ];
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
@@ -993,7 +1045,7 @@ mod tests {
             {"accountId": "g1", "account": null},
         ]});
 
-        let injected = inject(&s, "mail_search_start", &mut params).await;
+        let injected = inject(&s, "mail_search_start", &mut params).await.injected;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         assert_eq!(injected.len(), 1);
@@ -1035,7 +1087,7 @@ mod tests {
         let request = || json!({"account": {"id": "g1", "email": "me@gmail.test", "authType": "oauth2"}});
 
         let mut first = request();
-        let injected = inject(&s, "imap_get_mailboxes", &mut first).await;
+        let injected = inject(&s, "imap_get_mailboxes", &mut first).await.injected;
         note_refusal(&s, &injected, "Login failed for me@gmail.test: something else");
         let mut unrelated = request();
         inject(&s, "imap_get_mailboxes", &mut unrelated).await;
@@ -1191,13 +1243,35 @@ mod tests {
 
         for _ in 0..200 {
             let mut request = json!({"account": {"id": "g1", "email": "me@gmail.test", "authType": "oauth2"}});
-            let injected = inject(&s, "imap_get_mailboxes", &mut request).await;
+            let injected = inject(&s, "imap_get_mailboxes", &mut request).await.injected;
             note_refusal(&s, &injected, "XOAUTH2 auth failed for me@gmail.test: [AUTHENTICATIONFAILED]");
         }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         let posts = test_token_posts().len();
         assert!(posts <= 1, "{posts} refreshes for 200 refused requests");
+    }
+
+    /// A Graph call naming an account the daemon has no token for says why,
+    /// with a code the app turns into its sign-in or keychain state, instead
+    /// of "Missing accessToken".
+    #[tokio::test]
+    async fn a_graph_call_without_a_token_says_whether_to_sign_in_or_unlock() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(Vec::new());
+        let s = st();
+        let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
+        store(&s, &[("p1", &password)]);
+        let call = json!({"accountId": "o9", "accountEmail": "o9@outlook.test", "messageId": "m1", "isRead": true});
+
+        let no_record = crate::server::handle_request_for_test(&s, "graph_set_read", call.clone()).await;
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", s.app_dir.join("not-there.json"));
+        let unreadable = crate::server::handle_request_for_test(&s, "graph_set_read", call).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let message = |r: &crate::ipc::RpcResponse| r.error.as_ref().map(|e| e.message.clone()).unwrap_or_default();
+        assert!(message(&no_record).starts_with("E_OAUTH_SIGN_IN_NEEDED:"), "{}", message(&no_record));
+        assert!(message(&unreadable).starts_with("E_OAUTH_KEYCHAIN_UNAVAILABLE:"), "{}", message(&unreadable));
     }
 
     /// The pairs offered to the app name the grants they belong to, by a

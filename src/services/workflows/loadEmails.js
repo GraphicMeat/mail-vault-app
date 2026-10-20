@@ -3,7 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useConnectivityStore } from '../../stores/connectivityStore';
-import { hasValidCredentials, resolveServerAccount } from '../authUtils';
+import { hasValidCredentials, resolveServerAccount, oauthErrorState } from '../authUtils';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
@@ -821,8 +821,11 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 
     let errorType = 'serverError';
     let errorMessage = error.message;
+    const oauthState = oauthErrorState(error);
 
-    if (error.message?.includes('authenticated but not connected') || error.message?.includes('Command Error. 12')) {
+    if (oauthState) {
+      ({ errorType, errorMessage } = oauthState);
+    } else if (error.message?.includes('authenticated but not connected') || error.message?.includes('Command Error. 12')) {
       errorType = 'outlookOAuth';
       errorMessage = 'Microsoft IMAP connection failed. This is a known Microsoft server issue affecting personal Outlook.com accounts with OAuth2. See FAQ for details.';
     } else if (error.message?.includes('XOAUTH2 auth failed')) {
@@ -1007,8 +1010,11 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 
     let errorType = 'serverError';
     let errorMessage = error.message;
+    const oauthState = oauthErrorState(error);
 
-    if (error.message?.includes('network') || error.message?.includes('timeout')) {
+    if (oauthState) {
+      ({ errorType, errorMessage } = oauthState);
+    } else if (error.message?.includes('network') || error.message?.includes('timeout')) {
       errorType = 'offline';
     } else if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
       errorType = 'passwordMissing';

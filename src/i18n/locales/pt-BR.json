@@ -715,6 +715,8 @@
   "emailActionBar.star": "Marcar com estrela",
   "emailActionBar.unstar": "Remover estrela",
   "errors.E_CONN_LOST": "A conexão com o servidor de e-mail caiu",
+  "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "Não foi possível ler as chaves para o login desta conta. Desbloqueie e tente de novo.",
+  "errors.E_OAUTH_SIGN_IN_NEEDED": "Entre novamente nesta conta em Ajustes, Contas.",
   "errors.E_IAP_PAYMENT": "Não foi possível iniciar a compra",
   "errors.E_IAP_RESTORE": "Não foi possível iniciar a restauração",
   "errors.E_MAILBOX_EMPTY": "Nenhuma mensagem encontrada nessa pasta",
