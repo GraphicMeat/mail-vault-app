@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 
-const { oauthErrorState } = await import('../authUtils.js');
+const { oauthErrorState } = await import('../oauthErrors.js');
 
 const SIGN_IN = 'E_OAUTH_SIGN_IN_NEEDED: Sign in to this account again under Settings, Accounts.';
 const KEYCHAIN = 'E_OAUTH_KEYCHAIN_UNAVAILABLE: The keychain could not be read for this account.';

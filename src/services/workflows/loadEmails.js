@@ -3,7 +3,8 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useConnectivityStore } from '../../stores/connectivityStore';
-import { hasValidCredentials, resolveServerAccount, oauthErrorState } from '../authUtils';
+import { hasValidCredentials, resolveServerAccount } from '../authUtils';
+import { oauthErrorState } from '../oauthErrors';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';

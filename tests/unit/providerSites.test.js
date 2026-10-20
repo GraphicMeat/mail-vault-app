@@ -12,6 +12,8 @@ const JMAP_AWARE = /isJmapAccount|serverSavesSent/;
 
 const IMAP_PATH = 'Graph-only branch; JMAP takes the IMAP path';
 const ALLOWED = {
+  // Names a grant's transport for its fingerprint (oauth_tokens.rs); no mail branch.
+  'src/services/oauthTokenSync.js': 'grant fingerprint, not a mail branch',
   'src/components/ComposeModal.jsx': IMAP_PATH,
   'src/components/settings/MboxImportDialog.jsx': IMAP_PATH,
   'src/components/settings/MigrationSettings.jsx': IMAP_PATH,
