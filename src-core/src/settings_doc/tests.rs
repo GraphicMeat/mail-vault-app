@@ -227,6 +227,36 @@ fn parallel_patches_to_one_key_end_on_the_highest_version_writer() {
     assert_eq!(disk(d.path())["same"], json!(last));
 }
 
+// ── readers never wait on a write ───────────────────────────────────────────
+
+#[test]
+fn a_slow_write_never_holds_up_readers() {
+    let d = dir();
+    seed(d.path(), json!({"a": 1}));
+    let doc = Arc::new(SettingsDoc::open(d.path()));
+    let v0 = doc.get(None).unwrap().version;
+    *doc.slow_write.lock().unwrap() = Some(Duration::from_millis(1500));
+    let writer = {
+        let doc = Arc::clone(&doc);
+        std::thread::spawn(move || doc.patch(&json!({"b": 2}), None).unwrap())
+    };
+    while !doc.in_write.load(Ordering::SeqCst) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    // The write is parked inside its IO, holding its locks.
+    let started = std::time::Instant::now();
+    assert_eq!(*doc.read().unwrap(), json!({"a": 1}), "a reader sees the old document");
+    let snap = doc.get(None).unwrap();
+    assert_eq!(Value::Object(snap.values), json!({"a": 1}));
+    assert_eq!(snap.version, v0);
+    let waited = started.elapsed();
+    assert!(waited < Duration::from_millis(200), "read and get waited {waited:?} on a write");
+    let change = writer.join().unwrap();
+    assert_eq!(change.version, v0 + 1);
+    assert_eq!(*doc.read().unwrap(), json!({"a": 1, "b": 2}));
+    assert_eq!(doc.get(None).unwrap().version, v0 + 1, "the reader's look at the new file is not a second bump");
+}
+
 // ── atomicity ───────────────────────────────────────────────────────────────
 
 #[test]

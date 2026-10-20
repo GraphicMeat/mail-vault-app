@@ -254,12 +254,25 @@ fn lock_unsupported(e: &std::io::Error) {
     ONCE.call_once(|| warn!("settings: no file lock here ({e}); writing under the process lock only"));
 }
 
+/// Two locks, so a reader never waits on a write's IO (CLAUDE.md, Process
+/// and Thread Model): `writer` serialises the writers and is held across the
+/// file lock, the reads, the backup, the fsyncs and the sidecar; `inner` only
+/// guards the in-memory copy and is held for a comparison or a swap, never
+/// across IO. A reader sees the old document or the new one.
 pub struct SettingsDoc {
     dir: PathBuf,
     backup_interval: Duration,
+    writer: Mutex<()>,
     inner: Mutex<Inner>,
+    /// A backup was taken (or found current) in this run. Writer-only.
+    backed_up: std::sync::atomic::AtomicBool,
     #[cfg(test)]
     fail_before_rename: std::sync::atomic::AtomicBool,
+    /// A write parks this long (holding what it holds) before its rename.
+    #[cfg(test)]
+    slow_write: Mutex<Option<Duration>>,
+    #[cfg(test)]
+    in_write: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Default)]
@@ -276,8 +289,17 @@ struct Inner {
     /// the best copy to recover from.
     bytes: Option<Vec<u8>>,
     doc: Option<Arc<Value>>,
-    /// A backup was taken (or found current) in this run.
-    backed_up: bool,
+    /// `version` changed since the sidecar was last written.
+    unrecorded: bool,
+}
+
+/// What `current` found: the values to work from, the version, the good
+/// file's bytes, or the broken file's bytes and where the values came from.
+struct Current {
+    values: Map<String, Value>,
+    version: u64,
+    good: Option<Vec<u8>>,
+    broken: Option<(Vec<u8>, String)>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -304,9 +326,15 @@ impl SettingsDoc {
         SettingsDoc {
             dir: app_dir.to_path_buf(),
             backup_interval,
+            writer: Mutex::new(()),
             inner: Mutex::new(Inner::default()),
+            backed_up: Default::default(),
             #[cfg(test)]
             fail_before_rename: Default::default(),
+            #[cfg(test)]
+            slow_write: Mutex::new(None),
+            #[cfg(test)]
+            in_write: Default::default(),
         }
     }
 
@@ -318,12 +346,17 @@ impl SettingsDoc {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    fn load_version(&self, inner: &mut Inner) {
+    /// Reads the sidecar once per process (outside `inner`).
+    fn load_version(&self) {
+        if self.lock().version_loaded {
+            return;
+        }
+        let sidecar = std::fs::read(self.dir.join(VERSION_NAME)).ok().and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok());
+        let mut inner = self.lock();
         if inner.version_loaded {
             return;
         }
         inner.version_loaded = true;
-        let sidecar = std::fs::read(self.dir.join(VERSION_NAME)).ok().and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok());
         if let Some(s) = sidecar {
             inner.version = s.version;
             inner.sidecar_hash = Some(s.sha256);
@@ -332,48 +365,67 @@ impl SettingsDoc {
 
     /// Takes in a good file read from disk; a change since this process last
     /// saw it (another writer, or one before this run) bumps the version.
-    fn observe_good(&self, inner: &mut Inner, bytes: Vec<u8>, value: Value) {
-        self.load_version(inner);
+    /// Memory only: the caller records the version after letting go.
+    fn observe_good(inner: &mut Inner, bytes: Vec<u8>, value: Value) {
         if inner.bytes.as_deref() == Some(&bytes[..]) && inner.doc.is_some() {
             inner.observed = true;
             return;
         }
+        let hash = sha_hex(&bytes);
         let changed = match &inner.doc {
             Some(doc) if inner.observed => **doc != value,
-            _ => inner.sidecar_hash.as_deref() != Some(sha_hex(&bytes).as_str()),
+            _ => inner.sidecar_hash.as_deref() != Some(hash.as_str()),
         };
         if changed {
             inner.version += 1;
-            // Recorded at once, not at the next write: a daemon that restarts
-            // before writing would otherwise read the old version back and
-            // hand out this number again for other content.
-            let hash = sha_hex(&bytes);
-            self.record_version(inner.version, &hash);
-            inner.sidecar_hash = Some(hash);
+            inner.unrecorded = true;
         }
+        inner.sidecar_hash = Some(hash);
         inner.observed = true;
         inner.bytes = Some(bytes);
         inner.doc = Some(Arc::new(value));
     }
 
-    /// The version sidecar: small, atomic, no fsync (a lost one only costs a
-    /// spurious bump on the next start).
-    fn record_version(&self, version: u64, hash: &str) {
-        let sidecar = serde_json::to_vec(&Sidecar { version, sha256: hash.to_string() }).unwrap_or_default();
-        if let Err(e) = crate::fsx::write_atomic(&self.dir.join(VERSION_NAME), &sidecar) {
-            warn!("settings: could not record version {version}: {e}");
-        }
-    }
-
-    fn observe_missing(&self, inner: &mut Inner) {
-        self.load_version(inner);
+    fn observe_missing(inner: &mut Inner) {
         let had = if inner.observed { inner.doc.is_some() } else { inner.sidecar_hash.is_some() };
         if had {
             inner.version += 1;
+            inner.unrecorded = true;
         }
         inner.observed = true;
         inner.bytes = None;
         inner.doc = None;
+    }
+
+    /// Writes the sidecar when the version moved. Recorded at once, not at
+    /// the next write: a daemon that restarts before writing would otherwise
+    /// read the old version back and hand the number out again for other
+    /// content. Under `writer` (taken here unless the caller holds it), so
+    /// two records never land out of order; a reader that finds a write in
+    /// progress leaves it to that write.
+    fn record_version(&self, writer_held: bool) {
+        let _guard = if writer_held {
+            None
+        } else {
+            match self.writer.try_lock() {
+                Ok(g) => Some(g),
+                Err(_) => return,
+            }
+        };
+        let (version, hash) = {
+            let mut inner = self.lock();
+            if !inner.unrecorded {
+                return;
+            }
+            inner.unrecorded = false;
+            (inner.version, inner.sidecar_hash.clone().unwrap_or_default())
+        };
+        let sidecar = serde_json::to_vec(&Sidecar { version, sha256: hash }).unwrap_or_default();
+        // Small, atomic, no fsync: a lost one costs a spurious bump at most.
+        if let Err(e) = crate::fsx::write_atomic(&self.dir.join(VERSION_NAME), &sidecar) {
+            warn!("settings: could not record version {version}: {e}");
+            self.lock().unrecorded = true;
+        }
     }
 
     /// The document as it is on disk now, for the daemon's readers. `Err` when
@@ -385,70 +437,98 @@ impl SettingsDoc {
     /// an older app); only the parse is reused while they are unchanged.
     pub fn read(&self) -> Result<Arc<Value>, String> {
         let bytes = std::fs::read(self.path()).map_err(|e| format!("settings unreadable: {e}"))?;
-        let mut inner = self.lock();
-        if inner.bytes.as_deref() == Some(&bytes[..]) {
-            if let Some(doc) = &inner.doc {
-                return Ok(Arc::clone(doc));
+        {
+            let inner = self.lock();
+            if inner.bytes.as_deref() == Some(&bytes[..]) {
+                if let Some(doc) = &inner.doc {
+                    return Ok(Arc::clone(doc));
+                }
             }
         }
         let value: Value = serde_json::from_slice(&bytes).map_err(|e| format!("settings unparseable: {e}"))?;
         if !value.is_object() {
             return Err("settings hold no JSON object".to_string());
         }
-        self.observe_good(&mut inner, bytes, value);
-        Ok(Arc::clone(inner.doc.as_ref().expect("observed")))
+        self.load_version();
+        let doc = {
+            let mut inner = self.lock();
+            Self::observe_good(&mut inner, bytes, value);
+            Arc::clone(inner.doc.as_ref().expect("observed"))
+        };
+        self.record_version(false);
+        Ok(doc)
     }
 
-    /// What to work from when the file is broken: what this process last
-    /// read or wrote, else the newest backup that parses, else nothing.
-    fn recover(&self, inner: &Inner) -> (Map<String, Value>, String) {
-        if let Some(Value::Object(map)) = inner.doc.as_deref() {
-            return (map.clone(), "memory".to_string());
-        }
-        for n in 1..=BACKUP_KEEP {
+    /// The newest backup that parses (IO: never under `inner`).
+    fn newest_backup(&self) -> Option<(Map<String, Value>, String)> {
+        (1..=BACKUP_KEEP).find_map(|n| {
             let name = backup_name(n);
-            if let Disk::Good(_, Value::Object(map)) = read_disk(&self.dir.join(&name)) {
-                return (map, name);
+            match read_disk(&self.dir.join(&name)) {
+                Disk::Good(_, Value::Object(map)) => Some((map, name)),
+                _ => None,
             }
-        }
-        (Map::new(), "empty".to_string())
+        })
     }
 
-    /// The current document (and, when the file is broken, where it came
-    /// from instead). Takes in whatever changed on disk.
-    fn current(&self, inner: &mut Inner) -> Result<(Map<String, Value>, Option<(Vec<u8>, String)>), SettingsError> {
-        match read_disk_settled(&self.path()) {
-            Disk::Missing => {
-                self.observe_missing(inner);
-                Ok((Map::new(), None))
-            }
-            Disk::Good(bytes, value) => {
-                self.observe_good(inner, bytes, value);
-                match inner.doc.as_deref() {
-                    Some(Value::Object(map)) => Ok((map.clone(), None)),
-                    _ => Ok((Map::new(), None)),
+    /// The current document and its version (and, when the file is broken,
+    /// its bytes and where the values came from instead). Takes in whatever
+    /// changed on disk. The disk reads happen outside `inner`.
+    fn current(&self) -> Result<Current, SettingsError> {
+        self.load_version();
+        let disk = read_disk_settled(&self.path());
+        let current = {
+            let mut inner = self.lock();
+            match disk {
+                Disk::Missing => {
+                    Self::observe_missing(&mut inner);
+                    Current { values: Map::new(), version: inner.version, good: None, broken: None }
                 }
+                Disk::Good(bytes, value) => {
+                    let good = bytes.clone();
+                    Self::observe_good(&mut inner, bytes, value);
+                    let values = match inner.doc.as_deref() {
+                        Some(Value::Object(map)) => map.clone(),
+                        _ => Map::new(),
+                    };
+                    Current { values, version: inner.version, good: Some(good), broken: None }
+                }
+                Disk::Broken(bytes) => {
+                    inner.observed = true;
+                    // What this process last read or wrote is the best copy.
+                    let memory = match inner.doc.as_deref() {
+                        Some(Value::Object(map)) => Some(map.clone()),
+                        _ => None,
+                    };
+                    let (values, from) = match memory {
+                        Some(map) => (map, Some("memory".to_string())),
+                        None => (Map::new(), None),
+                    };
+                    Current { values, version: inner.version, good: None, broken: Some((bytes, from.unwrap_or_default())) }
+                }
+                Disk::Unreadable(e) => return Err(SettingsError::Io(e)),
             }
-            Disk::Broken(bytes) => {
-                self.load_version(inner);
-                inner.observed = true;
-                let (map, from) = self.recover(inner);
-                warn!("settings: {FILE_NAME} does not parse ({} bytes); working from {from}", bytes.len());
-                Ok((map, Some((bytes, from))))
+        };
+        self.record_version(false);
+        let mut current = current;
+        if let Some((bytes, from)) = &mut current.broken {
+            if from.is_empty() {
+                let (values, name) = self.newest_backup().unwrap_or_else(|| (Map::new(), "empty".to_string()));
+                current.values = values;
+                *from = name;
             }
-            Disk::Unreadable(e) => Err(SettingsError::Io(e)),
+            warn!("settings: {FILE_NAME} does not parse ({} bytes); working from {from}", bytes.len());
         }
+        Ok(current)
     }
 
     /// The whole document, or only `keys` (those present), plus its version.
-    /// A missing file is an empty document. Never writes.
+    /// A missing file is an empty document. Never writes the document.
     pub fn get(&self, keys: Option<&[String]>) -> Result<Snapshot, SettingsError> {
-        let mut inner = self.lock();
-        let (mut values, broken) = self.current(&mut inner)?;
+        let Current { mut values, version, broken, .. } = self.current()?;
         if let Some(keys) = keys {
             values.retain(|k, _| keys.contains(k));
         }
-        Ok(Snapshot { values, version: inner.version, recovered: broken.map(|(_, from)| from) })
+        Ok(Snapshot { values, version, recovered: broken.map(|(_, from)| from) })
     }
 
     /// Applies a merge patch (see [`merge_patch`]) to the document.
@@ -480,12 +560,14 @@ impl SettingsDoc {
     }
 
     fn write_op(&self, base_version: Option<u64>, apply: impl FnOnce(&mut Value)) -> Result<Change, SettingsError> {
-        let mut inner = self.lock();
+        let _writer = self.writer.lock().unwrap_or_else(|p| p.into_inner());
         let _file_lock = lock_file(&self.dir, DAEMON_LOCK_WAIT).map_err(|e| SettingsError::Io(e.to_string()))?;
-        let (before, broken) = self.current(&mut inner)?;
+        let Current { values: before, version, good, broken } = self.current()?;
+        // `current` may have taken another writer's change in.
+        self.record_version(true);
         if let Some(base) = base_version {
-            if base != inner.version {
-                return Err(SettingsError::Conflict { current: inner.version });
+            if base != version {
+                return Err(SettingsError::Conflict { current: version });
             }
         }
         let mut next = Value::Object(before.clone());
@@ -495,14 +577,12 @@ impl SettingsDoc {
         };
         let changed = changed_keys(&before, after);
         if changed.is_empty() {
-            return Ok(Change { version: inner.version, changed });
+            return Ok(Change { version, changed });
         }
 
         self.sweep_temps();
-        if broken.is_none() {
-            if let Some(bytes) = inner.bytes.clone() {
-                self.maybe_backup(&mut inner, &bytes);
-            }
+        if let Some(bytes) = &good {
+            self.maybe_backup(bytes);
         }
         if let Some((bytes, _)) = &broken {
             if let Err(e) = write_durable(&self.dir.join(CORRUPT_NAME), bytes, false) {
@@ -512,6 +592,11 @@ impl SettingsDoc {
         let bytes = serde_json::to_vec(&next).map_err(|e| SettingsError::Io(e.to_string()))?;
         #[cfg(test)]
         let fail = self.fail_before_rename.load(std::sync::atomic::Ordering::SeqCst);
+        #[cfg(test)]
+        if let Some(pause) = *self.slow_write.lock().unwrap_or_else(|p| p.into_inner()) {
+            self.in_write.store(true, std::sync::atomic::Ordering::SeqCst);
+            std::thread::sleep(pause);
+        }
         #[cfg(not(test))]
         let fail = false;
         write_durable(&self.path(), &bytes, fail).map_err(|e| {
@@ -519,28 +604,38 @@ impl SettingsDoc {
             SettingsError::Io(e.to_string())
         })?;
 
-        inner.version += 1;
-        let hash = sha_hex(&bytes);
-        self.record_version(inner.version, &hash);
-        inner.sidecar_hash = Some(hash);
-        inner.bytes = Some(bytes);
-        inner.doc = Some(Arc::new(next));
-        info!("settings: wrote {changed:?}, version {}", inner.version);
-        Ok(Change { version: inner.version, changed })
+        let version = {
+            let mut inner = self.lock();
+            // A reader can take the new file in between the rename and here;
+            // it already counted it, so it is not counted twice.
+            if inner.bytes.as_deref() != Some(&bytes[..]) {
+                inner.version += 1;
+                inner.sidecar_hash = Some(sha_hex(&bytes));
+                inner.bytes = Some(bytes);
+                inner.doc = Some(Arc::new(next));
+            }
+            inner.observed = true;
+            inner.unrecorded = true;
+            inner.version
+        };
+        self.record_version(true);
+        info!("settings: wrote {changed:?}, version {version}");
+        Ok(Change { version, changed })
     }
 
     /// Copies the current good file to `.bak1` (shifting the older ones up,
     /// dropping the sixth) before the first write of a run, and then once the
     /// newest backup is older than the interval. A backup failure never
     /// stops the write itself.
-    fn maybe_backup(&self, inner: &mut Inner, current: &[u8]) {
+    fn maybe_backup(&self, current: &[u8]) {
+        use std::sync::atomic::Ordering::SeqCst;
         let bak1 = self.dir.join(backup_name(1));
         let age = std::fs::metadata(&bak1).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
-        let due = !inner.backed_up || age.is_none_or(|a| a >= self.backup_interval);
+        let due = !self.backed_up.load(SeqCst) || age.is_none_or(|a| a >= self.backup_interval);
         if !due {
             return;
         }
-        inner.backed_up = true;
+        self.backed_up.store(true, SeqCst);
         if std::fs::read(&bak1).ok().as_deref() == Some(current) {
             return;
         }
