@@ -54,6 +54,7 @@ pub mod unsubscribe;
 pub mod smtp;
 pub mod compose;
 pub mod spellcheck;
+pub mod settings_doc;
 pub mod transfer_limits;
 pub mod transfer_stats;
 pub mod transfer;
