@@ -808,13 +808,15 @@ async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_tok
     // (an empty queue: every request it gets is a 500), so whatever the job does
     // with the token, it goes nowhere. Never set `MAILVAULT_GRAPH_BASE` here: it
     // is read once per process and would break those tests.
-    let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
     let logs = captured_logs();
     let mock = MockImap::start(Scenario::new());
     let rig = Rig::build(
         mock,
         json!({"id": ACCT, "email": EMAIL, "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"}),
     );
+    // After the rig's env lock, as every test that takes both does: the
+    // other order deadlocks against them.
+    let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
     seed_graph_job(&rig.dir);
     let mut rx = rig.state.events.subscribe();
     rig.start_worker();
@@ -869,10 +871,11 @@ async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_tok
 /// listens for `abd-token-needed` any more, so it is not sent.
 #[tokio::test]
 async fn a_new_sign_in_wakes_a_graph_job_waiting_for_its_token() {
-    let _graph = crate::handlers::graph::test_graph_mock();
     let mock = MockImap::start(Scenario::new());
     let account = json!({"id": ACCT, "email": EMAIL, "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"});
     let rig = Rig::build(mock, account.clone());
+    // After the rig's env lock, as every test that takes both does.
+    let _graph = crate::handlers::graph::test_graph_mock();
     seed_graph_job(&rig.dir);
     let mut rx = rig.state.events.subscribe();
     rig.start_worker();
