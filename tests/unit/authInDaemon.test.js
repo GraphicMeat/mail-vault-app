@@ -26,7 +26,7 @@ function sources(dir) {
       if (name === '__tests__' || name === 'demo') continue;
       out.push(...sources(path));
     } else if (/\.(js|jsx)$/.test(name) && !/\.test\.(js|jsx)$/.test(name)) {
-      out.push(path);
+      out.push(path.split('\\').join('/')); // Windows joins with backslashes
     }
   }
   return out;
