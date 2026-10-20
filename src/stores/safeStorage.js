@@ -36,7 +36,8 @@ const OUTDATED = 'errors.daemonOutdated';
 const NOT_LOADED = 'errors.settingsNotLoaded';
 // The daemon's own settings errors (`settings_doc::SettingsError`): a daemon
 // that knows settings.* answered, and failed this time.
-const isSettingsError = text => text.startsWith('errors.settings');
+const SETTINGS_ERRORS = ['errors.settingsConflict', 'errors.settingsInvalid', 'errors.settingsWriteFailed'];
+const isSettingsError = text => SETTINGS_ERRORS.includes(text);
 // How long a window waits for its first settings.get before reading the file
 // through the shell instead. A warm daemon answers in milliseconds; a cold
 // one is still starting, and the UI paints defaults until hydration, so the
