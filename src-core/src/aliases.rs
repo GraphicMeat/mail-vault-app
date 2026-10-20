@@ -193,7 +193,23 @@ pub fn gmail_status(code: u16) -> ProviderStatus {
 /// Ask Gmail for the account's send-as addresses. One recorded request, shown
 /// on Network Activity as this account's "alias lookup".
 pub async fn fetch_gmail_send_as(access_token: &str, account_email: &str) -> ProviderAliases {
-    fetch_send_as_at(GMAIL_SEND_AS_URL, access_token, account_email).await
+    fetch_send_as_at(&gmail_send_as_url(), access_token, account_email).await
+}
+
+/// Debug builds only: `MAILVAULT_GMAIL_API_BASE`, a loopback http origin, so
+/// an e2e run with a mock Gmail account never sends its mock token to Google.
+/// A release build always asks Google.
+fn gmail_send_as_url() -> String {
+    #[cfg(debug_assertions)]
+    if let Ok(base) = std::env::var("MAILVAULT_GMAIL_API_BASE") {
+        let loopback = reqwest::Url::parse(&base).ok().is_some_and(|u| {
+            u.scheme() == "http" && u.host_str().is_some_and(|h| h == "127.0.0.1" || h.eq_ignore_ascii_case("localhost"))
+        });
+        if loopback {
+            return format!("{}/gmail/v1/users/me/settings/sendAs", base.trim_end_matches('/'));
+        }
+    }
+    GMAIL_SEND_AS_URL.to_string()
 }
 
 /// `fetch_gmail_send_as` against `url`. No override reaches this from outside
