@@ -3086,6 +3086,11 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // new cap this budget could bind against in practice.
         "fetch_remote_asset" => Some(Duration::from_secs(30)),
 
+        // The settings document (`handlers/settings.rs`): one small file read,
+        // or one write and fsync. Every window hydrates through `settings.get`,
+        // so a daemon that accepts and never answers must not hang the UI.
+        "settings.get" | "settings.patch" | "settings.replace" => Some(Duration::from_secs(30)),
+
         // Task 4.4 / decision 8: inline-blocking, same reasoning as
         // archive_emails/bulk_delete_emails above, the whole ZIP
         // read-or-write pass happens within this RPC call and the JS
@@ -4825,6 +4830,14 @@ mod tests {
     #[test]
     fn reply_timeout_gives_fetch_remote_asset_thirty_seconds() {
         assert_eq!(crate::reply_timeout("fetch_remote_asset"), Some(std::time::Duration::from_secs(30)));
+    }
+
+    /// Every window's hydration waits on `settings.get`: bounded by name.
+    #[test]
+    fn reply_timeout_bounds_the_settings_rpcs() {
+        for method in ["settings.get", "settings.patch", "settings.replace"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
     }
 
     /// Task 4.4, decision 8: pinned by name, not the `_ => None` default,

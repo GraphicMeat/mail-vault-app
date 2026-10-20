@@ -339,6 +339,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   const uploads = new Map();
   let uploadSeq = 0;
   let settings = clone(initialSettings);
+  let settingsVersion = 0;
   const listeners = new Map();
   const journal = [];
   let pendingOperation = null;
@@ -553,7 +554,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     const mailbox = args.mailbox || 'INBOX';
     switch (command) {
       case 'read_settings_json': return JSON.stringify(settings);
-      case 'write_settings_json': settings = JSON.parse(args.data || '{}'); emit('demo:state', { type: 'settings' }); return null;
+      case 'write_settings_json': settings = JSON.parse(args.data || '{}'); settingsVersion += 1; emit('demo:state', { type: 'settings' }); return null;
       case 'get_app_data_dir': return '/demo/app-data';
       case 'get_credentials': return { status: 'granted', credentials: Object.fromEntries(ACCOUNTS.map(item => [item.id, JSON.stringify(item)])) };
       case 'demo_emit_event': emit(args.event, args.payload); return null;
@@ -676,6 +677,40 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         }
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
         // The demo's mail carries no authentication results and no codes to read.
+        // The settings document (handlers/settings.rs) over the same
+        // `settings` object read/write_settings_json use.
+        if (method === 'settings.get' || method === 'settings.patch' || method === 'settings.replace') {
+          const p = args.params || {};
+          if (method === 'settings.get') {
+            const keys = Array.isArray(p.keys) ? p.keys : null;
+            const values = Object.fromEntries(Object.entries(settings).filter(([k]) => !keys || keys.includes(k)));
+            return { values: clone(values), version: settingsVersion };
+          }
+          const input = method === 'settings.patch' ? p.patch : p.values;
+          if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('errors.settingsInvalid');
+          if (Number.isInteger(p.baseVersion) && p.baseVersion !== settingsVersion) throw new Error('errors.settingsConflict');
+          const before = JSON.stringify(settings);
+          const next = clone(settings);
+          const mergePatch = (target, patch) => {
+            if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return clone(patch);
+            const out = target && typeof target === 'object' && !Array.isArray(target) ? target : {};
+            for (const [k, v] of Object.entries(patch)) { if (v === null) delete out[k]; else out[k] = mergePatch(out[k], v); }
+            return out;
+          };
+          const changed = [];
+          for (const [k, v] of Object.entries(input)) {
+            const was = JSON.stringify(next[k]);
+            if (v === null) delete next[k];
+            else next[k] = method === 'settings.patch' ? mergePatch(next[k], v) : clone(v);
+            if (JSON.stringify(next[k]) !== was) changed.push(k);
+          }
+          if (JSON.stringify(next) === before) return { version: settingsVersion, changed: [] };
+          settings = next;
+          settingsVersion += 1;
+          emit('demo:state', { type: 'settings' });
+          emit('settings-changed', { keys: changed.sort(), version: settingsVersion });
+          return { version: settingsVersion, changed: changed.sort() };
+        }
         if (method === 'message.verify_sender') return { status: 'none', tooltip: [], issues: [], auth: { spf: null, dkim: null, dmarc: null }, dkim: null, simulated: true };
         if (method === 'message.code') return { code: null, needsBody: false, simulated: true };
         // "Is the server copy gone?": the demo's own server rows answer, and

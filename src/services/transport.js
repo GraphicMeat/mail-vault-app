@@ -296,6 +296,11 @@ export const DAEMON_OWNED = new Set([
   // The sender shield's verdict and the one-time code in a mail, decided by
   // the daemon from the header fields and text the app hands over.
   'message.verify_sender', 'message.code',
+  // Phase 1 step 0a: the daemon owns frontend-settings.json (atomic writes,
+  // a version, backups) and emits `settings-changed {keys, version}`.
+  // safeStorage.js is the caller; it keeps read/write_settings_json as the
+  // fallback for a daemon without these.
+  'settings.get', 'settings.patch', 'settings.replace',
 ]);
 
 async function sendToDaemon(command, args) {

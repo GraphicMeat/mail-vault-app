@@ -53,6 +53,7 @@ pub(crate) mod portable;
 pub(crate) mod release_notes;
 pub(crate) mod restore;
 pub(crate) mod scheduled;
+pub(crate) mod settings;
 pub(crate) mod search_index;
 pub(crate) mod snooze;
 pub(crate) mod storage_format;
