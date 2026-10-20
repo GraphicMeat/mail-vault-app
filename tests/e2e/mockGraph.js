@@ -39,6 +39,17 @@ const rfcAddress = (r) => (r?.emailAddress?.name
   : `${r?.emailAddress?.address || ''}`);
 
 export function startMockGraph() {
+  // With a mock token endpoint up (wdio.oauth.conf.js), a request is served
+  // only with an access token it issued that has not expired, as Graph does.
+  const tokenOrigin = process.env.E2E_MOCK_OAUTH_ORIGIN || null;
+  const tokenAccepted = async (token) => {
+    try {
+      const r = await fetch(`${tokenOrigin}/__mock/check`, {
+        method: 'POST', body: JSON.stringify({ service: 'graph', user: '', token }),
+      });
+      return (await r.json()).accepted === true;
+    } catch { return false; }
+  };
   let folders = [];      // [{ id, displayName, wellKnownName, messages: [{ id, internetMessageId, receivedDateTime, subject, mime }] }]
   let requests = [];     // [{ method, path }]
   let held = null;       // a message id whose MIME answer waits for DELETE /__mock/hold
@@ -199,7 +210,7 @@ export function startMockGraph() {
     return json(res, out.status, out.body);
   };
 
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const path = decodeURIComponent(url.pathname);
 
@@ -235,6 +246,9 @@ export function startMockGraph() {
 
     requests.push({ method: req.method, path });
     if (!/^Bearer \S+/.test(req.headers.authorization || '')) return json(res, 401, { error: { code: 'InvalidAuthenticationToken' } });
+    if (tokenOrigin && !(await tokenAccepted((req.headers.authorization || '').slice('Bearer '.length)))) {
+      return json(res, 401, { error: { code: 'InvalidAuthenticationToken', message: 'Access token has expired or is not yet valid.' } });
+    }
 
     if (path === '/v1.0/me/sendMail' && req.method === 'POST') {
       let body = '';

@@ -287,6 +287,13 @@ let MOCK_ACCOUNTS = [
   },
 ];
 
+// A mock account with `tokenCheckOrigin` (wdio.oauth.conf.js) gets a mock IMAP
+// and SMTP server that accept a sign-in only with a token the mock token
+// endpoint at that origin issued and that has not expired.
+function withTokenCheck(account, scenarioPayload) {
+  return account.tokenCheckOrigin ? { ...scenarioPayload, tokenCheckOrigin: account.tokenCheckOrigin } : scenarioPayload;
+}
+
 // Dedicated suites may supply actual Scenario payloads without changing the
 // default fixture accounts, server lifecycle or isolated-app cleanup.
 export function configureMockAccounts(accounts) {
@@ -411,6 +418,8 @@ export const config = {
     './tests/e2e/ui-insights.test.js',
     './tests/e2e/graph-*.test.js',
     './tests/e2e/jmap-*.test.js',
+    // The oauth-* specs need the mock token endpoint only wdio.oauth.conf.js starts.
+    './tests/e2e/oauth-*.test.js',
     // Measurement, not a test: 45 minutes of deliberate idling, asserts
     // nothing. wdio.ram.conf.js selects it by name.
     './tests/e2e/ram-*.test.js',
@@ -519,7 +528,7 @@ export const config = {
 
     buildMockServer();
     mockServers = await Promise.all(
-      MOCK_ACCOUNTS.map((a) => a.graph ? null : startMockImap(a.scenario || scenario({
+      MOCK_ACCOUNTS.map((a) => a.graph ? null : startMockImap(withTokenCheck(a, a.scenario || scenario({
         owner: a.email,
         subjectPrefix: a.subjectPrefix,
         inbox: a.inbox,
@@ -536,13 +545,16 @@ export const config = {
         backupDeleteMailbox: a.backupDeleteMailbox,
         abdMailboxes: a.abdMailboxes,
         blitzMailbox: process.env.MV_BLITZ_FIXTURE === '1' ? a.blitzMailbox : undefined,
-      }))),
+      })))),
     );
     // A Graph entry ({ graph: true, account }) carries its whole seeded account:
     // no IMAP server, no password, the token in the credentials file.
-    seededAccounts = MOCK_ACCOUNTS.map((a, i) => a.graph ? a.account : mockAccount({
-      ...a, port: mockServers[i].port, smtpPort: mockServers[i].smtpPort,
-    }));
+    // `accountExtra` (wdio.oauth.conf.js) lays OAuth2 fields over the seeded
+    // password account: the same mock server, signed in with a token instead.
+    seededAccounts = MOCK_ACCOUNTS.map((a, i) => a.graph ? a.account : {
+      ...mockAccount({ ...a, port: mockServers[i].port, smtpPort: mockServers[i].smtpPort }),
+      ...(a.accountExtra || {}),
+    });
     credentialsPath = seedAccounts(testDataDir, seededAccounts);
 
     // Outlook accounts talk to Microsoft Graph, not IMAP. The backup specs for
