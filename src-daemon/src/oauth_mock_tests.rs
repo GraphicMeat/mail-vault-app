@@ -411,6 +411,35 @@ async fn checklist_7_a_server_refusing_valid_tokens_costs_one_refresh_a_minute()
     assert_eq!(rig.leaks(), Vec::<String>::new());
 }
 
+// ── found by these tests ────────────────────────────────────────────────────
+
+/// Outlook ends a signed-in IMAP session once its token expires ("Session
+/// invalidated - AccessTokenExpired"). The daemon refreshes five minutes
+/// before expiry, so pooled sessions signed in with the old token outlive the
+/// refresh and are ended a few minutes later: the next request on one failed
+/// ("connection likely dropped") although a good token was held. A refresh
+/// now retires the account's pooled sessions, so the next request signs in
+/// with the new token.
+#[tokio::test]
+async fn a_pooled_session_ended_for_its_expired_token_costs_no_failed_request() {
+    let mut rig = Rig::new(inbox());
+    rig.auth.end_sessions_when_invalid(true);
+    let signed = rig.sign_in(GOOGLE_SCOPE, false);
+    let record = rig.record("g1", "me@gmail.test", &signed, json!({}));
+    rig.store(&[&record]);
+    let account = Rig::param(&record);
+
+    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": account})).await), "signs in, the session is pooled");
+    rig.advance(Duration::from_secs(56 * 60));
+    let at_refresh = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
+    rig.advance(Duration::from_secs(5 * 60));
+    let after_old_expiry = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
+
+    assert!(ok(&at_refresh), "{}", message(&at_refresh));
+    assert_eq!(rig.posts(), 1, "refreshed inside the margin");
+    assert!(ok(&after_old_expiry), "the old token's session must not be used: {}", message(&after_old_expiry));
+}
+
 // ── also ────────────────────────────────────────────────────────────────────
 
 /// 20 requests in parallel at expiry: one refresh, every request signed in.

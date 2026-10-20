@@ -447,10 +447,17 @@ pub(crate) async fn for_record(state: &DaemonState, account_id: &str, record: &V
         let _ = until;
         return if entry.still_valid(now) { Ok(Some(entry.access_token)) } else { Err(entry.failure(kind, message)) };
     }
-    refresh(state, account_id, entry, now).await
+    let config = serde_json::from_value::<ImapConfig>(record.clone()).ok();
+    refresh(state, account_id, entry, now, config.as_ref()).await
 }
 
-async fn refresh(state: &DaemonState, account_id: &str, entry: Entry, now: i64) -> Result<Option<String>, TokenError> {
+async fn refresh(
+    state: &DaemonState,
+    account_id: &str,
+    entry: Entry,
+    now: i64,
+    config: Option<&ImapConfig>,
+) -> Result<Option<String>, TokenError> {
     let grant = &entry.grant;
     // Network Activity shows the refresh as the account's, from a worker too.
     let request = state.oauth2.refresh_token(
@@ -470,6 +477,11 @@ async fn refresh(state: &DaemonState, account_id: &str, entry: Entry, now: i64) 
             let expires_at = tokens.expires_at as i64 + (state.tokens.now() - now_ms());
             state.tokens.store_refresh(account_id, grant, tokens.access_token, tokens.refresh_token, expires_at);
             info!("[oauth] refreshed the access token of {}", grant.email);
+            // Pooled IMAP sessions signed in with the old token would be
+            // ended under a request once it expires (Outlook): sign in anew.
+            if let Some(config) = config.filter(|c| !c.uses_graph() && !c.uses_jmap()) {
+                state.imap_pool.retire_idle(config).await;
+            }
             state.events.emit(REFRESHED_EVENT, json!({ "accountId": account_id }));
             return Ok(Some(token));
         }

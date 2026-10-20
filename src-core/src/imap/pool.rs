@@ -549,6 +549,39 @@ impl ImapPool {
         }
     }
 
+    /// Log out the account's idle pooled sessions, both lanes, so the next
+    /// request signs in again. For a new OAuth2 token: a provider that ends a
+    /// session once the token it signed in with expires (Outlook, "Session
+    /// invalidated - AccessTokenExpired") would otherwise end them under the
+    /// next request. Sessions checked out finish their command; the budget
+    /// and the capabilities stay.
+    pub async fn retire_idle(&self, config: &ImapConfig) {
+        let key = conn_key(config);
+        let mut to_logout = Vec::new();
+        for pool in [&self.background, &self.priority] {
+            if let Some(pooled) = pool.lock().await.remove(&key) {
+                to_logout.extend(pooled.into_iter().map(|ps| ps.session));
+            }
+        }
+        if to_logout.is_empty() {
+            return;
+        }
+        info!("[IMAP pool] Retired {} idle sessions for {} after a new sign-in token", to_logout.len(), key);
+        // Out of the pool already; the LOGOUTs go on their own, bounded, so a
+        // slow server never holds up the request that asked for the token.
+        let logout = async move {
+            for mut session in to_logout {
+                let _ = async_std::future::timeout(EVICT_LOGOUT_TIMEOUT, session.logout()).await;
+            }
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                handle.spawn(logout);
+            }
+            Err(_) => logout.await,
+        }
+    }
+
     /// Check if the server supports a specific capability (case-insensitive).
     pub async fn has_capability(&self, config: &ImapConfig, cap: &str) -> bool {
         let key = conn_key(config);
