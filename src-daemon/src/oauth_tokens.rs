@@ -50,6 +50,12 @@ const UNANSWERED_COOLDOWN: Duration = Duration::from_secs(30);
 /// After the provider refused: no new attempt for this long, unless a new
 /// sign-in replaces the grant first.
 const REFUSED_COOLDOWN: Duration = Duration::from_secs(10 * 60);
+/// After a refresh a server's refusal asked for: no refusal asks for another
+/// one before this long has passed, doubling while refusals keep coming (a
+/// server that refuses even a valid token: IMAP off for the account, a scope
+/// it lacks) up to `REJECTION_BACKOFF_CAP`.
+const REJECTION_BACKOFF: Duration = Duration::from_secs(60);
+const REJECTION_BACKOFF_CAP: Duration = Duration::from_secs(10 * 60);
 
 /// How the stored record may be read: `Guarded` may raise the keychain prompt
 /// (only when the gate is clear, as every guarded read), `Quiet` never does.
@@ -143,6 +149,11 @@ struct Entry {
     rejected: bool,
     /// After a failed refresh: none before this, and why it failed.
     cooldown: Option<(Instant, FailKind, String)>,
+    /// A refusal before this does not ask for a refresh (`REJECTION_BACKOFF`).
+    rejection_quiet_until: Option<Instant>,
+    /// The quiet time the next refusal-driven refresh starts; zero when a
+    /// request has gone through since.
+    rejection_backoff: Duration,
 }
 
 impl Entry {
@@ -257,7 +268,18 @@ impl TokenStore {
         // A new grant (or none held): the record's pair, and nothing of the
         // old grant's, unsaved pair included, survives.
         let lineage = vec![grant.refresh_token.clone()];
-        let entry = Entry { grant, lineage, access_token, expires_at, unsaved: false, checked: true, rejected: false, cooldown: None };
+        let entry = Entry {
+            grant,
+            lineage,
+            access_token,
+            expires_at,
+            unsaved: false,
+            checked: true,
+            rejected: false,
+            cooldown: None,
+            rejection_quiet_until: None,
+            rejection_backoff: Duration::ZERO,
+        };
         entries.insert(account_id.to_string(), entry.clone());
         Some(entry)
     }
@@ -270,11 +292,23 @@ impl TokenStore {
         }
     }
 
-    /// A server refused `token` for `account_id`: the next use refreshes.
+    /// A server refused `token` for `account_id`: the next use refreshes,
+    /// unless a refusal already asked for one within the quiet time.
     pub(crate) fn rejected(&self, account_id: &str, token: &str) {
         if let Some(entry) = self.entries().get_mut(account_id) {
-            if entry.access_token == token {
+            let quiet = entry.rejection_quiet_until.is_some_and(|until| Instant::now() < until);
+            if entry.access_token == token && !quiet {
                 entry.rejected = true;
+            }
+        }
+    }
+
+    /// A request went through with `token`: the next refusal-driven refresh
+    /// starts the backoff afresh (the current quiet time still runs out).
+    pub(crate) fn accepted(&self, account_id: &str, token: &str) {
+        if let Some(entry) = self.entries().get_mut(account_id) {
+            if entry.access_token == token {
+                entry.rejection_backoff = Duration::ZERO;
             }
         }
     }
@@ -318,6 +352,11 @@ impl TokenStore {
     fn store_refresh(&self, account_id: &str, grant: &Grant, access_token: String, refresh_token: Option<String>, expires_at: i64) {
         let mut entries = self.entries();
         let Some(entry) = entries.get_mut(account_id) else { return };
+        if entry.rejected {
+            let wait = if entry.rejection_backoff.is_zero() { REJECTION_BACKOFF } else { (entry.rejection_backoff * 2).min(REJECTION_BACKOFF_CAP) };
+            entry.rejection_backoff = wait;
+            entry.rejection_quiet_until = Some(Instant::now() + wait);
+        }
         // The refresh token goes with the client it was posted with: only
         // the token itself rotates.
         entry.grant = grant.clone();
@@ -576,6 +615,13 @@ pub(crate) fn note_refusal(state: &DaemonState, injected: &[Injected], error: &s
         for i in injected {
             state.tokens.rejected(&i.account_id, &i.token);
         }
+    }
+}
+
+/// A request that went through with the tokens it carried.
+pub(crate) fn note_accepted(state: &DaemonState, injected: &[Injected]) {
+    for i in injected {
+        state.tokens.accepted(&i.account_id, &i.token);
     }
 }
 
@@ -1130,6 +1176,28 @@ mod tests {
         assert_eq!(after_write.ok().flatten().as_deref(), Some("at-rotated-0015"));
         assert_eq!(test_token_posts().len(), 1);
         assert_eq!(s.tokens.unsaved().len(), 1, "still offered for the app to save");
+    }
+
+    /// A server that refuses a token that is valid (IMAP turned off for the
+    /// account, a Graph scope it lacks) must not cost a token round trip per
+    /// request: one refresh, then none for at least a minute.
+    #[tokio::test]
+    async fn a_server_refusing_valid_tokens_gets_at_most_one_refresh_a_minute() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let answers = (0..200).map(|i| granted(&format!("at-loop-{i:04}"), None)).collect();
+        let _mock = test_token_mock(answers);
+        let s = st();
+        store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000})))]);
+
+        for _ in 0..200 {
+            let mut request = json!({"account": {"id": "g1", "email": "me@gmail.test", "authType": "oauth2"}});
+            let injected = inject(&s, "imap_get_mailboxes", &mut request).await;
+            note_refusal(&s, &injected, "XOAUTH2 auth failed for me@gmail.test: [AUTHENTICATIONFAILED]");
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+
+        let posts = test_token_posts().len();
+        assert!(posts <= 1, "{posts} refreshes for 200 refused requests");
     }
 
     /// The pairs offered to the app name the grants they belong to, by a

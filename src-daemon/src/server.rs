@@ -506,8 +506,9 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
     if let Some(line) = jmap_refusal_log_line(&method, &resp) {
         warn!("{line}");
     }
-    if let Some(error) = resp.error.as_ref().filter(|_| !injected.is_empty()) {
-        crate::oauth_tokens::note_refusal(state, &injected, &error.message);
+    match resp.error.as_ref() {
+        Some(error) => crate::oauth_tokens::note_refusal(state, &injected, &error.message),
+        None => crate::oauth_tokens::note_accepted(state, &injected),
     }
     resp
 }
