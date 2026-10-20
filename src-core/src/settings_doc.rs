@@ -43,6 +43,9 @@ pub const CORRUPT_NAME: &str = "frontend-settings.json.corrupt";
 pub const BACKUP_KEEP: usize = 5;
 /// A backup is taken before the first write of a run, then at most this often.
 pub const BACKUP_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+/// Never two rotations closer than this, first write of a run included: five
+/// daemon restarts in a row must not push the copy from before them out.
+pub const BACKUP_MIN_SPACING: Duration = Duration::from_secs(60 * 60);
 
 pub fn backup_name(n: usize) -> String {
     format!("{FILE_NAME}.bak{n}")
@@ -624,14 +627,21 @@ impl SettingsDoc {
     }
 
     /// Copies the current good file to `.bak1` (shifting the older ones up,
-    /// dropping the sixth) before the first write of a run, and then once the
-    /// newest backup is older than the interval. A backup failure never
-    /// stops the write itself.
+    /// dropping the sixth) when there is no backup yet, before the first
+    /// write of a run once the newest backup is an hour old, and then once it
+    /// is older than the interval; only when the file differs from `.bak1`.
+    /// A backup failure never stops the write itself.
     fn maybe_backup(&self, current: &[u8]) {
         use std::sync::atomic::Ordering::SeqCst;
         let bak1 = self.dir.join(backup_name(1));
         let age = std::fs::metadata(&bak1).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
-        let due = !self.backed_up.load(SeqCst) || age.is_none_or(|a| a >= self.backup_interval);
+        let exists = bak1.exists();
+        // A newest backup dated in the future (the clock went back, a network
+        // filesystem's clock) has no age: not due, or every write would
+        // rotate and push every older copy out.
+        let spacing = BACKUP_MIN_SPACING.min(self.backup_interval);
+        let wait = if self.backed_up.load(SeqCst) { self.backup_interval } else { spacing };
+        let due = !exists || age.is_some_and(|a| a >= wait);
         if !due {
             return;
         }

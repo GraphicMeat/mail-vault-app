@@ -410,10 +410,42 @@ fn one_backup_per_run_when_the_interval_has_not_passed() {
     assert_eq!(backups(d.path()), vec![backup_name(1)]);
     let bak: Value = serde_json::from_slice(&fs::read(d.path().join(backup_name(1))).unwrap()).unwrap();
     assert_eq!(bak, json!({"n": 0}), "the file as the run found it");
-    // A second run backs up again, the first write of a run always does.
-    let doc = SettingsDoc::open(d.path());
-    doc.patch(&json!({"n": 5}), None).unwrap();
-    assert_eq!(backups(d.path()), vec![backup_name(1), backup_name(2)]);
+}
+
+#[test]
+fn daemon_restarts_within_the_hour_never_push_the_pre_session_copy_out() {
+    let d = dir();
+    seed(d.path(), json!({"pre": "session"}));
+    for n in 0..10 {
+        // A daemon restart each time (a vault switch, a crash loop), one write each.
+        SettingsDoc::open(d.path()).patch(&json!({ "n": n }), None).unwrap();
+    }
+    let slots: Vec<Value> = backups(d.path())
+        .iter()
+        .map(|name| serde_json::from_slice(&fs::read(d.path().join(name)).unwrap()).unwrap())
+        .collect();
+    assert!(slots.contains(&json!({"pre": "session"})), "the pre-session copy is gone: {slots:?}");
+}
+
+#[test]
+fn a_backup_dated_in_the_future_is_not_due() {
+    let d = dir();
+    seed(d.path(), json!({"n": 0}));
+    let future = std::time::SystemTime::now() + Duration::from_secs(24 * 60 * 60);
+    for n in 1..=BACKUP_KEEP {
+        let path = d.path().join(backup_name(n));
+        fs::write(&path, json!({ "bak": n }).to_string()).unwrap();
+        fs::File::options().write(true).open(&path).unwrap().set_modified(future).unwrap();
+    }
+    for doc in [SettingsDoc::open(d.path()), SettingsDoc::open_with(d.path(), Duration::ZERO)] {
+        for n in 1..=10 {
+            doc.patch(&json!({ "n": n }), None).unwrap();
+        }
+    }
+    for n in 1..=BACKUP_KEEP {
+        let bak: Value = serde_json::from_slice(&fs::read(d.path().join(backup_name(n))).unwrap()).unwrap();
+        assert_eq!(bak, json!({ "bak": n }), "slot {n} was rotated by writes that were not due");
+    }
 }
 
 #[test]
