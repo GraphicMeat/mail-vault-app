@@ -808,7 +808,7 @@ async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_tok
     // (an empty queue: every request it gets is a 500), so whatever the job does
     // with the token, it goes nowhere. Never set `MAILVAULT_GRAPH_BASE` here: it
     // is read once per process and would break those tests.
-    let _graph = crate::handlers::graph::test_graph_mock();
+    let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
     let logs = captured_logs();
     let mock = MockImap::start(Scenario::new());
     let rig = Rig::build(
@@ -819,21 +819,10 @@ async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_tok
     let mut rx = rig.state.events.subscribe();
     rig.start_worker();
 
-    // No token was ever pushed: the job asks for one and waits.
+    // No token was ever pushed and the record holds none: the job waits.
     let paused = rig.status_is("paused", "sign_in_needed").await;
     assert_eq!(paused["provider"], json!("graph"));
     let mut events = drain(&mut rx);
-    let asked = |evs: &[(String, Value)]| evs.iter().filter(|(n, _)| n == "abd-token-needed").count();
-    wait_for("the token request", 10, || {
-        events.extend(drain(&mut rx));
-        (asked(&events) >= 1).then_some(())
-    })
-    .await;
-    let first = events.iter().find(|(n, _)| n == "abd-token-needed").unwrap().1.clone();
-    assert_eq!(first["accountId"], json!(ACCT));
-    assert_eq!(first["provider"], json!("graph"));
-    assert!(first["jobId"].as_str().unwrap().starts_with("abd-acc1-"));
-    let asked_before = asked(&events);
 
     let token = "tok-SECRET-abc123XYZ";
     let reply = rig
@@ -843,12 +832,15 @@ async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_tok
     assert_eq!(reply, json!({}));
 
     // The job left the sign-in pause: it went on (and whatever the closed port
-    // said, it said so with the token), or it asked once more.
+    // said, it said so with the token), or it sent the token and paused again.
     wait_for("the job to react to the token", 30, || {
         events.extend(drain(&mut rx));
         let f = rig.frame()?;
         let moved_on = !(f["status"]["state"] == json!("paused") && f["status"]["reason"] == json!("sign_in_needed"));
-        (moved_on || asked(&events) > asked_before).then_some(())
+        let sent_with_it = crate::handlers::graph::test_graph_requests()
+            .iter()
+            .any(|r| r.headers.get("authorization").is_some_and(|a| a.ends_with(token)));
+        (moved_on || sent_with_it).then_some(())
     })
     .await;
 
@@ -866,6 +858,39 @@ async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_tok
         assert!(!text.contains(token), "the token leaked into the {what}");
     }
     assert!(!files.is_empty());
+
+    rig.rpc("abd.cancel", json!({"accountId": ACCT})).await.unwrap();
+    rig.finished().await;
+}
+
+/// The user signs in again while a Graph job waits for a token: the app's
+/// credentials write (`oauth2.credentials_changed`) wakes the job at once,
+/// and it leases the new token, instead of waiting out its retry. Nobody
+/// listens for `abd-token-needed` any more, so it is not sent.
+#[tokio::test]
+async fn a_new_sign_in_wakes_a_graph_job_waiting_for_its_token() {
+    let _graph = crate::handlers::graph::test_graph_mock();
+    let mock = MockImap::start(Scenario::new());
+    let account = json!({"id": ACCT, "email": EMAIL, "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"});
+    let rig = Rig::build(mock, account.clone());
+    seed_graph_job(&rig.dir);
+    let mut rx = rig.state.events.subscribe();
+    rig.start_worker();
+    rig.status_is("paused", "sign_in_needed").await;
+
+    let mut signed_in = account;
+    signed_in["oauth2AccessToken"] = json!("tok-after-sign-in");
+    std::fs::write(rig.dir.join("credentials.json"), json!({ ACCT: signed_in.to_string() }).to_string()).unwrap();
+    let changed = crate::server::handle_request_for_test(&rig.state, "oauth2.credentials_changed", json!({})).await;
+    assert!(changed.error.is_none());
+
+    let state = Arc::clone(&rig.state);
+    wait_for("the job to lease the new sign-in's token", 10, move || {
+        (state.abd.tokens.get(ACCT).map(|l| l.token) == Some("tok-after-sign-in".to_string())).then_some(())
+    })
+    .await;
+    let events = drain(&mut rx);
+    assert!(events.iter().all(|(n, _)| n != "abd-token-needed"), "a dead event was sent");
 
     rig.rpc("abd.cancel", json!({"accountId": ACCT})).await.unwrap();
     rig.finished().await;

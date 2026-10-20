@@ -47,7 +47,6 @@ use tracing::{error, info, warn};
 
 pub(crate) const PROGRESS_EVENT: &str = "abd-progress";
 pub(crate) const PREVIEW_EVENT: &str = "abd-preview";
-pub(crate) const TOKEN_EVENT: &str = "abd-token-needed";
 
 /// A dry-run listing is good for this long.
 pub(crate) const PREVIEW_TTL: Duration = Duration::from_secs(30 * 60);
@@ -319,6 +318,14 @@ pub struct AbdState {
 impl AbdState {
     pub(crate) fn handle(&self, account: &str) -> Option<Arc<JobHandle>> {
         lock(&self.jobs).get(account).cloned()
+    }
+
+    /// The app wrote credentials (a new sign-in, maybe): every job waiting for
+    /// a token looks again now rather than at its next retry.
+    pub(crate) fn wake_token_waits(&self) {
+        for handle in lock(&self.jobs).values() {
+            handle.wake_if_parked(Parked::Token);
+        }
     }
 
     pub(crate) fn mirror(&self, account: &str) -> Option<String> {
@@ -970,9 +977,10 @@ impl Rt {
         let st = &self.state;
         match reason {
             PauseReason::SignInNeeded => {
-                // The daemon renews the token itself first; only a refresh
-                // that failed asks the app (Graph and OAuth IMAP). Password
-                // and JMAP accounts sign in with what the keychain holds.
+                // The daemon renews the token itself first (Graph and OAuth
+                // IMAP); after a renewal that failed the job waits for a new
+                // sign-in (`oauth2.credentials_changed` wakes it) or its retry.
+                // Password and JMAP accounts sign in with what the keychain holds.
                 if matches!(self.kind, Kind::Graph | Kind::ImapOauth) {
                     let refused = st.abd.tokens.get(&account).map(|l| l.token);
                     if let Some(token) = refused.as_deref() {
@@ -987,8 +995,6 @@ impl Rt {
                         return;
                     }
 
-                    let provider = if self.kind == Kind::Graph { "graph" } else { "imap_oauth" };
-                    st.events.emit(TOKEN_EVENT, json!({"accountId": account, "jobId": job.job_id, "provider": provider}));
                 }
                 let used = self.used_seq.get();
                 match self.kind {
