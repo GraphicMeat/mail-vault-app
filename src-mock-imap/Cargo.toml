@@ -9,7 +9,12 @@ publish = false
 name = "mock-imap-server"
 path = "src/bin/server.rs"
 
+[[bin]]
+name = "mock-oauth-server"
+path = "src/bin/oauth_server.rs"
+
 [dependencies]
+base64 = "0.22"
 chrono = "0.4"
 mailparse = "0.15"
 serde = { version = "1.0", features = ["derive"] }

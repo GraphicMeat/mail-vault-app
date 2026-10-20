@@ -210,6 +210,12 @@ pub struct Scenario {
     /// Greeting line sent on connect. Default: `* OK MockIMAP ready`
     pub greeting: Option<String>,
     pub smtp: SmtpScenario,
+    /// A mock token endpoint (`oauth::MockOAuth`) in another process: XOAUTH2
+    /// sign-ins are accepted only with a token it issued and that has not
+    /// expired. The e2e harness sets it; in-process tests pass a check to
+    /// `MockImap::start_checked` instead.
+    #[serde(rename = "tokenCheckOrigin")]
+    pub token_check_origin: Option<String>,
 }
 
 impl Scenario {
@@ -219,6 +225,7 @@ impl Scenario {
             faults: vec![],
             greeting: None,
             smtp: SmtpScenario::default(),
+            token_check_origin: None,
         }
     }
 

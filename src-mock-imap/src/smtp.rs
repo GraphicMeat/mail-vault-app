@@ -42,6 +42,7 @@ pub(crate) fn start(
     config: SmtpScenario,
     stop: Arc<AtomicBool>,
     recorder: Arc<SmtpRecorder>,
+    check: Option<Arc<dyn crate::oauth::TokenCheck>>,
 ) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock smtp");
     let addr = listener.local_addr().expect("smtp local_addr");
@@ -52,9 +53,9 @@ pub(crate) fn start(
                 break;
             }
             let Ok(conn) = conn else { continue };
-            let (config, recorder) = (config.clone(), recorder.clone());
+            let (config, recorder, check) = (config.clone(), recorder.clone(), check.clone());
             std::thread::spawn(move || {
-                let _ = handle_conn(conn, config, recorder);
+                let _ = handle_conn(conn, config, recorder, check);
             });
         }
     });
@@ -66,6 +67,7 @@ fn handle_conn(
     conn: TcpStream,
     config: SmtpScenario,
     recorder: Arc<SmtpRecorder>,
+    check: Option<Arc<dyn crate::oauth::TokenCheck>>,
 ) -> std::io::Result<()> {
     conn.set_nodelay(true)?;
     let mut out = conn.try_clone()?;
@@ -100,13 +102,13 @@ fn handle_conn(
                     b"250-mock.test\r\n\
                       250-8BITMIME\r\n\
                       250-SMTPUTF8\r\n\
-                      250-AUTH PLAIN LOGIN\r\n\
+                      250-AUTH PLAIN LOGIN XOAUTH2\r\n\
                       250 HELP\r\n",
                 )?;
                 out.flush()?;
             }
             "HELO" => reply(&mut out, "250 mock.test")?,
-            "AUTH" => authenticate(&mut reader, &mut out, &rest, &recorder)?,
+            "AUTH" => authenticate(&mut reader, &mut out, &rest, &recorder, check.as_deref())?,
             "MAIL" => {
                 recipients.clear();
                 reply(&mut out, "250 2.1.0 Ok")?;
@@ -157,10 +159,36 @@ fn authenticate(
     out: &mut TcpStream,
     rest: &str,
     recorder: &Arc<SmtpRecorder>,
+    check: Option<&dyn crate::oauth::TokenCheck>,
 ) -> std::io::Result<()> {
     let mut parts = rest.split_whitespace();
     let mechanism = parts.next().unwrap_or("").to_uppercase();
     let initial = parts.next();
+
+    // XOAUTH2: the initial response carries the bearer token. With a check on,
+    // only a token it accepts signs in (535 otherwise, as Gmail answers).
+    if mechanism == "XOAUTH2" {
+        let blob = match initial {
+            Some(b) => b.to_string(),
+            None => {
+                reply(out, "334 ")?;
+                match read_command(reader)? {
+                    Some(answer) => answer,
+                    None => return Ok(()),
+                }
+            }
+        };
+        let accepted = match (check, crate::oauth::parse_xoauth2(&blob)) {
+            (None, _) => true,
+            (Some(check), Some((user, token))) => check.check("smtp", &user, &token),
+            (Some(_), None) => false,
+        };
+        return if accepted {
+            reply(out, "235 2.7.0 Authentication successful")
+        } else {
+            reply(out, "535 5.7.8 Username and Password not accepted")
+        };
+    }
 
     let challenges = match mechanism.as_str() {
         // `AUTH PLAIN <blob>` is done in one line; a bare `AUTH PLAIN` needs one.

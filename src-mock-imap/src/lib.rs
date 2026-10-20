@@ -18,6 +18,7 @@
 
 pub mod commands;
 pub mod encode;
+pub mod oauth;
 pub mod scenario;
 mod smtp;
 pub mod state;
@@ -51,6 +52,22 @@ pub struct MockImap {
 
 impl MockImap {
     pub fn start(scenario: Scenario) -> MockImap {
+        let check = scenario
+            .token_check_origin
+            .clone()
+            .map(|origin| Arc::new(oauth::RemoteTokenCheck { origin }) as Arc<dyn oauth::TokenCheck>);
+        Self::start_with(scenario, check)
+    }
+
+    /// `start`, with XOAUTH2 sign-ins (IMAP and SMTP) accepted only when
+    /// `check` accepts the bearer token, and a session whose token stopped
+    /// being valid (expired, revoked) dropped at its next command, as a
+    /// provider does when it notices.
+    pub fn start_checked(scenario: Scenario, check: Arc<dyn oauth::TokenCheck>) -> MockImap {
+        Self::start_with(scenario, Some(check))
+    }
+
+    fn start_with(scenario: Scenario, check: Option<Arc<dyn oauth::TokenCheck>>) -> MockImap {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock imap");
         let addr = listener.local_addr().expect("local_addr");
         let state = Arc::new(Mutex::new(scenario.state.clone()));
@@ -61,7 +78,7 @@ impl MockImap {
         let peak = Arc::new(AtomicUsize::new(0));
         let counts: Arc<Mutex<HashMap<String, usize>>> = Arc::new(Mutex::new(HashMap::new()));
         let smtp_recorder = Arc::new(smtp::SmtpRecorder::new());
-        let smtp_addr = smtp::start(scenario.smtp.clone(), stop.clone(), smtp_recorder.clone());
+        let smtp_addr = smtp::start(scenario.smtp.clone(), stop.clone(), smtp_recorder.clone(), check.clone());
 
         {
             let state = state.clone();
@@ -70,6 +87,7 @@ impl MockImap {
             let connections = connections.clone();
             let (live, peak) = (live.clone(), peak.clone());
             let faults = scenario.faults.clone();
+            let check = check.clone();
             let greeting = scenario
                 .greeting
                 .clone()
@@ -84,15 +102,16 @@ impl MockImap {
                     let conn_no = connections.fetch_add(1, Ordering::SeqCst) + 1;
                     peak.fetch_max(live.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
                     let open = Open(live.clone());
-                    let (state, log, faults, counts, greeting) = (
+                    let (state, log, faults, counts, greeting, check) = (
                         state.clone(),
                         log.clone(),
                         faults.clone(),
                         counts.clone(),
                         greeting.clone(),
+                        check.clone(),
                     );
                     std::thread::spawn(move || {
-                        let _ = handle_conn(conn, state, log, faults, counts, greeting, open, conn_no);
+                        let _ = handle_conn(conn, state, log, faults, counts, greeting, open, conn_no, check);
                     });
                 }
             });
@@ -206,7 +225,10 @@ fn handle_conn(
     greeting: String,
     open: Open,
     conn_no: usize,
+    check: Option<Arc<dyn oauth::TokenCheck>>,
 ) -> std::io::Result<()> {
+    // The bearer token this session signed in with, when a check is on.
+    let mut signed_in_with: Option<(String, String)> = None;
     let mut open = Some(open);
     conn.set_nodelay(true)?;
     let mut out = conn.try_clone()?;
@@ -259,11 +281,39 @@ fn handle_conn(
         };
         cmd.literal = literal;
 
+        // A token that stopped being valid (expired, revoked) ends the session
+        // at its next command, when the check says the provider does that.
+        if let (Some(check), Some((_, token))) = (&check, &signed_in_with) {
+            if check.ends_session(token) {
+                write_line(&mut out, b"* BYE Session invalidated - AccessTokenExpired")?;
+                return Ok(());
+            }
+        }
+
         // AUTHENTICATE needs a continuation round-trip before it can be dispatched.
         if cmd.name == "AUTHENTICATE" {
             write_line(&mut out, b"+ ")?;
             let mut blob = String::new();
             reader.read_line(&mut blob)?;
+            if let Some(check) = &check {
+                let accepted = match oauth::parse_xoauth2(&blob) {
+                    Some((user, token)) => {
+                        let ok = check.check("imap", &user, &token);
+                        if ok {
+                            signed_in_with = Some((user, token));
+                        }
+                        ok
+                    }
+                    None => false,
+                };
+                if !accepted {
+                    write_line(
+                        &mut out,
+                        format!("{} NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)", cmd.tag).as_bytes(),
+                    )?;
+                    continue;
+                }
+            }
             sess.authenticated = true;
             write_line(
                 &mut out,
