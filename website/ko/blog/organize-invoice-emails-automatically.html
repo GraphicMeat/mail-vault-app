@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>청구서 이메일을 자동으로 정리하는 방법 - MailVault 블로그</title>
+  <meta name="description" content="태그와 검증한 자동 태그 규칙으로 청구서 이메일을 정리합니다. 일치 항목을 미리 보고, 이전 메일을 분류하고, 메시지를 이동하지 않고 월별 보기를 만듭니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/organize-invoice-emails-automatically.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/organize-invoice-emails-automatically.html">
+  <meta property="og:title" content="청구서 이메일을 자동으로 정리하는 방법">
+  <meta property="og:description" content="태그와 검증한 자동 태그 규칙으로 청구서 이메일을 정리합니다. 일치 항목을 미리 보고, 이전 메일을 분류하고, 메시지를 이동하지 않고 월별 보기를 만듭니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="청구서 이메일을 자동으로 정리하는 방법">
+  <meta name="twitter:description" content="태그와 검증한 자동 태그 규칙으로 청구서 이메일을 정리합니다. 일치 항목을 미리 보고, 이전 메일을 분류하고, 메시지를 이동하지 않고 월별 보기를 만듭니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "청구서 이메일을 자동으로 정리하는 방법",
+  "description": "태그와 검증한 자동 태그 규칙으로 청구서 이메일을 정리합니다. 일치 항목을 미리 보고, 이전 메일을 분류하고, 메시지를 이동하지 않고 월별 보기를 만듭니다.",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com/ko/"
+  },
+  "mainEntityOfPage": "https://mailvaultapp.com/ko/blog/organize-invoice-emails-automatically.html",
+  "image": "https://mailvaultapp.com/screenshots/settings-auto-tags-detail-light-1792.webp",
+  "inLanguage": "ko"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/organize-invoice-emails-automatically.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault 홈"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 제공</a></div>
+      <nav class="mv-navlinks" aria-label="기본 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="GitHub에서 MailVault에 Star 주기" title="GitHub에서 MailVault에 Star 주기"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="MailVault에 하트 보내기" title="MailVault에 하트 보내기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="언어 선택"><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/organize-invoice-emails-automatically.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/organize-invoice-emails-automatically.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/organize-invoice-emails-automatically.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/organize-invoice-emails-automatically.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/organize-invoice-emails-automatically.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/organize-invoice-emails-automatically.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/organize-invoice-emails-automatically.html" lang="ko" hreflang="ko" translate="no" aria-current="page">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/organize-invoice-emails-automatically.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/organize-invoice-emails-automatically.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="색상 테마 전환" title="색상 테마 전환">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">메뉴</span></summary><nav aria-label="모바일 탐색"><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/faq.html">FAQ</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">무료 다운로드</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>색상 테마 전환</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-20" class="text-sm text-primary-500 font-medium">2026년 10월 20일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">청구서 이메일을 자동으로 정리하는 방법</h1>
+          <p class="text-sm text-slate-500">MailVault 작성 · 읽는 시간 4분</p>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+<p>구매한 물품의 청구서가 필요한데 이메일에 표시된 이름이 공급업체 이름과 다릅니다. 영수증은 다른 계정으로 왔습니다. 실제로 필요한 문서보다 배송 안내가 먼저 보입니다. 다시 검색하면 결국 찾을 수 있지만 다음 달에도 같은 일을 반복하게 됩니다.</p>
+<p><strong>청구서 이메일을 자동으로 정리하려면 태그 하나를 고르고, 범위를 좁힌 규칙을 만들고, 일치 항목을 미리 본 다음 해당 태그로 결과를 모읍니다.</strong> MailVault의 자동 태그는 일치하는 메일이 도착할 때 태그를 붙일 수 있습니다. 이전 메일은 별도로 검토하고 모아 볼 수 있는 저장된 보기를 만들 수 있습니다.</p>
+<p>필요한 변화는 작습니다. 나중에 이 메시지를 어떻게 찾을지 정한 다음 새 메일이 도착할 때 그 태그가 붙도록 합니다.</p>
+<nav aria-label="이 글의 내용"><p><a href="#choose">태그 선택</a> · <a href="#rule">규칙 만들기</a> · <a href="#preview">일치 항목 확인</a> · <a href="#collect">결과 모으기</a></p></nav>
+<h2 id="choose">1. 청구서에 일관된 태그 하나 붙이기</h2>
+<p><strong>청구서</strong> 또는 <strong>영수증</strong>으로 시작합니다. 둘 다 필요하다면 각각의 의미를 정합니다. 청구서는 결제를 요청하고, 영수증은 구매나 결제를 기록합니다. 청구서라는 태그를 아무 설명 없이 결제 완료라는 뜻으로 쓰면 안 됩니다.</p>
+<p>먼저 내용을 아는 메시지 몇 개에 <a href="/ko/features/tags.html">수동 태그</a>를 붙입니다. 공급업체 청구서, 구매 영수증, 관련 없는 알림을 하나씩 고릅니다. 이 예시를 기준으로 규칙의 결과를 구체적으로 비교할 수 있습니다.</p>
+<h2 id="rule">2. 앱이 확인할 수 있는 정보로 규칙 만들기</h2>
+<p><strong>설정 → 자동 태그 → 새 규칙</strong>을 엽니다. 규칙의 이름을 정하고 적용할 태그를 선택하거나 만든 후 다음과 같은 지시를 입력합니다.</p>
+<blockquote><p>구매 청구서와 영수증에 태그를 붙입니다. 발송 안내, 배송 완료 확인, 홍보 제안은 제외합니다.</p></blockquote>
+<p><strong>조건 좁히기 (선택)</strong>에서 정확한 보낸 사람 주소, 보낸 사람 도메인, 제목 조건을 알고 있다면 추가합니다. 정기적으로 거래하는 공급업체 한 곳이라면 보낸 사람 조건과 제목에 “청구서”가 포함된다는 조건부터 시작할 수 있습니다. 원하는 모든 청구서에 첨부 파일이 있는 것이 아니라면 첨부 파일을 필수 조건으로 두지 않습니다. 문서를 링크로 제공하는 공급업체도 있습니다.</p>
+<p><strong>자동 태그가 확인하는 정보는 보낸 사람, 제목, 메일함, 첨부 파일 유무입니다. 메시지 본문이나 첨부된 PDF는 읽지 않습니다.</strong> 청구 총액, PDF에 적힌 결제 기한, 청구서의 결제 여부를 지시에 넣으면 규칙이 갖고 있지 않은 정보를 추론하도록 요구하는 셈입니다.</p>
+<p>시험하는 동안에는 <strong>받은 편지함에서 → 받은 편지함에 유지</strong>를 유지합니다. 평소 메일을 읽는 방식을 바꾸지 않고 규칙으로 태그를 붙일 수 있습니다.</p>
+<figure class="mv-search-diagram"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-auto-tags-detail-720.webp 720w, /screenshots/ko/settings-auto-tags-detail-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/ko/settings-auto-tags-detail-light-1792.webp" srcset="/screenshots/ko/settings-auto-tags-detail-light-720.webp 720w, /screenshots/ko/settings-auto-tags-detail-light-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px" width="896" height="309" loading="lazy" decoding="async" alt="영수증 규칙, 활성화 스위치, 새 규칙 버튼이 표시된 자동 태그 설정 · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture><figcaption>규칙에는 지시, 태그, 받은 편지함 동작이 함께 저장됩니다. 결과를 확인하는 동안에는 받은 편지함에 유지로 시작합니다.</figcaption></figure>
+<h2 id="preview">3. 활성화하기 전에 미리 보기</h2>
+<p>확인할 계정을 선택하고 <strong>미리보기</strong>를 누릅니다. 태그를 적용하지 않고 어떤 메시지가 일치하는지 보여 줍니다. 배송 안내가 청구서로 포함되는지, 제목이 모호한 실제 청구서가 누락되는지 두 가지 오류를 확인합니다.</p>
+<p>조건을 한 번에 하나씩 조정하고 다시 미리 봅니다. <strong>판단할 수 없음</strong>이 표시되면 규칙이 준비되었다고 판단하기 전에 AI 설정을 확인합니다. 자연어 규칙에는 정상적으로 작동하는 모델이 필요합니다. 정확한 조건으로 후보를 먼저 좁힌 후 모델이 평가합니다. 사용할 수 있는 옵션은 <a href="/ko/ai-setup.html">AI 설정 가이드</a>에서 설명합니다.</p>
+<p>규칙은 기본적으로 기기 내에서 처리됩니다. 원격 제공업체를 선택하면 후보 메타데이터의 처리 위치가 바뀌므로 규칙 설정에서 이 선택을 확인합니다. 분류가 애매한 메시지에는 언제든 직접 태그를 붙일 수 있습니다.</p>
+<p>일치 항목이 적절하면 규칙을 저장하고 활성화합니다. 미리보기는 표본이므로 이후 처음 도착하는 새 청구서도 확인합니다.</p>
+<h2 id="collect">4. 이전 청구서도 같은 목록에 모으기</h2>
+<p><strong>소급 적용</strong>을 사용하면 선택한 계정의 이전 메일에도 저장된 규칙을 적용할 수 있습니다. 모은 메일을 인계에 활용하기 전에 결과를 확인합니다. 규칙 범위가 너무 넓었다면 MailVault에서 이전 메일에 적용한 작업을 취소할 수 있습니다.</p>
+<p>월별 검토를 위해 청구서 태그와 필요한 날짜 범위로 필터링한 <a href="/ko/features/saved-views.html">저장된 보기</a>를 만듭니다. 보기는 원본 메시지를 이동하지 않고 여러 계정의 일치 항목을 모을 수 있습니다. 기본 보기를 포함해 저장된 보기 3개가 무료로 제공되며, Premium에서는 더 많이 사용할 수 있습니다.</p>
+<figure class="mv-search-diagram"><video controls playsinline preload="none" width="960" height="660" poster="/assets/clips/ko/tagging-rules.jpg" aria-label="MailVault 태그 규칙 시연 · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ko/tagging-rules.mp4" type="video/mp4"><a href="/assets/clips/ko/tagging-rules.mp4">짧은 시연 보기</a>.</video><figcaption id="clip-description">약 5초, 소리 없음. 자연어 규칙이 있는 자동 태그를 엽니다. 받은 편지함으로 전환하면 청구서 2026-0471에 청구서 태그가 붙어 있습니다. 영상은 규칙과 태그가 적용된 결과를 보여 주며, 미리보기나 설정 단계는 보여 주지 않습니다.</figcaption></figure>
+<h2 id="limits">이 작업 흐름으로 확인할 수 있는 것과 없는 것</h2>
+<p>자동 태그와 수동 태그 지정은 무료입니다. 태그는 메시지를 모으기 쉽게 만들지만 공급업체 확인, 결제 승인, 회계 항목 추출은 하지 않습니다. 세부 내용이 중요하면 원본 메시지와 문서를 열어 확인합니다. 태그를 붙여도 별도의 독립적인 백업은 만들어지지 않습니다.</p>
+<p>이전 청구서가 보이지 않으면 규칙의 제목 및 보낸 사람 조건, 선택한 계정, 로컬에서 사용할 수 있는 메일을 확인합니다. 한 번만 찾으려면 별도 가이드인 <a href="/ko/blog/how-to-search-thousands-of-emails-fast.html">대용량 이메일 아카이브 검색 방법</a>을 참고합니다. 문서를 보존하려면 <a href="/ko/guides/email-archiving-for-freelancers.html">프리랜서를 위한 이메일 보관 가이드</a>를 따릅니다.</p>
+<p>공급업체 한 곳과 소수의 메시지로 시작합니다. 결과를 신뢰할 수 있게 되면 규칙을 확장합니다. 목표는 다음 달에 바로 열어 볼 수 있을 만큼 믿을 수 있는 목록을 만드는 것입니다.</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-slate-50 border border-slate-200">
+            <p class="font-semibold text-slate-900 mb-3">다음 달 청구서를 더 쉽게 찾을 수 있도록 합니다.</p>
+            <p class="text-sm mb-4">MailVault에서 이 작업 흐름을 사용해 볼 수 있습니다. macOS, Windows, Linux를 지원합니다.</p>
+            <div class="flex flex-wrap gap-3">
+              <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/ko/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="organize-invoice-emails-automatically" data-acquisition-destination="download">MailVault 무료 다운로드</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ko" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="organize-invoice-emails-automatically" data-acquisition-destination="demo">데모 살펴보기 ↗</a>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何自动整理账单邮件 - MailVault博客</title>
+  <meta name="description" content="使用标签和经过验证的自动标签规则整理账单邮件。预览匹配结果，整理旧邮件，创建月度视图，无需移动邮件。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/organize-invoice-emails-automatically.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/organize-invoice-emails-automatically.html">
+  <meta property="og:title" content="如何自动整理账单邮件">
+  <meta property="og:description" content="使用标签和经过验证的自动标签规则整理账单邮件。预览匹配结果，整理旧邮件，创建月度视图，无需移动邮件。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="如何自动整理账单邮件">
+  <meta name="twitter:description" content="使用标签和经过验证的自动标签规则整理账单邮件。预览匹配结果，整理旧邮件，创建月度视图，无需移动邮件。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "如何自动整理账单邮件",
+  "description": "使用标签和经过验证的自动标签规则整理账单邮件。预览匹配结果，整理旧邮件，创建月度视图，无需移动邮件。",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com/zh/"
+  },
+  "mainEntityOfPage": "https://mailvaultapp.com/zh/blog/organize-invoice-emails-automatically.html",
+  "image": "https://mailvaultapp.com/screenshots/settings-auto-tags-detail-light-1792.webp",
+  "inLanguage": "zh-Hans"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/organize-invoice-emails-automatically.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/organize-invoice-emails-automatically.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+      <nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="选择语言"><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/organize-invoice-emails-automatically.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/organize-invoice-emails-automatically.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/organize-invoice-emails-automatically.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/organize-invoice-emails-automatically.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/organize-invoice-emails-automatically.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/organize-invoice-emails-automatically.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/organize-invoice-emails-automatically.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/organize-invoice-emails-automatically.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/organize-invoice-emails-automatically.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary><nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-20" class="text-sm text-primary-500 font-medium">2026年10月20日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何自动整理账单邮件</h1>
+          <p class="text-sm text-slate-500">作者：MailVault · 阅读需 4 分钟</p>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+<p>你需要某次采购的账单，却发现邮件里的名称不是供应商名称。收据发到了另一个账户。先找到的是配送更新，而不是实际需要的文件。反复搜索，最终总能找到，但下个月你还得再找一遍。</p>
+<p><strong>要自动整理账单邮件，先选一个标签，创建范围明确的规则，预览匹配结果，再用该标签汇集邮件。</strong>在MailVault中，自动标签可以在匹配邮件到达时为其加上标签。你可以单独检查旧邮件，并创建已保存视图来查看这组邮件。</p>
+<p>只需做一个小改变：先决定日后要如何找到这些邮件，再让新邮件到达时就带上相应标签。</p>
+<nav aria-label="本文内容"><p><a href="#choose">选择标签</a> · <a href="#rule">创建规则</a> · <a href="#preview">检查匹配项</a> · <a href="#collect">汇集结果</a></p></nav>
+<h2 id="choose">1. 给账单使用一个统一的标签</h2>
+<p>从<strong>账单</strong>或<strong>收据</strong>开始。如果两者都需要，先明确各自的含义：账单要求付款，收据记录购买或付款。名为“账单”的标签不应在没有说明的情况下代表“已付款”。</p>
+<p>先对几封内容明确的邮件添加<a href="/zh/features/tags.html">手动标签</a>。选择一封供应商账单、一封购物收据和一封无关通知。这些示例可以作为具体参照，用来比较规则的输出结果。</p>
+<h2 id="rule">2. 用应用能查看的信息创建规则</h2>
+<p>打开<strong>设置 → 自动标签 → 新建规则</strong>。为规则命名，选择或创建要应用的标签，再输入类似下面的指令：</p>
+<blockquote><p>为采购账单和收据添加标签。排除发货更新、配送确认和促销优惠。</p></blockquote>
+<p>在<strong>缩小范围(可选)</strong>中，添加已知的准确发件人地址、发件人域名或主题条件。对于固定的供应商，可以先设置发件人条件，再加上主题包含“账单”的条件。除非你需要的每封账单邮件确实都有附件，否则不要将附件设为必需条件：有些供应商会通过链接提供文件。</p>
+<p><strong>自动标签只查看发件人、主题、邮箱和是否有附件，不会读取邮件正文或附带的PDF。</strong>如果指令涉及账单总额、PDF内的到期日或账单是否已付，就是要求规则推断它无法获得的信息。</p>
+<p>测试时保持<strong>在收件箱中 → 保留在收件箱</strong>。规则可以给邮件加标签，而不改变你平时阅读邮件的习惯。</p>
+<figure class="mv-search-diagram"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/settings-auto-tags-detail-720.webp 720w, /screenshots/zh/settings-auto-tags-detail-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/zh/settings-auto-tags-detail-light-1792.webp" srcset="/screenshots/zh/settings-auto-tags-detail-light-720.webp 720w, /screenshots/zh/settings-auto-tags-detail-light-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px" width="896" height="309" loading="lazy" decoding="async" alt="自动标签设置，显示收据规则、启用开关和新建规则按钮 · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture><figcaption>规则将指令、标签和收件箱处理方式保存在一起。检查结果期间，先使用“保留在收件箱”。</figcaption></figure>
+<h2 id="preview">3. 启用前先预览</h2>
+<p>选择要检查的账户，点击<strong>预览</strong>。它只显示哪些邮件会匹配，不会实际添加标签。留意两类错误：配送更新被当作账单，以及真正的账单因为主题不明确而被漏掉。</p>
+<p>每次调整一个条件，再次预览。如果显示<strong>无法判断</strong>，先检查AI设置，不要直接认为规则已可用。自然语言规则需要正常工作的模型；精确条件会先缩小候选范围，再交由模型判断。可用选项见<a href="/zh/ai-setup.html">AI设置指南</a>。</p>
+<p>规则默认在设备上处理。选择远程服务商会改变候选邮件元数据的处理位置，请在规则设置中确认这一选择。对于含糊的邮件，你随时可以手动添加标签。</p>
+<p>匹配结果合适后，保存并启用规则。预览只是抽样，所以也要检查启用后最先收到的新账单。</p>
+<h2 id="collect">4. 将旧账单汇入同一组邮件</h2>
+<p>使用<strong>回溯处理</strong>，将保存的规则应用到所选账户的历史邮件。在把这组邮件用于交接之前，请检查结果。如果规则范围太宽，MailVault支持撤销这次历史邮件处理。</p>
+<p>要按月检查，可创建一个按账单标签和所需日期范围筛选的<a href="/zh/features/saved-views.html">已保存视图</a>。视图能跨账户汇集匹配项，而不移动原邮件。免费提供3个已保存视图，预置视图也计入其中；Premium允许更多视图。</p>
+<figure class="mv-search-diagram"><video controls playsinline preload="none" width="960" height="660" poster="/assets/clips/zh/tagging-rules.jpg" aria-label="MailVault标签规则演示 · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/tagging-rules.mp4" type="video/mp4"><a href="/assets/clips/zh/tagging-rules.mp4">观看简短演示</a>.</video><figcaption id="clip-description">约5秒，无音频。打开自动标签，其中有一条自然语言规则。视频切换到收件箱，“账单 2026-0471”带有“账单”标签。视频展示的是规则和已加标签的结果，不包含预览或设置步骤。</figcaption></figure>
+<h2 id="limits">这套流程能确认什么，不能确认什么</h2>
+<p>自动标签和手动标签均免费。标签让邮件更容易汇集，但不会核验供应商、批准付款或提取会计字段。细节重要时，请打开原邮件和文档核对。添加标签也不会创建独立备份。</p>
+<p>如果缺少旧账单，请检查规则的主题和发件人条件、所选账户，以及本地可用的邮件。如果只是偶尔查找一次，可参阅单独的<a href="/zh/blog/how-to-search-thousands-of-emails-fast.html">大型邮件归档搜索指南</a>。有关文档保存，请参阅<a href="/zh/guides/email-archiving-for-freelancers.html">自由职业者邮件归档指南</a>。</p>
+<p>先从一个供应商和少量邮件开始。结果可靠后，再扩大规则范围。目标是得到一组值得信赖的邮件，下个月可以直接打开查看。</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-slate-50 border border-slate-200">
+            <p class="font-semibold text-slate-900 mb-3">让下个月的账单更容易找到。</p>
+            <p class="text-sm mb-4">在MailVault中试试这套流程。支持macOS、Windows和Linux。</p>
+            <div class="flex flex-wrap gap-3">
+              <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/zh/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="organize-invoice-emails-automatically" data-acquisition-destination="download">免费下载 MailVault</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="organize-invoice-emails-automatically" data-acquisition-destination="demo">体验演示 ↗</a>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

@@ -55,10 +55,6 @@ const EXCLUDE = new Set([
   'terms.html',
   'download-stats.html',
   'oauth/yahoo/callback.html',
-  // English workflow articles; add translations before including in sourcePages.
-  'blog/organize-invoice-emails-automatically.html',
-  'blog/email-templates-for-client-replies.html',
-  'blog/find-emails-you-havent-replied-to.html',
 ]);
 
 const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
@@ -558,6 +554,8 @@ export function render(html, pageRel, loc, dict) {
     let data;
     try { data = JSON.parse(ld.raw); } catch { continue; }
     const out = walkLd(data, null, tr);
+    // Language identifiers are not prose, but must follow the translated page.
+    if (typeof out?.inLanguage === 'string') out.inLanguage = loc.htmlLang;
     // walkLd deliberately leaves URLs alone as *strings*; they still have to point
     // at this locale's copy, or the structured data declares the German page to be
     // the English one.
@@ -967,9 +965,6 @@ const SITEMAP = path.join(ROOT, 'sitemap.xml');
 // English-only pages that are still worth indexing (EXCLUDE keeps them out of translation).
 const SITEMAP_EXTRA = [
   'changelog.html', 'privacy.html', 'terms.html',
-  'blog/organize-invoice-emails-automatically.html',
-  'blog/email-templates-for-client-replies.html',
-  'blog/find-emails-you-havent-replied-to.html',
 ];
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();

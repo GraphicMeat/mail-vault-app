@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何找出尚未回复的邮件 - MailVault博客</title>
+  <meta name="description" content="使用MailVault的待回复视图查找尚未回复的邮件。了解其30天范围，检查回复标记，并单独管理长期跟进清单。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/find-emails-you-havent-replied-to.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/find-emails-you-havent-replied-to.html">
+  <meta property="og:title" content="如何找出尚未回复的邮件">
+  <meta property="og:description" content="使用MailVault的待回复视图查找尚未回复的邮件。了解其30天范围，检查回复标记，并单独管理长期跟进清单。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="如何找出尚未回复的邮件">
+  <meta name="twitter:description" content="使用MailVault的待回复视图查找尚未回复的邮件。了解其30天范围，检查回复标记，并单独管理长期跟进清单。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-content.css?v=4">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "如何找出尚未回复的邮件",
+  "description": "使用MailVault的待回复视图查找尚未回复的邮件。了解其30天范围，检查回复标记，并单独管理长期跟进清单。",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com/zh/"
+  },
+  "mainEntityOfPage": "https://mailvaultapp.com/zh/blog/find-emails-you-havent-replied-to.html",
+  "image": "https://mailvaultapp.com/screenshots/settings-views-detail-light-1708.webp",
+  "inLanguage": "zh-Hans"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/find-emails-you-havent-replied-to.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/find-emails-you-havent-replied-to.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+      <nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a></nav>
+      <div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+        <details class="mv-language" translate="no"><summary aria-label="选择语言"><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/find-emails-you-havent-replied-to.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/find-emails-you-havent-replied-to.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/find-emails-you-havent-replied-to.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/find-emails-you-havent-replied-to.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/find-emails-you-havent-replied-to.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/find-emails-you-havent-replied-to.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/find-emails-you-havent-replied-to.html" lang="ko" hreflang="ko" translate="no">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/find-emails-you-havent-replied-to.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/find-emails-you-havent-replied-to.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题">◐</button><a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+        <details class="mv-mobile-menu"><summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary><nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-10-20" class="text-sm text-primary-500 font-medium">2026年10月20日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何找出尚未回复的邮件</h1>
+          <p class="text-sm text-slate-500">作者：MailVault · 阅读需 4 分钟</p>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+<p>你在两场会议之间打开客户邮件，决定稍后回复，然后继续忙别的事。到了下午，它已经不再是未读邮件。未读数量看起来不多，但那个问题仍在等待答复。</p>
+<p><strong>要找出尚未回复的邮件，先使用按回复状态筛选的视图，再检查实际对话。</strong>MailVault预置的<strong>待回复</strong>视图会汇集近期发给你、且未标记为已回复的邮件。它使用电脑上已建立索引的邮件，可跨已连接的账户显示结果。</p>
+<p>打开邮件和回复邮件是两件事。为未回复邮件建立独立的检查清单，就能看清这个区别。</p>
+<nav aria-label="本文内容"><p><a href="#open">打开视图</a> · <a href="#scope">了解范围</a> · <a href="#review">检查列表</a> · <a href="#follow-up">管理长期跟进</a></p></nav>
+<h2 id="open">从待回复视图开始</h2>
+<p>在侧边栏中打开<strong>视图 → 待回复</strong>。如果你重命名或删除了预置视图，请查看<strong>设置 → 视图</strong>。你可以在那里编辑现有视图，也可以将保存的搜索转为视图。</p>
+<p>依赖结果之前，先等待账户同步和本地索引更新完成。视图搜索的是MailVault当前可用的信息，无法证明尚未加载的账户或文件夹中没有未回复邮件。</p>
+<figure class="mv-search-diagram"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/settings-views-detail-720.webp 720w, /screenshots/zh/settings-views-detail-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/zh/settings-views-detail-light-1708.webp" srcset="/screenshots/zh/settings-views-detail-light-720.webp 720w, /screenshots/zh/settings-views-detail-light-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px" width="854" height="212" loading="lazy" decoding="async" alt="MailVault中的已保存视图：待回复、已加星标、附件，以及自定义的账单视图 · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture><figcaption>待回复是预置视图之一。这张截图还显示了自定义的账单视图；免费方案总共允许3个视图。</figcaption></figure>
+<h2 id="scope">默认列表包含什么</h2>
+<p>未修改的待回复预置视图会选出满足以下条件的邮件：</p>
+<ul><li>收件人包含你。</li><li>不是你发出的邮件。</li><li>未标记为已回复。</li><li>邮件位于最近<strong>30天</strong>内。</li><li>不在被识别为废纸篓、垃圾邮件或归档的文件夹中。</li></ul>
+<p>视图可以编辑，所以结果不符时请检查当前筛选条件。日期范围很重要：6周前的未回复请求，即使仍需处理，也不在默认视图范围内。</p>
+<p><strong>待回复使用邮件的已回复标记，并不会推断整段对话是否已解决。</strong>通知邮件可能根本不需要回复。如果你以新邮件的方式回复，或从未更新原邮件标记的其他应用回复，原邮件可能仍会留在列表中。已标记为回复的邮件，也可能包含你承诺但尚未完成的工作。</p>
+<figure class="mv-search-diagram"><video controls playsinline preload="none" width="960" height="660" poster="/assets/clips/zh/views.jpg" aria-label="MailVault已保存视图演示 · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/views.mp4" type="video/mp4"><a href="/assets/clips/zh/views.mp4">观看简短演示</a>.</video><figcaption id="clip-description">约5秒，无音频。在侧边栏选择附件，显示316封邮件。选择待回复，显示41封。随后视频返回附件视图。这些是演示数量，并不表示哪些邮件需要人工回复。</figcaption></figure>
+<h2 id="review">把结果变成每天的简短检查</h2>
+<ol><li><strong>打开原邮件并阅读对话。</strong>检查后续往来是否已经回答了问题。</li><li><strong>有答案时就回复。</strong>如果同样的说明反复出现，可以使用<a href="/zh/blog/email-templates-for-client-replies.html">已保存的回复模板</a>，并按对方的情况调整。</li><li><strong>还有工作未完成时，为邮件加星标。</strong>写好草稿或确认收到，并不代表任务已经完成。为仍需处理的事项保留自己的标记。</li><li><strong>也要检查已加星标视图。</strong>处理完毕后取消星标，不要用已读/未读代替已完成/未完成。</li></ol>
+<p>为星标约定一个固定含义，例如“我还有事情要做”。如果你已经用星标收藏喜欢的邮件，就改用专门的手动标签。只有清楚标记的含义，它才有帮助。</p>
+<h2 id="follow-up">在30天范围之外管理长期跟进</h2>
+<p>有些请求需要等待供应商回复、某个决定或更远的日期。对这些事项使用预置的<strong>已加星标</strong>视图：与待回复不同，它默认没有日期范围限制。如果你改用跟进标签，就创建一个按该标签筛选的已保存视图，并且不限制日期范围。</p>
+<p>你也可以在设置 → 视图中扩大待回复的日期范围。需要检查更早的未回复邮件时可以这样做，但列表会变长。与其把每封未回复邮件都当作必须完成的任务，单独维护一个任务清单通常更容易。</p>
+<p>已保存视图不会移动或复制原邮件。同一封邮件可以同时出现在待回复、已加星标和附件中。打开其他视图只会改变显示哪些邮件，不会改变邮件的存储位置。</p>
+<h2 id="missing">如果找不到预期的邮件</h2>
+<p>检查账户、日期范围、收件人、回复状态和文件夹。仅发送给邮件列表，或发送到MailVault未识别为你的地址的请求，可能不满足“发给我”的条件。已归档邮件会被预置视图的文件夹条件排除。放宽筛选条件或直接搜索该邮件，确认是哪项条件将其排除了。</p>
+<p>对于有明确截止日期的请求，请在平时使用的日历或任务系统中另外添加提醒。这个视图是检查工具，并不保证每项承诺都会在合适的时间出现。</p>
+<h2 id="free">免费包含哪些内容？</h2>
+<p>MailVault免费提供总计3个已保存视图，包括预置的待回复、已加星标和附件。你可以编辑或替换它们。如果已经有3个，请先删除不用的视图，再添加自定义视图，或使用Premium获得更多数量。删除视图只会移除保存的筛选条件，不会删除其中显示的邮件。</p>
+<p>更多筛选选项请参阅<a href="/zh/features/saved-views.html">已保存视图功能页</a>。每天检查时，先问自己两个问题：哪些还没回复？哪些已经回复，但仍有事情要做？</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-slate-50 border border-slate-200">
+            <p class="font-semibold text-slate-900 mb-3">把未回复邮件纳入每天的检查。</p>
+            <p class="text-sm mb-4">在MailVault中试试这套流程。支持macOS、Windows和Linux。</p>
+            <div class="flex flex-wrap gap-3">
+              <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/zh/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="download">免费下载 MailVault</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="demo">体验演示 ↗</a>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+  <script defer src="/assets/english-site.js?v=20261008-light"></script>
+</body>
+</html>

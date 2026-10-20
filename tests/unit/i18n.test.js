@@ -128,6 +128,15 @@ describe('render', () => {
     expect(out).toContain('&copy; 2026 MailVault. Alle Rechte vorbehalten.');
   });
 
+  it.each(LOCALES)('sets article structured-data language to $htmlLang', (locale) => {
+    const page = '<html lang="en"><head><script type="application/ld+json">'
+      + JSON.stringify({ '@context': 'https://schema.org', '@type': 'BlogPosting', inLanguage: 'en' })
+      + '</script></head></html>';
+    const out = render(page, 'blog/organize-invoice-emails-automatically.html', locale, {});
+    const data = JSON.parse(out.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1]);
+    expect(data.inLanguage).toBe(locale.htmlLang);
+  });
+
   it('translates JSON-LD prose and points its url at this locale', () => {
     const out = render(PAGE, 'pricing.html', de, dict({
       'Simple, Honest Pricing': 'Einfache, ehrliche Preise',
