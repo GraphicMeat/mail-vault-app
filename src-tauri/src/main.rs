@@ -514,8 +514,9 @@ fn read_settings_json() -> Result<String, String> {
 // Write frontend settings to JSON file on disk (replaces localStorage).
 // The daemon owns the file (`settings.replace`); this is safeStorage's
 // fallback for a daemon without `settings.*` or one it cannot reach. Kept for
-// one release. Atomic, refused unless a JSON object, under the daemon's lock.
-#[tauri::command]
+// one release. Atomic, refused unless a JSON object, under the daemon's lock;
+// off the main thread (an fsync, and up to 2s waiting for that lock).
+#[tauri::command(async)]
 fn write_settings_json(data: String) -> Result<(), String> {
     let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data dir: {}", e))?;

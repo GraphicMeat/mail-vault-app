@@ -209,13 +209,49 @@ fn rename_over(from: &Path, to: &Path) -> std::io::Result<()> {
     }
 }
 
+/// How long the daemon waits for the cross-process lock (the shell's
+/// fallback write holds it for one small write).
+const DAEMON_LOCK_WAIT: Duration = Duration::from_secs(10);
+/// How long the shell's fallback write waits: it runs for a window, and the
+/// app keeps the change queued and retries.
+const SHELL_LOCK_WAIT: Duration = Duration::from_secs(2);
+
 /// Holds `frontend-settings.json.lock` exclusively until dropped: the
-/// daemon's writes and the shell's fallback writes never interleave.
-fn lock_file(dir: &Path) -> std::io::Result<std::fs::File> {
+/// daemon's writes and the shell's fallback writes never interleave. `Err`
+/// only when another writer holds it past `wait`. A lock the filesystem
+/// cannot take (FAT/exFAT on a portable drive, some network homes) is not a
+/// reason to stop saving settings: `Ok(None)`, and the write goes ahead under
+/// the process's own lock, as every write did before there was this one.
+fn lock_file(dir: &Path, wait: Duration) -> std::io::Result<Option<std::fs::File>> {
     std::fs::create_dir_all(dir)?;
-    let file = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(dir.join(LOCK_NAME))?;
-    file.lock()?;
-    Ok(file)
+    let file = match std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(dir.join(LOCK_NAME)) {
+        Ok(f) => f,
+        Err(e) => {
+            lock_unsupported(&e);
+            return Ok(None);
+        }
+    };
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(Some(file)),
+            Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(std::fs::TryLockError::WouldBlock) => {
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "another writer holds the settings lock"));
+            }
+            Err(std::fs::TryLockError::Error(e)) => {
+                lock_unsupported(&e);
+                return Ok(None);
+            }
+        }
+    }
+}
+
+fn lock_unsupported(e: &std::io::Error) {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| warn!("settings: no file lock here ({e}); writing under the process lock only"));
 }
 
 pub struct SettingsDoc {
@@ -430,7 +466,7 @@ impl SettingsDoc {
 
     fn write_op(&self, base_version: Option<u64>, apply: impl FnOnce(&mut Value)) -> Result<Change, SettingsError> {
         let mut inner = self.lock();
-        let _file_lock = lock_file(&self.dir).map_err(|e| SettingsError::Io(e.to_string()))?;
+        let _file_lock = lock_file(&self.dir, DAEMON_LOCK_WAIT).map_err(|e| SettingsError::Io(e.to_string()))?;
         let (before, broken) = self.current(&mut inner)?;
         if let Some(base) = base_version {
             if base != inner.version {
@@ -549,6 +585,10 @@ const STALE_TEMP: Duration = Duration::from_secs(60);
 /// written atomically under the same lock the daemon takes. The error is a
 /// catalog key; the reason goes to the log.
 pub fn write_document(app_dir: &Path, data: &str) -> Result<(), String> {
+    write_document_waiting(app_dir, data, SHELL_LOCK_WAIT)
+}
+
+fn write_document_waiting(app_dir: &Path, data: &str, wait: Duration) -> Result<(), String> {
     match serde_json::from_str::<Value>(data) {
         Ok(v) if v.is_object() => {}
         _ => {
@@ -556,7 +596,7 @@ pub fn write_document(app_dir: &Path, data: &str) -> Result<(), String> {
             return Err(SettingsError::NotAnObject.catalog_key().to_string());
         }
     }
-    let result = lock_file(app_dir).and_then(|_lock| write_durable(&app_dir.join(FILE_NAME), data.as_bytes(), false));
+    let result = lock_file(app_dir, wait).and_then(|_lock| write_durable(&app_dir.join(FILE_NAME), data.as_bytes(), false));
     result.map_err(|e| {
         warn!("settings: fallback write failed, the file is unchanged: {e}");
         SettingsError::Io(e.to_string()).catalog_key().to_string()

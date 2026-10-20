@@ -374,6 +374,36 @@ fn a_broken_file_is_never_backed_up() {
     assert!(backups(d.path()).is_empty());
 }
 
+// ── the cross-process lock ──────────────────────────────────────────────────
+
+#[test]
+fn a_filesystem_without_the_lock_still_saves_settings() {
+    let d = dir();
+    // The lock file cannot be opened at all (a directory sits at its path):
+    // the same outcome as a filesystem that refuses advisory locks.
+    fs::create_dir(d.path().join(LOCK_NAME)).unwrap();
+    let doc = SettingsDoc::open(d.path());
+    doc.patch(&json!({"a": 1}), None).unwrap();
+    write_document(d.path(), &json!({"a": 1, "b": 2}).to_string()).unwrap();
+    assert_eq!(disk(d.path()), json!({"a": 1, "b": 2}));
+}
+
+#[test]
+fn a_held_lock_makes_the_shell_write_give_up_in_time_and_leave_the_file() {
+    let d = dir();
+    seed(d.path(), json!({"keep": "me"}));
+    let held = fs::OpenOptions::new().create(true).truncate(false).write(true).open(d.path().join(LOCK_NAME)).unwrap();
+    held.lock().unwrap();
+    let started = std::time::Instant::now();
+    let err = write_document_waiting(d.path(), "{\"keep\":\"you\"}", Duration::from_millis(200)).unwrap_err();
+    assert_eq!(err, "errors.settingsWriteFailed");
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert_eq!(disk(d.path()), json!({"keep": "me"}));
+    drop(held);
+    write_document(d.path(), "{\"keep\":\"you\"}").unwrap();
+    assert_eq!(disk(d.path()), json!({"keep": "you"}));
+}
+
 #[test]
 fn errors_name_catalog_keys() {
     assert_eq!(SettingsError::Conflict { current: 1 }.catalog_key(), "errors.settingsConflict");
