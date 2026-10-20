@@ -18,11 +18,17 @@ function host({ daemon = 'new', disk = {}, search = '' } = {}) {
     listeners: new Map(),
     failNextReplace: null,
     holdReplace: null,
+    // settings.get: 'ok', 'hang' (never answers), or an error to throw.
+    get: 'ok',
+    // read_settings_json: 'ok' or 'reject'.
+    shellRead: 'ok',
   };
   const daemonRpc = async ({ method, params }) => {
     if (h.daemon === 'down') throw 'errors.daemonUnavailable';
     if (h.daemon === 'old') throw 'errors.daemonOutdated';
     if (method === 'settings.get') {
+      if (h.get === 'hang') return new Promise(() => {});
+      if (h.get !== 'ok') throw h.get;
       const keys = params?.keys;
       const values = Object.fromEntries(Object.entries(h.disk).filter(([k]) => !keys || keys.includes(k)));
       return structuredClone({ values, version: h.version });
@@ -44,7 +50,10 @@ function host({ daemon = 'new', disk = {}, search = '' } = {}) {
   const invoke = vi.fn(async (cmd, args) => {
     h.calls.push(cmd === 'daemon_rpc' ? `daemon_rpc:${args.method}` : cmd);
     if (cmd === 'daemon_rpc') return daemonRpc(args);
-    if (cmd === 'read_settings_json') return JSON.stringify(h.disk);
+    if (cmd === 'read_settings_json') {
+      if (h.shellRead === 'reject') throw 'Failed to read settings: Permission denied (os error 13)';
+      return JSON.stringify(h.disk);
+    }
     if (cmd === 'write_settings_json') { h.disk = JSON.parse(args.data); return null; }
     return undefined;
   });
@@ -380,3 +389,64 @@ describe('safeStorage across windows', () => {
     await vi.waitFor(() => expect(h.disk[SETTINGS]).toEqual(blob({ a: 2 })));
   });
 });
+
+describe('safeStorage never writes before it has seen the document', () => {
+  beforeEach(() => { vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  function storeWithDefaults(name, defaults, version = 3) {
+    return {
+      persist: { getOptions: () => ({ name, version }), rehydrate: vi.fn(async () => {}) },
+      getInitialState: () => ({ ...defaults, act: () => {} }),
+      setState: vi.fn(),
+    };
+  }
+
+  it('a cold daemon and a failed shell read: the defaults a store writes never reach the file', async () => {
+    const saved = { [SETTINGS]: blob({ a: 5, b: 5, onboardingComplete: true }), [THEME]: blob({ theme: 'dark' }, 0) };
+    const h = host({ disk: saved });
+    h.get = 'hang';
+    h.shellRead = 'reject';
+    const { safeStorage, flushSafeStorage } = await load();
+    expect(await safeStorage.getItem(SETTINGS)).toBeNull();
+    // The daemon is up now, but its read fails; the store writes defaults plus one change.
+    h.get = 'errors.settingsWriteFailed';
+    safeStorage.setItem(SETTINGS, JSON.stringify(blob({ a: 1, b: 9 })));
+    await expect(flushSafeStorage()).rejects.toThrow('errors.settingsNotLoaded');
+    expect(h.calls).not.toContain('daemon_rpc:settings.replace');
+    expect(h.calls).not.toContain('write_settings_json');
+    expect(h.disk).toEqual(saved);
+  }, 10000);
+
+  it('once the document is read, the queued change lands on top of it, never instead of it', async () => {
+    const h = host({ disk: { [SETTINGS]: blob({ a: 5, b: 5, c: 5 }) } });
+    h.get = 'hang';
+    h.shellRead = 'reject';
+    const { safeStorage, flushSafeStorage, registerPersistedStore } = await load();
+    const store = storeWithDefaults(SETTINGS, { a: 1, b: 1, c: 1 });
+    registerPersistedStore(store);
+    expect(await safeStorage.getItem(SETTINGS)).toBeNull();
+    // Hydrated from nothing: the store holds its defaults; the user changes b.
+    safeStorage.setItem(SETTINGS, JSON.stringify(blob({ a: 1, b: 9, c: 1 })));
+    h.get = 'ok';
+    h.shellRead = 'ok';
+    await flushSafeStorage();
+    expect(h.disk[SETTINGS]).toEqual(blob({ a: 5, b: 9, c: 5 }));
+    // And the store takes the document in, through its own hydration.
+    expect(store.persist.rehydrate).toHaveBeenCalled();
+    expect(JSON.parse(await safeStorage.getItem(SETTINGS))).toEqual(blob({ a: 5, b: 9, c: 5 }));
+  }, 10000);
+
+  it('a queued change it cannot place over the document is dropped, the document kept', async () => {
+    const h = host({ disk: { 'mailvault-compose-session': [{ id: 'kept' }] } });
+    h.get = 'hang';
+    h.shellRead = 'reject';
+    const { safeStorage, flushSafeStorage } = await load();
+    expect(await safeStorage.getItem('mailvault-compose-session')).toBeNull();
+    safeStorage.setItem('mailvault-compose-session', JSON.stringify([]));
+    h.get = 'ok';
+    await flushSafeStorage();
+    expect(h.disk['mailvault-compose-session']).toEqual([{ id: 'kept' }]);
+  }, 10000);
+});
+

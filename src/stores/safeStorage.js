@@ -17,6 +17,10 @@
 // goes through the shell too. A shell write lays only the changed keys over
 // what is on disk now, so it never undoes another writer's keys.
 //
+// Nothing is written before this window has seen the document: a store that
+// hydrated from nothing holds its defaults, and those must never replace the
+// saved settings. Its queued change is laid over the document once one is read.
+//
 // Falls back to in-memory storage when Tauri is not available (dev browser).
 
 import { isChildWindow } from '../utils/privacy/isChildWindow';
@@ -27,6 +31,8 @@ const invoke = typeof window !== 'undefined' ? window.__TAURI__?.core?.invoke : 
 // daemon that does not know the method.
 const UNAVAILABLE = 'errors.daemonUnavailable';
 const OUTDATED = 'errors.daemonOutdated';
+// Refused because this window never saw the document (catalog key).
+const NOT_LOADED = 'errors.settingsNotLoaded';
 // How long a window waits for its first settings.get before reading the file
 // through the shell instead. A warm daemon answers in milliseconds; a cold
 // one is still starting, and the UI paints defaults until hydration, so the
@@ -103,24 +109,40 @@ function fill(values) {
   if (overruled.length) console.warn('[safeStorage] Kept the saved settings over a write made before they loaded:', overruled.join(', '));
 }
 
+// `snapshot`, or why not: `lacks` (no settings.* here: the shell for good)
+// or `transient` (unreachable).
 async function readThroughDaemon() {
   const started = Date.now();
-  let unreachable = false;
+  let transient = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const reply = await withBudget(Promise.resolve().then(() => rpc('settings.get', {})), Math.max(1, FIRST_READ_BUDGET_MS - (Date.now() - started)));
-      if (!isSnapshot(reply)) return { snapshot: null, unreachable: false };
-      return { snapshot: reply, unreachable: false };
+      if (!isSnapshot(reply)) return { lacks: true };
+      return { snapshot: reply };
     } catch (e) {
-      if (errText(e) !== UNAVAILABLE) return { snapshot: null, unreachable: false };
-      unreachable = true;
+      const text = errText(e);
+      if (text !== UNAVAILABLE) return { lacks: true };
+      transient = 'retry';
       // `daemon_rpc` already spawned and waited for the daemon; one more try
       // covers a daemon that was restarting, inside the same budget.
       if (Date.now() - started > FIRST_READ_BUDGET_MS - 500) break;
       await new Promise(r => setTimeout(r, 300));
     }
   }
-  return { snapshot: null, unreachable };
+  return { transient };
+}
+
+// The document through the shell: its values, or null when it cannot be read.
+async function readThroughShell() {
+  try {
+    const data = await invoke('read_settings_json');
+    const parsed = data ? JSON.parse(data) : {};
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    console.warn('[safeStorage] The settings file does not hold an object');
+  } catch (e) {
+    console.warn('[safeStorage] Could not load settings from disk:', errText(e));
+  }
+  return null;
 }
 
 function ensureLoaded() {
@@ -131,7 +153,7 @@ function ensureLoaded() {
   }
   loadPromise = (async () => {
     const started = Date.now();
-    const { snapshot, unreachable } = await readThroughDaemon();
+    const { snapshot, lacks } = await readThroughDaemon();
     if (snapshot) {
       mode = 'daemon';
       noteVersion(snapshot.version);
@@ -140,27 +162,107 @@ function ensureLoaded() {
       if (snapshot.recovered) console.warn('[safeStorage] The settings file did not parse; the daemon recovered it from', snapshot.recovered);
       console.log(`[safeStorage] Loaded settings from the daemon in ${Date.now() - started}ms:`, Object.keys(snapshot.values).join(', '));
     } else {
-      mode = unreachable ? 'pending' : 'shell';
-      if (unreachable) console.warn('[safeStorage] The daemon did not answer settings.get; read the settings file through the shell instead');
-      try {
-        const data = await invoke('read_settings_json');
-        if (data && data !== '{}') {
-          try {
-            const parsed = JSON.parse(data);
-            fill(parsed);
-            console.log('[safeStorage] Loaded settings from disk:', Object.keys(parsed).join(', '));
-          } catch (e) {
-            console.warn('[safeStorage] Failed to parse settings:', e);
-          }
-        }
+      mode = lacks ? 'shell' : 'pending';
+      if (!lacks) console.warn('[safeStorage] The daemon did not answer settings.get; read the settings file through the shell instead');
+      const values = await readThroughShell();
+      if (values) {
+        fill(values);
         loaded = true;
-      } catch (e) {
-        console.warn('[safeStorage] Could not load settings from disk:', e);
+        console.log('[safeStorage] Loaded settings from disk:', Object.keys(values).join(', '));
       }
     }
     if (mode !== 'shell') listenForChanges();
   })().finally(() => { settledLoad = true; early.clear(); });
   return loadPromise;
+}
+
+// ── A document read late ────────────────────────────────────────────────────
+
+// A store's persisted defaults, to tell the changes in a queued write (a store
+// that hydrated from nothing writes its defaults plus the user's change) from
+// the defaults themselves. Null when the store is not known here.
+function persistedDefaults(store) {
+  const options = store?.persist?.getOptions?.();
+  if (!options || typeof store.getInitialState !== 'function') return null;
+  const initial = store.getInitialState();
+  try {
+    return JSON.parse(JSON.stringify(typeof options.partialize === 'function' ? options.partialize(initial) : initial));
+  } catch {
+    return null;
+  }
+}
+
+// The queued write laid over the document: the document, plus each field the
+// queued write changed from the store's defaults. Null when that cannot be
+// told (an unknown store, another store version).
+function layOver(name, queued, doc) {
+  if (!queued?.state || !doc?.state || (queued.version ?? 0) !== (doc.version ?? 0)) return null;
+  const defaults = persistedDefaults(stores.get(name));
+  if (!defaults) return null;
+  const state = { ...doc.state };
+  for (const [field, value] of Object.entries(queued.state)) {
+    if (!deepEqual(value, defaults[field])) state[field] = value;
+  }
+  return { ...doc, state };
+}
+
+// Takes in a document this window could not read at startup: every key it
+// had not touched, and every queued change laid over its key, then lets each
+// store hydrate from it.
+function adoptLate(values) {
+  const hydrate = [];
+  const dropped = [];
+  for (const [name, doc] of Object.entries(values)) {
+    if (dirty.has(name) && !inflight.has(name)) {
+      const merged = layOver(name, cache.has(name) ? parse(cache.get(name)) : undefined, doc);
+      if (merged) {
+        cache.set(name, JSON.stringify(merged));
+      } else {
+        dirty.delete(name);
+        dropped.push(name);
+        cache.set(name, JSON.stringify(doc));
+      }
+    } else if (!inflight.has(name)) {
+      cache.set(name, JSON.stringify(doc));
+    }
+    hydrate.push(name);
+  }
+  if (dropped.length) console.warn('[safeStorage] Kept the saved settings over a change made before they could be read:', dropped.join(', '));
+  for (const name of hydrate) {
+    const rehydrate = stores.get(name)?.persist?.rehydrate;
+    if (typeof rehydrate === 'function') Promise.resolve().then(() => rehydrate()).catch(() => {});
+  }
+}
+
+// One more try at the document (the daemon, then the shell). True once read.
+let lateRead = null;
+function readLate() {
+  if (loaded) return Promise.resolve(true);
+  lateRead ??= (async () => {
+    let values = null;
+    if (mode !== 'shell') {
+      try {
+        const reply = await withBudget(Promise.resolve().then(() => rpc('settings.get', {})), FIRST_READ_BUDGET_MS);
+        if (isSnapshot(reply)) {
+          mode = 'daemon';
+          noteVersion(reply.version);
+          values = reply.values;
+        } else {
+          mode = 'shell';
+        }
+      } catch (e) {
+        if (errText(e) === OUTDATED) mode = 'shell';
+      }
+    }
+    values ??= await readThroughShell();
+    if (!values) return false;
+    adoptLate(values);
+    loaded = true;
+    console.log('[safeStorage] Loaded settings late:', Object.keys(values).join(', '));
+    if (mode !== 'shell') listenForChanges();
+    return true;
+  })().finally(() => { lateRead = null; });
+  return lateRead;
 }
 
 // ── Writing ─────────────────────────────────────────────────────────────────
@@ -174,7 +276,7 @@ async function writeThroughShell(names) {
   } catch { /* unreadable or broken: decided below */ }
   if (!base) {
     // Only a cache that holds the whole document may stand in for it.
-    if (!loaded) throw new Error('[safeStorage] The settings file could not be read; not writing over it');
+    if (!loaded) throw new Error(NOT_LOADED);
     base = {};
     for (const [key, value] of cache.entries()) base[key] = parse(value);
   }
@@ -213,6 +315,13 @@ async function writeDirty() {
   if (!invoke) return;
   await ensureLoaded(); // never write before the document is known
   if (!writesEnabled || !dirty.size) return;
+  // A window that never saw the document holds store defaults: one more try
+  // at reading it, else nothing is written and the change stays queued.
+  if (!loaded && !(await readLate())) {
+    scheduleRetry();
+    throw new Error(NOT_LOADED);
+  }
+  if (!dirty.size) return;
   const names = [...dirty];
   dirty.clear();
   names.forEach(n => inflight.add(n));

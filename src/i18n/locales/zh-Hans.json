@@ -777,6 +777,7 @@
   "errors.daemonUnavailable": "MailVault 后台服务没有响应。请重新启动 MailVault 后重试。",
   "errors.settingsConflict": "你的设置已在另一个窗口中更改。请重试。",
   "errors.settingsInvalid": "此设置更改无效，未保存。",
+  "errors.settingsNotLoaded": "无法读取你已保存的设置，因此此更改没有覆盖保存。请重新启动 MailVault 后重试。",
   "errors.settingsWriteFailed": "无法保存你的设置。之前的设置保持不变。",
   "errors.duplicateAccount": "该服务器上的这个邮箱已添加过",
   "errors.jmapAuthFailed": "服务器拒绝了密码或令牌。",

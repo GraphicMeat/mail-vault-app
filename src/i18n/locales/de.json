@@ -777,6 +777,7 @@
   "errors.daemonUnavailable": "Der MailVault-Hintergrunddienst antwortet nicht. Starte MailVault neu und versuche es erneut.",
   "errors.settingsConflict": "Deine Einstellungen wurden in einem anderen Fenster geändert. Versuche es erneut.",
   "errors.settingsInvalid": "Diese Einstellungsänderung ist ungültig und wurde nicht gespeichert.",
+  "errors.settingsNotLoaded": "Deine gespeicherten Einstellungen konnten nicht gelesen werden, daher wurde diese Änderung nicht darüber gespeichert. Starte MailVault neu und versuche es erneut.",
   "errors.settingsWriteFailed": "Deine Einstellungen konnten nicht gespeichert werden. Deine bisherigen Einstellungen sind unverändert.",
   "errors.duplicateAccount": "Diese E-Mail auf diesem Server ist bereits hinzugefügt",
   "errors.jmapAuthFailed": "Der Server hat das Passwort oder Token abgelehnt.",

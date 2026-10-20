@@ -777,6 +777,7 @@
   "errors.daemonUnavailable": "Le service d'arrière-plan de MailVault ne répond pas. Redémarrez MailVault et réessayez.",
   "errors.settingsConflict": "Vos réglages ont changé dans une autre fenêtre. Réessayez.",
   "errors.settingsInvalid": "Ce changement de réglages n'est pas valide et n'a pas été enregistré.",
+  "errors.settingsNotLoaded": "Vos réglages enregistrés n'ont pas pu être lus, ce changement n'a donc pas été enregistré par-dessus. Redémarrez MailVault et réessayez.",
   "errors.settingsWriteFailed": "Vos réglages n'ont pas pu être enregistrés. Vos réglages précédents sont inchangés.",
   "errors.duplicateAccount": "Cet e-mail sur ce serveur est déjà ajouté",
   "errors.jmapAuthFailed": "Le serveur a refusé le mot de passe ou le jeton.",

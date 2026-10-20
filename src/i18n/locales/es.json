@@ -777,6 +777,7 @@
   "errors.daemonUnavailable": "El servicio en segundo plano de MailVault no responde. Reinicia MailVault e inténtalo de nuevo.",
   "errors.settingsConflict": "Tus ajustes cambiaron en otra ventana. Inténtalo de nuevo.",
   "errors.settingsInvalid": "Ese cambio de ajustes no es válido y no se ha guardado.",
+  "errors.settingsNotLoaded": "No se pudieron leer tus ajustes guardados, así que este cambio no se guardó encima de ellos. Reinicia MailVault e inténtalo de nuevo.",
   "errors.settingsWriteFailed": "No se pudieron guardar tus ajustes. Tus ajustes anteriores no han cambiado.",
   "errors.duplicateAccount": "Este correo en este servidor ya está añadido",
   "errors.jmapAuthFailed": "El servidor rechazó la contraseña o el token.",

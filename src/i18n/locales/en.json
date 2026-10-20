@@ -777,6 +777,7 @@
   "errors.daemonUnavailable": "The MailVault background service is not responding. Restart MailVault and try again.",
   "errors.settingsConflict": "Your settings changed in another window. Try again.",
   "errors.settingsInvalid": "That settings change could not be saved because it is not valid.",
+  "errors.settingsNotLoaded": "Your saved settings could not be read, so this change was not saved over them. Restart MailVault and try again.",
   "errors.settingsWriteFailed": "Your settings could not be saved. Your previous settings are unchanged.",
   "errors.duplicateAccount": "This email on this server is already added",
   "errors.jmapAuthFailed": "The server rejected the password or token.",
