@@ -28,9 +28,10 @@ const invoke = typeof window !== 'undefined' ? window.__TAURI__?.core?.invoke : 
 const UNAVAILABLE = 'errors.daemonUnavailable';
 const OUTDATED = 'errors.daemonOutdated';
 // How long a window waits for its first settings.get before reading the file
-// through the shell instead. The shell's own reply budget is 30s; the UI
-// paints defaults until hydration, so this is kept short.
-const FIRST_READ_BUDGET_MS = 4000;
+// through the shell instead. A warm daemon answers in milliseconds; a cold
+// one is still starting, and the UI paints defaults until hydration, so the
+// shell's read (what every window did before) takes over quickly.
+const FIRST_READ_BUDGET_MS = 1500;
 const RETRY_FIRST_MS = 2000;
 const RETRY_MAX_MS = 60000;
 
@@ -41,6 +42,13 @@ const cache = new Map();
 const dirty = new Set();
 // Keys in the write on the wire.
 const inflight = new Set();
+// Keys written before the document loaded. Zustand persist writes a store's
+// whole state on every setState, hydrated or not, so such a write is the
+// store's DEFAULTS plus one change; letting it win would drop every setting
+// the user saved under that key. The document wins instead, and hydration
+// merges it over the in-memory state as usual.
+const early = new Set();
+let settledLoad = false;
 
 // 'daemon' once settings.get answered with a snapshot; 'pending' while the
 // daemon was unreachable at startup (writes still try it first); 'shell' for
@@ -82,10 +90,17 @@ function noteVersion(version) {
 }
 
 function fill(values) {
+  const overruled = [];
   for (const [key, value] of Object.entries(values)) {
-    // Only set if not already in cache (in-session writes take priority)
-    if (!cache.has(key)) cache.set(key, JSON.stringify(value));
+    if (early.has(key)) {
+      overruled.push(key);
+      dirty.delete(key);
+    } else if (cache.has(key)) {
+      continue;
+    }
+    cache.set(key, JSON.stringify(value));
   }
+  if (overruled.length) console.warn('[safeStorage] Kept the saved settings over a write made before they loaded:', overruled.join(', '));
 }
 
 async function readThroughDaemon() {
@@ -144,7 +159,7 @@ function ensureLoaded() {
       }
     }
     if (mode !== 'shell') listenForChanges();
-  })();
+  })().finally(() => { settledLoad = true; early.clear(); });
   return loadPromise;
 }
 
@@ -362,11 +377,13 @@ export const safeStorage = {
   setItem: (name, value) => {
     cache.set(name, value);
     dirty.add(name);
+    if (!settledLoad && invoke) early.add(name);
     debouncedSave();
   },
   removeItem: (name) => {
     cache.delete(name);
     dirty.add(name);
+    if (!settledLoad && invoke) early.add(name);
     debouncedSave();
   },
 };

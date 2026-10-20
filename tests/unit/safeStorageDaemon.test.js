@@ -95,14 +95,42 @@ describe('safeStorage through the daemon', () => {
     expect(h.calls).not.toContain('read_settings_json');
   });
 
-  it('keeps an in-session write over the disk copy of that key, and loads every other key', async () => {
-    const h = host({ disk: { [SETTINGS]: blob({ language: 'de' }), [THEME]: blob({ theme: 'dark' }, 0) } });
+  it('keeps the saved document over a write made before it loaded, and never writes that write over it', async () => {
+    const h = host({ disk: { [SETTINGS]: blob({ language: 'de', listPaneSize: 470, onboardingComplete: true }), [THEME]: blob({ theme: 'dark' }, 0) } });
+    // A cold daemon: settings.get takes a while, and persist writes a store's
+    // defaults on any setState meanwhile.
+    let answer;
+    const slow = h.invoke.getMockImplementation();
+    h.invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === 'daemon_rpc' && args.method === 'settings.get' && !answer) {
+        await new Promise(r => { answer = r; });
+      }
+      return slow(cmd, args);
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { safeStorage, flushSafeStorage } = await load();
+    const hydrated = safeStorage.getItem(SETTINGS);
+    safeStorage.setItem(SETTINGS, JSON.stringify(blob({ language: 'en' })));
+    await vi.waitFor(() => expect(answer).toBeTypeOf('function'));
+    answer();
+    expect(JSON.parse(await hydrated).state).toEqual({ language: 'de', listPaneSize: 470, onboardingComplete: true });
+    await flushSafeStorage();
+    expect(h.disk[SETTINGS]).toEqual(blob({ language: 'de', listPaneSize: 470, onboardingComplete: true }));
+    expect(h.calls).not.toContain('daemon_rpc:settings.replace');
+    expect(warn.mock.calls.flat().join(' ')).toMatch(/before they loaded: mailvault-settings/);
+    // After the load, a write is the user's and wins as always.
+    safeStorage.setItem(SETTINGS, JSON.stringify(blob({ language: 'en' })));
+    await flushSafeStorage();
+    expect(h.disk[SETTINGS]).toEqual(blob({ language: 'en' }));
+    expect(h.disk[THEME]).toEqual(blob({ theme: 'dark' }, 0));
+  });
+
+  it('writes a key written before the load when the document does not have it yet', async () => {
+    const h = host({ disk: { [THEME]: blob({ theme: 'dark' }, 0) } });
     const { safeStorage, flushSafeStorage } = await load();
     safeStorage.setItem(SETTINGS, JSON.stringify(blob({ language: 'en' })));
-    expect(JSON.parse(await safeStorage.getItem(SETTINGS)).state.language).toBe('en');
-    expect(JSON.parse(await safeStorage.getItem(THEME)).state.theme).toBe('dark');
     await flushSafeStorage();
-    expect(h.disk[THEME]).toEqual(blob({ theme: 'dark' }, 0));
+    expect(h.disk[SETTINGS]).toEqual(blob({ language: 'en' }));
   });
 
   it('writes only the changed store, whole, with settings.replace', async () => {

@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 /**
  * `safeStorage` reads the settings file through Tauri, so hydration is async,
- * and `ensureLoaded` deliberately refuses to overwrite a key already in the
- * cache — "in-session writes take priority".
+ * and `ensureLoaded` lets an in-session write keep its key only once the
+ * document has loaded.
  *
- * That rule is only safe while nothing writes before the read lands. Any
- * `setState` during module evaluation makes zustand's persist middleware write
- * the settings key immediately, and the disk copy is then dropped whole: not
- * just the field that was written, but every setting the user ever saved.
+ * Any `setState` during module evaluation makes zustand's persist middleware
+ * write the settings key immediately: the store's defaults plus one change.
+ * Before the read lands, that write must not win, or every setting the user
+ * ever saved is dropped (and, written back, lost on disk).
  */
 describe('safeStorage and a write that beats the disk read', () => {
   let safeStorage;
@@ -32,16 +32,18 @@ describe('safeStorage and a write that beats the disk read', () => {
     expect(JSON.parse(raw).state.listPaneSize).toBe(470);
   });
 
-  it('drops the whole disk copy when a write lands first', async () => {
-    // What `setLocale(...)` at import time does, via persist.
+  it('keeps the disk copy when a write lands first', async () => {
+    // What `setLocale(...)` at import time does, via persist: the store's
+    // defaults plus one change. It used to replace the disk copy whole, and
+    // every other saved setting went with it. The disk copy wins now; the
+    // store's hydration merges it over the in-memory state.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     safeStorage.setItem('mailvault-settings', JSON.stringify({
       version: 4, state: { language: 'en' },
     }));
     const raw = await safeStorage.getItem('mailvault-settings');
     const state = JSON.parse(raw).state;
-    expect(state.language).toBe('en');
-    // The point: listPaneSize was never written by the early caller, and it is
-    // gone anyway. Every other saved setting goes with it.
-    expect(state.listPaneSize).toBeUndefined();
+    expect(state.language).toBe('de');
+    expect(state.listPaneSize).toBe(470);
   });
 });
