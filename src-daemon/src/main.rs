@@ -44,6 +44,8 @@ mod mbox_upload_job;
 mod migration;
 mod netgate;
 mod oauth_tokens;
+#[cfg(test)]
+mod oauth_mock_tests;
 mod people_index;
 mod people_snapshot;
 mod raw_message;

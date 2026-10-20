@@ -899,6 +899,104 @@ async fn a_new_sign_in_wakes_a_graph_job_waiting_for_its_token() {
     rig.finished().await;
 }
 
+// ── OAuth2 sign-in against mock servers (hand-test checklist step 6) ───────
+
+/// A Gmail-shaped OAuth2 account on a mock IMAP server that accepts only a
+/// token the mock token endpoint issued and that has not expired, and ends a
+/// session whose token stopped being valid (as Outlook does). The daemon's
+/// token requests go to that endpoint (`set_token_endpoint_for_tests`).
+fn oauth_rig(sc: Scenario) -> (Rig, mock_imap::oauth::TokenAuthority, mock_imap::oauth::MockOAuth, mock_imap::oauth::SignIn) {
+    use mock_imap::oauth::{GrantSpec, MockOAuth, TokenAuthority};
+    let auth = TokenAuthority::new();
+    auth.end_sessions_when_invalid(true);
+    let endpoint = MockOAuth::start(auth.clone());
+    let mock = MockImap::start_checked(sc, Arc::new(auth.clone()));
+    let signed = auth.sign_in(GrantSpec {
+        client_id: mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID.into(),
+        scope: "https://mail.google.com/".into(),
+        expires_in: 3600,
+        rotate: false,
+    });
+    let account = oauth_account(&mock, &signed);
+    let rig = Rig::build(mock, account);
+    rig.state.oauth2.set_token_endpoint_for_tests(Some(endpoint.origin()));
+    abd_worker::start(Arc::clone(&rig.state));
+    (rig, auth, endpoint, signed)
+}
+
+fn oauth_account(mock: &MockImap, signed: &mock_imap::oauth::SignIn) -> Value {
+    json!({
+        "id": ACCT, "email": EMAIL, "imapHost": mock.host(), "imapPort": mock.port(), "imapSecure": true,
+        "authType": "oauth2", "oauth2Provider": "google",
+        "oauth2ClientId": mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,
+        "oauth2AccessToken": signed.access_token, "oauth2RefreshToken": signed.refresh_token,
+        "oauth2ExpiresAt": signed.expires_at,
+    })
+}
+
+/// Checklist 6a: the token expires an hour into a long job. The server ends
+/// the session; the job renews the token itself and finishes.
+#[tokio::test]
+async fn an_oauth_job_whose_token_expires_mid_run_renews_it_and_finishes() {
+    let (rig, auth, _endpoint, _) = oauth_rig(slow_fetches(12, 120));
+    rig.preview().await;
+    rig.start(archive_params()).await.unwrap();
+    wait_for("a few downloads", 30, || (rig.fetched() >= 3).then_some(())).await;
+
+    rig.state.tokens.advance_clock_for_tests(Duration::from_secs(3660));
+    auth.advance(Duration::from_secs(3660));
+    let done = rig.finished().await;
+
+    assert_eq!(done["outcome"], json!("completed"), "{done}");
+    assert!(rig.inbox_uids().is_empty());
+    assert_eq!(rig.vault_uids("INBOX").len(), 12);
+    let posts = auth.posts();
+    assert!(!posts.is_empty() && posts.iter().all(|p| p.status == 200), "renewed: {posts:?}");
+}
+
+/// Checklist 6b: the grant is revoked mid-run. The job pauses for a sign-in
+/// and deletes nothing; a new sign-in (the app's credentials write) wakes it
+/// at once, not at its ten-minute retry, and it finishes.
+#[tokio::test]
+async fn a_grant_revoked_mid_run_parks_the_job_deleting_nothing_until_a_new_sign_in_wakes_it() {
+    let (rig, auth, _endpoint, signed) = oauth_rig(slow_fetches(12, 120));
+    rig.preview().await;
+    rig.start(archive_params()).await.unwrap();
+    wait_for("a few downloads", 30, || (rig.fetched() >= 3).then_some(())).await;
+
+    auth.revoke(&signed.refresh_token);
+    rig.status_is("paused", "sign_in_needed").await;
+    assert_eq!(rig.inbox_uids().len(), 12, "nothing left the server");
+    assert!(rig.trash_ids().is_empty());
+    assert_eq!(rig.mock.count_commands("MOVE"), 0);
+    let posts_while_parked = auth.posts().len();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(auth.posts().len(), posts_while_parked, "a refused grant is not asked again and again");
+
+    let renewed = auth.sign_in(mock_imap::oauth::GrantSpec {
+        client_id: mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID.into(),
+        scope: "https://mail.google.com/".into(),
+        expires_in: 3600,
+        rotate: false,
+    });
+    let account = oauth_account(&rig.mock, &renewed);
+    std::fs::write(rig.dir.join("credentials.json"), json!({ ACCT: account.to_string() }).to_string()).unwrap();
+    let woke = Instant::now();
+    assert!(handle_request_for_test(&rig.state, "oauth2.credentials_changed", json!({})).await.error.is_none());
+    let state = Arc::clone(&rig.state);
+    wait_for("the job to leave the sign-in pause", 10, move || {
+        let f = state.abd.handle(ACCT)?.frame();
+        (f["status"]["reason"] != json!("sign_in_needed")).then_some(())
+    })
+    .await;
+    assert!(woke.elapsed() < Duration::from_secs(10), "woken by the sign-in, not the retry");
+    let done = rig.finished().await;
+
+    assert_eq!(done["outcome"], json!("completed"), "{done}");
+    assert!(rig.inbox_uids().is_empty());
+    assert_eq!(rig.vault_uids("INBOX").len(), 12);
+}
+
 #[test]
 fn tokens_are_per_account_bump_a_generation_and_expire() {
     let t = abd_worker::Tokens::default();
