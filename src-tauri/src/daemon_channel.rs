@@ -246,6 +246,9 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         // for the drive, lets go.
                         let abd_frame = (name == crate::abd::ABD_PROGRESS).then(|| payload.clone());
                         let lagged = name == "daemon-events-lagged";
+                        if name == "settings-changed" {
+                            crate::follow_settings_log_level(&payload);
+                        }
                         if app.emit(&name, payload).is_err() {
                             debug!("daemon channel: failed to emit {name} to the frontend");
                         }

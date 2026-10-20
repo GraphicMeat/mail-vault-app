@@ -298,8 +298,8 @@ export const DAEMON_OWNED = new Set([
   'message.verify_sender', 'message.code',
   // Phase 1 step 0a: the daemon owns frontend-settings.json (atomic writes,
   // a version, backups) and emits `settings-changed {keys, version}`.
-  // safeStorage.js is the caller; it keeps read/write_settings_json as the
-  // fallback for a daemon without these.
+  // safeStorage.js is the caller; it keeps the shell's two settings commands
+  // as the fallback for a daemon without these.
   'settings.get', 'settings.patch', 'settings.replace',
 ]);
 

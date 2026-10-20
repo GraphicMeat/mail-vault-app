@@ -22,8 +22,8 @@ export const LEGACY_LOCALIZED_KEYS = [
 ];
 
 /**
- * The settings store persists through an async `getItem` (`read_settings_json`
- * over IPC) and its merge lets the persisted value overwrite what is in memory,
+ * The settings store persists through an async `getItem` (`settings.get` to
+ * the daemon) and its merge lets the persisted value overwrite what is in memory,
  * so a flag — or a rewritten last mailbox — written before hydration is thrown
  * away, and the account is adopted again on the next launch after the app has
  * already opened its folders under the new key. Wait for hydration first.

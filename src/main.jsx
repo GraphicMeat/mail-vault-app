@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 import { MotionConfig } from 'framer-motion';
 import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
+import './stores/settingsFollow';
 import { wireConnectivityEvents, installNetMock } from './stores/connectivityStore';
 import { watchTextAppearance } from './utils/appFont';
 import { watchMenuBar, watchQuitShortcut } from './utils/menuBar';
@@ -37,7 +38,7 @@ watchQuitShortcut();
 
 // Apply the persisted language once the store has hydrated — and NOT before.
 //
-// Settings persist through Tauri (`src/stores/safeStorage.js`), so `getItem`
+// Settings persist through the daemon (`src/stores/safeStorage.js`), so `getItem`
 // returns a Promise and hydration finishes after this module runs. Reading the
 // language here would see the default `en`; worse, *publishing* it would call
 // `setState`, and persist writes that through to `safeStorage` immediately.

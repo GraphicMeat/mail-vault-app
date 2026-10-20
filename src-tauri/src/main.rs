@@ -259,8 +259,9 @@ fn setup_logging(log_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGua
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     // Standard (INFO, addresses masked) unless the persisted settings ask for
-    // Verbose; `write_settings_json` applies a change. The salt is shared with
-    // the daemon, which reads the same file.
+    // Verbose; a change applies through `follow_settings_log_level` (the
+    // daemon's `settings-changed`) or `write_settings_json`. The salt is
+    // shared with the daemon, which reads the same file.
     let data_dir = mailvault_core::paths::app_data_dir().unwrap_or_else(|_| log_dir.clone());
     let settings = fs::read_to_string(data_dir.join("frontend-settings.json")).unwrap_or_default();
     log_redact::set_verbose(log_redact::verbose_from_settings(&settings));
@@ -510,21 +511,32 @@ fn read_settings_json() -> Result<String, String> {
     }
 }
 
-// Write frontend settings to JSON file on disk (replaces localStorage)
+// Write frontend settings to JSON file on disk (replaces localStorage).
+// The daemon owns the file (`settings.replace`); this is safeStorage's
+// fallback for a daemon without `settings.*` or one it cannot reach. Kept for
+// one release. Atomic, refused unless a JSON object, under the daemon's lock.
 #[tauri::command]
 fn write_settings_json(data: String) -> Result<(), String> {
     let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data dir: {}", e))?;
-    if !data_dir.exists() {
-        fs::create_dir_all(&data_dir)
-            .map_err(|e| format!("Failed to create data dir: {}", e))?;
-    }
-    let settings_path = data_dir.join("frontend-settings.json");
-    fs::write(&settings_path, &data)
-        .map_err(|e| format!("Failed to write settings: {}", e))?;
+    mailvault_core::settings_doc::write_document(&data_dir, &data)?;
     // The shell's own log level follows `logVerbosity` (the daemon is told by RPC).
     log_redact::set_verbose(log_redact::verbose_from_settings(&data));
     Ok(())
+}
+
+/// The daemon wrote the settings (`settings-changed`): the shell's own log
+/// level follows `logVerbosity`, as it did when the shell wrote the file.
+pub(crate) fn follow_settings_log_level(payload: &serde_json::Value) {
+    let touches = payload["keys"].as_array().is_some_and(|keys| keys.iter().any(|k| k == "mailvault-settings"));
+    if !touches {
+        return;
+    }
+    tauri::async_runtime::spawn_blocking(|| {
+        let Ok(dir) = mailvault_core::paths::app_data_dir() else { return };
+        let raw = fs::read_to_string(dir.join(mailvault_core::settings_doc::FILE_NAME)).unwrap_or_default();
+        log_redact::set_verbose(log_redact::verbose_from_settings(&raw));
+    });
 }
 
 // Use a more specific service name with bundle ID for persistence across builds

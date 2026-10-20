@@ -1,19 +1,112 @@
-// Tauri filesystem-backed storage for Zustand persist.
-// Completely bypasses localStorage/WKWebView storage (which throws
-// "SecurityError: The operation is insecure" in App Sandbox).
+// Storage for Zustand persist, backed by the settings document the daemon
+// owns (`frontend-settings.json`, `src-core/src/settings_doc.rs`). Bypasses
+// localStorage/WKWebView storage, which throws "SecurityError: The operation
+// is insecure" in App Sandbox.
 //
-// Uses Tauri invoke to read/write JSON files in the app data directory.
-// Falls back to in-memory storage if Tauri is not available (dev browser).
+// One top-level key per persisted store. Reads come from `settings.get` once
+// per window; a change is written 500ms later with `settings.replace`, which
+// replaces just the stores that changed (whole, so a key a store dropped is
+// gone). The daemon writes atomically, keeps a version and backups, and emits
+// `settings-changed {keys, version}`, which every window takes in.
+//
+// Fallbacks (one release, for an update that pairs this app with an older
+// daemon): a daemon without `settings.*` (errors.daemonOutdated, or any reply
+// that is not a snapshot) switches this window to the shell's
+// read/write_settings_json for good. A daemon that is unreachable at startup
+// gets the file read through the shell once; a write while it is unreachable
+// goes through the shell too. A shell write lays only the changed keys over
+// what is on disk now, so it never undoes another writer's keys.
+//
+// Falls back to in-memory storage when Tauri is not available (dev browser).
 
 import { isChildWindow } from '../utils/privacy/isChildWindow';
 
 const invoke = typeof window !== 'undefined' ? window.__TAURI__?.core?.invoke : undefined;
 
-// In-memory cache — always holds the current state.
-const cache = new Map();
+// The two markers `daemon_rpc` (src-tauri) returns: no daemon reachable, and a
+// daemon that does not know the method.
+const UNAVAILABLE = 'errors.daemonUnavailable';
+const OUTDATED = 'errors.daemonOutdated';
+// How long a window waits for its first settings.get before reading the file
+// through the shell instead. The shell's own reply budget is 30s; the UI
+// paints defaults until hydration, so this is kept short.
+const FIRST_READ_BUDGET_MS = 4000;
+const RETRY_FIRST_MS = 2000;
+const RETRY_MAX_MS = 60000;
 
-// Promise that resolves once disk data has been loaded into cache.
+// In-memory cache — always holds the current state, as JSON strings.
+const cache = new Map();
+// Keys changed in this window and not yet written (always tracked; a child
+// window never writes them, but they protect its own values from refreshes).
+const dirty = new Set();
+// Keys in the write on the wire.
+const inflight = new Set();
+
+// 'daemon' once settings.get answered with a snapshot; 'pending' while the
+// daemon was unreachable at startup (writes still try it first); 'shell' for
+// a daemon without settings.* (and every test that mocks invoke without it).
+let mode = 'shell';
+let lastVersion = null;
+// The first read put the document into the cache.
+let loaded = false;
+
+// Promise that resolves once the document has been loaded into the cache.
 let loadPromise = null;
+
+const errText = e => (typeof e === 'string' ? e : e?.message || String(e));
+const parse = value => { try { return JSON.parse(value); } catch { return value; } };
+const isSnapshot = r => !!r && typeof r === 'object' && Number.isInteger(r.version)
+  && !!r.values && typeof r.values === 'object' && !Array.isArray(r.values);
+
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every(k => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]));
+}
+
+function rpc(method, params) {
+  return invoke('daemon_rpc', { method, params });
+}
+
+function withBudget(promise, ms) {
+  let timer;
+  const budget = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(UNAVAILABLE)), ms); });
+  return Promise.race([promise, budget]).finally(() => clearTimeout(timer));
+}
+
+function noteVersion(version) {
+  if (Number.isInteger(version)) lastVersion = lastVersion == null ? version : Math.max(lastVersion, version);
+}
+
+function fill(values) {
+  for (const [key, value] of Object.entries(values)) {
+    // Only set if not already in cache (in-session writes take priority)
+    if (!cache.has(key)) cache.set(key, JSON.stringify(value));
+  }
+}
+
+async function readThroughDaemon() {
+  const started = Date.now();
+  let unreachable = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const reply = await withBudget(Promise.resolve().then(() => rpc('settings.get', {})), Math.max(1, FIRST_READ_BUDGET_MS - (Date.now() - started)));
+      if (!isSnapshot(reply)) return { snapshot: null, unreachable: false };
+      return { snapshot: reply, unreachable: false };
+    } catch (e) {
+      if (errText(e) !== UNAVAILABLE) return { snapshot: null, unreachable: false };
+      unreachable = true;
+      // `daemon_rpc` already spawned and waited for the daemon; one more try
+      // covers a daemon that was restarting, inside the same budget.
+      if (Date.now() - started > FIRST_READ_BUDGET_MS - 500) break;
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+  return { snapshot: null, unreachable };
+}
 
 function ensureLoaded() {
   if (loadPromise) return loadPromise;
@@ -21,48 +114,129 @@ function ensureLoaded() {
     loadPromise = Promise.resolve();
     return loadPromise;
   }
-  loadPromise = invoke('read_settings_json')
-    .then(data => {
-      if (data && data !== '{}') {
-        try {
-          const parsed = JSON.parse(data);
-          for (const [key, value] of Object.entries(parsed)) {
-            // Only set if not already in cache (in-session writes take priority)
-            if (!cache.has(key)) {
-              cache.set(key, JSON.stringify(value));
-            }
+  loadPromise = (async () => {
+    const started = Date.now();
+    const { snapshot, unreachable } = await readThroughDaemon();
+    if (snapshot) {
+      mode = 'daemon';
+      noteVersion(snapshot.version);
+      fill(snapshot.values);
+      loaded = true;
+      if (snapshot.recovered) console.warn('[safeStorage] The settings file did not parse; the daemon recovered it from', snapshot.recovered);
+      console.log(`[safeStorage] Loaded settings from the daemon in ${Date.now() - started}ms:`, Object.keys(snapshot.values).join(', '));
+    } else {
+      mode = unreachable ? 'pending' : 'shell';
+      if (unreachable) console.warn('[safeStorage] The daemon did not answer settings.get; read the settings file through the shell instead');
+      try {
+        const data = await invoke('read_settings_json');
+        if (data && data !== '{}') {
+          try {
+            const parsed = JSON.parse(data);
+            fill(parsed);
+            console.log('[safeStorage] Loaded settings from disk:', Object.keys(parsed).join(', '));
+          } catch (e) {
+            console.warn('[safeStorage] Failed to parse settings:', e);
           }
-          console.log('[safeStorage] Loaded settings from disk:', Object.keys(parsed).join(', '));
-        } catch (e) {
-          console.warn('[safeStorage] Failed to parse settings:', e);
         }
+        loaded = true;
+      } catch (e) {
+        console.warn('[safeStorage] Could not load settings from disk:', e);
       }
-    })
-    .catch(e => {
-      console.warn('[safeStorage] Could not load settings from disk:', e);
-    });
+    }
+    if (mode !== 'shell') listenForChanges();
+  })();
   return loadPromise;
 }
 
-// Save all cached data to Tauri filesystem
-// Rejects when the write fails, so flushSafeStorage() can report it.
-async function writeToDisk() {
+// ── Writing ─────────────────────────────────────────────────────────────────
+
+// The changed keys laid over the file as it is now, through the shell.
+async function writeThroughShell(names) {
+  let base = null;
+  try {
+    const parsed = JSON.parse(await invoke('read_settings_json'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) base = parsed;
+  } catch { /* unreadable or broken: decided below */ }
+  if (!base) {
+    // Only a cache that holds the whole document may stand in for it.
+    if (!loaded) throw new Error('[safeStorage] The settings file could not be read; not writing over it');
+    base = {};
+    for (const [key, value] of cache.entries()) base[key] = parse(value);
+  }
+  for (const name of names) {
+    if (cache.has(name)) base[name] = parse(cache.get(name));
+    else delete base[name];
+  }
+  await invoke('write_settings_json', { data: JSON.stringify(base) });
+}
+
+async function send(names) {
+  if (mode !== 'shell') {
+    const values = Object.fromEntries(names.map(n => [n, cache.has(n) ? parse(cache.get(n)) : null]));
+    try {
+      const reply = await rpc('settings.replace', { values });
+      if (reply && Number.isInteger(reply.version)) {
+        mode = 'daemon';
+        noteVersion(reply.version);
+        return;
+      }
+      mode = 'shell';
+    } catch (e) {
+      const text = errText(e);
+      if (text === OUTDATED) mode = 'shell';
+      // A daemon that answered with an error of its own (the write failed,
+      // the file is intact): keep the change queued and try again later.
+      else if (text !== UNAVAILABLE) throw e;
+      // Unreachable: through the shell this time, so nothing waits on it.
+    }
+  }
+  await writeThroughShell(names);
+}
+
+async function writeDirty() {
   if (!writesEnabled) return;
   if (!invoke) return;
-  const obj = {};
-  for (const [key, value] of cache.entries()) {
-    try { obj[key] = JSON.parse(value); } catch { obj[key] = value; }
+  await ensureLoaded(); // never write before the document is known
+  if (!writesEnabled || !dirty.size) return;
+  const names = [...dirty];
+  dirty.clear();
+  names.forEach(n => inflight.add(n));
+  try {
+    await send(names);
+    retryDelay = 0;
+  } catch (e) {
+    // Keep every change queued; a newer setItem for the same key is already there.
+    names.forEach(n => dirty.add(n));
+    scheduleRetry();
+    throw e;
+  } finally {
+    names.forEach(n => inflight.delete(n));
   }
-  await invoke('write_settings_json', { data: JSON.stringify(obj) });
+}
+
+// One write at a time: two writes on two connections could land out of order.
+let writeChain = Promise.resolve();
+function writeQueued() {
+  const run = writeChain.then(writeDirty);
+  writeChain = run.catch(() => {});
+  return run;
 }
 
 // The debounced path: warns on failure and never rejects.
 function saveToDisk() {
-  return writeToDisk().catch(e => console.warn('[safeStorage] Failed to write settings:', e));
+  saveTimer = null;
+  return writeQueued().catch(e => console.warn('[safeStorage] Failed to write settings:', errText(e)));
 }
 
 // Debounced save — avoids excessive disk writes
 let saveTimer = null;
+let retryDelay = 0;
+function scheduleRetry() {
+  if (!writesEnabled || saveTimer) return;
+  retryDelay = Math.min(retryDelay ? retryDelay * 2 : RETRY_FIRST_MS, RETRY_MAX_MS);
+  saveTimer = setTimeout(saveToDisk, retryDelay);
+}
+
 // The detached compose bundle imports the same persisted stores, but its
 // snapshot is intentionally partial. Decide before Zustand can hydrate so it
 // can never overwrite the main window's settings file during child startup.
@@ -89,16 +263,95 @@ export function setSafeStorageWriteEnabled(enabled) {
   }
 }
 
-// Write now instead of in 500ms, and resolve once the file is written: a
+// Write now instead of in 500ms, and resolve once the document is written: a
 // caller about to reload the window (account transfer import) would otherwise
 // lose whatever the debounce had not yet saved. One write covers every
 // persisted store (settings and theme share this cache). A no-op in windows
 // whose writes are disabled (detached compose/settings). REJECTS when the
-// write fails, so the caller can tell the user their settings did not land.
+// write fails, so the caller can tell the user their settings did not land;
+// the change stays queued and is retried.
 export async function flushSafeStorage() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   await ensureLoaded(); // never write a cache that is missing on-disk keys
-  await writeToDisk();
+  await writeQueued();
+}
+
+// ── Other writers ───────────────────────────────────────────────────────────
+
+// Persisted stores a change from elsewhere is applied to, by persist name.
+const stores = new Map();
+// The main window and an original-message window follow changes in their
+// stores. A settings or compose window does not: its owner relays every change
+// to it, and applying it here as well would echo through that relay. An
+// export window keeps choices of its own in memory that this would undo.
+const followsInStores = () => !isChildWindow()
+  || new URLSearchParams(window.location?.search || '').has('original');
+
+export function registerPersistedStore(store) {
+  const name = store?.persist?.getOptions?.()?.name;
+  if (name) stores.set(name, store);
+}
+
+function applyToStore(name, before, after) {
+  const store = stores.get(name);
+  if (!store || !followsInStores()) return;
+  if (!after || typeof after !== 'object' || !after.state || typeof after.state !== 'object') return;
+  const version = store.persist?.getOptions?.()?.version ?? 0;
+  // Written by another version of the store: it would need that migration.
+  if ((after.version ?? 0) !== version) return;
+  const prev = (before && typeof before === 'object' && before.state) || {};
+  const patch = {};
+  for (const key of new Set([...Object.keys(prev), ...Object.keys(after.state)])) {
+    if (!deepEqual(prev[key], after.state[key])) patch[key] = after.state[key];
+  }
+  if (Object.keys(patch).length) store.setState(patch);
+}
+
+// Takes in the daemon's current values of `keys` (all keys when null):
+// skips the ones this window has not written yet, and the ones it is writing.
+async function refresh(keys) {
+  let reply;
+  try {
+    reply = await rpc('settings.get', keys ? { keys } : {});
+  } catch {
+    return; // the next event or reconnect catches up
+  }
+  if (!isSnapshot(reply)) return;
+  noteVersion(reply.version);
+  const names = keys || [...new Set([...cache.keys(), ...Object.keys(reply.values)])];
+  for (const name of names) {
+    if (dirty.has(name) || inflight.has(name)) continue;
+    const has = Object.prototype.hasOwnProperty.call(reply.values, name);
+    const before = cache.has(name) ? parse(cache.get(name)) : undefined;
+    const after = has ? reply.values[name] : undefined;
+    if (deepEqual(before, after)) continue;
+    if (has) cache.set(name, JSON.stringify(after));
+    else cache.delete(name);
+    applyToStore(name, before, after);
+  }
+}
+
+let listening = false;
+function listenForChanges() {
+  const listen = typeof window !== 'undefined' ? window.__TAURI__?.event?.listen : undefined;
+  if (listening || typeof listen !== 'function') return;
+  listening = true;
+  const on = (name, cb) => Promise.resolve().then(() => listen(name, cb)).catch(() => {});
+  on('settings-changed', ({ payload } = {}) => {
+    const keys = Array.isArray(payload?.keys) ? payload.keys.filter(k => typeof k === 'string') : [];
+    if (!keys.length) return;
+    // This window's own write, or one it has already taken in.
+    if (Number.isInteger(payload.version) && lastVersion != null && payload.version <= lastVersion) return;
+    void refresh(keys);
+  });
+  // A restarted daemon, or an event stream that dropped events: compare all,
+  // and send what was queued while it was gone.
+  const catchUp = () => {
+    void refresh(null);
+    if (dirty.size && writesEnabled) void writeQueued().catch(e => console.warn('[safeStorage] Failed to write settings:', errText(e)));
+  };
+  on('daemon-reconnected', catchUp);
+  on('daemon-events-lagged', catchUp);
 }
 
 export const safeStorage = {
@@ -108,10 +361,12 @@ export const safeStorage = {
   },
   setItem: (name, value) => {
     cache.set(name, value);
+    dirty.add(name);
     debouncedSave();
   },
   removeItem: (name) => {
     cache.delete(name);
+    dirty.add(name);
     debouncedSave();
   },
 };

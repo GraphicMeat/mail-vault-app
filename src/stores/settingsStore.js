@@ -787,8 +787,8 @@ export const useSettingsStore = create(
 
       // Log detail: 'standard' (default, addresses/subjects redacted) or
       // 'verbose' (raw values, for support sessions). Read by the shell at
-      // start and on every write_settings_json; LogsSettings also pushes it
-      // to the running daemon via the logs.set_verbosity RPC.
+      // start and on every settings-changed from the daemon; LogsSettings
+      // also pushes it to the running daemon via the logs.set_verbosity RPC.
       logVerbosity: 'standard',
 
       // When a bug report was last filed (GitHub issue opened, or the bug
