@@ -167,7 +167,17 @@ fn resolve_token_endpoint(default: &str, env_var: &str) -> String {
     let Some(raw) = raw.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
         return default.to_string();
     };
-    let loopback = reqwest::Url::parse(raw).ok().is_some_and(|url| {
+    if is_loopback_http(raw) {
+        raw.to_string()
+    } else {
+        default.to_string()
+    }
+}
+
+/// A plain-http URL on this machine, with no credentials in it: the only
+/// kind of token endpoint a test override may name.
+fn is_loopback_http(raw: &str) -> bool {
+    reqwest::Url::parse(raw).ok().is_some_and(|url| {
         url.scheme() == "http"
             && url.username().is_empty()
             && url.password().is_none()
@@ -179,12 +189,7 @@ fn resolve_token_endpoint(default: &str, env_var: &str) -> String {
                         .parse::<std::net::IpAddr>()
                         .is_ok_and(|ip| ip.is_loopback())
             })
-    });
-    if loopback {
-        raw.to_string()
-    } else {
-        default.to_string()
-    }
+    })
 }
 
 fn get_provider_config(provider: &str, google: GoogleClientChoice<'_>) -> Result<ProviderConfig, String> {
@@ -399,6 +404,11 @@ pub struct OAuth2Manager {
     pending: Arc<Mutex<HashMap<String, PendingOAuth>>>,
     callback_running: Arc<Mutex<bool>>,
     senders: SenderMap,
+    /// Debug builds only: a loopback token endpoint this manager posts to
+    /// instead of the provider's, set by a test for its own manager (the env
+    /// overrides are process-wide). A release build has no such field.
+    #[cfg(debug_assertions)]
+    token_endpoint: std::sync::Mutex<Option<String>>,
 }
 
 impl OAuth2Manager {
@@ -407,7 +417,26 @@ impl OAuth2Manager {
             pending: Arc::new(Mutex::new(HashMap::new())),
             callback_running: Arc::new(Mutex::new(false)),
             senders: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(debug_assertions)]
+            token_endpoint: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Debug builds only: post this manager's token requests to `origin`, a
+    /// loopback http URL (anything else is ignored). Tests only.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub fn set_token_endpoint_for_tests(&self, origin: Option<String>) {
+        *self.token_endpoint.lock().unwrap_or_else(|e| e.into_inner()) = origin.filter(|o| is_loopback_http(o));
+    }
+
+    /// The endpoint to post to: the provider's, or a test's in a debug build.
+    fn token_endpoint(&self, provider: String) -> String {
+        #[cfg(debug_assertions)]
+        if let Some(origin) = self.token_endpoint.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            return origin;
+        }
+        provider
     }
 
     pub async fn generate_auth_url(
@@ -570,7 +599,7 @@ impl OAuth2Manager {
         // refresh instead of hanging it (Track B: Google add-account timeout).
         let client = crate::net_activity::http_client("sign-in", Some(Duration::from_secs(30)));
         let resp = client
-            .send(client.post(config.token_endpoint).form(&params))
+            .send(client.post(self.token_endpoint(config.token_endpoint)).form(&params))
             .await
             .map_err(|e| format!("Token request failed: {}", e))?;
 
@@ -653,7 +682,7 @@ impl OAuth2Manager {
         // refresh instead of hanging it (Track B: Google add-account timeout).
         let client = crate::net_activity::http_client("sign-in", Some(Duration::from_secs(30)));
         let resp = client
-            .send(client.post(config.token_endpoint).form(&params))
+            .send(client.post(self.token_endpoint(config.token_endpoint)).form(&params))
             .await
             // With its causes: "error sending request" alone says nothing of
             // why, and the causes are what the network gate recognises.
@@ -846,6 +875,31 @@ async fn handle_callback(stream: &mut tokio::net::TcpStream, senders: &SenderMap
 
 #[cfg(test)]
 mod tests {
+
+    /// A release build ignores every token endpoint override: the env vars
+    /// read as unset, and `set_token_endpoint_for_tests` does not exist (it
+    /// would not compile here). Runs only as `cargo test --release`.
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_builds_ignore_every_token_endpoint_override() {
+        std::env::set_var("MAILVAULT_MS_TOKEN_ENDPOINT", "http://127.0.0.1:9");
+        std::env::set_var("MAILVAULT_GOOGLE_TOKEN_ENDPOINT", "http://127.0.0.1:9");
+        use super::*;
+        assert_eq!(resolve_token_endpoint(MS_TOKEN_ENDPOINT, "MAILVAULT_MS_TOKEN_ENDPOINT"), MS_TOKEN_ENDPOINT);
+        assert_eq!(resolve_token_endpoint(GOOGLE_TOKEN_ENDPOINT, "MAILVAULT_GOOGLE_TOKEN_ENDPOINT"), GOOGLE_TOKEN_ENDPOINT);
+        assert_eq!(OAuth2Manager::new().token_endpoint("https://provider.example/token".to_string()), "https://provider.example/token");
+    }
+
+    /// The per-manager seam takes a loopback http URL only.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn the_test_token_endpoint_takes_loopback_http_only() {
+        let m = super::OAuth2Manager::new();
+        m.set_token_endpoint_for_tests(Some("https://login.example.com/token".to_string()));
+        assert_eq!(m.token_endpoint("provider".to_string()), "provider");
+        m.set_token_endpoint_for_tests(Some("http://127.0.0.1:4321".to_string()));
+        assert_eq!(m.token_endpoint("provider".to_string()), "http://127.0.0.1:4321");
+    }
     use super::{
         get_provider_config_with, google_client_for_new_sign_in, google_client_for_stamp, html_escape,
         id_token_email, issued_flow_config, own_google_pair, GoogleClientChoice, DEFAULT_NEW_GOOGLE_CLIENT,

@@ -38,7 +38,7 @@ use crate::server::DaemonState;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing::{info, warn};
 
 /// Refresh this long before the stored expiry (the app's `REFRESH_BUFFER_MS`).
@@ -150,9 +150,9 @@ struct Entry {
     /// A server refused `access_token`: refresh before using it again.
     rejected: bool,
     /// After a failed refresh: none before this, and why it failed.
-    cooldown: Option<(Instant, FailKind, String)>,
+    cooldown: Option<(i64, FailKind, String)>,
     /// A refusal before this does not ask for a refresh (`REJECTION_BACKOFF`).
-    rejection_quiet_until: Option<Instant>,
+    rejection_quiet_until: Option<i64>,
     /// The quiet time the next refusal-driven refresh starts; zero when a
     /// request has gone through since.
     rejection_backoff: Duration,
@@ -178,6 +178,11 @@ impl Entry {
 pub(crate) struct TokenStore {
     entries: Mutex<HashMap<String, Entry>>,
     flights: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Debug builds only: how far a test moved this store's clock, so token
+    /// lifetimes and cooldowns pass without sleeping and without touching the
+    /// system clock. A release build has no such field.
+    #[cfg(debug_assertions)]
+    clock_offset_ms: std::sync::atomic::AtomicI64,
 }
 
 fn now_ms() -> i64 {
@@ -233,6 +238,20 @@ fn scrub(text: &str, secrets: &[&str]) -> String {
 }
 
 impl TokenStore {
+    /// Epoch ms: the system clock, moved by a test in a debug build.
+    pub(crate) fn now(&self) -> i64 {
+        #[cfg(debug_assertions)]
+        return now_ms() + self.clock_offset_ms.load(std::sync::atomic::Ordering::SeqCst);
+        #[cfg(not(debug_assertions))]
+        now_ms()
+    }
+
+    /// Debug builds only: move this store's clock forward (tests).
+    #[cfg(debug_assertions)]
+    pub(crate) fn advance_clock_for_tests(&self, by: Duration) {
+        self.clock_offset_ms.fetch_add(by.as_millis() as i64, std::sync::atomic::Ordering::SeqCst);
+    }
+
     fn entries(&self) -> std::sync::MutexGuard<'_, HashMap<String, Entry>> {
         self.entries.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -297,8 +316,9 @@ impl TokenStore {
     /// A server refused `token` for `account_id`: the next use refreshes,
     /// unless a refusal already asked for one within the quiet time.
     pub(crate) fn rejected(&self, account_id: &str, token: &str) {
+        let now = self.now();
         if let Some(entry) = self.entries().get_mut(account_id) {
-            let quiet = entry.rejection_quiet_until.is_some_and(|until| Instant::now() < until);
+            let quiet = entry.rejection_quiet_until.is_some_and(|until| now < until);
             if entry.access_token == token && !quiet {
                 entry.rejected = true;
             }
@@ -352,12 +372,13 @@ impl TokenStore {
     }
 
     fn store_refresh(&self, account_id: &str, grant: &Grant, access_token: String, refresh_token: Option<String>, expires_at: i64) {
+        let now = self.now();
         let mut entries = self.entries();
         let Some(entry) = entries.get_mut(account_id) else { return };
         if entry.rejected {
             let wait = if entry.rejection_backoff.is_zero() { REJECTION_BACKOFF } else { (entry.rejection_backoff * 2).min(REJECTION_BACKOFF_CAP) };
             entry.rejection_backoff = wait;
-            entry.rejection_quiet_until = Some(Instant::now() + wait);
+            entry.rejection_quiet_until = Some(now + wait.as_millis() as i64);
         }
         // The refresh token goes with the client it was posted with: only
         // the token itself rotates.
@@ -377,8 +398,9 @@ impl TokenStore {
 
     fn store_failure(&self, account_id: &str, kind: FailKind, message: &str) {
         let wait = if kind == FailKind::Refused { REFUSED_COOLDOWN } else { UNANSWERED_COOLDOWN };
+        let now = self.now();
         if let Some(entry) = self.entries().get_mut(account_id) {
-            entry.cooldown = Some((Instant::now() + wait, kind, message.to_string()));
+            entry.cooldown = Some((now + wait.as_millis() as i64, kind, message.to_string()));
         }
     }
 }
@@ -397,7 +419,7 @@ async fn read_record(account_id: &str, read: Read) -> Result<(ImapConfig, Value)
 /// with no refresh token gets its stored token, never refreshed. `Err`: the token has
 /// expired and could not be renewed, or the record could not be read.
 pub(crate) async fn access_token(state: &DaemonState, account_id: &str, read: Read) -> Result<Option<String>, TokenError> {
-    if let Some(token) = state.tokens.cached(account_id, now_ms()) {
+    if let Some(token) = state.tokens.cached(account_id, state.tokens.now()) {
         return Ok(Some(token));
     }
     let (_, record) = read_record(account_id, read)
@@ -417,11 +439,11 @@ pub(crate) async fn for_record(state: &DaemonState, account_id: &str, record: &V
     // A refresh that finished while this caller waited wins here: its expiry
     // is later than the record this caller read.
     let Some(entry) = state.tokens.reconcile(account_id, record) else { return Ok(unrefreshable_token(record)) };
-    let now = now_ms();
+    let now = state.tokens.now();
     if !entry.needs_refresh(now) {
         return Ok(Some(entry.access_token));
     }
-    if let Some((until, kind, message)) = entry.cooldown.clone().filter(|(until, ..)| Instant::now() < *until) {
+    if let Some((until, kind, message)) = entry.cooldown.clone().filter(|(until, ..)| now < *until) {
         let _ = until;
         return if entry.still_valid(now) { Ok(Some(entry.access_token)) } else { Err(entry.failure(kind, message)) };
     }
@@ -443,7 +465,10 @@ async fn refresh(state: &DaemonState, account_id: &str, entry: Entry, now: i64) 
     let failure = match result {
         Ok(tokens) if !tokens.access_token.is_empty() => {
             let token = tokens.access_token.clone();
-            state.tokens.store_refresh(account_id, grant, tokens.access_token, tokens.refresh_token, tokens.expires_at as i64);
+            // The provider's lifetime counted on this store's clock (the core
+            // stamps the system clock, which a debug test may have moved past).
+            let expires_at = tokens.expires_at as i64 + (state.tokens.now() - now_ms());
+            state.tokens.store_refresh(account_id, grant, tokens.access_token, tokens.refresh_token, expires_at);
             info!("[oauth] refreshed the access token of {}", grant.email);
             state.events.emit(REFRESHED_EVENT, json!({ "accountId": account_id }));
             return Ok(Some(token));
