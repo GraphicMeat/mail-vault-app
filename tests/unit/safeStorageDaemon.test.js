@@ -471,3 +471,19 @@ describe('a transient first-read error does not pin the window to the shell', ()
   });
 });
 
+describe('a window that cannot write still follows changes', () => {
+  beforeEach(() => { vi.spyOn(console, 'log').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('an original window that set state itself (onRehydrateStorage) still takes later changes in', async () => {
+    const h = host({ search: '?original=1', disk: { [SETTINGS]: blob({ a: 1, cacheLimitMB: 512 }) } });
+    const { safeStorage, registerPersistedStore } = await load();
+    const store = { persist: { getOptions: () => ({ name: SETTINGS, version: 3 }) }, setState: vi.fn() };
+    registerPersistedStore(store);
+    await safeStorage.getItem(SETTINGS);
+    // What settingsStore's onRehydrateStorage does: a setState, so persist writes.
+    safeStorage.setItem(SETTINGS, JSON.stringify(blob({ a: 1, cacheLimitMB: 128 })));
+    h.externalWrite(SETTINGS, blob({ a: 2, cacheLimitMB: 128 }));
+    await vi.waitFor(() => expect(store.setState).toHaveBeenCalledWith({ a: 2 }));
+  });
+});

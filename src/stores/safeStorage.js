@@ -47,9 +47,12 @@ const RETRY_MAX_MS = 60000;
 
 // In-memory cache — always holds the current state, as JSON strings.
 const cache = new Map();
-// Keys changed in this window and not yet written (always tracked; a child
-// window never writes them, but they protect its own values from refreshes).
+// Keys changed in this window and not yet written.
 const dirty = new Set();
+// Keys a window that cannot write changed in its own memory: kept out of
+// `dirty` (which would stop it following those keys for good), but a full
+// refresh does not delete them.
+const localOnly = new Set();
 // Keys in the write on the wire.
 const inflight = new Set();
 // Keys written before the document loaded. Zustand persist writes a store's
@@ -406,6 +409,10 @@ export function safeStorageWritable() {
 // defaults but must never serialize its partial webview cache over main state.
 export function setSafeStorageWriteEnabled(enabled) {
   writesEnabled = Boolean(enabled);
+  if (writesEnabled) {
+    localOnly.forEach(n => dirty.add(n));
+    localOnly.clear();
+  }
   if (!writesEnabled && saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
@@ -475,6 +482,8 @@ async function refresh(keys) {
     const before = cache.has(name) ? parse(cache.get(name)) : undefined;
     const after = has ? reply.values[name] : undefined;
     if (deepEqual(before, after)) continue;
+    if (!has && !keys && localOnly.has(name)) continue;
+    localOnly.delete(name);
     if (has) cache.set(name, JSON.stringify(after));
     else cache.delete(name);
     applyToStore(name, before, after);
@@ -504,6 +513,18 @@ function listenForChanges() {
   on('daemon-events-lagged', catchUp);
 }
 
+// A change in this window: queued to write, or, in a window that cannot
+// write, kept in its own memory only.
+function track(name) {
+  if (!writesEnabled) {
+    localOnly.add(name);
+    return;
+  }
+  dirty.add(name);
+  if (!settledLoad && invoke) early.add(name);
+  debouncedSave();
+}
+
 export const safeStorage = {
   // Returns a Promise — Zustand's createJSONStorage handles this via .then()
   getItem: (name) => {
@@ -511,14 +532,10 @@ export const safeStorage = {
   },
   setItem: (name, value) => {
     cache.set(name, value);
-    dirty.add(name);
-    if (!settledLoad && invoke) early.add(name);
-    debouncedSave();
+    track(name);
   },
   removeItem: (name) => {
     cache.delete(name);
-    dirty.add(name);
-    if (!settledLoad && invoke) early.add(name);
-    debouncedSave();
+    track(name);
   },
 };
