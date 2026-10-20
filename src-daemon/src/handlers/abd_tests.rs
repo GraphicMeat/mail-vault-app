@@ -969,8 +969,12 @@ async fn a_grant_revoked_mid_run_parks_the_job_deleting_nothing_until_a_new_sign
     assert_eq!(rig.inbox_uids().len(), 12, "nothing left the server");
     assert!(rig.trash_ids().is_empty());
     assert_eq!(rig.mock.count_commands("MOVE"), 0);
+    // The paused frame can land just before the one refused refresh: let it
+    // happen, then nothing more may be asked.
+    tokio::time::sleep(Duration::from_millis(500)).await;
     let posts_while_parked = auth.posts().len();
     tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(posts_while_parked <= 1, "{posts_while_parked} token requests for one refusal");
     assert_eq!(auth.posts().len(), posts_while_parked, "a refused grant is not asked again and again");
 
     let renewed = auth.sign_in(mock_imap::oauth::GrantSpec {
