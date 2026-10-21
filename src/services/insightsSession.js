@@ -46,7 +46,9 @@ export function createInsightsSession({ api, listen = tauriListen }) {
       if (mine.cancelled || disposed) throw aborted();
       return { id, coverage: done.coverage, loaded: done.loaded };
     } catch (error) {
-      if (!mine.cancelled) release(id);
+      // Again after a cancel: that release may have reached the daemon
+      // before the build did. This one follows the build's reply.
+      release(id);
       throw mine.cancelled || disposed ? aborted() : error;
     } finally {
       if (run === mine) run = null;
