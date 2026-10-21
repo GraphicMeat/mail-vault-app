@@ -17,6 +17,7 @@ use tracing::{error, info};
 
 pub(crate) mod abd;
 pub(crate) mod ai;
+pub(crate) mod alias_store;
 pub(crate) mod aliases;
 pub(crate) mod archive;
 pub(crate) mod auto_tags;

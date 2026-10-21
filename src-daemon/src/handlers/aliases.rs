@@ -35,16 +35,23 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         Ok(a) => a,
         Err(resp) => return Some(resp),
     };
+    Some(RpcResponse::success(id, discover(state, account, &account_id).await))
+}
+
+/// One account's `{provider, detected}` answer. `account` carries the token
+/// the daemon holds for it (`oauth_tokens`): the request's own, replaced by
+/// `oauth_tokens::inject`, or the one `alias_store` resolved itself.
+pub(super) async fn discover(state: &Arc<DaemonState>, account: &Value, account_id: &str) -> Value {
     let login = account.get("email").and_then(Value::as_str).unwrap_or_default().to_string();
     // A JMAP server lists exactly what the account may send as: its
     // identities are the answer, and its mail is not mined for more.
     if aliases::is_jmap(account) {
         let provider = jmap_provider(state, account).await;
         let detected: Vec<DetectedAlias> = Vec::new();
-        return Some(RpcResponse::success(id, json!({ "provider": provider, "detected": detected })));
+        return json!({ "provider": provider, "detected": detected });
     }
-    let (provider, detected) = tokio::join!(provider(state, account, &login), detect(state, account_id, login.clone()));
-    Some(RpcResponse::success(id, json!({ "provider": provider, "detected": detected })))
+    let (provider, detected) = tokio::join!(provider(state, account, &login), detect(state, account_id.to_string(), login.clone()));
+    json!({ "provider": provider, "detected": detected })
 }
 
 /// A JMAP account's identities (`Identity/get`) as the provider's list. An

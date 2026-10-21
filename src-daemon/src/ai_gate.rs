@@ -24,7 +24,7 @@ pub(crate) fn refusal() -> String {
 /// `accounts.json`'s entry for `account_id`. A missing or unreadable file reads
 /// as "not listed": the caller then falls through to the keychain record, and
 /// from there to "unknown" (treated as Google).
-fn listed_record(app_dir: &Path, account_id: &str) -> Option<Value> {
+pub(crate) fn listed_record(app_dir: &Path, account_id: &str) -> Option<Value> {
     let data = std::fs::read_to_string(app_dir.join("accounts.json")).ok()?;
     let list: Vec<Value> = serde_json::from_str(&data).ok()?;
     list.into_iter().find(|a| a.get("id").and_then(Value::as_str) == Some(account_id))

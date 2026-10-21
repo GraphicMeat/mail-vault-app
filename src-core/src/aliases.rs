@@ -20,6 +20,9 @@ use std::io::{BufRead, Read};
 use std::path::Path;
 use std::time::Duration;
 
+/// The rules for an account's stored alias list (add, remove, merge).
+pub mod list;
+
 /// The Network Activity purpose of the provider lookup.
 pub const PURPOSE: &str = "alias lookup";
 /// How many of a folder's newest messages detection reads.
