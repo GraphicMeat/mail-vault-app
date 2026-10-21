@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage, flushSafeStorage, safeStorageWritable } from './safeStorage';
 import { daemonCall } from '../services/daemonClient';
-import { FETCH_MODES } from '../utils/fetchPolicy';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { decide } from '../utils/notificationPolicy.js';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
@@ -114,6 +113,11 @@ const normalizeExplorerGrouping = value => ['sender', 'conversation'].includes(v
 const normalizeExplorerDateDepth = value => value === 'day' ? 'day' : 'month';
 // What a two-finger trackpad swipe on a message row does, per side.
 export const SWIPE_ACTIONS = ['archive', 'delete', 'toggleRead', 'star', 'snooze', 'move', 'none'];
+
+// The download modes a `fetchMode` / `fetchModes` value may hold (the names
+// `src-core/src/fetch_mode.rs` reads; what each one keeps is the daemon's,
+// `policy.accounts`).
+export const FETCH_MODES = ['onDemand', 'keepRecent', 'indexOnly', 'hoarder'];
 const normalizeSwipeAction = (value, fallback) => SWIPE_ACTIONS.includes(value) ? value : fallback;
 // 'web' is the iframe reader; 'blitz' is the optional native renderer module.
 export const normalizeEmailRenderer = v => (v === 'blitz' ? 'blitz' : 'web');
@@ -440,8 +444,8 @@ export const useSettingsStore = create(
       // Only window. 0 = no cutoff (legacy; the UI offers 1/3/6/12).
       localCacheDurationMonths: 3, // Default 3 months
 
-      // Download mode (src/utils/fetchPolicy.js; the daemon reads these keys
-      // from frontend-settings.json): the default, per-account overrides
+      // Download mode (the daemon reads these keys from frontend-settings.json
+      // and answers what they mean through `policy.accounts`): the default, per-account overrides
       // { [accountId]: mode }, and whether Premium runs Hoarder's background
       // download (kept equal to hasPremiumAccess, see the subscriber below).
       fetchMode: 'keepRecent',

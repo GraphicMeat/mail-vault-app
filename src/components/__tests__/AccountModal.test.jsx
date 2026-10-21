@@ -6,7 +6,8 @@
 // handleOAuth2SignIn flow and check the add finishes on its own, and that a
 // signed-in address that doesn't match what the user typed is caught before
 // anything is saved (Q3: Google's id_token `email` claim vs the typed
-// address).
+// address). The daemon compares them (`oauth2_exchange` with `expectEmail`
+// answers `emailMatches`); these specs hand the modal its answer.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
@@ -89,6 +90,7 @@ describe('AccountModal — OAuth callback finishes the add', () => {
       refreshToken: 'refresh-token',
       expiresAt: 1234567890,
       email: TYPED_EMAIL, // Google's id_token claim, matches what was typed
+      emailMatches: true,
       clientId: 'own.apps.googleusercontent.com', // the OAuth client that issued the tokens
     });
     mockAddAccount.mockResolvedValue({ id: 'acct-1', email: TYPED_EMAIL });
@@ -101,6 +103,8 @@ describe('AccountModal — OAuth callback finishes the add', () => {
     // "Connected!" success state appearing, is entirely the callback's doing.
     await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('Connected!')).toBeTruthy();
+    // The daemon is told what was typed, to compare the sign-in against.
+    expect(mockExchangeOAuth2Code.mock.calls[0][1]).toBe(TYPED_EMAIL);
 
     const submitted = mockAddAccount.mock.calls[0][0];
     expect(submitted.email).toBe(TYPED_EMAIL);
@@ -117,6 +121,7 @@ describe('AccountModal — OAuth callback finishes the add', () => {
       refreshToken: 'refresh-token',
       expiresAt: 1234567890,
       email: 'someone-else@gmail.com',
+      emailMatches: false,
     });
 
     await openGmailStep2();
@@ -143,6 +148,7 @@ describe('AccountModal — OAuth callback finishes the add', () => {
       refreshToken: 'refresh-token',
       expiresAt: 1234567890,
       email: 'user@gmail.com', // Google's canonical (dot-free) claim
+      emailMatches: true, // the daemon's identity comparison
     });
     mockAddAccount.mockResolvedValue({ id: 'acct-3', email: dottedTyped });
 

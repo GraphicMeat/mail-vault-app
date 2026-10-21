@@ -7,13 +7,33 @@
  * arriving, and on a Gmail account an empty field shows what applies (2,500 MB
  * down, 500 up with the cap off; the 2,000 MB default with it on) as its placeholder.
  *
- * "Gmail" is decided by the account's IMAP host, the way the daemon decides it
- * (`default_limits(host)`), not by the email domain.
+ * The figures are the daemon's (`policy.accounts`, `transfer`; "Gmail" by the
+ * IMAP host, the limits and defaults pinned by
+ * src-core/tests/fixtures/transfer-limits-cases.json). These specs hand the
+ * card the daemon's answers and check what it shows of them.
  */
 
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+
+const MB = 1024 * 1024;
+// accountId -> the daemon's `transfer` answer.
+const answers = vi.hoisted(() => ({}));
+vi.mock('../../../services/accountPolicy', () => ({
+  useAccountPolicy: (account) => (account?.id in answers ? { fetch: null, transfer: answers[account.id] } : undefined),
+}));
+/** What the daemon answers for a Gmail host (or not), cap on or off, typed limits. */
+function transfer({ gmail, cap = false, down = null, up = null }) {
+  const side = (typed, capOn, capOff) => {
+    const fallback = gmail ? (cap ? capOn : capOff) : null;
+    return {
+      limitBytes: typed ?? fallback, isProviderDefault: typed == null && fallback != null,
+      defaultCapOn: gmail ? capOn : null, defaultCapOff: gmail ? capOff : null,
+    };
+  };
+  return { gmail, capEnabled: cap, warnEnabled: true, down: side(down, 2000 * MB, 2500 * MB), up: side(up, 500 * MB, 500 * MB), today: { down: 0, up: 0 }, warning: null };
+}
 
 const { default: DataUsageAccountCard } = await import('../DataUsageAccountCard');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
@@ -34,6 +54,11 @@ let snapshot;
 beforeEach(() => {
   snapshot = useSettingsStore.getState();
   useSettingsStore.setState({ transferLimits: {}, accountColors: {} });
+  for (const id of Object.keys(answers)) delete answers[id];
+  answers[PLAIN.id] = transfer({ gmail: false });
+  answers[GMAIL.id] = transfer({ gmail: true });
+  answers[WORKSPACE.id] = transfer({ gmail: true });
+  answers[FORWARDED.id] = transfer({ gmail: false });
 });
 afterEach(() => {
   cleanup();
@@ -83,11 +108,13 @@ describe('DataUsageAccountCard placeholders', () => {
 
   it('shows the 2000 MB default once the cap is on and the field is empty', () => {
     useSettingsStore.setState({ transferLimits: { [GMAIL.id]: { capEnabled: true } } });
+    answers[GMAIL.id] = transfer({ gmail: true, cap: true });
     renderCard(GMAIL);
     expect(downInput().getAttribute('placeholder')).toBe('2000');
     expect(upInput().getAttribute('placeholder')).toBe('500');
   });
 
+  // Before the change reaches the daemon: the placeholder follows the toggle.
   it('follows the toggle: switching the cap on moves the placeholder from 2500 to 2000', () => {
     renderCard(GMAIL);
     expect(downInput().getAttribute('placeholder')).toBe('2500');
@@ -108,7 +135,7 @@ describe('DataUsageAccountCard placeholders', () => {
     expect(downInput().getAttribute('placeholder')).toBe('Unlimited');
   });
 
-  it('decides by IMAP host: Google Workspace is Gmail, a forwarded @gmail.com is not', () => {
+  it('shows the daemon\'s Gmail answer: Google Workspace is Gmail, a forwarded @gmail.com is not', () => {
     renderCard(WORKSPACE);
     expect(downInput().getAttribute('placeholder')).toBe('2500');
     cleanup();
@@ -122,13 +149,13 @@ describe('DataUsageAccountCard placeholders', () => {
     useSettingsStore.setState({
       transferLimits: { [GMAIL.id]: { capEnabled: true, dailyDownLimitBytes: 1500 * 1024 * 1024 } },
     });
+    answers[GMAIL.id] = transfer({ gmail: true, cap: true, down: 1500 * MB });
     renderCard(GMAIL);
     expect(downInput().value).toBe('1500');
   });
 });
 
 describe('DataUsageAccountCard usage bar on a Gmail account', () => {
-  const MB = 1024 * 1024;
   const bar = (account) => render(<DataUsageAccountCard account={account} stats={{ today: { down: 100 * MB, up: 10 * MB } }} />);
 
   it('measures today against Gmail\'s real 2,500 MB limit while the cap is off', () => {
@@ -140,7 +167,17 @@ describe('DataUsageAccountCard usage bar on a Gmail account', () => {
 
   it('measures against the 2,000 MB default once the cap is on', () => {
     useSettingsStore.setState({ transferLimits: { [GMAIL.id]: { capEnabled: true } } });
+    answers[GMAIL.id] = transfer({ gmail: true, cap: true });
     bar(GMAIL);
     expect(document.body.textContent).toContain(`/ ${formatBytes(2000 * MB)}`);
+  });
+});
+
+describe('DataUsageAccountCard before the daemon answers', () => {
+  it('shows no limit and Unlimited placeholders, never a guessed figure', () => {
+    delete answers[GMAIL.id];
+    render(<DataUsageAccountCard account={GMAIL} stats={{ today: { down: 100 * MB, up: 0 } }} />);
+    expect(document.body.textContent).not.toContain(`/ ${formatBytes(2500 * MB)}`);
+    expect(downInput().getAttribute('placeholder')).toBe('Unlimited');
   });
 });

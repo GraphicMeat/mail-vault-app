@@ -9,7 +9,6 @@ import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
-import { normalizeEmailIdentity } from '../utils/emailIdentity';
 import { formatCount } from '../utils/formatCount';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { Private } from './privacy/Private';
@@ -548,24 +547,22 @@ export function AccountModal({ onClose, onSuccess }) {
       }
 
       // Step 3: Wait for the callback — exchange endpoint blocks until user completes sign-in
-      const tokenData = await exchangeOAuth2Code(state);
+      const tokenData = await exchangeOAuth2Code(state, userEnteredEmail);
 
       if (cancelled) return; // User cancelled while waiting
 
       // Google's id_token carries the `email` claim once `openid email` is
       // requested (src-core/src/oauth2.rs); Microsoft returns no id_token
-      // today, so tokenData.email is undefined there and this check is
-      // skipped — a typo'd Microsoft address has no guard yet (Track B, Q3
-      // concern). A mismatch means the user signed into a different mailbox
-      // than the one they typed: stop before the account is ever saved,
-      // and don't store these tokens under the typed (wrong) address.
+      // today, so the daemon has no `emailMatches` answer there and this
+      // check is skipped: a typo'd Microsoft address has no guard yet (Track
+      // B, Q3 concern). A mismatch means the user signed into a different
+      // mailbox than the one they typed: stop before the account is ever
+      // saved, and don't store these tokens under the typed (wrong) address.
       //
-      // The claim is always Gmail's canonical (dot-free) address, but a
-      // real Gmail sign-in is compared against whatever the user actually
-      // typed — dots, a `+tag`, or googlemail.com vs gmail.com all point at
-      // the same inbox there, so a byte comparison would reject correct
-      // sign-ins (review: task-B2-review.md, "Important"). Fix round 1.
-      if (tokenData.email && normalizeEmailIdentity(tokenData.email) !== normalizeEmailIdentity(userEnteredEmail)) {
+      // The daemon compares by identity, not bytes (`normalize_identity`):
+      // dots, a `+tag`, or googlemail.com vs gmail.com all point at the same
+      // Gmail inbox, and the claim is always the canonical dot-free address.
+      if (tokenData.emailMatches === false) {
         setError(t('account.oauthEmailMismatch', { typed: pa(userEnteredEmail, 'email'), signedIn: pa(tokenData.email, 'email') }));
         return;
       }

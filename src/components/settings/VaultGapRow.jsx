@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useBackupStore } from '../../stores/backupStore';
-import { fetchPolicy } from '../../utils/fetchPolicy';
+import { useAccountPolicy } from '../../services/accountPolicy';
 import { resolveServerAccount } from '../../services/authUtils';
 import { send } from '../../services/transport';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -27,25 +26,19 @@ export function errorKey(e, fallback) {
   return code ? `errors.${code}` : fallback;
 }
 
-// Hidden, On Demand and Index Only keep no copy here by design: nothing to count.
-const keepsNoCopies = (state, accountId) => {
-  const policy = fetchPolicy(state, accountId);
-  return !policy || policy.mode === 'onDemand' || policy.mode === 'indexOnly';
-};
-
-// Keep Recent promises only mail dated inside its window (the daemon leaves
-// older copies out of the count on purpose: the mode leaves them on the
-// server), so the row names the window. 0 = no window (a window of 0 keeps
-// everything, as Hoarder does).
-const recentWindow = (state, accountId) => {
-  const policy = fetchPolicy(state, accountId);
-  return policy?.mode === 'keepRecent' ? policy.windowMonths : 0;
-};
-
 export default function VaultGapRow({ account }) {
   const t = useT();
-  const byDesign = useSettingsStore((s) => keepsNoCopies(s, account.id));
-  const months = useSettingsStore((s) => recentWindow(s, account.id));
+  // The daemon's reading of the account's download mode (`policy.accounts`).
+  // Hidden, On Demand and Index Only keep no copy here by design: nothing to
+  // count. Keep Recent promises only mail dated inside its window (the count
+  // leaves older copies out on purpose: the mode leaves them on the server),
+  // so the row names the window; 0 = no window. Nothing is counted before
+  // the daemon has said which (`undefined`); one that cannot say (`null`)
+  // counts, as a mode that keeps copies would.
+  const policy = useAccountPolicy(account);
+  const policyKnown = policy !== undefined;
+  const byDesign = !!policy && !policy.fetch?.vaultHoldsCopies;
+  const months = policy?.fetch?.recentWindowMonths || 0;
   // A backup running or queued for this account would displace a save.
   const backupBusy = useBackupStore((s) => (!!s.activeBackup?.active && !s.activeBackup.done
     && s.activeBackup.accountId === account.id) || s.queue.includes(account.id));
@@ -66,7 +59,7 @@ export default function VaultGapRow({ account }) {
       .catch((e) => { if (mine === seq.current) setGap({ error: errorKey(e, 'settings.backup.vaultGap.countFailed') }); });
   }, [account.id]);
 
-  useEffect(() => { if (!byDesign) refresh(); }, [byDesign, refresh]);
+  useEffect(() => { if (policyKnown && !byDesign) refresh(); }, [policyKnown, byDesign, refresh]);
 
   useEffect(() => {
     let unlisten = null;

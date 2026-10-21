@@ -2,7 +2,7 @@ import React, { forwardRef, useState } from 'react';
 import { useSettingsStore, getAccountColor, getAccountInitial } from '../../stores/settingsStore';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { formatBytes } from '../../utils/formatBytes';
-import { isGmailAccount, resolveDailyLimitBytes, providerDefaultBytes } from '../../utils/transferLimits';
+import { useAccountPolicy } from '../../services/accountPolicy';
 import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
@@ -35,17 +35,24 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
   const avatarColor = getAccountColor(accountColors, account);
   const avatarInitial = getAccountInitial(account);
   const config = transferLimits[account.id] || {};
-  const gmail = isGmailAccount(account);
+  // The limits as the daemon reads and enforces them (`policy.accounts`);
+  // nothing is shown for a limit until it answers.
+  const shown = useAccountPolicy(account)?.transfer;
+  const gmail = shown?.gmail === true;
 
   const periodKey = period === 'day' ? 'today' : period;
   const periodStats = stats?.[periodKey] || { down: 0, up: 0 };
   const todayStats = stats?.today || { down: 0, up: 0 };
 
-  const downLimit = resolveDailyLimitBytes(config, gmail, 'down');
-  const upLimit = resolveDailyLimitBytes(config, gmail, 'up');
+  const NO_LIMIT = { limitBytes: null, isProviderDefault: false, defaultCapOn: null, defaultCapOff: null };
+  const downLimit = shown?.down || NO_LIMIT;
+  const upLimit = shown?.up || NO_LIMIT;
 
   const warnEnabled = config.warnEnabled !== false;
   const capEnabled = config.capEnabled === true;
+  // An empty field stands for the provider default under the toggle as it is
+  // now, before the change reaches the daemon.
+  const placeholderBytes = (limit) => (capEnabled ? limit.defaultCapOn : limit.defaultCapOff);
 
   // ponytail: commit on blur, not onChange — avoids the input value jumping
   // mid-keystroke when the 30s stats refresh re-renders this card.
@@ -175,7 +182,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyDownLimitBytes)}
               onBlur={handleLimitBlur('dailyDownLimitBytes')}
-              placeholder={limitPlaceholder(providerDefaultBytes(gmail, capEnabled, 'down'))}
+              placeholder={limitPlaceholder(placeholderBytes(downLimit))}
               className={inputClass}
             />
           </div>
@@ -186,7 +193,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyUpLimitBytes)}
               onBlur={handleLimitBlur('dailyUpLimitBytes')}
-              placeholder={limitPlaceholder(providerDefaultBytes(gmail, capEnabled, 'up'))}
+              placeholder={limitPlaceholder(placeholderBytes(upLimit))}
               className={inputClass}
             />
           </div>

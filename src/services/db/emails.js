@@ -3,7 +3,7 @@
 import { readDir, exists } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { initDB, initBasic, accountDir, dataPath } from './accounts.js';
-import { mailboxPathFromVaultDir } from '../../stores/slices/unifiedHelpers.js';
+import { flattenMailboxes } from '../../stores/slices/unifiedHelpers.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
 import { custodySource } from '../../stores/slices/custody.js';
 import { t } from '../../i18n/index.js';
@@ -493,6 +493,24 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
   return emails;
 }
 
+// Vault directory names are sanitised and lossy ("Projekt Nystart" and
+// "Projekt_Nystart" share one), so a name read back off disk is not a path
+// IMAP can SELECT. The daemon maps each to the first of `mailboxes` (a tree
+// or a flat list, in the order to prefer) that produces it, else to itself
+// (`policy.vault_mailboxes`). It cannot answer: each name stands for itself,
+// which is what an unmatched directory gets anyway.
+async function mailboxesForVaultDirs(dirs, mailboxes) {
+  if (!dirs.length) return [];
+  const paths = flattenMailboxes(mailboxes).map(box => box.path);
+  try {
+    const reply = await invoke('policy.vault_mailboxes', { dirs, mailboxes: paths });
+    if (Array.isArray(reply?.mailboxes) && reply.mailboxes.length === dirs.length) return reply.mailboxes;
+  } catch (e) {
+    console.warn('[db] policy.vault_mailboxes failed; reading the folders under their directory names:', e);
+  }
+  return dirs;
+}
+
 export async function getAllLocalEmails(accountId, mailboxes = []) {
   await initDB();
   if (!invoke) return [];
@@ -502,13 +520,12 @@ export async function getAllLocalEmails(accountId, mailboxes = []) {
     const dirExists = await exists(acctDir);
     if (!dirExists) return [];
 
-    const mailboxDirs = await readDir(acctDir);
+    const dirs = (await readDir(acctDir)).filter(e => e.name && e.isDirectory).map(e => e.name);
+    // Pass the SERVER path each directory came from, so `_mailbox` on these
+    // rows is something IMAP can SELECT.
+    const paths = await mailboxesForVaultDirs(dirs, mailboxes);
     const allEmails = [];
-    for (const mbEntry of mailboxDirs) {
-      if (!mbEntry.name || !mbEntry.isDirectory) continue;
-      // The directory name is sanitised and lossy — pass the SERVER path it
-      // came from, so `_mailbox` on these rows is something IMAP can SELECT.
-      const mailbox = mailboxPathFromVaultDir(mbEntry.name, mailboxes);
+    for (const mailbox of paths) {
       // One call per vault directory, and the read stamps custody off that
       // mailbox's index once for the whole batch — one read per MAILBOX here,
       // never one per message. Bodies included: this feeds the search scan.
@@ -707,10 +724,12 @@ export async function searchLocalEmails(accountId, query, filters = {}) {
   // The paths this search asked for come first: the scan stamps a one-folder
   // search with `filters.mailbox` verbatim, whether or not the tree lists it.
   const knownBoxes = [...(mailboxes || []).map(path => ({ path })), ...(filters.mailboxes || [])];
+  const dirs = [...new Set((reply.rows || []).map(row => row.vaultDir).filter(Boolean))];
+  const pathByDir = new Map((await mailboxesForVaultDirs(dirs, knownBoxes)).map((path, i) => [dirs[i], path]));
   const stamperByMailbox = new Map();
   const rows = [];
   for (const row of reply.rows || []) {
-    const mailbox = mailboxPathFromVaultDir(row.vaultDir, knownBoxes);
+    const mailbox = pathByDir.get(row.vaultDir) ?? row.vaultDir;
     if (!stamperByMailbox.has(mailbox)) {
       stamperByMailbox.set(mailbox, custodyStamper(await getLocalIndexMeta(accountId, mailbox)));
     }

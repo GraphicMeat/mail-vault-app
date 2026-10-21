@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { SegmentedChoice } from '../ui/SegmentedChoice';
 import { Button } from '../ui/Button';
 import { InfoPopover } from '../ui/InfoPopover';
-import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
-import { FETCH_MODES } from '../../utils/fetchPolicy';
+import { useSettingsStore, hasPremiumAccess, FETCH_MODES } from '../../stores/settingsStore';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { useT } from '../../i18n/index.js';
 

@@ -50,6 +50,20 @@ const ALL_SAVED = new RegExp(`${escape(NONE)}|${escape(NONE_RECENT)}`);
 const PARTIAL = en['settings.backup.vaultGap.partial'];
 const UNAVAILABLE = en['errors.E_VAULT_UNAVAILABLE'];
 
+/**
+ * The daemon's reading of an account's download mode (`policy.accounts`,
+ * `fetch`; handlers/policy.rs). Keep Recent, 3 months, unless a spec says.
+ */
+const recent = (months) => ({ mode: 'keepRecent', windowMonths: months, vaultHoldsCopies: true, recentWindowMonths: months });
+const FETCH = {
+  onDemand: { mode: 'onDemand', windowMonths: 3, vaultHoldsCopies: false, recentWindowMonths: 0 },
+  indexOnly: { mode: 'indexOnly', windowMonths: 3, vaultHoldsCopies: false, recentWindowMonths: 0 },
+  hoarder: { mode: 'hoarder', windowMonths: 3, vaultHoldsCopies: true, recentWindowMonths: 0 },
+  hidden: null,
+};
+// accountId -> its `fetch` view.
+let fetchFor;
+
 /** The daemon's success reply (vault_gap.rs `count`). */
 const reply = (over = {}) => ({ count: 0, vaultReachable: true, partial: false, byMailbox: [], ...over });
 
@@ -98,6 +112,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   for (const name of Object.keys(handlers)) delete handlers[name];
   counts = {};
+  fetchFor = {};
   saveReply = { runId: LUKE.id, started: true };
   sendMock.mockImplementation(async (method, params) => {
     if (method === 'vault_gap_count') {
@@ -110,11 +125,16 @@ beforeEach(() => {
       return saveReply;
     }
     if (method === 'backup_cancel') return { cancelled: true };
+    if (method === 'policy.accounts') {
+      return { accounts: Object.fromEntries(params.accounts.map((a) => [a.id, {
+        fetch: a.id in fetchFor ? fetchFor[a.id] : recent(3), transfer: {},
+      }])) };
+    }
     throw new Error(`unexpected ${method}`);
   });
   resolveServerAccount.mockImplementation(async (id, account) => ({ ok: true, account: { ...account, resolved: true }, source: 'store' }));
   settingsSnapshot = useSettingsStore.getState();
-  useSettingsStore.setState({ language: 'en', fetchMode: 'keepRecent', fetchModes: {}, hiddenAccounts: {}, localCacheDurationMonths: 3 });
+  useSettingsStore.setState({ language: 'en' });
   useBackupStore.setState({ activeBackup: null, queue: [] });
 });
 afterEach(() => {
@@ -156,7 +176,7 @@ describe('VaultGapRow - the count', () => {
   });
 
   it('nothing missing, complete, reachable, in Hoarder: every copy is in the vault', async () => {
-    useSettingsStore.setState({ fetchModes: { [LUKE.id]: 'hoarder' } });
+    fetchFor[LUKE.id] = FETCH.hoarder;
     counts = { [LUKE.id]: reply({ count: 0 }) };
     await renderRow(LUKE, 'none');
     expect(row().textContent).toContain('Every copy this app has shown or cached is in your vault.');
@@ -178,14 +198,14 @@ describe('VaultGapRow - the count', () => {
   });
 
   it('a one-month window reads in the singular', async () => {
-    useSettingsStore.setState({ localCacheDurationMonths: 1 });
+    fetchFor[LUKE.id] = recent(1);
     counts = { [LUKE.id]: reply({ count: 0 }) };
     await renderRow(LUKE, 'none');
     expect(row().textContent).toContain(en['settings.backup.vaultGap.noneRecent_one'].replace('{{count}}', '1'));
   });
 
   it('a Keep Recent window of 0 keeps everything: the plain line', async () => {
-    useSettingsStore.setState({ localCacheDurationMonths: 0, fetchMode: 'keepRecent' });
+    fetchFor[LUKE.id] = recent(0);
     counts = { [LUKE.id]: reply({ count: 0 }) };
     await renderRow(LUKE, 'none');
     expect(row().textContent).toContain(NONE);
@@ -265,11 +285,11 @@ describe('VaultGapRow - a count that is only a floor', () => {
 
 describe('VaultGapRow - download modes that keep no copies', () => {
   it.each([
-    ['On Demand for the account', { fetchModes: { [LUKE.id]: 'onDemand' } }],
-    ['Index Only by default', { fetchMode: 'indexOnly' }],
-    ['a hidden account', { hiddenAccounts: { [LUKE.id]: true } }],
-  ])('%s says the mode keeps no copies, and is never counted', async (_, settings) => {
-    useSettingsStore.setState(settings);
+    ['On Demand for the account', { [LUKE.id]: FETCH.onDemand }],
+    ['Index Only', { [LUKE.id]: FETCH.indexOnly }],
+    ['a hidden account', { [LUKE.id]: FETCH.hidden }],
+  ])('%s says the mode keeps no copies, and is never counted', async (_, modes) => {
+    fetchFor = modes;
     counts = { [LUKE.id]: reply({ count: 0 }) };
     await renderRow(LUKE, 'byDesign');
     expect(row().textContent).toContain(en['settings.backup.vaultGap.byDesign']);
@@ -282,14 +302,26 @@ describe('VaultGapRow - download modes that keep no copies', () => {
   });
 
   it.each([
-    ['Keep Recent', { fetchMode: 'keepRecent' }],
-    ['Hoarder for the account', { fetchModes: { [LUKE.id]: 'hoarder' } }],
-    ['On Demand for another account only', { fetchModes: { [VADER.id]: 'onDemand' } }],
-  ])('%s is counted', async (_, settings) => {
-    useSettingsStore.setState(settings);
+    ['Keep Recent', {}],
+    ['Hoarder for the account', { [LUKE.id]: FETCH.hoarder }],
+    ['On Demand for another account only', { [VADER.id]: FETCH.onDemand }],
+  ])('%s is counted', async (_, modes) => {
+    fetchFor = modes;
     counts = { [LUKE.id]: reply({ count: 2 }) };
     await renderRow(LUKE, 'missing');
     expect(countCalls()).toBe(1);
+  });
+
+  // The mode is the daemon's reading of the settings file, which the store
+  // writes a moment after it changes: the row asks again on settings-changed.
+  it('follows a mode change once it reaches the daemon', async () => {
+    counts = { [LUKE.id]: reply({ count: 2 }) };
+    await renderRow(LUKE, 'missing');
+    fetchFor[LUKE.id] = FETCH.onDemand;
+    await waitFor(() => expect(handlers['settings-changed']?.size).toBeGreaterThan(0));
+    await act(async () => { for (const cb of handlers['settings-changed']) cb({ payload: { keys: ['mailvault-settings'], version: 2 } }); });
+    await waitFor(() => expect(row().dataset.state).toBe('byDesign'));
+    expect(calls('policy.accounts').length).toBeGreaterThan(1);
   });
 });
 

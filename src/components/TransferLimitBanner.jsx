@@ -2,9 +2,7 @@ import { Button } from './ui/Button';
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAccountStore } from '../stores/accountStore';
-import { useSettingsStore } from '../stores/settingsStore';
-import * as api from '../services/api';
-import { isGmailAccount, resolveDailyLimitBytes } from '../utils/transferLimits';
+import { accountPolicies, onPolicyInputsChanged } from '../services/accountPolicy';
 import { useT } from '../i18n/index.js';
 
 const DISMISS_KEY = 'mailvault-transfer-warn-dismissed';
@@ -19,58 +17,44 @@ function loadDismissed() {
 }
 
 /**
- * Shown across the top of the main view when an account has crossed 80% of
- * its daily transfer limit (explicit or Gmail's provider default) and
- * warnEnabled hasn't been turned off for it. Dismissing hides it for that
- * account until the next UTC day.
+ * Shown across the top of the main view when the daemon says an account is
+ * near its daily transfer limit (`policy.accounts`, `transfer.warning`: 80%
+ * of the explicit limit or Gmail's provider default, unless warnEnabled was
+ * turned off for it). Dismissing hides it for that account until the next
+ * UTC day.
  */
 export function TransferLimitBanner({ onOpenDataUsage }) {
   const t = useT();
   const accounts = useAccountStore(s => s.accounts);
-  const transferLimits = useSettingsStore(s => s.transferLimits);
   const [warnings, setWarnings] = useState([]);
   const [dismissed, setDismissed] = useState(loadDismissed);
 
   const check = useCallback(async () => {
     if (!accounts?.length) { setWarnings([]); return; }
     try {
-      const res = await api.getTransferStats();
+      const policies = await accountPolicies(accounts);
       const today = utcDateKey();
       const next = [];
       for (const account of accounts) {
         if (dismissed[account.id] === today) continue;
-        const entry = transferLimits[account.id];
-        const warnEnabled = entry?.warnEnabled !== false; // missing entry = warn on
-        if (!warnEnabled) continue;
-        const todayStats = res?.accounts?.[account.id]?.today;
-        if (!todayStats) continue;
-        const gmail = isGmailAccount(account);
-        const down = resolveDailyLimitBytes(entry, gmail, 'down');
-        const up = resolveDailyLimitBytes(entry, gmail, 'up');
-        let worst = null;
-        if (down.limitBytes) {
-          const pct = todayStats.down / down.limitBytes;
-          if (pct >= 0.8) worst = { pct, direction: 'download' };
-        }
-        if (up.limitBytes) {
-          const pct = todayStats.up / up.limitBytes;
-          if (pct >= 0.8 && (!worst || pct > worst.pct)) worst = { pct, direction: 'upload' };
-        }
-        if (worst) {
-          next.push({ accountId: account.id, email: account.email, pct: worst.pct, direction: worst.direction });
+        const warning = policies[account.id]?.transfer?.warning;
+        if (warning) {
+          next.push({ accountId: account.id, email: account.email, pct: warning.fraction, direction: warning.direction });
         }
       }
       setWarnings(next);
     } catch (e) {
       console.warn('[TransferLimitBanner] stats check failed:', e);
     }
-  }, [accounts, transferLimits, dismissed]);
+  }, [accounts, dismissed]);
 
-  // Check on app start + every 5 minutes
+  // Check on app start, every 5 minutes, and when a settings change (a
+  // limit, the warning switch) has reached the daemon.
   useEffect(() => {
     check();
     const timer = setInterval(check, CHECK_INTERVAL_MS);
-    return () => clearInterval(timer);
+    const off = onPolicyInputsChanged(check);
+    return () => { clearInterval(timer); off(); };
   }, [check]);
 
   const dismiss = (accountId) => {

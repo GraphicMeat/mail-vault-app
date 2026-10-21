@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lastDaysSeries } from '../../src/utils/transferLimits';
+import { lastDaysSeries } from '../../src/utils/transferSeries';
 
 // Fixed instant, deliberately late in a UTC day so a local-time implementation
 // west of UTC would produce a different window and fail here.

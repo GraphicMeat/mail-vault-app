@@ -1,8 +1,9 @@
 /**
  * The app's body pipeline downloads ahead only what the account's download
  * mode keeps (Track H): On Demand nothing, Keep Recent the window (as
- * before), Hoarder everything. Same rule as the daemon's gates
- * (`src/utils/fetchPolicy.js`, a port of `src-core/src/fetch_mode.rs`).
+ * before), Hoarder everything. The daemon decides (`policy.accounts`, its
+ * `fetch.keep` answer from src-core/src/fetch_mode.rs, pinned there by the
+ * shared fixture); these specs hand the pipeline the daemon's answers.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -33,6 +34,16 @@ vi.mock('../../stores/mailStore', () => ({
 
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => store.settings },
+}));
+
+// The daemon's `policy.accounts` answer for each account (`fetch` only).
+const daemon = vi.hoisted(() => ({ fetch: {}, asked: [] }));
+vi.mock('../transport', () => ({
+  send: vi.fn(async (method, params) => {
+    if (method !== 'policy.accounts') throw new Error(`unexpected ${method}`);
+    daemon.asked.push(params);
+    return { accounts: Object.fromEntries(params.accounts.map((a) => [a.id, { fetch: daemon.fetch[a.id] ?? null, transfer: {} }])) };
+  }),
 }));
 
 const bodyIndexed = vi.hoisted(() => ({ uids: null }));
@@ -66,28 +77,36 @@ const rows = [
   { uid: 4 }, // no date at all
 ];
 const saved = new Set([3]);
-const policy = (mode, windowMonths = 3) => ({ mode, windowMonths, hoarderPremium: false });
+// The daemon's `fetch` view: `keep` is what the download-ahead takes.
+const CUTOFF = Date.UTC(2026, 5, 27, 12); // three months before NOW
+const view = (mode, keep, keepSinceMs = null) => ({ mode, windowMonths: 3, hoarderPremium: false, keep, keepSinceMs });
+const ON_DEMAND = view('onDemand', 'none');
+const KEEP_RECENT = view('keepRecent', 'since', CUTOFF);
+const INDEX_ONLY = view('indexOnly', 'since', CUTOFF);
+const HOARDER = view('hoarder', 'all');
 
 describe('_getUncachedUids by download mode', () => {
   it('On Demand downloads nothing ahead', () => {
-    expect(pipelineManager._getUncachedUids(rows, saved, policy('onDemand'), NOW)).toEqual([]);
+    expect(pipelineManager._getUncachedUids(rows, saved, ON_DEMAND)).toEqual([]);
   });
 
   it('a hidden account (no policy) downloads nothing ahead', () => {
-    expect(pipelineManager._getUncachedUids(rows, saved, null, NOW)).toEqual([]);
+    expect(pipelineManager._getUncachedUids(rows, saved, null)).toEqual([]);
   });
 
-  it('Keep Recent is unchanged: unsaved mail inside the window, undated mail left out', () => {
-    expect(pipelineManager._getUncachedUids(rows, saved, policy('keepRecent'), NOW)).toEqual([1]);
+  // Undated mail is kept, as the daemon's download gate keeps it
+  // (`keeps_body_dated`); the JS port used to leave it out.
+  it('Keep Recent: unsaved mail inside the window, and undated mail', () => {
+    expect(pipelineManager._getUncachedUids(rows, saved, KEEP_RECENT)).toEqual([1, 4]);
   });
 
   it('Index Only downloads what Keep Recent would', () => {
-    expect(pipelineManager._getUncachedUids(rows, saved, policy('indexOnly'), NOW)).toEqual([1]);
+    expect(pipelineManager._getUncachedUids(rows, saved, INDEX_ONLY)).toEqual([1, 4]);
   });
 
-  it('Hoarder (and the legacy window 0) downloads every unsaved message', () => {
-    expect(pipelineManager._getUncachedUids(rows, saved, policy('hoarder'), NOW)).toEqual([1, 2, 4]);
-    expect(pipelineManager._getUncachedUids(rows, saved, policy('keepRecent', 0), NOW)).toEqual([1, 2, 4]);
+  it('Hoarder (and the legacy window 0, `keep: all`) downloads every unsaved message', () => {
+    expect(pipelineManager._getUncachedUids(rows, saved, HOARDER)).toEqual([1, 2, 4]);
+    expect(pipelineManager._getUncachedUids(rows, saved, view('keepRecent', 'all'))).toEqual([1, 2, 4]);
   });
 });
 
@@ -100,8 +119,11 @@ describe('the active account pipeline reads the account\'s own mode', () => {
     pipelineManager._contentCascadeDone.clear();
     pipelineManager._loadSentHeaders = vi.fn();
     pipelineManager._startBackgroundHeadersOnly = vi.fn();
+    daemon.fetch = {};
+    daemon.asked = [];
+    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128 };
     store.state = {
-      accounts: [{ id: 'luke', email: 'luke@x' }],
+      accounts: [{ id: 'luke', email: 'luke@x', imapHost: 'imap.x' }],
       activeMailbox: 'INBOX',
       emails: [{ uid: 11, date: new Date().toISOString() }],
       savedEmailIds: new Set(),
@@ -109,7 +131,15 @@ describe('the active account pipeline reads the account\'s own mode', () => {
   });
 
   it('On Demand hands the pipeline an empty list (the attachment step still runs)', async () => {
-    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'onDemand', localCacheDurationMonths: 3 };
+    daemon.fetch.luke = ON_DEMAND;
+    await pipelineManager.startActiveAccountPipeline('luke');
+    expect(startContentCaching).toHaveBeenCalledWith([], 'INBOX');
+    expect(daemon.asked).toEqual([{ accounts: [{ id: 'luke', imapHost: 'imap.x' }] }]);
+  });
+
+  it('a daemon that cannot answer downloads nothing ahead', async () => {
+    const { send } = await import('../transport');
+    send.mockRejectedValueOnce(new Error('daemon gone'));
     await pipelineManager.startActiveAccountPipeline('luke');
     expect(startContentCaching).toHaveBeenCalledWith([], 'INBOX');
   });
@@ -118,27 +148,27 @@ describe('the active account pipeline reads the account\'s own mode', () => {
   // only the vault would download them again at every launch (review I2).
   it('Index Only counts a body the search index holds as kept', async () => {
     bodyIndexed.uids = new Set([11]);
-    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'indexOnly', localCacheDurationMonths: 3 };
+    daemon.fetch.luke = view('indexOnly', 'all');
     await pipelineManager.startActiveAccountPipeline('luke');
     expect(startContentCaching).toHaveBeenCalledWith([], 'INBOX');
   });
 
   it('Index Only downloads the body when the index cannot say (null)', async () => {
     bodyIndexed.uids = null;
-    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'indexOnly', localCacheDurationMonths: 3 };
+    daemon.fetch.luke = view('indexOnly', 'all');
     await pipelineManager.startActiveAccountPipeline('luke');
     expect(startContentCaching).toHaveBeenCalledWith([11], 'INBOX');
   });
 
   it('Keep Recent never treats an indexed body as kept', async () => {
     bodyIndexed.uids = new Set([11]);
-    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'keepRecent', localCacheDurationMonths: 3 };
+    daemon.fetch.luke = view('keepRecent', 'all');
     await pipelineManager.startActiveAccountPipeline('luke');
     expect(startContentCaching).toHaveBeenCalledWith([11], 'INBOX');
   });
 
-  it('a per-account override wins over the global mode', async () => {
-    store.settings = { hiddenAccounts: {}, cacheLimitMB: 128, fetchMode: 'onDemand', fetchModes: { luke: 'keepRecent' }, localCacheDurationMonths: 3 };
+  it('fetches what the daemon says this account keeps', async () => {
+    daemon.fetch.luke = KEEP_RECENT;
     await pipelineManager.startActiveAccountPipeline('luke');
     expect(startContentCaching).toHaveBeenCalledWith([11], 'INBOX');
   });

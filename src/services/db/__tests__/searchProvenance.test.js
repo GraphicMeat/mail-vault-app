@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 if (!globalThis.window) globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
 
 const listed = [];
+const mapped = [];
 
 vi.mock('../../transport.js', () => ({
   send: (cmd, args) => {
@@ -26,6 +27,14 @@ vi.mock('../../transport.js', () => ({
     }
     if (cmd === 'maildir_read_light_batch') {
       return Promise.resolve([{ uid: 34, subject: 'Angebot', from: { address: 'a@b.c' } }]);
+    }
+    // The daemon's directory to mailbox mapping (`policy.vault_mailboxes`,
+    // src-core search_index/text.rs), answered here for this one directory.
+    if (cmd === 'policy.vault_mailboxes') {
+      mapped.push(args);
+      return Promise.resolve({
+        mailboxes: args.dirs.map((d) => (d === VAULT_DIR && args.mailboxes.includes(SERVER_PATH) ? SERVER_PATH : d)),
+      });
     }
     if (cmd === 'maildir_repair_generation') {
       return Promise.resolve({ ran: false, rebound: [], orphaned: [], kept: 0, errors: 0, generation: 1 });
@@ -63,7 +72,7 @@ const MAILBOXES = [
   ] },
 ];
 
-beforeEach(() => { listed.length = 0; });
+beforeEach(() => { listed.length = 0; mapped.length = 0; });
 
 describe('local vault rows carry their own location', () => {
   it('stamps _mailbox and _accountId on every row getLocalEmails returns', async () => {
@@ -81,6 +90,11 @@ describe('local vault rows carry their own location', () => {
     // stamped with the directory name is a row that cannot be fetched.
     expect(rows[0]._mailbox).toBe(SERVER_PATH);
     expect(listed).toEqual([SERVER_PATH]);
+    // The daemon maps it, asked once with the whole tree flattened.
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0].dirs).toEqual([VAULT_DIR]);
+    expect(mapped[0].mailboxes).toContain(SERVER_PATH);
+    expect(mapped[0].mailboxes).toContain('INBOX.Archive');
   });
 
   it('keeps an unknown directory as itself rather than inventing a path', async () => {

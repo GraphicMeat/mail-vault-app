@@ -3,7 +3,6 @@ import { Loader } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { formatBytes } from '../../../utils/formatBytes';
 import { formatCount } from '../../../utils/formatCount';
-import { GMAIL_LIMIT_DOWN_BYTES } from '../../../utils/transferLimits';
 import { MODE_BACKUP } from '../../../utils/abdFrame';
 import { folderLabel } from '../../abd/abdText';
 import { useT } from '../../../i18n/index.js';
@@ -72,7 +71,9 @@ export default function AbdSummary({
           <li data-testid="abd-summary-estimate">
             {t('settings.backup.abd.setup.estimateDays', {
               count: estimate.days,
-              limit: formatBytes(estimate.dailyLimitBytes ?? GMAIL_LIMIT_DOWN_BYTES),
+              // The daemon names the limit it estimated against (Gmail's own
+              // cap when the user's is off): `days` is set only with one.
+              limit: formatBytes(estimate.dailyLimitBytes || 0),
             })}
           </li>
         )}

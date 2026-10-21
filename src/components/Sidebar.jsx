@@ -22,7 +22,7 @@ import { useBackupStore } from '../stores/backupStore';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
 import { formatCount } from '../utils/formatCount';
-import { lastDaysSeries } from '../utils/transferLimits';
+import { lastDaysSeries } from '../utils/transferSeries';
 import { t as tr, useT } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
 import { SidebarViews } from './SidebarViews';

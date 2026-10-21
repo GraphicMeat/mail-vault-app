@@ -1,7 +1,6 @@
 // ── transfer/settingsTransfer — which frontend settings travel in an account transfer file ──
 
-import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
-import { FETCH_MODES } from '../../utils/fetchPolicy';
+import { useSettingsStore, hasPremiumAccess, FETCH_MODES } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { flushSafeStorage } from '../../stores/safeStorage';
 import { quickActionOverridesAsDiffs } from '../../utils/quickActions';

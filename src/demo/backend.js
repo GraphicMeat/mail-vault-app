@@ -713,6 +713,19 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         }
         if (method === 'message.verify_sender') return { status: 'none', tooltip: [], issues: [], auth: { spf: null, dkim: null, dmarc: null }, dkim: null, simulated: true };
         if (method === 'message.code') return { code: null, needsBody: false, simulated: true };
+        // The demo keeps every body and sets no daily limit.
+        if (method === 'policy.accounts') {
+          const none = { limitBytes: null, isProviderDefault: false, defaultCapOn: null, defaultCapOff: null };
+          const accounts = {};
+          for (const a of args.params?.accounts || []) {
+            accounts[a.id] = {
+              fetch: { mode: 'hoarder', windowMonths: 3, hoarderPremium: false, vaultHoldsCopies: true, recentWindowMonths: 0, keep: 'all', keepSinceMs: null },
+              transfer: { gmail: false, capEnabled: false, warnEnabled: true, down: none, up: none, today: { down: 0, up: 0 }, warning: null },
+            };
+          }
+          return { accounts };
+        }
+        if (method === 'policy.vault_mailboxes') return { mailboxes: [...(args.params?.dirs || [])] };
         // "Is the server copy gone?": the demo's own server rows answer, and
         // nothing is stamped (its custody lives on the rows themselves).
         if (method === 'custody.probe_server_copy') {

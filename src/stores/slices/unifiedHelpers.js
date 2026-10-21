@@ -610,28 +610,18 @@ export function _resolveMailboxPath(accountMailboxes, folderId) {
   return findBox(accountMailboxes, byRole) || findBox(accountMailboxes, byName) || folderId;
 }
 
-// ── Vault directory names ──────────────────────────────────────────────────
-// `maildir_cur_path` (src-tauri/src/main.rs) stores a mailbox under a name with
-// every char outside [alphanumeric . - _] replaced by '_'. That mapping is
-// many-to-one — "Projekt Nystart" and "Projekt_Nystart" share a directory — so
-// a directory name read back off disk is NOT a server mailbox path. SELECTing
-// it fails, or worse lands somewhere else. Recover the real path by sanitising
-// the mailbox paths the server told us about and matching.
-// Rust's `char::is_alphanumeric` is Unicode-aware, so this regex must be too:
-// an "Entwürfe" folder is not stored as "Entw_rfe".
-// On Windows, `vault_dir_name` (src-core/src/search_index/text.rs) additionally
-// suffixes Win32-reserved names — mirrored here by `avoidReserved`, gated on
-// the same platform check `vaultDirName` uses. The two sides agree everywhere,
-// not just on unix; the shared fixture (`vaultDirNameParity.test.js`) holds
-// the unix names, and both tests add `avoidReserved` to them on Windows.
-const VAULT_UNSAFE_RE = /[^\p{Alphabetic}\p{N}.\-_]/gu;
+// ── Win32 reserved names ───────────────────────────────────────────────────
+// The vault's directory names, and the reverse mapping from a directory back
+// to the server mailbox, are the daemon's (`vault_dir_name` and
+// `policy.vault_mailboxes`, src-core/src/search_index/text.rs). What stays
+// here is the file-name step attachment saves share with it.
 
 const RESERVED_DEVICES = new Set(['CON', 'PRN', 'AUX', 'NUL']);
 
-// Win32 reserved device names, and names Win32 silently rewrites — pure port
-// of `avoid_reserved` in src-core/src/search_index/text.rs. Kept standalone
-// (not folded into `vaultDirName`) so it can be unit-tested on any platform
-// without mocking `navigator`.
+// Win32 reserved device names, and names Win32 silently rewrites: pure port
+// of `avoid_reserved` in src-core/src/search_index/text.rs, for an attachment
+// file name (src/services/attachmentUtils.js). Kept standalone so it can be
+// unit-tested on any platform without mocking `navigator`.
 export function avoidReserved(name) {
   const dot = name.indexOf('.');
   const stem = dot === -1 ? name : name.slice(0, dot);
@@ -658,30 +648,10 @@ export function isWindowsPlatform() {
     && (navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows'));
 }
 
-export function vaultDirName(mailbox) {
-  let safe = String(mailbox ?? '').replace(VAULT_UNSAFE_RE, '_');
-  // `.` and `..` would name the account dir or climb out of it.
-  if (safe === '.' || safe === '..') safe = safe.replace(/\./g, '_');
-  return isWindowsPlatform() ? avoidReserved(safe) : safe;
-}
-
 export function flattenMailboxes(mailboxes, out = []) {
   for (const box of mailboxes || []) {
     if (box?.path) out.push(box);
     if (box?.children?.length) flattenMailboxes(box.children, out);
   }
   return out;
-}
-
-// dir name → the server mailbox path that produced it. Unknown dirs come back
-// as themselves: a stale vault folder for a mailbox the server no longer lists
-// still has readable mail in it, and reading is all this name is used for.
-// Ambiguity resolves to the first match, which is the only honest option — the
-// sanitiser threw the distinguishing character away.
-export function mailboxPathFromVaultDir(dir, mailboxes) {
-  if (!dir) return dir;
-  for (const box of flattenMailboxes(mailboxes)) {
-    if (vaultDirName(box.path) === dir) return box.path;
-  }
-  return dir;
 }

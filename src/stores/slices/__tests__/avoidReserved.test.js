@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { avoidReserved, vaultDirName } from '../unifiedHelpers.js';
+import { describe, it, expect } from 'vitest';
+import { avoidReserved } from '../unifiedHelpers.js';
 
 // Finding 2 (final fix wave): mirrors src-core/src/search_index/text.rs's
 // `avoid_reserved` test one-for-one, so the two sanitizers can't drift again.
@@ -27,21 +27,5 @@ describe('avoidReserved (Win32 reserved-name suffixing, mirrors the Rust side)',
       expect(avoidReserved(name)).toBe(name);
     }
     expect(avoidReserved('')).toBe('');
-  });
-});
-
-describe('vaultDirName applies avoidReserved only when the platform reports Windows', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('suffixes a reserved name on a Windows navigator', () => {
-    vi.stubGlobal('navigator', { platform: 'Win32', userAgent: 'Windows NT 10.0' });
-    expect(vaultDirName('CON')).toBe('CON_');
-  });
-
-  it('leaves a reserved name untouched on a non-Windows navigator', () => {
-    vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: 'Macintosh' });
-    expect(vaultDirName('CON')).toBe('CON');
   });
 });

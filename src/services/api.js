@@ -509,13 +509,16 @@ export async function getGoogleClients() {
   return { mailvault: false, default: 'thunderbird' };
 }
 
-export async function exchangeOAuth2Code(state) {
+// `expectEmail`, the address the user typed: the daemon answers
+// `emailMatches` (is the signed-in mailbox that one, by identity) whenever the
+// provider names the signed-in address.
+export async function exchangeOAuth2Code(state, expectEmail) {
   if (IS_TAURI) {
-    return tauriInvoke('oauth2_exchange', { state });
+    return tauriInvoke('oauth2_exchange', { state, expectEmail });
   }
   return httpRequest('/oauth2/exchange', {
     method: 'POST',
-    body: JSON.stringify({ state }),
+    body: JSON.stringify({ state, expectEmail }),
   });
 }
 

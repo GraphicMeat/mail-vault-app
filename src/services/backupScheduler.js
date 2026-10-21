@@ -6,7 +6,7 @@ import { useMailStore } from '../stores/mailStore';
 import { hasValidCredentials, resolveServerAccount } from './authUtils';
 import { createSnapshotFromMaildir } from './snapshotService';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
-import { downloadCapChanged } from '../utils/transferLimits';
+import { downloadCapChanged } from './downloadCapWatch';
 import { t } from '../i18n/index.js';
 
 // Re-prompt the share-to-unlock panel at most weekly.

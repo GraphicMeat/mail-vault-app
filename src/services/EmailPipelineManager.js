@@ -6,8 +6,8 @@ import * as db from './db';
 import { graphFoldersToMailboxes, isGraphAccount } from './graphConfig';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { waitForSentMailboxPath, findSentMailboxPath, mergesSentIntoThreads } from '../utils/sentFolder';
-import { fetchPolicy, keepsBody } from '../utils/fetchPolicy';
-import { downloadCapChanged } from '../utils/transferLimits';
+import { accountPolicies, fetchesAhead } from './accountPolicy';
+import { downloadCapChanged } from './downloadCapWatch';
 import { vaultUids } from '../stores/slices/unifiedHelpers';
 
 /** Check if an account is hidden in settings */
@@ -81,15 +81,17 @@ class EmailPipelineManager {
       ? (ownRows.find(e => e._mailbox)?._mailbox || 'INBOX')
       : activeMailbox;
 
-    // What the account already keeps, read before the pipeline is picked:
-    // everything from the reuse check to `startContentCaching` must run
-    // without a yield (see below). Only Index Only asks the index.
-    const policy = fetchPolicy(useSettingsStore.getState(), accountId);
+    // What the account keeps (the daemon's answer) and what it already
+    // holds, read before the pipeline is picked: everything from the reuse
+    // check to `startContentCaching` must run without a yield (see below).
+    // Only Index Only asks the index.
+    const policy = await this._fetchPolicy(account);
+    // The read yielded: a newer activation owns the pipelines now.
+    if (this._activeAccountId !== accountId || this._destroyed) return;
     // The store's set is keyed by folder; this pipeline keeps one folder's uids.
     let kept = vaultUids(savedEmailIds, accountId, pipelineMailbox);
     if (policy?.mode === 'indexOnly') {
       kept = await this._keptUids(accountId, pipelineMailbox, kept, policy);
-      // The read yielded: a newer activation owns the pipelines now.
       if (this._activeAccountId !== accountId || this._destroyed) return;
     }
 
@@ -251,7 +253,7 @@ class EmailPipelineManager {
       const pipeline = this.pipelines.get(account.id);
       if (!pipeline || pipeline._destroyed) continue;
 
-      const policy = fetchPolicy(useSettingsStore.getState(), account.id);
+      const policy = await this._fetchPolicy(account);
       // Use in-memory headers from header loading phase (avoids re-reading from disk)
       const emails = pipeline._lastLoadedEmails;
       if (emails && emails.length > 0) {
@@ -465,7 +467,7 @@ class EmailPipelineManager {
       this._contentCascadeDone.has(account.id) &&
       (pipeline._phase === 'idle' || pipeline._phase === 'done')
     ) {
-      const policy = fetchPolicy(useSettingsStore.getState(), account.id);
+      const policy = await this._fetchPolicy(account);
       const vault = await db.getVaultUidSets(account.id, 'INBOX');
       // Unknown: fetch nothing rather than re-fetch every cached body.
       if (!vault || pipeline._destroyed || this._destroyed) return;
@@ -473,6 +475,20 @@ class EmailPipelineManager {
       if (pipeline._destroyed || this._destroyed) return;
       const uids = this._getUncachedUids(emails, kept, policy);
       if (uids.length > 0) pipeline.startContentCaching(uids, 'INBOX');
+    }
+  }
+
+  /**
+   * The account's download mode as the daemon reads it (`policy.accounts`):
+   * `null` for a hidden account, and when the daemon cannot answer, which
+   * downloads nothing ahead rather than guessing a mode.
+   */
+  async _fetchPolicy(account) {
+    try {
+      return (await accountPolicies([account]))[account.id]?.fetch ?? null;
+    } catch (e) {
+      console.warn('[PipelineManager] download mode unavailable, nothing fetched ahead:', e?.message || e);
+      return null;
     }
   }
 
@@ -490,15 +506,16 @@ class EmailPipelineManager {
 
   /**
    * Filter emails to the UIDs whose body the account's download mode keeps
-   * (`fetchPolicy`, the daemon's own rule) and that are not yet in Maildir.
-   * On Demand and a hidden account (`policy` null) download nothing ahead.
-   * Uses the pre-loaded savedEmailIds Set for O(1) lookups instead of per-UID IPC calls.
+   * (the daemon's `keep` answer, `fetchesAhead`) and that are not yet in
+   * Maildir. On Demand and a hidden account (`policy` null) download nothing
+   * ahead. Uses the pre-loaded savedEmailIds Set for O(1) lookups instead of
+   * per-UID IPC calls.
    */
-  _getUncachedUids(emails, savedEmailIds, policy, nowMs = Date.now()) {
-    if (!policy || policy.mode === 'onDemand') return [];
+  _getUncachedUids(emails, savedEmailIds, policy) {
+    if (!policy || policy.keep === 'none') return [];
     return emails
       .filter(email => !savedEmailIds.has(email.uid)
-        && keepsBody(policy, new Date(email.date || email.internalDate).getTime(), nowMs))
+        && fetchesAhead(policy, new Date(email.date || email.internalDate).getTime()))
       .map(email => email.uid);
   }
 }

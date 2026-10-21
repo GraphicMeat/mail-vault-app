@@ -301,6 +301,10 @@ export const DAEMON_OWNED = new Set([
   // safeStorage.js is the caller; it keeps the shell's two settings commands
   // as the fallback for a daemon without these.
   'settings.get', 'settings.patch', 'settings.replace',
+  // Phase 1 row 5: what an account's download mode keeps, its daily limits
+  // and the banner's warning, and which server mailbox a vault directory
+  // holds (handlers/policy.rs).
+  'policy.accounts', 'policy.vault_mailboxes',
 ]);
 
 async function sendToDaemon(command, args) {
