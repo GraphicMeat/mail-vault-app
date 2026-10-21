@@ -82,8 +82,8 @@ fn js_number(n: &serde_json::Number) -> String {
         return n.to_string();
     }
     match n.as_f64() {
-        Some(f) if f == 0.0 => "0".into(),
-        Some(f) if f.fract() == 0.0 && f.abs() < 1e21 => format!("{f:.0}"),
+        // `-0` prints as `0` in JS.
+        Some(f) if f.fract() == 0.0 && f.abs() < 1e21 => format!("{:.0}", f + 0.0),
         _ => n.to_string(),
     }
 }
@@ -803,7 +803,7 @@ impl Model {
         for mut event in events {
             let had = !event.correspondents.is_empty();
             if q.hide_automated {
-                event.correspondents.retain(|person, _| !automated(*person));
+                event.correspondents.retain(|person, _| !automated(person));
             }
             if q.hide_automated && had && event.correspondents.is_empty() {
                 continue;
