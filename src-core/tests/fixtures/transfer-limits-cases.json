@@ -1,0 +1,2308 @@
+{
+  "_comment": "Shared fixture for the daily transfer limits as Settings > Data usage and the warning banner show them. Expected values are the answers of src/utils/transferLimits.js and TransferLimitBanner.jsx at 65040308f; src-core/src/transfer_limits.rs (include_str!) must match. Regenerate with node src-core/tests/fixtures/gen/limits-policy-fixtures.mjs.",
+  "gmailHostCases": [
+    {
+      "host": "imap.gmail.com",
+      "expected": true
+    },
+    {
+      "host": "IMAP.GMAIL.COM",
+      "expected": true
+    },
+    {
+      "host": "IMAP.GoogleMail.com",
+      "expected": true
+    },
+    {
+      "host": "imap.googlemail.com",
+      "expected": true
+    },
+    {
+      "host": "imap.hostinger.com",
+      "expected": false
+    },
+    {
+      "host": "outlook.office365.com",
+      "expected": false
+    },
+    {
+      "host": "",
+      "expected": false
+    },
+    {
+      "host": "mail.notgmail.example",
+      "expected": true
+    },
+    {
+      "host": "gmail",
+      "expected": true
+    }
+  ],
+  "limitCases": [
+    {
+      "name": "missing@imap.gmail.com",
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2621440000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "missing@imap.hostinger.com",
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "empty@imap.gmail.com",
+      "entry": {},
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2621440000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "empty@imap.hostinger.com",
+      "entry": {},
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "cap_off_blank@imap.gmail.com",
+      "entry": {
+        "capEnabled": false
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2621440000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "cap_off_blank@imap.hostinger.com",
+      "entry": {
+        "capEnabled": false
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2097152000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 104857600,
+          "isProviderDefault": false,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": 104857600,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "cap_off_down_set@imap.gmail.com",
+      "entry": {
+        "capEnabled": false,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 104857600,
+          "isProviderDefault": false,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "cap_off_down_set@imap.hostinger.com",
+      "entry": {
+        "capEnabled": false,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": 104857600,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2097152000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 52428800,
+          "isProviderDefault": false,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": 52428800,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "both_set@imap.gmail.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 314572800,
+        "dailyUpLimitBytes": 41943040
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 314572800,
+          "isProviderDefault": false,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 41943040,
+          "isProviderDefault": false,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "both_set@imap.hostinger.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 314572800,
+        "dailyUpLimitBytes": 41943040
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": 314572800,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": 41943040,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 104857600,
+          "isProviderDefault": false,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 52428800,
+          "isProviderDefault": false,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": 104857600,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": 52428800,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 0,
+          "isProviderDefault": false,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 0,
+          "isProviderDefault": false,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": 0,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": 0,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "null_fields@imap.gmail.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": null,
+        "dailyUpLimitBytes": null
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2097152000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "null_fields@imap.hostinger.com",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": null,
+        "dailyUpLimitBytes": null
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "warn_off@imap.gmail.com",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2097152000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "warn_off@imap.hostinger.com",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    },
+    {
+      "name": "warn_on@imap.gmail.com",
+      "entry": {
+        "warnEnabled": true,
+        "capEnabled": false
+      },
+      "host": "imap.gmail.com",
+      "expected": {
+        "down": {
+          "limitBytes": 2621440000,
+          "isProviderDefault": true,
+          "defaultCapOn": 2097152000,
+          "defaultCapOff": 2621440000
+        },
+        "up": {
+          "limitBytes": 524288000,
+          "isProviderDefault": true,
+          "defaultCapOn": 524288000,
+          "defaultCapOff": 524288000
+        }
+      }
+    },
+    {
+      "name": "warn_on@imap.hostinger.com",
+      "entry": {
+        "warnEnabled": true,
+        "capEnabled": false
+      },
+      "host": "imap.hostinger.com",
+      "expected": {
+        "down": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        },
+        "up": {
+          "limitBytes": null,
+          "isProviderDefault": false,
+          "defaultCapOn": null,
+          "defaultCapOff": null
+        }
+      }
+    }
+  ],
+  "warningCases": [
+    {
+      "name": "missing@imap.gmail.com/idle",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.gmail.com/down_79",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.gmail.com/down_80",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.gmail.com/down_over",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.gmail.com/up_90",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.gmail.com/both_down_worse",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.gmail.com/both_up_worse",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.gmail.com/gmail_cutoff_80",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.8
+      }
+    },
+    {
+      "name": "missing@imap.gmail.com/gmail_default_80",
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.8
+      }
+    },
+    {
+      "name": "missing@imap.hostinger.com/idle",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/down_79",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/down_80",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/down_over",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/up_90",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/both_down_worse",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/both_up_worse",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/gmail_cutoff_80",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "missing@imap.hostinger.com/gmail_default_80",
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/idle",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/down_79",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/down_80",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/down_over",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/up_90",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/both_down_worse",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/both_up_worse",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 1
+      }
+    },
+    {
+      "name": "cap_on_blank@imap.gmail.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.8
+      }
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/idle",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/down_79",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/down_80",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/down_over",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/up_90",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/both_down_worse",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/both_up_worse",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_blank@imap.hostinger.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.8
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 1.5
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.95
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.85
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 20
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.gmail.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 16
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.8
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 1.5
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.95
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.85
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 20
+      }
+    },
+    {
+      "name": "cap_on_down_set@imap.hostinger.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 16
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.9
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.82
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.98
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 1
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.gmail.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 8
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.9
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.82
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.98
+      }
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "cap_on_up_set@imap.hostinger.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 8
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.8
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 1.5
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.9
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.95
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.98
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 20
+      }
+    },
+    {
+      "name": "down_and_up@imap.gmail.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 16
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.8
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 1.5
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.9
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 0.95
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": {
+        "direction": "upload",
+        "fraction": 0.98
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 20
+      }
+    },
+    {
+      "name": "down_and_up@imap.hostinger.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 104857600,
+        "dailyUpLimitBytes": 52428800
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": {
+        "direction": "download",
+        "fraction": 16
+      }
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.gmail.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/idle",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/down_79",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/down_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/down_over",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/up_90",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/both_down_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/both_up_worse",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/gmail_cutoff_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "explicit_zero@imap.hostinger.com/gmail_default_80",
+      "entry": {
+        "capEnabled": true,
+        "dailyDownLimitBytes": 0,
+        "dailyUpLimitBytes": 0
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/idle",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/down_79",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/down_80",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/down_over",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/up_90",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/both_down_worse",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/both_up_worse",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/gmail_cutoff_80",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.gmail.com/gmail_default_80",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.gmail.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/idle",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/down_79",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 82837504,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/down_80",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 83886080,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/down_over",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 157286400,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/up_90",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 0,
+        "up": 47185920
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/both_down_worse",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 99614720,
+        "up": 42991616
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/both_up_worse",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 89128960,
+        "up": 51380224
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/gmail_cutoff_80",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 2097152000,
+        "up": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "warn_off@imap.hostinger.com/gmail_default_80",
+      "entry": {
+        "warnEnabled": false,
+        "capEnabled": true
+      },
+      "host": "imap.hostinger.com",
+      "today": {
+        "down": 1677721600,
+        "up": 419430400
+      },
+      "expected": null
+    }
+  ]
+}

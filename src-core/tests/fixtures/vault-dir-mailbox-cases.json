@@ -1,0 +1,158 @@
+{
+  "_comment": "Shared fixture for the vault directory to server mailbox mapping (unix names). Expected values are the answers of mailboxPathFromVaultDir in src/stores/slices/unifiedHelpers.js at 65040308f: the first listed mailbox whose vault_dir_name is the directory, else the directory itself. src-core/src/search_index/text.rs (include_str!) must match. Regenerate with node src-core/tests/fixtures/gen/limits-policy-fixtures.mjs.",
+  "cases": [
+    {
+      "name": "plain",
+      "dir": "INBOX",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "INBOX"
+    },
+    {
+      "name": "dotted",
+      "dir": "INBOX.Archive",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "INBOX.Archive"
+    },
+    {
+      "name": "slash_and_space",
+      "dir": "_Gmail__Sent_Mail",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "[Gmail]/Sent Mail"
+    },
+    {
+      "name": "ambiguous_first_listed_wins",
+      "dir": "Projekt_Nystart",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "Projekt Nystart"
+    },
+    {
+      "name": "ambiguous_other_order",
+      "dir": "Projekt_Nystart",
+      "mailboxes": [
+        "Projekt_Nystart",
+        "Projekt Nystart"
+      ],
+      "expected": "Projekt_Nystart"
+    },
+    {
+      "name": "unicode_kept",
+      "dir": "INBOX.Entwürfe",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "INBOX.Entwürfe"
+    },
+    {
+      "name": "unicode_replaced",
+      "dir": "Réunions___Notes",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "Réunions & Notes"
+    },
+    {
+      "name": "cjk",
+      "dir": "会議_議事録",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "会議/議事録"
+    },
+    {
+      "name": "unknown_dir_is_itself",
+      "dir": "Old_Folder",
+      "mailboxes": [
+        "INBOX",
+        "INBOX.Archive",
+        "Projekt Nystart",
+        "Projekt_Nystart",
+        "[Gmail]/Sent Mail",
+        "Réunions & Notes",
+        "会議/議事録",
+        "INBOX.Entwürfe"
+      ],
+      "expected": "Old_Folder"
+    },
+    {
+      "name": "no_mailboxes",
+      "dir": "INBOX",
+      "mailboxes": [],
+      "expected": "INBOX"
+    },
+    {
+      "name": "empty_dir",
+      "dir": "",
+      "mailboxes": [
+        "",
+        "INBOX"
+      ],
+      "expected": ""
+    },
+    {
+      "name": "dot_dir",
+      "dir": "_",
+      "mailboxes": [
+        ".",
+        "INBOX"
+      ],
+      "expected": "."
+    }
+  ]
+}
