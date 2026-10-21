@@ -3,7 +3,6 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSyncStore } from '../stores/syncStore';
 import { pipelineManager } from '../services/EmailPipelineManager';
-import { runCleanupRules, shouldRunCleanup } from '../services/cleanupEngine';
 
 /**
  * React bridge for the EmailPipelineManager.
@@ -88,32 +87,8 @@ export function usePipelineCoordinator() {
   // A cap switched off or a changed download limit wakes a pass that sleeps at the limit.
   useEffect(() => pipelineManager.watchTransferLimits(), []);
 
-  // Auto-cleanup rules — run once after initial sync, then check hourly
-  const cleanupRanRef = useRef(false);
-  useEffect(() => {
-    if (!activeAccountId || emails.length === 0 || loading) return;
-    if (cleanupRanRef.current) return;
-
-    // Run cleanup after initial sync settles (5s delay to avoid competing with pipeline)
-    const initialTimer = setTimeout(() => {
-      if (shouldRunCleanup()) {
-        cleanupRanRef.current = true;
-        runCleanupRules().catch(e => console.error('[PipelineCoordinator] Cleanup failed:', e));
-      }
-    }, 5000);
-
-    // Check hourly whether 24h has passed since last run
-    const hourlyInterval = setInterval(() => {
-      if (shouldRunCleanup()) {
-        runCleanupRules().catch(e => console.error('[PipelineCoordinator] Scheduled cleanup failed:', e));
-      }
-    }, 60 * 60 * 1000);
-
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(hourlyInterval);
-    };
-  }, [activeAccountId, emails.length, loading]);
+  // Auto-cleanup rules run in the daemon (src-daemon/src/cleanup_worker.rs):
+  // once a day on its own, and on Run All Now in Storage settings.
 
   // Cleanup on unmount
   useEffect(() => {

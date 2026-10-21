@@ -778,9 +778,10 @@ export const useSettingsStore = create(
       // Set by the v4 → v5 migration when it switches previously-inert rules
       // off. Purely a notice for StorageSettings; cleared once acknowledged.
       cleanupRulesDisarmed: false,
-      // What the last cleanup run did: { at, archived, deleted, skipped }. The
-      // 24h guard used to live in a module variable, so it re-armed on every
-      // launch and the user never saw what a scheduled run had done.
+      // What the last cleanup run did, as the app's own engine recorded it:
+      // { at, archived, deleted, skipped }. No longer written: the daemon runs
+      // the rules and keeps its own record (cleanup.status). It reads this
+      // once, until it has run itself, so an upgrade does not run straight away.
       cleanupLastRun: null,
 
       // Helper mode: 'on-demand' (default) or 'always-on' (recommended)
@@ -1538,8 +1539,6 @@ export const useSettingsStore = create(
       })),
 
       dismissCleanupRulesDisarmed: () => set({ cleanupRulesDisarmed: false }),
-
-      setCleanupLastRun: (run) => set({ cleanupLastRun: run }),
 
       toggleCleanupRule: (id) => {
         if (!hasPremiumAccess(get().billingProfile)) return;

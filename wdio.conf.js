@@ -622,6 +622,9 @@ export const config = {
           // Same for the Hoarder worker: it would fill the vault from every
           // mock folder and add LIST / UID FETCH commands mid-suite.
           MAILVAULT_DISABLE_HOARDER: '1',
+          // Same for the daily auto-cleanup run (debug builds only): a rule a
+          // spec adds must run when the spec presses Run All Now, not before.
+          MAILVAULT_DISABLE_CLEANUP_DAILY: '1',
           // Same hatch for the mock SMTP listener, same loopback-only rule.
           // Without it lettre insists on STARTTLS and no send can ever succeed.
           MAILVAULT_SMTP_PLAINTEXT: '1',

@@ -822,6 +822,18 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           emit('settings-changed', { keys: changed.sort(), version: settingsVersion });
           return { version: settingsVersion, changed: changed.sort() };
         }
+        // Auto-cleanup rules: the demo deletes nothing from any server; a run
+        // ends at once with nothing done.
+        if (method === 'cleanup.status') return { running: false, lastRun: null, nextDueAt: null };
+        if (method === 'cleanup.run_now') {
+          emit('cleanup-run', { state: 'done', ran: false, lastRun: null });
+          return { started: true, simulated: true };
+        }
+        if (method === 'cleanup.preview') return { ran: false, archived: 0, deleted: 0 };
+        if (method === 'cleanup.rules.get') {
+          const rules = settings['mailvault-settings']?.state?.cleanupRules;
+          return { rules: (Array.isArray(rules) ? rules : []).map(r => ({ ...r, refused: null, runs: !!r?.enabled })) };
+        }
         if (method === 'message.verify_sender') return { status: 'none', tooltip: [], issues: [], auth: { spf: null, dkim: null, dmarc: null }, dkim: null, simulated: true };
         if (method === 'message.code') return { code: null, needsBody: false, simulated: true };
         // The demo keeps every body and sets no daily limit.

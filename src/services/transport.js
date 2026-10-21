@@ -320,6 +320,9 @@ export const DAEMON_OWNED = new Set([
   // by the daemon (src-core/src/body_scan). services/bodyScan.js and
   // services/rowVerdicts.js are the callers.
   'body.scan', 'body.verdicts', 'body.classify_links', 'body.info',
+  // Phase 1 row 6: the daemon runs the auto-cleanup rules (daily and on
+  // Run All Now) through the abd engine; services/cleanupApi.js is the caller.
+  'cleanup.status', 'cleanup.run_now', 'cleanup.preview', 'cleanup.rules.get',
 ]);
 
 async function sendToDaemon(command, args) {

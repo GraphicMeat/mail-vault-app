@@ -1,6 +1,12 @@
 /**
  * E2E: an auto-cleanup rule may only delete a server copy it can prove is here.
  *
+ * The rules run in the daemon since phase 1 row 6 (src-daemon/src/
+ * cleanup_worker.rs, through the Archive & delete engine): "the engine" below
+ * is that run, Run All Now is `cleanup.run_now`, and the report line renders
+ * the daemon's last run. The questions and the three places they are asked
+ * are unchanged.
+ *
  * The bug this pins (b29414c9): a rule deleted mail from the server that it
  * had never managed to save. `archive_emails` was invoked with the account
  * under the wrong argument name so every call was rejected, the catch swallowed
@@ -315,6 +321,8 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
 
   afterEach(async function () {
     if (this.currentTest.state !== 'failed') return;
+    // The run and its record are the daemon's now (cleanup.status).
+    console.log('Cleanup run status', JSON.stringify(await invokeApp('daemon_rpc', { method: 'cleanup.status', params: {} })));
     console.log('Cleanup rule diagnostics', JSON.stringify(await browser.execute((victim, orphan, uid) => {
       const stateOf = (needle) => {
         const row = [...document.querySelectorAll('[data-testid="email-row"]')]
@@ -329,7 +337,6 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
       } : null);
       return {
         settings: document.querySelector('[data-testid="settings-page"]')?.innerText,
-        lastRun: window.__SETTINGS_STORE__.getState().cleanupLastRun,
         rules: window.__SETTINGS_STORE__.getState().cleanupRules,
         rowStates: { victim: stateOf(victim), orphan: stateOf(orphan) },
         victimUid: uid,

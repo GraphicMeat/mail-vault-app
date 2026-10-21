@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { runCleanupRules } from '../../services/cleanupEngine';
+import { cleanupStatus, cleanupRules as readCleanupRules, onCleanupRun, runCleanupNow } from '../../services/cleanupApi';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { SearchIndexSettings } from './SearchIndexSettings';
 import { StorageFormatSettings } from './StorageFormatSettings';
@@ -26,12 +26,19 @@ import {
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { formatDateTime } from '../../utils/dateFormat';
-import { CLEANUP_FOLDERS } from '../../utils/cleanupFolders';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { t, useT  } from '../../i18n/index.js';
+import { t, tErr, useT } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { formatCount } from '../../utils/formatCount';
 import { SettingsPageLayout } from '../ui/SettingsForm';
+
+/**
+ * The folders the rule picker offers: roles, resolved per account by the
+ * daemon (src-core/src/cleanup_rules.rs). 'all' is the every-folder sentinel.
+ * None of them may be a protected folder there (`PROTECTED_FOLDERS`, Drafts):
+ * a rule that names one renders enabled and never runs.
+ */
+const CLEANUP_FOLDERS = ['all', 'INBOX', 'Sent', 'Trash', 'Junk', 'Archive'];
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const t = useT();
@@ -53,7 +60,6 @@ export function StorageSettings({ accounts, onUpgrade }) {
     toggleCleanupRule,
     cleanupRulesDisarmed,
     dismissCleanupRulesDisarmed,
-    cleanupLastRun,
   } = useSettingsStore();
   const isPaidUser = hasPremiumAccess(billingProfile);
 
@@ -79,11 +85,46 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const [showCleanupFirstTimeWarning, setShowCleanupFirstTimeWarning] = useState(false);
   const [cleanupRunning, setCleanupRunning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState(null);
+  // The daemon runs the rules (daily, or on Run All Now) and keeps the last run.
+  const [cleanupLastRun, setCleanupLastRun] = useState(null);
+  // rule id -> the catalog key of why the daemon will not run it
+  const [cleanupRefused, setCleanupRefused] = useState({});
   const [orphanStats, setOrphanStats] = useState(null);
   const [purgingOrphans, setPurgingOrphans] = useState(false);
   const [purgeOrphansConfirm, setPurgeOrphansConfirm] = useState(false);
 
   const invoke = window.__TAURI__?.core?.invoke;
+
+  // The last run and whether one is going, and every run's end after that.
+  useEffect(() => {
+    let alive = true;
+    let off = () => {};
+    onCleanupRun((p) => {
+      if (p.state === 'running') setCleanupRunning(true);
+      if (p.state === 'done') {
+        setCleanupRunning(false);
+        if (p.lastRun) setCleanupLastRun(p.lastRun);
+      }
+    }).then((fn) => { if (alive) off = fn; else fn(); });
+    cleanupStatus().then((status) => {
+      if (!alive || !status) return;
+      setCleanupRunning(!!status.running);
+      if (status.lastRun) setCleanupLastRun(status.lastRun);
+    }, () => {});
+    return () => { alive = false; off(); };
+  }, []);
+
+  // Rules the daemon reads but will not run say so on their row.
+  useEffect(() => {
+    let alive = true;
+    readCleanupRules().then((r) => {
+      if (!alive) return;
+      const refused = {};
+      for (const rule of r?.rules || []) if (rule?.id && rule.refused) refused[rule.id] = rule.refused;
+      setCleanupRefused(refused);
+    }, () => {});
+    return () => { alive = false; };
+  }, [cleanupRules]);
 
   // Check for File System Access API support
   useEffect(() => {
@@ -408,6 +449,12 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       }`}>
                         {rule.action === 'delete' ? t('rowMenu.deleteServer') : t('settings.storage.archiveThenDelete')}
                       </span>
+                      {cleanupRefused[rule.id] && (
+                        <span className="text-xs text-mail-warning truncate" title={tErr(cleanupRefused[rule.id])}>
+                          <AlertTriangle size={12} className="inline mr-1" />
+                          {tErr(cleanupRefused[rule.id])}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 ml-3 shrink-0">
                       <ToggleSwitch label={t('settings.storage.enableRule', { folder: decodeImapUtf7(rule.folder) })}
@@ -626,15 +673,15 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       setCleanupRunning(true);
                       setCleanupResult(null);
                       try {
-                        // What the run did is read back off the stored last
-                        // run, which a scheduled run writes too - a line that
-                        // faded after five seconds could never report one.
-                        await runCleanupRules();
+                        // The daemon runs it; the line below is its last run,
+                        // which a daily run updates too. `cleanup-run` says
+                        // when it is over.
+                        const r = await runCleanupNow();
+                        if (!r?.started && !r?.running) setCleanupRunning(false);
                       } catch (e) {
-                        setCleanupResult(`Cleanup failed: ${e.message}`);
-                        setTimeout(() => setCleanupResult(null), 5000);
-                      } finally {
                         setCleanupRunning(false);
+                        setCleanupResult(tErr(e));
+                        setTimeout(() => setCleanupResult(null), 5000);
                       }
                     }}
                     disabled={cleanupRunning}

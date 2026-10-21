@@ -110,8 +110,8 @@ function scanText(text, names) {
     directRaw: new RegExp(String.raw`(?:const|let|var)\s+(\w+)\s*=\s*${TAURI}\s*;`),
     // const { invoke } = window.__TAURI__.core;
     destructureRaw: new RegExp(String.raw`(?:const|let|var)\s*\{\s*invoke\s*\}\s*=\s*window\.__TAURI__${DOT}core\b`),
-    // const { invoke } = await import('@tauri-apps/api/core'), cleanupEngine.js's
-    // shape (:109). No `window.__TAURI__` reference on this line at all, so
+    // const { invoke } = await import('@tauri-apps/api/core'), the shape the
+    // deleted cleanupEngine.js used. No `window.__TAURI__` reference on this line at all, so
     // none of the window-based patterns above ever see it.
     dynamicImportRaw: /(?:const|let|var)\s*\{\s*invoke\s*\}\s*=\s*(?:await\s+)?import\s*\(\s*['"]@tauri-apps\/api\/core['"]\s*\)/,
     // const Y = X();  — resolves Y when X is a known raw factory.
@@ -204,7 +204,7 @@ describe('raw invoke guard: every Phase 1+2+3 daemon-owned name routes through t
     expect(routed).toHaveLength(0);
   });
 
-  // Step 2: the dynamic-import shape cleanupEngine.js:109 uses is a different
+  // Step 2: the dynamic-import shape the deleted cleanupEngine.js used is a different
   // syntax from every other raw-invoke idiom in this file (no `window.__TAURI__`
   // on the line at all) and needs its own pattern, proven here the same way.
   it('negative control: catches the dynamic-import raw shape, ignores the routed replacement', () => {

@@ -24,43 +24,21 @@ vi.mock('../../src/stores/safeStorage', () => {
   };
 });
 
-const mockAccounts = [{ id: 'acc-1', email: 'luke@test.com' }];
-vi.mock('../../src/stores/mailStore', () => ({
-  useMailStore: { getState: () => ({ accounts: mockAccounts }) },
-}));
-
-const getEmailHeaders = vi.fn().mockResolvedValue({ emails: [] });
-// The engine resolves the rule's folder against this list before it reads a
-// single header, so "did it reach the mailbox at all" needs one.
-const getCachedMailboxEntry = vi.fn().mockResolvedValue({
-  lastKnownGoodMailboxes: [{ path: 'INBOX', name: 'INBOX' }],
-});
-vi.mock('../../src/services/db', () => ({ getEmailHeaders, getCachedMailboxEntry }));
-vi.mock('../../src/services/api', () => ({
-  archiveEmail: vi.fn().mockResolvedValue({}),
-  deleteEmail: vi.fn().mockResolvedValue({}),
-}));
-vi.mock('../../src/services/authUtils', () => ({
-  ensureFreshToken: vi.fn(a => Promise.resolve(a)),
-}));
-
 const daemonCall = vi.fn().mockResolvedValue({ ok: true });
 vi.mock('../../src/services/daemonClient.js', () => ({ daemonCall }));
 
 const { useSettingsStore } = await import('../../src/stores/settingsStore');
-const { runCleanupRules } = await import('../../src/services/cleanupEngine');
 const { syncNow } = await import('../../src/services/syncService.js');
 
 const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
 const FREE = { hasSubscription: false };
 
 /**
- * A rule that would definitely do work if the engine got that far — in the
- * shape StorageSettings.jsx saves. This used to be written in the engine's own
- * (never-written) vocabulary, which meant the "control" case below passed while
- * the engine was in fact incapable of acting on any real rule. The gate is what
- * this file tests; the rule still has to be a real one for that to mean anything.
- * Rule execution itself is covered in cleanupEngine.test.js.
+ * A rule in the shape StorageSettings.jsx saves. Whether rules RUN without
+ * premium is the daemon's gate now (`cleanup_rules::has_premium_access`,
+ * pinned with the old engine's answers in
+ * src-core/tests/fixtures/cleanup-rule-cases.json); the store's own gate on
+ * writing them stays here.
  */
 const liveRule = {
   id: 'rule-1', enabled: true, account: 'all', folder: 'INBOX',
@@ -70,39 +48,6 @@ const liveRule = {
 beforeEach(() => {
   vi.clearAllMocks();
   useSettingsStore.setState({ billingProfile: FREE, cleanupRules: [], shareGrant: null, hiddenAccounts: {} });
-});
-
-describe('cleanup engine — premium decides whether rules run at all', () => {
-  it('reads nothing from disk without premium', async () => {
-    useSettingsStore.setState({ billingProfile: FREE, cleanupRules: [liveRule] });
-    const result = await runCleanupRules();
-    expect(result).toEqual({ archived: 0, deleted: 0 });
-    // The totals alone prove nothing — "no premium" and "no rules" both return
-    // zeros. That the engine never touched the mailbox is the assertion.
-    expect(getEmailHeaders).not.toHaveBeenCalled();
-  });
-
-  it('control: the same rule DOES reach the mailbox with premium', async () => {
-    useSettingsStore.setState({ billingProfile: PREMIUM, cleanupRules: [liveRule] });
-    await runCleanupRules();
-    expect(getEmailHeaders).toHaveBeenCalled();
-  });
-
-  it('an expired share grant puts the gate back', async () => {
-    useSettingsStore.setState({
-      billingProfile: FREE, cleanupRules: [liveRule], shareGrant: { expiresAt: Date.now() - 1 },
-    });
-    await runCleanupRules();
-    expect(getEmailHeaders).not.toHaveBeenCalled();
-  });
-
-  it('a live share grant opens it, with no subscription anywhere', async () => {
-    useSettingsStore.setState({
-      billingProfile: FREE, cleanupRules: [liveRule], shareGrant: { expiresAt: Date.now() + 60_000 },
-    });
-    await runCleanupRules();
-    expect(getEmailHeaders).toHaveBeenCalled();
-  });
 });
 
 describe('syncNow — auto-classification is the premium half of a sync', () => {
