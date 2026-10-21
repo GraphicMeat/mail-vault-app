@@ -158,7 +158,7 @@ pub fn parse_dkim_signature(dkim_signature: &str, auth: &str) -> Option<DkimSign
 
 /// `^[^\s@]+@[^\s@]+\.[^\s@]+$`: one `@`, no whitespace, and a dot with
 /// something on both sides after it.
-fn looks_like_address(s: &str) -> bool {
+pub(crate) fn looks_like_address(s: &str) -> bool {
     if s.chars().any(js_space) {
         return false;
     }
@@ -171,7 +171,7 @@ fn looks_like_address(s: &str) -> bool {
 }
 
 /// `^[a-z0-9.-]+\.[a-z]{2,}$`, ASCII and case-blind.
-fn looks_like_domain(s: &str) -> bool {
+pub(crate) fn looks_like_domain(s: &str) -> bool {
     if !s.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') {
         return false;
     }
@@ -185,7 +185,7 @@ fn looks_like_domain(s: &str) -> bool {
 }
 
 /// The display name as it is quoted: outer quotes and backslashes off, `\"` unescaped, trimmed.
-fn clean_name(name: &str) -> String {
+pub(crate) fn clean_name(name: &str) -> String {
     let stripped = name.trim_start_matches(['"', '\\']).trim_end_matches(['"', '\\']);
     js_trim(&stripped.replace("\\\"", "\"")).to_string()
 }

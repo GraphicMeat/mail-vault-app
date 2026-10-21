@@ -4989,6 +4989,7 @@ dependencies = [
  "dirs 5.0.1",
  "futures",
  "hickory-resolver",
+ "html5ever 0.40.1",
  "imap-proto",
  "jiff",
  "keyring",

@@ -51,6 +51,7 @@ pub mod dns;
 pub mod dkim;
 pub mod sender_check;
 pub mod verification_code;
+pub mod body_scan;
 pub mod unsubscribe;
 pub mod smtp;
 pub mod compose;

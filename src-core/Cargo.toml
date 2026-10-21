@@ -17,6 +17,9 @@ dirs = "5"
 tracing = "0.1"
 sha2 = "0.10"
 regex = "1"
+# The body scan (src/body_scan): an HTML document parsed the way the webview's DOMParser does. Same
+# version blitz-html already pulls in through src-render, so the workspace builds one copy.
+html5ever = "0.40"
 # NFKC for the one-time code detector (src/verification_code.rs), as the app's JS read it.
 unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v4"] }
