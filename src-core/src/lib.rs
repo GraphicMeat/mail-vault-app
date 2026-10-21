@@ -38,6 +38,7 @@ pub mod custody;
 pub mod people;
 pub mod mime;
 pub mod imap;
+pub mod insights_model;
 pub mod graph;
 pub mod graph_ledger;
 pub mod jmap;

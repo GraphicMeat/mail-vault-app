@@ -46,6 +46,9 @@ zeroize = "1"
 pgp = "0.20"
 # Network Activity's map (src/geo_ip.rs): reads the bundled DB-IP country database.
 maxminddb = "0.32"
+# Insights day buckets in the viewer's IANA time zone (src/insights_model.rs).
+# The tz database is bundled so the sandboxed and snap daemons never read /usr/share/zoneinfo.
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
 
 
 # Snap keyring (src/snap_keyring.rs): the Secret portal through oo7, plugged
