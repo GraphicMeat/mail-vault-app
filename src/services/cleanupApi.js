@@ -13,8 +13,14 @@ export function cleanupStatus() {
   return send('cleanup.status', {});
 }
 
-/** Start a run. `{ started }`, or `{ started: false, running: true }` while one is going. */
+/**
+ * Start a run. `{ started }`, or `{ started: false, running: true }` while one
+ * is going. Through the shell (`cleanup_run_now`, src-tauri/src/cleanup.rs),
+ * which resolves the backup drive and hands it to the daemon's
+ * `cleanup.run_now`; outside the desktop shell, straight to the daemon.
+ */
 export function runCleanupNow() {
+  if (typeof window !== 'undefined' && window.__TAURI__) return send('cleanup_run_now', {});
   return send('cleanup.run_now', {});
 }
 

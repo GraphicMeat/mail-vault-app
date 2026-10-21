@@ -98,6 +98,8 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 // Same for a backup-drive hold of an archive/delete job: the
                 // app re-attaches through `abd_attach` once it is connected.
                 crate::abd::release_all(&app, "the daemon channel reconnected");
+                // And the drive held for a cleanup run (Run All Now).
+                crate::cleanup::release_all(&app, "the daemon channel reconnected");
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
                 // Runs on the first connect too (CONNECTED is already true above, addendum
                 // C3). Harmless on a fresh daemon (unconfigured until 1.8's re-push); catches
@@ -245,6 +247,8 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         // (`abd.rs`): its terminal frame, or one saying it paused
                         // for the drive, lets go.
                         let abd_frame = (name == crate::abd::ABD_PROGRESS).then(|| payload.clone());
+                        // And a cleanup run's: its done event lets go.
+                        let cleanup_event = (name == crate::cleanup::CLEANUP_RUN).then(|| payload.clone());
                         let lagged = name == "daemon-events-lagged";
                         if name == "settings-changed" {
                             crate::follow_settings_log_level(&payload);
@@ -261,9 +265,13 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         if let Some(frame) = abd_frame {
                             crate::abd::release_after_frame(app, &frame);
                         }
+                        if let Some(event) = cleanup_event {
+                            crate::cleanup::release_after_event(app, &event);
+                        }
                         if lagged {
                             crate::export_folder::release_all(app, "the daemon event stream lagged");
                             crate::abd::release_all(app, "the daemon event stream lagged");
+                            crate::cleanup::release_all(app, "the daemon event stream lagged");
                         }
                     }
                 }

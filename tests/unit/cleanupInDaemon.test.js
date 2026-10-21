@@ -39,6 +39,24 @@ describe('the auto-cleanup rules run in the daemon', () => {
     expect([...RPCS].sort()).toEqual(['cleanup.preview', 'cleanup.rules.get', 'cleanup.run_now', 'cleanup.status']);
   });
 
+  // Run All Now goes through the shell, which resolves the backup drive's
+  // bookmark (the daemon cannot) and holds it until the run's done event.
+  it('Run All Now reaches the daemon through the shell forwarder, which lets the drive go', () => {
+    expect(api).toContain("send('cleanup_run_now'");
+    expect(owned).not.toContain("'cleanup_run_now'");
+    expect(demo).toContain("case 'cleanup_run_now'");
+    const main = readFileSync('src-tauri/src/main.rs', 'utf8');
+    const handlerStart = main.indexOf('generate_handler![');
+    expect(main.slice(handlerStart, main.indexOf(']', handlerStart))).toContain('cleanup::cleanup_run_now');
+    expect(main).toContain('.manage(cleanup::HeldCleanupPath::default())');
+    const channel = readFileSync('src-tauri/src/daemon_channel.rs', 'utf8');
+    expect(channel).toContain('crate::cleanup::release_after_event(');
+    expect(channel.match(/crate::cleanup::release_all\(/g)).toHaveLength(2);
+    const shell = readFileSync('src-tauri/src/cleanup.rs', 'utf8');
+    expect(shell).toMatch(/#\[tauri::command\]\s*pub async fn cleanup_run_now\(/);
+    expect(shell).toContain('ports.call("cleanup.run_now", json!({ "mirrorRoot": root })');
+  });
+
   it('the JS engine and its folder policy are gone', () => {
     expect(existsSync('src/services/cleanupEngine.js')).toBe(false);
     expect(existsSync('src/utils/cleanupFolders.js')).toBe(false);

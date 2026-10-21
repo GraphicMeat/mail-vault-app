@@ -116,7 +116,7 @@ pub(crate) trait Ports {
     fn call(&self, method: &str, params: Value, budget: Duration) -> Result<Value, String>;
 }
 
-struct AppPorts<'a>(&'a tauri::AppHandle);
+pub(crate) struct AppPorts<'a>(pub(crate) &'a tauri::AppHandle);
 
 impl Ports for AppPorts<'_> {
     fn resolve(&self) -> Option<String> {

@@ -411,7 +411,7 @@ fn the_worker_logs_no_values() {
     let src = include_str!("cleanup_worker.rs");
     let code = &src[..src.find("#[cfg(test)]").unwrap()];
     for line in code.lines().filter(|l| l.contains("info!(") || l.contains("warn!(")) {
-        for bad in ["{account", "{email", "{folder", "{path", "{rule", "{token", "{cfg", "{settings"] {
+        for bad in ["{account", "{email", "{folder", "{path", "{rule", "{token", "{cfg", "{settings", ":?}", ".text()", "{exit"] {
             assert!(!line.contains(bad), "{line}");
         }
     }

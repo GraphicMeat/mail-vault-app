@@ -1387,6 +1387,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       }
       case 'backup_purge_uids': return { removed: 0, queued: 0, simulated: true };
       case 'abd_summarize': case 'abd_start': return unsupported(command);
+      // Run All Now's shell forwarder: the demo has no drive and no server.
+      case 'cleanup_run_now': emit('cleanup-run', { state: 'done', ran: false, lastRun: null }); return { started: true, simulated: true };
       case 'abd_attach': return { attached: false, simulated: true };
       case 'backup_copy_uids': return { copied: [...(args.uids || [])], verified: [...(args.uids || [])], missing: [], mismatched: [], failed: [], simulated: true };
       case 'start_migration': {

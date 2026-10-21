@@ -16,9 +16,10 @@
 //!   (an undo or a replay may still need it);
 //! - an account with an Archive & delete job still going is not touched;
 //! - with a backup drive configured, the drive must be the one handed to
-//!   this run and is only read: a copy not already there stays on the server
-//!   (the daemon cannot resolve the drive's bookmark itself, so a daily run
-//!   with a drive configured deletes nothing);
+//!   this run (Run All Now goes through the shell's `cleanup_run_now`, which
+//!   resolves the bookmark) and is only read: a copy not already there stays
+//!   on the server. The daemon cannot resolve the bookmark itself, so a daily
+//!   run with a drive configured deletes nothing;
 //! - the server is listed for the named folders only, and the listing is
 //!   cut down to the candidates; a folder whose UIDVALIDITY is not the one the
 //!   cache was written under is skipped, and a candidate whose Message-ID on
@@ -555,7 +556,14 @@ impl AccountRun<'_> {
         }
         ops.release().await;
         if !matches!(exit, RunExit::Completed) {
-            info!("cleanup: a job stopped before the end ({exit:?}); the rest stays on the server");
+            // The kind only: a failure's text can name a folder.
+            let kind = match exit {
+                RunExit::Cancelled => "cancelled",
+                RunExit::Paused(_) => "paused",
+                RunExit::Failed(_) => "failed",
+                RunExit::Completed => "completed",
+            };
+            info!("cleanup: a job stopped before the end ({kind}); the rest stays on the server");
         }
         tally_job(&job, action, total)
     }
@@ -573,8 +581,9 @@ async fn run_account<S: JobOps>(ar: &AccountRun<'_>, ops: &mut S, work: &Account
     };
     let full = match listing {
         Ok(l) => l,
-        Err(e) => {
-            warn!("cleanup: the server could not be listed: {}", e.text());
+        Err(_) => {
+            // No detail: the server's text can name a folder or an address.
+            warn!("cleanup: the server could not be listed; the account's mail stays on the server");
             ops.release().await;
             tally.skipped += all;
             return tally;

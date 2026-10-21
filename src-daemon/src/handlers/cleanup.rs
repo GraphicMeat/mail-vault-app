@@ -6,6 +6,8 @@
 //!   deleted, skipped: 0, rules: [{id, matched}]}`, `deleted` being what a run
 //!   would try (the JS dry run's count), protected copies left out.
 //! - `cleanup.run_now {mirrorRoot?}`: start a run on the worker. `{started}`;
+//!   the app calls it through the shell's `cleanup_run_now`, which adds the
+//!   resolved backup drive as `mirrorRoot`;
 //!   `started: false, running: true` while one is already going. The end is
 //!   the `cleanup-run {state: "done", ran, lastRun}` event.
 //! - `cleanup.status`: `{running, lastRun, nextDueAt}`.

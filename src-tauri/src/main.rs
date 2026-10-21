@@ -188,6 +188,7 @@ mod abd;
 mod app_icon;
 mod autostart;
 mod backup;
+mod cleanup;
 #[cfg(feature = "blitz-render")]
 mod blitz_tiles;
 mod commands;
@@ -3634,6 +3635,7 @@ fn main() {
     let builder = builder
         .manage(backup::HeldBackupPaths::default())
         .manage(abd::HeldAbdPaths::default())
+        .manage(cleanup::HeldCleanupPath::default())
         .manage(export_folder::HeldExportPaths::default())
         .manage(dropped_files::DroppedPaths::default())
         .manage(iap::IapState::new())
@@ -3733,6 +3735,7 @@ fn main() {
             abd::abd_summarize,
             abd::abd_start,
             abd::abd_attach,
+            cleanup::cleanup_run_now,
             commands::get_transfer_stats,
             github::github_device_start,
             github::github_device_poll,
