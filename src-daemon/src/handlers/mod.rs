@@ -25,6 +25,7 @@ pub(crate) mod backup;
 pub(crate) mod backup_zip;
 pub(crate) mod body;
 pub(crate) mod cache;
+pub(crate) mod cleanup;
 pub(crate) mod common;
 pub(crate) mod compose;
 pub(crate) mod custody;

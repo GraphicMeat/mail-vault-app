@@ -37,7 +37,7 @@ use std::sync::Arc;
 /// IMAP, header date for Graph. `9e783f50` moved these reads to SQLite and
 /// ordered every one of them by date, which put a freshly arrived message
 /// with an old INTERNALDATE below months-old mail.
-fn header_order(root: &std::path::Path, account_id: &str, mailbox: &str) -> sql_cache::HeaderOrder {
+pub(crate) fn header_order(root: &std::path::Path, account_id: &str, mailbox: &str) -> sql_cache::HeaderOrder {
     if header_cache::uid_tracks_arrival(root, account_id, mailbox) {
         sql_cache::HeaderOrder::Arrival
     } else {

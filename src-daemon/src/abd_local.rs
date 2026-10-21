@@ -37,6 +37,9 @@ pub(crate) struct DaemonLocal {
     email: String,
     /// A JMAP account: `graph_uids` allocates from the mailbox's JMAP ledger.
     jmap: bool,
+    /// A backup folder fixed for this store (auto-cleanup), instead of the
+    /// one the shell attached to the account's abd job.
+    mirror_override: Option<PathBuf>,
     /// One listing per mirror folder, held across batches (Part B's contract).
     mirror_listings: Mutex<HashMap<String, MirrorListing>>,
     /// The fallback listing for a folder whose mirror name missed. Dropped by
@@ -64,6 +67,7 @@ impl DaemonLocal {
             account_id: account_id.to_string(),
             email: email.to_string(),
             jmap: false,
+            mirror_override: None,
             mirror_listings: Mutex::new(HashMap::new()),
             mirror_maps: Mutex::new(HashMap::new()),
         }
@@ -76,6 +80,12 @@ impl DaemonLocal {
         self
     }
 
+    /// Read the drive at `root` instead of the account's attached mirror.
+    pub(crate) fn with_mirror(mut self, root: Option<PathBuf>) -> DaemonLocal {
+        self.mirror_override = root;
+        self
+    }
+
     /// The vault root, or "the vault is not available" (a move in progress, an
     /// unreachable folder): the job pauses for it instead of writing elsewhere.
     fn vault(&self) -> Result<PathBuf, LocalError> {
@@ -84,12 +94,15 @@ impl DaemonLocal {
 
     /// The backup folder the shell attached, if it is there.
     fn mirror_root(&self) -> Result<PathBuf, LocalError> {
-        let root = self
-            .state
-            .abd
-            .mirror(&self.account_id)
-            .ok_or_else(|| LocalError::DriveUnavailable("no backup folder is attached".to_string()))?;
-        let path = PathBuf::from(root);
+        let path = match &self.mirror_override {
+            Some(p) => p.clone(),
+            None => self
+                .state
+                .abd
+                .mirror(&self.account_id)
+                .map(PathBuf::from)
+                .ok_or_else(|| LocalError::DriveUnavailable("no backup folder is attached".to_string()))?,
+        };
         if !path.is_dir() {
             return Err(LocalError::DriveUnavailable("the backup folder is not available".to_string()));
         }

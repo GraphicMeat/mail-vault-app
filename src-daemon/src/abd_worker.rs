@@ -248,7 +248,7 @@ const UNKNOWN_EXPIRY_LEASE_MS: i64 = 10 * 60 * 1000;
 /// it first when it is about to expire. `true` when a lease with a token
 /// other than `stale` is now in place. The app's `abd.set_token` push is only
 /// a fallback for a refresh that failed.
-async fn lease_daemon_token(state: &Arc<DaemonState>, account_id: &str, stale: Option<&str>) -> bool {
+pub(crate) async fn lease_daemon_token(state: &Arc<DaemonState>, account_id: &str, stale: Option<&str>) -> bool {
     let Ok(Some(token)) = crate::oauth_tokens::access_token(state, account_id, crate::oauth_tokens::Read::Quiet).await else {
         return false;
     };
@@ -637,7 +637,7 @@ impl Env for DaemonEnv {
 // ── Ops the daemon drives ──────────────────────────────────────────────────
 
 /// What the driver needs from an ops object beyond `ServerOps`.
-trait JobOps: ServerOps {
+pub(crate) trait JobOps: ServerOps {
     /// Before every run: fresh credentials (IMAP), the plan's uid -> Graph id
     /// map (Graph), or both (JMAP).
     fn prepare(&mut self, plans: &PlanStore, cfg: &ImapConfig);
@@ -670,7 +670,7 @@ impl JobOps for JmapOps {
     }
 }
 
-fn new_imap_ops(state: &Arc<DaemonState>, cfg: ImapConfig) -> ImapOps {
+pub(crate) fn new_imap_ops(state: &Arc<DaemonState>, cfg: ImapConfig) -> ImapOps {
     let ops = ImapOps::new(Arc::clone(&state.imap_pool), cfg);
     #[cfg(test)]
     if let Some(g) = *lock(&state.abd.test.gmail_host) {
@@ -679,7 +679,7 @@ fn new_imap_ops(state: &Arc<DaemonState>, cfg: ImapConfig) -> ImapOps {
     ops
 }
 
-fn new_graph_ops(state: &Arc<DaemonState>, email: &str, account_id: &str) -> GraphOps {
+pub(crate) fn new_graph_ops(state: &Arc<DaemonState>, email: &str, account_id: &str) -> GraphOps {
     let leases: Arc<dyn LeaseStore> = Arc::new(AccountLease { state: Arc::clone(state), account_id: account_id.to_string() });
     let st = Arc::clone(state);
     GraphOps::new(email, leases).with_clock(Arc::new(move || st.clock.now_ms()))
@@ -687,12 +687,12 @@ fn new_graph_ops(state: &Arc<DaemonState>, email: &str, account_id: &str) -> Gra
 
 /// A JMAP account's ops: its own session, from the keychain's credentials
 /// (`JobOps::prepare` hands it the latest before every run).
-fn new_jmap_ops(cfg: &ImapConfig) -> JmapOps {
+pub(crate) fn new_jmap_ops(cfg: &ImapConfig) -> JmapOps {
     JmapOps::new(cfg.clone())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Kind {
+pub(crate) enum Kind {
     Password,
     ImapOauth,
     Graph,
@@ -700,7 +700,7 @@ enum Kind {
     Jmap,
 }
 
-fn kind_of(cfg: &ImapConfig) -> Kind {
+pub(crate) fn kind_of(cfg: &ImapConfig) -> Kind {
     if cfg.uses_jmap() {
         Kind::Jmap
     } else if cfg.oauth2_transport.as_deref() == Some("graph") {
@@ -714,7 +714,7 @@ fn kind_of(cfg: &ImapConfig) -> Kind {
 
 /// The config a connection is made with: an OAuth IMAP account uses the
 /// lease the app pushed while it is good, else what the keychain holds.
-fn with_lease(state: &Arc<DaemonState>, mut cfg: ImapConfig, account_id: &str) -> (ImapConfig, u64) {
+pub(crate) fn with_lease(state: &Arc<DaemonState>, mut cfg: ImapConfig, account_id: &str) -> (ImapConfig, u64) {
     let mut seq = 0;
     if kind_of(&cfg) == Kind::ImapOauth {
         if let Some(l) = state.abd.tokens.fresh(account_id, state.clock.now_ms()) {
@@ -1135,7 +1135,7 @@ async fn preview_inner(state: &Arc<DaemonState>, account_id: &str, preview_id: &
 /// `graph_id_map.json`, or with `jmap` the `jmap_id_map.json` the bridge and
 /// the sync allocate from. Read-only: a dry run never writes the ledger (the
 /// plan freeze allocates).
-async fn fill_graph_uids(state: &Arc<DaemonState>, account_id: &str, mut p: PreviewListing, jmap: bool) -> Result<PreviewListing, String> {
+pub(crate) async fn fill_graph_uids(state: &Arc<DaemonState>, account_id: &str, mut p: PreviewListing, jmap: bool) -> Result<PreviewListing, String> {
     let Ok(root) = common::vault_root(state) else { return Ok(p) };
     let account = account_id.to_string();
     common::blocking(move || {
