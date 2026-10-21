@@ -873,6 +873,13 @@ export async function sendNotification(title, body, sound, target) {
   });
 }
 
+// Whether a new-mail banner is shown (`notify.decide`, decided in the daemon by
+// src-core/src/notify_policy.rs): `{deliver, reason}` for
+// `{accountId, folder, from, viewIds, focusHeld}`.
+export async function notifyDecision(ctx) {
+  return tauriInvoke('notify.decide', ctx);
+}
+
 export async function previewNotificationSound(sound) {
   return tauriInvoke('preview_notification_sound', { sound });
 }

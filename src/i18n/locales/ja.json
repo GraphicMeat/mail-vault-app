@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "優先送信者",
   "notifyPolicy.reason.quietHours": "サイレント時間",
   "notifyPolicy.reason.viewMuted": "ビューがミュート",
+  "notifyPolicy.reason.policyUnavailable": "配信済み（ルールを確認できませんでした）",
   "offlineBanner.body": "メールはここに残っています。MailVault はこのコンピュータに保存済みの内容を表示しています。オンラインに戻ると同期は自動的に再開します。",
   "offlineBanner.checking": "確認中…",
   "offlineBanner.retry": "再確認",

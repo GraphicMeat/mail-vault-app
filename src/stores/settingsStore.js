@@ -3,7 +3,6 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage, flushSafeStorage, safeStorageWritable } from './safeStorage';
 import { daemonCall } from '../services/daemonClient';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
-import { decide } from '../utils/notificationPolicy.js';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
 import { DEFAULT_APP_FONT, normalizeAppFont, normalizeTextScale } from '../utils/appFont';
 import {
@@ -1255,15 +1254,6 @@ export const useSettingsStore = create(
             .map(e => e.match === match ? { ...e, throughQuietHours } : e),
         },
       })),
-
-      // Thin wrapper over the policy engine (utils/notificationPolicy.decide)
-      // kept so callers written against the old boolean gate keep compiling.
-      // No focus-session awareness here — that precedence lives in
-      // focusStore.notify(), which is the one place that knows about it.
-      shouldNotify: (accountId, folder) => {
-        const { notificationSettings } = get();
-        return decide({ accountId, folder, now: Date.now() }, notificationSettings).deliver;
-      },
 
       // Badge settings
       setBadgeEnabled: (enabled) => set({ badgeEnabled: enabled }),

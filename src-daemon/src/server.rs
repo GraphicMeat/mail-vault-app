@@ -725,6 +725,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::policy::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::notify::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────

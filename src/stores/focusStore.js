@@ -2,10 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 import { t } from '../i18n/index.js';
-import { sendNotification } from '../services/api';
+import { sendNotification, notifyDecision } from '../services/api';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
-import { decide } from '../utils/notificationPolicy.js';
-import { useSettingsStore } from './settingsStore';
 import { usePrivacyStore } from './privacyStore';
 import { getPrivacyDictionary } from '../utils/privacy/privacyDictionary';
 import { maskString } from '../utils/privacy/piiDetector';
@@ -166,6 +164,9 @@ export const useFocusStore = create(
   )
 );
 
+// The decision when the daemon could not give one.
+const POLICY_UNAVAILABLE = { deliver: true, reason: 'policy-unavailable' };
+
 // The last 200 notification-policy decisions, newest last. In-memory only —
 // // ponytail: lost on restart; persist to app.db if users need it to survive one.
 const MAX_DECISIONS = 200;
@@ -195,14 +196,16 @@ export function clearNotificationDecisions() {
  * failing a backup or a sync over.
  *
  * `mailCtx` is optional and only ever set for mail-arrival banners
- * (`{ accountId, folder, from, domain, viewIds }`) — backup/billing/focus
+ * (`{ accountId, folder, from, viewIds }`); backup/billing/focus
  * notifications pass none of it and are always delivered as before. When
- * present, the notification policy (`utils/notificationPolicy.decide`)
- * decides whether this actually goes out, and the outcome is recorded in the
- * decision log either way — that's the only way a suppressed notification
- * ever shows up in "why didn't I get this".
+ * present, the daemon's notification policy (`notify.decide`,
+ * src-core/src/notify_policy.rs) decides whether this actually goes out, and
+ * the outcome is recorded in the decision log either way: that's the only
+ * way a suppressed notification ever shows up in "why didn't I get this".
+ * A daemon that cannot answer lets the banner out: a missed mail is worse
+ * than one a mute should have caught.
  */
-export function notify(title, body, sound, target, mailCtx) {
+export async function notify(title, body, sound, target, mailCtx) {
   // Privacy mode: a banner is on screen too. Mail banners say only that mail
   // came; anything else is masked like the window behind it. Until the saved
   // choice has loaded it counts as on: a banner cannot be taken back.
@@ -216,19 +219,24 @@ export function notify(title, body, sound, target, mailCtx) {
   }
   const selectedSound = normalizeNotificationSound(sound);
   const audible = selectedSound !== 'none';
-  const s = useFocusStore.getState();
-  const focusHeld = !!s.endsAt;
 
   if (mailCtx) {
-    const policy = useSettingsStore.getState().notificationSettings;
-    const decision = decide({ ...mailCtx, focusHeld, now: Date.now() }, policy);
-    recordDecision({ ts: Date.now(), subject: title, from: mailCtx.from || '', deliver: decision.deliver, reason: decision.reason });
-    if (!decision.deliver && decision.reason !== 'focus-hold') return Promise.resolve();
+    const ts = Date.now();
+    let decision = null;
+    try {
+      decision = await notifyDecision({ ...mailCtx, focusHeld: !!useFocusStore.getState().endsAt });
+    } catch { /* no answer: let it out, logged as such */ }
+    if (typeof decision?.deliver !== 'boolean') decision = POLICY_UNAVAILABLE;
+    recordDecision({ ts, subject: title, from: mailCtx.from || '', deliver: decision.deliver, reason: decision.reason });
+    if (!decision.deliver && decision.reason !== 'focus-hold') return;
   }
 
-  if (focusHeld) {
+  // Read after the decision: a session that started or ended while the
+  // daemon answered decides whether this is held or shown now.
+  const s = useFocusStore.getState();
+  if (s.endsAt) {
     s.hold({ title, body, ...(audible ? { sound: selectedSound } : {}), ...(target ? { target } : {}) });
-    return Promise.resolve();
+    return;
   }
   const sent = target
     ? sendNotification(title, body, audible ? selectedSound : undefined, target)

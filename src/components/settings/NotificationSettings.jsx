@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
 import { getNotificationDecisions, clearNotificationDecisions } from '../../stores/focusStore';
-import { reasonI18nKey } from '../../utils/notificationPolicy.js';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { Bell, ChevronUp, ChevronDown, HardDrive, Mail, Volume2, Star, History, Trash2 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -10,6 +9,21 @@ import { Private } from '../privacy/Private';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { NOTIFICATION_SOUNDS, normalizeNotificationSound } from '../../utils/notificationSounds';
 import { previewNotificationSound } from '../../services/api';
+
+// The decision log's label for each reason the daemon's policy answers
+// (src-core/src/notify_policy.rs REASONS), plus notify()'s own fallback.
+const REASON_I18N_KEY = {
+  'focus-hold': 'notifyPolicy.reason.focusHold',
+  'notifications-off': 'notifyPolicy.reason.notificationsOff',
+  'priority-allowlist': 'notifyPolicy.reason.priorityAllowlist',
+  'quiet-hours': 'notifyPolicy.reason.quietHours',
+  'view-muted': 'notifyPolicy.reason.viewMuted',
+  'account-muted': 'notifyPolicy.reason.accountMuted',
+  'folder-not-watched': 'notifyPolicy.reason.folderNotWatched',
+  'delivered-default': 'notifyPolicy.reason.deliveredDefault',
+  'policy-unavailable': 'notifyPolicy.reason.policyUnavailable',
+};
+const reasonI18nKey = (reason) => REASON_I18N_KEY[reason] || reason;
 
 const DEFAULT_QUIET_HOURS = { enabled: false, start: '22:00', end: '07:00' };
 

@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "Remitente prioritario",
   "notifyPolicy.reason.quietHours": "Horario silencioso",
   "notifyPolicy.reason.viewMuted": "Vista silenciada",
+  "notifyPolicy.reason.policyUnavailable": "Entregada, no se pudieron comprobar las reglas",
   "offlineBanner.body": "Tu correo sigue aquí: MailVault muestra lo que ya está guardado en este equipo. La sincronización se reanudará sola cuando vuelvas a estar en línea.",
   "offlineBanner.checking": "Comprobando…",
   "offlineBanner.retry": "Volver a comprobar",

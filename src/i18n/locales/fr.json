@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "Expéditeur prioritaire",
   "notifyPolicy.reason.quietHours": "Heures de silence",
   "notifyPolicy.reason.viewMuted": "Vue en sourdine",
+  "notifyPolicy.reason.policyUnavailable": "Remise, règles non vérifiables",
   "offlineBanner.body": "Votre courrier est toujours là : MailVault affiche ce qui est déjà enregistré sur cet ordinateur. La synchronisation reprendra d'elle-même dès que vous serez de nouveau en ligne.",
   "offlineBanner.checking": "Vérification…",
   "offlineBanner.retry": "Réessayer",

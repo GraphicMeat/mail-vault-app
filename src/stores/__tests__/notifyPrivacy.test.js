@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-vi.mock('../../services/api', () => ({ sendNotification: vi.fn(() => Promise.resolve()) }));
+vi.mock('../../services/api', () => ({
+  sendNotification: vi.fn(() => Promise.resolve()),
+  notifyDecision: vi.fn(() => Promise.resolve({ deliver: true, reason: 'delivered-default' })),
+}));
 import { sendNotification } from '../../services/api';
 import { notify, useFocusStore } from '../focusStore';
 import { usePrivacyStore } from '../privacyStore';
@@ -17,7 +20,7 @@ beforeEach(() => {
 describe('notify under privacy mode', () => {
   it('mail banners become generic', async () => {
     usePrivacyStore.setState({ enabled: true });
-    await notify('John Smith', 'Lunch at 221B Baker Street?', undefined, undefined, { accountId: 'a', folder: 'INBOX', from: 'j@x.com', domain: 'x.com', viewIds: [] });
+    await notify('John Smith', 'Lunch at 221B Baker Street?', undefined, undefined, { accountId: 'a', folder: 'INBOX', from: 'j@x.com', viewIds: [] });
     const [title, body] = sendNotification.mock.calls[0];
     expect(title).toBe('New message');
     expect(body).toBe('');
@@ -25,7 +28,7 @@ describe('notify under privacy mode', () => {
   // A one-time code is mail content: no code, so no Copy & delete either.
   it('a mail banner drops its one-time code', async () => {
     usePrivacyStore.setState({ enabled: true });
-    await notify('PlayBall', '26313\nPassword Reset Request', undefined, { accountId: 'a', mailbox: 'INBOX', uid: 7, code: '26313' }, { accountId: 'a', folder: 'INBOX', from: 'j@x.com', domain: 'x.com', viewIds: [] });
+    await notify('PlayBall', '26313\nPassword Reset Request', undefined, { accountId: 'a', mailbox: 'INBOX', uid: 7, code: '26313' }, { accountId: 'a', folder: 'INBOX', from: 'j@x.com', viewIds: [] });
     const [, body, , target] = sendNotification.mock.calls[0];
     expect(body).toBe('');
     expect(target).toEqual({ accountId: 'a', mailbox: 'INBOX', uid: 7 });

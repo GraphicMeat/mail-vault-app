@@ -20,9 +20,9 @@ import { offerCodeFromArrival } from '../services/codeBubble';
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
 
-// Dispatch per-account notifications; notify() itself runs the notification
-// policy (utils/notificationPolicy.decide) and decides whether each one is
-// actually shown — this is the only way a suppressed one still lands in the
+// Dispatch per-account notifications; notify() asks the daemon's notification
+// policy (`notify.decide`) whether each one is actually shown, and logs the
+// answer either way: the only way a suppressed one still lands in the
 // decision log ("why didn't I get this").
 const dispatchNotifications = (perAccountResults) => {
   if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
@@ -47,14 +47,13 @@ const dispatchNotifications = (perAccountResults) => {
       ...(code ? { code } : {}),
     };
     const from = newestFromAddress || '';
-    const domain = from.includes('@') ? from.slice(from.indexOf('@') + 1) : '';
     // A view is an index query the daemon answers, and an arriving message
     // is not in the index yet -- so nothing here can say which views it
     // belongs to, and the mute would miss the very notification it was set
-    // for. `decide` implements view-muted and is tested for it; the control
+    // for. The policy implements view-muted and is tested for it; the control
     // stays out of Settings until arrival-time matching exists, because a
     // switch that silently never fires is worse than no switch.
-    const mailCtx = { accountId, folder, from, domain, viewIds: [] };
+    const mailCtx = { accountId, folder, from, viewIds: [] };
     const notifyEmail = (title, body) => selectedSound === 'none'
       ? notify(title, body, undefined, target, mailCtx)
       : notify(title, body, selectedSound, target, mailCtx);

@@ -17,16 +17,18 @@ vi.mock('../safeStorage', () => ({
 /** Writes of OUR key only — neighbouring stores share this backend. */
 const focusWrites = () => mem.setItem.mock.calls.filter(c => c[0] === 'mailvault-focus').length;
 
+// The daemon's answer for a mail banner (`notify.decide`); a case sets its own.
+const DELIVERED = { deliver: true, reason: 'delivered-default' };
 vi.mock('../../services/api', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
+  notifyDecision: vi.fn(),
 }));
 
-const { sendNotification } = await import('../../services/api');
+const { sendNotification, notifyDecision } = await import('../../services/api');
 const {
   useFocusStore, useFocusClock, notify, remainingMs, formatRemaining,
   getNotificationDecisions, clearNotificationDecisions, FOCUS_SCENES,
 } = await import('../focusStore');
-const { useSettingsStore } = await import('../settingsStore');
 
 const T0 = 1_700_000_000_000;
 
@@ -37,10 +39,8 @@ beforeEach(() => {
   useFocusStore.setState({ held: [] });
   useFocusClock.setState({ now: 0 });
   clearNotificationDecisions();
-  useSettingsStore.setState({
-    notificationSettings: { enabled: true, showPreview: true, sound: 'none', accounts: {}, mutedViewIds: [], importantSenders: [] },
-  });
   vi.clearAllMocks();
+  notifyDecision.mockImplementation(async ({ focusHeld }) => (focusHeld ? { deliver: false, reason: 'focus-hold' } : DELIVERED));
 });
 
 afterEach(() => {
@@ -237,16 +237,12 @@ describe('notify() with a mail-arrival context', () => {
   });
 
   it('suppresses a notification the policy rejects, and never calls sendNotification for it', async () => {
-    useSettingsStore.setState({
-      notificationSettings: {
-        enabled: true, showPreview: true, sound: 'none', mutedViewIds: [], importantSenders: [],
-        accounts: { a1: { enabled: false, folders: ['INBOX'] } },
-      },
-    });
-    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+    notifyDecision.mockResolvedValue({ deliver: false, reason: 'account-muted' });
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', viewIds: [] };
 
     await notify('Rokas', 'Hello', undefined, undefined, ctx);
 
+    expect(notifyDecision).toHaveBeenCalledWith({ ...ctx, focusHeld: false });
     expect(sendNotification).not.toHaveBeenCalled();
     const log = getNotificationDecisions();
     expect(log).toHaveLength(1);
@@ -255,7 +251,7 @@ describe('notify() with a mail-arrival context', () => {
   });
 
   it('records a delivered decision too, and still calls sendNotification', async () => {
-    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', viewIds: [] };
 
     await notify('Rokas', 'Hello', undefined, undefined, ctx);
 
@@ -267,17 +263,47 @@ describe('notify() with a mail-arrival context', () => {
 
   it('a running Focus session still holds a policy-governed notification for later', async () => {
     useFocusStore.getState().start(25);
-    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', viewIds: [] };
 
     await notify('Rokas', 'Hello', undefined, undefined, ctx);
 
+    expect(notifyDecision).toHaveBeenCalledWith({ ...ctx, focusHeld: true });
     expect(sendNotification).not.toHaveBeenCalled();
     expect(useFocusStore.getState().held).toHaveLength(1);
     expect(getNotificationDecisions()[0]).toMatchObject({ deliver: false, reason: 'focus-hold' });
   });
 
+  it('a banner held by a session that ended while the daemon answered is shown now', async () => {
+    useFocusStore.getState().start(25);
+    notifyDecision.mockImplementation(async () => {
+      useFocusStore.getState().abandon();
+      return { deliver: false, reason: 'focus-hold' };
+    });
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', viewIds: [] };
+
+    await notify('Rokas', 'Hello', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 3 }, ctx);
+
+    expect(sendNotification).toHaveBeenCalledWith('Rokas', 'Hello', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 3 });
+    expect(useFocusStore.getState().held).toEqual([]);
+  });
+
+  it('a daemon that cannot answer lets the banner out, logged as such', async () => {
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', viewIds: [] };
+    for (const failure of [() => Promise.reject(new Error('DAEMON_OFFLINE')), () => Promise.resolve(null), () => { throw new Error('sync'); }]) {
+      notifyDecision.mockImplementationOnce(failure);
+      await expect(notify('Rokas', 'Hello', undefined, undefined, ctx)).resolves.toBeUndefined();
+    }
+    expect(sendNotification).toHaveBeenCalledTimes(3);
+    expect(getNotificationDecisions().map(d => [d.deliver, d.reason])).toEqual(Array(3).fill([true, 'policy-unavailable']));
+  });
+
+  it('only mail banners ask the daemon', async () => {
+    await notify('Backup complete', 'Saved 200 messages');
+    expect(notifyDecision).not.toHaveBeenCalled();
+  });
+
   it('keeps only the last 200 decisions', async () => {
-    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', viewIds: [] };
     for (let i = 0; i < 205; i++) await notify(`Subject ${i}`, 'body', undefined, undefined, ctx);
     const log = getNotificationDecisions();
     expect(log).toHaveLength(200);

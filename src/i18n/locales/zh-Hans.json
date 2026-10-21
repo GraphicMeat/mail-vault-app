@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "优先发件人",
   "notifyPolicy.reason.quietHours": "免打扰时段",
   "notifyPolicy.reason.viewMuted": "视图已静音",
+  "notifyPolicy.reason.policyUnavailable": "已送达（无法检查规则）",
   "offlineBanner.body": "你的邮件仍在这里：MailVault 正在显示这台电脑上已保存的内容。恢复联网后会自动继续同步。",
   "offlineBanner.checking": "正在检查…",
   "offlineBanner.retry": "重新检查",

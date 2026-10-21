@@ -308,6 +308,10 @@ export const DAEMON_OWNED = new Set([
   // and the banner's warning, and which server mailbox a vault directory
   // holds (handlers/policy.rs).
   'policy.accounts', 'policy.vault_mailboxes',
+  // Phase 1 row 9: the daemon decides whether a new-mail banner is shown
+  // (src-core/src/notify_policy.rs, over the settings document); notify() in
+  // stores/focusStore.js only renders the answer.
+  'notify.decide',
 ]);
 
 async function sendToDaemon(command, args) {

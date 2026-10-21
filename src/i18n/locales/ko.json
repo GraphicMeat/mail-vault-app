@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "우선 발신자",
   "notifyPolicy.reason.quietHours": "방해 금지 시간",
   "notifyPolicy.reason.viewMuted": "보기 음소거됨",
+  "notifyPolicy.reason.policyUnavailable": "전달됨(규칙을 확인할 수 없음)",
   "offlineBanner.body": "메일은 그대로 있습니다. MailVault는 이 컴퓨터에 이미 저장된 내용을 보여 주고 있습니다. 다시 온라인 상태가 되면 동기화가 자동으로 재개됩니다.",
   "offlineBanner.checking": "확인 중…",
   "offlineBanner.retry": "다시 확인",

@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "Mittente prioritario",
   "notifyPolicy.reason.quietHours": "Ore silenziose",
   "notifyPolicy.reason.viewMuted": "Vista silenziata",
+  "notifyPolicy.reason.policyUnavailable": "Consegnata, regole non verificabili",
   "offlineBanner.body": "La tua posta è ancora qui: MailVault mostra ciò che è già salvato su questo computer. La sincronizzazione riprenderà da sola quando tornerai online.",
   "offlineBanner.checking": "Controllo in corso…",
   "offlineBanner.retry": "Controlla di nuovo",

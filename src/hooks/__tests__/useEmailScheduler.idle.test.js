@@ -102,7 +102,6 @@ const settingsState = () => ({
   refreshOnLaunch: false,
   setLastRefreshTime: vi.fn(),
   notificationSettings: { enabled: true, showPreview: true, accounts: {} },
-  shouldNotify: () => true,
   badgeEnabled: false,
   badgeMode: 'unread',
   unreadPerAccount: {},
@@ -235,7 +234,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     // this mock) is what decides whether the policy actually suppresses it —
     // see focusStore.test.js for that.
     expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 },
-      { accountId: 'a1', folder: 'INBOX', from: '', domain: '', viewIds: [] });
+      { accountId: 'a1', folder: 'INBOX', from: '', viewIds: [] });
   });
 
   describe('a one-time code in the mail', () => {
@@ -265,7 +264,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockNotify).toHaveBeenCalledWith('PlayBall', '26313\nPassword Reset Request', undefined,
         { accountId: 'a1', mailbox: 'INBOX', uid: 7, code: '26313' },
-        { accountId: 'a1', folder: 'INBOX', from: 'smtp@playball.lt', domain: 'playball.lt', viewIds: [] });
+        { accountId: 'a1', folder: 'INBOX', from: 'smtp@playball.lt', viewIds: [] });
     });
 
     it('keeps the code out of a banner that shows no preview', async () => {
@@ -357,7 +356,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
     expect(mockLoadEmails).not.toHaveBeenCalled();
     expect(mockNotify).toHaveBeenCalledWith('c@three.co', 'Elsewhere', undefined, { accountId: 'a2', mailbox: 'INBOX', uid: 12 },
-      { accountId: 'a2', folder: 'INBOX', from: 'c@three.co', domain: 'three.co', viewIds: [] });
+      { accountId: 'a2', folder: 'INBOX', from: 'c@three.co', viewIds: [] });
   });
 
   // A launch after a night closed collects every arrival at once. The preview
@@ -389,7 +388,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
     // No uid on that header: the banner still opens its folder.
     expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', 'Ping', { accountId: 'a1', mailbox: 'INBOX' },
-      { accountId: 'a1', folder: 'INBOX', from: '', domain: '', viewIds: [] });
+      { accountId: 'a1', folder: 'INBOX', from: '', viewIds: [] });
   });
 
   it('opens only the folder when the banner shows no preview', async () => {

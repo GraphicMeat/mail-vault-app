@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "Priority sender",
   "notifyPolicy.reason.quietHours": "Quiet hours",
   "notifyPolicy.reason.viewMuted": "View muted",
+  "notifyPolicy.reason.policyUnavailable": "Delivered, rules could not be checked",
   "offlineBanner.body": "Your mail is still here: MailVault is showing what is already saved on this computer. Syncing resumes on its own once you are back online.",
   "offlineBanner.checking": "Checking…",
   "offlineBanner.retry": "Check again",

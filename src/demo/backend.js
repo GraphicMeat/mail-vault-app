@@ -721,6 +721,13 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         }
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
         // The demo's mail carries no authentication results and no codes to read.
+        // The new-mail banner policy (handlers/notify.rs): the demo has no
+        // rules to apply, so only a Focus session holds a banner.
+        if (method === 'notify.decide') {
+          return (args.params || {}).focusHeld
+            ? { deliver: false, reason: 'focus-hold' }
+            : { deliver: true, reason: 'delivered-default' };
+        }
         // The settings document (handlers/settings.rs) over the same
         // `settings` object read/write_settings_json use.
         if (method === 'settings.get' || method === 'settings.patch' || method === 'settings.replace') {

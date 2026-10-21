@@ -1278,6 +1278,7 @@
   "notifyPolicy.reason.priorityAllowlist": "Bevorzugter Absender",
   "notifyPolicy.reason.quietHours": "Ruhezeiten",
   "notifyPolicy.reason.viewMuted": "Ansicht stummgeschaltet",
+  "notifyPolicy.reason.policyUnavailable": "Zugestellt, Regeln nicht prüfbar",
   "offlineBanner.body": "Deine E-Mails sind weiterhin da – MailVault zeigt, was bereits auf diesem Computer gespeichert ist. Der Abgleich wird automatisch fortgesetzt, sobald du wieder online bist.",
   "offlineBanner.checking": "Wird geprüft …",
   "offlineBanner.retry": "Erneut prüfen",
