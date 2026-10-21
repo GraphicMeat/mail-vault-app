@@ -86,7 +86,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const [cleanupRunning, setCleanupRunning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState(null);
   // The daemon runs the rules (daily, or on Run All Now) and keeps the last run.
-  const [cleanupLastRun, setCleanupLastRun] = useState(null);
+  const [cleanupLastRun, showCleanupLastRun] = useState(null);
   // rule id -> the catalog key of why the daemon will not run it
   const [cleanupRefused, setCleanupRefused] = useState({});
   const [orphanStats, setOrphanStats] = useState(null);
@@ -103,14 +103,14 @@ export function StorageSettings({ accounts, onUpgrade }) {
     const ask = () => cleanupStatus().then((status) => {
       if (!alive || !status) return;
       setCleanupRunning(!!status.running);
-      if (status.lastRun) setCleanupLastRun(status.lastRun);
+      if (status.lastRun) showCleanupLastRun(status.lastRun);
     }, () => {});
     const keep = (p) => p.then((fn) => { if (alive) offs.push(fn); else fn(); });
     keep(onCleanupRun((p) => {
       if (p.state === 'running') setCleanupRunning(true);
       if (p.state === 'done') {
         setCleanupRunning(false);
-        if (p.lastRun) setCleanupLastRun(p.lastRun);
+        if (p.lastRun) showCleanupLastRun(p.lastRun);
       }
     }));
     import('@tauri-apps/api/event').then(({ listen }) => {
@@ -129,7 +129,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       cleanupStatus().then((status) => {
         if (!status) return;
         if (!status.running) setCleanupRunning(false);
-        if (status.lastRun) setCleanupLastRun(status.lastRun);
+        if (status.lastRun) showCleanupLastRun(status.lastRun);
       }, () => {});
     }, 5000);
     return () => clearInterval(timer);
