@@ -14,6 +14,10 @@
 //! `snapshotExpired`, `invalidCursor`, `snapshotStale` (the last carrying
 //! its own `coverage`) becomes `{"ok": false, "error": {...}}`, the same
 //! pattern `search_index_destroy` already uses.
+//!
+//! The dotted `insights.*` methods (the aggregation the app's Insights
+//! workspace renders) fall through to `handlers::insights_aggregate`, which
+//! pages these same snapshots in-process.
 
 use crate::custody;
 use crate::handlers::common::{blocking, opt_str_arg, str_arg, vault_root, vec_arg};
@@ -117,6 +121,29 @@ pub(crate) fn begin_snapshot(state: &Arc<DaemonState>, account_ids: &[String]) -
     }
 }
 
+/// `insights_read_page`'s body, also run in-process by `insights.build`
+/// (`handlers::insights_aggregate`), which pages the snapshot the same way
+/// the app used to.
+pub(crate) fn read_page(state: &Arc<DaemonState>, snapshot_id: &str, cursor: Option<&str>) -> Value {
+    let configured = match configured_account_ids(&state.app_dir) {
+        Ok(c) => c,
+        Err(_) => return err(insights::error("accountConfigurationUnavailable")),
+    };
+    let root = match vault_root(state) {
+        Ok(r) => r,
+        Err(_) => return err(insights::error("vaultUnavailable")),
+    };
+    if let Err(e) = state.insights.validate_context(snapshot_id, &root, &configured) {
+        state.insights.release(snapshot_id);
+        return err(e);
+    }
+    let gen_fn = || custody::generation(state);
+    match state.insights.read(snapshot_id, cursor, &gen_fn) {
+        Ok(v) => ok(v),
+        Err(e) => err(e),
+    }
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "insights_begin_snapshot" => {
@@ -131,25 +158,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let snapshot_id = req!(str_arg(&id, params, "snapshotId"));
             let cursor = opt_str_arg(params, "cursor");
             let state = Arc::clone(state);
-            let result = blocking(move || -> Value {
-                let configured = match configured_account_ids(&state.app_dir) {
-                    Ok(c) => c,
-                    Err(_) => return err(insights::error("accountConfigurationUnavailable")),
-                };
-                let root = match vault_root(&state) {
-                    Ok(r) => r,
-                    Err(_) => return err(insights::error("vaultUnavailable")),
-                };
-                if let Err(e) = state.insights.validate_context(&snapshot_id, &root, &configured) {
-                    state.insights.release(&snapshot_id);
-                    return err(e);
-                }
-                let gen_fn = || custody::generation(&state);
-                match state.insights.read(&snapshot_id, cursor.as_deref(), &gen_fn) {
-                    Ok(v) => ok(v),
-                    Err(e) => err(e),
-                }
-            })
+            let result = blocking(move || read_page(&state, &snapshot_id, cursor.as_deref()))
             .await
             .unwrap_or_else(|_| err(insights::error("snapshotUnavailable")));
             RpcResponse::success(id, result)
@@ -165,7 +174,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             .unwrap_or_else(|_| err(insights::error("snapshotUnavailable")));
             RpcResponse::success(id, result)
         }
-        _ => return None,
+        // The dotted `insights.*` methods: the aggregation built from these
+        // snapshots (phase 1 row 23).
+        _ => return crate::handlers::insights_aggregate::route(state, method, params, id).await,
     })
 }
 

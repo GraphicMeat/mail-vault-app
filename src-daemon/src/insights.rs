@@ -450,6 +450,9 @@ fn live(entry: &Entry, now: Instant) -> bool {
 #[derive(Default, Clone)]
 pub struct InsightsSnapshots {
     inner: Arc<Mutex<HashMap<String, Entry>>>,
+    /// The aggregation models `insights.build` makes from these snapshots
+    /// (`handlers::insights_aggregate`).
+    pub(crate) models: crate::handlers::insights_aggregate::Models,
 }
 impl InsightsSnapshots {
     fn expire(&self, now: Instant) {
@@ -468,6 +471,7 @@ impl InsightsSnapshots {
     /// it as a leaked background task.
     pub(crate) fn start_cleanup(&self) {
         let weak = Arc::downgrade(&self.inner);
+        let models = self.models.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(30)).await;
@@ -477,6 +481,7 @@ impl InsightsSnapshots {
                 if let Ok(mut snapshots) = inner.lock() {
                     snapshots.retain(|_, s| live(s, Instant::now()));
                 };
+                models.expire(Instant::now());
             }
         });
     }
