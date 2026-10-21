@@ -295,6 +295,11 @@ function seedMessages(sessionNow) {
   return [...hero, ...generated];
 }
 
+/** A demo row as an Insights snapshot's HeaderCopy. */
+function insightsCopy(row) {
+  return { ...header(row), source: row.vaultPresent ? 'vault' : 'server-cache', origin: row._origin, receivedAt: row.date, sentAt: row.mailbox === 'Sent' ? row.date : null, messageDate: row.date, dateEvidence: { received: 'header', sent: row.mailbox === 'Sent' ? 'header' : 'none' }, serverDeleted: !row.serverPresent, serverAbsent: !row.serverPresent, localMailbox: row.mailbox };
+}
+
 function header(message) {
   const { rawSource, rawSourceBase64, html: bodyHtml, text, ...rest } = message;
   return { ...clone(rest), html: bodyHtml, text, flags: [...message.flags], from: clone(message.from), to: clone(message.to), cc: [], bcc: [], attachments: message.attachments?.map(({ content, ...attachment }) => attachment) || [] };
@@ -351,6 +356,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   let syncTicket = 0;
   const syncTickets = new Map();
   const snapshots = new Map();
+  const insightsModels = new Map();
   const builtMimes = new Map();
   const learning = new Map();
   const classificationOverrides = new Map();
@@ -565,6 +571,60 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         if (method && !method.includes('.')) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
+        // Insights: the daemon's insights.build / aggregate / messages
+        // (handlers/insights_aggregate.rs), as a small stand-in over the
+        // demo rows: one event per row, no cross-copy grouping.
+        if (method?.startsWith('insights.')) {
+          const p = args.params || {};
+          if (method === 'insights.release') { insightsModels.delete(p.buildId); return { ok: true }; }
+          if (method === 'insights.build') {
+            const rows = messages.filter(row => (p.accountIds || []).includes(row.accountId) && !['Drafts', 'Trash', 'Junk', 'Spam'].includes(row.mailbox));
+            const coverage = { status: 'ready', updatedAt: new Date().toISOString(), folders: [], warnings: { unknownDates: 0, fallbackDates: 0, uncertainIdentity: 0, unreadableFiles: 0 }, errors: [] };
+            insightsModels.set(p.buildId, { rows, coverage });
+            setTimeout(() => {
+              emit('insights-build-progress', { buildId: p.buildId, loaded: rows.length, total: rows.length, coverage });
+              emit('insights-build-progress', { buildId: p.buildId, finished: true, ok: true, loaded: rows.length, coverage });
+            }, 0);
+            return { ok: true, buildId: p.buildId };
+          }
+          const model = insightsModels.get(p.buildId);
+          if (!model) return { ok: false, error: { code: 'modelExpired', message: 'modelExpired' } };
+          if (method === 'insights.status') return { ok: true, state: 'ready', loaded: model.rows.length, coverage: model.coverage };
+          const q = p.query || {};
+          const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+          const day = at => new Intl.DateTimeFormat('en-CA', { timeZone: q.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(at));
+          const events = model.rows.map(row => {
+            const direction = row.mailbox === 'Sent' ? 'sent' : 'received';
+            const people = (direction === 'sent' ? row.to || [] : [row.from]).filter(person => person?.address);
+            return { key: `${row.accountId}:${row.mailbox}:${row.uid}:${direction}`, row, direction, at: new Date(row.date).toISOString(), date: day(row.date), people };
+          }).filter(e => e.date >= q.startDate && e.date <= q.endDate && (q.direction === 'both' || e.direction === q.direction)
+            && (!q.senderAddress || e.people.some(person => person.address.toLowerCase() === q.senderAddress)));
+          if (method === 'insights.messages') {
+            const sel = p.selection || {};
+            const picked = events.filter(e => (!sel.startDate || e.date >= sel.startDate) && (!sel.endDate || e.date <= sel.endDate)
+              && (!sel.senderAddress || e.people.some(person => person.address.toLowerCase() === sel.senderAddress)) && (!sel.messageKey || e.key === sel.messageKey));
+            return { ok: true, messages: picked.sort((a, b) => order(b.at, a.at)).map(e => ({ key: e.key, copies: [insightsCopy(e.row)], subject: e.row.subject || '', from: e.row.from || null, eventAt: e.at })) };
+          }
+          const days = new Map(), senders = new Map();
+          for (let d = new Date(`${q.startDate}T12:00:00Z`); d.toISOString().slice(0, 10) <= q.endDate; d.setUTCDate(d.getUTCDate() + 1)) days.set(d.toISOString().slice(0, 10), { date: d.toISOString().slice(0, 10), sent: 0, received: 0, value: 0 });
+          for (const e of events) {
+            const cell = days.get(e.date); cell[e.direction] += 1; cell.value += 1;
+            for (const person of e.people) {
+              const address = person.address.toLowerCase();
+              const s = senders.get(address) || { address, name: person.name || address, count: 0, sent: 0, received: 0, lastAt: null, automationEvidence: [], buckets: new Map() };
+              s.count += 1; s[e.direction] += 1; if (!s.lastAt || e.at > s.lastAt) s.lastAt = e.at;
+              const bucket = s.buckets.get(e.date) || { startDate: e.date, endDate: e.date, sent: 0, received: 0, keys: [], events: [] };
+              bucket[e.direction] += 1; bucket.keys.push(e.key); bucket.events.push({ key: e.key, at: e.at, direction: e.direction });
+              s.buckets.set(e.date, bucket); senders.set(address, s);
+            }
+          }
+          const list = [...senders.values()].sort((a, b) => (q.senderSort === 'name' ? order(a.name.toLowerCase(), b.name.toLowerCase()) : ['count', 'volume'].includes(q.senderSort) ? b.count - a.count : 0) || order(b.lastAt || '', a.lastAt || ''));
+          const sent = events.filter(e => e.direction === 'sent').length;
+          return { ok: true, result: { totals: { sent, received: events.length - sent, both: events.length },
+            senders: list.map(({ buckets, ...s }) => s), days: [...days.values()],
+            lanes: list.map(s => ({ address: s.address, name: s.name, lastAt: s.lastAt, buckets: [...s.buckets.values()].sort((a, b) => order(a.startDate, b.startDate)) })),
+            unknownDateCount: 0, fallbackDateCount: 0, uncertainIdentityCount: 0 } };
+        }
         if (method === 'contacts_index.get') {
           const ids = Array.isArray(args.params?.accountIds) && args.params.accountIds.length ? args.params.accountIds : ACCOUNT_IDS;
           return Object.fromEntries(ids.map(id => {
@@ -1279,7 +1339,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'insights_begin_snapshot': {
         const rows = messages.filter(row => (args.accountIds || ACCOUNT_IDS).includes(row.accountId)); const id = `demo-snapshot-${++snapshotSeq}`; snapshots.set(id, rows); return { snapshotId: id, inventoryCount: rows.length, coverage: { status: 'ready', updatedAt: new Date().toISOString(), folders: [], warnings: { unknownDates: 0, fallbackDates: 0, uncertainIdentity: 0, unreadableFiles: 0 }, errors: [] } };
       }
-      case 'insights_read_page': { const rows = snapshots.get(args.snapshotId) || []; return { rows: rows.map(row => ({ ...header(row), source: row.vaultPresent ? 'vault' : 'server-cache', origin: row._origin, receivedAt: row.date, sentAt: row.mailbox === 'Sent' ? row.date : null, messageDate: row.date, dateEvidence: { received: 'header', sent: row.mailbox === 'Sent' ? 'header' : 'none' }, serverDeleted: !row.serverPresent, serverAbsent: !row.serverPresent, localMailbox: row.mailbox })), nextCursor: null, coverage: { status: 'ready', updatedAt: new Date().toISOString(), folders: [], warnings: { unknownDates: 0, fallbackDates: 0, uncertainIdentity: 0, unreadableFiles: 0 }, errors: [] } }; }
+      case 'insights_read_page': { const rows = snapshots.get(args.snapshotId) || []; return { rows: rows.map(insightsCopy), nextCursor: null, coverage: { status: 'ready', updatedAt: new Date().toISOString(), folders: [], warnings: { unknownDates: 0, fallbackDates: 0, uncertainIdentity: 0, unreadableFiles: 0 }, errors: [] } }; }
       case 'insights_release_snapshot': snapshots.delete(args.snapshotId); return null;
       case 'ping': return { pong: true, simulated: true };
       case 'net.probe': case 'check_network_connectivity': return true;
@@ -1504,7 +1564,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; migrationState = null; snapshots.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; migrationState = null; snapshots.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }

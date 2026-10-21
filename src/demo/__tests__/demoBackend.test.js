@@ -455,6 +455,28 @@ describe('demo mailbox backend', () => {
     expect((await restored.invoke('daemon_rpc', { method: 'list_local_folders', params: { accountId: account.id } })).map(f => f.name)).toEqual([`${name} 2`]);
   });
 
+  it('stands in for the daemon Insights model: a build frame, then charts and a drill-down', async () => {
+    const backend = createDemoBackend();
+    const [account] = backend.snapshot().accounts;
+    const frames = [];
+    const stop = backend.on('insights-build-progress', ({ payload }) => frames.push(payload));
+    const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+    expect(await rpc('insights.build', { buildId: 'demo-1', accountIds: [account.id] })).toEqual({ ok: true, buildId: 'demo-1' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    stop();
+    expect(frames.at(-1)).toMatchObject({ buildId: 'demo-1', finished: true, ok: true });
+    const query = { accountIds: [account.id], startDate: '2000-01-01', endDate: '2030-12-31', timeZone: 'UTC', direction: 'both', senderAddress: null, timelineBucket: 'week', senderSort: 'count' };
+    const { result } = await rpc('insights.aggregate', { buildId: 'demo-1', query });
+    expect(result.totals.both).toBeGreaterThan(0);
+    expect(result.senders.length).toBeGreaterThan(0);
+    const top = result.senders[0];
+    const { messages } = await rpc('insights.messages', { buildId: 'demo-1', query, selection: { senderAddress: top.address } });
+    expect(messages).toHaveLength(top.count);
+    expect(messages[0].copies[0]).toMatchObject({ accountId: account.id });
+    await rpc('insights.release', { buildId: 'demo-1' });
+    expect(await rpc('insights.aggregate', { buildId: 'demo-1', query })).toMatchObject({ ok: false, error: { code: 'modelExpired' } });
+  });
+
   it('serves daemon-owned search index commands through daemon_rpc', async () => {
     const backend = createDemoBackend();
     const status = await backend.invoke('daemon_rpc', { method: 'search_index_status', params: {} });

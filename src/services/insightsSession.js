@@ -1,111 +1,91 @@
-import {t} from '../i18n';
+import { insightsFailure } from './insightsApi.js';
+
+export const BUILD_PROGRESS_EVENT = 'insights-build-progress';
 
 const aborted = () => new DOMException('Insights request cancelled', 'AbortError');
-const waitForRetry = (milliseconds, signal) => new Promise((resolve, reject) => {
-  if (signal.aborted) { reject(aborted()); return; }
-  const cancel = () => { clearTimeout(timer); reject(aborted()); };
-  const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve(); }, milliseconds);
-  signal.addEventListener('abort', cancel, { once: true });
-});
+const newBuildId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const tauriListen = (event, handler) => import('@tauri-apps/api/event').then(module => module.listen(event, handler));
 
-/** Owns native snapshot and worker lifetimes without reading or mutating mail UI state. */
-export function createInsightsSession({ api, workerFactory }) {
-  const worker = workerFactory();
-  const pending = new Map();
-  let disposed = false, ready = false, nextId = 0, generation = 0, current = null;
-  const rejectPending = error => {
-    for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(error); }
-    pending.clear();
-  };
-  const receive = ({ data }) => {
-    const entry = pending.get(data?.requestId);
-    if (!entry) return;
-    clearTimeout(entry.timer); pending.delete(data.requestId);
-    if (data.type === 'error') entry.reject(Object.assign(new Error(data.payload?.message || 'Insights query failed'), data.payload));
-    else entry.resolve(data.payload);
-  };
-  const workerError = event => rejectPending(new Error(event.message || 'Insights worker stopped'));
-  worker.addEventListener('message', receive);
-  worker.addEventListener('error', workerError);
-  const request = (type, payload) => new Promise((resolve, reject) => {
-    if (disposed) { reject(aborted()); return; }
-    const requestId = ++nextId;
-    const timer = setTimeout(() => { pending.delete(requestId); reject(new Error('Insights query timed out')); }, 60000);
-    pending.set(requestId, { resolve, reject, timer });
-    try { worker.postMessage({ type, requestId, ...payload }); }
-    catch (error) { clearTimeout(timer); pending.delete(requestId); reject(error); }
-  });
-  const release = async run => {
-    if (!run?.snapshotId) return;
-    const id = run.snapshotId; run.snapshotId = null;
-    try { await api.releaseInsightsSnapshot(id); } catch { /* Native inactivity expiry remains the fallback. */ }
-  };
-  const cancel = () => {
-    if (current) { current.controller.abort(); void release(current); }
-    rejectPending(aborted());
-  };
+/**
+ * One Insights workspace visit's model, held by the daemon. `load` asks the
+ * daemon to build it (the snapshot walk, the stale retries and the
+ * aggregation all run there) and follows its progress frames; `query` and
+ * `messages` ask that model. The session reads and changes no mail state.
+ */
+export function createInsightsSession({ api, listen = tauriListen }) {
+  let disposed = false, run = null, buildId = null, lastScope = null;
+  const release = id => { if (id) api.releaseInsights(id).catch(() => { /* Daemon idle expiry is the fallback. */ }); };
+  const cancelRun = () => { run?.cancel(); run = null; };
+
+  async function build(scope, onProgress) {
+    const id = newBuildId();
+    let settle;
+    const finished = new Promise((resolve, reject) => { settle = { resolve, reject }; });
+    finished.catch(() => {});
+    const mine = { cancelled: false, cancel() { this.cancelled = true; settle.reject(aborted()); release(id); } };
+    run = mine;
+    const unlisten = [];
+    try {
+      // The listener is up before the build starts, so a build that ends
+      // before its reply lands is still heard.
+      unlisten.push(await listen(BUILD_PROGRESS_EVENT, ({ payload }) => {
+        if (payload?.buildId !== id) return;
+        if (!payload.finished) onProgress({ loaded: payload.loaded, total: payload.total ?? null, coverage: payload.coverage });
+        else if (payload.ok) settle.resolve(payload);
+        else settle.reject(insightsFailure(payload.error));
+      }));
+      // A restarted daemon lost the build; a lagging stream may have dropped
+      // the last frame, so ask where it is.
+      unlisten.push(await listen('daemon-reconnected', () => settle.reject(insightsFailure({ code: 'daemonRestarted' }))));
+      unlisten.push(await listen('daemon-events-lagged', () => {
+        api.insightsStatus(id).then(status => { if (status.state === 'ready') settle.resolve(status); }, error => settle.reject(error));
+      }));
+      if (mine.cancelled) throw aborted();
+      await api.buildInsights(id, scope);
+      const done = await finished;
+      if (mine.cancelled || disposed) throw aborted();
+      return { id, coverage: done.coverage, loaded: done.loaded };
+    } catch (error) {
+      if (!mine.cancelled) release(id);
+      throw mine.cancelled || disposed ? aborted() : error;
+    } finally {
+      if (run === mine) run = null;
+      for (const stop of unlisten) { try { stop(); } catch { /* the other listeners still go */ } }
+    }
+  }
+
+  async function load({ accountIds, accounts, ownAddressesByAccount, onProgress = () => {} }) {
+    if (disposed) throw aborted();
+    cancelRun();
+    const scope = { accountIds, accounts, ownAddressesByAccount };
+    const built = await build(scope, onProgress);
+    const previous = buildId;
+    buildId = built.id; lastScope = scope;
+    if (previous !== built.id) release(previous);
+    return { coverage: built.coverage, loaded: built.loaded };
+  }
+
+  /** Asks the model; a model the daemon dropped while idle is built again once. */
+  async function ask(fn) {
+    if (disposed) throw aborted();
+    if (!buildId) throw insightsFailure({ code: 'modelNotReady' });
+    try { return await fn(buildId); }
+    catch (error) {
+      if (error?.code !== 'modelExpired' || !lastScope) throw error;
+      await load(lastScope);
+      return fn(buildId);
+    }
+  }
+
   return {
-    async load({ accountIds, accounts, ownAddressesByAccount, onProgress = () => {} }) {
-      if (disposed) throw aborted();
-      cancel();
-      const run = { generation: ++generation, controller: new AbortController(), snapshotId: null };
-      current = run;
-      const assertCurrent = () => { if (disposed || run.generation !== generation || run.controller.signal.aborted) throw aborted(); };
-      const backoff = [250, 500, 1000];
-      for (let attempt = 0; attempt <= backoff.length; attempt++) {
-        try {
-          assertCurrent();
-          const start = await api.beginInsightsSnapshot(accountIds, { signal: run.controller.signal });
-          run.snapshotId = start.snapshotId;
-          assertCurrent();
-          // Each attempt owns fresh rows/cursors. A stale partial inventory
-          // must never be joined to the following generation or reach a worker.
-          const copies = [], visited = new Set();
-          let cursor = null, coverage = start.coverage;
-          onProgress({ loaded: 0, total: start.inventoryCount ?? null, coverage });
-          do {
-            const page = await api.readInsightsPage(run.snapshotId, cursor, { signal: run.controller.signal });
-            assertCurrent();
-            coverage = page.coverage || coverage;
-            if (coverage?.status === 'stale') throw Object.assign(new Error(t('insights.failed')), { code: 'stale', coverage });
-            if (!Array.isArray(page.rows)) throw Object.assign(new Error(t('insights.failed')), {code:'invalid-page'});
-            copies.push(...page.rows);
-            cursor = page.nextCursor ?? null;
-            if (cursor !== null && visited.has(cursor)) throw Object.assign(new Error(t('insights.failed')), {code:'repeated-cursor'});
-            visited.add(cursor);
-            onProgress({ loaded: copies.length, total: start.inventoryCount ?? copies.length, coverage });
-          } while (cursor !== null);
-          const build = await request('build-start', { accounts, ownAddressesByAccount });
-          assertCurrent();
-          const buildId = build?.buildId;
-          if (!buildId) throw new Error(t('insights.failed'));
-          for (let offset = 0; offset < copies.length; offset += 1000) {
-            assertCurrent();
-            await request('build-append', { buildId, copies: copies.slice(offset, offset + 1000) });
-            assertCurrent();
-            if (offset + 1000 < copies.length) await waitForRetry(0, run.controller.signal);
-          }
-          assertCurrent();
-          await request('build-commit', { buildId });
-          assertCurrent(); ready = true;
-          return { coverage, loaded: copies.length };
-        } catch (error) {
-          assertCurrent();
-          if (!['snapshotStale', 'stale'].includes(error?.code)) throw error;
-          if (attempt === backoff.length) {
-            throw Object.assign(new Error(t('insights.failed')), { code: error.code, coverage: error.coverage });
-          }
-        } finally { await release(run); }
-        await waitForRetry(backoff[attempt], run.controller.signal);
-      }
-    },
-    query(query) { return !ready ? Promise.reject(new Error('Insights model is not ready')) : request('query', { query }); },
-    messages(query, selection) { return !ready ? Promise.reject(new Error('Insights model is not ready')) : request('messages', { query, selection }); },
+    load,
+    query: query => ask(id => api.aggregateInsights(id, query)),
+    messages: (query, selection) => ask(id => api.insightsMessages(id, query, selection)),
     dispose() {
       if (disposed) return;
-      disposed = true; ++generation; cancel();
-      worker.removeEventListener('message', receive); worker.removeEventListener('error', workerError);
-      worker.terminate();
+      disposed = true;
+      cancelRun();
+      release(buildId); buildId = null;
     },
   };
 }

@@ -2,7 +2,6 @@
 import { describe,it,expect,vi } from 'vitest';
 import { createInsightsStore } from '../insightsStore';
 import { createInsightsSession } from '../../services/insightsSession';
-import { createInsightsWorkerHandler } from '../../workers/insightsWorker';
 import { A, B, COUNT_FIXTURE } from '../../../tests/fixtures/insights';
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 function harness() {
@@ -93,13 +92,19 @@ describe('Insights workspace lifecycle',()=>{
   });
 });
 
-// Real store -> real session -> real worker/model. Only the native inventory
-// and browser worker transport are in-memory boundaries, with controllable I/O.
+// Real store -> real session; the daemon (its build frames, model and
+// answers) is an in-memory stand-in with controllable I/O. The model's own
+// answers are src-core's insights_model tests.
 function integratedHarness() {
   let preferences={range:'30d',direction:'received'};
   let today=new Date('2026-09-09T12:00:00Z');
   let nextInventory=null, nextMessages=null;
-  const workers=[];
+  const workers=[], released=[], listeners=new Map();
+  const emit=(event,payload)=>{for(const fn of listeners.get(event)||[])fn({payload});};
+  const listen=async(event,fn)=>{if(!listeners.has(event))listeners.set(event,new Set());listeners.get(event).add(fn);return()=>listeners.get(event).delete(fn);};
+  // COUNT_FIXTURE's answers for account A, as the daemon model gives them.
+  const totals=query=>query.startDate==='2026-09-08'&&query.endDate==='2026-09-08'?{received:0,sent:0,both:0}
+    :query.senderAddress==='ana@example.test'?{received:2,sent:1,both:3}:{received:3,sent:1,both:4};
   const store=createInsightsStore({
     getAccounts:()=>[{id:A,email:'me@example.test'},{id:B,email:'second@example.test'}],
     getOwnAddresses:()=>({[A]:['me@example.test'],[B]:['second@example.test']}),
@@ -107,25 +112,23 @@ function integratedHarness() {
     now:()=>today,timeZone:()=> 'Europe/Vilnius',
     createSession:()=>{
       const inventory=nextInventory;nextInventory=null;
-      const listeners=new Map();
-      const transport={terminated:false,addEventListener:(type,listener)=>listeners.set(type,listener),
-        removeEventListener:type=>listeners.delete(type),terminate(){this.terminated=true;listeners.clear();},
-        postMessage:message=>queueMicrotask(()=>handle({data:message})),
-      };
-      const handle=createInsightsWorkerHandler(reply=>{
-        if(reply.type==='messages' && nextMessages){
-          const delayed=nextMessages;nextMessages=null;delayed.started.resolve();
-          void delayed.promise.then(()=>listeners.get('message')?.({data:reply}));
-        } else queueMicrotask(()=>listeners.get('message')?.({data:reply}));
-      });
-      workers.push(transport);
-      return createInsightsSession({workerFactory:()=>transport,api:{
-        beginInsightsSnapshot:async()=>({snapshotId:'synthetic-snapshot',inventoryCount:COUNT_FIXTURE.length,coverage:{status:'reading'}}),
-        readInsightsPage:async()=>{
-          if(inventory){inventory.started.resolve();await inventory.promise;}
-          return {rows:COUNT_FIXTURE,nextCursor:null,coverage:{status:'ready'}};
+      const built=[];workers.push({built,get terminated(){return built.length>0&&built.every(id=>released.includes(id));}});
+      return createInsightsSession({listen,api:{
+        buildInsights:async buildId=>{
+          built.push(buildId);
+          void (async()=>{
+            if(inventory){inventory.started.resolve();await inventory.promise;}
+            emit('insights-build-progress',{buildId,finished:true,ok:true,loaded:COUNT_FIXTURE.length,coverage:{status:'ready'}});
+          })();
+          return {ok:true,buildId};
         },
-        releaseInsightsSnapshot:async()=>{},
+        insightsStatus:async()=>({state:'building'}),
+        aggregateInsights:async(buildId,query)=>({totals:totals(query),senders:[],days:[],lanes:[]}),
+        insightsMessages:async()=>{
+          if(nextMessages){const delayed=nextMessages;nextMessages=null;delayed.started.resolve();await delayed.promise;}
+          return [{key:'one'}];
+        },
+        releaseInsights:async buildId=>{released.push(buildId);},
       }});
     },
   });

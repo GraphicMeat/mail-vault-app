@@ -35,7 +35,7 @@ describe('Insights with real native mail data', function () {
       const outcomes = await nativeProbeOutcomes();
       console.log('[insights] Initial native outcomes:', JSON.stringify(outcomes));
       await stopNativeProbe();
-      assert.ok(outcomes.some(event => event.name === 'insights_begin_snapshot'), 'Observer must witness the real native snapshot attempt');
+      assert.ok(outcomes.some(event => event.name === 'insights.build'), 'Observer must witness the real daemon build attempt');
     }
   });
 
@@ -80,7 +80,7 @@ describe('Insights with real native mail data', function () {
         await browser.execute(() => window.__PIPELINE_CONTROL__.resumeAll());
       }
     }
-    assert.ok(calls.includes('insights_begin_snapshot'), 'Read-only assertion requires an observed real native scan');
+    assert.ok(calls.includes('insights.build'), 'Read-only assertion requires an observed real daemon scan');
     assert.equal(calls.some(name => /^(imap_get_email|imap_get_email_light|maildir_read|prefetch_attachments|smtp_send_email|compose\.send|archive_emails|imap_delete_email|bulk_delete_emails)$/.test(name)), false, `Entering charts only reads headers: ${calls.join(', ')}`);
     console.log('[insights] native scan/model/render frame timing:', JSON.stringify(scanTiming), 'inventory:', LARGE ? 50000 : 700);
     assert.ok(scanTiming.frames > 0, 'Frame callbacks remained responsive during scan');
@@ -338,7 +338,7 @@ describe('Insights with real native mail data', function () {
   });
 
   it('discards a delayed real native page when closed and when account scope changes', async () => {
-    await startNativeProbe('insights_read_page');
+    await startNativeProbe('insights.build');
     try {
       await clickReachable('[data-testid="insights-refresh"]');
       await waitForHeldNativeReply();
@@ -350,7 +350,7 @@ describe('Insights with real native mail data', function () {
     await openInsights(); await setInsightsRange();
     await displayedTotal(expected.received + 1);
 
-    await startNativeProbe('insights_read_page');
+    await startNativeProbe('insights.build');
     try {
       await clickReachable('[data-testid="insights-refresh"]');
       await waitForHeldNativeReply();
@@ -360,7 +360,7 @@ describe('Insights with real native mail data', function () {
       await releaseNativeReply();
       await browser.executeAsync(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))));
       await displayedTotal(1);
-      console.log('[insights] Race tests delay one actual native page response without replacing its data.');
+      console.log('[insights] Race tests delay one actual daemon build reply without replacing its data.');
     } finally { await stopNativeProbe(); }
     await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[0].id); await waitForInsights();
   });

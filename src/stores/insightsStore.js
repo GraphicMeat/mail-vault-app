@@ -14,11 +14,12 @@ const defaults = {
   getPreferences: () => useSettingsStore.getState().insightsPreferences,
   savePreferences: value => useSettingsStore.getState().setInsightsPreferences(value),
   now: () => new Date(), timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-  createSession: () => createInsightsSession({api, workerFactory: () => new Worker(new URL('../workers/insightsWorker.js', import.meta.url), {type:'module'})}),
+  // The daemon builds and answers the model (insights.build / aggregate / messages).
+  createSession: () => createInsightsSession({api}),
 };
 const initial = () => ({isOpen:false,tab:'map',query:{},preferences:normalizeInsightsPreferences(),status:'idle',progress:null,coverage:null,result:null,displayQuery:null,selectedDay:null,selection:null,messages:[],messagesLoading:false,detailOpen:false,error:null});
 
-/** Only UI preferences are persisted. Headers and native handles live in this session. */
+/** Only UI preferences are persisted. The model lives in the daemon for this session. */
 export function createInsightsStore(options = {}) {
   const deps = {...defaults,...options};
   let session = null, loadingSession = null, generation = 0, queryGeneration = 0, messageGeneration = 0;
@@ -107,7 +108,7 @@ export function createInsightsStore(options = {}) {
         set({selection,messages:[],messagesLoading:true,detailOpen:false});
         try {
           const rows=await current.messages(get().query,selection);
-          if(id===messageGeneration && current===session && get().isOpen)set({messages:selection.messageKey?rows.filter(row=>row.key===selection.messageKey):rows,messagesLoading:false});
+          if(id===messageGeneration && current===session && get().isOpen)set({messages:rows,messagesLoading:false});
         } catch(error) {
           if(id===messageGeneration && error.name!=='AbortError')set({messagesLoading:false,error:error.message});
         }

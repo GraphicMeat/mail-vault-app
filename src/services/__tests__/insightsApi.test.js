@@ -1,63 +1,58 @@
 /**
- * Task 3.7 moved the three insights commands into the daemon, so this file
- * now mocks `daemonCall` where it used to mock the Tauri `invoke`, and the
- * Tauri mock became the fence: a name that came back to a Tauri command
- * would fail loudly here instead of quietly working.
+ * The Insights bindings reach the daemon (`daemonCall`), never a Tauri
+ * command, and the daemon's `{ok: false, error}` envelope comes back as a
+ * rejection carrying its code and coverage with the catalog message.
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const h = vi.hoisted(() => ({ alive: false, calls: [], release: [], begin: null }));
-const page = { rows: [{ accountId: 'a', mailbox: 'INBOX', uid: 17, source: 'server-cache' }], nextCursor: null, coverage: { status: 'ready', folders: [] } };
+const h = vi.hoisted(() => ({ calls: [], replies: new Map() }));
 vi.mock('../daemonClient.js', () => ({ daemonCall: async (method, params) => {
-  if (method === 'daemon.heartbeat') return { alive: h.alive, version: 'test', uptime_secs: 1 };
+  if (method === 'daemon.heartbeat') return { alive: true, version: 'test', uptime_secs: 1 };
   h.calls.push([method, params]);
-  if (method === 'insights_begin_snapshot') return h.begin ? h.begin : { ok: true, snapshotId: 's1', inventoryCount: 1, coverage: { status: 'reading', folders: [] } };
-  if (method === 'insights_read_page') return { ok: true, ...page };
-  if (method === 'insights_release_snapshot') { h.release.push(params.snapshotId); return { ok: true }; }
-  throw new Error(`Unexpected method ${method}`);
+  if (!h.replies.has(method)) throw new Error(`Unexpected method ${method}`);
+  return h.replies.get(method);
 } }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: async (cmd) => {
   throw new Error(`Insights is daemon-owned: ${cmd} must never reach a Tauri command`);
 } }));
 beforeEach(() => {
-  vi.resetModules(); vi.useFakeTimers();
-  h.calls = []; h.release = []; h.begin = null;
+  vi.resetModules();
+  h.calls = []; h.replies = new Map();
   globalThis.window ??= {};
   window.__TAURI__ = {};
 });
-afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); delete window.__TAURI__; });
+afterEach(() => { delete window.__TAURI__; });
 
-it.each([false, true])('reads camelCase daemon pages without waiting for the heartbeat, alive=%s', async (alive) => {
-  h.alive = alive;
+it('sends each RPC with its arguments and unwraps the answer', async () => {
   const api = await import('../insightsApi.js');
-  const starting = api.beginInsightsSnapshot(['a']);
-  await vi.advanceTimersByTimeAsync(100);
-  const begin = await starting;
-  expect((await import('../transport.js')).getDaemonHealth().alive).toBe(alive);
-  expect(begin).toEqual({ ok: true, snapshotId: 's1', inventoryCount: 1, coverage: { status: 'reading', folders: [] } });
-  expect(await api.readInsightsPage(begin.snapshotId, null)).toEqual({ ok: true, ...page });
-  await api.releaseInsightsSnapshot(begin.snapshotId);
+  h.replies.set('insights.build', { ok: true, buildId: 'b' });
+  h.replies.set('insights.status', { ok: true, state: 'building', loaded: 3 });
+  h.replies.set('insights.aggregate', { ok: true, result: { totals: { both: 1 } } });
+  h.replies.set('insights.messages', { ok: true, messages: [{ key: 'k' }] });
+  h.replies.set('insights.release', { ok: true });
+  const accounts = [{ id: 'a', email: 'me@test', sentFolderOverride: 'Sent mail', password: 'never sent', imapHost: 'h' }, { email: 'no-id@test' }];
+  expect(await api.buildInsights('b', { accountIds: ['a'], accounts, ownAddressesByAccount: { a: ['me@test'] } })).toEqual({ ok: true, buildId: 'b' });
+  expect(await api.insightsStatus('b')).toMatchObject({ state: 'building' });
+  expect(await api.aggregateInsights('b', { direction: 'both' })).toEqual({ totals: { both: 1 } });
+  expect(await api.insightsMessages('b', { direction: 'both' }, { messageKey: 'k' })).toEqual([{ key: 'k' }]);
+  await api.releaseInsights('b');
+  await api.releaseInsights(null);
   expect(h.calls).toEqual([
-    ['insights_begin_snapshot', { accountIds: ['a'] }],
-    ['insights_read_page', { snapshotId: 's1', cursor: null }],
-    ['insights_release_snapshot', { snapshotId: 's1' }],
+    ['insights.build', { buildId: 'b', accountIds: ['a'], accounts: [{ id: 'a', email: 'me@test', sentFolderOverride: 'Sent mail' }], ownAddressesByAccount: { a: ['me@test'] } }],
+    ['insights.status', { buildId: 'b' }],
+    ['insights.aggregate', { buildId: 'b', query: { direction: 'both' } }],
+    ['insights.messages', { buildId: 'b', query: { direction: 'both' }, selection: { messageKey: 'k' } }],
+    ['insights.release', { buildId: 'b' }],
   ]);
 });
-it('does not begin after cancellation', async () => {
+
+it('re-raises a failure envelope with its code and coverage and the catalog message', async () => {
   const api = await import('../insightsApi.js');
-  const controller = new AbortController(); controller.abort();
-  await expect(api.beginInsightsSnapshot(['a'], { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
-  expect(h.calls).toEqual([]);
-});
-it('releases a snapshot that completes after cancellation', async () => {
-  let finish;
-  h.begin = new Promise(resolve => { finish = resolve; });
-  const api = await import('../insightsApi.js');
-  const controller = new AbortController();
-  const pending = api.beginInsightsSnapshot(['a'], { signal: controller.signal });
-  controller.abort();
-  finish({ ok: true, snapshotId: 'late', inventoryCount: 0, coverage: { status: 'ready', folders: [] } });
-  const cancelled = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-  await vi.advanceTimersByTimeAsync(100);
-  await cancelled;
-  expect(h.release).toEqual(['late']);
+  h.replies.set('insights.aggregate', { ok: false, error: { code: 'modelExpired', message: 'modelExpired' } });
+  h.replies.set('insights.status', { ok: false, error: { code: 'vaultUnavailable', coverage: { status: 'error' } } });
+  await expect(api.aggregateInsights('b', {})).rejects.toMatchObject({ code: 'modelExpired' });
+  const error = await api.insightsStatus('b').catch(e => e);
+  expect(error).toBeInstanceOf(Error);
+  expect(error).toMatchObject({ code: 'vaultUnavailable', coverage: { status: 'error' } });
+  expect(error.message).toMatch(/refresh/i);
+  expect(error.message).not.toMatch(/vaultUnavailable/);
 });

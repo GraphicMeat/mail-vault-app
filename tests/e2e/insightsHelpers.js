@@ -300,7 +300,7 @@ export async function startNativeProbe(holdCommand = null) {
     const probe = { previous, commands: [], outcomes: [], active: true, held: false, claimed: false, release: null };
     const observer = function (name, actual) {
       probe.commands.push(name);
-      const result = name.startsWith('insights_') ? Promise.resolve(actual).then(value => {
+      const result = /^insights[._]/.test(name) ? Promise.resolve(actual).then(value => {
         const frameProbe = window.__INSIGHTS_FRAME_PROBE__;
         if (frameProbe?.active && frameProbe.nativeReceipts.length < 100) frameProbe.nativeReceipts.push({ name, at: performance.now() });
         probe.outcomes.push({ name, ok: true, ...(frameProbe?.active ? { receivedAt: performance.now() } : {}) }); return value;

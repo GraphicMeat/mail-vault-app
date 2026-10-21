@@ -1,259 +1,135 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createInsightsSession } from '../insightsSession';
+import { describe, expect, it } from 'vitest';
+import { BUILD_PROGRESS_EVENT, createInsightsSession } from '../insightsSession';
 
-const deferred = () => { let resolve, reject; const promise = new Promise((a,b) => { resolve=a; reject=b; }); return { promise, resolve, reject }; };
-function harness(options = {}) {
-  const operations = [], listeners = new Map();
-  const worker = {
-    addEventListener: (type, fn) => listeners.set(type, fn),
-    removeEventListener: type => listeners.delete(type),
-    postMessage(message) {
-      operations.push(message);
-      options.onPost?.(message, operations);
-      queueMicrotask(() => listeners.get('message')?.({ data: {
-        type: message.type === 'build-start' ? 'build-started' : message.type === 'build-append' ? 'build-appended' : message.type === 'build-commit' || message.type === 'build' ? 'built' : message.type === 'query' ? 'result' : 'messages',
-        requestId: message.requestId, payload: message.type === 'build-start' ? { buildId: message.requestId } : message.type === 'query' ? { totals: { received: 2 } } : [],
-      } }));
-    },
-    terminate: () => operations.push('terminated'),
+/**
+ * The session only follows a daemon build (insights.build and its
+ * insights-build-progress frames) and asks the built model. The walk, the
+ * stale retries and the aggregation are the daemon's
+ * (src-daemon/src/handlers/insights_aggregate.rs) and tested there.
+ */
+function harness(overrides = {}) {
+  const calls = [], listeners = new Map();
+  const emit = (event, payload) => { for (const fn of listeners.get(event) || []) fn({ payload }); };
+  const listen = async (event, fn) => {
+    if (!listeners.has(event)) listeners.set(event, new Set());
+    listeners.get(event).add(fn);
+    return () => listeners.get(event).delete(fn);
   };
   const api = {
-    beginInsightsSnapshot: async ids => { operations.push(['begin', ids]); return { snapshotId: 'snap', inventoryCount: 2, coverage: { status: 'reading' } }; },
-    readInsightsPage: async (id, cursor) => {
-      operations.push(['page', id, cursor]);
-      return cursor == null
-        ? { rows: [{ uid: 1 }], nextCursor: 'next', coverage: { status: 'reading' } }
-        : { rows: [{ uid: 2 }], nextCursor: null, coverage: { status: 'partial', folders: [{ missingHeaders: 8 }] } };
+    buildInsights: async (buildId, scope) => {
+      calls.push(['build', buildId, scope]);
+      if (overrides.onBuild) overrides.onBuild(buildId, emit);
+      else queueMicrotask(() => {
+        emit(BUILD_PROGRESS_EVENT, { buildId, loaded: 0, total: 2, coverage: { status: 'reading' } });
+        emit(BUILD_PROGRESS_EVENT, { buildId, loaded: 2, total: 2, coverage: { status: 'partial' } });
+        emit(BUILD_PROGRESS_EVENT, { buildId, finished: true, ok: true, loaded: 2, coverage: { status: 'partial' } });
+      });
+      return { ok: true, buildId };
     },
-    releaseInsightsSnapshot: async id => operations.push(['release', id]),
-    ...options,
+    insightsStatus: async buildId => { calls.push(['status', buildId]); return overrides.status || { ok: true, state: 'ready', loaded: 2, coverage: { status: 'ready' } }; },
+    aggregateInsights: async (buildId, query) => { calls.push(['aggregate', buildId, query]); return overrides.aggregate ? overrides.aggregate(buildId, calls) : { totals: { received: 2 } }; },
+    insightsMessages: async (buildId, query, selection) => { calls.push(['messages', buildId, query, selection]); return [{ key: 'one' }]; },
+    releaseInsights: async buildId => { calls.push(['release', buildId]); },
   };
-  return { session: createInsightsSession({ api, workerFactory: () => worker }), operations, listeners };
+  return { session: createInsightsSession({ api, listen }), calls, emit, listeners };
 }
 const scope = { accountIds: ['a'], accounts: [{ id: 'a' }], ownAddressesByAccount: { a: ['me@test'] } };
+const builds = calls => calls.filter(c => c[0] === 'build').map(c => c[1]);
+const listening = listeners => [...listeners.values()].reduce((n, set) => n + set.size, 0);
 
-describe('Insights session lifecycle', () => {
-  it('streams inventory to the worker in chunks no larger than 1000 and preserves every row', async () => {
-    const rows = Array.from({ length: 2001 }, (_, uid) => ({ uid }));
-    const { session, operations } = harness({
-      beginInsightsSnapshot: async () => ({ snapshotId: 'large', inventoryCount: rows.length, coverage: { status: 'reading' } }),
-      readInsightsPage: async () => ({ rows, nextCursor: null, coverage: { status: 'ready' } }),
-    });
-    await session.load(scope);
-    const chunks = operations.filter(op => Array.isArray(op?.copies));
-    expect(chunks.length).toBeGreaterThan(1);
-    expect(Math.max(...chunks.map(chunk => chunk.copies.length))).toBeLessThanOrEqual(1000);
-    expect(chunks.filter(chunk => chunk.type === 'build-append').flatMap(chunk => chunk.copies)).toEqual(rows);
-    session.dispose();
-  });
-
-  it('does not commit old rows after a scope switch between worker chunks', async () => {
-    const oldRows = Array.from({ length: 2001 }, (_, uid) => ({ uid }));
-    const newRows = [{ uid: 8000 }];
-    let session, newLoad;
-    const target = harness({
-      onPost: message => {
-        if (message.type === 'build-append' && !newLoad) {
-          newLoad = session.load({ ...scope, accountIds: ['new'] });
-        }
-      },
-      beginInsightsSnapshot: async ids => ({ snapshotId: ids[0] === 'new' ? 'new' : 'old', coverage: {} }),
-      readInsightsPage: async id => ({ rows: id === 'old' ? oldRows : newRows, nextCursor: null }),
-    });
-    session = target.session;
-    const { operations } = target;
-    try {
-      const old = session.load(scope).catch(error => error.name);
-      expect(await old).toBe('AbortError');
-      await newLoad;
-      const starts = operations.filter(op => op?.type === 'build-start');
-      expect(starts).toHaveLength(2);
-      const commits = operations.filter(op => op?.type === 'build-commit');
-      expect(commits).toHaveLength(1);
-      expect(commits[0].buildId).toBe(starts[1].requestId);
-      expect(operations.filter(op => op?.type === 'build-append' && op.buildId === starts[1].requestId)
-        .flatMap(op => op.copies)).toEqual(newRows);
-      expect(operations.filter(op => op?.type === 'build-append' && op.buildId === starts[0].requestId)).toHaveLength(1);
-      expect(operations).toContainEqual(['release', 'old']);
-      expect(operations).toContainEqual(['release', 'new']);
-    } finally { session.dispose(); }
-  });
-
-  it('does not transfer more chunks or commit after disposal during an append', async () => {
-    let session;
-    const target = harness({
-      onPost: message => { if (message.type === 'build-append') session.dispose(); },
-      readInsightsPage: async () => ({ rows: Array.from({ length: 2001 }, (_, uid) => ({ uid })), nextCursor: null }),
-    });
-    session = target.session;
-    try {
-      await expect(session.load(scope)).rejects.toMatchObject({ name: 'AbortError' });
-      expect(target.operations.filter(op => op?.type === 'build-append')).toHaveLength(1);
-      expect(target.operations.some(op => op?.type === 'build-commit')).toBe(false);
-      expect(target.operations).toContain('terminated');
-      expect(target.operations).toContainEqual(['release', 'snap']);
-    } finally { session.dispose(); }
-  });
-
-  it('yields a macrotask between staged append chunks', async () => {
-    let marker = false, sawMarkerOnSecondAppend = false, appends = 0;
-    const { session } = harness({
-      onPost: message => {
-        if (message.type !== 'build-append') return;
-        if (++appends === 1) setTimeout(() => { marker = true; }, 0);
-        else if (appends === 2) sawMarkerOnSecondAppend = marker;
-      },
-      readInsightsPage: async () => ({ rows: Array.from({ length: 2001 }, (_, uid) => ({ uid })), nextCursor: null }),
-    });
-    await session.load(scope);
-    expect(sawMarkerOnSecondAppend).toBe(true);
-    session.dispose();
-  });
-
-  it('drains all pages before building and reports partial coverage honestly', async () => {
-    const { session, operations } = harness();
+describe('Insights session over the daemon model', () => {
+  it('follows the build frames and answers queries from the built model', async () => {
+    const { session, calls, listeners } = harness();
     const progress = [];
-    await session.load({ ...scope, onProgress: value => progress.push(value) });
-    expect(operations.filter(op => op?.type === 'build-commit')).toHaveLength(1);
-    expect(operations.filter(op => op?.type === 'build-append').flatMap(op => op.copies)).toEqual([{ uid: 1 }, { uid: 2 }]);
-    expect(progress.at(-1)).toMatchObject({ loaded: 2, coverage: { status: 'partial' } });
-    expect(operations).toContainEqual(['release', 'snap']);
-    expect(await session.query({ direction: 'received' })).toEqual({ totals: { received: 2 } });
+    expect(await session.load({ ...scope, onProgress: p => progress.push(p) })).toEqual({ coverage: { status: 'partial' }, loaded: 2 });
+    expect(progress).toEqual([
+      { loaded: 0, total: 2, coverage: { status: 'reading' } },
+      { loaded: 2, total: 2, coverage: { status: 'partial' } },
+    ]);
+    expect(calls[0][2]).toEqual(scope);
+    const [id] = builds(calls);
+    expect(await session.query({ direction: 'both' })).toEqual({ totals: { received: 2 } });
+    expect(await session.messages({ direction: 'both' }, { messageKey: 'one' })).toEqual([{ key: 'one' }]);
+    expect(calls).toContainEqual(['aggregate', id, { direction: 'both' }]);
+    expect(calls).toContainEqual(['messages', id, { direction: 'both' }, { messageKey: 'one' }]);
+    expect(listening(listeners)).toBe(0);
     session.dispose();
+    expect(calls.at(-1)).toEqual(['release', id]);
   });
-  it('cancels an old snapshot and never builds its rows after a scope switch', async () => {
-    const first = deferred(); let n=0;
-    const { session, operations } = harness({ beginInsightsSnapshot: () => ++n===1 ? first.promise : Promise.resolve({ snapshotId:'new', coverage:{} }) });
-    const old = session.load(scope).catch(error => error.name);
-    await session.load({ ...scope, accountIds: ['b'] });
-    first.resolve({ snapshotId: 'old', coverage: {} });
-    expect(await old).toBe('AbortError');
-    expect(operations).toContainEqual(['release', 'old']);
-    expect(operations.filter(op=>op?.type==='build-commit')).toHaveLength(1);
-    session.dispose();
-  });
-  it('keeps a read failure as an error instead of building a false empty model', async () => {
-    const { session, operations } = harness({ readInsightsPage: async () => { throw new Error('Vault disconnected'); } });
-    await expect(session.load(scope)).rejects.toThrow('Vault disconnected');
-    expect(operations.some(op=>op?.type?.startsWith('build'))).toBe(false);
-    expect(operations).toContainEqual(['release','snap']);
-    session.dispose();
-  });
-  it('refuses stale snapshots rather than joining mixed generations', async () => {
-    const { session, operations } = harness({ readInsightsPage: async () => ({ rows: [{ uid: 4 }], nextCursor: null, coverage: { status: 'stale' } }) });
-    await expect(session.load(scope)).rejects.toMatchObject({ code: 'stale' });
-    expect(operations.some(op=>op?.type?.startsWith('build'))).toBe(false);
-    session.dispose();
-  });
-  it('rejects pending worker work when disposed and releases the native snapshot', async () => {
-    const pending = deferred();
-    const { session, operations } = harness({ readInsightsPage: () => pending.promise });
-    const load = session.load(scope).catch(error=>error.name);
-    await Promise.resolve(); session.dispose();
-    pending.resolve({ rows: [], nextCursor:null, coverage:{} });
-    expect(await load).toBe('AbortError');
-    expect(operations).toContain('terminated');
-    expect(operations).toContainEqual(['release', 'snap']);
-  });
-  it('rejects queries before a model exists', async () => {
-    const { session } = harness();
-    await expect(session.query({})).rejects.toThrow(/ready/i);
-    session.dispose();
-  });
-});
 
-describe('Insights session snapshot retries', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
-  const stale = () => ({ code: 'snapshotStale', coverage: { status: 'stale' } });
-
-  it('retries a changing initial inventory after backoff and builds only the completed scan', async () => {
-    let begins = 0;
-    const { session, operations } = harness({ beginInsightsSnapshot: async () => {
-      if (++begins < 3) throw stale();
-      return { snapshotId: 'stable', inventoryCount: 2, coverage: { status: 'reading' } };
-    } });
-    const load = session.load(scope).catch(error => error);
-    await vi.advanceTimersByTimeAsync(249); expect(begins).toBe(1);
-    await vi.advanceTimersByTimeAsync(1); expect(begins).toBe(2);
-    await vi.advanceTimersByTimeAsync(499); expect(begins).toBe(2);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(await load).toMatchObject({ loaded: 2, coverage: { status: 'partial' } });
-    expect(begins).toBe(3);
-    expect(operations.filter(op => op?.type === 'build-commit')).toHaveLength(1);
-    expect(operations).toContainEqual(['release', 'stable']);
+  it('ignores frames of another build', async () => {
+    const { session } = harness({ onBuild: (buildId, emit) => queueMicrotask(() => {
+      emit(BUILD_PROGRESS_EVENT, { buildId: 'someone-else', finished: true, ok: false, error: { code: 'vaultUnavailable' } });
+      emit(BUILD_PROGRESS_EVENT, { buildId, finished: true, ok: true, loaded: 1, coverage: { status: 'ready' } });
+    }) });
+    expect(await session.load(scope)).toMatchObject({ loaded: 1 });
     session.dispose();
   });
 
-  it('releases an invalidated paged snapshot and discards its rows before a fresh attempt', async () => {
-    let begins = 0;
-    const { session, operations } = harness({
-      beginInsightsSnapshot: async () => ({ snapshotId: ++begins === 1 ? 'old' : 'new', coverage: { status: 'reading' } }),
-      readInsightsPage: async (id, cursor) => {
-        if (id === 'old' && cursor == null) return { rows: [{ uid: 900 }], nextCursor: 'old-next' };
-        if (id === 'old') throw stale();
-        return { rows: [{ uid: 2 }], nextCursor: null, coverage: { status: 'ready' } };
-      },
-    });
-    const progress = [], load = session.load({ ...scope, onProgress: value => progress.push(value.loaded) }).catch(error => error);
-    await vi.advanceTimersByTimeAsync(250);
-    expect(await load).toMatchObject({ loaded: 1 });
-    expect(operations.filter(op => op?.type === 'build-append').flatMap(op => op.copies)).toEqual([{ uid: 2 }]);
-    expect(operations.filter(op => op?.type === 'build-commit')).toHaveLength(1);
-    expect(operations.filter(op => op?.[0] === 'release')).toEqual([['release', 'old'], ['release', 'new']]);
-    expect(progress).toEqual([0, 1, 0, 1]);
-    session.dispose();
-  });
-
-  it('retries a stale coverage response without building any of its records', async () => {
-    let begins = 0;
-    const { session, operations } = harness({
-      beginInsightsSnapshot: async () => ({ snapshotId: `attempt-${++begins}`, coverage: {} }),
-      readInsightsPage: async () => begins === 1
-        ? { rows: [{ uid: 900 }], nextCursor: null, coverage: { status: 'stale' } }
-        : { rows: [{ uid: 2 }], nextCursor: null, coverage: { status: 'ready' } },
-    });
-    const load = session.load(scope).catch(error => error);
-    await vi.advanceTimersByTimeAsync(250);
-    expect(await load).toMatchObject({ loaded: 1 });
-    expect(operations.filter(op => op?.type === 'build-append').flatMap(op => op.copies)).toEqual([{ uid: 2 }]);
-    expect(operations.filter(op => op?.type === 'build-commit')).toHaveLength(1);
-    session.dispose();
-  });
-
-  it('stops after four attempts and preserves the stale code with a readable error', async () => {
-    let begins = 0;
-    const { session, operations } = harness({ beginInsightsSnapshot: async () => { ++begins; throw stale(); } });
-    const load = session.load(scope).catch(error => error);
-    await vi.advanceTimersByTimeAsync(1749); expect(begins).toBe(3);
-    await vi.advanceTimersByTimeAsync(1);
-    const error = await load;
-    expect(begins).toBe(4);
+  it('rejects with the daemon code and coverage, and releases the failed build', async () => {
+    const { session, calls } = harness({ onBuild: (buildId, emit) => queueMicrotask(() =>
+      emit(BUILD_PROGRESS_EVENT, { buildId, finished: true, ok: false, error: { code: 'snapshotStale', message: 'insights.failed', coverage: { status: 'stale' } } })) });
+    const error = await session.load(scope).catch(e => e);
     expect(error).toBeInstanceOf(Error);
     expect(error).toMatchObject({ code: 'snapshotStale', coverage: { status: 'stale' } });
     expect(error.message).toMatch(/refresh/i);
-    expect(operations.some(op => op?.type?.startsWith('build'))).toBe(false);
-    await vi.advanceTimersByTimeAsync(10000); expect(begins).toBe(4);
+    expect(calls.at(-1)).toEqual(['release', builds(calls)[0]]);
+    await expect(session.query({})).rejects.toMatchObject({ code: 'modelNotReady' });
     session.dispose();
   });
 
-  it('does not retry a non-stale failure', async () => {
-    let begins = 0;
-    const failure = new Error('Vault disconnected');
-    const { session } = harness({ beginInsightsSnapshot: async () => { ++begins; throw failure; } });
-    expect(await session.load(scope).catch(error => error)).toBe(failure);
-    await vi.advanceTimersByTimeAsync(10000); expect(begins).toBe(1);
+  it('cancels the running build when a new scope loads, and never adopts it', async () => {
+    let hold;
+    const { session, calls, emit } = harness({ onBuild: (buildId, send) => { if (!hold) hold = buildId; else queueMicrotask(() => send(BUILD_PROGRESS_EVENT, { buildId, finished: true, ok: true, loaded: 1, coverage: {} })); } });
+    const old = session.load(scope).catch(e => e.name);
+    await new Promise(r => setTimeout(r, 0));
+    const fresh = await session.load({ ...scope, accountIds: ['b'] });
+    expect(await old).toBe('AbortError');
+    expect(fresh).toMatchObject({ loaded: 1 });
+    // The cancelled build's last frame arrives late and changes nothing.
+    emit(BUILD_PROGRESS_EVENT, { buildId: hold, finished: true, ok: true, loaded: 9, coverage: {} });
+    const [first, second] = builds(calls);
+    expect(calls).toContainEqual(['release', first]);
+    await session.query({});
+    expect(calls.at(-1)[1]).toBe(second);
     session.dispose();
   });
 
-  it('cancels a backoff immediately and never starts another native attempt', async () => {
-    let begins = 0;
-    const { session, operations } = harness({ beginInsightsSnapshot: async () => { ++begins; throw stale(); } });
-    const load = session.load(scope).catch(error => error);
-    await vi.advanceTimersByTimeAsync(100);
+  it('stops following a build when disposed and releases it', async () => {
+    const { session, calls, listeners } = harness({ onBuild: () => {} });
+    const pending = session.load(scope).catch(e => e.name);
+    await new Promise(r => setTimeout(r, 0));
     session.dispose();
-    expect(await load).toMatchObject({ name: 'AbortError' });
-    await vi.advanceTimersByTimeAsync(10000); expect(begins).toBe(1);
-    expect(operations.some(op => op?.type?.startsWith('build'))).toBe(false);
+    expect(await pending).toBe('AbortError');
+    expect(calls).toContainEqual(['release', builds(calls)[0]]);
+    expect(listening(listeners)).toBe(0);
+    await expect(session.load(scope)).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('asks where the build is when the event stream lagged', async () => {
+    const { session, calls, emit } = harness({ onBuild: () => queueMicrotask(() => emit('daemon-events-lagged', {})) });
+    expect(await session.load(scope)).toEqual({ coverage: { status: 'ready' }, loaded: 2 });
+    expect(calls.some(c => c[0] === 'status')).toBe(true);
+    session.dispose();
+  });
+
+  it('fails a build the restarted daemon lost', async () => {
+    const { session, emit } = harness({ onBuild: () => queueMicrotask(() => emit('daemon-reconnected', {})) });
+    await expect(session.load(scope)).rejects.toMatchObject({ code: 'daemonRestarted' });
+    session.dispose();
+  });
+
+  it('builds again once when the daemon dropped an idle model', async () => {
+    let first = true;
+    const { session, calls } = harness({ aggregate: () => {
+      if (first) { first = false; throw Object.assign(new Error('x'), { code: 'modelExpired' }); }
+      return { totals: { received: 5 } };
+    } });
+    await session.load(scope);
+    expect(await session.query({})).toEqual({ totals: { received: 5 } });
+    const [one, two] = builds(calls);
+    expect(two).toBeTruthy();
+    expect(calls).toContainEqual(['release', one]);
+    session.dispose();
   });
 });

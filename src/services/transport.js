@@ -312,6 +312,10 @@ export const DAEMON_OWNED = new Set([
   // (src-core/src/notify_policy.rs, over the settings document); notify() in
   // stores/focusStore.js only renders the answer.
   'notify.decide',
+  // Phase 1 row 23: the daemon builds the Insights model from its own
+  // snapshot and answers every chart and drill-down (was the web worker and
+  // src/utils/insights/model.js). Progress: `insights-build-progress`.
+  'insights.build', 'insights.status', 'insights.aggregate', 'insights.messages', 'insights.release',
 ]);
 
 async function sendToDaemon(command, args) {
