@@ -156,7 +156,7 @@ async fn capture_all(
 /// A due follow-up reminder pinned on one of the copies the server just lost
 /// points at nothing now: it ends, and the app hears so off the `follow-up`
 /// event. Only the uids the server really removed.
-async fn end_follow_ups_at(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]) {
+pub(crate) async fn end_follow_ups_at(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]) {
     if uids.is_empty() {
         return;
     }
@@ -302,20 +302,7 @@ async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailb
     let result = blocking(move || {
         crate::custody::with_conn(&st, |c| {
             mailvault_core::custody::cache::save_headers(c, &account_id, &mailbox, &serde_json::json!({ "removedUids": uids }).to_string())?;
-            let gone: std::collections::HashSet<u32> = uids.into_iter().collect();
-            let rows: Vec<Value> = entries::read(c, &account_id, &mailbox)?.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-            let stamped: Vec<Value> = rows
-                .into_iter()
-                .filter(|e| entries::uid_of(e).is_some_and(|u| gone.contains(&u)))
-                .map(|mut e| {
-                    e["serverDeleted"] = Value::Bool(true);
-                    e
-                })
-                .collect();
-            if !stamped.is_empty() {
-                entries::upsert(c, &account_id, &mailbox, &stamped)?;
-            }
-            Ok(())
+            stamp_server_deleted(c, &account_id, &mailbox, &uids)
         })
     })
     .await
@@ -323,6 +310,26 @@ async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailb
     if let Err(e) = result {
         warn!("bulk_delete: could not record the deleted uids in the header cache / custody: {e}");
     }
+}
+
+/// Mark the custody entries of `uids` "this app deleted the server copy":
+/// what turns a vault row from "saved in your vault" into "your only copy".
+/// A uid with no entry is left alone (no row is invented for it).
+pub(crate) fn stamp_server_deleted(c: &mailvault_core::custody::Connection, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<(), String> {
+    let gone: std::collections::HashSet<u32> = uids.iter().copied().collect();
+    let rows: Vec<Value> = entries::read(c, account_id, mailbox)?.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    let stamped: Vec<Value> = rows
+        .into_iter()
+        .filter(|e| entries::uid_of(e).is_some_and(|u| gone.contains(&u)))
+        .map(|mut e| {
+            e["serverDeleted"] = Value::Bool(true);
+            e
+        })
+        .collect();
+    if !stamped.is_empty() {
+        entries::upsert(c, account_id, mailbox, &stamped)?;
+    }
+    Ok(())
 }
 
 fn progress_reply(id: Value, result: Result<mailvault_core::archive::ArchiveProgress, String>) -> RpcResponse {

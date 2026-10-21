@@ -307,19 +307,24 @@ impl LocalStore for DaemonLocal {
         if uids.is_empty() {
             return;
         }
-        let (state, account, mailbox, uids) =
+        let (state, account, mailbox, gone) =
             (Arc::clone(&self.state), self.account_id.clone(), folder.to_string(), uids.to_vec());
         let r = common::blocking(move || {
-            crate::classification::forget_at(&state.app_dir, &account, &mailbox, &uids);
+            crate::classification::forget_at(&state.app_dir, &account, &mailbox, &gone);
             crate::custody::with_conn(&state, |c| {
-                mailvault_core::custody::cache::remove_headers(c, &account, &mailbox, &uids)
+                mailvault_core::custody::cache::remove_headers(c, &account, &mailbox, &gone)?;
+                // The vault copy is now the only one, as after any other
+                // delete this app makes (`bulk_delete_emails`).
+                crate::handlers::archive::stamp_server_deleted(c, &account, &mailbox, &gone)
             })
         })
         .await;
         match r {
             Ok(Ok(_)) => {}
-            Ok(Err(e)) | Err(e) => warn!("abd: header rows of deleted mail not dropped: {e}"),
+            Ok(Err(e)) | Err(e) => warn!("abd: header rows of deleted mail not dropped or stamped: {e}"),
         }
+        // A reminder on a copy that left the server ends with it.
+        crate::handlers::archive::end_follow_ups_at(&self.state, &self.account_id, folder, uids).await;
     }
 }
 
@@ -339,5 +344,29 @@ mod tests {
         DaemonLocal::new(Arc::clone(&state), "acc", "a@b.test").deleted_from_server("INBOX", &[5]).await;
 
         assert_eq!(crate::classification::keys_for_test(&state.app_dir, "acc"), vec!["<6>".to_string()]);
+    }
+
+    /// The vault copy of what the job took from the server is stamped
+    /// `serverDeleted`, like after `bulk_delete_emails`; a uid it did not
+    /// take is not.
+    #[tokio::test]
+    async fn mail_deleted_from_the_server_is_stamped_as_the_only_copy() {
+        use mailvault_core::custody::entries;
+        use serde_json::{json, Value};
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        crate::custody::with_conn(&state, |c| {
+            entries::upsert(c, "acc", "INBOX", &[json!({"uid": 5, "source": "local"}), json!({"uid": 6, "source": "local"})])
+        })
+        .unwrap();
+
+        DaemonLocal::new(Arc::clone(&state), "acc", "a@b.test").deleted_from_server("INBOX", &[5]).await;
+
+        let rows: Vec<Value> =
+            serde_json::from_str(&crate::custody::with_conn(&state, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap()).unwrap();
+        let of = |uid: u64| rows.iter().find(|e| e["uid"] == json!(uid)).unwrap().clone();
+        assert_eq!(of(5)["serverDeleted"], json!(true));
+        assert!(of(6).get("serverDeleted").is_none());
     }
 }
