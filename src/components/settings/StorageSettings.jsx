@@ -96,23 +96,44 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const invoke = window.__TAURI__?.core?.invoke;
 
   // The last run and whether one is going, and every run's end after that.
+  // A reconnect or a lagged event stream may have eaten the end: ask again.
   useEffect(() => {
     let alive = true;
-    let off = () => {};
-    onCleanupRun((p) => {
+    const offs = [];
+    const ask = () => cleanupStatus().then((status) => {
+      if (!alive || !status) return;
+      setCleanupRunning(!!status.running);
+      if (status.lastRun) setCleanupLastRun(status.lastRun);
+    }, () => {});
+    const keep = (p) => p.then((fn) => { if (alive) offs.push(fn); else fn(); });
+    keep(onCleanupRun((p) => {
       if (p.state === 'running') setCleanupRunning(true);
       if (p.state === 'done') {
         setCleanupRunning(false);
         if (p.lastRun) setCleanupLastRun(p.lastRun);
       }
-    }).then((fn) => { if (alive) off = fn; else fn(); });
-    cleanupStatus().then((status) => {
-      if (!alive || !status) return;
-      setCleanupRunning(!!status.running);
-      if (status.lastRun) setCleanupLastRun(status.lastRun);
-    }, () => {});
-    return () => { alive = false; off(); };
+    }));
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      keep(listen('daemon-reconnected', ask));
+      keep(listen('daemon-events-lagged', ask));
+    }).catch(() => {});
+    ask();
+    return () => { alive = false; offs.forEach((fn) => fn()); };
   }, []);
+
+  // While a run is going, the status is the fallback for an end event that
+  // never arrives.
+  useEffect(() => {
+    if (!cleanupRunning) return undefined;
+    const timer = setInterval(() => {
+      cleanupStatus().then((status) => {
+        if (!status) return;
+        if (!status.running) setCleanupRunning(false);
+        if (status.lastRun) setCleanupLastRun(status.lastRun);
+      }, () => {});
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [cleanupRunning]);
 
   // Rules the daemon reads but will not run say so on their row.
   useEffect(() => {
