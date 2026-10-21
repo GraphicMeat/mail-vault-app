@@ -1,27 +1,21 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIframeTemplate';
-import { frameBody } from '../../stores/netActivityStore';
+import { useBodyScan, UNSCANNED_HEAD } from '../../services/bodyScan';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
 import { useMailFonts } from '../../hooks/useMailFonts';
 import { useThemeStore } from '../../stores/themeStore';
 import { useAltBodyRenderer } from './bodyRendererRegistry';
 
-// The body both renderers draw: the mail's content, with its beacons swapped
-// out when tracker blocking is active.
-export function previewBody(html, trackerBlocking) {
-  return frameBody(getEmailBodyContent(html), null, trackerBlocking).body;
-}
-
 // Read-only email body for the side surfaces (Cleanup preview, Time Capsule).
 //
 // Same document the reading pane builds — the nonce script CSP and, when
 // tracker blocking is active, the body with its beacons swapped out — so
 // opening a message here phones home no more than opening it in the reader.
-// No key for the scan: these surfaces have no scoped `accountId-mailbox-uid`,
-// and a bare uid would share the scan cache with another mailbox's verdict.
-export function buildEmailPreviewHtml(html, trackerBlocking, privacy = false) {
-  return buildEmailIframeHtml({ bodyHtml: previewBody(html, trackerBlocking), privacy });
+// `body` is the scanned body (services/bodyScan); `unscanned` refuses remote
+// images when the daemon could not scan it.
+export function buildEmailPreviewHtml(body, privacy = false, unscanned = false) {
+  return buildEmailIframeHtml({ bodyHtml: body, privacy, extraHead: unscanned ? UNSCANNED_HEAD : '' });
 }
 
 // No `allow-scripts`: nothing runs in here at all, not even our own fold or
@@ -35,9 +29,14 @@ export function EmailPreviewFrame({ html, title, message = null }) {
   const privacyOn = usePrivacyFrameGate();
   // Memoized: every build mints a fresh nonce, so a rebuild on the height
   // re-render would reload the frame and loop on its own load event.
-  // The body is computed once for both: Blitz draws it as is, the frame wraps it.
-  const body = useMemo(() => previewBody(html, trackerBlocking), [html, trackerBlocking]);
-  const doc = useMemo(() => buildEmailIframeHtml({ bodyHtml: body, privacy: privacyOn }), [body, privacyOn]);
+  // The body is scanned once for both: Blitz draws it as is, the frame wraps it.
+  // No key for the scan: these surfaces have no scoped `accountId-mailbox-uid`,
+  // and a bare uid would share the scan with another mailbox's verdict.
+  // Nothing is drawn until the scan is in.
+  const content = useMemo(() => getEmailBodyContent(html), [html]);
+  const scan = useBodyScan(content, { blocking: trackerBlocking });
+  const body = scan ? scan.html : '';
+  const doc = useMemo(() => (scan ? buildEmailPreviewHtml(body, privacyOn, !scan.scanned) : ''), [scan, body, privacyOn]);
   // No scripts in here, but same-origin: the parent's masking pass reaches it.
   useBodyPrivacy(frameRef, doc, { message });
   const fitHeight = (frame) => {
@@ -50,6 +49,8 @@ export function EmailPreviewFrame({ html, title, message = null }) {
   useMailFonts(frameRef, () => fitHeight(frameRef.current));
 
   if (Alt) {
+    // The alternative renderer fetches images itself: it only ever gets a scanned body.
+    if (!scan?.scanned) return null;
     // Light, capped at 2000 and scrolling past it, like the frame's height cap.
     // Links stay inert, as in the script-less frame.
     return (

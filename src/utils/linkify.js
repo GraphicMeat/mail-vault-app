@@ -64,7 +64,7 @@ function soleHref(text) {
  */
 export function linkifyHtml(html) {
   if (!html || typeof DOMParser === 'undefined' || !/https?:\/\/|www\.|@/i.test(html)) return html;
-  // Wrapped the way scanEmailLinks parses it: without a <body>, a leading
+  // Wrapped the way the body scan parses it: without a <body>, a leading
   // <style> would be parsed into <head> and lost on the way back out.
   const doc = new DOMParser().parseFromString(`<!DOCTYPE html><html><body>${html}</body></html>`, 'text/html');
   let changed = false;

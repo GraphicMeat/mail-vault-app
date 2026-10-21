@@ -6,9 +6,10 @@ vi.mock('../../utils/emailIframeTemplate', async (importOriginal) => {
   const real = await importOriginal();
   return { ...real, attachEmailIframeAutoSize: vi.fn(real.attachEmailIframeAutoSize) };
 });
+// The daemon's scan, answered at once with nothing found (src/test/bodyScan).
+vi.mock('../../services/bodyScan', async (orig) => (await import('../../test/bodyScan')).stubBodyScan(orig));
 const { OriginalFrame, buildOriginalFrameHtml } = await import('../OriginalFrame');
 const { buildEmailIframeHtml, attachEmailIframeAutoSize } = await import('../../utils/emailIframeTemplate');
-const { frameBody } = await import('../../stores/netActivityStore');
 const { getDarkReaderInlineScripts } = await import('../../utils/darkReaderInject');
 const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../email/bodyRendererRegistry');
 const { useSettingsStore } = await import('../../stores/settingsStore');
@@ -54,21 +55,21 @@ describe('OriginalFrame on the body seam', () => {
   });
 
   it('buildOriginalFrameHtml with padding null adds no override', () => {
-    expect(buildOriginalFrameHtml({ html: '<p>x</p>', dark: false, palette: 'graphite', padding: null, trackerBlocking: false, privacy: false, nonce: 'n' })).not.toContain('<style>body { padding:');
+    expect(buildOriginalFrameHtml({ html: '<p>x</p>', dark: false, palette: 'graphite', padding: null, privacy: false, nonce: 'n' })).not.toContain('<style>body { padding:');
   });
 
   it('buildOriginalFrameHtml is byte-identical to the template the component built inline', () => {
-    // The pre-extraction body of the srcDoc memo, verbatim.
-    const old = ({ html, dark, palette, padding, trackerBlocking, privacy, nonce }) => buildEmailIframeHtml({
-      bodyHtml: frameBody(html, null, trackerBlocking).body,
+    // The pre-extraction body of the srcDoc memo, its body now the scanned one it is handed.
+    const old = ({ html, dark, palette, padding, privacy, nonce }) => buildEmailIframeHtml({
+      bodyHtml: html,
       themeTag: dark ? 'dark' : 'light',
       extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}<style>body { padding: ${padding}; }</style>`,
       nonce,
       privacy,
     });
     const html = '<div style="color:#123">Hi <a href="https://example.com/x">there</a></div><img src="https://t.example/p.gif" width="1" height="1">';
-    for (const dark of [false, true]) for (const trackerBlocking of [false, true]) for (const privacy of [false, true]) for (const padding of ['12px 16px', '0']) {
-      const args = { html, dark, palette: 'indigo', padding, trackerBlocking, privacy, nonce: 'abc123' };
+    for (const dark of [false, true]) for (const privacy of [false, true]) for (const padding of ['12px 16px', '0']) {
+      const args = { html, dark, palette: 'indigo', padding, privacy, nonce: 'abc123' };
       expect(buildOriginalFrameHtml(args)).toBe(old(args));
     }
   });

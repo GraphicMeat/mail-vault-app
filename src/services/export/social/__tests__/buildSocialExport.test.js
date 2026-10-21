@@ -11,6 +11,10 @@ const captureAppWindow = vi.fn(async () => stubCanvas());
 const composeSocialImage = vi.fn(() => stubCanvas());
 
 vi.mock('../renderSocialCard', () => ({ renderSocialCard: (...a) => renderSocialCard(...a) }));
+// The link verdicts are the daemon's (`body.classify_links`), answered as it answers this link.
+vi.mock('../../../bodyScan', async (orig) => (await import('../../../../test/bodyScan')).stubLinkVerdicts(orig, {
+  'http://claim.example/c/rokas%40example.lt': 'red',
+}));
 vi.mock('../../renderMessageToCanvas', () => ({
   renderMessageToCanvas: vi.fn(async () => stubCanvas()),
   measureMessageHeight: vi.fn(async () => 100),

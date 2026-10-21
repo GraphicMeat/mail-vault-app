@@ -25,6 +25,13 @@ vi.mock('../EmailActionBar', () => ({ EmailActionBar: (p) => (
 ) }));
 vi.mock('../../../utils/replyTarget', () => ({ replyTarget: async (header, _l, _s, selectedHtml) => ({ ...header, selectedHtml }) }));
 vi.mock('../../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
+// The daemon's scan (src/test/bodyScan), answered at once: the body titled and
+// one link flagged, so the alternative renderer gets the scanned body and the marks.
+vi.mock('../../../services/bodyScan', async (orig) => {
+  const { stubBodyScan, bodyScanAnswer } = await import('../../../test/bodyScan');
+  return stubBodyScan(orig, (html, opts) => bodyScanAnswer(html, opts.links
+    ? { html: `${html}<!--scanned-->`, alerts: [{ level: 'red' }], maxAlertLevel: 'red' } : {}));
+});
 
 const { ThreadView } = await import('../ThreadView');
 const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../bodyRendererRegistry');
@@ -35,8 +42,7 @@ const { useSearchStore } = await import('../../../stores/searchStore');
 const { emailKey, emailScopeKey } = await import('../../../stores/slices/unifiedHelpers');
 const { useMailStore } = await import('../../../stores/mailStore');
 const { isTrackerBlockingActive } = await import('../../../stores/settingsStore');
-const { frameBody } = await import('../../../stores/netActivityStore');
-const { scanEmailLinks } = await import('../../../utils/linkSafety');
+const bodyScan = await import('../../../services/bodyScan');
 const { getEmailBodyContent } = await import('../../../utils/emailIframeTemplate');
 const { replaceCidUrls } = await import('../../../services/attachmentUtils');
 const newestHtml = '<p>Newest body</p><script>evil()</script>';
@@ -81,11 +87,12 @@ describe('ThreadView with an alternative body renderer', () => {
     const p = last();
     expect(p.surface).toBe('thread');
     expect(p.bodyHtml).toContain('Newest body');
-    // Exactly the pre-processed body the iframe path renders (cid, tracker frame, link scan).
+    // Exactly the scanned body the iframe path renders (cid, then the daemon's tracker frame and link scan).
     const scopeKey = emailScopeKey(newest, useMailStore.getState());
-    const framed = frameBody(getEmailBodyContent(replaceCidUrls(newestHtml, undefined)), scopeKey, isTrackerBlockingActive(useSettingsStore.getState())).body;
-    expect(p.bodyHtml).toBe(scanEmailLinks(framed, scopeKey).modifiedBodyHtml);
-    expect(p.indicatorCss).toBe(scanEmailLinks(framed, scopeKey).indicatorStyle);
+    const asked = bodyScan.__scans.find(s => s.html === getEmailBodyContent(replaceCidUrls(newestHtml, undefined)));
+    expect(asked.opts).toEqual({ key: scopeKey, blocking: isTrackerBlockingActive(useSettingsStore.getState()), links: true });
+    expect(p.bodyHtml).toBe(`${asked.html}<!--scanned-->`);
+    expect(p.indicatorCss).toBe(bodyScan.LINK_ALERT_STYLE);
     expect(p.sizing).toBe('content');
     expect(p.style).toEqual({ minHeight: 100 });
     expect(p.theme).toEqual({ dark: true, palette: 'indigo' });
@@ -156,9 +163,11 @@ describe('ThreadView with an alternative body renderer', () => {
     } finally { process.off('unhandledRejection', unhandled); }
   });
 
-  it('Open in window goes to the renderer, not open_email_window', () => {
+  it('Open in window goes to the renderer, not open_email_window', async () => {
     render(<ThreadView thread={thread} />);
     fireEvent.click(screen.getByText('bar-window'));
+    // The window's body is scanned first (blocking holds in a second window too).
+    await new Promise(r => setTimeout(r, 0));
     expect(openWindow).toHaveBeenCalledWith({ html: expect.stringContaining('Newest body'), dark: true, title: 'Re: Lunch' });
     expect(window.__TAURI__.core.invoke).not.toHaveBeenCalled();
   });

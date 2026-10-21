@@ -192,13 +192,13 @@ export async function prepareSocialMessage(message, { mirror = true, redact = nu
   };
   const model = details ? senderDetailsModel(sender, await verifySender(sender)) : null;
   const rawBody = links ? rawBodyHtml(full) : '';
-  if (!redact) return { message: full, body, details: model, links: links ? collectSocialLinks(rawBody) : null };
+  if (!redact) return { message: full, body, details: model, links: links ? await collectSocialLinks(rawBody) : null };
   const dict = unionDictionaries(redact.dict, buildNameDictionary({ names: collectPrivacyNames({ emails: [full] }) }));
   return {
     message: redactMessageForExport(full, dict),
     body: redactBodyForExport(body, dict, { format: redact.format || 'image' }),
     details: model && maskSenderDetails(model, dict),
-    links: links ? collectSocialLinks(rawBody, { dict, redact: true }) : null,
+    links: links ? await collectSocialLinks(rawBody, { dict, redact: true }) : null,
   };
 }
 

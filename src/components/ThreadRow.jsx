@@ -3,7 +3,7 @@ import { displayText } from '../utils/bidiText';
 import { getRowParty, getRowPartyName, threadRowMembers } from '../utils/emailParser';
 import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
-import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
+import { getLinkAlertLevel, getAlertsForEmails } from '../services/bodyScan';
 import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';

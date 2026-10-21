@@ -53,9 +53,9 @@ vi.mock('../email/FullViewEmailModal', () => ({ FullViewEmailModal: () => null }
 vi.mock('../TagChips', () => ({ TagChips: () => null }));
 vi.mock('../LinkSafetyModal', () => ({ LinkSafetyModal: () => null }));
 vi.mock('../../i18n/index.js', () => ({ t: key => key, tErr: key => key, getLocale: () => 'en', useT: () => key => key }));
-vi.mock('../../utils/trackerDetect', () => ({ scanTrackers: () => ({ trackers: [], cleanedBodyHtml: '' }), summarizeTrackers: () => null }));
-vi.mock('../../services/trackerVerdicts', () => ({ recordTrackerSummary: vi.fn() }));
-vi.mock('../../utils/linkSafety', () => ({ scanEmailLinks: () => ({ modifiedBodyHtml: '', indicatorStyle: '', maxAlertLevel: null }), checkLinkAlert: vi.fn() }));
+vi.mock('../../services/rowVerdicts', () => ({ recordTrackerSummary: vi.fn(), recordLinkAlert: vi.fn() }));
+vi.mock('../../services/bodyScan', async (orig) => (await import('../../test/bodyScan')).stubBodyScan(orig, () => (
+  { trackers: [], count: 0, https: 0, summary: null, html: '', alerts: [], maxAlertLevel: null, scanned: true })));
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: Object.assign(selector => selector(mocks.settings), { getState: () => mocks.settings }),
   isTrackerBlockingActive: () => false,

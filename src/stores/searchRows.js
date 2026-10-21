@@ -10,11 +10,10 @@
 // this file; the store holds no row logic of its own.
 
 import { useMailStore } from './mailStore';
-import { useSettingsStore } from './settingsStore';
 import { emailKey } from './slices/unifiedHelpers';
 import { normalizeMessageId } from '../utils/emailParser';
 import { isBackedUp } from '../components/email/MessageStateIcon';
-import { annotateRowAlerts } from './slices/rowAlerts';
+import { annotateRowAlerts } from '../services/rowVerdicts';
 
 // Merge incremental daemon rows without losing the existing custody/location
 // preference rules.
@@ -69,7 +68,7 @@ export function finalize(allResults, scan = {}) {
     if (owner) row._accountEmail = owner.email;
   }
   // The same shields the folder list paints, or a hit wears none of them.
-  return annotateRowAlerts(perMessage, useMailStore.getState(), useSettingsStore.getState());
+  return annotateRowAlerts(perMessage, useMailStore.getState());
 }
 
 

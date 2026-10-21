@@ -1,5 +1,33 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// The verdicts are the daemon's (`body.classify_links`, src-core body_scan,
+// held to the reader's JS by the golden corpus): answered here as it answers
+// these links. What this file checks is the list: which links, what order,
+// what a redacted card keeps.
+const verdicts = vi.hoisted(() => ({
+  asked: [],
+  levels: {
+    'https://evil.example/login?u=abc': 'red',
+    'https://evil.example/login': 'red',
+    'javascript:steal()': 'red',
+    'javascript:x()': 'red',
+    'javascript:z()': 'red',
+    "javascript:alert('joanna.k@example.org')": 'red',
+    'data:text/html;base64,AAAA': 'red',
+    'https://kowalczyk.example/': 'red',
+    'https://track.example/r?url=https%3A%2F%2Felsewhere.example%2Fx': 'yellow',
+  },
+}));
+vi.mock('../../../bodyScan', async (orig) => ({
+  ...(await orig()),
+  classifyLinks: async (links) => {
+    verdicts.asked.push(...links);
+    if (!verdicts.levels) return null;
+    return links.map(l => ({ level: verdicts.levels[l.href] ?? null }));
+  },
+}));
+
 import { collectSocialLinks, socialLinksHtml, MAX_SOCIAL_LINKS } from '../socialLinks';
 import { buildNameDictionary } from '../../../../utils/privacy/piiDetector';
 
@@ -15,8 +43,8 @@ const BODY = [
 ].join('\n');
 
 describe('collectSocialLinks', () => {
-  it('lists http(s), javascript: and data: links only, once each, worst first', () => {
-    const { links, more } = collectSocialLinks(BODY);
+  it('lists http(s), javascript: and data: links only, once each, worst first', async () => {
+    const { links, more } = await collectSocialLinks(BODY);
     expect(more).toBe(0);
     expect(links.map(l => l.href)).toEqual([
       'https://evil.example/login?u=abc', // red: the text shows another site
@@ -30,26 +58,28 @@ describe('collectSocialLinks', () => {
     expect(links[0].text).toBe('https://bank.example');
   });
 
-  it('keeps the mail\'s order within a rank, and the first text of a duplicate', () => {
-    const { links } = collectSocialLinks('<a href="https://b.example">B</a><a href="https://a.example">A</a><a href="https://b.example">again</a>');
+  it('keeps the mail\'s order within a rank, and the first text of a duplicate', async () => {
+    const { links } = await collectSocialLinks('<a href="https://b.example">B</a><a href="https://a.example">A</a><a href="https://b.example">again</a>');
     expect(links.map(l => l.text)).toEqual(['B', 'A']);
   });
 
-  it('a data: link and an upper-case script scheme are red', () => {
-    const { links } = collectSocialLinks('<a href="data:text/html;base64,AAAA">d</a><a href="JavaScript:x()">j</a>');
+  it('a data: link and an upper-case script scheme are red', async () => {
+    const { links } = await collectSocialLinks('<a href="data:text/html;base64,AAAA">d</a><a href="JavaScript:x()">j</a>');
     expect(links.map(l => l.level)).toEqual(['red', 'red']);
+    // The classifier reads a lowercase scheme: "JavaScript:" is asked as the same trap.
+    expect(verdicts.asked.map(l => l.href)).toContain('javascript:x()');
   });
 
-  it('caps at ten, worst kept, and counts the rest', () => {
+  it('caps at ten, worst kept, and counts the rest', async () => {
     const many = Array.from({ length: 14 }, (_, i) => `<a href="https://site${i}.example/">s${i}</a>`).join('') + '<a href="javascript:z()">z</a>';
-    const { links, more } = collectSocialLinks(many);
+    const { links, more } = await collectSocialLinks(many);
     expect(links).toHaveLength(MAX_SOCIAL_LINKS);
     expect(more).toBe(5);
     expect(links[0].href).toBe('javascript:z()');
   });
 
-  it('redacted: a web link is its scheme and host only, a script link its scheme only, the text masked', () => {
-    const { links } = collectSocialLinks(
+  it('redacted: a web link is its scheme and host only, a script link its scheme only, the text masked', async () => {
+    const { links } = await collectSocialLinks(
       '<a href="https://u:p@news.example:8443/unsub/joanna.k%40example.org?t=SECRET#frag">Hi Joanna Kowalczyk</a>'
       + '<a href="javascript:alert(\'joanna.k@example.org\')">go</a>'
       + '<a href="http://shop.example/o/123">https://shop.example/o/123?e=joanna.k@example.org</a>',
@@ -62,8 +92,8 @@ describe('collectSocialLinks', () => {
     for (const leak of ['SECRET', 'joanna', 'frag', 'unsub', '8443', 'u:p', 'alert', '/o/123', 'Joanna']) expect(all).not.toContain(leak);
   });
 
-  it('redacted: a name in the host is masked too, whatever its case, and the rest of the host stays', () => {
-    const { links } = collectSocialLinks(
+  it('redacted: a name in the host is masked too, whatever its case, and the rest of the host stays', async () => {
+    const { links } = await collectSocialLinks(
       '<a href="https://joanna-kowalczyk.substack.example/p/1">Read</a><a href="https://kowalczyk.example/">https://Joanna.shop.example/x</a>',
       { dict, redact: true });
     // The second one shows another site than it goes to: red, so it leads.
@@ -71,20 +101,29 @@ describe('collectSocialLinks', () => {
     expect(links[0].text).toBe('https://xxxxxx.shop.example');
   });
 
-  it('keeps the classification of the real link when redacting', () => {
-    const { links } = collectSocialLinks('<a href="https://evil.example/login">https://bank.example</a>', { dict, redact: true });
+  it('keeps the classification of the real link when redacting', async () => {
+    const { links } = await collectSocialLinks('<a href="https://evil.example/login">https://bank.example</a>', { dict, redact: true });
     expect(links[0]).toMatchObject({ level: 'red', href: 'https://evil.example', insecure: false });
   });
 
-  it('nothing to list for an empty body or one with no web link', () => {
-    expect(collectSocialLinks('')).toEqual({ links: [], more: 0 });
-    expect(collectSocialLinks('<p>hi</p><a href="mailto:x@y.z">m</a>')).toEqual({ links: [], more: 0 });
+  it('lists the links unjudged when the daemon cannot be asked', async () => {
+    const real = verdicts.levels;
+    verdicts.levels = null;
+    try {
+      const { links } = await collectSocialLinks('<a href="https://evil.example/login">https://bank.example</a>');
+      expect(links).toEqual([{ text: 'https://bank.example', href: 'https://evil.example/login', level: null, insecure: false }]);
+    } finally { verdicts.levels = real; }
+  });
+
+  it('nothing to list for an empty body or one with no web link', async () => {
+    expect(await collectSocialLinks('')).toEqual({ links: [], more: 0 });
+    expect(await collectSocialLinks('<p>hi</p><a href="mailto:x@y.z">m</a>')).toEqual({ links: [], more: 0 });
   });
 });
 
 describe('socialLinksHtml', () => {
-  it('a box with a badge per verdict, the text, then the destination in monospace', () => {
-    const html = socialLinksHtml(collectSocialLinks(BODY));
+  it('a box with a badge per verdict, the text, then the destination in monospace', async () => {
+    const html = socialLinksHtml(await collectSocialLinks(BODY));
     expect(html).toContain('>Links<');
     expect(html).toContain('>Dangerous<');
     expect(html).toContain('>Suspicious<');
@@ -93,23 +132,23 @@ describe('socialLinksHtml', () => {
     expect(html).not.toMatch(/\+\d+ more/);
   });
 
-  it('says how many more there are', () => {
+  it('says how many more there are', async () => {
     const many = Array.from({ length: 12 }, (_, i) => `<a href="https://s${i}.example/">s</a>`).join('');
-    expect(socialLinksHtml(collectSocialLinks(many))).toContain('+2 more');
+    expect(socialLinksHtml(await collectSocialLinks(many))).toContain('+2 more');
   });
 
-  it('nothing at all when there is no link', () => {
+  it('nothing at all when there is no link', async () => {
     expect(socialLinksHtml({ links: [], more: 0 })).toBe('');
     expect(socialLinksHtml()).toBe('');
   });
 
-  it('escapes the text and the address', () => {
+  it('escapes the text and the address', async () => {
     const html = socialLinksHtml({ links: [{ text: '<script>x()</script>', href: 'https://a.example/"><img src=x>', level: null, insecure: false }], more: 0 });
     expect(html).not.toMatch(/<script|<img/);
     expect(html).toContain('&lt;script&gt;');
   });
 
-  it('shortens a very long address', () => {
+  it('shortens a very long address', async () => {
     const html = socialLinksHtml({ links: [{ text: '', href: `https://a.example/${'x'.repeat(300)}`, level: null, insecure: false }], more: 0 });
     expect(html).toContain('…');
     expect(html.length).toBeLessThan(900);

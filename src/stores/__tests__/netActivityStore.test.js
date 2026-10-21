@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-// jsdom: frameBody runs the real tracker scan, which needs DOMParser.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const harness = vi.hoisted(() => ({ daemonCall: vi.fn(), listeners: new Map(), unlisten: vi.fn() }));
@@ -15,7 +14,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   },
 }));
 
-const { useNetActivityStore, visibleEvents, filterEvents, copyText, frameBody, rangesFor } = await import('../netActivityStore');
+const { useNetActivityStore, visibleEvents, filterEvents, copyText, noteFramedBody, rangesFor } = await import('../netActivityStore');
 
 // Recent by default: the live list keeps only rows inside the query's range.
 const ev = (over = {}) => ({
@@ -287,73 +286,58 @@ describe('copyText', () => {
   });
 });
 
+// What the daemon's `body.scan` answers (services/bodyScan hands every answer here).
+const scanOf = ({ trackers = [], https = 0 } = {}) => ({ trackers: trackers.map(url => ({ url })), https });
+
 describe('remote images', () => {
-  const beacon = '<img src="https://track.example.test/o.gif" width="1" height="1">';
-  const photo = '<img src="https://cdn.example.test/photo.jpg" width="600" height="400">';
-  const plainHttp = '<img src="http://old.example.test/photo.jpg" width="600" height="400">';
-  const inline = '<img src="cid:logo@x" width="600" height="400">';
   const counts = () => useNetActivityStore.getState().remoteImages;
 
   it('with blocking on, counts the removed beacon as blocked and the other https image as loaded', async () => {
-    const body = `<p>hi</p>${beacon}${photo}${inline}`;
-    const { body: rendered } = frameBody(body, 'acct-INBOX-1', true);
-    expect(rendered).not.toContain('track.example.test');
+    noteFramedBody(scanOf({ trackers: ['https://track.example.test/o.gif'], https: 2 }), 'acct-INBOX-1', true);
     await flush();
     expect(counts()).toEqual({ blocked: 1, loaded: 1 });
   });
 
   it('with blocking off, blocks nothing and counts every https image as loaded', async () => {
-    const body = `<p>x</p>${beacon}${photo}`;
-    const { body: rendered } = frameBody(body, 'acct-INBOX-2', false);
-    expect(rendered).toBe(body);
+    noteFramedBody(scanOf({ trackers: ['https://track.example.test/o.gif'], https: 2 }), 'acct-INBOX-2', false);
     await flush();
     expect(counts()).toEqual({ blocked: 0, loaded: 2 });
   });
 
   // The app's CSP allows `img-src https:` only: a plain http image never loads.
   it('does not count a plain http or inline image as loaded', async () => {
-    frameBody(`<p>y</p>${plainHttp}${inline}`, 'acct-INBOX-3', false);
+    noteFramedBody(scanOf({ https: 0 }), 'acct-INBOX-3', false);
     await flush();
     expect(counts()).toEqual({ blocked: 0, loaded: 0 });
   });
 
+  it('a blocked plain-http beacon is blocked, and never subtracted from the https images', async () => {
+    noteFramedBody(scanOf({ trackers: ['http://track.example.test/o.gif'], https: 1 }), 'acct-INBOX-3b', true);
+    await flush();
+    expect(counts()).toEqual({ blocked: 1, loaded: 1 });
+  });
+
   it('counts a message once however often it is rendered', async () => {
-    const body = `<p>z</p>${photo}`;
-    frameBody(body, 'acct-INBOX-4', false);
-    frameBody(body, 'acct-INBOX-4', false);
-    frameBody(body, 'acct-INBOX-4', true);
+    const scan = scanOf({ https: 1 });
+    noteFramedBody(scan, 'acct-INBOX-4', false);
+    noteFramedBody(scan, 'acct-INBOX-4', false);
+    noteFramedBody(scan, 'acct-INBOX-4', true);
     await flush();
     expect(counts()).toEqual({ blocked: 0, loaded: 1 });
   });
 
   // Index Only / On Demand: a preview body first, the full one later, same key.
   it('adds what a fuller body of the same message brings, and only that', async () => {
-    frameBody(`<p>preview</p>${photo}`, 'acct-INBOX-5', false);
-    frameBody(`<p>full</p>${photo}<img src="https://cdn.example.test/second.jpg" width="600" height="400">`, 'acct-INBOX-5', false);
+    noteFramedBody(scanOf({ https: 1 }), 'acct-INBOX-5', false);
+    noteFramedBody(scanOf({ https: 2 }), 'acct-INBOX-5', false);
     await flush();
     expect(counts()).toEqual({ blocked: 0, loaded: 2 });
   });
 
-  it('tells keyless previews apart by their body', async () => {
-    frameBody(`<p>one</p>${photo}`, null, false);
-    frameBody(`<p>two</p>${photo}`, null, false);
-    frameBody(`<p>two</p>${photo}`, null, false);
+  it('counts nothing without an id or an answer', async () => {
+    noteFramedBody(scanOf({ https: 3 }), '', false);
+    noteFramedBody(null, 'acct-INBOX-6', false);
     await flush();
-    expect(counts()).toEqual({ blocked: 0, loaded: 2 });
-  });
-});
-
-// Every frame and "Open in window" pop-out takes its body from frameBody. A
-// Google Fonts stylesheet left in it would be fetched by the webview itself,
-// past Network Activity; the pop-outs have no app CSP to stop it.
-describe('Google Fonts stylesheets in a framed body', () => {
-  const link = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;700&display=swap">';
-  const imported = '<style>@import url("https://fonts.googleapis.com/css?family=Lato");p{font-family:Lora}</style>';
-
-  it.each([false, true])('are stripped with blocking %s', (blocking) => {
-    const { body } = frameBody(`${link}${imported}<p>hi</p>`, `acct-INBOX-fonts-${blocking}`, blocking);
-    expect(body).not.toContain('fonts.googleapis.com');
-    expect(body).toContain('p{font-family:Lora}');
-    expect(body).toContain('<p>hi</p>');
+    expect(counts()).toEqual({ blocked: 0, loaded: 0 });
   });
 });

@@ -15,10 +15,8 @@ import { X, Loader } from 'lucide-react';
 import { AttachmentItem } from '../EmailViewer';
 import { DownloadAllButton } from './AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
-import { checkLinkAlert } from '../../utils/linkSafety';
-import { scanTrackers } from '../../utils/trackerDetect';
-import { frameBody } from '../../stores/netActivityStore';
-import { recordTrackerVerdict } from '../../services/trackerVerdicts';
+import { useBodyScan, scanHead, checkLinkAlert } from '../../services/bodyScan';
+import { recordTrackerSummary } from '../../services/rowVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
@@ -211,28 +209,26 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     });
   };
 
+  // Full-view is a fourth renderer of the same body; blocking holds here too.
+  // Escapes (including `&`) and turns any address into a mailto: the frame's
+  // click handler already knows what to do with.
+  const fullKey = emailScopeKey(email, useMailStore.getState());
+  const fullBody = useMemo(
+    () => replaceCidUrls(email.html || plainTextBodyHtml(email.text || email.textBody || '(No content)'), email.attachments),
+    [email],
+  );
+  const fullScan = useBodyScan(fullBody, { key: fullKey, blocking: trackerBlocking });
+
   // Fourth renderer, same duty: record what the body carries so the row it was
-  // opened from shows the glyph. `scanTrackers` is cached per key + body
-  // fingerprint, so this is not a second parse of the same message.
+  // opened from shows the glyph. The scan is the one the frame draws.
   useEffect(() => {
-    if (!email?.html) return;
-    const key = emailScopeKey(email, useMailStore.getState());
-    if (!key) return;
-    recordTrackerVerdict(key, scanTrackers(replaceCidUrls(email.html, email.attachments), key).trackers);
-  }, [email]);
+    if (!email?.html || !fullKey || !fullScan?.scanned) return;
+    recordTrackerSummary(fullKey, fullScan.summary);
+  }, [fullScan, fullKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The pre-processed body (cid, tracker frame): the iframe and the alternative renderer draw the same one.
-  const frameBodyHtml = useMemo(() => {
-    // Escapes (including `&`, which the hand-rolled pair here used to let
-    // through) and turns any address into a mailto: the frame's click
-    // handler already knows what to do with.
-    const htmlBody = email.html || plainTextBodyHtml(email.text || email.textBody || '(No content)');
-
-    // Full-view is a fourth renderer of the same body; blocking holds here too.
-    const cidResolved = replaceCidUrls(htmlBody, email.attachments);
-    const scannedForFrame = frameBody(cidResolved, emailScopeKey(email, useMailStore.getState()), trackerBlocking).body;
-    return getEmailBodyContent(scannedForFrame);
-  }, [email, trackerBlocking]);
+  // The pre-processed body (cid, tracker frame): the iframe and the alternative
+  // renderer draw the same one. Empty until the scan is in.
+  const frameBodyHtml = useMemo(() => (fullScan ? getEmailBodyContent(fullScan.html) : ''), [fullScan]);
 
   // Build full HTML content for iframe. Empty while the alternative body draws, so
   // the hooks below that key on it run again when the iframe comes back (!!Alt).
@@ -241,16 +237,17 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     // One nonce per render: the frame's CSP runs only our nonced DR script, not
     // anything the mail carries.
     const nonce = emailScriptNonce();
+    if (!fullScan) return '';
     return buildEmailIframeHtml({
       bodyHtml: frameBodyHtml,
       themeTag: theme,
-      extraHead: isDark ? getDarkReaderInlineScripts({ palette, nonce }) : '',
+      extraHead: `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${fullScan.scanned ? '' : scanHead(fullScan)}`,
       nonce,
       privacy: privacyOn,
     });
   // `email` stays a dep: a new message object rebuilds the srcDoc (fresh nonce, reload), as before the split,
   // so the handler effect below never re-attaches to a document that did not reload.
-  }, [email, frameBodyHtml, theme, palette, privacyOn, !!Alt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [email, frameBodyHtml, fullScan, theme, palette, privacyOn, !!Alt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Intercept links and prevent native context menu in full-view iframe
   // The full-view window is a third reader of the same body — the highlight
@@ -404,7 +401,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                 <span className="text-sm text-mail-text-muted">{t('email.fullView.loadingEmailContent')}</span>
               </div>
             </div>
-          ) : Alt ? (
+          ) : Alt ? (!fullScan?.scanned ? null : (
             <Alt
               ref={altRef} surface="fullView" messageKey={emailScopeKey(email, useMailStore.getState())} bodyHtml={frameBodyHtml}
               plainText={email.text || email.textBody || ''} theme={{ dark: isDark, palette }} foldQuotes={false}
@@ -415,7 +412,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
               })}
               sizing="fill" className="w-full h-full"
             />
-          ) : (
+          )) : (
             <iframe
               ref={iframeRef}
               srcDoc={iframeContent}

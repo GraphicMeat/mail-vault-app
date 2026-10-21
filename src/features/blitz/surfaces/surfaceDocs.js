@@ -6,6 +6,7 @@ import { buildChatBubbleDocument } from '../../../components/ChatBubbleView';
 import { buildOriginalFrameHtml } from '../../../components/OriginalFrame';
 import { buildEmailPreviewHtml } from '../../../components/email/EmailPreviewFrame';
 import { buildMessageDocument, EXPORT_WIDTH_PX } from '../../../services/export/exportDocument';
+import { stripGoogleFontImports } from '../../../utils/mailFonts';
 import { surfaceWorkerTheme } from './sizing';
 
 // Each surface's iframe document for one corpus body, built by the surface's
@@ -28,8 +29,10 @@ export function surfaceDocs(rawHtml, { dark, palette }) {
   const documentSurface = (surface, width, iframeHtml, blitzTheme = theme, extra = {}) => out.push({
     surface, width, iframeHtml, blitz: { surface, documentHtml: iframeHtml, theme: blitzTheme, foldQuotes: false, ...extra },
   });
-  documentSurface('original', 640, buildOriginalFrameHtml({ html: bodyHtml, dark, palette, padding: '12px 16px', trackerBlocking: false, privacy: false, nonce }));
-  documentSurface('popout', 800, buildOriginalFrameHtml({ html: bodyHtml, dark, palette, padding: null, trackerBlocking: false, privacy: false, nonce }));
+  // What the original and pop-out frame with tracker blocking off: the body, its Google Font imports out.
+  const framedBody = stripGoogleFontImports(bodyHtml);
+  documentSurface('original', 640, buildOriginalFrameHtml({ html: framedBody, dark, palette, padding: '12px 16px', privacy: false, nonce }));
+  documentSurface('popout', 800, buildOriginalFrameHtml({ html: framedBody, dark, palette, padding: null, privacy: false, nonce }));
   // Export: the body half of a dark card is dark (Dark Reader); the header's dark is CSS in its own document,
   // so Blitz draws it light (renderMessageToCanvas: dark only for part 'body').
   const darkBodyHead = dark ? `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">${dr}` : '';
@@ -38,7 +41,7 @@ export function surfaceDocs(rawHtml, { dark, palette }) {
   if (!dark) {
     // The whole light export document (the HTML export's card), header and body in one.
     documentSurface('exportCard', EXPORT_WIDTH_PX, buildMessageDocument({ message, bodyHtml }), { dark: false, palette });
-    const preview = buildEmailPreviewHtml(bodyHtml, false, false);
+    const preview = buildEmailPreviewHtml(framedBody, false);
     out.push({ surface: 'preview', width: 600, iframeHtml: preview, blitz: { surface: 'preview', bodyHtml, theme: { dark: false, palette }, foldQuotes: false } });
   }
   // The bubble never runs Dark Reader: "dark" here is the app theme its CSS reads.

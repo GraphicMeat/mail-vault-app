@@ -2,6 +2,11 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../renderMessageToCanvas', () => ({ renderMessageToCanvas: vi.fn(), measureMessageHeight: vi.fn() }));
+// The link verdicts are the daemon's (`body.classify_links`), answered as it answers these links.
+vi.mock('../../bodyScan', async (orig) => (await import('../../../test/bodyScan')).stubLinkVerdicts(orig, {
+  'http://claim.example/c/rokas%40example.lt?t=SECRET': 'red',
+  'javascript:run()': 'red',
+}));
 vi.mock('../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   useSettingsStore: { getState: () => ({ billingProfile: { hasSubscription: true } }) },

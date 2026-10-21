@@ -30,7 +30,7 @@ vi.mock('../email/MessageStateIcon', () => ({
   ConnectedStateIcon: () => <span data-testid="state-icon" />,
   describeMessageState: () => ({ tone: 'local' }),
 }));
-vi.mock('../../utils/linkSafety', () => ({
+vi.mock('../../services/bodyScan', () => ({
   getLinkAlertLevel: () => null,
   getAlertsForEmails: () => [],
   getCachedAlerts: () => [],

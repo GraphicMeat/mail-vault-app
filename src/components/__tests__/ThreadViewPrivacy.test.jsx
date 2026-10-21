@@ -90,10 +90,12 @@ describe('ThreadView under privacy mode', () => {
     expect(screen.queryByTestId('privacy-source-blocked')).toBeNull();
   });
 
-  it('control: with privacy off the window opens', () => {
+  it('control: with privacy off the window opens', async () => {
     usePrivacyStore.setState({ enabled: false });
     render(<ThreadView thread={thread} onComposeReply={vi.fn()} />);
     fireEvent.click(screen.getAllByTestId('open-window-stub')[0]);
+    // The window's body is scanned first.
+    await new Promise(r => setTimeout(r, 0));
     expect(invoke.mock.calls.filter(([command]) => command === 'open_email_window')).toHaveLength(1);
   });
 

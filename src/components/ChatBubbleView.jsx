@@ -38,11 +38,9 @@ import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
-import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
+import { useBodyScan, checkLinkAlert, LINK_ALERT_STYLE, UNSCANNED_HEAD } from '../services/bodyScan';
 import { linkifyHtml } from '../utils/linkify';
-import { summarizeTrackers } from '../utils/trackerDetect';
-import { frameBody } from '../stores/netActivityStore';
-import { recordTrackerSummary } from '../services/trackerVerdicts';
+import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors, getChatLinkColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, keepImageProportions, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
@@ -67,7 +65,8 @@ import { startThreadReadTimer, cancelThreadReadTimers } from '../services/workfl
 // It carries the same CSP as buildEmailIframeHtml: script-src 'nonce-...' as
 // the first head element, and the fold scripts carry that nonce. The mail's
 // own script and inline handlers get no nonce and are blocked.
-export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, indicatorStyle, privacy, signatureDisplay, nonce = emailScriptNonce() }) {
+// `unscanned`: the daemon could not scan the body, so no remote image loads.
+export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, indicatorStyle, privacy, signatureDisplay, nonce = emailScriptNonce(), unscanned = false }) {
   // srcDoc is an isolated document and cannot inherit the app's CSS
   // variables. Resolve the active palette here so light chat bubbles keep
   // readable text after an Appearance change.
@@ -80,7 +79,7 @@ export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, in
       <!DOCTYPE html>
       <html${privacy ? PRIVACY_HTML_ATTR : ''}>
         <head>
-          <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">
+          <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">${unscanned ? UNSCANNED_HEAD : ''}
           <meta charset="UTF-8">
           <base target="_blank">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -580,31 +579,25 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   };
 
   // Build HTML content for iframe with theme-aware colors
+  // Chat bubbles render the same body a third time: blocking has to hold here
+  // too, or switching to Chat view undoes it. Scanned either way: the verdict
+  // below paints the row's glyph, and a free user reading in chat view
+  // deserves the same warning. Linkified here: this frame is built without
+  // getEmailBodyContent.
+  const chatScopeKey = emailScopeKey(email, useMailStore.getState());
+  const chatBody = useMemo(
+    () => (mergedEmail.html ? linkifyHtml(replaceCidUrls(mergedEmail.html, mergedEmail.attachments)) : ''),
+    [mergedEmail.html, mergedEmail.attachments],
+  );
+  const chatScan = useBodyScan(chatBody, { key: chatScopeKey, blocking: trackerBlocking, links: linkSafetyEnabled });
+
   const iframeContent = useMemo(() => {
-    if (!mergedEmail.html) return '';
-
-    // Linkified here: this frame is built without getEmailBodyContent.
-    const rawBody = linkifyHtml(replaceCidUrls(mergedEmail.html, mergedEmail.attachments));
-    const chatScopeKey = emailScopeKey(email, useMailStore.getState());
-    // Chat bubbles render the same body a third time — blocking has to hold
-    // here too, or switching to Chat view undoes it.
-    // Scan either way — the verdict below is what paints the row's glyph, and
-    // a free user reading in chat view deserves the same warning.
-    const { scan: trackerScan, body: framed } = frameBody(rawBody, chatScopeKey, trackerBlocking);
-    let scannedBody = framed;
-    let indicatorStyle = '';
-    let chatAlertLevel = null;
-    if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(scannedBody, chatScopeKey);
-      scannedBody = scan.modifiedBodyHtml;
-      indicatorStyle = scan.indicatorStyle;
-      chatAlertLevel = scan.maxAlertLevel;
-    }
-
+    if (!mergedEmail.html || !chatScan) return '';
+    const indicatorStyle = chatScan.alerts.length > 0 ? LINK_ALERT_STYLE : '';
     // Chat bubbles build their own document (transparent bg, per-bubble tint).
-    const builtHtml = buildChatBubbleDocument({ bodyHtml: scannedBody, fromUser, theme, palette, indicatorStyle, privacy: privacyOn, signatureDisplay });
-    return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };
-  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette, privacyOn]);
+    const builtHtml = buildChatBubbleDocument({ bodyHtml: chatScan.html, fromUser, theme, palette, indicatorStyle, privacy: privacyOn, signatureDisplay, unscanned: !chatScan.scanned });
+    return { html: builtHtml, alertLevel: chatScan.maxAlertLevel, trackerSummary: chatScan.summary, scopeKey: chatScopeKey };
+  }, [mergedEmail.html, chatScan, chatScopeKey, fromUser, signatureDisplay, theme, palette, privacyOn]);
 
   // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
   const iframeHtmlContent = iframeContent?.html || '';
@@ -612,7 +605,9 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   useBodyPrivacy(iframeRef, iframeHtmlContent, { message: mergedEmail });
   // Blitz draws the very document the iframe gets (the privacy gate included: its
   // pre-pass releases it when privacy is inactive), always light, on a transparent canvas.
-  const altProps = Alt && iframeHtmlContent ? {
+  // The alternative renderer fetches images itself: an unscanned body takes the
+  // iframe, whose CSP refuses remote images.
+  const altProps = Alt && iframeHtmlContent && chatScan?.scanned ? {
     surface: 'bubble', messageKey: iframeContent.scopeKey, documentHtml: iframeHtmlContent,
     plainText, theme: { dark: false, palette }, signatureDisplay, foldQuotes: true,
     privacy: privacyOn, message: mergedEmail, accountId: mergedEmail?._accountId,
@@ -636,12 +631,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   useEffect(() => {
     if (chatScanAlert && !email._linkAlert) {
       email._linkAlert = chatScanAlert;
-      const scopeKey = emailScopeKey(email, useMailStore.getState());
-      useMailStore.setState(state => ({
-        emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: chatScanAlert } : e),
-        sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: chatScanAlert } : e),
-      }));
-      useSettingsStore.getState().setLinkAlert(scopeKey, chatScanAlert);
+      recordLinkAlert(emailScopeKey(email, useMailStore.getState()), chatScanAlert);
     }
   }, [chatScanAlert, email.uid]);
 

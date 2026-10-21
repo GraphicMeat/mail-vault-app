@@ -3,10 +3,11 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowLeft, ChevronRight, Folder, MessagesSquare, Search, X } from 'lucide-react';
 import { buildExplorerTree, resolveExplorerPath } from '../utils/explorer';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useMailStore } from '../stores/mailStore';
 import { getLocale, useT } from '../i18n';
 import { formatEmailDate } from '../utils/dateFormat';
 import { displayText } from '../utils/bidiText';
-import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
+import { backfillTrackerVerdicts } from '../services/rowVerdicts';
 import { filterUnread } from '../utils/emailParser';
 import { usePrivateAttr, usePrivacyActive } from '../hooks/usePrivacy';
 import '../styles/explorer.css';
@@ -163,7 +164,7 @@ export function ExplorerView({
         if (showGroups) return;
         const visible = virtualized ? virtualizer.getVirtualItems().map(item => entries[item.index]?.email).filter(Boolean)
           : visibleEmails.slice(0, 60);
-        backfillTrackerVerdicts(visible);
+        backfillTrackerVerdicts(visible, useMailStore.getState());
       }, 400);
     };
     scan();

@@ -6,7 +6,7 @@ import {
   formatRelativeTime
 } from '../utils/emailParser';
 import { ChevronLeft, MessageCircle, Calendar } from 'lucide-react';
-import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
+import { getLinkAlertLevel, getAlertsForEmails } from '../services/bodyScan';
 import { useMailStore } from '../stores/mailStore';
 import { formatDateOnly } from '../utils/dateFormat';
 import { LinkAlertIcon } from './LinkAlertIcon';

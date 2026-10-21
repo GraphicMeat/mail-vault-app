@@ -3,7 +3,7 @@ import { Sun, Moon } from 'lucide-react';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
-import { frameBody } from '../stores/netActivityStore';
+import { useBodyScan, UNSCANNED_HEAD } from '../services/bodyScan';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getEmailColors } from '../utils/mailChrome';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
@@ -37,15 +37,17 @@ export function OriginalThemeToggle({ dark, onToggle, testid = 'compose-original
 // The document an original draws: the frame's whole srcdoc, privacy gate
 // included. Blitz draws exactly this (its pre-pass releases the gate when
 // privacy is inactive). `padding` null means no override: the template's own
-// 24px applies (the pop-out window).
-export function buildOriginalFrameHtml({ html, dark, palette, padding, trackerBlocking, privacy, nonce = emailScriptNonce() }) {
+// 24px applies (the pop-out window). `html` is the scanned body
+// (services/bodyScan); `unscanned` refuses remote images when the daemon could
+// not scan it.
+export function buildOriginalFrameHtml({ html, dark, palette, padding, privacy, nonce = emailScriptNonce(), unscanned = false }) {
   // Kept out of the extraHead template: the i18n audit cannot see a template
   // literal nested inside another one and would report "body" as JSX text.
   const paddingCss = padding ? `<style>body { padding: ${padding}; }</style>` : '';
   return buildEmailIframeHtml({
-    bodyHtml: frameBody(html, null, trackerBlocking).body,
+    bodyHtml: html,
     themeTag: dark ? 'dark' : 'light',
-    extraHead: `${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${paddingCss}`,
+    extraHead: `${unscanned ? UNSCANNED_HEAD : ''}${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${paddingCss}`,
     nonce,
     privacy,
   });
@@ -73,12 +75,17 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
   // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its auto-size.
   useEffect(() => (autoSize && frameRef.current ? attachEmailIframeAutoSize(frameRef.current) : undefined), [autoSize, !!Alt]);
   useMailFonts(frameRef);
+  // Nothing is drawn until the daemon's scan is in (no key: an original has
+  // no scoped message key here).
+  const scan = useBodyScan(html, { blocking: trackerBlocking });
   const srcDoc = useMemo(
-    () => buildOriginalFrameHtml({ html, dark, palette, padding, trackerBlocking, privacy: privacyOn }),
-    [html, dark, palette, padding, trackerBlocking, privacyOn],
+    () => (scan ? buildOriginalFrameHtml({ html: scan.html, dark, palette, padding, privacy: privacyOn, unscanned: !scan.scanned }) : ''),
+    [scan, dark, palette, padding, privacyOn],
   );
   useBodyPrivacy(frameRef, srcDoc, { message });
   if (Alt) {
+    // The alternative renderer fetches images itself: it only ever gets a scanned body.
+    if (!scan?.scanned) return null;
     return (
       <Alt
         surface={surface}

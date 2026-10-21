@@ -1,4 +1,4 @@
-import { classifyLink } from '../../../utils/linkSafety';
+import { classifyLinks } from '../../bodyScan';
 import { findPii, maskString, maskText, EMPTY_DICTIONARY } from '../../../utils/privacy/piiDetector';
 import { t } from '../../../i18n/index.js';
 import { esc } from '../exportDocument';
@@ -44,8 +44,12 @@ function hostOnly(href, dict = EMPTY_DICTIONARY) {
 
 const rank = (l) => (l.level === 'red' ? 0 : l.level === 'yellow' ? 1 : l.insecure ? 2 : 3);
 
-/** `{ links: [{ text, href, level: 'red'|'yellow'|null, insecure }], more }`, worst first, capped. */
-export function collectSocialLinks(bodyHtml, { dict, redact = false } = {}) {
+/**
+ * `{ links: [{ text, href, level: 'red'|'yellow'|null, insecure }], more }`, worst first, capped.
+ * The verdicts are the reader's, asked of the daemon (`body.classify_links`);
+ * when it cannot answer, the links are listed unjudged.
+ */
+export async function collectSocialLinks(bodyHtml, { dict, redact = false } = {}) {
   if (!bodyHtml) return { links: [], more: 0 };
   const doc = new DOMParser().parseFromString(`<body>${bodyHtml}</body>`, 'text/html');
   const seen = new Set();
@@ -55,10 +59,11 @@ export function collectSocialLinks(bodyHtml, { dict, redact = false } = {}) {
     if (!SHOWN_SCHEME.test(href) || seen.has(href)) continue;
     seen.add(href);
     const text = a.textContent?.trim() || '';
-    // classifyLink reads a lowercase scheme: "JavaScript:" is the same trap.
-    const level = classifyLink(href.replace(/^\w+(?=:)/, m => m.toLowerCase()), text).level;
-    found.push({ text, href, level, insecure: /^http:/i.test(href) });
+    found.push({ text, href, level: null, insecure: /^http:/i.test(href) });
   }
+  // The classifier reads a lowercase scheme: "JavaScript:" is the same trap.
+  const verdicts = await classifyLinks(found.map(l => ({ href: l.href.replace(/^\w+(?=:)/, m => m.toLowerCase()), text: l.text })));
+  if (verdicts) found.forEach((l, i) => { l.level = verdicts[i]?.level || null; });
   // Array sort is stable: links of one rank keep the mail's order.
   const sorted = found.map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map(x => x.l);
   const links = sorted.slice(0, MAX_SOCIAL_LINKS).map(l => (redact

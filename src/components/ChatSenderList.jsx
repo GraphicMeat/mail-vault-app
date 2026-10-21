@@ -8,7 +8,7 @@ import {
   formatRelativeTime
 } from '../utils/emailParser';
 import { MessageSquare, Search, ChevronRight } from 'lucide-react';
-import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
+import { getLinkAlertLevel, getAlertsForEmails } from '../services/bodyScan';
 import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';

@@ -4,7 +4,9 @@
 // with no CSP and no tracker strip: opening a message there fired the beacons
 // the reading pane blocks. They now render through the reader's template and
 // the same `isTrackerBlockingActive` gate — these cases pin that, driving the
-// real settings store rather than a stubbed flag.
+// real settings store rather than a stubbed flag. The scan is the daemon's
+// (`body.scan`), stubbed the way it answers: the beacon swapped for its marker
+// when blocking.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
@@ -21,8 +23,15 @@ vi.mock('../../../stores/safeStorage', () => {
   };
 });
 
+vi.mock('../../../services/bodyScan', async (orig) => {
+  const { stubBodyScan, bodyScanAnswer } = await import('../../../test/bodyScan');
+  return stubBodyScan(orig, (html, opts) => bodyScanAnswer(html, opts.blocking
+    ? { html: html.replace(/<img[^>]*>/, '<span data-mv-tracker-blocked="Mailchimp"></span>'), count: 1 } : {}));
+});
+
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { EmailPreviewFrame, buildEmailPreviewHtml } = await import('../EmailPreviewFrame');
+const { getEmailBodyContent } = await import('../../../utils/emailIframeTemplate');
 
 const PREMIUM = { hasSubscription: true, premiumAccess: true, status: 'active' };
 const FREE = { hasSubscription: false };
@@ -46,18 +55,16 @@ afterEach(() => cleanup());
 
 describe('buildEmailPreviewHtml', () => {
   it('carries the reader CSP and leaves the mail script un-nonced', () => {
-    const doc = buildEmailPreviewHtml(MAIL, false);
+    const doc = buildEmailPreviewHtml(getEmailBodyContent(MAIL), false);
     expect(leadingScriptSrc(doc)).toMatch(/^script-src 'nonce-[A-Za-z0-9+/=_-]+'$/);
     expect(doc).toMatch(/<script>window\.pwned = 1<\/script>/);
     // Unwrapped, not nested: one document, not the mail's <html> inside ours.
     expect(doc.match(/<html/gi)).toHaveLength(1);
   });
 
-  it('strips the beacon when blocking is active and keeps it when not', () => {
-    const blocked = buildEmailPreviewHtml(MAIL, true);
-    expect(blocked).not.toContain('list-manage.com');
-    expect(blocked).toContain('data-mv-tracker-blocked');
-    expect(buildEmailPreviewHtml(MAIL, false)).toContain(BEACON);
+  it('refuses remote images for a body the daemon could not scan', () => {
+    expect(buildEmailPreviewHtml('<p>x</p>', false, true)).toContain('content="img-src data: blob: cid:"');
+    expect(buildEmailPreviewHtml('<p>x</p>', false)).not.toContain('img-src');
   });
 });
 
@@ -67,6 +74,7 @@ describe('EmailPreviewFrame', () => {
     const doc = iframe.getAttribute('srcdoc');
     expect(leadingScriptSrc(doc)).toMatch(/^script-src 'nonce-/);
     expect(doc).not.toContain('list-manage.com');
+    expect(doc).toContain('data-mv-tracker-blocked');
     // Still no scripts at all in the preview frame.
     expect(iframe.getAttribute('sandbox')).toBe('allow-same-origin');
   });

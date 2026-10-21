@@ -42,10 +42,8 @@ import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
-import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
-import { summarizeTrackers } from '../../utils/trackerDetect';
-import { frameBody } from '../../stores/netActivityStore';
-import { recordTrackerSummary } from '../../services/trackerVerdicts';
+import { useBodyScan, scanBody, scanHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
+import { recordTrackerSummary, recordLinkAlert } from '../../services/rowVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName, threadRowMembers } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
@@ -123,33 +121,28 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
 
   const scopeKey = emailScopeKey(email, useMailStore.getState());
 
+  // The body asked of the daemon (services/bodyScan), stable per message so a
+  // theme toggle never asks again. Strip beacons before anything renders them:
+  // a thread view that skipped this would fire every pixel the reading pane
+  // just blocked. Detection runs for everyone; only the swap to the cleaned
+  // body is premium, so a free user's row still gets the glyph for a message
+  // read right here. Nothing is framed until the answer is in.
+  const threadBody = useMemo(
+    () => (loadedEmail?.html ? getEmailBodyContent(replaceCidUrls(loadedEmail.html, loadedEmail.attachments)) : ''),
+    [loadedEmail?.html, loadedEmail?.attachments],
+  );
+  const bodyScan = useBodyScan(threadBody, { key: scopeKey, blocking: trackerBlocking, links: linkSafetyEnabled });
+
   const { iframeContent, altBody, altIndicator, scanAlertLevel: threadScanAlert, trackerSummary } = useMemo(() => {
-    if (!loadedEmail?.html) return { iframeContent: '', altBody: '', altIndicator: '', scanAlertLevel: null, trackerSummary: null };
-    const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
-    const bodyHtml = getEmailBodyContent(htmlWithCid);
-    // Scan body (stable per uid → cacheable); wrap with iframe template so
-    // theme toggles don't invalidate the scan cache.
-    // Strip beacons before anything renders them — a thread view that skipped
-    // this would fire every pixel the reading pane just blocked.
-    // Detection runs for everyone; only the swap to the cleaned body is
-    // premium. Scanning only when blocking was on left a free user's row with
-    // no glyph for a message they had read right here.
-    const { scan: trackerScan, body: framed } = frameBody(bodyHtml, scopeKey, trackerBlocking);
-    let renderedBody = framed;
-    let indicatorStyle = '';
-    let alertLevel = null;
-    if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(renderedBody, scopeKey);
-      renderedBody = scan.modifiedBodyHtml;
-      indicatorStyle = scan.indicatorStyle;
-      alertLevel = scan.maxAlertLevel;
-    }
+    if (!loadedEmail?.html || !bodyScan) return { iframeContent: '', altBody: '', altIndicator: '', scanAlertLevel: null, trackerSummary: null };
+    const renderedBody = bodyScan.html;
+    const indicatorStyle = bodyScan.alerts.length > 0 ? LINK_ALERT_STYLE : '';
     // Light baseline; DR inlined when dark so it runs during load —
     // no post-load injection race, no flash on theme toggle. One nonce per
     // render: only our DR + fold scripts carry it, so the mail's own script
     // is blocked by the frame's CSP.
     const nonce = emailScriptNonce();
-    const extraHead = `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    const extraHead = `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${scanHead(bodyScan)}`;
     const html = buildEmailIframeHtml({
       bodyHtml: renderedBody,
       themeTag: theme,
@@ -158,8 +151,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
       nonce,
       privacy: privacyOn,
     });
-    return { iframeContent: html, altBody: renderedBody, altIndicator: indicatorStyle, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
-  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette, privacyOn]);
+    return { iframeContent: html, altBody: renderedBody, altIndicator: indicatorStyle, scanAlertLevel: bodyScan.maxAlertLevel, trackerSummary: bodyScan.summary };
+  }, [loadedEmail?.html, bodyScan, signatureDisplay, theme, palette, privacyOn]);
 
   // Privacy masking first: it must run on `load` before the search highlight.
   // The loaded body may carry no headers: the row's parties go in too (as ChatBubbleView merges).
@@ -180,11 +173,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   useEffect(() => {
     if (!readOnly && threadScanAlert && !email._linkAlert) {
       email._linkAlert = threadScanAlert;
-      useMailStore.setState(state => ({
-        emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: threadScanAlert } : e),
-        sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: threadScanAlert } : e),
-      }));
-      useSettingsStore.getState().setLinkAlert(scopeKey, threadScanAlert);
+      recordLinkAlert(scopeKey, threadScanAlert);
     }
   }, [threadScanAlert, scopeKey, readOnly]);
 
@@ -291,7 +280,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
           className="rounded-lg overflow-hidden mt-2 max-w-full"
           style={{ backgroundColor: emailColors.background }}
         >
-          {Alt ? (
+          {/* The alternative renderer fetches images itself: it only ever gets a scanned body. */}
+          {Alt ? (!bodyScan?.scanned ? null : (
             <Alt
               ref={altRef} surface="thread" messageKey={scopeKey} bodyHtml={altBody} indicatorCss={altIndicator}
               plainText={loadedEmail.text || loadedEmail.textBody || ''} theme={{ dark: isDark, palette }}
@@ -304,7 +294,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
               })}
               sizing="content" style={{ minHeight: 100 }}
             />
-          ) : (
+          )) : (
             <iframe
               ref={iframeRef}
               srcDoc={iframeContent}
@@ -556,7 +546,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
             onToggleRead={onToggleRead}
             onToggleFlag={onToggleFlag}
             onExport={target => useExportStore.getState().openExport({ messages: [target] })}
-            onOpenInWindow={() => {
+            onOpenInWindow={async () => {
               const invoke = window.__TAURI__?.core?.invoke;
               if (!invoke) return;
               if (refuseWindowUnderPrivacy()) return;
@@ -566,15 +556,20 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
               if (!rawHtml) return;
               const bodyHtml = getEmailBodyContent(rawHtml);
               // Same body, second window — strip there too.
-              const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
+              const popupScan = await scanBody(bodyHtml, { key: scopeKey, blocking: trackerBlocking });
+              const popupBody = popupScan.html;
               // The renderer owns the window under it (no iframe page, no Dark Reader).
-              if (altRenderer?.openWindow) { void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: email.subject || 'Email' })).catch(() => {}); return; }
+              // An unscanned body is not handed to it: it would load every image.
+              if (altRenderer?.openWindow) {
+                if (popupScan.scanned) void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: email.subject || 'Email' })).catch(() => {});
+                return;
+              }
               // file:// popup inherits no CSP; DR needs the meta's nonce to run.
               const popupNonce = emailScriptNonce();
               const popupHtml = buildEmailIframeHtml({
                 bodyHtml: popupBody,
                 themeTag: effectiveTheme,
-                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : '',
+                extraHead: `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : ''}${popupScan.scanned ? '' : scanHead(popupScan)}`,
                 nonce: popupNonce,
               });
               invoke('open_email_window', { html: popupHtml, title: email.subject || 'Email' });

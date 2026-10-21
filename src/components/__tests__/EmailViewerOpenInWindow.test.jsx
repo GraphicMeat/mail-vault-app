@@ -28,9 +28,11 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
 const invoke = vi.fn(async () => {});
 const windowCalls = () => invoke.mock.calls.filter(([command]) => command === 'open_email_window');
 // The shell only from the click on: the reader mounts as in every other test.
-const openInWindow = () => {
+// The window's body is scanned first (the daemon's answer, stubbed in vitest.setup.js).
+const openInWindow = async () => {
   window.__TAURI__ = { core: { invoke } };
   fireEvent.click(screen.getByTestId('open-in-window'));
+  await new Promise(r => setTimeout(r, 0));
 };
 
 function renderViewer(body, props = {}) {
@@ -69,9 +71,9 @@ describe('EmailViewer open in new window', () => {
     expect(button.parentElement.contains(screen.getByTestId('close-viewer'))).toBe(true);
   });
 
-  it('opens a plain-text message, its text escaped', () => {
+  it('opens a plain-text message, its text escaped', async () => {
     renderViewer({ text: 'Boil <water>.\nAdd salt.' }, { showOpenInWindow: true });
-    openInWindow();
+    await openInWindow();
     expect(windowCalls()).toHaveLength(1);
     const [, { html, title }] = windowCalls()[0];
     expect(title).toBe('Pasta <recipe>');
@@ -80,18 +82,18 @@ describe('EmailViewer open in new window', () => {
     expect(html).not.toContain('<water>');
   });
 
-  it('opens an HTML message from its HTML', () => {
+  it('opens an HTML message from its HTML', async () => {
     renderViewer({ html: '<p>Rich <b>body</b></p>', text: 'Rich body' }, { showOpenInWindow: true });
-    openInWindow();
+    await openInWindow();
     expect(windowCalls()[0][1].html).toContain('<b>body</b>');
   });
 });
 
 describe('EmailViewer under privacy mode', () => {
-  it('keeps the message in the pane: the file:// window cannot be masked', () => {
+  it('keeps the message in the pane: the file:// window cannot be masked', async () => {
     usePrivacyStore.setState({ enabled: true });
     renderViewer({ html: '<p>Rich <b>body</b></p>', text: 'Rich body' }, { showOpenInWindow: true });
-    openInWindow();
+    await openInWindow();
     expect(windowCalls()).toHaveLength(0);
     expect(useMailStore.getState().error).toBe(t('privacy.windowBlocked'));
   });

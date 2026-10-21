@@ -5,7 +5,7 @@
 import * as api from '../../services/api';
 import { useSettingsStore } from '../settingsStore';
 import { buildThreads } from '../../utils/emailParser';
-import { annotateRowAlerts } from './rowAlerts';
+import { annotateRowAlerts } from '../../services/rowVerdicts';
 import { NO_SERVER_UIDS } from './serverUids';
 import { custodySource } from './custody';
 import {
@@ -433,7 +433,7 @@ export const createMessageListSlice = (set, get) => ({
       unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, hiddenTagIds, tagsByRow, localSnoozes, viewHidden,
     });
 
-    annotateRowAlerts(result, get(), useSettingsStore.getState());
+    annotateRowAlerts(result, get());
 
     // ── the sidebar's unread badge ──
     //

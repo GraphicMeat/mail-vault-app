@@ -3,7 +3,7 @@
 // A mail styled in a Google Font links Google's stylesheet. Left in, the
 // webview fetches it and the font files itself: past Network Activity, and
 // past tracker blocking. stripGoogleFontImports takes those links out of every
-// framed body (stores/netActivityStore.js frameBody); the families the mail
+// framed body (services/bodyScan.js scanBody); the families the mail
 // chose come from the daemon instead (services/fontService.js attachMailFonts),
 // read off the rendered frame with fontSourcesOf + mailFontFamilies.
 

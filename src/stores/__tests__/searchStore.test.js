@@ -635,13 +635,16 @@ describe('narrowing a search by a custom field', () => {
 // wore its shields in the folder and none in the results.
 describe('search rows carry the list\'s safety verdicts', () => {
   beforeEach(resetHarness);
-  it('paints impersonation, Reply-To, link and tracker verdicts on a hit', () => {
-    harness.settingsState = {
-      ...harness.settingsState,
-      linkSafetyEnabled: true,
-      linkAlerts: { 'acct-1-Archive-7': 'red' },
-      trackerAlerts: { 'acct-1-Archive-7': { count: 1, vendors: ['Mailchimp'] } },
-    };
+  // The verdicts are the daemon's (`body.verdicts`, src-core body_scan): the
+  // hit's key and sender fields go over, the answer is patched onto it.
+  const answerVerdicts = (verdict) => harness.daemonCall.mockImplementation(async (method, p) => (
+    method === 'body.verdicts' ? { rows: Object.fromEntries(p.rows.map(r => [r.id, verdict(r)])), trackers: {} } : undefined));
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+  it('asks for the verdicts of a hit and paints them on it', async () => {
+    answerVerdicts(r => (r.key === 'acct-1-Archive-7'
+      ? { _senderAlert: 'red', _replyToMismatch: { replyToDomain: 'elsewhere.test' }, _linkAlert: 'red', _trackerInfo: { count: 1, vendors: ['Mailchimp'] } }
+      : {}));
     useSearchStore.getState().showRows([
       result(7, 'Invoice', {
         _accountId: 'acct-1', _mailbox: 'Archive', messageId: '<7@x.test>',
@@ -649,6 +652,13 @@ describe('search rows carry the list\'s safety verdicts', () => {
         replyTo: [{ address: 'collect@elsewhere.test' }],
       }),
     ]);
+    await settle();
+    const asked = harness.daemonCall.mock.calls.filter(([m]) => m === 'body.verdicts').map(([, p]) => p);
+    expect(asked.flatMap(p => p.rows)).toContainEqual(expect.objectContaining({
+      key: 'acct-1-Archive-7',
+      from: { name: 'billing@paypal.com', address: 'scam@evil.test' },
+      replyTo: [{ name: null, address: 'collect@elsewhere.test' }],
+    }));
     const [hit] = useSearchStore.getState().searchResults;
     expect(hit._senderAlert).toBe('red');
     expect(hit._replyToMismatch).toBeTruthy();
@@ -657,11 +667,12 @@ describe('search rows carry the list\'s safety verdicts', () => {
   });
 
   it('paints a streamed hit too', async () => {
-    harness.settingsState = { ...harness.settingsState, linkSafetyEnabled: true, linkAlerts: {}, trackerAlerts: {} };
+    answerVerdicts(r => (r.key === 'acct-1-INBOX-8' ? { _senderAlert: 'yellow' } : {}));
     const run = await startSearch('invoice');
     progress(run, 1, {
       rows: [result(8, 'Invoice', { _accountId: 'acct-1', _mailbox: 'INBOX', from: { name: 'paypal.com', address: 'x@evil.test' } })],
     });
+    await settle();
     expect(useSearchStore.getState().searchResults[0]._senderAlert).toBe('yellow');
   });
 

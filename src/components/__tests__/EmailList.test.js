@@ -76,7 +76,7 @@ const bulkManager = vi.hoisted(() => ({ cancel: vi.fn(), start: vi.fn(), operati
 vi.mock('../../services/BulkOperationManager', () => ({
   bulkOperationManager: bulkManager,
 }));
-vi.mock('../../utils/linkSafety', () => ({
+vi.mock('../../services/bodyScan', () => ({
   getLinkAlertLevel: () => null,
   getCachedAlerts: () => [],
   getAlertsForEmails: () => [],
@@ -86,7 +86,7 @@ vi.mock('../../utils/linkSafety', () => ({
 // every promise it returns, which marks a rejection handled and hides it from
 // the run's unhandled-error check.
 const backfillRuns = vi.hoisted(() => []);
-vi.mock('../../services/trackerVerdicts', async (importOriginal) => {
+vi.mock('../../services/rowVerdicts', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

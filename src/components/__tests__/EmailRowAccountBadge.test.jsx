@@ -21,7 +21,7 @@ vi.mock('../email/MessageStateIcon', () => ({
   ConnectedStateIcon: () => null,
   describeMessageState: () => ({ tone: 'local' }),
 }));
-vi.mock('../../utils/linkSafety', () => ({ getLinkAlertLevel: () => null, getAlertsForEmails: () => [], getCachedAlerts: () => [] }));
+vi.mock('../../services/bodyScan', () => ({ getLinkAlertLevel: () => null, getAlertsForEmails: () => [], getCachedAlerts: () => [] }));
 vi.mock('../../stores/mailStore', () => {
   const state = {
     serverUids: { complete: false }, activeMailbox: 'UNIFIED', activeAccountId: 'acct-1',

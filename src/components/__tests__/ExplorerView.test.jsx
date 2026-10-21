@@ -6,7 +6,7 @@ import * as explorerModule from '../ExplorerView';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 vi.mock('../../stores/safeStorage', () => ({ safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } }));
-vi.mock('../../services/trackerVerdicts', () => ({ backfillTrackerVerdicts: vi.fn() }));
+vi.mock('../../services/rowVerdicts', () => ({ backfillTrackerVerdicts: vi.fn() }));
 
 const emails = [
   { uid: 1, _accountId: 'a', _mailbox: 'INBOX', from: { name: 'Shop', address: 'shop@example.test' }, subject: 'Invoice September', date: '2026-09-09T12:00:00', flags: [], isArchived: true, messageId: '<sep@test>' },

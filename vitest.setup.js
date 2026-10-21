@@ -7,3 +7,12 @@ if (typeof Range !== 'undefined') {
   Range.prototype.getClientRects ??= () => Object.assign([], { item: () => null });
   Range.prototype.getBoundingClientRect ??= () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
 }
+
+// The body scan is the daemon's (`body.scan`, src-core/src/body_scan) and a
+// test has no daemon: every renderer gets the scan answered at once, nothing
+// found and the body framed as given (src/test/bodyScan.js), the way the demo
+// backend answers. A test about what a renderer does with a finding stubs its
+// own answer; the client's own tests (services/__tests__/bodyScan.test.js)
+// unmock it.
+import { vi } from 'vitest';
+vi.mock('./src/services/bodyScan.js', async (orig) => (await import('./src/test/bodyScan.js')).stubBodyScan(orig));

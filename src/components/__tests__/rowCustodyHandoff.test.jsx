@@ -25,7 +25,7 @@ vi.mock('../email/MessageStateIcon', async (importOriginal) => ({
   ...(await importOriginal()),
   ConnectedStateIcon: () => null,
 }));
-vi.mock('../../utils/linkSafety', () => ({
+vi.mock('../../services/bodyScan', () => ({
   getLinkAlertLevel: () => null,
   getAlertsForEmails: () => [],
   getCachedAlerts: () => [],

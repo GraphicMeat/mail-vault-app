@@ -6,7 +6,7 @@ const harness = vi.hoisted(() => ({ accounts: [{ id: 'a1', email: 'work@example.
 vi.mock('../mailStore', () => ({ useMailStore: { getState: () => ({ accounts: harness.accounts }) } }));
 vi.mock('../settingsStore', () => ({ useSettingsStore: { getState: () => ({}) } }));
 vi.mock('../../components/email/MessageStateIcon', () => ({ isBackedUp: () => false }));
-vi.mock('../slices/rowAlerts', () => ({ annotateRowAlerts: rows => rows }));
+vi.mock('../../services/rowVerdicts', () => ({ annotateRowAlerts: rows => rows }));
 
 const { finalize } = await import('../searchRows.js');
 

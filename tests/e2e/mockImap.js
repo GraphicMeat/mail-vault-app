@@ -388,7 +388,7 @@ export const OWN_DARK_CARD_BG = 'rgb(23, 23, 23)';
 
 // ── The mailto: link in that same message's body ────────────────────────────
 // An address in a message is not a place to navigate to: clicking it opens a
-// compose window here. The link scanner skips mailto: (utils/linkSafety.js),
+// compose window here. The link scanner skips mailto: (src-core/src/body_scan),
 // so this anchor cannot change any alert level the other specs assert on.
 
 export const MAILTO_LINK_ID = 'mv-mailto-link';
@@ -435,7 +435,7 @@ export const TRACKER_SUBJECT = 'Weekly digest with a tracking pixel';
 export const TRACKER_BODY_MARKER = 'Here is what you missed this week';
 /** The beacon. A known vendor endpoint, so detection does not lean on shape. */
 export const TRACKER_PIXEL_URL = 'https://mv-mock.list-manage.com/track/open.php?u=mock&id=42';
-/** Label utils/trackerList.js gives that endpoint. */
+/** Label the bundled tracker table (src-core/src/body_scan/tracker_list.rs) gives that endpoint. */
 export const TRACKER_VENDOR = 'Mailchimp';
 /** A real image in the same body — proof blocking removes the beacon only. */
 export const TRACKER_REAL_IMAGE = 'https://cdn.mock.test/newsletter-hero.png';

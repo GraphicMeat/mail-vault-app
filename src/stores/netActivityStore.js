@@ -1,9 +1,6 @@
 import { create } from 'zustand';
 import { listen } from '@tauri-apps/api/event';
 import { daemonCall } from '../services/daemonClient';
-import { scanTrackers } from '../utils/trackerDetect';
-import { bodyStamp } from '../utils/linkSafety';
-import { stripGoogleFontImports } from '../utils/mailFonts';
 
 // Settings > Privacy > Network Activity. The daemon keeps the events (in
 // app.db on this Mac, for the period the user chose); this only mirrors what
@@ -61,7 +58,7 @@ export const useNetActivityStore = create((set, get) => ({
   /** The rows Pause holds on screen; null while live. */
   frozen: null,
   loadError: false,
-  /** Remote images in the mail this window rendered, counted by `frameBody`. */
+  /** Remote images in the mail this window rendered, counted by `noteFramedBody`. */
   remoteImages: { blocked: 0, loaded: 0 },
   /** What the table, the map and the totals show. */
   query: { range: 'day', account: '', country: '' },
@@ -208,38 +205,28 @@ export const copyText = (rows, noAccount = '-') => rows.map(e => [
 const counted = new Map();
 
 /**
- * The body a message frame renders: the cleaned one when tracker blocking is
- * on. Every mail renderer goes through here so the page's remote-images line
- * counts each message once, whichever view showed it. Loaded means allowed
- * to load: an https `<img>` left in the body (the app's CSP allows no plain
- * http image). Keyless previews are told apart by their body. A message whose
- * preview body is later replaced by the full one under the same key adds only
- * what the full body has beyond what was already counted.
- *
- * Google Fonts stylesheets leave here too, blocking or not: the webview would
- * fetch them itself, unseen (the "Open in window" pop-outs carry no app CSP).
- * The families they named come through the daemon (fontService
- * attachMailFonts). The scan reads the body as given, so it shares its cache
- * entry with the other scans of the same message.
+ * Counts what a message frame renders for the page's remote-images line, once
+ * per message whichever view showed it: `scan` is the daemon's answer
+ * (services/bodyScan.js, which calls this for every scan it is given), `id` the
+ * message's scoped key or, for a keyless preview, its body's stamp. Loaded
+ * means allowed to load: an https `<img>` left in the body (the app's CSP
+ * allows no plain http image). A message whose preview body is later replaced
+ * by the full one under the same id adds only what the full body has beyond
+ * what was already counted.
  */
-export function frameBody(bodyHtml, key, blocking) {
-  const scan = scanTrackers(bodyHtml, key);
-  const body = stripGoogleFontImports(blocking ? scan.cleanedBodyHtml : bodyHtml);
-  const id = key || (bodyHtml ? bodyStamp(bodyHtml) : '');
-  if (id) {
-    const trackers = scan.trackers || [];
-    const httpsTrackers = trackers.filter(tr => /^https:/i.test(tr.url || '')).length;
-    const now = {
-      blocked: blocking ? trackers.length : 0,
-      loaded: (scan.https || 0) - (blocking ? httpsTrackers : 0),
-    };
-    const before = counted.get(id) || { blocked: 0, loaded: 0 };
-    const blocked = Math.max(0, now.blocked - before.blocked);
-    const loaded = Math.max(0, now.loaded - before.loaded);
-    counted.set(id, { blocked: Math.max(now.blocked, before.blocked), loaded: Math.max(now.loaded, before.loaded) });
-    // Deferred: renderers call this while rendering, and a store write
-    // there is an update of another component (this page) mid-render.
-    if (blocked || loaded) queueMicrotask(() => useNetActivityStore.getState().noteRemoteImages(blocked, loaded));
-  }
-  return { scan, body };
+export function noteFramedBody(scan, id, blocking) {
+  if (!id || !scan) return;
+  const trackers = scan.trackers || [];
+  const httpsTrackers = trackers.filter(tr => /^https:/i.test(tr.url || '')).length;
+  const now = {
+    blocked: blocking ? trackers.length : 0,
+    loaded: (scan.https || 0) - (blocking ? httpsTrackers : 0),
+  };
+  const before = counted.get(id) || { blocked: 0, loaded: 0 };
+  const blocked = Math.max(0, now.blocked - before.blocked);
+  const loaded = Math.max(0, now.loaded - before.loaded);
+  counted.set(id, { blocked: Math.max(now.blocked, before.blocked), loaded: Math.max(now.loaded, before.loaded) });
+  // Deferred: a store write while another component renders is an update of
+  // this page mid-render.
+  if (blocked || loaded) queueMicrotask(() => useNetActivityStore.getState().noteRemoteImages(blocked, loaded));
 }

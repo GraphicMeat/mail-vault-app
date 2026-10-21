@@ -14,6 +14,13 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (name, handler) => { if (name !== 'privacy-mode-changed') handlers.push(handler); return () => {}; }),
   emit,
 }));
+// The daemon's scan (`body.scan`), answered the way it answers: the beacon
+// swapped for its marker when blocking.
+vi.mock('../../services/bodyScan', async (orig) => {
+  const { stubBodyScan, bodyScanAnswer } = await import('../../test/bodyScan');
+  return stubBodyScan(orig, (html, opts) => bodyScanAnswer(html, opts.blocking
+    ? { html: html.replace(/<img[^>]*>/, '<span data-mv-tracker-blocked="Mailchimp"></span>'), count: 1 } : {}));
+});
 vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'original-1', setTitle }) }));
 
 vi.mock('../../stores/safeStorage', () => {
@@ -88,6 +95,7 @@ describe('the original message window', () => {
     useSettingsStore.setState({ billingProfile: PREMIUM, trackerBlockingEnabled: true });
     await deliver({ html: `<p>Hi</p><img src="${BEACON}" width="1" height="1">` });
     expect(document.querySelector('iframe').getAttribute('srcdoc')).not.toContain('list-manage.com');
+    expect(document.querySelector('iframe').getAttribute('srcdoc')).toContain('data-mv-tracker-blocked');
   });
 
   it('keeps the beacon in the detached original when blocking is off, same as the reading pane', async () => {

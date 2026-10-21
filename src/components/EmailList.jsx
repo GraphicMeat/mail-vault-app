@@ -15,9 +15,9 @@ import { useSearchStore } from '../stores/searchStore';
 import { useViewHideStore } from '../stores/viewHideStore';
 import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
-import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
+import { backfillTrackerVerdicts } from '../services/rowVerdicts';
 import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers, emailsInRowRange } from '../utils/emailParser';
-import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
+import { getLinkAlertLevel, getAlertsForEmails } from '../services/bodyScan';
 import { listRowGround } from '../utils/listRowGround';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { formatCount } from '../utils/formatCount';
@@ -1102,7 +1102,7 @@ function EmailListComponent({ stacked = false }) {
         if (row.type === 'thread') headers.push(...row.thread.emails);
         else if (row.email) headers.push(row.email);
       }
-      backfillTrackerVerdicts(headers);
+      backfillTrackerVerdicts(headers, useMailStore.getState());
     };
     // Settle, then read. Mid-fling the visible window is a different set every
     // frame, and each one would cost a vault read per row.

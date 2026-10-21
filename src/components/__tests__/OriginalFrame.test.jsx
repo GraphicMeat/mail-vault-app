@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 //
-// The reply/forward "original message" frame used to hardcode
-// `frameBody(html, null, false)`, so it rendered a quoted message's remote
-// images and tracking beacons no matter what the reading pane's tracker
-// blocking setting said. It now reads the same `isTrackerBlockingActive`
-// gate as EmailViewer/ChatBubbleView/EmailPreviewFrame, driving the real
-// settings store rather than a stubbed flag.
+// The reply/forward "original message" frame used to hardcode blocking off,
+// so it rendered a quoted message's remote images and tracking beacons no
+// matter what the reading pane's tracker blocking setting said. It reads the
+// same `isTrackerBlockingActive` gate as EmailViewer/ChatBubbleView/
+// EmailPreviewFrame, driving the real settings store rather than a stubbed
+// flag, and frames the daemon's answer (`body.scan`, stubbed here the way the
+// daemon answers: the beacon swapped for its marker when blocking).
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
@@ -22,6 +23,15 @@ vi.mock('../../stores/safeStorage', () => {
   };
 });
 
+vi.mock('../../services/bodyScan', async (orig) => {
+  const { stubBodyScan, bodyScanAnswer } = await import('../../test/bodyScan');
+  return stubBodyScan(orig, (html, opts) => {
+    if (html.includes('PENDING')) return undefined;
+    if (html.includes('UNSCANNED')) return { ...bodyScanAnswer(html), scanned: false };
+    return bodyScanAnswer(html, opts.blocking ? { html: html.replace(/<img[^>]*>/, '<span data-mv-tracker-blocked="Mailchimp"></span>'), count: 1 } : {});
+  });
+});
+
 const { useSettingsStore } = await import('../../stores/settingsStore');
 const { OriginalFrame } = await import('../OriginalFrame');
 const { usePrivacyStore } = await import('../../stores/privacyStore');
@@ -31,9 +41,9 @@ const FREE = { hasSubscription: false };
 const BEACON = 'https://example.list-manage.com/track/open.php?u=8f2&id=a91';
 const MAIL = `<p>Hi</p><img src="${BEACON}" width="1" height="1">`;
 
-function renderFrame(billingProfile, trackerBlockingEnabled = true) {
+function renderFrame(billingProfile, trackerBlockingEnabled = true, html = MAIL) {
   useSettingsStore.setState({ billingProfile, trackerBlockingEnabled });
-  const { container } = render(<OriginalFrame html={MAIL} dark={false} title="Original Message" />);
+  const { container } = render(<OriginalFrame html={html} dark={false} title="Original Message" />);
   return container.querySelector('iframe').getAttribute('srcdoc');
 }
 
@@ -52,6 +62,14 @@ describe('OriginalFrame', () => {
 
   it('keeps the beacon for a free user, matching the reading pane', () => {
     expect(renderFrame(FREE, true)).toContain(BEACON);
+  });
+
+  it('frames nothing while the scan is asked', () => {
+    expect(renderFrame(PREMIUM, true, `${MAIL}PENDING`)).toBe('');
+  });
+
+  it('frames a body the daemon could not scan with remote images refused', () => {
+    expect(renderFrame(FREE, true, `${MAIL}UNSCANNED`)).toContain('content="img-src data: blob: cid:"');
   });
 });
 

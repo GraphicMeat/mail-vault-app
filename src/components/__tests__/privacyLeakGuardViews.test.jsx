@@ -39,7 +39,7 @@ vi.mock('../../services/aliases', () => ({
   removeAlias: vi.fn(async () => true),
 }));
 vi.mock('../EmailViewer', () => ({ EmailViewer: () => null }));
-vi.mock('../../services/trackerVerdicts', () => ({ backfillTrackerVerdicts: vi.fn() }));
+vi.mock('../../services/rowVerdicts', () => ({ backfillTrackerVerdicts: vi.fn() }));
 
 const { usePrivacyStore } = await import('../../stores/privacyStore');
 const { useMailStore } = await import('../../stores/mailStore');

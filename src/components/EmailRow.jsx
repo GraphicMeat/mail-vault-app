@@ -7,7 +7,7 @@ import { AccountBadge, useAccountHover } from './AccountBadge';
 import { getRowPartyName } from '../utils/emailParser';
 import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
-import { getCachedAlerts } from '../utils/linkSafety';
+import { getCachedAlerts } from '../services/bodyScan';
 import { useMailStore } from '../stores/mailStore';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey } from '../stores/slices/unifiedHelpers';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';

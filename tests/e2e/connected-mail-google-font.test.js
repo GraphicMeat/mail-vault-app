@@ -3,7 +3,7 @@
  *
  * A mail styled in a Google Font links Google's stylesheet. The webview used to
  * fetch it itself: past Network Activity and past tracker blocking. Now
- * `frameBody` strips the link and every @import of it, the app CSP no longer
+ * the body scan (services/bodyScan.js) strips the link and every @import of it, the app CSP no longer
  * allows Google's hosts, and `attachMailFonts` reads the family the rendered
  * frame names, has the daemon download it (`fonts.download`, unless tracker
  * blocking is on) and registers its faces into the frame's own

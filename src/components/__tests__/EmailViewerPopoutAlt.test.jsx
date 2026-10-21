@@ -30,22 +30,25 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.__TAURI__; openWindow.mockClear(); _resetBodyRenderersForTest(); usePrivacyStore.setState({ enabled: false }); useSettingsStore.setState({ emailRenderer: 'web' }); });
 
 describe('Open in window', () => {
-  it('blitz: hands the pre-processed body to the renderer window', () => {
+  it('blitz: hands the pre-processed body to the renderer window', async () => {
     show({ emailRenderer: 'blitz' });
     fireEvent.click(screen.getByText('bar-window'));
+    await new Promise(r => setTimeout(r, 0));
     expect(openWindow).toHaveBeenCalledWith({ html: expect.stringContaining('Pop body'), dark: false, title: 'Pop me' });
     expect(window.__TAURI__.core.invoke).not.toHaveBeenCalledWith('open_email_window', expect.anything());
   });
-  it('web: the file:// window as today', () => {
+  it('web: the file:// window as today', async () => {
     show({ emailRenderer: 'web' });
     fireEvent.click(screen.getByText('bar-window'));
+    await new Promise(r => setTimeout(r, 0));
     expect(openWindow).not.toHaveBeenCalled();
     expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('open_email_window', expect.objectContaining({ title: 'Pop me' }));
   });
-  it('blitz: privacy mode refuses the window before the renderer sees the body', () => {
+  it('blitz: privacy mode refuses the window before the renderer sees the body', async () => {
     usePrivacyStore.setState({ enabled: true });
     show({ emailRenderer: 'blitz' });
     fireEvent.click(screen.getByText('bar-window'));
+    await new Promise(r => setTimeout(r, 0));
     expect(openWindow).not.toHaveBeenCalled();
   });
   it('blitz: a rejecting renderer window is not an unhandled rejection', async () => {
@@ -62,10 +65,11 @@ describe('Open in window', () => {
       expect(unhandled).not.toHaveBeenCalled();
     } finally { process.off('unhandledRejection', unhandled); }
   });
-  it('blitz: without Tauri nothing opens', () => {
+  it('blitz: without Tauri nothing opens', async () => {
     show({ emailRenderer: 'blitz' });
     delete window.__TAURI__;
     fireEvent.click(screen.getByText('bar-window'));
+    await new Promise(r => setTimeout(r, 0));
     expect(openWindow).not.toHaveBeenCalled();
   });
 });

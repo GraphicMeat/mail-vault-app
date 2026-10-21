@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { openInBrowser } from '../../services/billingApi';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
-import { TRACKER_PATTERNS } from '../../utils/trackerList';
+import { trackerPatternCount } from '../../services/bodyScan';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { Button } from '../ui/Button';
@@ -20,7 +20,7 @@ const TRACKER_SAMPLE = `<img src="https://mailer.example.com/o/open.php`
 const CLEANED_SAMPLE = `<span data-mv-tracker-blocked="Mailchimp" title="…">🛡 Tracker blocked</span>`;
 
 /** Where the bundled endpoint list comes from — the two upstreams named in
- *  utils/trackerList.js, in the order that file merges them. */
+ *  src-core/src/body_scan/tracker_list.rs, in the order that table merges them. */
 const SOURCES = () => ([
   {
     label: tr('settings.tracking.uglyEmail'),
@@ -84,6 +84,13 @@ export function TrackerBlockingView({ onUpgrade }) {
   const setTrackerBlockingEnabled = useSettingsStore(s => s.setTrackerBlockingEnabled);
   const trackerAlerts = useSettingsStore(s => s.trackerAlerts);
   const priceBlurb = usePremiumPriceBlurb();
+  // The table is the daemon's (src-core body_scan); the line waits for its size.
+  const [patterns, setPatterns] = useState(null);
+  useEffect(() => {
+    let live = true;
+    trackerPatternCount().then(n => { if (live) setPatterns(n); });
+    return () => { live = false; };
+  }, []);
 
   const isPremium = hasPremiumAccess(billingProfile);
   const active = isPremium && trackerBlockingEnabled;
@@ -215,9 +222,11 @@ export function TrackerBlockingView({ onUpgrade }) {
             {t('settings.tracking.nothingFoundYetScanIsLocal')}
           </p>
         )}
-        <p className="text-[11px] text-mail-text-muted/70 mt-3">
-          {t('settings.tracking.knownEndpointsBundled', { count: TRACKER_PATTERNS.length })}
-        </p>
+        {patterns != null && (
+          <p className="text-[11px] text-mail-text-muted/70 mt-3">
+            {t('settings.tracking.knownEndpointsBundled', { count: patterns })}
+          </p>
+        )}
         {/* Named upstreams, linked. A blocklist whose provenance is a sentence
             is a claim; one you can open and read is a citation. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">

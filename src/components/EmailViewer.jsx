@@ -35,21 +35,17 @@ import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
 import { useExportStore } from '../stores/exportStore';
 import { useViewBuilderStore } from '../stores/viewBuilderStore';
-import { patchEverywhere } from '../stores/messageRows';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { CloseViewerButton } from './email/CloseViewerButton';
 import { Button } from './ui/Button';
-import { scanEmailLinks } from '../utils/linkSafety';
 import { activateEmailLink, openExternalUrl } from '../utils/emailLinkActivation';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
-import { getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
-import { frameBody } from '../stores/netActivityStore';
-import { recordTrackerSummary } from '../services/trackerVerdicts';
-import { getCachedAlerts } from '../utils/linkSafety';
+import { useBodyScan, scanBody, scanHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
+import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder, vaultHas } from '../stores/slices/unifiedHelpers';
 import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
@@ -434,24 +430,22 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // of having quietly always said what it now says.
   const custodyLanded = useCustodyLanding(scopeKey, custody.tone);
 
+  // The body the frame shows, asked of the daemon (services/bodyScan): stable
+  // per message, so theme and Dark Reader are layered on top below and a
+  // toggle never asks again. Tracker detection runs for everyone (the glyph
+  // tells a free user their mail phoned home); only the SWAP to the cleaned
+  // body is premium. Nothing is framed until the answer is in: the raw body
+  // would fire the beacons blocking is about to strip.
+  const readerBody = useMemo(
+    () => (selectedEmail?.html ? getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments)) : ''),
+    [selectedEmail?.html, selectedEmail?.attachments],
+  );
+  const bodyScan = useBodyScan(readerBody, { key: scopeKey, blocking: trackerBlocking, links: linkSafetyEnabled });
+
   const { iframeContent, scanAlertLevel, trackerSummary, altBodyHtml, indicatorCss } = useMemo(() => {
-    if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null, altBodyHtml: '', indicatorCss: '' };
-    const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
-    // Scan body HTML (stable per uid → cacheable); theme/DR is layered on
-    // top via buildEmailIframeHtml so toggling theme doesn't invalidate the
-    // scan cache or strip Dark Reader scripts from a cached modifiedHtml.
-    // Tracker detection runs for everyone — the glyph tells a free user their
-    // mail phoned home. Only the SWAP to the cleaned body is premium.
-    const { scan: trackerScan, body: framed } = frameBody(bodyHtml, scopeKey, trackerBlocking);
-    let renderedBody = framed;
-    let indicatorStyle = '';
-    let alertLevel = null;
-    if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(renderedBody, scopeKey);
-      renderedBody = scan.modifiedBodyHtml;
-      indicatorStyle = scan.indicatorStyle;
-      alertLevel = scan.maxAlertLevel;
-    }
+    if (!selectedEmail?.html || !bodyScan) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null, altBodyHtml: '', indicatorCss: '' };
+    const renderedBody = bodyScan.html;
+    const indicatorStyle = bodyScan.alerts.length > 0 ? LINK_ALERT_STYLE : '';
     // Light baseline always. When dark, Dark Reader is INLINED into the
     // iframe HTML (not injected post-load) so it runs during page load —
     // eliminates the load-event race and prevents a flash of light content
@@ -459,7 +453,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     // One nonce for this render: the frame's CSP grants only scripts that carry
     // it (our DR + fold scripts), so the mail's own script never runs.
     const nonce = emailScriptNonce();
-    const extraHead = `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    const extraHead = `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${scanHead(bodyScan)}`;
     const html = buildEmailIframeHtml({
       bodyHtml: renderedBody,
       themeTag: effectiveEmailTheme,
@@ -468,8 +462,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       nonce,
       privacy: privacyOn,
     });
-    return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), altBodyHtml: renderedBody, indicatorCss: indicatorStyle };
-  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, palette, signatureDisplay, privacyOn]);
+    return { iframeContent: html, scanAlertLevel: bodyScan.maxAlertLevel, trackerSummary: bodyScan.summary, altBodyHtml: renderedBody, indicatorCss: indicatorStyle };
+  }, [selectedEmail?.html, bodyScan, linkSafetyEnabled, effectiveEmailTheme, palette, signatureDisplay, privacyOn]);
 
   // The alternative body reports a clicked link; the same rule as the iframe's
   // click handler decides what happens (compose, link-safety modal, open).
@@ -490,8 +484,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       // Every row that IS this message, by the scoped key rather than the uid:
       // in unified inbox `emails` spans accounts, and every row sharing the
       // number would light up. A search hit is one of the containers too.
-      if (scopeKey) patchEverywhere([scopeKey], row => (row._linkAlert === scanAlertLevel ? row : { ...row, _linkAlert: scanAlertLevel }));
-      useSettingsStore.getState().setLinkAlert(scopeKey, scanAlertLevel);
+      recordLinkAlert(scopeKey, scanAlertLevel);
     }
   }, [scanAlertLevel, scopeKey]);
 
@@ -635,7 +628,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     // the handlers attached.
   }, [selectedEmail?.html, !!AltBody]);
 
-  const openInWindow = () => {
+  const openInWindow = async () => {
     const invoke = window.__TAURI__?.core?.invoke;
     if (!invoke || !(selectedEmail?.html || selectedEmail?.text)) return;
     if (refuseWindowUnderPrivacy()) return;
@@ -647,9 +640,14 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       : textToHtml(selectedEmail.text);
     // The popup is a second renderer of the same mail: a beacon
     // stripped in the pane but left in the window still fires.
-    const popupBody = frameBody(bodyHtml, scopeKey, trackerBlocking).body;
+    const popupScan = await scanBody(bodyHtml, { key: scopeKey, blocking: trackerBlocking });
+    const popupBody = popupScan.html;
     // The renderer owns the window under it (no iframe page, no Dark Reader).
-    if (altRenderer?.openWindow) { void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: selectedEmail.subject || 'Email' })).catch(() => {}); return; }
+    // An unscanned body is not handed to it: it would load every image.
+    if (altRenderer?.openWindow) {
+      if (popupScan.scanned) void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: selectedEmail.subject || 'Email' })).catch(() => {});
+      return;
+    }
     // The popup loads from file:// and inherits no CSP, so its meta
     // (script-src 'nonce-…') is the ONLY policy: Dark Reader has to
     // carry the same nonce to run there.
@@ -657,7 +655,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     const popupHtml = buildEmailIframeHtml({
       bodyHtml: popupBody,
       themeTag: effectiveEmailTheme,
-      extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : '',
+      extraHead: `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : ''}${popupScan.scanned ? '' : scanHead(popupScan)}`,
       nonce: popupNonce,
     });
     invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
@@ -880,14 +878,15 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
                 backgroundColor: emailColors.background,
               }}
             >
-              {AltBody ? (
+              {/* The alternative renderer fetches images itself: it only ever gets a scanned body. */}
+              {AltBody ? (!bodyScan?.scanned ? null : (
                 <AltBody
                   ref={altBodyRef} surface="reader" messageKey={scopeKey} bodyHtml={altBodyHtml} indicatorCss={indicatorCss}
                   plainText={selectedEmail.text} theme={{ dark: emailDarkMode, palette }} signatureDisplay={signatureDisplay}
                   foldQuotes privacy={privacyOn} searchQuery={searchQueryForHighlight} accountId={selectedEmail._accountId}
                   message={selectedEmail} onLink={onAltLink} sizing="content"
                 />
-              ) : (
+              )) : (
                 <iframe
                   ref={iframeRef}
                   srcDoc={iframeContent}

@@ -149,7 +149,7 @@ const { useSearchStore } = await import('../../../stores/searchStore');
 const { useNotesStore } = await import('../../../stores/notesStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { applySeenLocally, applyFlagToTargets } = await import('../messageMutations');
-const { recordTrackerSummary } = await import('../../trackerVerdicts');
+const { recordTrackerSummary } = await import('../../rowVerdicts');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
 const KEY = 'a1-INBOX-7';

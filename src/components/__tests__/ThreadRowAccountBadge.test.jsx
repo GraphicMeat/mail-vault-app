@@ -17,7 +17,7 @@ vi.mock('../ReplyToAlertIcon', () => ({ ReplyToAlertIcon: () => null, getThreadR
 vi.mock('../TrackerAlertIcon', () => ({ TrackerAlertIcon: () => null, getThreadTrackerInfo: () => null }));
 vi.mock('../RowQuickActions', () => ({ RowQuickActions: () => null }));
 vi.mock('../email/MessageStateIcon', () => ({ ConnectedStateIcon: () => null, describeMessageState: () => ({ tone: 'local' }) }));
-vi.mock('../../utils/linkSafety', () => ({ getLinkAlertLevel: () => null, getAlertsForEmails: () => [], getCachedAlerts: () => [] }));
+vi.mock('../../services/bodyScan', () => ({ getLinkAlertLevel: () => null, getAlertsForEmails: () => [], getCachedAlerts: () => [] }));
 const mailState = vi.hoisted(() => ({
   serverUids: { complete: false }, activeMailbox: 'UNIFIED', activeAccountId: 'acct-1', unifiedInbox: true,
   accounts: [{ id: 'acct-2', email: 'home@example.com', name: 'Home' }],

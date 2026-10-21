@@ -84,6 +84,23 @@ const mockSettingsState = {
   // just derived, so every spec that drives it needs the setter.
   setUnreadForAccount: () => {},
 };
+// The row verdicts are the daemon's (`body.verdicts`): it reads the persisted
+// link alerts by the scoped key the list sends, as this stand-in does.
+vi.mock('../../services/daemonClient', async (orig) => {
+  const real = await orig();
+  return {
+    ...real,
+    daemonCall: async (method, params) => {
+      if (method !== 'body.verdicts') return real.daemonCall(method, params);
+      const rows = {};
+      for (const r of params.rows || []) {
+        const level = r.key && mockSettingsState.linkAlerts?.[r.key];
+        if (level) rows[r.id] = { _linkAlert: level };
+      }
+      return { rows, trackers: {} };
+    },
+  };
+});
 vi.mock('../settingsStore', () => ({
   useSettingsStore: {
     getState: () => mockSettingsState,
@@ -1642,7 +1659,7 @@ describe('persisted link alerts are applied per account + mailbox', () => {
     date: 'Sun, 04 Jan 2026 12:00:00 +0000',
   });
 
-  const render = (accountId, mailbox, emails) => {
+  const render = async (accountId, mailbox, emails) => {
     useMailStore.setState({
       activeAccountId: accountId,
       activeMailbox: mailbox,
@@ -1657,28 +1674,30 @@ describe('persisted link alerts are applied per account + mailbox', () => {
       _sortedEmailsFingerprint: '',
     });
     useMailStore.getState().updateSortedEmails();
+    // The verdicts arrive by patch once the daemon answers.
+    await new Promise(resolve => setTimeout(resolve, 0));
     return useMailStore.getState().sortedEmails;
   };
 
   afterEach(() => { mockSettingsState.linkAlerts = {}; });
 
-  it('flags the message the alert was stored for', () => {
+  it('flags the message the alert was stored for', async () => {
     mockSettingsState.linkAlerts = { 'acct-1-INBOX-41': 'red' };
-    expect(render('acct-1', 'INBOX', [row(41)])[0]._linkAlert).toBe('red');
+    expect((await render('acct-1', 'INBOX', [row(41)]))[0]._linkAlert).toBe('red');
   });
 
   // Both cases seed a leftover bare-UID entry alongside the scoped one. The
   // migration drops those, but a reader that still falls back to `e.uid` would
   // find it — which is exactly the leak, and what makes these tests fail
   // against the old code instead of merely passing against the new.
-  it('leaves another account\'s message with the same UID unflagged', () => {
+  it('leaves another account\'s message with the same UID unflagged', async () => {
     mockSettingsState.linkAlerts = { 41: 'red', 'acct-1-INBOX-41': 'red' };
-    expect(render('acct-2', 'INBOX', [row(41)])[0]._linkAlert).toBeUndefined();
+    expect((await render('acct-2', 'INBOX', [row(41)]))[0]._linkAlert).toBeUndefined();
   });
 
-  it('leaves another mailbox\'s message with the same UID unflagged', () => {
+  it('leaves another mailbox\'s message with the same UID unflagged', async () => {
     mockSettingsState.linkAlerts = { 41: 'red', 'acct-1-INBOX-41': 'red' };
-    expect(render('acct-1', 'Archive', [row(41)])[0]._linkAlert).toBeUndefined();
+    expect((await render('acct-1', 'Archive', [row(41)]))[0]._linkAlert).toBeUndefined();
   });
 });
 

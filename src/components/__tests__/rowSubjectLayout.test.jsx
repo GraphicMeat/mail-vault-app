@@ -45,7 +45,7 @@ vi.mock('../email/MessageStateIcon', () => ({
   // row wash. These are layout tests, so answer with the ordinary vault tone.
   describeMessageState: () => ({ tone: 'local' }),
 }));
-vi.mock('../../utils/linkSafety', () => ({
+vi.mock('../../services/bodyScan', () => ({
   getLinkAlertLevel: () => null,
   getAlertsForEmails: () => [],
   getCachedAlerts: () => [],
